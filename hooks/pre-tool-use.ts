@@ -98,6 +98,20 @@ import {
   type RunIdSource,
   TEAM_AGENT_MODE,
 } from "./lib/backend-degradation.js";
+// #60 tier-scoring guard — execute-plan's "the Agent `model` param is the only
+// tiering lever, and it is REQUIRED" prose as code, plus the SKILL.md:113
+// dispatch line as a run-record receipt. See lib/tier-dispatch.ts header.
+import {
+  appendTierDispatchEvent,
+  buildDenyMessage as buildTierDenyMessage,
+  buildRecordMessage as buildTierRecordMessage,
+  buildTierDispatchEvent,
+  isUntieredOverrideEngaged,
+  readConfiguredTierModels,
+  resolveTierDispatch,
+  TIER_DISPATCH_EVENT,
+} from "./lib/tier-dispatch.js";
+import { redactField as redactTierField } from "./lib/v1.4/redact-log.js";
 import { genSpanId } from "./lib/trace-v2.js";
 // L5a: host-neutral hook payload + Claude emitter. PreToolUsePayload is now the
 // shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
@@ -985,6 +999,177 @@ function emitBackendDegradationDeny(message: string): void {
   );
 }
 
+// ── Tier-scoring guard (#60) ────────────────────────────────────────────────
+//
+// Convert `execute-plan/SKILL.md §"Tier resolution"`'s two PROSE mandates into
+// runtime behavior:
+//
+//   1. the Agent `model` param is the ONLY tiering lever and is REQUIRED on
+//      every lane dispatch (default cheap; `powerful` must be justified) — a
+//      Guild lane dispatched WITHOUT it silently inherits the dispatching
+//      process's model, which is exactly how a post-/compact opus orchestrator
+//      turned 48 cheap/mid lanes into opus lanes;
+//   2. the dispatch line `lane <task-id> · score N · tier <tier> · model <model>`
+//      is printed and recorded — "never silent" (SKILL.md:113) — which vanished
+//      along with the param.
+//
+// A `guild.tier_dispatch.v1` receipt is written to
+// `<runDir>/logs/tier-dispatch.jsonl` for EVERY Guild-lane dispatch decision,
+// compliant ones included: "48 dispatches, none tiered" is only answerable
+// post-hoc when the compliant lines are on the record too. (Consumer wiring in
+// verify-done/reflect is a followup; the sink is auditable by path today.)
+//
+// Scope mirrors the #58 guard's, plus #56's stale-sentinel defense:
+//   - only tool_name === "Agent";
+//   - only inside a resolvable, SAFE, and FRESH Guild run;
+//   - only for a Guild LANE dispatch, and only STRUCTURED lane evidence blocks.
+// Deliberately NOT lead-only (unlike #56): the tier contract binds the DISPATCH,
+// not the dispatcher — a helper spawned from inside a lane with no `model` param
+// inherits that lane's model just as silently.
+
+/** The guard's outcome, when it produced one. */
+interface TierGuardOutcome {
+  /** True when the dispatch must be denied and this message shown. */
+  deny: boolean;
+  message: string;
+}
+
+/**
+ * Evaluate the tier guard AND emit its receipts. Returns null when the dispatch
+ * is not a gateable Guild lane.
+ *
+ * Receipt emission is deliberately SEPARATE from the deny emission, for the same
+ * reason #56's is: the #58 or #56 guard may own stdout for the same event, and a
+ * dispatch that is both persona-stripped/backend-degraded AND untiered must
+ * still leave its tier receipt — they are independent audit dimensions.
+ */
+function evaluateTierDispatch(
+  payload: GuildHookEvent,
+  cwd: string,
+): TierGuardOutcome | null {
+  if (payload.tool_name !== "Agent") return null;
+
+  // Same run-identity provenance rule as #56: an exported GUILD_RUN_ID (or a
+  // dispatch naming this run in its own descriptor env) is trusted identity; a
+  // `current-run-id` sentinel must additionally prove freshness, since closeRun
+  // never clears it.
+  const envRunId = process.env["GUILD_RUN_ID"];
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) return null;
+  const runIdSource: RunIdSource =
+    (typeof envRunId === "string" && envRunId.length > 0) ||
+    dispatchAssertsRunId(payload.tool_input, runId)
+      ? "env"
+      : "sentinel";
+
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return null;
+  const ti = payload.tool_input as Record<string, unknown> | undefined;
+  const prompt = typeof ti?.["prompt"] === "string" ? (ti["prompt"] as string) : "";
+
+  // Cheap-first short-circuit — `resolveTierDispatch` re-checks both conditions
+  // and remains the single authority on the matrix.
+  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+  const guildRoot = resolveGuildRoot(cwd);
+  const runFresh = isRunFresh(guildRoot, runId, runIdSource);
+  if (!runFresh) return null;
+
+  const tierModels = readConfiguredTierModels(
+    guildRoot,
+    resolveHostResolution(process.env).id,
+  );
+  const result = resolveTierDispatch({
+    toolInput: payload.tool_input,
+    attr,
+    prompt,
+    runId,
+    tierModels,
+    overrideEngaged: isUntieredOverrideEngaged(process.env),
+    runFresh,
+  });
+  if (!result.recorded) return null;
+
+  const message =
+    result.decision === "deny"
+      ? buildTierDenyMessage(result, tierModels)
+      : buildTierRecordMessage(result, tierModels);
+
+  // ── Receipt: the resurrected SKILL.md:113 dispatch line ──────────────────
+  const ts = new Date().toISOString();
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId =
+    typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
+      ? laneEnv
+      : undefined;
+  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  try {
+    appendTierDispatchEvent(
+      runDir,
+      buildTierDispatchEvent({
+        runId,
+        ts,
+        spanId: genSpanId(runId, TIER_DISPATCH_EVENT, ts, result.specialist ?? "main"),
+        result,
+        detail: message,
+        ...(laneId !== undefined ? { laneId } : {}),
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  // Audit-rail twin — ONLY for a genuine untiered violation (reason
+  // "missing_model"): that is the one case the `tier_dispatch_untiered` event
+  // name is accurate for (adversarial review finding #6). A `tier_unverifiable`
+  // or `tier_model_mismatch` record carries an explicit model — it is NOT
+  // untiered, so labeling it so would poison security analytics. Compliant
+  // dispatches never emit a twin (the tier-dispatch sink already carries the
+  // complete per-dispatch record).
+  if (result.reason === "missing_model" && result.decision !== "pass") {
+    try {
+      appendSecurityEvent(
+        runDir,
+        buildSecurityEvent({
+          run_id: runId,
+          lane_id: laneId,
+          event_type: "tier_dispatch_untiered",
+          decision: result.decision === "deny" ? "deny" : "allow",
+          tool: "Agent",
+          detail: message,
+        }),
+      );
+    } catch {
+      /* telemetry must never block the gate */
+    }
+  }
+
+  // The print half of the "never silent" mandate — restore the dispatch line on
+  // stderr for every Guild-lane dispatch, not just the violations. The message
+  // is built only from bounded identifiers (role, model, tier tokens, bounded
+  // config values), but pass it through the shared redaction anyway so no path
+  // out of this guard can print an unredacted config/detail value (round 2, P1).
+  const safeMessage = redactTierField(message);
+  process.stderr.write(
+    result.decision === "pass"
+      ? `[pre-tool-use] guild-tier: ${result.model} · ${result.decision} — ${safeMessage}\n`
+      : `warn: [pre-tool-use] ${safeMessage}\n`,
+  );
+  return { deny: result.decision === "deny", message };
+}
+
+/** Emit the #60 deny decision. The caller must then own stdout for this event. */
+function emitTierDispatchDeny(message: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: message,
+      },
+    }),
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export async function main(): Promise<void> {
@@ -1012,6 +1197,14 @@ export async function main(): Promise<void> {
   // here, only its receipts.
   const backend = evaluateBackendDegradation(payload, cwd);
 
+  // #60 tier-scoring guard. Evaluated alongside #56 and for the same reason: its
+  // receipt is the run-record dispatch line and must exist even when another
+  // guard owns stdout for this event. It emits its decision LAST of the three —
+  // a stripped persona (#58) and a wrong backend (#56) are the more specific
+  // defects, and under the team backend the lane never takes a `model` param at
+  // all (panes carry the tier on the teammate definition).
+  const tier = evaluateTierDispatch(payload, cwd);
+
   // #58 dispatch-integrity guard — fail closed on a persona-stripped Guild
   // specialist dispatch. It emits first when both fire: a stripped persona is
   // the more specific defect, and the #56 receipt is already on disk.
@@ -1023,6 +1216,15 @@ export async function main(): Promise<void> {
   // the rest of the hook (telemetry sidecar) still runs.
   if (backend !== null && backend.deny) {
     emitBackendDegradationDeny(backend.message);
+    return;
+  }
+
+  // #60 deny — before capability enforcement for the same reason as the two
+  // above: an untiered dispatch must not be reachable through an `ask` a
+  // capability gate could approve. A recorded/overridden allow falls through so
+  // the rest of the hook (telemetry sidecar) still runs.
+  if (tier !== null && tier.deny) {
+    emitTierDispatchDeny(tier.message);
     return;
   }
 

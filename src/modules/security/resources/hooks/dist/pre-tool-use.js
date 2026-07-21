@@ -33,8 +33,8 @@ __export(pre_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_tool_use_exports);
-var fs7 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var fs8 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -263,11 +263,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path7 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path7), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path7)) return;
+  const path8 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path8), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path8)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path7, "wx");
+    const fd = (0, import_node_fs.openSync)(path8, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -365,14 +365,14 @@ function capSidecarText(existing, incomingLine, maxBytes) {
 }
 function appendSidecarPre(runDir, entry, opts = {}) {
   validateSidecarEntry(entry);
-  const path7 = sidecarPath(runDir);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path7), { recursive: true });
+  const path8 = sidecarPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path8), { recursive: true });
   const redacted = redactEventFields(entry, opts.fieldCap);
   const line = JSON.stringify(redacted) + "\n";
   const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
   const appendCapped = () => {
-    const existing = (0, import_node_fs2.existsSync)(path7) ? (0, import_node_fs2.readFileSync)(path7, "utf8") : "";
-    (0, import_node_fs2.writeFileSync)(path7, capSidecarText(existing, line, maxBytes));
+    const existing = (0, import_node_fs2.existsSync)(path8) ? (0, import_node_fs2.readFileSync)(path8, "utf8") : "";
+    (0, import_node_fs2.writeFileSync)(path8, capSidecarText(existing, line, maxBytes));
   };
   if (process.platform === "win32") {
     appendCapped();
@@ -1258,6 +1258,277 @@ function appendBackendDegradationEvent(runDir, event) {
   }
 }
 
+// lib/tier-dispatch.ts
+var fs7 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
+var OVERRIDE_ENV2 = "GUILD_ALLOW_UNTIERED_DISPATCH";
+var TIER_DISPATCH_EVENT = "tier_dispatch";
+var TIER_DISPATCH_SCHEMA = "guild.tier_dispatch.v1";
+var RECEIPT_RELATIVE_PATH2 = "logs/tier-dispatch.jsonl";
+var TIER_ENV = "GUILD_TIER";
+var TIER_SCORE_ENV = "GUILD_TIER_SCORE";
+var MISSING_MODEL = "MISSING";
+var TIERS = ["cheap", "mid", "powerful"];
+var CLAUDE_TIER_FALLBACK = {
+  cheap: "haiku",
+  mid: "sonnet",
+  powerful: "opus"
+};
+var SAFE_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+function safeModelName(value) {
+  if (value.length === 0) return MISSING_MODEL;
+  if (!SAFE_MODEL_RE.test(value)) return "<unsafe>";
+  return redactField(value);
+}
+var SAFE_TASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+function safeTaskId(value) {
+  if (value.length === 0) return "";
+  if (!SAFE_TASK_ID_RE.test(value)) return "<unsafe>";
+  return redactField(value);
+}
+function toolInputEnv(toolInput) {
+  if (toolInput === null || typeof toolInput !== "object") return {};
+  const env = toolInput["env"];
+  if (env === null || typeof env !== "object" || Array.isArray(env)) return {};
+  return env;
+}
+function readDispatchModel(toolInput) {
+  if (toolInput === null || typeof toolInput !== "object") return void 0;
+  const v = toolInput["model"];
+  if (typeof v !== "string") return void 0;
+  const trimmed = v.trim();
+  return trimmed.length > 0 ? trimmed : void 0;
+}
+function readDeclaredTier(toolInput) {
+  const v = toolInputEnv(toolInput)[TIER_ENV];
+  if (typeof v !== "string") return void 0;
+  const t = v.trim().toLowerCase();
+  return TIERS.includes(t) ? t : void 0;
+}
+function rawTierPresent(toolInput) {
+  const v = toolInputEnv(toolInput)[TIER_ENV];
+  return typeof v === "string" && v.trim().length > 0;
+}
+function readDeclaredScore(toolInput) {
+  const v = toolInputEnv(toolInput)[TIER_SCORE_ENV];
+  if (typeof v === "number") return Number.isFinite(v) ? v : void 0;
+  if (typeof v !== "string" || v.trim().length === 0) return void 0;
+  const n = Number(v.trim());
+  return Number.isFinite(n) ? n : void 0;
+}
+var MODEL_FAMILY_RE = /(?:^|[^a-z])(haiku|sonnet|opus|fable)(?:[^a-z]|$)/;
+function modelFamily(value) {
+  return MODEL_FAMILY_RE.exec(value.trim().toLowerCase())?.[1];
+}
+function isBareFamily(v) {
+  return /^(haiku|sonnet|opus|fable)$/.test(v.trim().toLowerCase());
+}
+function modelMatchesConfigured(configured, dispatched) {
+  const nc = configured.trim().toLowerCase();
+  const nd = dispatched.trim().toLowerCase();
+  if (nc.length === 0 || nd.length === 0) return false;
+  if (nc === nd) return true;
+  const fc = modelFamily(nc);
+  const fd = modelFamily(nd);
+  if (fc === void 0 || fc !== fd) return false;
+  return isBareFamily(nc);
+}
+function tierOfModel(map, model) {
+  const hits = TIERS.filter((t) => {
+    const m = map[t];
+    return m !== null && modelMatchesConfigured(m, model);
+  });
+  return hits.length === 1 ? hits[0] : void 0;
+}
+function unpackTierHostValue(v) {
+  let raw = null;
+  if (typeof v === "string") raw = v.trim().length > 0 ? v.trim() : null;
+  else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+    const m = v["model"];
+    if (typeof m === "string" && m.trim().length > 0) raw = m.trim();
+  }
+  return raw === null ? null : safeModelName(raw);
+}
+function readConfiguredTierModels(guildRoot, hostId) {
+  const claudeHost = hostId.startsWith("claude");
+  const out = {
+    cheap: claudeHost ? CLAUDE_TIER_FALLBACK.cheap : null,
+    mid: claudeHost ? CLAUDE_TIER_FALLBACK.mid : null,
+    powerful: claudeHost ? CLAUDE_TIER_FALLBACK.powerful : null
+  };
+  let doc;
+  try {
+    doc = JSON.parse(fs7.readFileSync(path6.join(guildRoot, ".guild", "settings.json"), "utf8"));
+  } catch {
+    return out;
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return out;
+  const models = doc["models"];
+  if (models === null || typeof models !== "object" || Array.isArray(models)) return out;
+  const tiers = models["tiers"];
+  if (tiers === null || typeof tiers !== "object" || Array.isArray(tiers)) return out;
+  for (const tier of TIERS) {
+    const row = tiers[tier];
+    if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
+    out[tier] = unpackTierHostValue(row[hostId]);
+  }
+  return out;
+}
+function isUntieredOverrideEngaged(env) {
+  const raw = env[OVERRIDE_ENV2];
+  if (typeof raw !== "string") return false;
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+function resolveTierDispatch(facts) {
+  const evidence = classifyLaneEvidence(
+    facts.toolInput,
+    facts.attr,
+    facts.prompt,
+    facts.runId
+  );
+  const rawModel = readDispatchModel(facts.toolInput);
+  const declaredTier = readDeclaredTier(facts.toolInput);
+  const score = readDeclaredScore(facts.toolInput);
+  const base = {
+    decision: "pass",
+    reason: "model_present",
+    evidence,
+    recorded: false,
+    model: rawModel === void 0 ? MISSING_MODEL : safeModelName(rawModel),
+    subagentType: safeSubagentTypeLocal(facts.attr.subagentType)
+  };
+  if (declaredTier !== void 0) base.declaredTier = declaredTier;
+  if (score !== void 0) base.score = score;
+  if (facts.attr.taskId !== void 0) base.taskId = safeTaskId(facts.attr.taskId);
+  if (facts.attr.specialist !== void 0) base.specialist = safeSpecialist(facts.attr.specialist);
+  if (evidence === "none" || !facts.runFresh) return base;
+  base.recorded = true;
+  const expectedModel = declaredTier !== void 0 ? facts.tierModels[declaredTier] : null;
+  if (expectedModel !== null && expectedModel !== void 0) {
+    base.expectedModel = expectedModel;
+  }
+  if (rawModel === void 0) {
+    const decision = evidence !== "structured" ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny";
+    return { ...base, decision, reason: "missing_model" };
+  }
+  const dispatchedTier = tierOfModel(facts.tierModels, rawModel);
+  if (dispatchedTier !== void 0) base.dispatchedTier = dispatchedTier;
+  if (declaredTier === void 0) {
+    if (rawTierPresent(facts.toolInput)) {
+      return { ...base, decision: "allow_recorded", reason: "tier_unverifiable" };
+    }
+    return base;
+  }
+  if (expectedModel === null || expectedModel === void 0) {
+    return { ...base, decision: "allow_recorded", reason: "tier_unverifiable" };
+  }
+  if (modelMatchesConfigured(expectedModel, rawModel)) {
+    return { ...base, reason: "scored_compliant" };
+  }
+  if (dispatchedTier === void 0) {
+    return { ...base, decision: "allow_recorded", reason: "tier_unverifiable" };
+  }
+  return { ...base, decision: "allow_recorded", reason: "tier_model_mismatch" };
+}
+var SAFE_SUBAGENT_TYPE_RE2 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+function safeSubagentTypeLocal(value) {
+  if (value.length === 0) return "<absent>";
+  if (!SAFE_SUBAGENT_TYPE_RE2.test(value)) return "<unsafe>";
+  return redactField(value);
+}
+function safeSpecialist(value) {
+  return redactField(value);
+}
+function buildDispatchLine(r) {
+  return `lane ${r.taskId ?? "-"} \xB7 score ${r.score ?? "-"} \xB7 tier ${r.declaredTier ?? "-"} \xB7 model ${r.model}`;
+}
+var SCORER_HINT = "npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/score-tier.ts --signals '<json>' --cwd <repo-root> [--model-tier <pin>]";
+function ladderClause(map) {
+  const shown = TIERS.filter((t) => map[t] !== null).map((t) => `${t}=${map[t]}`);
+  return shown.length > 0 ? shown.join(", ") : "no models.tiers mapping for this host";
+}
+function buildDenyMessage2(r, map) {
+  const role = r.specialist ?? "<unattributed>";
+  const head = `Guild tier integrity (#60): the "${role}" lane is being dispatched through the Agent tool `;
+  const contract = `guild:execute-plan \xA7"Tier resolution" makes the Agent \`model\` param the ONLY tiering lever, and it is REQUIRED on every lane dispatch: the tier defaults CHEAP and a \`powerful\` invocation must be justified by the score, an explicit pin, or an advisor request (${ladderClause(map)}). `;
+  const remedy = `Resolve the lane's tier deterministically first \u2014 ${SCORER_HINT} \u2014 then dispatch with \`model: <the resolved model>\` (and carry ${TIER_ENV}/${TIER_SCORE_ENV} on the dispatch env so the resolved tier is verifiable here). `;
+  const door = `If this lane genuinely must run untiered, do it CONSCIOUSLY: re-run with ${OVERRIDE_ENV2}=1 \u2014 the dispatch is then allowed and a ${TIER_DISPATCH_EVENT} receipt is written to the run record either way. Blocking this dispatch.`;
+  return head + `with NO explicit \`model\` param, so it silently INHERITS the dispatching process's model. That is the exact #60 regression: after a /compact the orchestrator kept the memory of tier-scoring but stopped executing it, and every lane \u2014 including read/summarize/doc lanes the scorer bands cheap \u2014 inherited the powerful orchestrator model. ` + contract + remedy + door;
+}
+function buildRecordMessage(r, map) {
+  const role = r.specialist ?? "<unattributed>";
+  const line = buildDispatchLine(r);
+  const tail = `Recording a ${TIER_DISPATCH_EVENT} receipt at .guild/runs/<run-id>/${RECEIPT_RELATIVE_PATH2} so the dispatch line is a checkable run-record entry (guild:execute-plan SKILL.md \xA7"Tier resolution" step 5 \u2014 "never silent").`;
+  const promptOnlyClause = `The lane was identified from PROMPT TEXT alone (the handoff-protocol block, or the #58 adoption marker / role anchor / dispatch prose) \u2014 the dispatch env carries no GUILD_SPECIALIST / GUILD_TASK_ID / GUILD_AGENT_DEFINITION carrier. Quoted text is indistinguishable from a real brief, so this is recorded, not blocked. `;
+  if (r.reason === "scored_compliant" || r.reason === "model_present") {
+    const scored = r.reason === "scored_compliant" ? "verified scored (model matches the declared tier)" : "model present but scoring UNVERIFIED (no GUILD_TIER carrier to check)";
+    return `Guild tier integrity (#60): ${line} \xB7 ${scored} \xB7 decision ${r.decision}. ${tail}`;
+  }
+  if (r.reason === "tier_model_mismatch") {
+    return `Guild tier integrity (#60): the "${role}" lane declared ${TIER_ENV}="${r.declaredTier}" but was dispatched with \`model: "${r.model}"\` \u2014 this run's project-local \`${r.dispatchedTier}\` model, not its \`${r.declaredTier}\` model ("${r.expectedModel}"). RECORDED, not blocked: the hook reads only the project-local settings.json, not the full multi-layer effective tier map, so this may be a legitimate inherited remap rather than a real contradiction. If it IS a contradiction, dispatch \`model: "${r.expectedModel}"\` for the declared tier or re-score \u2014 ${SCORER_HINT}. ${line}. ${tail}`;
+  }
+  if (r.reason === "tier_unverifiable") {
+    return `Guild tier integrity (#60): the "${role}" lane declared ${TIER_ENV}="${r.declaredTier}" but the dispatched model ("${r.model}") could not be checked against this run's tier map (${ladderClause(map)}) \u2014 an unmapped tier for this host, or a model the project remapped. The \`model\` param IS present, so the contract's primary invariant holds; the tier is simply unverifiable here. ${line}. ${tail}`;
+  }
+  const violation = `was dispatched with NO explicit \`model\` param and therefore inherits the dispatching process's model (${ladderClause(map)}; the tier defaults cheap and \`powerful\` must be justified). `;
+  const head = `Guild tier integrity (#60): the "${role}" lane ${violation}`;
+  if (r.decision === "allow_override") {
+    return head + `OVERRIDDEN: the dispatch was allowed because ${OVERRIDE_ENV2} is set. To honor the tier contract instead, resolve the tier first \u2014 ${SCORER_HINT}. ${line}. ${tail}`;
+  }
+  return `${head}${promptOnlyClause}${line}. ${tail}`;
+}
+function buildTierDispatchEvent(input) {
+  const r = input.result;
+  const evt = {
+    schema_version: TIER_DISPATCH_SCHEMA,
+    ts: input.ts,
+    event: TIER_DISPATCH_EVENT,
+    tool: "Agent",
+    specialist: r.specialist ?? "",
+    ok: r.decision === "pass",
+    ms: 0,
+    run_id: input.runId,
+    decision: r.decision,
+    reason: r.reason,
+    // task_id is bounded upstream (safeTaskId) but bound again defensively so a
+    // receipt built from a hand-constructed result cannot leak an unbounded id.
+    task_id: safeTaskId(r.taskId ?? ""),
+    model: r.model,
+    lane_evidence: r.evidence,
+    subagent_type: r.subagentType,
+    dispatch_line: buildDispatchLine(r),
+    // The free-text detail carries operator-facing prose (config model names,
+    // ladder text) — run it through the shared redaction policy so a
+    // token-shaped or high-entropy value can never land in this shareable sink
+    // (adversarial review finding #3). The security-event twin is already
+    // redacted by buildSecurityEvent; this closes the dedicated sink too.
+    detail: redactField(input.detail),
+    span_id: input.spanId
+  };
+  if (r.declaredTier !== void 0) evt.tier = r.declaredTier;
+  if (r.score !== void 0) evt.score = r.score;
+  if (r.dispatchedTier !== void 0) evt.dispatched_tier = r.dispatchedTier;
+  if (r.expectedModel !== void 0) evt.expected_model = safeModelName(r.expectedModel);
+  if (r.decision === "allow_override") evt.override_env = OVERRIDE_ENV2;
+  if (input.laneId !== void 0) evt.lane_id = input.laneId;
+  return evt;
+}
+function appendTierDispatchEvent(runDir, event) {
+  try {
+    const file = path6.join(runDir, RECEIPT_RELATIVE_PATH2);
+    fs7.mkdirSync(path6.dirname(file), { recursive: true });
+    fs7.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [tier-dispatch] receipt write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
 // lib/guild-hook-event.ts
 async function readHookStdin() {
   return new Promise((resolve4) => {
@@ -1290,9 +1561,9 @@ function isKnownTool(name) {
   return TOOL_CALL_TOOL_VALUES.includes(name);
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path6.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path7.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs7.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs8.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -1324,8 +1595,8 @@ function readHostCapability(cwd) {
   addCandidate(candidates, legacyByRegistry[hostRes.id]);
   for (const hostId of candidates) {
     try {
-      const manifestPath = path6.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
-      const raw = fs7.readFileSync(manifestPath, "utf8");
+      const manifestPath = path7.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const raw = fs8.readFileSync(manifestPath, "utf8");
       return JSON.parse(raw);
     } catch {
     }
@@ -1334,8 +1605,8 @@ function readHostCapability(cwd) {
 }
 function writeApprovalRequest(runDir, opts) {
   try {
-    const approvalDir = path6.join(runDir, "agent-bus", "approvals");
-    fs7.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path7.join(runDir, "agent-bus", "approvals");
+    fs8.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-${opts.tool.toLowerCase()}.json`;
@@ -1350,7 +1621,7 @@ function writeApprovalRequest(runDir, opts) {
     if (opts.laneId) record["lane_id"] = opts.laneId;
     if (opts.dispatchRung) record["dispatch_rung"] = opts.dispatchRung;
     const content = JSON.stringify(record, null, 2) + "\n";
-    scrubbedWrite(path6.join(approvalDir, fileName), content, {
+    scrubbedWrite(path7.join(approvalDir, fileName), content, {
       surface: "bus",
       runDir,
       runId: opts.runId,
@@ -1378,7 +1649,7 @@ function hasGuildSignature(content) {
   return false;
 }
 function isInsideGuildDir(absPath) {
-  return path6.resolve(absPath).split(path6.sep).includes(".guild");
+  return path7.resolve(absPath).split(path7.sep).includes(".guild");
 }
 function runBoundaryGuard(payload, cwd, ctx) {
   const tool = payload.tool_name;
@@ -1402,7 +1673,7 @@ ${e.new_string}`;
     }
   }
   if (!hasGuildSignature(content)) return false;
-  const abs = path6.isAbsolute(filePath) ? filePath : path6.resolve(cwd, filePath);
+  const abs = path7.isAbsolute(filePath) ? filePath : path7.resolve(cwd, filePath);
   if (isInsideGuildDir(abs)) return false;
   const guardReason = `Guild-owned-file boundary (P5-boundary-001): a Guild-signed artifact would be written OUTSIDE the consuming repo's .guild/ (${abs}). Guild-owned files belong under .guild/ (or .guild/agents/proposed/, .guild/skills/proposed-*). Confirm this write is intentional.`;
   const toolName = payload.tool_name ?? "";
@@ -1457,8 +1728,8 @@ function readMcpDescription(payload, runDir, toolName) {
   }
   if (runDir !== void 0) {
     try {
-      const p = path6.join(runDir, "logs", "mcp-tool-descriptions.json");
-      const map = JSON.parse(fs7.readFileSync(p, "utf8"));
+      const p = path7.join(runDir, "logs", "mcp-tool-descriptions.json");
+      const map = JSON.parse(fs8.readFileSync(p, "utf8"));
       const d = map[toolName];
       if (typeof d === "string") return d;
     } catch {
@@ -1474,7 +1745,7 @@ function runSecurityEnforcement(payload, cwd) {
     const envRunId = process.env["GUILD_RUN_ID"];
     const envTaskId = process.env["GUILD_TASK_ID"];
     if (typeof envRunId === "string" && envRunId.length > 0 && typeof envTaskId === "string" && envTaskId.length > 0) {
-      const scopeFilePath = path6.join(
+      const scopeFilePath = path7.join(
         resolveGuildRoot(cwd),
         ".guild",
         "runs",
@@ -1742,6 +2013,88 @@ function emitBackendDegradationDeny(message) {
     })
   );
 }
+function evaluateTierDispatch(payload, cwd) {
+  if (payload.tool_name !== "Agent") return null;
+  const envRunId = process.env["GUILD_RUN_ID"];
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) return null;
+  const runIdSource = typeof envRunId === "string" && envRunId.length > 0 || dispatchAssertsRunId(payload.tool_input, runId) ? "env" : "sentinel";
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return null;
+  const ti = payload.tool_input;
+  const prompt = typeof ti?.["prompt"] === "string" ? ti["prompt"] : "";
+  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+  const guildRoot = resolveGuildRoot(cwd);
+  const runFresh = isRunFresh(guildRoot, runId, runIdSource);
+  if (!runFresh) return null;
+  const tierModels = readConfiguredTierModels(
+    guildRoot,
+    resolveHostResolution(process.env).id
+  );
+  const result = resolveTierDispatch({
+    toolInput: payload.tool_input,
+    attr,
+    prompt,
+    runId,
+    tierModels,
+    overrideEngaged: isUntieredOverrideEngaged(process.env),
+    runFresh
+  });
+  if (!result.recorded) return null;
+  const message = result.decision === "deny" ? buildDenyMessage2(result, tierModels) : buildRecordMessage(result, tierModels);
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId = typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : void 0;
+  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  try {
+    appendTierDispatchEvent(
+      runDir,
+      buildTierDispatchEvent({
+        runId,
+        ts,
+        spanId: genSpanId(runId, TIER_DISPATCH_EVENT, ts, result.specialist ?? "main"),
+        result,
+        detail: message,
+        ...laneId !== void 0 ? { laneId } : {}
+      })
+    );
+  } catch {
+  }
+  if (result.reason === "missing_model" && result.decision !== "pass") {
+    try {
+      appendSecurityEvent(
+        runDir,
+        buildSecurityEvent({
+          run_id: runId,
+          lane_id: laneId,
+          event_type: "tier_dispatch_untiered",
+          decision: result.decision === "deny" ? "deny" : "allow",
+          tool: "Agent",
+          detail: message
+        })
+      );
+    } catch {
+    }
+  }
+  const safeMessage = redactField(message);
+  process.stderr.write(
+    result.decision === "pass" ? `[pre-tool-use] guild-tier: ${result.model} \xB7 ${result.decision} \u2014 ${safeMessage}
+` : `warn: [pre-tool-use] ${safeMessage}
+`
+  );
+  return { deny: result.decision === "deny", message };
+}
+function emitTierDispatchDeny(message) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: message
+      }
+    })
+  );
+}
 async function main() {
   const raw = await readHookStdin();
   let payload = {};
@@ -1753,9 +2106,14 @@ async function main() {
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const backend = evaluateBackendDegradation(payload, cwd);
+  const tier = evaluateTierDispatch(payload, cwd);
   if (runDispatchIntegrityGuard(payload, cwd)) return;
   if (backend !== null && backend.deny) {
     emitBackendDegradationDeny(backend.message);
+    return;
+  }
+  if (tier !== null && tier.deny) {
+    emitTierDispatchDeny(tier.message);
     return;
   }
   if (runSecurityEnforcement(payload, cwd)) return;
@@ -1763,7 +2121,7 @@ async function main() {
     const bgHostCap = readHostCapability(cwd);
     const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
     const bgRunId = resolveRunId(cwd);
-    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path6.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
+    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path7.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
     const bgLaneId = typeof bgLaneEnv === "string" && bgLaneEnv.length > 0 ? bgLaneEnv : void 0;
     const bgDispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || void 0;
@@ -1797,7 +2155,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path6.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path7.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
   const entry = {
     run_id: runId,
@@ -1813,7 +2171,7 @@ async function main() {
     );
   }
   try {
-    fs7.mkdirSync(path6.join(runDir, "logs"), { recursive: true });
+    fs8.mkdirSync(path7.join(runDir, "logs"), { recursive: true });
     appendSidecarPre(runDir, entry);
   } catch (err) {
     process.stderr.write(
