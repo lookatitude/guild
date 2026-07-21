@@ -117,10 +117,21 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * RATIFIED_MANIFESTS and RATIFIED_CLAUDE_PLUGIN_FILES below are UNCHANGED —
  * verified, not assumed. Both guards were observed RED against the old pin
  * before this bump, which is the anti-vacuity evidence that the pin is live.
+ *
+ * Re-ratified 2026-07-21 (issue #58 type-erasure detectability, guild#66) —
+ * DELIBERATE skill-surface change: `skills/meta/execute-plan/{SKILL.md,dispatch.md}`
+ * now state the ENFORCED project-lane dispatch contract (GUILD_AGENT_DEFINITION
+ * line-1 marker + adoption prefix are guaranteed and hook-verified, replacing the
+ * "env not guaranteed on the subagent path" caveat). `skill-src/skill-registry.json`
+ * was re-extracted in the SAME commit so `render(entry) === skills/meta/execute-plan/
+ * SKILL.md` byte-parity holds (SC-W2-1 + skill-source-transform suites green).
+ * `commands/**` untouched — its pin is UNCHANGED (verified). `.claude-plugin/**`
+ * untouched — RATIFIED_MANIFESTS unchanged. Both guards observed RED against the
+ * old skills pin on guild#66 CI (run 29800612956) — anti-vacuity evidence.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
-  skills: "e539a219ed4c01aac2d6fdb795b898cf474988dd",
+  skills: "c936421787a8a723a52211cda66d11c71038d69d",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
