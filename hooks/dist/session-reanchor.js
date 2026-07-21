@@ -3102,6 +3102,150 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
+// lib/v1.4/redact-log.ts
+var TOKEN_REDACTED = "[REDACTED_TOKEN]";
+var PATH_REDACTED = "[REDACTED]";
+var KV_REDACTED = "[REDACTED]";
+var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
+var TRUNCATION_SUFFIX = "... [TRUNCATED]";
+var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+var TOKEN_SHAPE_PATTERNS = [
+  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
+  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
+  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
+  /\bghp_[A-Za-z0-9]{36}\b/g,
+  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
+  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+];
+function redactTokenShapes(input) {
+  let out = input;
+  for (const re of TOKEN_SHAPE_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
+  }
+  return out;
+}
+var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
+function redactHomeDirPaths(input) {
+  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
+    return `${root}/${dir}/${PATH_REDACTED}`;
+  });
+}
+var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
+function redactKeyValueSecrets(input) {
+  return input.replace(
+    KV_SECRET_PATTERN,
+    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
+  );
+}
+var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+var MAX_PATH_TOKEN_LEN = 512;
+function allWordsWordish(words) {
+  let opaqueBudget = 1;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    let upper = 0;
+    let lower = 0;
+    let digits = 0;
+    for (const ch of word) {
+      if (ch >= "a" && ch <= "z") lower++;
+      else if (ch >= "A" && ch <= "Z") upper++;
+      else digits++;
+    }
+    if (lower === 0) {
+      if (word.length > 8) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+    } else if (upper > 3 || digits > 4) {
+      return false;
+    }
+  }
+  return true;
+}
+function isRelativePathToken(candidate, fullInput, matchIndex) {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
+  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
+    return false;
+  }
+  let end = matchIndex + candidate.length;
+  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
+  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
+    return false;
+  }
+  const token = fullInput.slice(start, end);
+  if (token.length > MAX_PATH_TOKEN_LEN) return false;
+  if (!PATH_SHAPE.test(token)) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
+}
+function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
+  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
+    return true;
+  }
+  const lookBackStart = Math.max(0, matchIndex - 16);
+  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
+  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
+    return true;
+  }
+  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
+    return true;
+  }
+  return false;
+}
+var HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
+function redactHighEntropy(input) {
+  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
+    if (isWhitelistedHighEntropy(match, input, offset)) {
+      return match;
+    }
+    return HIGH_ENTROPY_REDACTED;
+  });
+}
+function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
+  const byteLen = Buffer.byteLength(input, "utf8");
+  if (byteLen <= cap) return input;
+  const buf = Buffer.from(input, "utf8");
+  const truncated = buf.slice(0, cap).toString("utf8");
+  const cleaned = truncated.replace(/\uFFFD+$/u, "");
+  return cleaned + TRUNCATION_SUFFIX;
+}
+function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
+  if (typeof input !== "string") return input;
+  let out = redactTokenShapes(input);
+  out = redactHomeDirPaths(out);
+  out = redactKeyValueSecrets(out);
+  out = redactHighEntropy(out);
+  out = truncateToCap(out, cap);
+  return out;
+}
+
+// lib/trace-v2.ts
+var SIDECAR_MAX_BYTES = 16 * 1024;
+
+// lib/v1.4/log-jsonl-writer.ts
+var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+
+// lib/v1.4/log-jsonl-sidecar.ts
+var SIDECAR_MAX_BYTES2 = 1024 * 1024;
+
+// lib/lane-attribution.ts
+function isWorkerInvocation(env = process.env) {
+  const laneId = env["GUILD_LANE_ID"];
+  const taskId = env["GUILD_TASK_ID"];
+  return typeof laneId === "string" && laneId.length > 0 || typeof taskId === "string" && taskId.length > 0;
+}
+
 // lib/reanchor.ts
 var fs6 = __toESM(require("node:fs"));
 var path8 = __toESM(require("node:path"));
@@ -6170,7 +6314,7 @@ var path7 = __toESM(require("path"));
 
 // ../src/modules/config/workflows/config-defaults.ts
 var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-var SIDECAR_MAX_BYTES = 1024 * 1024;
+var SIDECAR_MAX_BYTES3 = 1024 * 1024;
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS = {
@@ -7295,134 +7439,6 @@ var fs5 = __toESM(require("node:fs"));
 var path6 = __toESM(require("node:path"));
 var crypto = __toESM(require("node:crypto"));
 
-// lib/v1.4/redact-log.ts
-var TOKEN_REDACTED = "[REDACTED_TOKEN]";
-var PATH_REDACTED = "[REDACTED]";
-var KV_REDACTED = "[REDACTED]";
-var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
-var TRUNCATION_SUFFIX = "... [TRUNCATED]";
-var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
-];
-function redactTokenShapes(input) {
-  let out = input;
-  for (const re of TOKEN_SHAPE_PATTERNS) {
-    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
-  }
-  return out;
-}
-var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
-function redactHomeDirPaths(input) {
-  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
-    return `${root}/${dir}/${PATH_REDACTED}`;
-  });
-}
-var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
-function redactKeyValueSecrets(input) {
-  return input.replace(
-    KV_SECRET_PATTERN,
-    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
-  );
-}
-var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
-var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
-var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
-var MAX_PATH_TOKEN_LEN = 512;
-function allWordsWordish(words) {
-  let opaqueBudget = 1;
-  for (const word of words) {
-    if (word.length === 0 || word.length >= 20) return false;
-    let upper = 0;
-    let lower = 0;
-    let digits = 0;
-    for (const ch of word) {
-      if (ch >= "a" && ch <= "z") lower++;
-      else if (ch >= "A" && ch <= "Z") upper++;
-      else digits++;
-    }
-    if (lower === 0) {
-      if (word.length > 8) return false;
-      if (word.length > 2 && --opaqueBudget < 0) return false;
-    } else if (upper > 3 || digits > 4) {
-      return false;
-    }
-  }
-  return true;
-}
-function isRelativePathToken(candidate, fullInput, matchIndex) {
-  if (candidate.includes("+") || candidate.includes("=")) return false;
-  let start = matchIndex;
-  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
-  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
-  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
-    return false;
-  }
-  let end = matchIndex + candidate.length;
-  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
-  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
-  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
-    return false;
-  }
-  const token = fullInput.slice(start, end);
-  if (token.length > MAX_PATH_TOKEN_LEN) return false;
-  if (!PATH_SHAPE.test(token)) return false;
-  const slashCount = token.split("/").length - 1;
-  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
-  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
-}
-function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
-  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
-    return true;
-  }
-  const lookBackStart = Math.max(0, matchIndex - 16);
-  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
-  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
-    return true;
-  }
-  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
-    return true;
-  }
-  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
-    return true;
-  }
-  return false;
-}
-var HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
-function redactHighEntropy(input) {
-  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
-    if (isWhitelistedHighEntropy(match, input, offset)) {
-      return match;
-    }
-    return HIGH_ENTROPY_REDACTED;
-  });
-}
-function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
-  const byteLen = Buffer.byteLength(input, "utf8");
-  if (byteLen <= cap) return input;
-  const buf = Buffer.from(input, "utf8");
-  const truncated = buf.slice(0, cap).toString("utf8");
-  const cleaned = truncated.replace(/\uFFFD+$/u, "");
-  return cleaned + TRUNCATION_SUFFIX;
-}
-function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
-  if (typeof input !== "string") return input;
-  let out = redactTokenShapes(input);
-  out = redactHomeDirPaths(out);
-  out = redactKeyValueSecrets(out);
-  out = redactHighEntropy(out);
-  out = truncateToCap(out, cap);
-  return out;
-}
-
 // lib/security/secrets.ts
 function applySecretsPolicy(value, policy, opts) {
   if (typeof value !== "string") {
@@ -8016,6 +8032,7 @@ async function main() {
   if (!REANCHOR_SESSION_SOURCES.has(source)) {
     return;
   }
+  if (isWorkerInvocation()) return;
   const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : void 0;
   const cwd = process.env["GUILD_CWD"] ?? payloadCwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);

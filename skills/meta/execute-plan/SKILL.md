@@ -353,6 +353,70 @@ worked every time; the §11.1 ≥3-reflection trigger fired on what was
 actually an **under-specification** of valid orchestrator behavior, not a
 defect.
 
+### Expiry (issue #57 — the shortcut is a budget, not a standing posture)
+
+The forensic finding behind issue #57: a 39-hour self-build session used
+this shortcut to justify doing **909 Bash / 136 Edit / 52 Write operations
+itself** across 8 un-re-anchored compactions, instead of dispatching lane
+work by pointer — the orchestrator/team-lead/executor separation
+collapsed into one session. `## Mid-run scope expansion` below inherits
+the same budget (absorbing an operator mandate inline does not reset it).
+
+The inline shortcut is valid only up to a hard, codified budget. It
+**expires** — and the orchestrator MUST re-enter the formal sub-skill
+chain (`guild:context-assemble → dispatch → guild:review`, or
+`guild:resume` if picking a run back up) — on whichever of these happens
+first:
+
+1. **N direct lead Edit/Write operations.** `N` =
+   `.guild/settings.json` `defaults.lean_lead.hands_on_edit_threshold`
+   (default **8**; `defaults.lean_lead.enabled: false` disables the guard
+   entirely), read tolerantly straight off `settings.json` the same way
+   `defaults.resume.enabled` is (`hooks/lib/run-state.ts readResumeEnabled`).
+   **Known gap:** this key is not yet wired through `guild:config`'s
+   validate/set/resolve surfaces (`scripts/lib/core/config-cli.ts`,
+   `scripts/config-cmd.ts`, `src/modules/config/workflows/settings-reader.ts`)
+   — those files are outside this lane's scope — so `guild:config set` and
+   `guild:config validate` do not yet recognize it; only a direct hand-edit
+   of `settings.json` takes effect. Follow-up: register it as a proper
+   config-schema surface. Counted from the tool-call trace, not
+   self-reported — see enforcement below.
+2. **Any compaction boundary.** This is a DISJUNCTION with #1, not a
+   fresh N-edit allowance — `hooks/session-reanchor.ts` (gap G1, oir-wi-00)
+   already re-injects the lean-lead contract (dispatch by pointer, don't
+   absorb lane work) into the fresh post-compaction context, so continuing
+   to edit inline past that point is ALREADY a fresh violation on its own,
+   independent of N. The first direct lead Edit/Write after a compaction
+   is the trigger, not the Nth.
+
+**Enforcement lives in code, not prose.** `hooks/lean-lead-guard.ts` (a
+Stop hook — it observes every turn end) is registered globally, so it ALSO
+fires inside every dispatched specialist's own pane/subagent session, not
+just the lead's. It first checks THIS INVOCATION's own environment — a
+`GUILD_TASK_ID` or `GUILD_LANE_ID` set means the calling process IS a
+dispatched lane worker, not the lead, and the guard stays silent and never
+touches the shared per-run fire-once state (a lane worker's own Stop hook
+must never consume or perturb the ONE advisory meant for the lead). Once
+confirmed to be the lead's own session, it counts direct lead Edit/Write
+`tool_call` trace events since the most recent `PreCompact` trace event
+(identified by the ABSENCE of `lane_id` — real production dispatch
+backends thread `GUILD_TASK_ID` into a lane worker's own environment,
+which `post-tool-use.ts` stamps onto `lane_id`, so a lane worker's own
+tool calls always carry one), and cross-references the count against
+`run-state.json`'s open (`pending`/`in_progress`) lanes. Crossing the
+threshold — or, post-compaction, the FIRST such edit at all — while lanes
+are open surfaces a loud advisory (`hookSpecificOutput.additionalContext`)
+naming the count, the threshold, and the open-lane count, and pointing
+back at `guild:execute-plan` / `guild:resume`. It never denies a tool call
+and never forces a specific corrective action — a solo one-off task or a
+run with no dispatched lanes has nothing this guard needs to protect —
+see `hooks/lib/lean-lead-guard.ts` header for the full zero-noise gating
+(disabled, overridden, no open lanes, under threshold, already fired this
+cycle) and for the honest caveat that Stop's `additionalContext` does
+still cost the lead one more turn to read it, unlike a bare stderr log.
+An operator who wants this specific
+crossing dismissed sets `GUILD_LEAN_LEAD_OVERRIDE=1` for the session.
+
 ## Hard-set gate deferral under high autonomy (sibling to the inline shortcut above)
 
 Sibling clause to `## Inline shortcut under high autonomy` above — that section governs when the *sub-skill chain* can be inlined; this one governs what happens when a lane, inlined or not, **hits an always-ask / hard-set gate** while running under high autonomy (`--auto-approve=all` / `defaults.auto_approve: all`).
@@ -379,6 +443,13 @@ policy that emerged after SC-10). In both cases the run absorbed the
 expansion cleanly without restarting the lifecycle. This section codifies
 the absorption pattern so future orchestrators recognize and execute it
 deterministically.
+
+Absorbing an expansion **inline** (step 3 below) still draws against the
+same inline-shortcut budget as `## Inline shortcut under high autonomy →
+### Expiry` — a broadened mandate is not a reset. If the budget has
+already expired (or expires mid-absorption), formalize the remaining
+absorption work as dispatched lanes rather than continuing to patch it in
+directly.
 
 ### Detection signals
 

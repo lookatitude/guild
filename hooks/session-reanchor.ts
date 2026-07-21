@@ -26,9 +26,18 @@
  *          on the two posture-loss sources. Keeping them apart avoids coupling a
  *          run-state read into the always-on startup path.
  *
+ *          LEAD-ONLY (oir-wi-57 round-4 fix): SessionStart is globally
+ *          registered, so it ALSO fires when a dispatched specialist's own
+ *          pane/subagent resumes or compacts — not just the lead's. This
+ *          invocation's own GUILD_LANE_ID/GUILD_TASK_ID env identifies that
+ *          case and the header is skipped outright — a specialist reading
+ *          "you are the lean LEAD" would recreate the exact role-collapse
+ *          class issue #57 exists to prevent.
+ *
  * Stdin:   JSON — Claude Code SessionStart payload (carries `source`, `cwd`).
  * Stdout:  A single JSON object (the additionalContext envelope) when an active
- *          OPEN run exists AND source is compact|resume; otherwise NOTHING.
+ *          OPEN run exists AND source is compact|resume AND this invocation is
+ *          the lead's own session; otherwise NOTHING.
  * Stderr:  Diagnostics only.
  * Exit:    Always 0 — a re-anchor failure must never block the session.
  *
@@ -36,6 +45,7 @@
  */
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { isWorkerInvocation } from "./lib/lane-attribution.js";
 import {
   REANCHOR_SESSION_SOURCES,
   buildReanchorHeader,
@@ -82,6 +92,16 @@ export async function main(): Promise<void> {
     // startup / clear / fork — not a posture-loss event. Zero noise.
     return;
   }
+
+  // oir-wi-57 round-4: SessionStart is globally registered too, so a
+  // dispatched specialist's own pane/subagent resuming or compacting ALSO
+  // fires this hook — not just the lead's. The "you are the lean LEAD, not a
+  // lane worker" header must never reach a specialist's own session (it would
+  // recreate the exact role-collapse class issue #57 exists to prevent: a
+  // compacted specialist reading it and abandoning its lane to assume
+  // orchestration). This invocation's OWN environment carrying
+  // GUILD_LANE_ID/GUILD_TASK_ID means it IS a dispatched worker, not the lead.
+  if (isWorkerInvocation()) return;
 
   // `cwd` is only usable when it is actually a string — a non-string (e.g. 42)
   // must fall through to process.cwd(), never reach resolveGuildRoot.
