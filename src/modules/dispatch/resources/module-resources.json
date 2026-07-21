@@ -36,7 +36,7 @@
       "id": "lib/host/inprocess-backend",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "1f91528f57539221c2e6ffff02f57f8b590186d3fff760d8d6a4551dd7114149"
+      "sha256": "1e8e5900c9ec439021ecf70cc9b2261ff0ece0903e30a0b69bf0f957a6063e1b"
     },
     {
       "category": "scripts",

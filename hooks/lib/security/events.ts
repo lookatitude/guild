@@ -43,7 +43,15 @@ export type SecurityEventType =
    * — being scoped by architect). The event type is registered here so the
    * audit-event family is whole and the host: field (HK-05) is auto-stamped.
    */
-  | "recall_quarantine";
+  | "recall_quarantine"
+  /**
+   * #58: a Guild specialist-lane `Agent` dispatch claimed a project-specialist
+   * persona (adoption prompt / GUILD_SPECIALIST+GUILD_TASK_ID) but was dispatched
+   * as subagent_type="general-purpose" WITHOUT a matching GUILD_AGENT_DEFINITION
+   * — a silently persona-stripped dispatch. Blocked fail-closed by the
+   * PreToolUse dispatch-integrity guard.
+   */
+  | "dispatch_attribution_missing";
 
 /** The action Guild took for the gated tool call. */
 export type SecurityDecision = "ask" | "deny" | "allow" | "pass"

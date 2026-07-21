@@ -87,7 +87,19 @@ export function buildPrompt(
         `in its frontmatter \`skills:\`, load the project-local instance at ` +
         `\`.guild/skills/<skill>/SKILL.md\` when it exists before starting your lane. `
       : "";
+  // #58 — the machine-readable definition-adoption PREFIX. Emitted as the very
+  // FIRST LINE for a project specialist, alongside the human-readable
+  // instruction above. The PreToolUse dispatch-integrity guard parses identity
+  // from THIS line only: a fixed, producer-owned position that the lane's
+  // arbitrary `scope` text (appended below) can never forge or contradict. This
+  // is what makes a correct dispatch textually distinguishable from a
+  // persona-stripped one instead of byte-identical.
+  const definitionMarker =
+    specialist.definition_source === "project" && specialist.definition
+      ? `GUILD_AGENT_DEFINITION=${specialist.definition}\n`
+      : "";
   return (
+    definitionMarker +
     `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` +
     definitionInstruction +
     `Your lane scope: \`${specialist.scope}\`. ` +

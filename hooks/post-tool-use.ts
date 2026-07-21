@@ -43,6 +43,7 @@ import {
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header + contract-map §B-post.
 import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/trace-v2.js";
+import { resolveDispatchAttribution } from "./lib/dispatch-attribution.js";
 // HK-06: durable-surface (wiki/review/handoffs/provenance) PostToolUse scrub-in-place (D-SECRETS).
 import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
 import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
@@ -449,6 +450,21 @@ export async function main(): Promise<void> {
       actorId: laneId ?? "main",
       tokens,
     });
+    // #58 — stamp the resolved specialist role on an Agent dispatch so post-hoc
+    // audits can tell a real specialist lane from a bare generic agent (both
+    // dispatch as subagent_type="general-purpose"). Resolved from the dispatch's
+    // own tool_input (GUILD_SPECIALIST/GUILD_AGENT_DEFINITION env, else the
+    // adoption prompt) — NOT process.env, which belongs to the lead, not the
+    // dispatched lane.
+    // Gated on isSpecialistLane: only a real specialist lane is attributed. An
+    // ordinary generic call is left UNSTAMPED — stamping one would defeat the
+    // very distinction the field exists to record.
+    if (toolName === "Agent") {
+      const attr = resolveDispatchAttribution(payload.tool_input);
+      if (attr?.isSpecialistLane === true && attr.specialist !== undefined) {
+        traceV2.attribution_specialist = attr.specialist;
+      }
+    }
     appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(
