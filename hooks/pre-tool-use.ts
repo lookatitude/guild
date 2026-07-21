@@ -72,6 +72,11 @@ import {
   resolveScopeDecision,
 } from "./lib/security/enforce.js";
 import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
+import {
+  describeViolation,
+  dispatchViolations,
+  resolveDispatchAttribution,
+} from "./lib/dispatch-attribution.js";
 // L5a: host-neutral hook payload + Claude emitter. PreToolUsePayload is now the
 // shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
 // PreToolUse security behavior is preserved byte-for-byte.
@@ -689,6 +694,94 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
   return false;
 }
 
+// ── Dispatch-integrity guard (#58) ──────────────────────────────────────────
+//
+// Make specialist type-erasure DETECTABLE. During an active Guild run, an
+// `Agent` dispatch that CLAIMS a project-specialist persona (its prompt carries
+// the `.guild/agents/<role>.md` adoption instruction / the "dispatched as the
+// Guild <role> specialist" prose, OR it carries GUILD_SPECIALIST+GUILD_TASK_ID)
+// but is dispatched as `subagent_type: "general-purpose"` WITHOUT a matching
+// GUILD_AGENT_DEFINITION env is a silently persona-stripped dispatch — the
+// intended (definition-carrying) call and the defective one were otherwise
+// byte-identical. Fail closed: deny it with a loud, actionable message.
+//
+// Scope is deliberately tight (NEVER interfere with a non-Guild Agent call):
+//   - only tool_name === "Agent";
+//   - only inside a resolvable Guild run (GUILD_RUN_ID / current-run-id);
+//   - only when isPersonaStrippedDispatch — i.e. generic type ∧ specialist
+//     adoption ∧ no GUILD_AGENT_DEFINITION.
+// A correctly-carried project dispatch (definition present), a shipped agent
+// dispatched by name (non-generic), a generic learn/fan-out lane (no adoption
+// signature), and any non-Guild Agent call all fall through untouched.
+
+/**
+ * Returns true iff it handled the event (emitted a deny decision on stdout; the
+ * caller must then return without writing telemetry, keeping stdout = exactly
+ * the decision JSON). A best-effort guild.security_event.v1 is recorded, but the
+ * deny NEVER depends on the log write succeeding.
+ */
+function runDispatchIntegrityGuard(payload: GuildHookEvent, cwd: string): boolean {
+  if (payload.tool_name !== "Agent") return false;
+
+  // Only inside an active Guild run — non-Guild sessions are never gated.
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0) return false;
+
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return false;
+  const violations = dispatchViolations(attr);
+  if (violations.length === 0) return false;
+
+  const role = attr.specialist ?? "<unknown>";
+  // The message names the invariant(s) that ACTUALLY failed — telling an
+  // operator "GUILD_AGENT_DEFINITION is missing" when it is present and correct
+  // is worse than useless for an observability rail (adversarial review r6).
+  const detail = violations.map((v) => describeViolation(v, role, attr)).join("; ");
+  const reason =
+    `Guild dispatch integrity (#58): a lane claiming the Guild "${role}" specialist ` +
+    `is being dispatched as subagent_type="general-purpose", but ${detail}. ` +
+    `The specialist's persona, scoped skills, tool permissions, and ` +
+    `TRIGGER/DO-NOT-TRIGGER boundaries would be silently stripped — a real ` +
+    `"${role}" lane and a bare generic agent would be indistinguishable. ` +
+    `guild:execute-plan's backend descriptor (composeInProcessDispatch + ` +
+    `buildPrompt) sets every required carrier; re-dispatch through it. ` +
+    `Blocking this dispatch. [violations: ${violations.join(",")}]`;
+
+  // Best-effort audit record — never gate on the write.
+  try {
+    const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+    const laneEnv = process.env["GUILD_LANE_ID"];
+    const laneId =
+      typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
+        ? laneEnv
+        : undefined;
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        event_type: "dispatch_attribution_missing",
+        decision: "deny",
+        tool: "Agent",
+        detail: reason,
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
+      },
+    }),
+  );
+  return true;
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export async function main(): Promise<void> {
@@ -702,6 +795,14 @@ export async function main(): Promise<void> {
   }
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+
+  // #58 dispatch-integrity guard — fail closed on a persona-stripped Guild
+  // specialist dispatch. Runs FIRST (before capability enforcement) so a
+  // stripped `Agent` dispatch is DENIED outright and can never be downgraded to
+  // an `ask` (and then approved) by a capability-scope gate. Scoped tightly to
+  // the `Agent` tool inside an active run; falls through untouched otherwise. If
+  // it denies, it owns stdout for this event, so skip everything else.
+  if (runDispatchIntegrityGuard(payload, cwd)) return;
 
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this

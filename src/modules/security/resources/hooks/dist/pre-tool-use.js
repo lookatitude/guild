@@ -929,6 +929,87 @@ function verifyMcpDescription(toolName, liveDescription, pins) {
   };
 }
 
+// lib/dispatch-attribution.ts
+var GENERIC_SUBAGENT_TYPE = "general-purpose";
+var DEF_PATH_RE = /^\.guild\/agents\/([A-Za-z0-9._-]+)\.md$/;
+var SAFE_ROLE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var ROLE_DEF_ANCHOR_RE = /role definition is at\s*[`'"]?\.guild\/agents\/([A-Za-z0-9._-]+)\.md/i;
+var DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{0,2}\s+specialist/i;
+var DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
+var PRODUCER_HEAD_CHARS = 300;
+function safeRole(v) {
+  return v !== void 0 && SAFE_ROLE_RE.test(v) ? v : void 0;
+}
+function envStr(env, key) {
+  const v = env[key];
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function resolveDispatchAttribution(toolInput) {
+  if (toolInput === null || typeof toolInput !== "object") return null;
+  const ti = toolInput;
+  if (!("subagent_type" in ti) && !("prompt" in ti)) return null;
+  const subagentType = typeof ti.subagent_type === "string" ? ti.subagent_type : "";
+  const prompt = typeof ti.prompt === "string" ? ti.prompt : "";
+  const env = ti.env !== null && typeof ti.env === "object" ? ti.env : {};
+  const definitionPathRaw = envStr(env, "GUILD_AGENT_DEFINITION");
+  const definitionPath = definitionPathRaw?.trim();
+  const taskId = envStr(env, "GUILD_TASK_ID");
+  const specialistEnv = safeRole(envStr(env, "GUILD_SPECIALIST"));
+  const firstLine = (prompt.split("\n", 1)[0] ?? "").trim();
+  const markerPath = DEFINITION_MARKER_RE.exec(firstLine)?.[1];
+  const markerRole = safeRole(
+    markerPath !== void 0 ? DEF_PATH_RE.exec(markerPath)?.[1] : void 0
+  );
+  const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
+  const anchorRole = safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
+  const proseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
+  const hasProseSignature = proseRole !== void 0;
+  const hasAdoptionPrompt = markerRole !== void 0 || anchorRole !== void 0;
+  const defMatch = definitionPath !== void 0 && definitionPath.length > 0 ? DEF_PATH_RE.exec(definitionPath) : null;
+  const defRole = safeRole(defMatch?.[1]);
+  const hasValidDefinition = defMatch !== null && defRole !== void 0 && (specialistEnv === void 0 || defRole === specialistEnv);
+  const roles = [specialistEnv, defRole, markerRole, anchorRole, proseRole].filter(
+    (r) => r !== void 0
+  );
+  const hasConsistentIdentity = roles.every((r) => r === roles[0]);
+  const specialist = specialistEnv ?? defRole ?? markerRole ?? anchorRole ?? proseRole;
+  const promptTeammate = /teammate for run-id/i.test(head);
+  const isComposedLane = taskId !== void 0 && specialistEnv !== void 0;
+  const isSpecialistLane = hasAdoptionPrompt || hasProseSignature || isComposedLane;
+  const hasLaneSignature = isSpecialistLane || promptTeammate || taskId !== void 0 || specialistEnv !== void 0;
+  const out = {
+    subagentType,
+    isGeneric: subagentType === GENERIC_SUBAGENT_TYPE,
+    isSpecialistLane,
+    hasAdoptionPrompt,
+    hasValidDefinition,
+    hasConsistentIdentity,
+    hasLaneSignature
+  };
+  if (specialist !== void 0) out.specialist = specialist;
+  if (definitionPath !== void 0) out.definitionPath = definitionPath;
+  if (taskId !== void 0) out.taskId = taskId;
+  return out;
+}
+function dispatchViolations(attr) {
+  if (!attr.isGeneric || !attr.isSpecialistLane) return [];
+  const out = [];
+  if (!attr.hasValidDefinition) out.push("missing_definition");
+  if (!attr.hasAdoptionPrompt) out.push("missing_adoption_prompt");
+  if (!attr.hasConsistentIdentity) out.push("identity_mismatch");
+  return out;
+}
+function describeViolation(v, role, attr) {
+  switch (v) {
+    case "missing_definition":
+      return `no valid GUILD_AGENT_DEFINITION env` + (attr.definitionPath !== void 0 ? ` (got ${JSON.stringify(attr.definitionPath)}, expected ".guild/agents/${role}.md")` : ` (absent; expected ".guild/agents/${role}.md")`);
+    case "missing_adoption_prompt":
+      return `the definition-adoption prompt prefix was stripped \u2014 the prompt must begin with the line "GUILD_AGENT_DEFINITION=.guild/agents/${role}.md" so the lane is actually told to adopt its role definition`;
+    case "identity_mismatch":
+      return `the dispatch's identity carriers disagree about the role (GUILD_SPECIALIST / GUILD_AGENT_DEFINITION / the prompt's adoption marker must all name the SAME specialist) \u2014 the lane would run the wrong persona`;
+  }
+}
+
 // lib/guild-hook-event.ts
 async function readHookStdin() {
   return new Promise((resolve4) => {
@@ -1280,6 +1361,45 @@ function runSecurityEnforcement(payload, cwd) {
   }
   return false;
 }
+function runDispatchIntegrityGuard(payload, cwd) {
+  if (payload.tool_name !== "Agent") return false;
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0) return false;
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return false;
+  const violations = dispatchViolations(attr);
+  if (violations.length === 0) return false;
+  const role = attr.specialist ?? "<unknown>";
+  const detail = violations.map((v) => describeViolation(v, role, attr)).join("; ");
+  const reason = `Guild dispatch integrity (#58): a lane claiming the Guild "${role}" specialist is being dispatched as subagent_type="general-purpose", but ${detail}. The specialist's persona, scoped skills, tool permissions, and TRIGGER/DO-NOT-TRIGGER boundaries would be silently stripped \u2014 a real "${role}" lane and a bare generic agent would be indistinguishable. guild:execute-plan's backend descriptor (composeInProcessDispatch + buildPrompt) sets every required carrier; re-dispatch through it. Blocking this dispatch. [violations: ${violations.join(",")}]`;
+  try {
+    const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+    const laneEnv = process.env["GUILD_LANE_ID"];
+    const laneId = typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : void 0;
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        event_type: "dispatch_attribution_missing",
+        decision: "deny",
+        tool: "Agent",
+        detail: reason
+      })
+    );
+  } catch {
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: reason
+      }
+    })
+  );
+  return true;
+}
 async function main() {
   const raw = await readHookStdin();
   let payload = {};
@@ -1290,6 +1410,7 @@ async function main() {
     return;
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  if (runDispatchIntegrityGuard(payload, cwd)) return;
   if (runSecurityEnforcement(payload, cwd)) return;
   {
     const bgHostCap = readHostCapability(cwd);

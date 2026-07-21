@@ -65,6 +65,17 @@ export interface TraceV2Fields {
   model?: string;
   tokens?: TraceTokens;
   payload_ref?: string;
+  /**
+   * #58 — the resolved specialist role attributed to an `Agent` dispatch
+   * (tool_call, tool="Agent"). Lets a post-hoc audit distinguish a real `devops`
+   * lane from a bare generic agent even though both dispatch as
+   * subagent_type="general-purpose" (project specialists carry their persona in
+   * GUILD_AGENT_DEFINITION + the prompt, not in the dispatch primitive). Set by
+   * the caller from `resolveDispatchAttribution` — never from env — so it
+   * reflects THIS dispatch's target, not the emitting (lead) process. Optional:
+   * absence is valid (non-Agent calls, or an Agent call with no lane signature).
+   */
+  attribution_specialist?: string;
 }
 
 // ── span_id (D-OBS-6) ────────────────────────────────────────────────────────
