@@ -3065,14 +3065,12 @@ var require_js_yaml = __commonJS({
   }
 });
 
-// pre-compact.ts
-var pre_compact_exports = {};
-__export(pre_compact_exports, {
+// session-reanchor.ts
+var session_reanchor_exports = {};
+__export(session_reanchor_exports, {
   main: () => main
 });
-module.exports = __toCommonJS(pre_compact_exports);
-var fs7 = __toESM(require("node:fs"));
-var path9 = __toESM(require("node:path"));
+module.exports = __toCommonJS(session_reanchor_exports);
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -7424,23 +7422,6 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
   out = truncateToCap(out, cap);
   return out;
 }
-var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
-  "command_redacted",
-  "result_excerpt_redacted",
-  "payload_excerpt_redacted",
-  "prompt_excerpt",
-  "assumption_text",
-  "result"
-]);
-function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
-  const out = { ...event };
-  for (const [k, v] of Object.entries(out)) {
-    if (REDACTABLE_FIELDS.has(k) && typeof v === "string") {
-      out[k] = redactField(v, cap);
-    }
-  }
-  return out;
-}
 
 // lib/security/secrets.ts
 function applySecretsPolicy(value, policy, opts) {
@@ -7808,7 +7789,7 @@ function realProvenanceFsSeam() {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs8 = fsSeam ?? realProvenanceFsSeam();
+  const fs7 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
   const runsBase = path7.resolve(cwd, ".guild", "runs");
   try {
@@ -7816,7 +7797,7 @@ function readResolvedSettingsSnapshot(runId, opts) {
   } catch {
     return null;
   }
-  const raw = fs8.readFile(filePath);
+  const raw = fs7.readFile(filePath);
   if (raw === null) return null;
   try {
     return JSON.parse(raw);
@@ -7846,6 +7827,7 @@ function isPassedGateRecord(record) {
   if (typeof outcome !== "string") return false;
   return PASSED_GATE_OUTCOMES.has(outcome.trim().toLowerCase());
 }
+var REANCHOR_SESSION_SOURCES = /* @__PURE__ */ new Set(["compact", "resume"]);
 function resolveActiveRunId(guildRoot) {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.trim().length > 0) {
@@ -8007,241 +7989,7 @@ function buildAdditionalContextEnvelope(hookEventName, header) {
   });
 }
 
-// lib/v1.4/log-jsonl-schema.ts
-var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-function isSafeRunId(id) {
-  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function isSafeLaneId(id) {
-  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
-}
-function assertSafeRunId(id) {
-  if (!isSafeRunId(id)) {
-    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
-  }
-}
-function assertSafeLaneId(id) {
-  if (!isSafeLaneId(id)) {
-    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
-  }
-}
-function validateEventIds(event) {
-  assertSafeRunId(event.run_id);
-  if ("lane_id" in event && event.lane_id !== void 0) {
-    assertSafeLaneId(event.lane_id);
-  }
-}
-
-// lib/v1.4/log-jsonl-writer.ts
-var import_node_fs2 = require("node:fs");
-var import_node_path2 = require("node:path");
-var import_node_zlib = require("node:zlib");
-
-// lib/v1.4/v1.4-lock.ts
-var import_node_fs = require("node:fs");
-var import_node_path = require("node:path");
-function stableLockPath(runDir2) {
-  return (0, import_node_path.join)(runDir2, "logs", ".lock");
-}
-function exclusionSentinelPath(runDir2) {
-  return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
-}
-function initStableLockfile(runDir2) {
-  const path10 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path10), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path10)) return;
-  try {
-    const fd = (0, import_node_fs.openSync)(path10, "wx");
-    (0, import_node_fs.closeSync)(fd);
-  } catch (err) {
-    if (err?.code !== "EEXIST") throw err;
-  }
-}
-var DEFAULT_BACKOFF_MS = [2, 5, 10, 25, 50, 100, 200];
-var DEFAULT_TIMEOUT_MS = 5e3;
-function sleepSyncMs(ms) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-  }
-}
-function withStableLock(runDir2, fn, opts = {}) {
-  initStableLockfile(runDir2);
-  const sentinel = exclusionSentinelPath(runDir2);
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
-  const start = Date.now();
-  let attempt = 0;
-  for (; ; ) {
-    try {
-      const fd = (0, import_node_fs.openSync)(sentinel, "wx");
-      try {
-        (0, import_node_fs.writeSync)(fd, `${process.pid}
-`);
-      } catch {
-      }
-      (0, import_node_fs.closeSync)(fd);
-      try {
-        return fn();
-      } finally {
-        try {
-          (0, import_node_fs.unlinkSync)(sentinel);
-        } catch {
-        }
-      }
-    } catch (err) {
-      const code = err?.code;
-      if (code !== "EEXIST") throw err;
-      if (Date.now() - start > timeoutMs) {
-        throw new Error(
-          `v1.4-lock: timed out waiting for ${sentinel} (${timeoutMs}ms). Stale lock? Remove the file if you are sure no other process holds it.`
-        );
-      }
-      const idx = Math.min(attempt, backoff.length - 1);
-      sleepSyncMs(backoff[idx]);
-      attempt += 1;
-    }
-  }
-}
-
-// lib/trace-v2.ts
-var crypto2 = __toESM(require("crypto"));
-var SIDECAR_MAX_BYTES2 = 16 * 1024;
-function genSpanId(runId, eventType, ts, actorId) {
-  const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
-  return crypto2.createHash("sha256").update(material).digest("hex").slice(0, 16);
-}
-function envStr(env, key) {
-  const v = env[key];
-  return typeof v === "string" && v.length > 0 ? v : void 0;
-}
-function resolveTraceV2Fields(opts) {
-  const env = opts.env ?? process.env;
-  const out = {
-    span_id: genSpanId(opts.runId, opts.eventType, opts.ts, opts.actorId)
-  };
-  const parent = envStr(env, "GUILD_PARENT_SPAN_ID");
-  if (parent !== void 0) out.parent_span_id = parent;
-  const tier = envStr(env, "GUILD_TIER");
-  if (tier !== void 0) out.tier = tier;
-  const model = envStr(env, "GUILD_MODEL") ?? opts.payloadModel;
-  if (typeof model === "string" && model.length > 0) out.model = model;
-  if (opts.tokens !== void 0) out.tokens = opts.tokens;
-  if (typeof opts.payloadRef === "string" && opts.payloadRef.length > 0) {
-    out.payload_ref = opts.payloadRef;
-  }
-  return out;
-}
-function pruneUndefined(obj) {
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== void 0) out[k] = v;
-  }
-  return out;
-}
-
-// lib/v1.4/log-jsonl-writer.ts
-function liveLogPath(runDir2) {
-  return (0, import_node_path2.join)(runDir2, "logs", "v1.4-events.jsonl");
-}
-function archiveDir(runDir2) {
-  return (0, import_node_path2.join)(runDir2, "logs", "archive");
-}
-function archivePath(runDir2, n) {
-  return (0, import_node_path2.join)(archiveDir(runDir2), `v1.4-events.${n}.jsonl.gz`);
-}
-function laneFallbackPath(runDir2, laneId) {
-  if (!isSafeLaneId(laneId)) {
-    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(laneId)}`);
-  }
-  return (0, import_node_path2.join)(runDir2, "logs", `lane-${laneId}-events.jsonl`);
-}
-var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-function appendEvent(runDir2, event, opts = {}) {
-  validateEventIds(event);
-  const cap = opts.fieldCap;
-  const redacted = redactEventFields(event, cap);
-  const withV2 = opts.traceV2 !== void 0 ? { ...redacted, ...pruneUndefined(opts.traceV2) } : redacted;
-  const line = JSON.stringify(withV2) + "\n";
-  if (opts.forceFallback || process.platform === "win32") {
-    const laneId = opts.laneId ?? "global";
-    const path10 = laneFallbackPath(runDir2, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path10), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path10, "a");
-    try {
-      (0, import_node_fs2.writeSync)(fd, line);
-    } finally {
-      (0, import_node_fs2.closeSync)(fd);
-    }
-    return;
-  }
-  const live = liveLogPath(runDir2);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(live), { recursive: true });
-  withStableLock(runDir2, () => {
-    const fd = (0, import_node_fs2.openSync)(live, "a");
-    try {
-      (0, import_node_fs2.writeSync)(fd, line);
-    } finally {
-      (0, import_node_fs2.closeSync)(fd);
-    }
-    maybeRotateLocked(runDir2, opts.rotationThresholdBytes ?? ROTATION_THRESHOLD_BYTES);
-  });
-}
-function nextRotationIndex(runDir2) {
-  const dir = archiveDir(runDir2);
-  if (!(0, import_node_fs2.existsSync)(dir)) return 1;
-  let max = 0;
-  for (const entry of (0, import_node_fs2.readdirSync)(dir)) {
-    const m = /^v1\.4-events\.(\d+)\.jsonl\.gz$/.exec(entry);
-    if (m && m[1] !== void 0) {
-      const n = Number.parseInt(m[1], 10);
-      if (Number.isFinite(n) && n > max) max = n;
-    }
-  }
-  return max + 1;
-}
-function maybeRotateLocked(runDir2, thresholdBytes) {
-  const live = liveLogPath(runDir2);
-  if (!(0, import_node_fs2.existsSync)(live)) return;
-  const size = (0, import_node_fs2.statSync)(live).size;
-  if (size < thresholdBytes) return;
-  rotateLocked(runDir2);
-}
-function rotateLocked(runDir2) {
-  const live = liveLogPath(runDir2);
-  const archive = archiveDir(runDir2);
-  (0, import_node_fs2.mkdirSync)(archive, { recursive: true });
-  const n = nextRotationIndex(runDir2);
-  const stagingPath = (0, import_node_path2.join)(archive, `v1.4-events.${n}.jsonl`);
-  const finalArchive = archivePath(runDir2, n);
-  (0, import_node_fs2.renameSync)(live, stagingPath);
-  const raw = (0, import_node_fs2.readFileSync)(stagingPath);
-  const gzipped = (0, import_node_zlib.gzipSync)(raw);
-  (0, import_node_fs2.writeFileSync)(finalArchive, gzipped);
-  (0, import_node_fs2.unlinkSync)(stagingPath);
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const fd = (0, import_node_fs2.openSync)(live, "wx");
-      (0, import_node_fs2.closeSync)(fd);
-      return;
-    } catch (err) {
-      const code = err?.code;
-      if (code !== "EEXIST") throw err;
-      try {
-        (0, import_node_fs2.unlinkSync)(live);
-      } catch {
-      }
-    }
-  }
-  throw new Error(
-    `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
-  );
-}
-
-// lib/v1.4/log-jsonl-sidecar.ts
-var SIDECAR_MAX_BYTES3 = 1024 * 1024;
-
-// pre-compact.ts
+// session-reanchor.ts
 async function readStdin() {
   return new Promise((resolve6) => {
     const chunks = [];
@@ -8250,93 +7998,35 @@ async function readStdin() {
     process.stdin.on("error", () => resolve6(""));
   });
 }
-function payloadExcerpt(payload) {
-  if (payload === void 0 || payload === null) return "";
-  if (typeof payload === "string") return payload;
-  try {
-    return JSON.stringify(payload);
-  } catch {
-    return "";
-  }
-}
-function readCurrentRunId(guildRoot) {
-  const sentinelPath = path9.join(guildRoot, ".guild", "runs", "current-run-id");
-  try {
-    const value = fs7.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function resolveRunId(guildRoot) {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(guildRoot);
-}
 async function main() {
   const raw = await readStdin();
   let payload = {};
   try {
     if (raw.trim().length > 0) {
       const parsed = JSON.parse(raw.trim());
-      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-        payload = parsed;
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return;
       }
+      payload = parsed;
     }
   } catch {
-    process.stderr.write("warn: [pre-compact] invalid JSON on stdin; emitting bare event.\n");
+    return;
+  }
+  const source = typeof payload.source === "string" ? payload.source : "";
+  if (!REANCHOR_SESSION_SOURCES.has(source)) {
+    return;
   }
   const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : void 0;
   const cwd = process.env["GUILD_CWD"] ?? payloadCwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
-  try {
-    const header = buildReanchorHeader(guildRoot);
-    if (header !== null) {
-      process.stdout.write(buildAdditionalContextEnvelope("PreCompact", header));
-    }
-  } catch (err) {
-    process.stderr.write(
-      `warn: [pre-compact] re-anchor header build failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-  }
-  const runId = resolveRunId(guildRoot);
-  if (typeof runId !== "string" || runId.length === 0) {
-    process.stderr.write(
-      "warn: [pre-compact] GUILD_RUN_ID unset and current-run-id missing \u2014 falling through (no log emit).\n"
-    );
-    return;
-  }
-  const runDir2 = process.env["GUILD_RUN_DIR"] ?? path9.join(guildRoot, ".guild", "runs", runId);
-  const ts = (/* @__PURE__ */ new Date()).toISOString();
-  const event = {
-    ts,
-    event: "hook_event",
-    run_id: runId,
-    hook_name: "PreCompact",
-    payload_excerpt_redacted: payloadExcerpt(payload.payload),
-    latency_ms: 0,
-    status: "ok"
-  };
-  const traceV2 = resolveTraceV2Fields({
-    runId,
-    eventType: "hook_event",
-    ts,
-    actorId: "main"
-  });
-  try {
-    appendEvent(runDir2, event, { traceV2 });
-  } catch (err) {
-    process.stderr.write(
-      `warn: [pre-compact] log emit failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-  }
+  const header = buildReanchorHeader(guildRoot);
+  if (header === null) return;
+  process.stdout.write(buildAdditionalContextEnvelope("SessionStart", header));
 }
-if (process.argv[1] !== void 0 && (process.argv[1].endsWith("pre-compact.ts") || process.argv[1].endsWith("pre-compact.js"))) {
+if (require.main === module) {
   main().catch((err) => {
     process.stderr.write(
-      `fatal: [pre-compact] ${err instanceof Error ? err.message : String(err)}
+      `[session-reanchor] FATAL: ${err instanceof Error ? err.message : String(err)}
 `
     );
     process.exit(0);
