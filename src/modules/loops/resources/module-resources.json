@@ -29,7 +29,7 @@
       "id": "guild-loop-clarify/loop-mechanics.md",
       "source_path": "skills/meta/loop-clarify/loop-mechanics.md",
       "resource_path": "resources/skills/meta/loop-clarify/loop-mechanics.md",
-      "sha256": "18792c0830bd5cde2321ca07b6b28b8131288ce53ea559b8452c8a0b339516ea"
+      "sha256": "dc1a421cb770fc4d04c221298eb26abde3e4aade894db2504096f00892eae1f0"
     },
     {
       "category": "skills",
@@ -71,7 +71,7 @@
       "id": "guild-loop-implement/workflow-and-events.md",
       "source_path": "skills/meta/loop-implement/workflow-and-events.md",
       "resource_path": "resources/skills/meta/loop-implement/workflow-and-events.md",
-      "sha256": "9329105479525041caa7f3afdb7f6e4e0c88be9dcb0ae8e24004ee8fd9ecbf93"
+      "sha256": "4c66ba84eb39dfd9454443421b0e37c8d5160d00e4426c9b9b621a2cf3469229"
     },
     {
       "category": "skills",
@@ -92,7 +92,7 @@
       "id": "guild-loop-plan-review/loop-mechanics.md",
       "source_path": "skills/meta/loop-plan-review/loop-mechanics.md",
       "resource_path": "resources/skills/meta/loop-plan-review/loop-mechanics.md",
-      "sha256": "3808ed4fa4572cc6da5c826be3c7f77e3973d248de09e3731913f7178e05175b"
+      "sha256": "daf788b6ee9d0686eba7c348327225a06977c39f9e35b011e50d227fd177c83c"
     }
   ]
 }

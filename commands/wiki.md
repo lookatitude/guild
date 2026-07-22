@@ -46,13 +46,13 @@ depends on the sub-verb: `ingest` and `lint` are durable-write operations
 
 ```bash
 # ingest or lint:
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
   --command=/guild:wiki \
   --run-class=full \
   --cwd "$(pwd)"
 
 # query:
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
   --command=/guild:wiki \
   --run-class=lightweight \
   --cwd "$(pwd)"

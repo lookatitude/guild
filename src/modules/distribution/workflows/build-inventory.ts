@@ -221,8 +221,8 @@ function discoverSkills(root: string): SkillEntry[] {
 
 /** Strip a host plugin-root variable and runner from a hook command → repo-relative script path. */
 function hookScriptPath(command: string): string | null {
-  // commands look like: "bash ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/bootstrap.sh"
-  //                     "node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/x.js"
+  // commands look like: "bash ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/bootstrap.sh"
+  //                     "node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/x.js"
   const m = /\$\{(?:GUILD_PLUGIN_ROOT(?::-\$\{CLAUDE_PLUGIN_ROOT\})?|CLAUDE_PLUGIN_ROOT)\}\/([^\s"']+)/.exec(command);
   if (m) return m[1];
   // fallback: last whitespace-separated token that looks like a path

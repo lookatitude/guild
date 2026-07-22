@@ -8,7 +8,7 @@
       "id": "stats",
       "source_path": "commands/stats.md",
       "resource_path": "resources/commands/stats.md",
-      "sha256": "cc8b247c509bfa512bc5e700d14ec8e60b12e2acb992fd2351b49b79886eebf3"
+      "sha256": "f3135addc1af398a4f1a6733683ae902b5f8e4411991dadda9991018a84646f8"
     },
     {
       "category": "hooks",

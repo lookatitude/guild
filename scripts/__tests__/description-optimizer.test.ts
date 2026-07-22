@@ -31,13 +31,15 @@ function runScript(args: string[]): { exitCode: number; stdout: string; stderr: 
 }
 
 /**
- * Seed a minimal skill directory layout at <tmpDir>/skills/meta/<slug>/evals.json.
- * The optimizer accepts either a full layout or a direct evals path (the heuristic
- * searches skills/<tier>/<slug>/evals.json).
+ * Seed a minimal skill directory layout at <tmpDir>/skills/meta/<slug>/{SKILL.md,evals.json}.
+ * A SKILL.md stub is required — the optimizer only recognizes a directory as a live
+ * skill (and reads its evals.json) once SKILL.md is present there, matching
+ * evolve-loop.ts's findLiveSkillDir gate.
  */
 function seedSkill(tmpDir: string, slug: string, fixtureName: string): string {
   const skillDir = path.join(tmpDir, "skills", "meta", slug);
   fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), `# ${slug}\n`);
   fs.copyFileSync(
     path.join(FIXTURES, fixtureName),
     path.join(skillDir, "evals.json")
@@ -216,6 +218,7 @@ describe("description-optimizer.ts", () => {
     it("resolves a knowledge-tier slug (skills/knowledge/<slug>/evals.json)", () => {
       const skillDir = path.join(tmpDir, "skills", "knowledge", "wiki-ingest");
       fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# wiki-ingest\n");
       fs.copyFileSync(
         path.join(FIXTURES, "evals-for-optimizer.json"),
         path.join(skillDir, "evals.json"),
@@ -229,6 +232,7 @@ describe("description-optimizer.ts", () => {
     it("resolves a dir-level skill (skills/<slug>/evals.json, no tier nesting)", () => {
       const skillDir = path.join(tmpDir, "skills", "guild-quality");
       fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# guild-quality\n");
       fs.copyFileSync(
         path.join(FIXTURES, "evals-for-optimizer.json"),
         path.join(skillDir, "evals.json"),
@@ -249,6 +253,7 @@ describe("description-optimizer.ts", () => {
     it("a made-up future tier dir is picked up without any code change", () => {
       const skillDir = path.join(tmpDir, "skills", "future-tier", "some-skill");
       fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# some-skill\n");
       fs.copyFileSync(
         path.join(FIXTURES, "evals-for-optimizer.json"),
         path.join(skillDir, "evals.json"),
@@ -257,6 +262,89 @@ describe("description-optimizer.ts", () => {
       const { exitCode, stdout } = runScript(["--skill", "some-skill", "--cwd", tmpDir]);
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/^description:/m);
+    });
+  });
+
+  // ── v2-layout defect fix (issue #36 related): step 9 always SKIPPED ─────
+  // findEvalsFile only searched the self-build layout (<cwd>/skills/<tier>/<slug>/),
+  // never the v2 project-instance layout (<cwd>/.guild/skills/<slug>/) that
+  // evolve-loop.ts's findLiveSkillDir resolves FIRST for an evolved/minted skill, nor
+  // the plugin-install-root fallback it resolves LAST. Both are now mirrored here.
+  describe("v2-layout fix — resolution mirrors evolve-loop.ts's findLiveSkillDir", () => {
+    it("resolves evals under the v2 project instance (.guild/skills/<slug>/evals.json)", () => {
+      const skillDir = path.join(tmpDir, ".guild", "skills", "my-skill");
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# my-skill\n");
+      fs.copyFileSync(
+        path.join(FIXTURES, "evals-for-optimizer.json"),
+        path.join(skillDir, "evals.json"),
+      );
+
+      const { exitCode, stdout } = runScript(["--skill", "my-skill", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/^description:/m);
+    });
+
+    it("prefers the v2 project instance over a same-slug self-build copy (DH-3 priority)", () => {
+      // Project instance: a distinct fixture whose positive tokens differ from the
+      // self-build copy, so the assertion proves WHICH one was actually read.
+      const projectDir = path.join(tmpDir, ".guild", "skills", "dup-skill");
+      fs.mkdirSync(projectDir, { recursive: true });
+      fs.writeFileSync(path.join(projectDir, "SKILL.md"), "# dup-skill\n");
+      fs.writeFileSync(
+        path.join(projectDir, "evals.json"),
+        JSON.stringify({
+          should_trigger: ["project instance marker token", "project instance marker token again"],
+          should_not_trigger: ["unrelated"],
+        }),
+      );
+
+      seedSkill(tmpDir, "dup-skill", "evals-for-optimizer.json"); // self-build copy
+
+      const { stdout } = runScript(["--skill", "dup-skill", "--cwd", tmpDir]);
+      expect(stdout.toLowerCase()).toContain("marker");
+    });
+
+    it("falls back to the plugin install root (GUILD_PLUGIN_ROOT) when no project instance exists", () => {
+      const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-descopt-pluginroot-"));
+      try {
+        const skillDir = path.join(pluginRoot, "skills", "meta", "shipped-skill");
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(path.join(skillDir, "SKILL.md"), "# shipped-skill\n");
+        fs.copyFileSync(
+          path.join(FIXTURES, "evals-for-optimizer.json"),
+          path.join(skillDir, "evals.json"),
+        );
+
+        const result = spawnSync(
+          "npx",
+          ["tsx", SCRIPT, "--skill", "shipped-skill", "--cwd", tmpDir],
+          {
+            encoding: "utf8",
+            timeout: 120_000,
+            env: { ...process.env, GUILD_PLUGIN_ROOT: pluginRoot },
+          },
+        );
+        expect(result.status ?? 1).toBe(0);
+        expect(result.stdout ?? "").toMatch(/^description:/m);
+      } finally {
+        fs.rmSync(pluginRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("a live dir with SKILL.md but no evals.json is 'not found' — never falls through to a same-slug corpus from a different tier", () => {
+      // Live project instance: SKILL.md present, evals.json genuinely not bootstrapped yet.
+      const projectDir = path.join(tmpDir, ".guild", "skills", "not-ready-skill");
+      fs.mkdirSync(projectDir, { recursive: true });
+      fs.writeFileSync(path.join(projectDir, "SKILL.md"), "# not-ready-skill\n");
+
+      // An unrelated same-slug evals.json sitting in the self-build tier — must be ignored;
+      // it is NOT the live skill's evals, just a stray same-named fixture.
+      seedSkill(tmpDir, "not-ready-skill", "evals-for-optimizer.json");
+
+      const { exitCode, stderr } = runScript(["--skill", "not-ready-skill", "--cwd", tmpDir]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/evals/i);
     });
   });
 
