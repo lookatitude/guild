@@ -8,7 +8,7 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "dcb148bda6954ebbf851f703cfdd45d6f4e21d11debac02ce305ed537d5ce1c4"
+      "sha256": "8df4d22806beee06a5e068a982b8a31d9231860c9b02539850e4f2c996bbb448"
     },
     {
       "category": "scripts",
@@ -37,6 +37,13 @@
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
       "sha256": "1e8e5900c9ec439021ecf70cc9b2261ff0ece0903e30a0b69bf0f957a6063e1b"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host/pane-dispatch-trace",
+      "source_path": "scripts/lib/host/pane-dispatch-trace.ts",
+      "resource_path": "resources/scripts/lib/host/pane-dispatch-trace.ts",
+      "sha256": "b1552e0d50f36eae8932b1e2f97558f7233d4eb7a67f536182c3d2f7761ea33a"
     },
     {
       "category": "scripts",

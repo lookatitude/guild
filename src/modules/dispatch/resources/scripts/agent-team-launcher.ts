@@ -76,6 +76,8 @@ import {
 // task-cell-runtime G4: real, confirmed pane termination (replaces signal-only
 // [DISMISS]) + the acceptance gate that authorizes it.
 import { terminatePane } from "./lib/host/tmux-backend";
+// #76 — pane-path dispatch receipts into the orchestrating run's trace.
+import { emitPaneDispatchEvents } from "./lib/host/pane-dispatch-trace";
 import {
   findRunAcceptances,
   findRunTaskCells,
@@ -1828,6 +1830,44 @@ async function main(): Promise<void> {
             for (const cmd of remoteResult.plannedCommands ?? []) {
               process.stdout.write(`  ${cmd}\n`);
             }
+          } else {
+            // ── #76: remote lanes are pane-dispatched too ────────────────────
+            // A remote lane opens a pane on the FAR host, so its hooks write
+            // into that host's context — exactly the same blind spot as a local
+            // tmux pane, and reached via a different code path that returns
+            // before (and, for an all-remote team, exits before) the local
+            // spawn emit below. Recorded here, after the retry loop settled on
+            // a COMMITTED batch (a partial remote spawn tears every pane back
+            // down, so an aborted attempt has no live lane to record); skipped
+            // on dry-run, which dispatches nothing.
+            const emittedRemote = emitPaneDispatchEvents({
+              cwd,
+              runId,
+              // NO pane_target: `targetName` is this machine's tmux session /
+              // window name and means nothing on the far host, where each lane
+              // lives in its own independently-named detached `ssh-…` session.
+              // A wrong target is worse than an absent one — pane_id carries
+              // the real remote handle.
+              target: "",
+              surface: "remote",
+              lanes: remoteSpecialists.map((s) => ({
+                specialist: s.name,
+                taskId: s.taskId,
+                paneId: remoteResult.teammatePaneIds?.[s.name],
+              })),
+            });
+            if (emittedRemote > 0) {
+              process.stdout.write(
+                `[agent-team-launcher] recorded ${emittedRemote} remote dispatch(es) → ` +
+                  `.guild/runs/${runId}/logs/v1.4-events.jsonl\n`,
+              );
+            }
+            if (emittedRemote < remoteSpecialists.length) {
+              process.stderr.write(
+                `[agent-team-launcher] WARN: recorded ${emittedRemote}/${remoteSpecialists.length} remote ` +
+                  `dispatch receipt(s) — this run's trace under-reports its specialists (#76).\n`,
+              );
+            }
           }
 
           // Remove dispatched-remote specialists from the local tmux pool.
@@ -1993,6 +2033,42 @@ async function main(): Promise<void> {
         `  stderr: ${outcome.stderr}\n`
     );
     process.exit(2);
+  }
+
+  // ── #76: pane dispatch → the ORCHESTRATING run's trace ───────────────────
+  // The panes are separate interactive host sessions; their own hooks write
+  // into their own contexts, and the lead makes no `Agent` call for the
+  // #58/#66 attribution path to stamp. Without this emit a 10-lane pane run
+  // reads as a solo run (`specialists_dispatched: [(none)]`). Emitted HERE —
+  // after spawn confirmed ok, so a receipt means the pane really opened — and
+  // only on the real path (dry-run exits above, having dispatched nothing).
+  {
+    const emitted = emitPaneDispatchEvents({
+      cwd,
+      runId,
+      target: targetName,
+      surface: "tmux",
+      lanes: team.specialists.map((s) => ({
+        specialist: s.name,
+        taskId: s.taskId,
+        paneId: outcome.teammatePaneIds[s.name],
+      })),
+    });
+    if (emitted > 0) {
+      process.stdout.write(
+        `[agent-team-launcher] recorded ${emitted} pane dispatch(es) → ` +
+          `.guild/runs/${runId}/logs/v1.4-events.jsonl\n`,
+      );
+    }
+    // The count sums emitTraceEvent's own per-write verdicts, so a shortfall is
+    // a REAL gap in the run record. Never silent (the whole point of #76 is a
+    // trace you can trust) — but never fatal: the panes are up, the team runs.
+    if (emitted < team.specialists.length) {
+      process.stderr.write(
+        `[agent-team-launcher] WARN: recorded ${emitted}/${team.specialists.length} pane ` +
+          `dispatch receipt(s) — this run's trace under-reports its specialists (#76).\n`,
+      );
+    }
   }
 
   const manifestPath = writeManifest(

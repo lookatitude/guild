@@ -90,6 +90,20 @@ jobs:
         run: |
           npx tsx scripts/check-plugin-root-fallback.ts
 
+      # Bundle-determinism rail (issue #75) — the committed hook bundles must be a pure
+      # function of hooks/ sources + hooks/package-lock.json. Two entrypoints bundle
+      # first-party TypeScript from ../scripts/**, whose bare `import … from "js-yaml"`
+      # esbuild resolves from the IMPORTER's directory — so the bundled js-yaml came from
+      # plugin/scripts/node_modules (4.1.1) when that sibling package happened to be
+      # installed and from plugin/hooks/node_modules (4.3.0) via the old NODE_PATH
+      # fallback when it did not. Same sources, different committed bytes. This rail
+      # forbids any bundle from carrying a module resolved outside the hooks package, and
+      # requires every esbuild invocation to pin each declared hooks runtime dependency.
+      # Static + read-only; the byte-level rebuild-idempotence half is R-DIST above.
+      - name: Bundle determinism rail (hook bundles resolve deps only from hooks/node_modules)
+        run: |
+          npx tsx scripts/check-bundle-determinism.ts
+
       # Entrypoint packaging gate (issue #55 defect class) — every `npx tsx`/`node` hooks/
       # entrypoint documented in a shipped SKILL.md or hook source must actually exist on
       # disk. Catches the exact failure mode of issue #55 (a documented CLI invocation
