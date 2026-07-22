@@ -139,11 +139,17 @@ const ADOPTION_PROMPT =
   "You are the `devops` teammate for run-id `test-run`. Your role definition is at " +
   "`.guild/agents/devops.md` — read it FIRST and adopt it fully (persona, boundaries).";
 
-/** Contract-correct project-specialist dispatch (passes the #58 guard cleanly). */
+/**
+ * Contract-correct project-specialist dispatch (passes the #58 guard cleanly).
+ * Carries an explicit `model` so it also satisfies the #60 tier guard — these
+ * tests exercise the BACKEND dimension, and the #56 detector never reads
+ * `model`, so pinning it isolates #56 without changing any assertion here.
+ */
 const composedLane = () => ({
   tool_name: "Agent",
   tool_input: {
     subagent_type: "general-purpose",
+    model: "sonnet",
     prompt: ADOPTION_PROMPT,
     env: {
       GUILD_RUN_ID: RUN,
@@ -163,6 +169,7 @@ const composedLaneNoRunEnv = () => ({
   tool_name: "Agent",
   tool_input: {
     subagent_type: "general-purpose",
+    model: "sonnet",
     prompt: ADOPTION_PROMPT,
     env: {
       GUILD_SPECIALIST: "devops",

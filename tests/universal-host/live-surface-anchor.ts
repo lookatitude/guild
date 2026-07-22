@@ -165,6 +165,23 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * unchanged. The stale pin was observed RED locally against this tree before
  * the bump — anti-vacuity.
  *
+ * Re-ratified 2026-07-21 (issue #60 tier guard, guild#69) — DELIBERATE:
+ * `skills/meta/execute-plan/dispatch.md` additionally documents the enforced
+ * tier contract + the guild.tier_dispatch.v1 receipt sink. SKILL.md unchanged
+ * vs guild#67 (registry round-trip re-verified, no re-extraction needed).
+ * commands + .claude-plugin pins unchanged. Stale pin observed RED locally
+ * against this tree before the bump — anti-vacuity.
+ *
+ * Re-ratified 2026-07-22 (merge-train integration, guild#69) — mechanical
+ * MERGE re-ratification on the tree carrying #61+#66+#67+#69 content
+ * (dispatch.md now documents backend-degradation AND tier contracts).
+ * Registry round-trip verified against the merged SKILL.md set; commands pin
+ * = the post-sweep value.
+ *
+ * Re-ratified 2026-07-22 (final merge-train integration, guild#69) — the
+ * merged tree now also carries guild#68 (§Expiry + lean-lead). Registry
+ * re-extracted for the fully merged SKILL.md; pins recomputed.
+ *
  * Re-ratified 2026-07-22 (issue #59 lifecycle adherence, oir-wi-59) —
  * DELIBERATE: `skills/meta/execute-plan/SKILL.md` §"Resuming dead lanes" gains
  * the §"Close requires review + verify-done" contract — a build run must pass
@@ -184,10 +201,16 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * (SKILL.md: §Expiry + #66 contract + §Close-requires-review+verify).
  * Registry re-extracted for the merged SKILL.md (5/5 round-trip). commands
  * pin = post-sweep value.
+ *
+ * Re-ratified 2026-07-22 (final merge-train integration, guild#70) — the
+ * merged tree carries ALL wave content (#61+#66+#67+#68+#69+#70:
+ * dispatch.md backend+tier contracts, SKILL.md §Expiry + #66 contract +
+ * §Close-requires-review+verify). Registry re-extracted for the fully
+ * merged SKILL.md; pins recomputed on this tree.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "d504b36959f9febf89115f9966010219794d765a",
+  skills: "6287463dd440eb041e05f89ca6bc404aae7fa444",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
