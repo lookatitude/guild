@@ -185,9 +185,14 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
   // (3) SPAWN — subagent_type is DEFINITION-SOURCE-RESOLVED (dispatch.md hard
   //     constraint). Domain specialists are project instances: the host has no
   //     registered agent under their name, so they dispatch as the host-generic
-  //     type with GUILD_AGENT_DEFINITION + the adoption prompt (already set on
-  //     the descriptor by the launcher). Only a SHIPPED machinery/dev-team agent
-  //     dispatches by bare name.
+  //     type with GUILD_AGENT_DEFINITION + the adoption prompt. Both carriers are
+  //     UNCONDITIONAL for a project specialist and ALWAYS present on the
+  //     descriptor (composeInProcessDispatch keys them on definition_source ===
+  //     "project" alone, and throws if the lane has no definition path — #58). A
+  //     PreToolUse dispatch-integrity guard DENIES any general-purpose Agent
+  //     dispatch that claims a specialist persona without GUILD_AGENT_DEFINITION,
+  //     so a persona-stripped call can no longer masquerade as a real lane. Only
+  //     a SHIPPED machinery/dev-team agent dispatches by bare name.
   const subagentType =
     lane.definition_source === "project" ? GENERIC_SUBAGENT_TYPE /* + definition env/prompt from the descriptor */
                                          : lane.owner;

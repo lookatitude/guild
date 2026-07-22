@@ -27,8 +27,35 @@ export function composeInProcessDispatch(
     // the plugin install once at session start. Dispatch it as the host's
     // generic subagent type; buildPrompt embeds the definition-adoption
     // instruction so the lane still runs the minted role at its own tier.
-    const isProjectLocal =
-      spec.definition_source === "project" && !!spec.definition;
+    //
+    // #58 — the emission is keyed on `definition_source === "project"` ALONE
+    // (NOT `&& definition`): for a project specialist, GUILD_AGENT_DEFINITION +
+    // the definition-adoption prompt prefix are UNCONDITIONAL, so the intended
+    // dispatch is never byte-identical to a persona-stripped generic agent. A
+    // project specialist with no definition path cannot honor that contract —
+    // fail closed rather than silently degrade to a bare `general-purpose`
+    // dispatch (that IS the defect #58 describes).
+    const isProjectLocal = spec.definition_source === "project";
+    if (isProjectLocal) {
+      const def = typeof spec.definition === "string" ? spec.definition.trim() : "";
+      // The definition MUST be a well-formed `.guild/agents/<name>.md` path whose
+      // role matches this specialist. A missing / whitespace / arbitrary /
+      // role-mismatched path is not a valid GUILD_AGENT_DEFINITION — dispatching
+      // it would emit a persona-stripped generic descriptor the host guard would
+      // (rightly) block. Fail closed here at composition (#58, adversarial
+      // review) rather than let a bad descriptor reach the Agent tool.
+      const expected = `.guild/agents/${spec.name}.md`;
+      if (def !== expected) {
+        throw new Error(
+          `composeInProcessDispatch: project specialist "${spec.name}" has an ` +
+            `invalid definition path ${JSON.stringify(spec.definition)} — expected ` +
+            `"${expected}". A project specialist's GUILD_AGENT_DEFINITION env + ` +
+            `definition-adoption prompt prefix are unconditional (#58); refusing to ` +
+            `dispatch a persona-stripped generic agent. team-compose must write ` +
+            `${expected} and set spec.definition to it before dispatch.`,
+        );
+      }
+    }
     return {
       name: spec.name,
       subagentType: isProjectLocal ? GENERIC_SUBAGENT_TYPE : spec.name,
@@ -41,7 +68,7 @@ export function composeInProcessDispatch(
           ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
           : {}),
         ...(isProjectLocal
-          ? { GUILD_AGENT_DEFINITION: spec.definition as string }
+          ? { GUILD_AGENT_DEFINITION: `.guild/agents/${spec.name}.md` }
           : {}),
       },
       prompt: buildPrompt(
@@ -51,7 +78,7 @@ export function composeInProcessDispatch(
         req.teamPath,
         spec.host_kind ?? req.orchestratorHostKind ?? "claude",
       ),
-      definitionPath: isProjectLocal ? (spec.definition as string) : null,
+      definitionPath: isProjectLocal ? `.guild/agents/${spec.name}.md` : null,
     };
   });
 }

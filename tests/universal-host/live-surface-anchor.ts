@@ -130,10 +130,29 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * `.claude-plugin/**` untouched — RATIFIED_MANIFESTS unchanged. Both guards
  * observed RED against the old pin on guild#61 CI (jest (tests) job of run
  * 29794297180) before this bump — anti-vacuity evidence the pin is live.
+ *
+ * Re-ratified 2026-07-21 (issue #58 type-erasure detectability, guild#66) —
+ * DELIBERATE skill-surface change: `skills/meta/execute-plan/{SKILL.md,dispatch.md}`
+ * now state the ENFORCED project-lane dispatch contract (GUILD_AGENT_DEFINITION
+ * line-1 marker + adoption prefix are guaranteed and hook-verified, replacing the
+ * "env not guaranteed on the subagent path" caveat). `skill-src/skill-registry.json`
+ * was re-extracted in the SAME commit so `render(entry) === skills/meta/execute-plan/
+ * SKILL.md` byte-parity holds (SC-W2-1 + skill-source-transform suites green).
+ * `commands/**` untouched — its pin is UNCHANGED (verified). `.claude-plugin/**`
+ * untouched — RATIFIED_MANIFESTS unchanged. Both guards observed RED against the
+ * old skills pin on guild#66 CI (run 29800612956) — anti-vacuity evidence.
+ *
+ * Re-ratified 2026-07-22 (merge of guild#61 sweep + guild#66 onto next) —
+ * mechanical MERGE re-ratification: the merged tree carries BOTH the #61
+ * fallback sweep and the #66 execute-plan contract text, so both prior pins
+ * are stale by construction. skill-src/skill-registry.json re-based on next's
+ * (sweep-consistent) copy with the execute-plan entry re-extracted from the
+ * merged SKILL.md (all 5 wave-2 skills round-trip byte-identical). commands
+ * pin recomputed on the merged tree.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "0bb8de67e49b7a914d8a1a5351bd4de8f57e9dea",
+  skills: "9310e9a6cae2f03ec5201a11f9fffa1cdc88cd09",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
