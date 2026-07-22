@@ -53,7 +53,7 @@ mixed_or_uncertain      children found but ambiguous (some have .git/, some have
                         .guild/, workspace/detect.ts reports "uncertain")
 ```
 
-Detection script: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/detect.ts --cwd <root>` (depth-1
+Detection script: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/detect.ts --cwd <root>` (depth-1
 fixed, no knob). For `mixed_or_uncertain` surface one targeted question before
 proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 §5.1 confirm contract: show detection → ask proceed / pick / explain.
@@ -61,7 +61,7 @@ proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 After user confirmation, start the run before scanning:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/run-lifecycle.ts startRun
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/run-lifecycle.ts startRun
   --command "/guild:learn"
   --args ""
   --cwd <root>
@@ -100,8 +100,13 @@ Implements brief §178-201 ordered flow, SC-A:
    §618-621). If skipped, record the gate refusal and continue at step 8.
 8. **Derive domains, flows, components, labels.** `guild:learn-graph` stages
    2–7 (if approved at step 7).
-9. **Build or refresh `knowledge-links.json`.**  Stage 5 output from
-   `guild:learn-graph`; E1 extended edge set when available.
+9. **Build or refresh `knowledge-links.json`.** The deterministic edge-layer
+   builder (`knowledge-links-builder.ts` → `.guild/indexes/knowledge-links.json`,
+   `guild.knowledge_links.v1`) — this is Stage 5 output from `guild:learn-graph`
+   when step 8 ran; the builder itself is not LLM-gated, so it still runs even
+   when step 7's OQ1 gate was declined (see the "Deep-graph gate refused" eval
+   case below — map + links are still produced). E1 extended edge set when
+   step 8 ran.
 10. **Build the deep knowledge tier (knowledge tier — K1–K6; lazy + cost-gated).**
     Invoke `guild:learn-knowledge` — the topic→subtopic taxonomy, classified
     `wiki_page` + `diagram` nodes, and cross-modal `evidenced_by` edges into
@@ -119,8 +124,10 @@ Implements brief §178-201 ordered flow, SC-A:
     `.guild/runs/<run-id>/learn/candidates.json`.
 13. **Update derived indexes.** Write/refresh `codebase-map.json`,
     `knowledge-graph.json`, `knowledge-links.json`.
-14. **Write provenance.** Close the run with `closeRun`; provenance.json carries
-    scanned_count, skipped_count, skipped_files_ref (B3 handoff §4).
+14. **Write provenance.** Assemble `provenance.json` — scanned_count,
+    skipped_count, skipped_files_ref (B3 handoff §4) — as the payload
+    `closeRun` will persist at step 17 (the single terminal close call for
+    this pipeline; not invoked here).
 15. **Emit learning checkpoint.** Route to `guild:learn-harvest` if signal
     detected (see §"Learning checkpoint routing" below).
 16. **Emit reflection candidates.** Write
@@ -133,6 +140,76 @@ All wiki/decision/evolve promotions stay **human-gated**. This skill emits
 # Workflow — Workspace full learn (OQ2 = AUTO fan-out)
 
 Implements brief §203-228, SC-A, SC-D.
+
+## Workspace-root scope contract
+
+"Learn the root" at a workspace means the umbrella's **own** surface only —
+never a monolithic scan across every child repo. In-scope root feedstock, by
+bucket rule: `docs/v2/**` (the design set — not the whole `docs/` tree),
+`design/{DESIGN.md,DESIGN.json,PRODUCT.md,README.md}`, `gtm/**/*.md`
+(markdown only, excluding brand assets/generated), `.guild/wiki/**`
+(excluding `_archive/`), `.guild/workspace/*.{yaml,json}`,
+`.guild/workspace-knowledge/*.yaml`, `.guild/initiatives/**/*.yaml`, the root
+`.guild/{guild.yaml,settings.json,workspace.json}` config files,
+`.github/workflows/*.yml`, and root configs (`AGENTS.md`, `CLAUDE.md`,
+`MIGRATION.md`, `guild.code-workspace`, `skills-lock.json`, `.gitignore`).
+Reference selection: the 2026-07-18 umbrella graph lane scoped exactly 213
+files against exactly these per-bucket rules
+(`.guild/artifacts/reports/workspace-reorg-exec/learn-graph.md`).
+
+**Child-graph federation rule.** Immediate children detected at workspace
+step 2 below are **registered** in `.guild/workspace.json`
+(`guild.workspace.v1`) — never scanned or merged into the root's own
+map/graph as one monolith. Each child keeps its own independent
+`codebase-map.json` / `knowledge-graph.json` under its own `.guild/`,
+produced by its own regular-project full-learn pass (workspace step 6). The
+root graph reaches child knowledge only through the guild-memory federation
+recipe; cross-repo reference strings (`source_refs`/`related`/links pointing
+into a child) are counted as diagnostics and left unresolved, never
+materialized as root-graph nodes/edges (664 such hits in the reference lane
+above, correctly left unmaterialized). Root wiki never copies child wiki
+pages (non-negotiable #4 — this scope contract is that rule's direct
+consequence at learn time).
+
+**Graph-feedstock supplement (mandatory at workspace-root scope).** The
+cheap-map scanner (`guild:learn-map`, workflow step 6 below) excludes
+`.guild/` entirely by design — analogous to excluding `.git/` — so
+`codebase-map.json` carries zero `.guild/` entries. At a workspace root this
+leaves a hole in the in-scope feedstock listed above: `.guild/wiki/**`
+(excluding `_archive/`), `.guild/workspace/*.{yaml,json}`,
+`.guild/workspace-knowledge/*.yaml`, `.guild/initiatives/**/*.yaml`, and the
+root `.guild/{guild.yaml,settings.json,workspace.json}` files cannot be
+selected from the map alone. Step 8's semantic selection (`guild:learn-graph`)
+MUST supplement the map with a **direct filesystem scan** applying exactly
+those per-bucket rules (extension filters + `_archive/` exclusion, not a
+blanket directory walk) before building the graph — the 2026-07-18 graph lane
+had to infer and improvise this supplement mid-run because the contract was
+unwritten (see that handoff's Anomaly section). The scanner-inclusion code
+fix itself (teach `learn-map` to include `.guild/{wiki,workspace,
+workspace-knowledge,initiatives}` under the same per-bucket rules, excluding
+`runs/`/`raw/`/other high-churn state) remains **queued in the plugin
+backlog** — this contract line covers the prose-side gap only, it is not a
+substitute for the code fix.
+
+**Deep-tier default at workspace-root scope.** When workspace step 4 below
+runs the regular-project flow scoped to root-level artifacts, that pass's
+step 9 (`knowledge-links.json`, deterministic builder) still runs as usual,
+but step 10 — the K1–K6 deep knowledge tier (`guild:learn-knowledge`) —
+does **not** run by default within it, even if the step 7 OQ1 deep-graph
+gate was approved. It runs only via an explicit, separately budgeted
+`/guild:learn knowledge` invocation. This mirrors the accepted decision
+(`defer-deep-knowledge-tier-at-workspace-scale`): the OQ1 gate estimates
+scan cost, not judgment-round volume — the actual cost driver at workspace
+scale (the 2026-07-18 run's round-1 candidate emission produced ~15,000
+items needing LLM judgment after a scan estimate that had already cleared
+the gate). The default applies to workspace roots as a category per the
+decision's Scope section; its own hedge ("re-evaluate per scale") is not a
+license for this skill to silently auto-run the deep tier on a workspace root
+it judges "small enough" — that judgment stays with the operator, exercised
+through the same explicit `/guild:learn knowledge` invocation this default
+already requires for any workspace root, regardless of size. Project-scoped
+(non-workspace) learns are a different category entirely and are unaffected
+by this deferral — their step 10 runs normally once step 7 is approved.
 
 Read `learn_fanout` from `readWorkspaceKnowledgeConfig(root)` (B2 §3):
 
@@ -152,9 +229,14 @@ Workspace flow:
    (`guild.workspace.v1`).
 3. **Refresh `.guild/workspace.json`.**  `write-manifest.ts --cwd <root>`.
 4. **Learn the workspace root as coordination context only.** Run the
-   regular-project flow SCOPED to root-level artifacts (workspace manifest,
-   cross-project `docs/`, initiative ledgers) — **not** the child repos. Do
-   not scan any child repo as part of the root scan.
+   regular-project flow SCOPED to root-level artifacts per the
+   **Workspace-root scope contract** above (umbrella-own surface: `docs/v2/**`,
+   `design/`, `gtm/`, `.guild/` canonical stores, workspace config, CI) —
+   **not** the child repos, which are registered, never scanned as a
+   monolith. Do not scan any child repo as part of the root scan. Within
+   this pass, apply the contract's graph-feedstock supplement (direct scan
+   of `.guild/` canonical stores at step 8) and deep-tier default (step 10
+   deferred to an explicit `/guild:learn knowledge` invocation).
 5. **Aggregate cost estimate.** Before fanning out to children: count total
    files across all child repos (cheap stat, no LLM), emit:
    `"Workspace: <N> child repos, ~<M> files total; estimated full learn time
@@ -215,7 +297,7 @@ or `--include-oversized=<bytes>` to override the three overridable rules.
 
 # Learning checkpoint routing
 
-After step 14 (emit learning checkpoint), apply this cheap classifier:
+After step 15 (emit learning checkpoint), apply this cheap classifier:
 
 - If `candidates.json` has ≥1 wiki candidate with `confidence: high` OR ≥1
   decision candidate → route to `guild:learn-harvest` (signal detected).
@@ -265,13 +347,26 @@ user-approved scope.
 # Eval cases
 
 - `/guild:learn` no-arg on a regular project → target classified, classification
-  surfaced, user confirms, run started before scanning, full 16-step pipeline
+  surfaced, user confirms, run started before scanning, full 17-step pipeline
   executes, run closed with provenance.json, skipped-files.json emitted.
 - `/guild:learn` no-arg on a workspace (children detected) → workspace flow,
-  aggregate cost estimate shown before child scans, children fanned out
-  automatically (learn_fanout=auto), each child under its own skip policy, child
-  artifacts in child `.guild/`, workspace-level cross-project candidates in root
-  `.guild/wiki/workspace/` only.
+  root pass scoped to umbrella-own surface only (children registered in
+  `.guild/workspace.json`, never scanned as a monolith), aggregate cost
+  estimate shown before child scans, children fanned out automatically
+  (learn_fanout=auto) via their own regular-project full-learn pass, each
+  child under its own skip policy, child artifacts in child `.guild/`,
+  workspace-level cross-project candidates in root `.guild/wiki/workspace/`
+  only.
+- Workspace-root pass, step 8 (`guild:learn-graph`) → semantic selection
+  supplements `codebase-map.json` (zero `.guild/` entries by scanner design)
+  with a direct scan of `.guild/wiki/`, `.guild/workspace/`,
+  `.guild/workspace-knowledge/`, `.guild/initiatives/`, and root
+  `.guild/{guild.yaml,settings.json,workspace.json}`.
+- Workspace-root pass, step 7 OQ1 gate approved → step 9's deterministic
+  `knowledge-links.json` builder still runs, but step 10's K1–K6 deep
+  knowledge tier does NOT run by default; it requires an explicit
+  `/guild:learn knowledge` invocation. A regular-project run (non-workspace)
+  is unaffected — its step 10 runs normally once step 7 is approved.
 - `learn_fanout: "plan-only"` in workspace.json → fan-out plan emitted to
   workspace-plan.md, no child scans run.
 - `--dry-run` flag → workspace plan printed, nothing written, no scans run.

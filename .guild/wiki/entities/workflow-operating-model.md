@@ -320,7 +320,7 @@ rebuildable index STATE, and they exist for every run.
 ## Status Axes
 
 > **Supersession note (2026-06-11): v2 keeps four axes.**
-> [`docs/v2/06-initiatives.md`](../../../../docs/v2/06-initiatives.md) fixes the initiative manifest
+> [`docs/v2/initiatives.md`](../../../../docs/v2/initiatives.md) fixes the initiative manifest
 > (`guild.initiative.v1`) at the **4-axis model** — `definition_status` /
 > `execution_status` / `release_status` / `documentation_status`. The `review_status` and
 > `evolution_status` rows below were **folded into that model**: review evidence is

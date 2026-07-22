@@ -8,14 +8,14 @@
       "id": "config",
       "source_path": "commands/config.md",
       "resource_path": "resources/commands/config.md",
-      "sha256": "88f8de815b7c4a9ec65c2ac4fc80256c23a387203b590efea819e4e99941432b"
+      "sha256": "4c4daacb475acfc2a54e053047b6bfb0f77a51c8ee61e56bdaa0e76f26e17434"
     },
     {
       "category": "scripts",
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "49923862745a10b4fe9a2dfd9e99445c3a05390780468cabbb69aa0bcdc330af"
+      "sha256": "7825bceddcf79635e95f2f94290fb4d6933b60be54873ccb707f8f4a4db79311"
     },
     {
       "category": "scripts",
@@ -29,14 +29,14 @@
       "id": "lib/config-reconcile-contract",
       "source_path": "scripts/lib/config-reconcile-contract.ts",
       "resource_path": "resources/scripts/lib/config-reconcile-contract.ts",
-      "sha256": "b08d6aee46630caba75b24c7d0fa478995a0125c9917e8cafd9ab998929721ff"
+      "sha256": "2b04742adff70be17e76218c50e9ac2b715b2554cef775459f96dd4c3268b830"
     },
     {
       "category": "scripts",
       "id": "lib/config-render",
       "source_path": "scripts/lib/config-render.ts",
       "resource_path": "resources/scripts/lib/config-render.ts",
-      "sha256": "96a9a5c6d78dc2750f08c1be366905fed449102a7f564a0da6b635344d30b84f"
+      "sha256": "2bb875a347da355bfa866854f46703eee534e7460b8b6debd206d4c6a3819a95"
     },
     {
       "category": "scripts",
@@ -64,7 +64,7 @@
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "bab91055596cad8535eea0e70131a0f40b140d0f4bca4cbf039a67e22622f0b3"
+      "sha256": "4e3fea287dacb9533fbd612ccd85abe5a2bf77f40bba0fb0082b1b89239bd252"
     },
     {
       "category": "scripts",
@@ -99,7 +99,7 @@
       "id": "read-guild-config",
       "source_path": "scripts/read-guild-config.ts",
       "resource_path": "resources/scripts/read-guild-config.ts",
-      "sha256": "8e8c769ef7be896462a9be952f103a69636abd3b70350d5e92b209529f040692"
+      "sha256": "08a2c299bd636456b54f90d59ec7124c3071717baa6b691615d3c7537a9b6b13"
     }
   ]
 }

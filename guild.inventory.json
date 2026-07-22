@@ -1,10 +1,10 @@
 {
   "schema_version": "guild.inventory.v1",
   "generated_at": "1970-01-01T00:00:00.000Z",
-  "plugin_version": "2.2.0",
+  "plugin_version": "2.3.0",
   "manifest": {
     "name": "guild",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 2 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
@@ -39,7 +39,7 @@
     {
       "id": "config",
       "source_path": "commands/config.md",
-      "description": "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 5 host-native config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config ui list|get|sources|set` is the native CLI/agents-file settings render/edit surface — driven by CONFIG_UI_METADATA it lists config groups/keys/values/sources and edits any key, honoring the metadata's confirmation-strength (a danger/strongest key needs `--confirm`), routing every write through the config API; app/connector hosts report blocked; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+      "description": "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 16 registered host config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config ui list|get|sources|set` is the native CLI/agents-file settings render/edit surface — driven by CONFIG_UI_METADATA it lists config groups/keys/values/sources and edits any key, honoring the metadata's confirmation-strength (a danger/strongest key needs `--confirm`), routing every write through the config API; app/connector hosts report blocked; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
     },
     {
       "id": "dashboard",
@@ -311,7 +311,7 @@
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
       "tier": "meta",
-      "description": "Runs the §12 7-step workflow to mint a new shipping specialist — interview, draft under .guild/agents/proposed/, boundary scan of existing .guild/agents/*.md, propose adjacent-boundary edits (DO NOT TRIGGER for new-domain), gate boundary edits via guild:evolve-skill, gate the new specialist via paired evals + shadow mode, register live. Minted only when §11.2.1 extraction signals agree (recurring gap across ≥3 runs, distinct triggers, sufficient context isolation, enough eval cases). TRIGGER for \"create a new Guild specialist for <domain>\", \"mint a data-scientist specialist\", \"add a new role — <role>\", \"incubate a proposed specialist for <domain>\". DO NOT TRIGGER for minting a new skill/capability (guild:create-skill), evolving an existing specialist (guild:evolve-skill), composing a team for the current task (guild:team-compose), editing an existing agent's body (specialist-agent-writer dev agent), or rolling back a specialist (guild:rollback-skill)."
+      "description": "Runs the §12 7-step workflow to mint a new shipping specialist — interview, draft under .guild/agents/proposed/, boundary scan, gate applicable adjacent-boundary edits, gate the new specialist, register live. Creation authority is either human-requested (an explicit request or approved team-compose option A; no historical extraction prerequisite) or evolution-proposed (all §11.2.1 historical extraction signals required). TRIGGER for \"create a new Guild specialist for <domain>\", \"mint a data-scientist specialist\", \"add a new role — <role>\", \"incubate a proposed specialist for <domain>\". DO NOT TRIGGER for minting a new skill/capability (guild:create-skill), evolving an existing specialist (guild:evolve-skill), composing a team for the current task (guild:team-compose), editing an existing agent's body (specialist-agent-writer dev agent), or rolling back a specialist (guild:rollback-skill)."
     },
     {
       "id": "guild-dashboard",
@@ -853,6 +853,11 @@
       "event": "SessionStart"
     },
     {
+      "id": "SessionStart:session-reanchor.js",
+      "source_path": "hooks/dist/session-reanchor.js",
+      "event": "SessionStart"
+    },
+    {
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "event": "SessionStart"
@@ -863,8 +868,18 @@
       "event": "SessionStart"
     },
     {
+      "id": "Stop:lean-lead-guard.js",
+      "source_path": "hooks/dist/lean-lead-guard.js",
+      "event": "Stop"
+    },
+    {
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
+      "event": "Stop"
+    },
+    {
+      "id": "Stop:lifecycle-gate.js",
+      "source_path": "hooks/dist/lifecycle-gate.js",
       "event": "Stop"
     },
     {
@@ -928,7 +943,7 @@
         "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js"
       ],
       "read_only": true,
-      "description": "D-MCP declared capability (docs/v2/11-security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
+      "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
     },
     {
       "id": "guild-telemetry",
@@ -939,7 +954,7 @@
         "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js"
       ],
       "read_only": true,
-      "description": "D-MCP declared capability (docs/v2/11-security.md §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
+      "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
     }
   ],
   "scripts": [
@@ -969,6 +984,16 @@
       "kind": "cli"
     },
     {
+      "id": "check-docs-architecture",
+      "source_path": "scripts/check-docs-architecture.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "check-entrypoint-packaging",
+      "source_path": "scripts/check-entrypoint-packaging.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-lane-liveness",
       "source_path": "scripts/check-lane-liveness.ts",
       "kind": "cli"
@@ -976,6 +1001,11 @@
     {
       "id": "check-module-ownership",
       "source_path": "scripts/check-module-ownership.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "check-plugin-root-fallback",
+      "source_path": "scripts/check-plugin-root-fallback.ts",
       "kind": "cli"
     },
     {
@@ -1031,6 +1061,11 @@
     {
       "id": "desktop-app-smoke",
       "source_path": "scripts/desktop-app-smoke.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "docs-hygiene/check-symbol-citations",
+      "source_path": "scripts/docs-hygiene/check-symbol-citations.ts",
       "kind": "cli"
     },
     {
@@ -1501,6 +1536,16 @@
     {
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/specialist-identity",
+      "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/task-cell-backend",
+      "source_path": "scripts/lib/core/contracts/task-cell-backend.ts",
       "kind": "lib"
     },
     {
@@ -2094,6 +2139,11 @@
       "kind": "cli"
     },
     {
+      "id": "station-compose",
+      "source_path": "scripts/station-compose.ts",
+      "kind": "cli"
+    },
+    {
       "id": "sync-live-resources",
       "source_path": "scripts/sync-live-resources.ts",
       "kind": "cli"
@@ -2239,16 +2289,8 @@
   ],
   "docs": [
     {
-      "id": "docs/contracts/universal-host-p1-l0-foundation-contracts",
-      "source_path": "docs/contracts/universal-host-p1-l0-foundation-contracts.md"
-    },
-    {
       "id": "docs/generated/host-support-matrix",
       "source_path": "docs/generated/host-support-matrix.md"
-    },
-    {
-      "id": "docs/specialist-roster",
-      "source_path": "docs/specialist-roster.md"
     }
   ]
 }

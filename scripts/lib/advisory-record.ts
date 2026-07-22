@@ -4,7 +4,7 @@
  * guild.advisory.v1 typed record — the durable outcome of an advisory panel
  * (question, advisors + tiers, per-advisor recommendation + confidence,
  * synthesis, decision link). Bound by pointer to:
- *   docs/v2/09-adversarial-review.md §Advisory vs adversarial loops
+ *   docs/v2/adversarial-review.html §Advisory vs adversarial loops
  *   docs/knowledge/lifecycle/workflow-operating-model.md §Advisory records
  *
  * Contract (frozen, [v2-contract-only] in v2.0 — no writer shipped then):
@@ -456,7 +456,10 @@ function realFsSeam(): AppendFsSeam {
 
 // ── CLI entry point (not part of the library contract) ───────────────────────
 
-if (require.main === module) {
+// esbuild inlines this module into the hook bundles (hooks/dist/*.js), where
+// `require.main === module` is true for EVERY inlined module — gate on the exact argv basename so
+// the example skeleton never leaks into hook stdout (it looks like real data).
+if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   // Minimal CLI: print a skeleton record to stdout for inspection.
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const skeleton = makeAdvisoryRecord({

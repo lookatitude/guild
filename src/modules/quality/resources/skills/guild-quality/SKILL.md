@@ -95,11 +95,14 @@ Budget = `defaults.quality.budget` **by pointer to `./quality-contract.md §Budg
 
 Two **distinct, both-kept** review mechanisms at this boundary (https://guildstack.dev/docs/adversarial-review):
 
-1. **In-phase advisory panel (unchanged).** Advisory (non-blocking). Fixed
-   producer `qa-test-strategy`; fixed challengers `[security, architect]`;
-   cross-model-preferred (flag recorded). Findings resolve by rerun / added
-   check / named owner-accepted risk — never itself blocks. Populate
-   `challenger_trail` → `./quality-contract.md §challenger_trail`.
+1. **In-phase advisory panel.** Advisory (non-blocking). Sourced from the station
+   composer's `qa` `advisory_panel` (SoT: `src/modules/teams/workflows/station-composer.ts`
+   `STATION_POLICY.qa.advisory_panel`) — not a hardcoded fixed pair: producer
+   `qa-test-strategy` (matches the composer); challengers `security` (BASELINE — always
+   present) + `architect` (GATED on `multi_component`, recorded `chal:qa:architect`);
+   cross-model-preferred (flag recorded). Findings resolve by rerun / added check / named
+   owner-accepted risk — never itself blocks. Populate `challenger_trail` →
+   `./quality-contract.md §challenger_trail`.
 2. **Cross-host G-quality gate via the broker (policy-gated).** *Separate* from
    the same-session panel above: this is the **cross-host** review where a
    **different host family** critiques the quality report. After the report is
@@ -144,8 +147,8 @@ After `releasegate` and before phase close, fire the per-phase LearningCheckpoin
 
 - `selection`: deterministic-signal table + 3-choice prompt; grep proves zero
   copied schema. `runchecks`: budget a `§4.4` pointer (no literals);
-  discovered-harness-only. `g-quality`: fixed pair + cross-model flag +
-  advisory. `releasegate`: pointer-cited truth-table (quality-mechanics.md) +
+  discovered-harness-only. `g-quality`: composer-derived qa `advisory_panel` +
+  cross-model flag + advisory (non-blocking). `releasegate`: pointer-cited truth-table (quality-mechanics.md) +
   zero-drift diff vs `./quality-contract.md §"ReleaseGate predicate"` + the printed BLOCK-override asymmetry.
 
 # Escalation rules

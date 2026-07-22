@@ -13,7 +13,7 @@
  * serialised by Claude Code's hook dispatch — no concurrent writers from
  * the hook path). The ORCHESTRATOR side (concurrent lane dispatch via
  * execute-plan) must use the tooling bus-emit helper with the `.guild/.lock`
- * atomic-rename discipline (`docs/v2/08 §Concurrency & locking`). The
+ * atomic-rename discipline (`docs/v2/dispatch-execution.html §Concurrency & locking`). The
  * hook-side helper documented here does NOT need that lock.
  *
  * ── Best-effort contract ─────────────────────────────────────────────────────

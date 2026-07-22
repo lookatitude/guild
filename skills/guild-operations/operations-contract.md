@@ -51,7 +51,9 @@ Emitted when `class == release`. Supplies the D8 join fields (see
 ## Posture
 
 The 5 runbook classes + their default autonomy posture + routing target. The
-class→producer map is the same source that drives each runbook's producer.
+class→producer map is the same source that drives each runbook's producer; it fills
+the **`null` ops producer** in the station composer's `ops` `advisory_panel` (SoT:
+`src/modules/teams/workflows/station-composer.ts` `STATION_POLICY.ops.advisory_panel`).
 
 | Class | Default posture | Producer | Routes to |
 |---|---|---|---|
@@ -64,7 +66,10 @@ class→producer map is the same source that drives each runbook's producer.
 Split posture rides the interactive-by-default policy + the additive
 `autonomy_contract`; runbook approval lowers **only the SOFT gate**, never the
 hard set (rail 3). Active specialists stay `≤ producer + challenger` for
-`incident` / `rollback`.
+`incident` / `rollback` (the composer caps). The G-operations advisory
+**challengers** are sourced from the same `ops` `advisory_panel`, resolved by
+`composeStationTeam` — not a hardcoded list: `security` (BASELINE — always present) +
+`architect` (GATED on the `multi_component` signal; recorded as `chal:ops:architect`).
 
 ## Safety rails
 

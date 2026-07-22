@@ -1,6 +1,6 @@
 /**
  * __tests__/recall-config-flags.test.ts — compositeRecall + importanceAtIngest as
- * first-class, configurable, ENABLED-BY-DEFAULT config-object flags (docs/v2/05).
+ * first-class, configurable, ENABLED-BY-DEFAULT config-object flags (docs/v2/knowledge-memory.html).
  * Also locks the merge-fix: a user's settings.json value must actually be honored
  * (compositeRecall previously had NO merge logic — silently dropped).
  */

@@ -57,7 +57,14 @@
       "id": "guild-context-assemble",
       "source_path": "skills/meta/context-assemble/SKILL.md",
       "resource_path": "resources/skills/meta/context-assemble/SKILL.md",
-      "sha256": "c3067dd12988d4f1a5e37db038fd28f25bee1e752b1edecda094c69c779e4c2a"
+      "sha256": "b9cbf2a0cc9ecc4ac36cce5d188dd121910474de9c6e17ca487a7a2f02f492b5"
+    },
+    {
+      "category": "skills",
+      "id": "guild-context-assemble/scenarios.json",
+      "source_path": "skills/meta/context-assemble/scenarios.json",
+      "resource_path": "resources/skills/meta/context-assemble/scenarios.json",
+      "sha256": "9f918f24248ebb362e9e18faaf11b03e3936b0bb704136211a6c42854098621d"
     }
   ]
 }

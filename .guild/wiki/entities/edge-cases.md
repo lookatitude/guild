@@ -102,8 +102,9 @@ This file captures failure modes that should shape v2 implementation and review.
 | More than 6 specialists needed | Split into phases or require explicit allow-larger override. |
 | User starts in a later phase without prerequisites | Build or request the missing artifact; do not fake a spec, PRD, or done criteria. |
 | Specialist overlap | Choose one owner, add a reviewer, and record scope boundaries. |
-| Missing specialist appears once | Substitute or skip; do not mint a new specialist. |
-| New specialist fails shadow mode | Keep proposed files archived and present refinement options. |
+| Evolution proposes a specialist from only one occurrence | Keep it as a gap proposal; the historical extraction threshold has not passed. |
+| Human explicitly requests a genuinely new specialist | Record `human-requested` authority; require prospective routing/boundary evals without fabricating history. |
+| Evolution-proposed specialist fails shadow mode | Keep proposed files archived and present refinement options. |
 | Frontend vs mobile ambiguity | Use `frontend` for web UI and `mobile` for native/mobile platform concerns; React Native may need both with narrow scopes. |
 
 ## Loops and Reviews

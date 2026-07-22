@@ -2,7 +2,7 @@
  * scripts/__tests__/advisory-record.test.ts
  *
  * guild.advisory.v1 record writer (deferred item 24).
- * Canonical contract: docs/v2/09-adversarial-review.md §Advisory records;
+ * Canonical contract: docs/v2/adversarial-review.html §Advisory records;
  * docs/knowledge/lifecycle/workflow-operating-model.md §Advisory records.
  *
  * Coverage:

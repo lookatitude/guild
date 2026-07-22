@@ -19,7 +19,11 @@
  *   - TmuxTeamBackend.preflight() no-ops without a resolver (regression) and
  *     reports failures with one.
  *   - composeTmuxCommands with an all-claude resolver === the no-resolver path
- *     (byte-for-byte), and emits a `codex exec` pane for a codex specialist.
+ *     (byte-for-byte — issue #54's local Claude launch flags apply to BOTH,
+ *     since composeTmuxCommands intercepts every claude host_kind before it
+ *     ever consults resolveAdapter), and emits a `codex exec` pane for a
+ *     codex specialist (unaffected by issue #54 — the resolver is still
+ *     consulted for any non-claude host_kind).
  */
 
 import {
@@ -90,9 +94,14 @@ describe("guild.task_assignment.v1 — GUILD_TASK_ASSIGNMENT export (cross-host 
     expect(new CodexPaneAdapter().env(s).GUILD_TASK_ASSIGNMENT).toBe(rel);
   });
 
-  it("omits GUILD_TASK_ASSIGNMENT when no specialist is set", () => {
+  it("omits the GUILD_TASK_ASSIGNMENT export when no specialist is set", () => {
     const c = new CodexPaneAdapter().command(spec({ runId: "r" }));
-    expect(c).not.toContain("GUILD_TASK_ASSIGNMENT");
+    // Assert the absence of the EXPORT FRAGMENT specifically. task-cell-runtime G3
+    // added a read-ack instruction to the teammate PROMPT that names the
+    // `$GUILD_TASK_ASSIGNMENT` env var, so the bare token now legitimately appears
+    // in every teammate command; the export fragment (`GUILD_TASK_ASSIGNMENT=…`) is
+    // still correctly gated on `spec.specialist`, which is what this test guards.
+    expect(c).not.toContain("GUILD_TASK_ASSIGNMENT=");
     expect(new CodexPaneAdapter().env(spec({ runId: "r" })).GUILD_TASK_ASSIGNMENT).toBeUndefined();
   });
 });
@@ -126,11 +135,17 @@ describe("ClaudePaneAdapter", () => {
     expect(adapter.command(s)).toBe(paneCommand(s.prompt, s.runId));
   });
 
-  it("command carries the agent-team env gate + run id + keeps the pane alive", () => {
+  it("command carries the agent-team env gate + run id, and (G4) does NOT keep the pane alive by default", () => {
     const c = adapter.command(spec());
     expect(c).toContain("export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
     expect(c).toContain("export GUILD_RUN_ID=run-001");
-    expect(c).toContain("exec $SHELL");
+    // task-cell-runtime G4 (ADR D5): a completed worker's pane must DISAPPEAR — no
+    // lingering `exec $SHELL` (the P0.4 "pane alive != worker alive" bug). The
+    // operator debug shell is opt-in only (GUILD_PANE_DEBUG=1), verified in
+    // tmux-backend.test.ts.
+    expect(c).not.toContain("exec $SHELL");
+    // The command ends on the worker invocation (pane closes when `claude` exits).
+    expect(/\bclaude\b/.test(c)).toBe(true);
   });
 
   it("env reports the team gate + run id", () => {
@@ -389,6 +404,14 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
     { name: "backend", scope: "api", dependsOn: ["architect"] },
   ];
 
+  // Issue #54: composeTmuxCommands intercepts every "claude" host_kind BEFORE
+  // it ever consults resolveAdapter (see the comment on that branch), so for
+  // an all-Claude team the presence of a resolver is irrelevant — both paths
+  // call paneCommand() with the exact same resolved launch flags. The
+  // original byte-for-byte invariant holds again, now WITH the flags on both
+  // sides (a stronger claim than before issue #54: it used to be
+  // byte-identical bare `claude` on both sides; now it's byte-identical
+  // flag-bearing `claude` on both sides).
   it("composeTmuxCommands with an all-claude resolver === the no-resolver path (byte-for-byte)", () => {
     const common = {
       mode: "new-session" as const,
@@ -401,6 +424,12 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
     const legacy = composeTmuxCommands(common);
     const viaAdapter = composeTmuxCommands({ ...common, resolveAdapter: resolveAdapter() });
     expect(viaAdapter.map((c) => c.display)).toEqual(legacy.map((c) => c.display));
+
+    const claudeCmds = legacy.filter((c) => c.display.includes("claude "));
+    expect(claudeCmds.length).toBeGreaterThan(0);
+    for (const c of claudeCmds) {
+      expect(c.display).toContain("--permission-mode bypassPermissions");
+    }
   });
 
   it("a codex specialist gets a `codex exec` pane; orchestrator stays claude", () => {

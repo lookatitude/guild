@@ -42,6 +42,10 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import {
+  ALLOWED_INJECTION_CLEAN_VALUES,
+  ALLOWED_TOP_LEVEL_KEYS,
+} from "../../../../hooks/lib/handoff-v2";
 import { loadYamlApi } from "../../kernel";
 
 const yaml = loadYamlApi();
@@ -186,9 +190,8 @@ function isHandoffFixtureExempt(filePath: string): boolean {
 
 // ── Handoff-v2 extraction + validation (mirrored from hooks/lib/handoff-v2.ts) ──
 //
-// Scripts cannot import hooks/lib/ (separate package, different tsconfig).
-// Mirror the extraction logic with a reference comment per the task brief.
-// Any schema change in hooks/lib/handoff-v2.ts must be reflected here.
+// Extraction remains local because this linter must find every fence to detect
+// duplicates, while the canonical helper intentionally returns only the first.
 
 /**
  * Mirror of hooks/lib/handoff-v2.ts:extractHandoffEnvelope.
@@ -215,18 +218,15 @@ function extractAllHandoffEnvelopes(content: string): unknown[] {
 // ── guild.handoff.v2 full validator (mirror of hooks/lib/handoff-v2.ts) ───
 //
 // Full mirror of validateHandoffV2 in hooks/lib/handoff-v2.ts.
-// Scripts cannot import hooks/ (self-contained by design), so this is a
-// deliberate, commented duplication — not a new independent implementation.
+// Validation remains local, while the strict allowed-key set is imported from
+// the canonical validator so schema additions cannot silently diverge here.
 // Canonical source of truth: hooks/lib/handoff-v2.ts:validateHandoffV2.
 // Also mirrors the envelopeShapeErrors function in scripts/lib/reaping.ts,
 // which was forced to full parity by the AC-3 consumer agreement requirement.
 // If the canonical changes, update both mirrors in lockstep.
 
-/** Allowed top-level keys — mirror of ALLOWED_TOP_LEVEL_KEYS in hooks/lib/handoff-v2.ts. */
-const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = new Set([
-  "schema_version", "task_id", "tier", "status", "summary",
-  "artifacts", "issues", "escalate_reason", "learnings", "notes",
-]);
+/** Effective allowed-key set, shared with the canonical handoff-v2 validator. */
+export const ALLOWED_ENVELOPE_KEYS: ReadonlySet<string> = ALLOWED_TOP_LEVEL_KEYS;
 
 const VALID_ENVELOPE_TIERS = new Set<string>(["cheap", "mid", "powerful"]);
 const VALID_ENVELOPE_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
@@ -357,6 +357,16 @@ function envelopeShapeErrors(value: unknown): string[] {
           `got ${(obj["notes"] as string).length} chars`
       );
     }
+  }
+
+  // injection_clean — HK-08 additive-optional; absent ⇒ unverified (no error)
+  if (
+    obj["injection_clean"] !== undefined &&
+    !ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"] as string)
+  ) {
+    errors.push(
+      `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
+    );
   }
 
   return errors;
@@ -611,9 +621,52 @@ function checkNewHandRolledYaml(
   // eliminates the whole class of false positives where a non-YAML anchored
   // key-like regex (URL schemes tel:/urn:/blob:/mailto:/data:/http(s)://, glob
   // builders like globToRegExp, etc.) would otherwise trip patterns 3/4/5.
-  // Signals: a .yaml/.yml/.md/run.yaml reference, the word "frontmatter", or the
-  // '---' frontmatter-delimiter idiom (patterns 1/2 carry their own '---' signal).
-  const YAML_SURFACE_SIGNAL = /\.ya?ml\b|run\.yaml|frontmatter|\.md\b|['"`]---['"`]/i;
+  //
+  // A bare '.md' substring is deliberately NOT a signal (it was until OD-3's
+  // Markdown false positive): merely naming a Markdown path says nothing about
+  // whether the file parses YAML. That alone made scripts/generate-support-matrix.ts
+  // — which reads a plain Markdown metadata line with /^Generated: .../ and never
+  // touches YAML — get flagged, forcing an idiom-dodging rewrite of a correct parse.
+  //
+  // The accepted signals are the ones a real YAML/frontmatter surface cannot avoid:
+  //   - a .yaml / .yml path or extension literal (incl. run.yaml);
+  //   - a YAML library: an import/require of the 'js-yaml' or 'yaml' module, or
+  //     a yaml.load/loadAll/parse/safeLoad call. Both specifiers are gated
+  //     behind from/require/import, so neither a plain string in a format list
+  //     — ["json", "yaml"] — nor an incidental mention in a URL or comment
+  //     — "https://example/migrations/js-yaml-to-json" — is a signal;
+  //   - the word "frontmatter" / "front-matter" / "front matter";
+  //   - the '---' frontmatter delimiter in a *code* position: EXACTLY three
+  //     dashes (no more) DELIMITED ON BOTH SIDES by a quote, a regex slash, a
+  //     regex anchor, or an escaped newline. Covered forms: '---', "---\n",
+  //     `---`, /^---$/, split(/---/), split(/\r?\n---\r?\n/), indexOf("---"),
+  //     line === '---', and the quantified regex form /^-{3}$/ (which spells the
+  //     fence with one dash and a quantifier, so the literal-dash clauses cannot
+  //     see it — it is matched anchor-to-anchor, ^-{3}$, so an embedded
+  //     quantifier like /item-{3}id/ is not a signal). Any hand-rolled
+  //     frontmatter reader must locate the delimiter, so it carries this signal.
+  //
+  //     The escaped-newline adjacency is load-bearing: the most common
+  //     delimiter idiom of all is the newline-aware regex split(/\r?\n---\r?\n/),
+  //     where the dashes touch \n and \r rather than a quote.
+  //
+  //     Requiring BOTH sides — not merely a leading delimiter — is what keeps
+  //     the clause from re-opening the false-positive class it exists to close.
+  //     Prose that merely begins a run of dashes, "Summary\n--- details", has a
+  //     delimiter before the dashes but a space after, and is correctly ignored;
+  //     so are "^---suffix" and "prefix---$". Together with the exactly-three
+  //     rule this also excludes a comment rule (// ------------, too long and
+  //     not delimited), a Markdown table rule (|---|, pipe-delimited), and a
+  //     --flag CLI literal (only two dashes).
+  //
+  //     KNOWN RESIDUAL (accepted, tracked): a quoted "---" that is a Markdown
+  //     *writer's* divider constant is indistinguishable from a reader's
+  //     delimiter literal, so it still signals. That only makes the file a
+  //     CANDIDATE — a hand-rolled pattern must also match before anything is
+  //     reported — and it is strictly narrower than the '.md' behaviour it
+  //     replaces.
+  const YAML_SURFACE_SIGNAL =
+    /\.ya?ml\b|(?:from|require\s*\(|import\s*\()\s*['"`](?:js-)?yaml['"`]|\byaml\s*\.\s*(?:load|loadAll|parse|safeLoad)\b|front[-\s]?matter|(?:['"`\/^]|\\[rn])-{3}(?:['"`\/$]|\\[rn])|\^-\{3\}\$/i;
   if (!YAML_SURFACE_SIGNAL.test(content)) return [];
 
   // Scan for hand-rolled YAML patterns

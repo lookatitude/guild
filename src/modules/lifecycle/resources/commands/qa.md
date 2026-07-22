@@ -57,7 +57,7 @@ All five global flags + `--dry-run` apply.
 
 PCR-Quality must-exist floor: `.guild/runs/<run-id>/quality/<run-id>.md`,
 `quality/evidence/*`, `review/quality/*`. Binding:
-`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.html §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-011.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
@@ -80,7 +80,7 @@ re-resolve.
 Before the quality skill is invoked, start a run (SC-B, §435):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
   --command=/guild:qa \
   --cwd "$(pwd)"
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
@@ -92,7 +92,7 @@ the lifecycle; `start` writes `current-run-id` synchronously so `phase`
 resolves the open run):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js phase \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js phase \
   --phase=qa \
   --cwd "$(pwd)"
 ```

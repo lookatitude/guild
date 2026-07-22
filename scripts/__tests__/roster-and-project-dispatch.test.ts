@@ -686,6 +686,62 @@ describe("composeInProcessDispatch — project-local specialists", () => {
     );
     expect(d.subagentType).toBe("architect");
   });
+
+  // #58 — GUILD_AGENT_DEFINITION + the adoption prompt are UNCONDITIONAL for a
+  // project specialist, and a project specialist with no definition path FAILS
+  // CLOSED rather than silently degrading to a persona-stripped generic agent.
+  it("emits GUILD_AGENT_DEFINITION + definitionPath + adoption prompt for EVERY project specialist (unconditional)", () => {
+    const [d] = composeInProcessDispatch(launchReq([projectLocal]));
+    expect(d.subagentType).toBe(GENERIC_SUBAGENT_TYPE);
+    expect(d.env["GUILD_AGENT_DEFINITION"]).toBe(".guild/agents/kb-viz-engineer.md");
+    expect(d.definitionPath).toBe(".guild/agents/kb-viz-engineer.md");
+    expect(d.prompt).toContain(".guild/agents/kb-viz-engineer.md");
+    expect(d.prompt).toContain("adopt it");
+  });
+
+  it("throws (fail-closed) when a project specialist has no definition path — never a bare generic dispatch", () => {
+    const noDefinition: Specialist = {
+      name: "ghost",
+      scope: "orphan lane",
+      dependsOn: [],
+      definition_source: "project",
+      // definition intentionally omitted
+    };
+    expect(() => composeInProcessDispatch(launchReq([noDefinition]))).toThrow(
+      /project specialist "ghost"/,
+    );
+    expect(() => composeInProcessDispatch(launchReq([noDefinition]))).toThrow(
+      /invalid definition path/,
+    );
+  });
+
+  it("throws (fail-closed) when a project specialist's definition is empty", () => {
+    const emptyDefinition: Specialist = {
+      name: "ghost",
+      scope: "orphan lane",
+      dependsOn: [],
+      definition: "",
+      definition_source: "project",
+    };
+    expect(() => composeInProcessDispatch(launchReq([emptyDefinition]))).toThrow(
+      /#58/,
+    );
+  });
+
+  it("throws (fail-closed) on a role-mismatched / arbitrary definition path", () => {
+    const mismatched: Specialist = {
+      name: "kb-viz-engineer",
+      scope: "viz lane",
+      dependsOn: [],
+      definition: ".guild/agents/frontend.md", // wrong role
+      definition_source: "project",
+    };
+    expect(() => composeInProcessDispatch(launchReq([mismatched]))).toThrow(
+      /invalid definition path/,
+    );
+    const arbitrary: Specialist = { ...mismatched, definition: "/etc/passwd" };
+    expect(() => composeInProcessDispatch(launchReq([arbitrary]))).toThrow(/#58/);
+  });
 });
 
 describe("agent-team-launcher parseYaml — no generic `source:` alias", () => {

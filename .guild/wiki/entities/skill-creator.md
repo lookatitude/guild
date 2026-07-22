@@ -130,16 +130,20 @@ mutates **zero** instances:
 
 ```mermaid
 flowchart TD
-  Gap["Team-compose gap or repeated reflection cluster"] --> Interview["Interview role and examples"]
+  Gap["Human-approved team gap or repeated reflection cluster"] --> Authority{"Creation authority?"}
+  Authority -->|human-requested| Interview["Interview role and examples"]
+  Authority -->|evolution-proposed + extraction pass| Interview
   Interview --> DraftAgent[".guild/agents/proposed/<role>.md (derived_from_template stamped)"]
   Interview --> DraftSkills["Draft 2-5 proposed T5 skills under .guild/skills/"]
   DraftAgent --> Boundary["Boundary scan existing agents"]
   DraftSkills --> Boundary
   Boundary --> Edits["Propose DO NOT TRIGGER edits"]
   Edits --> AdjacentGate["Gate adjacent boundary edits"]
-  AdjacentGate --> NewGate["Gate new specialist"]
-  NewGate --> Shadow["Shadow mode on historical specs"]
-  Shadow --> Register{"Pass?"}
+  AdjacentGate --> NewGate["Gate new specialist with paired evals"]
+  NewGate --> Shadow{"Applicable or required history?"}
+  Shadow -->|yes| Replay["Shadow mode on historical specs"]
+  Shadow -->|no, human-requested| Register{"Pass?"}
+  Replay --> Register
   Register -->|yes| Live["Register-live into .guild/agents/ and .guild/skills/"]
   Register -->|no| Archive["Archive proposal with findings"]
 ```
@@ -150,8 +154,8 @@ flowchart TD
 > The plugin ships only the canonical/base read-only library + the two
 > templates; project-authored and evolved instances are project state. A
 > runtime write into plugin state is a v2 defect. Every instance carries
-> `derived_from_template: guild.{skill,agent}_template.vN`; the
-> session-restart/registration note is unchanged. The single enforceable
+> `derived_from_template: guild.{skill,agent}_template.vN`; project specialists
+> dispatch immediately by definition path rather than host-native registration. The single enforceable
 > boundary rule + the PreToolUse signature guard are stated once in
 > [`target-architecture.md`](../../../../.guild/wiki/entities/target-architecture.md) and the
 > ownership-map ADR — cited here by pointer.

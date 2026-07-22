@@ -2,8 +2,8 @@
 /**
  * scripts/check-roster-consistency.ts
  *
- * Read-only validator for docs/specialist-roster.md ↔ the shipped definition
- * files. Compares the "Complete default-tier map" table in specialist-roster.md
+ * Read-only validator for .guild/wiki/entities/specialist-roster.md ↔ the shipped definition
+ * files. Compares the "Complete default-tier map" table in that wiki entity page
  * against the actual `model:` frontmatter in every machinery agent
  * (agents/*.md) AND every specialist type template
  * (templates/specialists/*.md) — the two surfaces that together carry the
@@ -19,7 +19,7 @@
  *
  * Options:
  *   --cwd <path>   Plugin root (default: parent directory of this script).
- *                  Expects <cwd>/docs/specialist-roster.md and <cwd>/agents/.
+ *                  Expects <cwd>/.guild/wiki/entities/specialist-roster.md and <cwd>/agents/.
  *
  * Exit codes:
  *   0  Consistent — no drift found.
@@ -248,7 +248,7 @@ export function compareRosterToAgents(
  * Throws (writes to stderr + exits 1) if required paths are missing.
  */
 export function loadAndCompare(pluginRoot: string): ConsistencyResult {
-  const rosterPath = path.join(pluginRoot, "docs", "specialist-roster.md");
+  const rosterPath = path.join(pluginRoot, ".guild", "wiki", "entities", "specialist-roster.md");
   const agentsDir = path.join(pluginRoot, "agents");
   const templatesDir = path.join(pluginRoot, "templates", "specialists");
 

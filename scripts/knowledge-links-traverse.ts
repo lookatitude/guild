@@ -82,7 +82,7 @@ export interface KnowledgeLink {
   type: string;
   run_id: string;
   /**
-   * Tombstone-never-delete (docs/v2/05 §Invalidation, item 8). A superseded
+   * Tombstone-never-delete (docs/v2/knowledge-memory.html §Invalidation, item 8). A superseded
    * decision or deleted artifact MARKS its edge tombstoned instead of removing
    * it — active recall skips it (see activeLinks), but the history is preserved.
    */

@@ -97,6 +97,13 @@ export const SUMMARY_MAX_CHARS = 600;
 /** O-4 binding resolution: notes ≤ 200 chars. */
 export const NOTES_MAX_CHARS = 200;
 
+/** HK-08 additive-optional values; absence is interpreted as unverified. */
+export const ALLOWED_INJECTION_CLEAN_VALUES: ReadonlySet<string> = new Set([
+  "clean",
+  "flagged",
+  "unverified",
+]);
+
 const VALID_TIERS = new Set<string>(["cheap", "mid", "powerful"]);
 const VALID_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
 
@@ -255,8 +262,7 @@ export function validateHandoffV2(value: unknown): ValidationResult {
 
   // injection_clean — HK-08 additive-optional; absent ⇒ unverified (no error)
   if (obj["injection_clean"] !== undefined) {
-    const validValues = new Set(["clean", "flagged", "unverified"]);
-    if (!validValues.has(obj["injection_clean"] as string)) {
+    if (!ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"] as string)) {
       errors.push(
         `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
       );

@@ -1,0 +1,20 @@
+{
+  "_note": "Behavioral scenarios for the evolve paired-eval procedure (guild:evolve-skill). NOT executed by the trigger-fixture runner (tests/integration/paired-eval-runner.test.ts iterates should_trigger/should_not_trigger only); runner scenario support is a plugin backlog item. Grading = live paired dispatch trajectories.",
+  "scenarios": [
+    {
+      "id": "S1-workspace-root-empty-tour-by-design",
+      "setup": "Root has .guild/guild.yaml (guild.root.v1) kind: workspace. knowledge-graph.json present: tour[] is EMPTY; nodes include domain/config/document types; several document nodes carry non-empty source_refs that resolve on disk.",
+      "expected": "NARRATE via \u00a7Workspace-root fallback: 5-15 hand-sequenced steps, per-step nodeIds, every step meets the evidence floor; NO escalation; NO raw file reads."
+    },
+    {
+      "id": "S2-project-root-empty-tour-failed-build",
+      "setup": "Root has .guild/guild.yaml kind: project, no workspace.json. knowledge-graph.json present but tour[] is EMPTY because build-tour.ts failed.",
+      "expected": "ESCALATE to run guild:learn-graph stage 6; no tour written."
+    },
+    {
+      "id": "S3-child-project-with-false-manifest",
+      "setup": "Root has .guild/workspace.json that parses as guild.workspace.v1 with is_workspace: false (a legitimate child-project manifest). guild.yaml kind: project. tour[] EMPTY after a failed graph build.",
+      "expected": "ESCALATE \u2014 manifest presence is NOT workspace detection; is_workspace:false marks a project root."
+    }
+  ]
+}

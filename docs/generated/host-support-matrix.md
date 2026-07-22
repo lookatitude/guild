@@ -1,6 +1,6 @@
 # Generated Host Support Matrix
 
-Generated: 2026-07-05T21:08:02.090Z
+Generated: 2026-07-19T03:05:42.662Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 

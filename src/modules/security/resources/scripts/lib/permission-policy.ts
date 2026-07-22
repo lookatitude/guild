@@ -369,6 +369,14 @@ function isStringArray(v: unknown): v is string[] {
  * Returns the documented defaults on ANY failure (missing file / parse error /
  * mistyped value). NEVER throws.
  *
+ * `host_mode` / `host_mode_by_phase` are NOT read from settings.json here —
+ * neither is a registered key in the canonical closed config schema
+ * (config-cli.ts / config-cmd.ts own that surface; adding an ad-hoc key here
+ * would bypass it). `RuntimePermissionConfig.host_mode` remains an in-memory/
+ * programmatic override point only (its pre-existing contract, unchanged) —
+ * registering a real settings.json surface for it is a followup that needs
+ * its own lane through the canonical config-schema files.
+ *
  * (Reads the SAME locations as hooks/lib/security/config.ts `readSettingsAutoApprove`
  * + `parseSecurityConfig`, kept consistent so the policy and the PreToolUse hook
  * agree on the live posture.)

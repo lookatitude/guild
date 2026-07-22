@@ -2,7 +2,7 @@
  * scripts/__tests__/ideation-min-build.test.ts
  *
  * Focused jest tests for the ideation min-build spec resolver.
- * Spec pointer: docs/v2/03-lifecycle.md §"Phase continuity" / "A min-build spec [v2.x]"
+ * Spec pointer: docs/v2/lifecycle.html §"Phase continuity" / "A min-build spec [v2.x]"
  *
  * Coverage:
  *   1. needsMinBuild — happy paths (wiki absent / present)

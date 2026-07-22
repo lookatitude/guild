@@ -63,7 +63,10 @@ Use this checklist before treating v2 architecture documentation or implementati
 - Every team decision records backend, scope, skills, tools, MCP servers, and dependencies.
 - Every producer/reviewer has an advisory memory pattern or an explicit reason it is unavailable.
 - Development has security and architecture review signoff for every phase, including explicit not-applicable rationale when there are no findings.
-- Every new-agent path includes extraction signals, proposed path, boundary scan, eval gates, shadow mode, and registration.
+- Every new-agent path records creation authority, proposed path, boundary scan, applicable
+  boundary evals, new-role paired evals, and registration. Evolution-proposed paths also
+  include extraction signals and historical shadow; human-requested paths record absent
+  history as `not_applicable`.
 - Every tool escalation path routes through autonomy policy and user approval when needed.
 - Every runtime artifact path is under `.guild/`.
 - Every installed plugin artifact path is outside `.guild/`.

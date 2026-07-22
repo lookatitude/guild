@@ -12,7 +12,7 @@
  *   } from "./lib/owner-architect-loop";
  *
  * Loop-control state machine for the owner↔architect implementation loop
- * (docs/v2/09-adversarial-review.md §Loop control — [v2.x] candidate item 23).
+ * (docs/v2/adversarial-review.html §Loop control — [v2.x] candidate item 23).
  *
  * The owner↔architect loop is a **challenger loop** (adversarial shape):
  * - Owner produces an implementation artifact (code/design/handoff).
@@ -77,7 +77,7 @@ export const OWNER_ARCHITECT_SENTINEL = "## NO MORE QUESTIONS" as const;
 // ── Layer label ───────────────────────────────────────────────────────────────
 
 /**
- * Canonical loop-layer label for trace events (12-observability §loop_round_start).
+ * Canonical loop-layer label for trace events (observability §loop_round_start).
  * Distinct from L3/L4/security-review layers in `guild:loop-implement`.
  */
 export const OWNER_ARCHITECT_LAYER = "L-arch" as const;

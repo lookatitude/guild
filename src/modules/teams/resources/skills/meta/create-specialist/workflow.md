@@ -12,11 +12,20 @@ Five fields, captured via the interview in step 1 (ask the user until all five a
 4. **Example outputs** — 1–3 concrete artifacts (file shapes, deliverable types, handoff payloads) this specialist produces. Feeds the body of the agent file and the per-skill evals under `.guild/skills/proposed-<role>-*/`.
 5. **Dependencies** — upstream specialists this role reads handoffs from, and downstream specialists that depend on its output. Feeds the `opens_for:` conventions in the agent's handoff contract.
 
+## Creation authority
+
+Classify and record exactly one authority before the interview:
+
+- **Human-requested** — the user directly requested the role, or explicitly approved option A for a team-compose gap. Human-requested specialists do not require historical runs, reflections, or prior gap records. They still run the full interview and boundary scan, every applicable boundary-edit gate, and the new-specialist gate before Register.
+- **Evolution-proposed** — reflection, evolution, or cross-run analysis proposed the role without a current explicit creation request. All historical extraction signals below are mandatory.
+
+If a human-requested role has no applicable historical corpus, do not fabricate history and do not call the creation an override. The prospective paired evals are the gate; the absence of an applicable historical corpus alone does not block registration.
+
 ## 7-step workflow (§12)
 
 Seven ordered steps. Each step's gate must pass before the next runs.
 
-1. **Interview.** Capture the five Input fields above. If any is missing or underspecified, ask the user until all five are complete. Do not invent a role on the user's behalf — specialists are too heavy to conjure.
+1. **Interview.** Record `creation_authority` and capture the five Input fields above. If any is missing or underspecified, ask the user until all five are complete. Do not invent a role on the user's behalf — specialists are too heavy to conjure.
 
 2. **Draft.** Write the proposed files under the incubation path **in the consuming repo's `.guild/`** — never the plugin install dir (a runtime write into plugin install state is the **v2 DH-3 defect being fixed**):
    - `.guild/agents/proposed/<role>.md` — frontmatter (`name`, `description`, `when_to_use`, `model`, and `derived_from_template: guild.agent_template.v1` stamped **at draft time**) + body (responsibilities, superpowers, handoff contract, scope boundaries per the conventions in the shipped `templates/specialists/*.md` type library + project `.guild/agents/*.md`).
@@ -26,17 +35,17 @@ Seven ordered steps. Each step's gate must pass before the next runs.
 
 4. **Propose adjacent-boundary edits.** For each adjacent specialist, draft an append-only edit to its `description`: `DO NOT TRIGGER for: <new-specialist-domain>` (one short clause identifying the new domain and referencing the proposed role). Per `§12.1` step 4, these edits keep the adjacent specialists from continuing to steal the new specialist's triggers once it ships.
 
-5. **Gate boundary edits.** Each proposed boundary edit from step 4 runs through `guild:evolve-skill` as its own paired-evals run (A = adjacent specialist as-is, B = adjacent specialist with the DO NOT TRIGGER clause appended). The gate verifies the adjacent specialist still triggers correctly for its own domain but no longer matches the new specialist's triggers. Any boundary edit that fails its evolve gate stops this workflow (see Failure handling).
+5. **Gate boundary edits.** Each proposed boundary edit from step 4 runs through `guild:evolve-skill` as its own paired-evals run (A = adjacent specialist as-is, B = adjacent specialist with the DO NOT TRIGGER clause appended). The boundary-edit gate verifies the adjacent specialist still triggers correctly for its own domain but no longer matches the new specialist's triggers. If the adjacent set is empty, record `not_applicable`; do not invent an edit. Any applicable boundary edit that fails its evolve gate stops this workflow (see Failure handling).
 
-6. **Gate new specialist.** Paired evals on the new specialist itself (A = no-specialist baseline, B = proposed specialist), followed by shadow-mode runs on historical specs from `.guild/runs/*/` to surface boundary collisions and trigger-accuracy issues before live routing. Both must pass; shadow mode is not advisory here, it's part of the gate.
+6. **Gate new specialist.** The new-specialist gate always runs paired evals on at least 3 positive and 3 negative cases (A = no-specialist baseline, B = proposed specialist). For evolution-proposed creation, follow with shadow-mode runs on the historical specs that supplied the extraction evidence; paired evals and shadow replay must pass. For human-requested creation, replay any applicable historical specs from `.guild/runs/*/` when present; if none apply, record shadow replay as `not_applicable`. Missing history is not a failure on the human-requested path, but the paired eval gate remains mandatory.
 
 7. **Register.** On both gates passing, move the files **within `.guild/`** in the consuming repo: `.guild/agents/proposed/<role>.md` → `.guild/agents/<role>.md` and `.guild/skills/proposed-<role>-*/` → `.guild/skills/<role>-*/`. Register is a move, not a rewrite — the `derived_from_template` stamp drafted in step 2 is preserved through register-live unchanged. Commit the boundary edits to the adjacent specialists (from step 5). **The new agent file's existence at `.guild/agents/<role>.md` IS its registration** — `guild:team-compose` enumerates the live `.guild/agents/*.md` tree (∪ the shipped machinery agents + type templates) via `roster-resolve.ts` (ADR §4 filesystem-enumeration rule, code-backed); there is **no candidate list to append to**. After the move, refresh the derived registry projections with `roster-resolve.ts --cwd . --write-registry --quiet`. The new specialist is live for subsequent `/guild` tasks. The v1 behavior — moving into `agents/<role>.md` / `skills/specialists/<role>-*/` in the plugin install dir — is an explicit **v2 DH-3 defect being fixed**: the plugin install dir is never written at runtime.
 
    **No host registration — definition-path dispatch.** Hosts load agent definitions from the plugin install at session start; a project-local `.guild/agents/<role>.md` is never host-registered, with or without a restart. Dispatch instead flows through the definition-path mechanism (see `SKILL.md §Host-registration constraint`): team-compose writes `definition:` + `definition_source: project` into the team file, and every backend carries the definition-adoption instruction in the lane prompt at the specialist's own frontmatter tier. The specialist is usable in the same session it was minted; no restart message is needed.
 
-## Extraction signals (§11.2.1)
+## Historical extraction signals (§11.2.1 — evolution-proposed only)
 
-Five thresholds that must **ALL** agree before minting proceeds past step 2. If any signal is missing, stop and report which — specialists earn their slot, they don't get granted on one task's enthusiasm.
+For evolution-proposed creation, five thresholds must **ALL** agree before minting proceeds past step 2. If any signal is missing, stop and report which. Human-requested creation does not run this as a pass/fail gate: write `creation_authority: human-requested` + `status: not_required` to the extraction-check artifact and continue to the prospective gates.
 
 1. **Recurring cluster.** The same skill cluster appears across ≥3 unrelated tasks (walk `.guild/runs/*/summary.md` + reflections for co-activation evidence).
 2. **Distinct triggers + boundaries.** The cluster needs trigger rules that don't fit an existing specialist's description, AND at least one adjacent specialist needs a `DO NOT TRIGGER` boundary clause (otherwise the cluster is a skill edit, not a specialist).
@@ -44,11 +53,11 @@ Five thresholds that must **ALL** agree before minting proceeds past step 2. If 
 4. **≥3 reflections or team-compose gaps.** Walk `.guild/reflections/*.md` `proposals.missing_specialist` and `.guild/team/*.yaml` gap notes — the same proposed role must appear in ≥3 records. The `.guild/team/*.yaml` glob matches **both** the per-phase files (`<slug>.<phase>.yaml`) and any legacy `<slug>.yaml` (the `*.yaml` pattern already covers `<slug>.build.yaml` etc.) — so gap notes from every phase's team file are walked; do not restrict to `<slug>.yaml`.
 5. **Enough eval cases.** ≥3 positive + ≥3 negative eval cases already derivable from the accumulated evidence (required to gate the role in steps 5 and 6).
 
-Record the signal-check result at `.guild/evolve/<run-id>/extraction-check.json` so the gate is auditable.
+Record the signal-check result at `.guild/evolve/<run-id>/extraction-check.json` so the selected authority is auditable. Never synthesize historical evidence for a new human-requested role.
 
 ## Incubation path
 
-Proposed specialists live under the consuming repo's `.guild/` at `.guild/agents/proposed/<role>.md` and `.guild/skills/proposed-<role>-*/`. They stay in `proposed/` until both gates (step 5 boundary-edit gates + step 6 new-specialist gate with shadow mode) pass. Only step 7's Register moves them into live paths (still **within `.guild/`**). The proposed tree is explicitly not loaded by `guild:team-compose` as a candidate until registered — `guild:team-compose` reads `.guild/agents/*.md` (+ the shipped machinery agents and type templates), never `.guild/agents/proposed/*.md`.
+Proposed specialists live under the consuming repo's `.guild/` at `.guild/agents/proposed/<role>.md` and `.guild/skills/proposed-<role>-*/`. They stay in `proposed/` until the applicable step-5 boundary-edit gates and the step-6 new-specialist gate pass (including required historical shadow replay for evolution-proposed creation). Only step 7's Register moves them into live paths (still **within `.guild/`**). The proposed tree is explicitly not loaded by `guild:team-compose` as a candidate until registered — `guild:team-compose` reads `.guild/agents/*.md` (+ the shipped machinery agents and type templates), never `.guild/agents/proposed/*.md`.
 
 ## Failure handling
 
@@ -56,7 +65,7 @@ If any gate fails, **stop and surface refinement options to the user** — do no
 
 Surface:
 
-- **Which gate failed** (extraction-signal shortfall, boundary-edit evolve gate, or new-specialist paired-evals / shadow-mode gate).
+- **Which gate failed** (evolution-proposed extraction-signal shortfall, applicable boundary-edit evolve gate, or new-specialist paired-evals / required shadow-mode gate).
 - **The specific evidence** (missing extraction signal with count, failing eval case with trajectory, or shadow-mode collision with adjacent specialist).
 - **Refinement options** — narrow the role's trigger description, add/remove adjacent-boundary clauses, re-interview for a sharper Input, or abandon the proposal. The user chooses; this skill does not pick for them.
 

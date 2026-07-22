@@ -2,7 +2,7 @@
  * src/modules/host-runtime/workflows/degradation-trace.ts
  *
  * FDC degradation trace rows (deferred item 17;
- * docs/v2/08-dispatch-execution.md §Degradation signal table).
+ * docs/v2/dispatch-execution.html §Degradation signal table).
  *
  * Pure builders for the degradation trace rows that the dispatch-execution
  * doc identifies as `[v2.x]` emitters (no shipped emitter yet). Each
@@ -54,7 +54,7 @@ export const DEGRADATION_EVENT_TYPE = "feature_degraded" as const;
 /**
  * Closed set of degradation kinds this module can build rows for.
  *
- * Each value maps 1-to-1 to a signal in 08-dispatch-execution.md §Degradation
+ * Each value maps 1-to-1 to a signal in dispatch-execution.md §Degradation
  * signal table (FDC rows). Do NOT add new values without a corresponding FDC
  * row or v2.x deferred-item number.
  */
@@ -94,8 +94,8 @@ export type ParallelismMode = (typeof PARALLELISM_MODES)[number];
 // ── Backend rung ──────────────────────────────────────────────────────────────
 
 /**
- * The 4-rung backend ladder (canonical: 08-dispatch-execution.md §3 and
- * 07-host-adversarial-adaptability.md). Rung 1 = tmux team (strongest),
+ * The 4-rung backend ladder (canonical: dispatch-execution.md §3 and
+ * host-adversarial-adaptability.md). Rung 1 = tmux team (strongest),
  * Rung 4 = serial (universal floor). Stored as a number for arithmetic
  * comparisons in the scoring path.
  */

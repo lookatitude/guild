@@ -6469,8 +6469,8 @@ var init_config_cli = __esm({
       "models.cacheTTL.coordinator": '"1h" | "5m" | "off" (default "1h") \u2014 coordinator prompt-cache TTL hint (ADR \xA79).',
       "models.cacheTTL.leaf": '"1h" | "5m" | "off" (default "5m") \u2014 leaf-agent prompt-cache TTL hint (ADR \xA79).',
       "models.importanceGate": "int 1\u20135 (default 3) \u2014 min wiki importance level for routine recall (ADR \xA76).",
-      "models.compositeRecall": "bool (default true) \u2014 composite recall scoring (docs/v2/05 \xA7Recall scoring). true = wiki recall ranks by relevance \xD7 recency \xD7 importance and filters pages scoring below models.importanceGate. Because this requires raw BM25 scores, it bypasses the SQLite FTS read-through cache and uses file-BM25 for bundle recall. false = legacy BM25-only ranking with the SQLite cache eligible above defaults.index.wiki_file_threshold.",
-      "models.importanceAtIngest": "bool (default true) \u2014 write-time importance-at-ingest scorer (docs/v2/05 \xA7Importance-at-ingest). true = the ingest/learn path stamps each wiki page with a 1\u20135 recall_importance: score so recall reads a stable stored weight. false = recall derives the weight from the page category at query time.",
+      "models.compositeRecall": "bool (default true) \u2014 composite recall scoring (docs/v2/knowledge-memory.html \xA7Recall scoring). true = wiki recall ranks by relevance \xD7 recency \xD7 importance and filters pages scoring below models.importanceGate. Because this requires raw BM25 scores, it bypasses the SQLite FTS read-through cache and uses file-BM25 for bundle recall. false = legacy BM25-only ranking with the SQLite cache eligible above defaults.index.wiki_file_threshold.",
+      "models.importanceAtIngest": "bool (default true) \u2014 write-time importance-at-ingest scorer (docs/v2/knowledge-memory.html \xA7Importance-at-ingest). true = the ingest/learn path stamps each wiki page with a 1\u20135 recall_importance: score so recall reads a stable stored weight. false = recall derives the weight from the page category at query time.",
       "models.ingestSimilarityGate": "float 0\u20131 (default 0.80) \u2014 BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). If a candidate page scores \u2265 this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed \u2014 never silently overwrites.",
       "models.shortOutputThreshold": "object (default {}) \u2014 O-3 short-output advisor trigger buckets (D-OBS-3). Shape: { [task_type]: { [tier]: number } } where numbers are output-token floors. Empty map \u21D2 O-3 trigger is silent for all (task_type, tier) buckets. Values are proposed by benchmark/src/calibrate-o3-cli.ts after \u226530 samples per bucket; operator reviews and lands them here \u2014 nothing auto-writes this key.",
       // ── security: block (v2-security-and-untrusted-content ADR — D-BYPASS)
@@ -6950,7 +6950,7 @@ function runIndexMigrateCli() {
     process.exit(1);
   }
 }
-if (typeof module !== "undefined" && require.main === module) {
+if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   runIndexMigrateCli();
 }
 
@@ -7932,7 +7932,7 @@ function makeAdvisoryRecord(input) {
   }
   return rec;
 }
-if (require.main === module) {
+if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
   const skeleton = makeAdvisoryRecord({
     id: `advisory-example-001`,
@@ -7972,7 +7972,7 @@ function resolveRolesForRun(detection) {
 
 // ../scripts/read-guild-config.ts
 init_config_cli();
-if (require.main === module) {
+if (require.main === module && /^read-guild-config\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   const { __main } = (init_config_cli(), __toCommonJS(config_cli_exports));
   __main();
 }
@@ -8181,7 +8181,9 @@ function runClassifyProposalCli(argv = process.argv.slice(2)) {
   });
   process.stdout.write(JSON.stringify(res, null, 2) + "\n");
 }
-if (require.main === module) runClassifyProposalCli();
+if (require.main === module && /^classify-proposal\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runClassifyProposalCli();
+}
 
 // ../src/modules/initiatives/workflows/initiative-activity.ts
 var ACTIVITY_EVENTS = [

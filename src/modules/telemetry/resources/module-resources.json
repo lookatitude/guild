@@ -8,7 +8,7 @@
       "id": "stats",
       "source_path": "commands/stats.md",
       "resource_path": "resources/commands/stats.md",
-      "sha256": "cc8b247c509bfa512bc5e700d14ec8e60b12e2acb992fd2351b49b79886eebf3"
+      "sha256": "f3135addc1af398a4f1a6733683ae902b5f8e4411991dadda9991018a84646f8"
     },
     {
       "category": "hooks",
@@ -22,28 +22,28 @@
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "1b98ca6cd25465ef68750c40fce9654fcce91a54879ba015542334b4678d0a5d"
+      "sha256": "22da04cf6ca22bb9859d729ee91c4a4ee955f7903e2199a242017470ead34047"
     },
     {
       "category": "hooks",
       "id": "UserPromptSubmit:run-trace-start.js",
       "source_path": "hooks/dist/run-trace-start.js",
       "resource_path": "resources/hooks/dist/run-trace-start.js",
-      "sha256": "62ecb0f83a154929d34a9ff9fcc55b514f7fd142a44037f8a0efd4972a688053"
+      "sha256": "20524f6f00ac858671bf1238457b18f6cb5c47bc4266d9810931e57cdf25dc27"
     },
     {
       "category": "mcp_servers",
       "id": "guild-telemetry",
       "source_path": ".mcp.json",
       "resource_path": "resources/mcp_servers/.mcp.json",
-      "sha256": "60091d773900b8e0796c2af42e2e032476732c4d120f7a7159470d966231eb33"
+      "sha256": "e010b6a05b3ad25f76623be8c4578c03420127ad665a53205190059ab70a7cfb"
     },
     {
       "category": "scripts",
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "a4a10457b0ef3774dacd965ca7e2412f302d888cba7e5eb2bc78826ace3b46fe"
+      "sha256": "1c9da8d0ad286f17ca4f614e5271630e68e08961df8c1a86fe68e9cd11283fe9"
     },
     {
       "category": "scripts",

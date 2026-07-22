@@ -1,6 +1,6 @@
 /**
  * lib/initiative-activity.ts — the frozen initiative activity event schema +
- * append helper (deferred item 12; docs/v2/06-initiatives.md §Directory).
+ * append helper (deferred item 12; docs/v2/initiatives.html §Directory).
  *
  * The per-initiative `activity.jsonl` shipped as manual-capture appends with no
  * frozen schema. This defines `guild.initiative_activity.v1` (one JSON object per

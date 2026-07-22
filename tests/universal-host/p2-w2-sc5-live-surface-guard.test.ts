@@ -20,7 +20,7 @@
  * are now EMPTY — the surface is frozen as-ratified, with NO permitted deltas.
  *
  * Two halves:
- *  (1) EMPTY-SET live-surface guard, anchored to the PINNED ratified baseline (`PINNED_BASELINE` below).
+ *  (1) EMPTY-SET live-surface guard, anchored to the ratified TREE hashes (./live-surface-anchor.ts).
  *      `git diff --name-status <PINNED_BASELINE> -- .claude-plugin commands skills` vs the WORKING
  *      TREE must show ZERO entries. The baseline is HARD-PINNED — it can NEVER be
  *      HEAD/worktree (which would turn the diff into HEAD-vs-worktree and hide a COMMITTED
@@ -41,8 +41,19 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { discoverSurfaces } from "../../scripts/build-inventory";
-
-const PLUGIN_ROOT = path.resolve(__dirname, "../..");
+import {
+  PLUGIN_ROOT,
+  RATIFIED_CLAUDE_PLUGIN_FILES,
+  RATIFIED_MANIFESTS,
+  RATIFIED_TREES,
+  claudePluginFileSet,
+  describeTreeDelta,
+  git,
+  manifestStrippedHash,
+  ratifiedSurfaceTree,
+  stripVersions,
+  worktreeTreeHash,
+} from "./live-surface-anchor";
 const LIVE_PATHS = [".claude-plugin", "commands", "skills"];
 
 /**
@@ -115,151 +126,77 @@ function evaluateLiveSurfaceRows(rows: DiffRow[]): {
 	  };
 	}
 
-/**
- * The HARD-PINNED ratified baseline (`PINNED_BASELINE` — the commit at which the frozen surface last
- * deliberately changed; an ancestor of HEAD, not HEAD). Pinned (not env-derived) so the guard's diff anchor cannot be
- * moved to HEAD/worktree to hide a committed live-surface mutation.
- */
-// RE-RATIFICATION RULE (read before bumping): the pin is the LAST commit on branch history that
-// deliberately changed the frozen surface (`.claude-plugin/**`, `commands/**`, live `skills/**`) and
-// is an ancestor of HEAD but NOT HEAD, leaving ZERO delta to the working tree so the guard is GREEN
-// now and trips the instant a NEW (unreleased) surface change lands. Bump it to that change's commit
-// on any deliberate surface change. NEVER auto-follow HEAD (a chasing pin lets a committed surface
-// mutation hide itself — the entire reason it is pinned, not env-derived).
-const PINNED_BASELINE = "4f56c97"; // RE-RATIFIED 2026-07-14 at the v2.2.0 v2→main flip (the guard rule: bump the pin on a deliberate surface change / at the release flip). The release version bump (2.1.0→2.2.0) legitimately changes .claude-plugin/plugin.json + marketplace.json, which this guard freezes byte-identical; 4f56c97 is the version-bump commit, so freezing against it restores zero-delta while still tripping on any UNVERSIONED surface drift on top. Prior pin d98fd40 (PR #27 squash) predated the bump. SC-2 normalized equivalence remains the real cutover gate.
+// ── The anchor: TREE hashes, not a commit pin ────────────────────────────────
+// See ./live-surface-anchor.ts. A commit pin is orphaned by every squash-merge (#37,
+// #38, #39 in a row left this guard DARK on `next`); a tree hash is content identity,
+// which a squash preserves. With no movable ref there is nothing to point at HEAD,
+// move forward, or override — so resolveBaseline(), the ancestry/not-HEAD checks and
+// the GUILD_W2_BASELINE_REF bypass-rejector are deleted along with the vector they
+// defended.
 
-function git(args: string[]): string {
-  return execFileSync("git", args, { cwd: PLUGIN_ROOT, encoding: "utf8" }).trim();
-}
-function revParse(ref: string): string {
+/** Run the REAL `discoverSurfaces` resolver over the RATIFIED baseline trees. */
+function resolveAtRatifiedBaseline(): { skills: unknown; commands: unknown } {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-w2-baseline-"));
   try {
-    return git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
-  } catch {
-    return "";
+    const tarPath = path.join(tmp, "tree.tar");
+    // `git archive` accepts any tree-ish: synthesize a tree holding exactly the ratified
+    // frozen subtrees, so the baseline is anchored on CONTENT and survives a squash.
+    execFileSync("git", ["archive", "--format=tar", "-o", tarPath, ratifiedSurfaceTree()], {
+      cwd: PLUGIN_ROOT,
+    });
+    execFileSync("tar", ["-xf", tarPath, "-C", tmp]);
+    const d = discoverSurfaces(tmp); // SAME resolver L1 uses, now over the ratified tree
+    return { skills: d.skills, commands: d.commands };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
-}
-function isAncestor(a: string, b: string): boolean {
-  try {
-    execFileSync("git", ["merge-base", "--is-ancestor", a, b], { cwd: PLUGIN_ROOT });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Resolve the diff anchor. ALWAYS the pinned ratified-v2 baseline. Validates the pin
- * is real (resolves, is an ancestor of HEAD, is NOT HEAD), and REJECTS a tampered
- * `GUILD_W2_BASELINE_REF` (the bypass vector): it may never be HEAD, must be an
- * ancestor of HEAD, and must be an ancestor-or-equal of the ratified baseline.
- * Even a *valid* override does not move the anchor — the diff is always the pin.
- */
-function resolveBaseline(): string {
-  const base = revParse(PINNED_BASELINE);
-  if (!base) {
-    throw new Error(`SC-W2-5: pinned ratified-v2 baseline ${PINNED_BASELINE} does not resolve (history altered?)`);
-  }
-  const head = revParse("HEAD");
-  if (base === head) {
-    throw new Error("SC-W2-5: pinned baseline equals HEAD — refusing (would degrade to HEAD-vs-worktree)");
-  }
-  if (!isAncestor(PINNED_BASELINE, "HEAD")) {
-    throw new Error("SC-W2-5: pinned baseline is not an ancestor of HEAD");
-  }
-
-  const env = process.env["GUILD_W2_BASELINE_REF"];
-  if (env !== undefined && env !== "") {
-    const envSha = revParse(env);
-    if (!envSha) throw new Error(`SC-W2-5: GUILD_W2_BASELINE_REF="${env}" does not resolve to a commit`);
-    if (envSha === head) {
-      throw new Error("SC-W2-5: GUILD_W2_BASELINE_REF must NOT be HEAD (HEAD-vs-worktree hides committed live-surface changes)");
-    }
-    if (!isAncestor(env, "HEAD")) {
-      throw new Error("SC-W2-5: GUILD_W2_BASELINE_REF must be an ancestor of HEAD");
-    }
-    // Anti-bypass: an override may only make the baseline OLDER (stricter) — ancestor-or-equal of the
-    // ratified baseline. It can never move FORWARD (which would shrink the diff and weaken the guard).
-    if (!(envSha === base || isAncestor(env, PINNED_BASELINE))) {
-      throw new Error(`SC-W2-5: GUILD_W2_BASELINE_REF must be an ancestor-or-equal of the ratified baseline (${PINNED_BASELINE})`);
-    }
-  }
-  // The anchor is ALWAYS the pinned ratified-v2 tree — never the (possibly newer) env ref.
-  return base;
 }
 
 describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 baseline)", () => {
-  it("the pinned baseline is real, an ancestor of HEAD, and NOT HEAD (guard not vacuous)", () => {
-    const base = resolveBaseline();
-    expect(base).toMatch(/^[0-9a-f]{40}$/);
-    expect(base).not.toBe(revParse("HEAD"));
-    expect(isAncestor(PINNED_BASELINE, "HEAD")).toBe(true);
-  });
-
-  it("REJECTS GUILD_W2_BASELINE_REF=HEAD (the env-bypass vector)", () => {
-    const prev = process.env["GUILD_W2_BASELINE_REF"];
-    process.env["GUILD_W2_BASELINE_REF"] = "HEAD";
-    try {
-      expect(() => resolveBaseline()).toThrow(/must NOT be HEAD/);
-    } finally {
-      if (prev === undefined) delete process.env["GUILD_W2_BASELINE_REF"];
-      else process.env["GUILD_W2_BASELINE_REF"] = prev;
+  it("every ratified TREE anchor resolves to a real git tree object", () => {
+    for (const [p, tree] of Object.entries(RATIFIED_TREES)) {
+      expect(p).toBeTruthy();
+      expect(tree).toMatch(/^[0-9a-f]{40}$/);
+      expect(git(["cat-file", "-t", tree])).toBe("tree");
     }
   });
 
-  it("REJECTS a FORWARD GUILD_W2_BASELINE_REF (must be ancestor-or-equal of the ratified baseline)", () => {
-    // A forward move (past the ratified anchor) would shrink the diff/weaken the guard, so it must
-    // be rejected. Derive the forward ref (first commit AFTER the pin that is not HEAD) rather than
-    // hardcode a SHA, so it stays valid across pin bumps. (Older refs only add strictness.)
-    const head = revParse("HEAD");
-    const forwardRef = git(["rev-list", "--reverse", `${PINNED_BASELINE}..HEAD`])
-      .split("\n").map((s) => s.trim()).filter(Boolean).find((s) => s !== head);
-    expect(forwardRef).toBeTruthy(); // anti-vacuity: a real forward commit must exist to test with
-    const prev = process.env["GUILD_W2_BASELINE_REF"];
-    process.env["GUILD_W2_BASELINE_REF"] = forwardRef!;
+  it("anti-vacuity: worktreeTreeHash DETECTS a perturbation (it is not a constant)", () => {
+    const victim = path.join(PLUGIN_ROOT, "commands", "init.md");
+    const original = fs.readFileSync(victim);
+    const before = worktreeTreeHash("commands");
     try {
-      expect(() => resolveBaseline()).toThrow(/ancestor-or-equal of the ratified baseline/);
+      fs.appendFileSync(victim, "\n<!-- anti-vacuity probe -->\n");
+      expect(worktreeTreeHash("commands")).not.toBe(before);
     } finally {
-      if (prev === undefined) delete process.env["GUILD_W2_BASELINE_REF"];
-      else process.env["GUILD_W2_BASELINE_REF"] = prev;
+      fs.writeFileSync(victim, original);
     }
+    expect(worktreeTreeHash("commands")).toBe(before);
   });
 
-  it("diff is ALWAYS anchored to the pin even when a VALID older override is set", () => {
-    const prev = process.env["GUILD_W2_BASELINE_REF"];
-    // The pinned baseline's own parent is a valid pre-Wave-2 ancestor; setting it must
-    // NOT change the anchor (still the pin) — proven by an identical return value.
-    const grandparent = revParse(`${PINNED_BASELINE}^`);
-    if (grandparent) {
-      process.env["GUILD_W2_BASELINE_REF"] = grandparent;
-      try {
-        expect(resolveBaseline()).toBe(revParse(PINNED_BASELINE));
-      } finally {
-        if (prev === undefined) delete process.env["GUILD_W2_BASELINE_REF"];
-        else process.env["GUILD_W2_BASELINE_REF"] = prev;
+  it("strict ZERO delta under .claude-plugin/ + commands/ + skills/ vs the ratified surface", () => {
+    // Tree hashes compare the RATIFIED CONTENT to the WORKING TREE, so this catches BOTH a
+    // committed and an uncommitted live-surface mutation — and, unlike the old commit pin,
+    // it is not orphaned by a squash-merge.
+    for (const p of Object.keys(RATIFIED_TREES)) {
+      const actual = worktreeTreeHash(p);
+      if (actual !== RATIFIED_TREES[p]) {
+        throw new Error(
+          `SC-W2-5: ${p}/ changed vs the ratified tree ${RATIFIED_TREES[p]}:\n  ` +
+            describeTreeDelta(p, RATIFIED_TREES[p]!, actual).join("\n  ") +
+            "\n\nIf DELIBERATE, re-ratify RATIFIED_TREES in live-surface-anchor.ts in the SAME commit."
+        );
       }
+      expect(actual).toBe(RATIFIED_TREES[p]);
     }
+    // `.claude-plugin/` is per-file (release version bump is exempt) + an exact file set.
+    for (const [m, expected] of Object.entries(RATIFIED_MANIFESTS)) {
+      expect(manifestStrippedHash(m)).toBe(expected);
+    }
+    expect(claudePluginFileSet()).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
   });
 
-  it("strict ZERO delta under .claude-plugin/ + commands/ + skills/ vs the ratified v2 baseline (frozen as-ratified)", () => {
-    const baseline = resolveBaseline();
-    // `git diff <ref> -- paths` spans <ref>..WORKING TREE, so it catches BOTH a
-    // committed AND an uncommitted live-surface mutation (the committed case is the
-    // env-bypass attack this guard closes).
-    const verdict = evaluateLiveSurfaceRows(parseDiffRows(git(["diff", "--name-status", baseline, "--", ...LIVE_PATHS])));
-    if (verdict.violations.length > 0) {
-      throw new Error(
-        `SC-W2-5: live surface changed vs ${baseline} beyond the ratified additive allowlist:\n  ${verdict.violations.map((v) => v.raw).join("\n  ")}`,
-      );
-    }
-    expect(verdict.violations).toEqual([]);
-	    // EXACT-SET: the ADDED files under skills/ must be EXACTLY the two ratified files — no fewer
-	    // (each individually present) and no more (a third file under the dir would fail this equality).
-	    expect(verdict.addedSkillFiles).toEqual([...WAVE3_SKILL_ADDITION_FILES].sort());
-	    expect(verdict.modifiedSkillFiles).toEqual([...WAVE7_SKILL_MODIFICATION_FILES].sort());
-	    expect(verdict.ok).toBe(true);
-	  });
-
-	  it("anti-vacuity: the SAME live-surface evaluator rejects widened, missing, or frozen-surface deltas", () => {
+  it("anti-vacuity: the SAME live-surface evaluator rejects widened, missing, or frozen-surface deltas", () => {
 	    const allowedRows = [
 	      ...WAVE3_SKILL_ADDITION_FILES.map((p) => ({ status: "A", path: p, raw: `A\t${p}` })),
 	      ...WAVE7_SKILL_MODIFICATION_FILES.map((p) => ({ status: "M", path: p, raw: `M\t${p}` })),
@@ -311,28 +248,31 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
       .split("\n").map((l) => l.trim()).filter(Boolean);
     expect(changedElsewhere.length).toBeGreaterThan(0);
   });
+
+  it("version-bump tolerance is SPECIFIC — exempts a pure bump, still flags a surface change", () => {
+    // plugin.json: top-level version masked; the `commands`/`skills`/`agents` surface is not.
+    const a = JSON.stringify({ name: "guild", version: "2.1.0", commands: ["a.md", "b.md"] });
+    const bumpOnly = JSON.stringify({ name: "guild", version: "2.2.0", commands: ["a.md", "b.md"] });
+    const bumpPlusSurface = JSON.stringify({ name: "guild", version: "2.2.0", commands: ["a.md", "c.md"] });
+    expect(stripVersions(a)).toBe(stripVersions(bumpOnly));
+    expect(stripVersions(a)).not.toBe(stripVersions(bumpPlusSurface));
+    // marketplace.json: NESTED plugins[].version is masked; `source` (and all else) is not.
+    const mA = JSON.stringify({ plugins: [{ name: "guild", version: "2.1.0", source: "x" }] });
+    const mBump = JSON.stringify({ plugins: [{ name: "guild", version: "2.2.0", source: "x" }] });
+    const mSource = JSON.stringify({ plugins: [{ name: "guild", version: "2.2.0", source: "y" }] });
+    expect(stripVersions(mA)).toBe(stripVersions(mBump));
+    expect(stripVersions(mA)).not.toBe(stripVersions(mSource));
+    // Only the two .claude-plugin manifests are version-exempt PATHS — everything else is strict.
+    // The version tolerance is scoped to the two manifests ONLY — everything else is
+    // anchored by a raw tree hash, which no version masking can soften.
+    expect(Object.keys(RATIFIED_MANIFESTS).sort()).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
+    expect(Object.keys(RATIFIED_TREES).sort()).toEqual(["commands", "skills"]);
+  });
 });
 
 describe("SC-W2-5 (2) — build-inventory resolved-entry A/B (GENUINE pre/post)", () => {
   /** Run the REAL `discoverSurfaces` resolver against the live trees at `baseSha`. */
-  function resolveAtBaseline(baseSha: string): { skills: unknown; commands: unknown } {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-w2-baseline-"));
-    try {
-      const tarPath = path.join(tmp, "tree.tar");
-      // Extract the PRE-Wave-2 live surface trees from the pinned commit.
-      execFileSync("git", ["archive", "--format=tar", "-o", tarPath, baseSha, "skills", "commands"], {
-        cwd: PLUGIN_ROOT,
-      });
-      execFileSync("tar", ["-xf", tarPath, "-C", tmp]);
-      const d = discoverSurfaces(tmp); // SAME resolver L1 uses, now over the baseline tree
-      return { skills: d.skills, commands: d.commands };
-    } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  }
-
-  const baseline = resolveBaseline();
-  const pre = resolveAtBaseline(baseline);
+  const pre = resolveAtRatifiedBaseline();
   const cur = discoverSurfaces(PLUGIN_ROOT);
 
   it("baseline resolution actually produced a non-empty resolved set (not vacuous)", () => {

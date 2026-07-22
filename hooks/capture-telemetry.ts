@@ -6,7 +6,7 @@
  * Purpose: Appends one NDJSON event line per invocation.
  *   Primary (canonical): .guild/runs/<run-id>/logs/v1.4-events.jsonl
  *            This is the plugin↔benchmark contract boundary
- *            (docs/v2/12-observability.md) and the trace source for
+ *            (docs/v2/observability.html) and the trace source for
  *            guild-telemetry MCP queries. HK-01/HK-02 route ALL telemetry
  *            events (incl. SubagentStop, UserPromptSubmit, loop_round_start/
  *            end, codex_review_round) here with trace_event.v2 additive fields
@@ -352,7 +352,7 @@ async function main(): Promise<void> {
   );
 
   // ── HK-01/HK-02: route to CANONICAL logs/v1.4-events.jsonl (primary) ─────
-  // Per docs/v2/12-observability.md §"The canonical trace": the canonical sink
+  // Per docs/v2/observability.html §"The canonical trace": the canonical sink
   // is `logs/v1.4-events.jsonl` (the plugin↔benchmark contract boundary).
   // `events.ndjson` becomes a LEGACY MIRROR ONLY — kept for backward compat
   // with any consumer that hasn't migrated to the canonical path.

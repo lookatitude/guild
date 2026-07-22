@@ -3067,6 +3067,27 @@ var path3 = __toESM(require("path"));
 var fs = __toESM(require("fs"));
 var path2 = __toESM(require("path"));
 
+// lib/handoff-v2.ts
+var ALLOWED_INJECTION_CLEAN_VALUES = /* @__PURE__ */ new Set([
+  "clean",
+  "flagged",
+  "unverified"
+]);
+var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes",
+  "injection_clean"
+  // HK-08 additive-optional
+]);
+
 // ../src/modules/kernel/workflows/yaml-loader.ts
 var path = __toESM(require("node:path"));
 function pluginLocalScriptsRoots() {
@@ -3163,18 +3184,7 @@ function extractAllHandoffEnvelopes(content) {
   }
   return results;
 }
-var ALLOWED_ENVELOPE_KEYS = /* @__PURE__ */ new Set([
-  "schema_version",
-  "task_id",
-  "tier",
-  "status",
-  "summary",
-  "artifacts",
-  "issues",
-  "escalate_reason",
-  "learnings",
-  "notes"
-]);
+var ALLOWED_ENVELOPE_KEYS = ALLOWED_TOP_LEVEL_KEYS;
 var VALID_ENVELOPE_TIERS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
 var VALID_ENVELOPE_STATUSES = /* @__PURE__ */ new Set(["done", "blocked", "escalate"]);
 var ENVELOPE_SUMMARY_MAX = 600;
@@ -3262,6 +3272,11 @@ function envelopeShapeErrors(value) {
         `notes exceeds ${ENVELOPE_NOTES_MAX} char cap (O-4 binding resolution): got ${obj["notes"].length} chars`
       );
     }
+  }
+  if (obj["injection_clean"] !== void 0 && !ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"])) {
+    errors.push(
+      `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
+    );
   }
   return errors;
 }
@@ -3397,7 +3412,7 @@ function checkNewHandRolledYaml(filePath, content, allowList) {
   for (const inventoried of allowList) {
     if (normalised.endsWith(inventoried) || normalised.includes(inventoried)) return [];
   }
-  const YAML_SURFACE_SIGNAL = /\.ya?ml\b|run\.yaml|frontmatter|\.md\b|['"`]---['"`]/i;
+  const YAML_SURFACE_SIGNAL = /\.ya?ml\b|(?:from|require\s*\(|import\s*\()\s*['"`](?:js-)?yaml['"`]|\byaml\s*\.\s*(?:load|loadAll|parse|safeLoad)\b|front[-\s]?matter|(?:['"`\/^]|\\[rn])-{3}(?:['"`\/$]|\\[rn])|\^-\{3\}\$/i;
   if (!YAML_SURFACE_SIGNAL.test(content)) return [];
   const findings = [];
   for (const { pattern, label } of HAND_ROLLED_PATTERNS) {

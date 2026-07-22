@@ -5,7 +5,7 @@
  *
  * Contract (BY POINTER):
  *   docs/knowledge/team-and-routing/codex-openai-adapter.md §Codex-Cloud Redacted Task Packet
- *   docs/v2/08-dispatch-execution.md §2 (host routing flowchart, cloud_opt_in egress checkpoint)
+ *   docs/v2/dispatch-execution.html §2 (host routing flowchart, cloud_opt_in egress checkpoint)
  *
  * STATUS: [v2-contract-only] — DORMANT / INERT.
  * This module is NEVER a router default. It is reachable ONLY when:
@@ -603,7 +603,7 @@ export function isValidCloudTaskPacket(packet: unknown): packet is CloudTaskPack
  * cloudTaskPacketPath — returns the canonical disk path for a cloud task packet.
  *
  * Path: .guild/runs/<run-id>/cloud-packets/<task-run-id>.yaml
- * Bound by pointer: docs/v2/08-dispatch-execution.md §2 contract table.
+ * Bound by pointer: docs/v2/dispatch-execution.html §2 contract table.
  *
  * Pure path computation — no I/O.
  */

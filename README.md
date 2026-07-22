@@ -330,40 +330,14 @@ The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 ## Architecture at a glance
 
-![Guild plugin architecture](docs/diagrams/01-architecture.svg)
-
 Four layers: the orchestrator session, the installed plugin (skills, machinery
 agents, specialist templates, commands, hooks, scripts, MCPs), the composed
 specialist team in worktree isolation, and project-local state under `.guild/`
 (including the minted specialist instances).
 
-## Lifecycle
-
-![Guild task lifecycle](docs/diagrams/02-lifecycle.svg)
-
-## Skill taxonomy
-
-![Guild skill taxonomy](docs/diagrams/04-taxonomy.svg)
-
-## Project memory
-
-![Guild wiki operations](docs/diagrams/05-wiki.svg)
-
-## Context assembly
-
-![Guild context assembly](docs/diagrams/07-context-assembly.svg)
-
-## Team composition
-
-![Guild team composition](docs/diagrams/08-team-compose.svg)
-
-## Self-evolution
-
-![Guild self-evolution pipeline](docs/diagrams/03-evolution.svg)
-
-## Specialist creation
-
-![Guild specialist creation](docs/diagrams/06-create-specialist.svg)
+Diagrams and the full walkthroughs — lifecycle, skill taxonomy, project memory,
+context assembly, team composition, self-evolution, and specialist creation —
+live on the docs site: **https://guildstack.dev/docs**.
 
 ## Runtime state
 

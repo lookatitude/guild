@@ -2,7 +2,7 @@
  * lib/initiative.ts — guild.initiative.v1 validator + 4-axis status derivation
  * and the definition-ledger readiness rule (deferred items 10 & 11).
  *
- * docs/v2/06-initiatives.md §Registry & directory / §Definition ledger; field
+ * docs/v2/initiatives.html §Registry & directory / §Definition ledger; field
  * body canonical in docs/knowledge/observability/data-model.md §Initiative /
  * §DefinitionItem. The manifest was [v2-contract-only] (frozen target, no code
  * wrote/validated it). This is the [v2.x] adoption code: the closed-enum
@@ -74,7 +74,7 @@ export interface DerivationFacts {
 
 /**
  * Derive `status` from the four axes + facts — the furthest-progressed point the
- * axes jointly support (06-initiatives.md §171). Detour states (paused /
+ * axes jointly support (initiatives.md §171). Detour states (paused /
  * cancelled / rollback) take precedence over the forward ladder.
  */
 export function deriveInitiativeStatus(m: InitiativeAxes, facts: DerivationFacts = {}): DerivedStatus {
@@ -153,7 +153,7 @@ export function validateDefinitionItem(obj: unknown): { valid: boolean; errors: 
 }
 
 /**
- * Ledger readiness (06-initiatives.md §187): an initiative is NOT ready while any
+ * Ledger readiness (initiatives.md §187): an initiative is NOT ready while any
  * *blocking* definition item is still `needs_definition`. Returns the blocking
  * unresolved items (empty ⇒ ready).
  */
@@ -181,7 +181,7 @@ export interface D8Result {
 }
 
 /**
- * The D8 close gate (06-initiatives.md §The D8 close gate). An initiative cannot
+ * The D8 close gate (initiatives.md §The D8 close gate). An initiative cannot
  * close until THREE separate legs resolve — release and docs are never collapsed:
  *   1. exec    — verify.md PASS + execution_status done.
  *   2. release — release_status released (rollback_required does NOT close).

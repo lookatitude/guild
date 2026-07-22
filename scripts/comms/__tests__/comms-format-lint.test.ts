@@ -304,6 +304,296 @@ function parse(raw: string) {
     expect(warns.length).toBe(0);
   });
 
+  // ── YAML-surface gate: a bare '.md' substring is not a YAML surface ──────
+  //
+  // Regression for the OD-3 Markdown false positive: scripts/generate-support-matrix.ts
+  // parsed a plain Markdown metadata line (`Generated: <iso>`) with an anchored
+  // regex. It never touched YAML, but the old gate accepted any file merely
+  // CONTAINING '.md', so pattern (3) fired and a correct parse had to be
+  // rewritten around the detector. The gate now requires a real YAML signal.
+  it("does NOT warn: anchored regex over a Markdown metadata line with only a '.md' path", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/generate-matrix.ts",
+      `
+const OUT = join(__dirname, "..", "docs", "generated", "host-support-matrix.md");
+
+function normalizeGeneratedAt(markdown: string): string {
+  const line = markdown.split(/\\r?\\n/).find((l) => l.startsWith("Generated:"));
+  const match = line?.match(/^Generated: (\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z)$/);
+  return match?.[1] ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns).toEqual([]);
+  });
+
+  // Companion true-positive: same anchored-key idiom, but over a real YAML
+  // surface (.yml path). Must still be flagged — the gate tightened, it did not
+  // turn off. This case fails if the YAML signal list is emptied.
+  it("warns: anchored key regex over a real .yml surface is still flagged", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/read-team-yml.ts",
+      `
+const TEAM_FILE = ".guild/team/current.yml";
+
+function readStatus(raw: string): string {
+  const match = raw.match(/^status:\\s*(.*)$/m);
+  return match?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+    expect(warns[0].message).toMatch(/hand-rolled.*YAML|OD-3/i);
+  });
+
+  // Frontmatter readers carry the '---' delimiter in a code position even when
+  // they never say "yaml" or "frontmatter" and only name a .md path.
+  it("warns: hand-rolled .md frontmatter reader signalled by the '---' delimiter", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/read-doc-meta.ts",
+      `
+function readTitle(doc: string): string {
+  const end = doc.indexOf("---", 3);
+  const head = doc.slice(3, end);
+  const match = head.match(/^title:\\s*(.*)$/m);
+  return match?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
+  // The delimiter signal must survive the unquoted regex-literal form too —
+  // split(/---/) carries no quote around the dashes.
+  it("warns: frontmatter reader that locates the delimiter via split(/---/)", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/split-doc.ts",
+      `
+function readMeta(doc: string): string {
+  const head = doc.split(/---/)[1] ?? "";
+  const match = head.match(/^owner:\\s*(.*)$/m);
+  return match?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
+  // Dash sequences that are NOT frontmatter delimiters must not resurrect the
+  // false positive: a long comment rule, a Markdown table rule, and a --flag.
+  it("does NOT warn: dash runs that are comment rules, table rules, or CLI flags", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/render-report.ts",
+      `
+// ----------------------------------------------------------------
+const OUT = arg("--out") ?? "report.md";
+
+function render(rows: string[]): string {
+  const table = ["| host | tier |", "|---|---|", ...rows].join("\\n");
+  const stamp = table.match(/^Generated: (.*)$/m);
+  return stamp ? table : "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns).toEqual([]);
+  });
+
+  // Codex adversarial review, round 1 HIGH: the most common frontmatter
+  // delimiter idiom of all is a newline-aware regex — split(/\r?\n---\r?\n/) —
+  // where the dashes touch \n and \r, not a quote. An adjacency set of only
+  // quotes/slashes/anchors lets this real reader escape once '.md' is dropped.
+  it("warns: frontmatter reader using a newline-aware delimiter regex", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/read-newline-delimited.ts",
+      `
+const PATH = "README.md";
+
+function readTitle(raw: string): string {
+  const head = raw.split(/\\r?\\n---\\r?\\n/)[1] ?? "";
+  const match = head.match(/^title:\\s*(.*)$/m);
+  return match?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
+  // Codex adversarial review, round 1 MED: a bare quoted "yaml" in a format
+  // list is not a YAML surface. Only an import/require of the module counts.
+  it("does NOT warn: quoted 'yaml' in a format list is not a YAML surface", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/list-formats.ts",
+      `
+const SUPPORTED = ["json", "yaml", "toml"];
+
+function readStamp(report: string): string {
+  const stamp = report.match(/^Generated:\\s*(.*)$/m);
+  return stamp?.[1] ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns).toEqual([]);
+  });
+
+  // …but an actual import of the 'yaml' module still is a YAML surface.
+  it("warns: import of the 'yaml' module alongside a hand-rolled key regex", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/import-yaml-but-hand-roll.ts",
+      `
+import { parse } from "yaml";
+
+function readStatus(raw: string): string {
+  const match = raw.match(/^status:\\s*(.*)$/m);
+  return match?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
+  // Codex adversarial review, round 2 MED: the delimiter clause must require a
+  // delimiter on BOTH sides. Leading-adjacency alone re-opens the false-positive
+  // class — prose that merely starts a dash run, a caret-prefixed suffix, and a
+  // dollar-suffixed prefix are all not frontmatter delimiters.
+  it("does NOT warn: dash runs delimited on only one side", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/one-sided-dashes.ts",
+      `
+const TEMPLATE = "Summary\\n--- details";
+const HEADING = "^---suffix";
+const TRAILER = "prefix---$";
+
+export function readStamp(raw: string): string {
+  return raw.match(/^Generated:\\s*(.*)$/m)?.[1] ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns).toEqual([]);
+  });
+
+  // Codex adversarial review, round 2 MED: 'js-yaml' must be recognised as a
+  // module specifier, not as a bare substring — an incidental mention in a URL
+  // or comment is not a YAML surface.
+  it("does NOT warn: incidental 'js-yaml' mention in a URL is not a YAML surface", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/help-text.ts",
+      `
+const HELP = "See https://example.test/migrations/js-yaml-to-json";
+
+export function readStamp(raw: string): string {
+  return raw.match(/^Generated:\\s*(.*)$/m)?.[1] ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns).toEqual([]);
+  });
+
+  // …but a real js-yaml import alongside a hand-rolled regex still warns. A
+  // js-yaml dependency does not license hand-rolling next to it.
+  it("warns: js-yaml import alongside a hand-rolled key regex", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/import-jsyaml-but-hand-roll.ts",
+      `
+import * as yaml from "js-yaml";
+
+export function readStatus(raw: string): string {
+  return raw.match(/^status:\\s*(.*)$/m)?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
+  // Codex adversarial review, round 3 MED: the quantified fence /^-{3}$/ spells
+  // the delimiter with ONE dash and a quantifier, so the literal-dash clauses
+  // cannot see it. The old '.md' signal caught this reader; the tightened gate
+  // must not lose it.
+  it("warns: frontmatter reader using the quantified fence /^-{3}$/", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/quantified-fence.ts",
+      `
+const PATH = "README.md";
+const FENCE = /^-{3}$/;
+
+export function readTitle(lines: string[]): string {
+  const end = lines.findIndex((l) => FENCE.test(l));
+  const head = lines.slice(0, end).join("\\n");
+  return head.match(/^title:\\s*(.*)$/m)?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
+  // Codex adversarial review, round 4 MED: the quantified-fence clause must be
+  // anchor-to-anchor. An embedded -{3} quantifier in an unrelated regex is not
+  // a frontmatter fence and must not confer candidacy.
+  it("does NOT warn: embedded -{3} quantifier in an unrelated regex", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/slug-matcher.ts",
+      `
+const SLUG = /item-{3}id/;
+
+export function readStamp(raw: string): string {
+  return raw.match(/^Generated:\\s*(.*)$/m)?.[1] ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns).toEqual([]);
+  });
+
   it("does NOT warn: fixture/legacy-example source file even if it hand-rolls YAML", () => {
     const base = tmpDir();
     const srcPath = writeFile(

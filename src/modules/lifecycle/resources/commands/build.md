@@ -41,7 +41,7 @@ All five global flags + `--dry-run` apply.
     forces every lane in this run to the given model tier regardless of
     per-lane plan overrides or the `models:` settings block. Precedence:
     `--model-tier` > per-lane `model_tier:` > `settings.json models:` > built-in.
-    Ref: `docs/v2/13-config-surfaces.md §5`. DRIFT-ANALYSIS CMD-008.
+    Ref: `docs/v2/config-surfaces.html §5`. DRIFT-ANALYSIS CMD-008.
 
 ## Gates (default)
 
@@ -63,7 +63,7 @@ bundles), `.guild/runs/<run-id>/handoffs/*.md` (`guild.handoff_receipt.v1`),
 PCR-Development must-exist floor: `.guild/context/<run-id>/…`,
 `.guild/runs/<run-id>/handoffs/…`, `assumptions.md`, `review.md`,
 `agent-bus/events.ndjson`. Binding:
-`docs/v2/03-lifecycle.md §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
+`docs/v2/lifecycle.html §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
 CMD-007.
 
 ## Run-start preflight (settings-control-and-tmux U3/U6)
@@ -91,7 +91,7 @@ not re-resolve settings or re-select the backend mid-run.
 Before context-assemble begins for the first lane, start a run (SC-B, §435):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
   --command=/guild:build \
   --cwd "$(pwd)"
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
@@ -103,7 +103,7 @@ the lifecycle; `start` writes `current-run-id` synchronously so `phase`
 resolves the open run):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js phase \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js phase \
   --phase=build \
   --cwd "$(pwd)"
 ```
@@ -140,7 +140,7 @@ where `depends-on:` allows; `[lane-id]` re-runs one), invoke in order:
     `codex_cap` (default 5); on cap hit, surface force-pass / extend-cap /
     rework to the user. Trail under `.guild/runs/<run-id>/review/G-lane:<task-id>/`
     (packet-<round>.md, result-<round>.json, trail.md). Per
-    `docs/v2/09-adversarial-review.md §Gate ownership` — G-lane is the sole
+    `docs/v2/adversarial-review.html §Gate ownership` — G-lane is the sole
     command-visible gate for the Development phase; G-spec and G-plan are
     skill-internal. Ref: DRIFT-ANALYSIS CMD-001.
 3. **`guild:review`** (`skills/meta/review`) — two-stage per-lane review

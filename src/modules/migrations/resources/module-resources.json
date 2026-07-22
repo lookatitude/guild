@@ -8,7 +8,7 @@
       "id": "migrate",
       "source_path": "commands/migrate.md",
       "resource_path": "resources/commands/migrate.md",
-      "sha256": "e5eeef11e67e2b9971f939422ef05f1eaabd093778c4b620ad7310723a714cf9"
+      "sha256": "c45c2fdc337f81ce805aeb3e9056faea2f63568116fc775f8590e0791d097423"
     },
     {
       "category": "scripts",
@@ -78,7 +78,7 @@
       "id": "dot-guild/convert/wiki-importance",
       "source_path": "scripts/dot-guild/convert/wiki-importance.ts",
       "resource_path": "resources/scripts/dot-guild/convert/wiki-importance.ts",
-      "sha256": "92554bff656c5c87f0313282d690af7dd2577d660df58f00b2470e0fa78b82ec"
+      "sha256": "c3a4288ad4c60ab2b673f4ea636cc402b1e788885e7e64a6abaf6b6447307595"
     },
     {
       "category": "scripts",
@@ -113,7 +113,7 @@
       "id": "sync-migration",
       "source_path": "scripts/sync-migration.ts",
       "resource_path": "resources/scripts/sync-migration.ts",
-      "sha256": "8264ff9bf48ad5ccf0ef689577eaf8df7aedfa262e8ff8e44201491cf1224f00"
+      "sha256": "30b86ce03deae04e17a2dd896006a792fc330fab44cf9052ea107825ef7be3eb"
     }
   ]
 }

@@ -561,7 +561,7 @@ describe("ingestSimilarity", () => {
 
 // ── D-PROBE (ingest side, fail-closed) ───────────────────────────────────────
 //
-// docs/v2/11-security.md §D-PROBE: a directive-probe HIT on the candidate
+// docs/v2/security.html §D-PROBE: a directive-probe HIT on the candidate
 // forces should_pause:true — the page write is blocked pending explicit
 // operator confirmation through the SAME pause channel the similarity gate
 // uses. Deterministic (injection-guard regex patterns), never model prose.

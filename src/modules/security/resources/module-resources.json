@@ -8,42 +8,42 @@
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "resource_path": "resources/hooks/dist/post-tool-use.js",
-      "sha256": "4184057f646e2861a093993c32b60b1271891069cbfb76e54a88da9fe6038dd8"
+      "sha256": "20f5c2edb05ff4c5354a8960dcbb4096931014e1b951f260c0c1b2f1391520f0"
     },
     {
       "category": "hooks",
       "id": "PreToolUse:pre-tool-use.js",
       "source_path": "hooks/dist/pre-tool-use.js",
       "resource_path": "resources/hooks/dist/pre-tool-use.js",
-      "sha256": "fc107fe4b10798e5ba3cbfc586859cea4f88142fd07dcca066d55903621d65cf"
+      "sha256": "34b69480e95e90190583e1d18daf31d16c257a22615795e3ad426e6676ce5d3b"
     },
     {
       "category": "scripts",
       "id": "lib/cloud-consent-gate",
       "source_path": "scripts/lib/cloud-consent-gate.ts",
       "resource_path": "resources/scripts/lib/cloud-consent-gate.ts",
-      "sha256": "4332f7a146abdffa35d64b12abef2cb8dd5dbd438173a0d07a21181de388fec3"
+      "sha256": "6e5037e148d940bfb78bc00b4d4e33029aa11ae6f2651706c627aecb6833c214"
     },
     {
       "category": "scripts",
       "id": "lib/cloud-task-packet",
       "source_path": "scripts/lib/cloud-task-packet.ts",
       "resource_path": "resources/scripts/lib/cloud-task-packet.ts",
-      "sha256": "d3ee29a8e445a1ddbeccc2ce699f0ff8fcb0cc6454abee7b35c24b46d27faee6"
+      "sha256": "515f0127e081dbac5987f5ed1d49ec4d946f32c84f77ef675174701448b1949c"
     },
     {
       "category": "scripts",
       "id": "lib/permission-policy",
       "source_path": "scripts/lib/permission-policy.ts",
       "resource_path": "resources/scripts/lib/permission-policy.ts",
-      "sha256": "4728ebe3bb8ea30a74c661e50ae77542ab48dff2bc50e50cf6902f0c6664b96f"
+      "sha256": "f6dcca39cacaad8e1e2ceb85912eb91261a4455366fc8eaf8245440c01a03c4c"
     },
     {
       "category": "scripts",
       "id": "lib/permission-policy-schema",
       "source_path": "scripts/lib/permission-policy-schema.ts",
       "resource_path": "resources/scripts/lib/permission-policy-schema.ts",
-      "sha256": "46ca9c9fb4a4089057f2eff8b98d34ae6e4d5fdd2419dd30cd21692f92142f6b"
+      "sha256": "56917bbaae7ca2625e3d5949bd201c28f3a2d2e4c1e0568368b5a12a3b82836d"
     },
     {
       "category": "scripts",

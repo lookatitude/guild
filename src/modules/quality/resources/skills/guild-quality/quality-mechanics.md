@@ -71,9 +71,13 @@ P6-quality-002`.*
 
 *`P6-quality-003` deliverable.*
 
-1. **Fixed producer/challenger pair.** Producer `qa-test-strategy` (fixed);
-   challengers `[security, architect]` (fixed pair); **cross-model-preferred**
-   (the flag is recorded).
+1. **Composer-derived, signal-gated panel.** The trail is the station composer's
+   **`qa` station `advisory_panel`** (SoT: `src/modules/teams/workflows/station-composer.ts`
+   `STATION_POLICY.qa.advisory_panel`, resolved by `composeStationTeam`) — no longer a
+   hardcoded fixed pair. Producer `qa-test-strategy` (matches the composer); challengers
+   `security` (BASELINE — always present, the safety floor) + `architect` (GATED — present
+   only when the `multi_component` signal fired, recorded as `chal:qa:architect`);
+   **cross-model-preferred** (the flag is recorded).
 2. **Advisory (non-blocking).** G-quality is **advisory A** — it does **not**
    itself block. Findings are resolved by **rerun**, an **added check**, or an
    **owner-accepted risk** (the accepting owner is named).
@@ -81,7 +85,9 @@ P6-quality-002`.*
    **by pointer to `./quality-contract.md §challenger_trail`**.
 
 *pass_when (named-predicate "G-quality advisory completeness",
-`./quality-contract.md §challenger_trail`): fixed producer/challenger pair; cross-model flag
+`./quality-contract.md §challenger_trail`): producer + baseline/gated challengers sourced from
+the composer's `qa` `advisory_panel` (producer `qa-test-strategy`; `security` baseline;
+`architect` gated on `multi_component`) — not a fixed pair; cross-model flag
 recorded; every finding resolved or owner-accepted with name; G-quality
 non-blocking; challenger_trail maps to `./quality-contract.md §challenger_trail` by pointer. Evidence: the
 g-quality section; `validation-matrix.md §A P6-quality-003`.*

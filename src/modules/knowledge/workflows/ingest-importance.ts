@@ -1,7 +1,7 @@
 /**
  * src/modules/knowledge/workflows/ingest-importance.ts
  *
- * Write-time importance-at-ingest 1–5 scorer (docs/v2/05-knowledge-memory.md
+ * Write-time importance-at-ingest 1–5 scorer (docs/v2/knowledge-memory.html
  * §Importance-at-ingest). The 1–5 score is the MACHINE-FACING recall-ranking
  * weight — distinct from, and never conflated with, the human-curation
  * `importance: critical|high|medium|low` frontmatter grade (§Two importance axes).
@@ -37,7 +37,7 @@ export function isValidScore(n: unknown): n is number {
 /**
  * Write-time importance score (1–5) for a wiki page by its category — the
  * machine-facing recall weight from the ADR→5 / contract→4 / summary→3 /
- * context→2 design table (docs/v2/05 §Importance-at-ingest), mapped onto Guild's
+ * context→2 design table (docs/v2/knowledge-memory.html §Importance-at-ingest), mapped onto Guild's
  * `.guild/wiki/<category>/` convention. Pure + deterministic. Unknown/absent
  * category → 3 (the neutral middle, == the default importanceGate).
  */

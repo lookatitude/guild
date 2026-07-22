@@ -8,7 +8,7 @@
  * Contract authority (SoT):
  *   .guild/spec/universal-host-p1.md §10 (orthogonality invariant + safety rails + baseline golden)
  *   .guild/plan/universal-host-p1.md P1-L10 + §Foundation-contract specifications C2
- *   docs/contracts/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
+ *   .guild/wiki/decisions/universal-host-p1-l0-foundation-contracts.md (ADR-addendum)
  *
  * WHY (ADR ~1348/1602, load-bearing): `host_mode` governs HOST tool/edit/sandbox
  * autonomy; `guild_gates` governs GUILD lifecycle gates. They are INDEPENDENT — a

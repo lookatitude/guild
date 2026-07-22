@@ -775,4 +775,82 @@ describe("emit-learning-checkpoint — HK-03", () => {
       ).toThrow();
     });
   });
+
+  // ── Documented step-7.5 invocation (issue #55 end-to-end proof) ───────────
+  //
+  // Mirrors, byte-for-byte in shape, the exact CLI call documented in
+  // skills/meta/learning-checkpoint/SKILL.md ("How a phase skill fires the
+  // checkpoint (step 7.5)"): GUILD_RUN_ID, GUILD_PHASE, GUILD_EVIDENCE_REF,
+  // GUILD_CWD, GUILD_CHECKPOINT_VERDICT, and GUILD_CHECKPOINT_LINKS, invoked
+  // via `npx tsx .../hooks/emit-learning-checkpoint.ts` against a fresh temp
+  // .guild dir — proving the documented entrypoint runs end-to-end and writes
+  // a valid checkpoint record (not just that writeCheckpoint() works in-process).
+  describe("documented step-7.5 invocation (SKILL.md)", () => {
+    it("runs the full documented CLI call and writes a valid checkpoint record", () => {
+      const verdictFile = path.join(root, "development-verdict.json");
+      const verdict: CheckpointDecisions = {
+        ...ALL_NONE_DECISIONS,
+        wiki: "candidate:.guild/wiki/step-7-5-proof.md",
+      };
+      fs.writeFileSync(verdictFile, JSON.stringify(verdict), "utf8");
+
+      const linksFile = path.join(root, "development-links.json");
+      const links: KnowledgeLink[] = [
+        { from: `run:${RUN}`, to: "decision:step-7-5-proof", type: "produced", run_id: RUN },
+      ];
+      fs.writeFileSync(linksFile, JSON.stringify(links), "utf8");
+
+      const evidenceRef = `.guild/runs/${RUN}/review.md`;
+
+      const res = spawnSync("npx", ["tsx", SCRIPT], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GUILD_RUN_ID: RUN,
+          GUILD_PHASE: "development",
+          GUILD_EVIDENCE_REF: evidenceRef,
+          GUILD_CWD: root,
+          GUILD_CHECKPOINT_VERDICT: verdictFile,
+          GUILD_CHECKPOINT_LINKS: linksFile,
+        },
+        timeout: 30000,
+      });
+
+      expect(res.status).toBe(0);
+      const writtenPath = checkpointPath(root, RUN, "development");
+      // The CLI's own stdout is the written path (contract: "Output: path of written checkpoint").
+      expect((res.stdout ?? "").trim()).toBe(writtenPath);
+      expect(fs.existsSync(writtenPath)).toBe(true);
+
+      const parsed = parseYaml(readCheckpoint(writtenPath)) as {
+        learning_checkpoint?: {
+          version?: string;
+          phase?: string;
+          run_id?: string;
+          decisions?: Record<string, string>;
+          knowledge_links_batch?: KnowledgeLink[];
+          evidence_ref?: string;
+        };
+      } | null;
+      const record = parsed?.learning_checkpoint;
+      expect(record?.version).toBe("guild.learning_checkpoint.v1");
+      expect(record?.phase).toBe("development");
+      expect(record?.run_id).toBe(RUN);
+      expect(record?.evidence_ref).toBe(evidenceRef);
+      expect(Object.keys(record?.decisions ?? {}).sort()).toEqual([...DECISION_TARGETS].sort());
+      expect(record?.decisions?.["wiki"]).toBe("candidate:.guild/wiki/step-7-5-proof.md");
+      expect(record?.knowledge_links_batch).toHaveLength(1);
+      expect(record?.knowledge_links_batch?.[0]).toMatchObject({
+        from: `run:${RUN}`,
+        to: "decision:step-7-5-proof",
+        type: "produced",
+      });
+
+      // Non-none verdict routes to the reflections queue (VC-K7).
+      expect(fs.existsSync(reflectionsPath(root, RUN))).toBe(true);
+      // The append-only knowledge-links index picks up the edge too.
+      const indexFile = path.join(root, ".guild", "indexes", "knowledge-links.json");
+      expect(fs.existsSync(indexFile)).toBe(true);
+    });
+  });
 });

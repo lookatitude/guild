@@ -72,12 +72,37 @@ const MCP_SERVERS = ["guild-memory", "guild-telemetry"];
  * in-process function (the ADR §6.4 evidence redaction-verify, which the ADR assigns to
  * the L6 build/verify command itself). Both return an exit code (0 = pass).
  */
-interface Step {
+export interface Step {
   name: string;
+  stage?: string;
   cmd?: string;
   args?: string[];
   cwd?: string;
   run?: () => number;
+}
+
+/**
+ * The ` (stage 6b)` decoration for a step, or "" when the step carries no ADR stage.
+ * SINGLE SOURCE — both the progress label and the fail-fast summary render through this,
+ * so a failure can never drift back to the bare `step N/9` the ADR mismatch came from.
+ */
+export function formatStageSuffix(step: Pick<Step, "stage">): string {
+  return step.stage ? ` (stage ${step.stage})` : "";
+}
+
+/** Format a runtime step index with its logical ADR §8 stage, when one exists. */
+export function formatStepLabel(step: Pick<Step, "name" | "stage">, index: number, total: number): string {
+  return `[build:verify] step ${index}/${total}${formatStageSuffix(step)} — ${step.name}`;
+}
+
+/** The fail-fast summary line. Carries the stage label for the same reason the progress line does. */
+export function formatFailureSummary(
+  step: Pick<Step, "name" | "stage">,
+  index: number,
+  total: number,
+  rc: number
+): string {
+  return `[build:verify] FAILED at step ${index}/${total}${formatStageSuffix(step)} — ${step.name} (exit ${rc}).`;
 }
 
 function arg(flag: string): string | undefined {
@@ -87,7 +112,7 @@ function arg(flag: string): string | undefined {
 
 /** Run one step, streaming its output. Returns the step's exit code (non-zero = fail). */
 function runStep(step: Step, index: number, total: number): number {
-  const label = `[build:verify] step ${index}/${total} — ${step.name}`;
+  const label = formatStepLabel(step, index, total);
   console.log(`\n${label}`);
   console.log(`${"─".repeat(Math.min(label.length, 72))}`);
   if (step.run) {
@@ -132,26 +157,28 @@ function verifyEvidenceRedaction(): number {
 function buildChain(): Step[] {
   return [
     // 1. hooks build (esbuild → hooks/dist + hooks/agent-team/dist) — existing.
-    { name: "build hooks (esbuild bundle)", cmd: "npm", args: ["run", "build"], cwd: HOOKS_DIR },
+    { name: "build hooks (esbuild bundle)", stage: "1", cmd: "npm", args: ["run", "build"], cwd: HOOKS_DIR },
     // 2. MCP server builds (esbuild → per-server dist) — existing, one per shipped server.
     ...MCP_SERVERS.map((s) => ({
       name: `build MCP server: ${s} (esbuild bundle)`,
+      stage: "2",
       cmd: "npm",
       args: ["run", "build"],
       cwd: join(MCP_DIR, s),
     })),
     // 3. host package build (build:hosts → dist/<host>) — existing.
-    { name: "build host packages (build:hosts)", cmd: "npm", args: ["run", "build:hosts"], cwd: SCRIPTS_DIR },
+    { name: "build host packages (build:hosts)", stage: "3", cmd: "npm", args: ["run", "build:hosts"], cwd: SCRIPTS_DIR },
     // 4. host package verification — existing.
-    { name: "verify host packages (verify:host-packages)", cmd: "npm", args: ["run", "verify:host-packages"], cwd: SCRIPTS_DIR },
+    { name: "verify host packages (verify:host-packages)", stage: "4", cmd: "npm", args: ["run", "verify:host-packages"], cwd: SCRIPTS_DIR },
     // 5. installer verification (install.sh dry-run per installable host) — L4b rail.
-    { name: "verify installer (verify:installer)", cmd: "npm", args: ["run", "verify:installer"], cwd: SCRIPTS_DIR },
+    { name: "verify installer (verify:installer)", stage: "5", cmd: "npm", args: ["run", "verify:installer"], cwd: SCRIPTS_DIR },
     // 6. redaction/leak verification — the AC-SEC-1 package/receipt leg (ADR §6.4/§8 step 6):
     //    a shared-redact verify over plugin/evidence, run BEFORE the matrix step. In-process
     //    (the ADR assigns this pass to the L6 build/verify command), reusing the SAME shared
     //    `redact` the write path + CI audit run. Scoped to evidence/host-smoke ONLY.
     {
       name: "redaction/leak verify (shared redact over plugin/evidence — AC-SEC-1)",
+      stage: "6",
       run: verifyEvidenceRedaction,
     },
     // 6b. FULL share-dot-guild audit (plugin-audit-remediation hygiene pass) — the SAME
@@ -163,6 +190,7 @@ function buildChain(): Step[] {
     //    untracked-but-shareable cruft, not just already-tracked paths).
     {
       name: "full share-dot-guild audit (dot-guild/audit.ts CLI)",
+      stage: "6b",
       cmd: "npx",
       args: ["tsx", join(SCRIPTS_DIR, "dot-guild", "audit.ts"), `--workspace=${PLUGIN_ROOT}`],
       cwd: SCRIPTS_DIR,
@@ -172,6 +200,7 @@ function buildChain(): Step[] {
     //    smoke (§6.5). Exits non-zero on a gate/validation fail.
     {
       name: "generate + validate support matrix (host-support gate)",
+      stage: "7",
       cmd: "npx",
       args: ["tsx", join(SCRIPTS_DIR, "generate-support-matrix.ts"), ...matrixArgs()],
       cwd: SCRIPTS_DIR,
@@ -231,7 +260,7 @@ function main(): void {
   for (let i = 0; i < steps.length; i++) {
     const rc = runStep(steps[i], i + 1, total);
     if (rc !== 0) {
-      console.error(`\n[build:verify] FAILED at step ${i + 1}/${total} — ${steps[i].name} (exit ${rc}).`);
+      console.error(`\n${formatFailureSummary(steps[i], i + 1, total, rc)}`);
       console.error(`[build:verify] fail-fast: remaining ${total - i - 1} step(s) skipped. Overall exit ${rc}.`);
       process.exit(rc);
     }

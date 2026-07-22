@@ -31,7 +31,7 @@ export type FailModeDurable = "closed" | "open";
 export type FailModeTelemetry = "open" | "closed";
 
 /**
- * The run's autonomy posture (docs/v2/11-security.md §bypassPermissions
+ * The run's autonomy posture (docs/v2/security.html §bypassPermissions
  * governance). Closed triple — mirrors `AutonomyPolicy` in
  * scripts/write-task-run.ts (guild.task_run.v1 `autonomy_policy`).
  */
@@ -228,7 +228,7 @@ export function readSecurityConfig(cwd: string): SecurityConfig {
 
 // ── Autonomy-mode resolution (D-BYPASS forcing input) ───────────────────────
 //
-// docs/v2/11-security.md §bypassPermissions governance: under the
+// docs/v2/security.html §bypassPermissions governance: under the
 // non-interactive autonomy modes (`auto_approve`,
 // `autonomous_after_plan_approval`) `bypass_permissions_policy` is FORCED to
 // `deny` — a bypassPermissions attempt on an out-of-scope call must hard-block.

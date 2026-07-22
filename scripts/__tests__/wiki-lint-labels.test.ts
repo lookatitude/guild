@@ -1,7 +1,7 @@
 /**
  * scripts/__tests__/wiki-lint-labels.test.ts
  *
- * Wiki label taxonomy + label-coverage lint check (docs/v2/05-knowledge-memory.md
+ * Wiki label taxonomy + label-coverage lint check (docs/v2/knowledge-memory.html
  * §Label Schema; deferred item 5). Verifies:
  *   - readLabelTaxonomy parses `.guild/project.yaml → label_taxonomy` (null when absent),
  *   - the check is INERT until a taxonomy is authored (no findings on opt-out repos),

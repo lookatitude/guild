@@ -3,7 +3,7 @@
  *
  * Deterministic specialist-roster resolution (guild.roster.v1).
  *
- * The D4 anti-drift rule (specialist-roster ADR; docs/v2/10-factory-evolution.md)
+ * The D4 anti-drift rule (specialist-roster ADR; docs/v2/factory-evolution.html)
  * says the roster is "enumerated from the filesystem + agent frontmatter — never
  * from a hand-maintained list". Until now that enumeration existed only as skill
  * prose executed by the model. This library is the code-backed implementation:

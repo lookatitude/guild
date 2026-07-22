@@ -114,9 +114,14 @@ validator, two callers).
    outputs.
 2. **G-operations review — two distinct, both-kept mechanisms**
    (https://guildstack.dev/docs/adversarial-review):
-   - **In-phase advisory panel (unchanged).** Challengers `[security,
-     architect]`, cross-model-preferred; **≤4 active**; incident/rollback never
-     exceed **producer + challenger**. Same-session review; non-blocking.
+   - **In-phase advisory panel.** Challengers sourced from the station composer's
+     **`ops` station `advisory_panel`** (SoT: `src/modules/teams/workflows/station-composer.ts`
+     `STATION_POLICY.ops.advisory_panel`, resolved by `composeStationTeam`) — not a
+     hardcoded `[security, …]` list: `security` (BASELINE — always present) + `architect`
+     (GATED on the `multi_component` signal; recorded as `chal:ops:architect`). Producer
+     stays **CLASS-driven** (the `§Posture` class→producer map fills the composer's `null`
+     ops producer). Cross-model-preferred; **≤4 active**; incident/rollback never exceed
+     **producer + challenger** (the composer caps). Same-session review; non-blocking.
    - **Cross-host G-operations gate via the broker (policy-gated).** *Separate*
      from the panel: a **different host family** critiques the ops record /
      runbook. After the playbook emits its outputs and before done-criteria,

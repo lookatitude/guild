@@ -1,0 +1,44 @@
+initiative:
+  id: plugin-audit-remediation
+  title: "Plugin audit remediation — close the 47 confirmed findings of the 2026-07-12 full implementation audit"
+  status: closed                      # D8 close gate PASS 2026-07-14 (exec✓ release✓ docs✓); archived
+  closed_at: 2026-07-14
+  definition_status: drafted          # goals authored from the audit report; not yet G-spec reviewed
+  execution_status: done              # all 9 goals executed 2026-07-13 (3 waves, 17 lanes); PR #27 → next
+  release_status: released            # shipped in v2.2.0 (tag v2.2.0, 2026-07-14); release/v2.2.0 → main PR #31, synced back to next PR #32
+  documentation_status: updated       # G7 plugin docs + umbrella docs/v2 reconciled (umbrella 16f68b6)
+  scope: plugin
+  created_at: 2026-07-12
+  goals_doc: goals.md                 # 9 individually-shippable goals G1–G9, each with a validation gate
+
+  goal: >-
+    Remediate the full-plugin implementation audit of 2026-07-12 (16 subsystem lanes, 47
+    adversarially-confirmed serious findings, ~175 medium/low): reactivate the dead CI gates,
+    fix live-path runtime defects, resolve the wire-or-delete backlog of green-tested but
+    unreachable code, make multi-host packaging/selectability honest, replace unresolvable
+    contract pointers, sweep doc drift, and clear repo-hygiene debt.
+
+  evidence:
+    audit_report: ../../../../../.guild/artifacts/audits/plugin-implementation-audit-2026-07-12.md   # umbrella workspace path
+    audit_digest: ../../../../../.guild/artifacts/audits/plugin-implementation-audit-2026-07-12.digest.txt
+    method: "16 finder agents + adversarial verifier per critical/high finding; 47 confirmed, 1 refuted"
+
+  goals_index:
+    G1: "CI activation — run the dormant gates, re-green the red ones (jest suites, drift-guard baselines, clra meta-guard, skill-registry re-seed)"
+    G2: "Live-path runtime fixes — reflection/run-close/telemetry/validator/EXDEV/nudge defects shipping today"
+    G3: "Lifecycle wiring — initiative skill set + D8 close-gate CLI, evolve read/write split, preflight snapshot, recall contract"
+    G4: "Multi-host honesty — 7 unreachable selectable hosts, packaging closure (run-trace.js, templates/, SKILL.src.md, manifest paths), capability-truth unification"
+    G5: "Wire-or-delete sweep — ~350KB unwired shelf resolved item by item (wire it or delete it, never keep as-is)"
+    G6: "Shipped contract index — replace by-pointer references to non-shipped docs; de-self-build the 17 product agents"
+    G7: "Docs/prose sweep — banner, CONTRIBUTING build-step, AGENTS.md src/modules layer, README v2, ~100 retired docs/knowledge pointers"
+    G8: "Repo hygiene — junk trees, .gitignore allow-list semantics, run-state.json contradiction, golden fixture, guild-root anchor"
+    G9: "Generalization rails — registry-driven hosts, single run-context/run-event readers, fs-derived enumerations, reachability rail, path-resolution package gate"
+
+  sequencing:
+    - "G1 first — cheap, and it stops every other drift class from silently recurring."
+    - "G2/G3 next (user-visible breakage), G4 with G9's registry-driven-host track, then G5 batch decisions, G6/G7 mechanical sweeps, G8 anytime."
+
+  notes:
+    - "Created 2026-07-12 from the plugin-implementation-audit; operator directive: create only, do NOT start execution yet."
+    - "autopromote: false — goals are proposals; G-spec/G-plan gates before any build."
+    - "Every goal that changes shipped behavior carries the D8 docs/v2 reconciliation criterion (close gate)."

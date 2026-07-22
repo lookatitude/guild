@@ -60,6 +60,23 @@ export function buildPrompt(
       ? `Wait for a \`TaskCreated\` event from the orchestrator before starting.`
       : `Watch the file-based agent bus at \`.guild/runs/${runId}/agent-bus/\` ` +
         `for your dispatch/brief record before starting; do not wait for host-native event callbacks.`;
+  // task-cell-runtime D5 — the assignment read-ack gate (PROSE tier, G3).
+  // SCOPE (honest): `GUILD_TASK_ASSIGNMENT` still points at the legacy v1
+  // per-specialist file (`.guild/runs/<run>/tasks/<specialist>.json`, exported by
+  // tmux-backend.ts / pane-adapter.ts). G3 adds the *instruction* that the worker
+  // must read + validate + acknowledge that file before any work (fail-closed on
+  // missing/malformed). What is DEFERRED to G4 (with pane-per-task dispatch):
+  // repointing this env at the per-instance canonical v2 assignment path AND
+  // replacing this model-prose gate with a DETERMINISTIC read/ack await in the
+  // backend (per the "security steps must be code, not prose" rule). Until then
+  // this is a best-effort prose gate over the v1 pointer, not a v2 enforcement.
+  const readAckInstruction =
+    `Before doing any work, read your assignment file at \`$GUILD_TASK_ASSIGNMENT\` ` +
+    `and validate it (guild.task_assignment schema, fail-closed). If it is missing or ` +
+    `malformed, STOP and report a hard dispatch failure — do not start. Otherwise write ` +
+    `your acknowledgment beside it (an \`assignment-ack.json\` marker in the instance ` +
+    `directory) and only then begin your lane: you enter \`running\` only after the ` +
+    `assignment is acknowledged (D5). `;
   // Project-local specialist: the definition is not host-registered, so the
   // prompt carries the adoption instruction (definition body + its project
   // skills) — this replaces the old "degraded generic agent" fallback.
@@ -70,7 +87,19 @@ export function buildPrompt(
         `in its frontmatter \`skills:\`, load the project-local instance at ` +
         `\`.guild/skills/<skill>/SKILL.md\` when it exists before starting your lane. `
       : "";
+  // #58 — the machine-readable definition-adoption PREFIX. Emitted as the very
+  // FIRST LINE for a project specialist, alongside the human-readable
+  // instruction above. The PreToolUse dispatch-integrity guard parses identity
+  // from THIS line only: a fixed, producer-owned position that the lane's
+  // arbitrary `scope` text (appended below) can never forge or contradict. This
+  // is what makes a correct dispatch textually distinguishable from a
+  // persona-stripped one instead of byte-identical.
+  const definitionMarker =
+    specialist.definition_source === "project" && specialist.definition
+      ? `GUILD_AGENT_DEFINITION=${specialist.definition}\n`
+      : "";
   return (
+    definitionMarker +
     `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` +
     definitionInstruction +
     `Your lane scope: \`${specialist.scope}\`. ` +
@@ -79,6 +108,7 @@ export function buildPrompt(
     `When you finish, write your §8.2 handoff receipt to ` +
     `\`.guild/runs/${runId}/handoffs/${specialist.name}-<task-id>.md\` with all 5 fields ` +
     `(changed_files, opens_for, assumptions, evidence, followups). ` +
+    readAckInstruction +
     waitInstruction
   );
 }

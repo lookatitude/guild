@@ -2,6 +2,7 @@
 
 ## decisions
 
+- [task-cell-runtime-contract](decisions/task-cell-runtime-contract.md) - 2026-07-14 - Every lifecycle step emits a code-owned TaskCell (fan-out conditional: lead_only/plus_one/plus_many); three-layer specialist identity (type→profile→ephemeral instance, never reused); immutable terminal attempts; lifecycle-bearing backend replaces the launch()-only seam. Freeze record for the task-cell-runtime initiative.
 - [g-series-learn-clis-on-demand-only](decisions/g-series-learn-clis-on-demand-only.md) - 2026-07-13 - The G-series learn CLIs (extract-structural G1/G4, resolve-calls G2) are experimental/on-demand-only; learn-diff never calls them (KG-no-mutation contract) — false header claim corrected, files kept as tested test-fixture infrastructure.
 - [v2-final-design-and-doc-artifact-boundary](decisions/v2-final-design-and-doc-artifact-boundary.md) - 2026-06-18 - Keep `docs/v2/` as final design, `docs/knowledge/` as ADR/provenance, and remove historical drift/transfer/run artifacts from final docs while tracking live host/install gaps separately.
 - [telemetry-anchors-to-repo-root-not-cwd](decisions/telemetry-anchors-to-repo-root-not-cwd.md) - 2026-06-17 - Telemetry/run-state writes must resolve the repo root via guild-root.ts (not process cwd) so a sub-dir cwd can't create a nested `.guild/`; audit `nested-guild` stays the backstop.

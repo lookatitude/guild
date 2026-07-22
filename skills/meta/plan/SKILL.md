@@ -38,6 +38,10 @@ approved: false
 - task-id: T1-architect
 - owner: architect
 - depends-on: []
+- spine: true           # T2-backend lists T1-architect in its depends-on — this lane is a spine lane
+- consumed-contract:
+  - `docs/adr/pricing-service-boundary.md` — pulled by T2-backend (component boundaries it implements against)
+  - `docs/diagrams/` component-split diagram — pulled by T2-backend (service boundary shape)
 - complexity_score: 3   # deterministic auto-score (ADR §2 rubric); ≥3 → powerful
 - tier: powerful        # cheap|mid|powerful — chosen tier for this lane
 - scope: System boundaries, component split, tradeoff matrix for the pricing service.
@@ -55,7 +59,7 @@ approved: false
 - depends-on: [T1-architect]
 - complexity_score: 1   # draft/extract work-type → mid band
 - tier: mid             # may be overridden upward by execute-plan's re-score
-- scope: REST contract + data layer for /pricing endpoints.
+- scope: REST contract + data layer for /pricing endpoints, implemented against T1-architect's component boundaries (`docs/adr/pricing-service-boundary.md`) and service-split shape (`docs/diagrams/`).
 - success-criteria:
   - OpenAPI spec committed.
   - Unit tests green on the quote calculator.
@@ -75,15 +79,30 @@ Per-lane field rules:
 - **autonomy-policy** — three sub-bullets (may act / requires confirmation / forbidden) derived from the spec's autonomy policy, narrowed to this lane's scope. This becomes the subagent's permission contract during `guild:execute-plan`.
 - **complexity_score** — the deterministic auto-score for this lane per the cost-aware-tiering rubric (ADR §2): sum the signal weights (work-type verb 0/+1/+2, blast-radius/file-count, presence of an upstream `depends-on:` contract, security/correctness sensitivity, prior-attempt escalation +1). Seed it here from the team.yaml `default_tier` and the lane's scope; `guild:execute-plan` **re-scores deterministically at dispatch** (same inputs → same tier), so this value is an authoring estimate the dispatch trace either confirms or supersedes — never a silent pin.
 - **tier** — the chosen model tier (`cheap | mid | powerful`) the score maps to via the band cutoffs (`models.thresholds`, default `{mid:1, powerful:3}` — ADR §10, bound by pointer). The author MAY pin a tier upward when the auto-score will under-call a security/correctness-sensitive lane (`tier: powerful` with a one-line rationale in `scope`); this is the **per-lane override**, second in the precedence ladder below the `--model-tier` CLI escape hatch (ADR §2/§10). Leaving `tier` to track `complexity_score` is the default — the band map is authoritative unless the author explicitly pins.
+- **spine** — `true` when this lane's `task-id` appears in ≥1 other lane's `depends-on:` list; **omit the field entirely** on lanes with no dependents (do not write `spine: false` — its absence on a non-spine lane is itself signal, not a default value to spell out). Compute this deterministically from the DAG you are authoring, not from a role heuristic — architect is the common case (`## Parallelism rules` below) but any lane with downstream dependents qualifies.
+- **consumed-contract** — required when `spine: true`; omitted otherwise. One bullet per item a dependent lane's `scope` actually pulls from this lane's receipt (an artifact path, an interface, a schema name, a decision), naming the pulling dependent's `task-id`. See `## Spine lanes — declaration + non-waivable checkpoint` below for why this field exists and what consumes it.
 
 Parallelism rules:
 
-- Architect first when present — downstream lanes typically list the architect's task-id in `depends-on`.
+- Architect first when present — downstream lanes typically list the architect's task-id in `depends-on`. This is the common spine-lane shape: mark that lane `spine: true` with a `consumed-contract:` enumeration per `## Spine lanes` below.
 - Backend → QA: QA depends on backend's task-id.
 - DevOps → QA: staging hookup must precede QA's regression run.
 - Content and commercial lanes run in parallel with engineering when they only depend on the spec.
 
 The DAG expressed in `depends-on:` is what `guild:execute-plan` reads to schedule parallel dispatches — authoring the edges wrong here leads to either serialized work that could have parallelized or dispatches that start before their inputs exist.
+
+## Spine lanes — declaration + non-waivable checkpoint
+
+A **spine lane** is any lane whose `task-id` appears in one or more *other* lanes' `depends-on:` — architect is the common case (`## Parallelism rules` above), but any lane with downstream dependents qualifies. The plan MUST declare every spine lane explicitly rather than leave `guild:execute-plan` to infer it from the DAG after the fact:
+
+- Set `spine: true` on the lane block (per-lane field rules above).
+- Enumerate `consumed-contract:` on the same lane block — the artifacts, interfaces, schema names, or decisions each dependent's `scope` actually pulls from this lane's receipt, one bullet per item, naming the pulling dependent's `task-id`.
+
+This declaration is authored input, not decoration: it is exactly what `guild:execute-plan`'s **spine-lane verify checkpoint** consumes at dispatch time. That checkpoint's own step 1 ("Enumerate the consumed contract") is written to read this list from the plan rather than reconstruct it from scratch after the spine lane's receipt lands (`skills/meta/execute-plan/SKILL.md §"Spine-lane verify checkpoint"` — bound by pointer; its verification mechanics, ordering chain, and failure handling live there and are not re-spelled here). An incomplete `consumed-contract:` list under-scopes that checkpoint's verification, not just this document — author it as carefully as success-criteria.
+
+**Non-waivable.** The checkpoint execute-plan runs after a spine lane's receipt lands and before any dependent fans out is **NOT waivable by `--auto-approve=all`** — including plans authored under `--rigor=deep --auto-approve=all` and lanes whose own `autonomy-policy` grants broad "may act without asking" latitude. A permissive per-lane `autonomy-policy` governs what that lane's specialist may do unattended; it has no bearing on the cross-lane contract-verification checkpoint execute-plan owns at the fan-out boundary. When any lane in this plan is a spine lane, this non-waivability is a property of the plan, independent of whatever autonomy flags the run carries.
+
+*Evidence: reflection `run-learn-knowledge-convergence-20260529-094021` §P3 — the same run `guild:execute-plan`'s checkpoint traces to.*
 
 ## PRD — always written, right-sized (D-P1 / OQ8)
 
@@ -121,7 +140,7 @@ When a brownfield `KnowledgeGraph` index exists
 before finalizing lanes (codebase-understanding spec §"Where it sits" plug point P2):
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/learn/diff-learn.ts --cwd <repo-root> \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/learn/diff-learn.ts --cwd <repo-root> \
   --base <merge-base-with-integration-branch> [--head HEAD] [--run-id <id>]
 ```
 
@@ -180,4 +199,4 @@ After the G-plan review + approval gate and before handoff, fire the per-phase L
 
 Once the plan is written and **user-approved** (frontmatter `approved: true`), hand off to `guild:execute-plan`. Execute-plan creates the `<run-id>`, then invokes `guild:context-assemble` once per specialist lane to build the minimum-viable-context bundle before dispatching the specialist subagent. Do not run context assembly yourself — that's `guild:execute-plan`'s responsibility during per-lane dispatch.
 
-Handoff receipt should list: `plan_path`, `prd_form` (`inline` | `standalone` — with `prd_path` when standalone), `lane_count`, `parallel_eligible_count` (lanes with empty `depends-on:`), `backend` (mirrored from team.yaml), and `approved_at` timestamp.
+Handoff receipt should list: `plan_path`, `prd_form` (`inline` | `standalone` — with `prd_path` when standalone), `lane_count`, `parallel_eligible_count` (lanes with empty `depends-on:`), `backend` (mirrored from team.yaml), `approved_at` timestamp, and `team_plan_path` — **forwarded verbatim** from `guild:team-compose`'s handoff (the companion `guild.team_plan.v1` at `.guild/runs/<run-id>/team-plan/<phase>.json`, or its fail-soft skip note). Pass it through unchanged so `guild:execute-plan` can wire its `team_result` `team_plan_ref` to it — `guild:plan` neither reads nor regenerates it.

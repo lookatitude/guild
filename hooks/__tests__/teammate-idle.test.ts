@@ -4,7 +4,9 @@
  * Tests for hooks/agent-team/teammate-idle.ts
  *
  * Covers:
- *  - LANE-COMPLETE: valid fenced-JSON receipt → pointer + [AUTO-DISMISS] lines
+ *  - LANE-SUBMITTED (task-cell-runtime G4, ADR D5): a valid receipt with NO
+ *    durable acceptance record is handoff_submitted, NOT dismissible.
+ *  - LANE-ACCEPTED: a durable guild.handoff_acceptance.v1 gates safe-to-dismiss.
  *  - Invalid-envelope nudge: strict fenced-JSON wording (not YAML frontmatter)
  *  - Missing-receipt nudge: strict fenced-JSON wording (not YAML frontmatter)
  *  - Always exits 0
@@ -14,6 +16,16 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import {
+  buildTaskCell,
+  writeTaskCell,
+  type TaskCellDispatchInput,
+} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import {
+  buildAcceptance,
+  runDeterministicFloor,
+  writeAcceptanceRecord,
+} from "../../src/modules/dispatch/workflows/task-cell-acceptance";
 
 const SCRIPT = path.resolve(__dirname, "../agent-team/teammate-idle.ts");
 
@@ -106,6 +118,79 @@ function makePlanFile(taskId: string, teammate: string): string {
   return `- ${taskId}: Some task to do\n  owner: ${teammate}\n`;
 }
 
+const SEED_NOW = () => "2026-07-15T00:00:00.000Z";
+
+/**
+ * task-cell-runtime G4: seed a DURABLE `guild.handoff_acceptance.v1` (+ its sibling
+ * assignment binding worker_role) into the run tree under `cwd`, so the acceptance
+ * gate resolves this teammate's lane as safe-to-dismiss. Scope/tests are empty so
+ * the deterministic floor passes vacuously for any receipt.
+ */
+function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, workerRole: string): void {
+  const disp: TaskCellDispatchInput = {
+    runId,
+    logicalTaskId,
+    taskRunId: `${logicalTaskId}.tr1`,
+    attempt: 1,
+    attemptId: `${logicalTaskId}.att1`,
+    instanceId: `${logicalTaskId}.a1.i1`,
+    cellId: `cell-${logicalTaskId}`,
+    goalId: "goal",
+    phaseId: "build",
+    stepId: logicalTaskId,
+    teamId: "guild",
+    workerRole,
+    specialistTypeId: workerRole,
+    specialistTypeVersion: "1",
+    specialistTypeHash: "sha256:type",
+    specialistProfileId: workerRole,
+    specialistProfileHash: "sha256:profile",
+    contextBundleId: `.guild/context/${runId}/${workerRole}.md`,
+    contextBundleHash: "sha256:ctx",
+    hostId: "claude-code-cli",
+    adapterId: "claude-code-cli@1",
+    hostCapabilitiesHash: "sha256:caps",
+    objective: `implement ${logicalTaskId}`,
+    nonGoals: [],
+    scopePaths: [],
+    outputSchema: "guild.handoff_receipt.v1",
+    acceptanceTests: [],
+    dependencies: [],
+    projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
+    autonomyPolicy: "supervised",
+    budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+    deadline: null,
+    leadBindingId: "lead-binding",
+    now: SEED_NOW,
+  };
+  const cell = buildTaskCell(disp);
+  writeTaskCell(cwd, cell);
+  const validation = runDeterministicFloor({
+    assignment: cell.assignment,
+    submitted: {
+      receipt_id: "r1",
+      receipt_path: "handoffs/x.md",
+      schema_valid: true,
+      claimed_changed_files: [],
+      acceptance_tests_passed: [],
+      submitted_at: SEED_NOW(),
+    },
+    validationResultId: "val-1",
+    now: SEED_NOW,
+  });
+  const acceptance = buildAcceptance({
+    validation,
+    acceptancePolicyVersion: "1.0.0",
+    authoritiesRequired: ["deterministic_floor", "team_lead"],
+    authoritiesObserved: [
+      { authority: "deterministic_floor", decision: "accepted", at: SEED_NOW(), reason: null },
+      { authority: "team_lead", decision: "accepted", at: SEED_NOW(), reason: null },
+    ],
+    now: SEED_NOW,
+  });
+  writeAcceptanceRecord(cwd, acceptance);
+}
+
 // ── Fixtures ───────────────────────────────────────────────────────────────
 
 describe("teammate-idle.ts", () => {
@@ -157,63 +242,58 @@ describe("teammate-idle.ts", () => {
     expect(result.status).toBe(0);
   });
 
-  // ── LANE-COMPLETE ─────────────────────────────────────────────────────────
+  // ── LANE-SUBMITTED (G4: valid receipt, NO acceptance record) ───────────────
+  // A receipt on disk is the worker's OUTPUT, not an acceptance. Without a durable
+  // guild.handoff_acceptance.v1 the lane is handoff_submitted — NOT safe to
+  // dismiss. This is the P0.4 false-positive channel the old [AUTO-DISMISS] was.
 
-  describe("LANE-COMPLETE (valid receipt, nothing pending/invalid)", () => {
+  describe("LANE-SUBMITTED (valid receipt, no acceptance record)", () => {
     beforeEach(() => {
-      // Write a valid fenced-JSON receipt
+      // Write a valid fenced-JSON receipt — but seed NO acceptance record.
       fs.writeFileSync(
         path.join(handoffsDir, "backend-task-t1.md"),
         makeValidReceipt("task-t1", "done")
       );
     });
 
-    it("emits [LANE-COMPLETE]", () => {
+    it("emits [LANE-SUBMITTED] / awaiting-acceptance, NOT [LANE-COMPLETE]/[AUTO-DISMISS]", () => {
       const { stdout } = runScript({ ...basePayload, cwd: tmpDir });
-      expect(stdout).toContain("[LANE-COMPLETE]");
+      expect(stdout).toContain("[LANE-SUBMITTED]");
+      expect(stdout).toContain("awaiting-acceptance");
       expect(stdout).toContain('teammate="backend"');
-      expect(stdout).toContain('team="guild"');
+      expect(stdout).not.toContain("[LANE-COMPLETE]");
+      expect(stdout).not.toContain("[LANE-ACCEPTED]");
+      expect(stdout).not.toContain("[AUTO-DISMISS]");
+      expect(stdout).not.toContain("safe-to-dismiss");
     });
 
-    it("emits the canonical R2 pointer line per valid task", () => {
+    it("emits a `submitted ·` pointer line per valid task (not a dismissal)", () => {
       const { stdout } = runScript({ ...basePayload, cwd: tmpDir });
       const receiptPath = path.join(handoffsDir, "backend-task-t1.md");
-      expect(stdout).toContain(`done · task-t1 · status:done · receipt:${receiptPath}`);
+      expect(stdout).toContain(`submitted · task-t1 · status:done · receipt:${receiptPath}`);
     });
+  });
 
-    it("emits [AUTO-DISMISS] directive per valid task", () => {
-      const { stdout } = runScript({ ...basePayload, cwd: tmpDir });
-      expect(stdout).toContain(
-        `[AUTO-DISMISS] teammate="backend" team="guild" reason=valid-receipt task=task-t1`
-      );
-    });
+  // ── LANE-ACCEPTED (G4: durable acceptance record authorizes dismissal) ─────
 
-    it("reflects the correct status in the pointer line (blocked)", () => {
+  describe("LANE-ACCEPTED (durable guild.handoff_acceptance.v1 exists)", () => {
+    beforeEach(() => {
       fs.writeFileSync(
-        path.join(handoffsDir, "backend-task-t2.md"),
-        makeValidReceipt("task-t2", "blocked")
+        path.join(handoffsDir, "backend-task-t1.md"),
+        makeValidReceipt("task-t1", "done")
       );
-      // Remove the done-receipt so only the blocked one exists
-      fs.unlinkSync(path.join(handoffsDir, "backend-task-t1.md"));
-      const { stdout } = runScript({ ...basePayload, cwd: tmpDir });
-      const receiptPath = path.join(handoffsDir, "backend-task-t2.md");
-      expect(stdout).toContain(`done · task-t2 · status:blocked · receipt:${receiptPath}`);
-      expect(stdout).toContain(
-        `[AUTO-DISMISS] teammate="backend" team="guild" reason=valid-receipt task=task-t2`
-      );
+      // Seed a durable acceptance record binding worker_role=backend.
+      seedAcceptance(tmpDir, "test-run", "lt-backend", "backend");
     });
 
-    it("emits pointer + AUTO-DISMISS for EACH valid task when multiple receipts", () => {
-      // Write a second valid receipt
-      fs.writeFileSync(
-        path.join(handoffsDir, "backend-task-t2.md"),
-        makeValidReceipt("task-t2", "done")
-      );
+    it("emits [LANE-ACCEPTED] / safe-to-dismiss gated on the acceptance record", () => {
       const { stdout } = runScript({ ...basePayload, cwd: tmpDir });
-      expect(stdout).toContain("done · task-t1 · status:done");
-      expect(stdout).toContain("done · task-t2 · status:done");
-      expect(stdout).toContain("reason=valid-receipt task=task-t1");
-      expect(stdout).toContain("reason=valid-receipt task=task-t2");
+      expect(stdout).toContain("[LANE-ACCEPTED]");
+      expect(stdout).toContain("safe-to-dismiss");
+      expect(stdout).toContain("[TERMINATE-AUTHORIZED]");
+      expect(stdout).toContain("logical_task=lt-backend");
+      expect(stdout).not.toContain("[AUTO-DISMISS]");
+      expect(stdout).not.toContain("[LANE-SUBMITTED]");
     });
   });
 

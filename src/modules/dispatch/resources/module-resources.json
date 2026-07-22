@@ -8,7 +8,21 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "cb23ffbb07af7515d7a60c5df08562b3a8e30e8c4df9cbfdd1756b72469469c8"
+      "sha256": "dcb148bda6954ebbf851f703cfdd45d6f4e21d11debac02ce305ed537d5ce1c4"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/contracts/specialist-identity",
+      "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/specialist-identity.ts",
+      "sha256": "71013a384205271bb970e1f1a67e150ca232a33db89d5e8d3a74d9c60a80e762"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/contracts/task-cell-backend",
+      "source_path": "scripts/lib/core/contracts/task-cell-backend.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/task-cell-backend.ts",
+      "sha256": "92cb28d53275269d8a315162647d72bd42a545cc611f31455049896aa9127952"
     },
     {
       "category": "scripts",
@@ -22,7 +36,7 @@
       "id": "lib/host/inprocess-backend",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "1f91528f57539221c2e6ffff02f57f8b590186d3fff760d8d6a4551dd7114149"
+      "sha256": "1e8e5900c9ec439021ecf70cc9b2261ff0ece0903e30a0b69bf0f957a6063e1b"
     },
     {
       "category": "scripts",
@@ -36,7 +50,7 @@
       "id": "lib/host/tmux-backend",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "09d335b7ffecc518b643f78387ff349bbfe46f61cb5331ec15da405b8f349102"
+      "sha256": "047039d2b55e32b9c4f07e44fb2f09eb15567e9665a306b1ec001f42e1635512"
     },
     {
       "category": "scripts",

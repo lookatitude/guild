@@ -4,7 +4,7 @@
  * Focused tests for scripts/lib/mixed-host-contracts.ts — ITEM 19,
  * mixed-host tmux sibling coordination contracts.
  *
- * Contract (BY POINTER): docs/v2/08-dispatch-execution.md §Mixed-host teams
+ * Contract (BY POINTER): docs/v2/dispatch-execution.html §Mixed-host teams
  *   DI-5 decision; target-architecture.md §TmuxTeam / §LaneStatus.
  *
  * Coverage:

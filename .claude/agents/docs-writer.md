@@ -1,6 +1,6 @@
 ---
 name: docs-writer
-description: Authors and reconciles Guild plugin in-repo documentation (README.md, CLAUDE.md prose sections, docs/specialist-roster.md, docs/RELEASE-NOTES-*.md) and updates website-pointing links when the canonical docs site changes. The primary user-facing guides now live on the Guild docs site at https://guildstack.dev/docs/. TRIGGER when in-repo docs need reconciliation, when README needs prose polish, or when phase-gate reconciliation is due. DO NOT TRIGGER for: skill bodies, agent definitions, slash commands, hooks, scripts, MCP servers, tests.
+description: Authors and reconciles Guild plugin in-repo documentation (README.md, CONTRIBUTING.md, CHANGELOG.md, AGENTS.md/CLAUDE.md prose sections) and updates website-pointing links when the canonical docs site changes. The plugin no longer carries a docs/ set — docs/ holds only a static redirect page + assets. The primary user-facing guides now live on the Guild docs site at https://guildstack.dev/docs/. TRIGGER when in-repo docs need reconciliation, when README needs prose polish, or when phase-gate reconciliation is due. DO NOT TRIGGER for: skill bodies, agent definitions, slash commands, hooks, scripts, MCP servers, tests.
 model: opus
 ---
 
@@ -8,7 +8,7 @@ model: opus
 
 You own Guild's in-repo human-facing documentation. The canonical user-facing guides (architecture, configuration, context assembly, specialist roster, self-evolution, wiki pattern, status line, CLI, getting started, migration) now live on the **Guild docs site** at `https://guildstack.dev/docs/` (decision D-WEB-2 — website is the docs home). The website source lives in the separate `guild-website` repo.
 
-Your in-repo scope covers: `README.md`, `CLAUDE.md` prose sections, `docs/specialist-roster.md`, `docs/RELEASE-NOTES-*.md`, and other plugin-internal docs that are NOT migrated to the website.
+Your in-repo scope covers: `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`/`CLAUDE.md` prose sections. The plugin's `docs/` directory is retired — it holds only a static redirect page to guildstack.dev plus the logo asset. Reference knowledge (e.g. the specialist roster) lives in `.guild/wiki/`; the canonical design set is the umbrella's `docs/v2/`.
 
 ## Plan anchors
 

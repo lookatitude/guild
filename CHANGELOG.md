@@ -8,7 +8,91 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- docs: the plugin's `docs/` set is **retired**. The public docs are generated from
+  the canonical design set (the workspace's `docs/v2/`) + the website, and published
+  at [guildstack.dev/docs](https://guildstack.dev/docs); `docs/` now holds only a
+  static redirect page and the logo asset. Apart from `README.md`,
+  `CONTRIBUTING.md`, and `CHANGELOG.md`, no documentation lives in this repo. — @lookatitude
+- docs: the canonical design docs are **no longer numbered** (`docs/v2/03-lifecycle.md`
+  → `lifecycle.md`, …). Every citation in this repo is reconciled; reading order was
+  never carried by the filenames (the design set's README sequences it explicitly). — @lookatitude
+
+### Removed
+
+- docs: `docs/diagrams/**` (8 diagrams last updated 2026-04-24, depicting the v1
+  architecture/lifecycle — superseded by the docs site) and
+  `docs/generated/host-support-matrix.md`. — @lookatitude
+
+### Moved
+
+- The specialist roster moved to `.guild/wiki/entities/specialist-roster.md` — it is
+  reference knowledge backing the roster-consistency CI gate, not public docs. The
+  gate, its tests, and the workflow step follow it. — @lookatitude
+- The universal-host P1-L0 foundation contracts ADR addendum moved to
+  `.guild/wiki/decisions/` — it is cited as the source spec by six code modules,
+  all repointed. — @lookatitude
+
+## [2.3.0] — 2026-07-22
+
+Highlights: the **compaction-drift hardening wave** — a forensic analysis of a
+39-hour production run (issues #56–#60) showed Guild's behavioral contract
+silently evaporating at every `/compact`; this release makes the contract
+re-anchor deterministically (SessionStart/PreCompact re-anchor engine) and
+converts four prose rules into enforced hooks: backend refuse-don't-fallback,
+specialist-identity integrity, model-tier discipline, and lifecycle gating with
+a review/verify-done close backstop. Plus: unattended tmux team panes no longer
+stall on native permission prompts (#54), documented CLI paths resolve in plain
+shells with a CI rail (#36), and the learning-checkpoint entrypoint actually
+ships (#55). Also lands the task-cell runtime P0 core and six codex-gated skill
+evolutions.
+
+### Added
+
+- task-cell-runtime: P0 runtime core + station composer + specialist identity split + hybrid composition engine (G1–G8) ([#38](https://github.com/lookatitude/guild/pull/38)) — @lookatitude
+- skills: evolve guild:learn-onboard — workspace-root tour fallback ([#42](https://github.com/lookatitude/guild/pull/42)) — @lookatitude
+- skills: evolve guild:execute-plan — cmux-first dispatch, verified pickup, gated deferral, spine checkpoint ([#43](https://github.com/lookatitude/guild/pull/43)) — @lookatitude
+- skills: evolve guild:evolve-skill — codify the six gate-method rules ([#44](https://github.com/lookatitude/guild/pull/44)) — @lookatitude
+- skills: evolve fan-out 1 — plan spine declaration, context-assemble ask provenance, learn workspace contract ([#46](https://github.com/lookatitude/guild/pull/46)) — @lookatitude
+- docs-sync: fail-closed docs-architecture drift rail + committed host-support matrix with CI gate (CE-1, CE-13) ([#52](https://github.com/lookatitude/guild/pull/52)) — @lookatitude
+- hooks: re-anchor engine — re-inject the lead behavioral contract after /compact + resume (root cause of issues #56/#57/#59/#60) ([#64](https://github.com/lookatitude/guild/pull/64)) — @lookatitude
+- dispatch: make specialist type-erasure detectable — enforced GUILD_AGENT_DEFINITION contract + dispatch-integrity guard + trace attribution (issue #58) ([#66](https://github.com/lookatitude/guild/pull/66)) — @lookatitude
+- hooks: runtime backend-degradation detector for team-mode lanes — refuse-don't-fallback as code + degradation receipts (issue #56) ([#67](https://github.com/lookatitude/guild/pull/67)) — @lookatitude
+- hooks: lean-lead inline-shortcut expiry + hands-on-edit Stop-hook guard (issue #57) ([#68](https://github.com/lookatitude/guild/pull/68)) — @lookatitude
+- hooks: PreToolUse tier guard — no Guild lane dispatch without an explicit model param + tier_dispatch receipt sink (issue #60) ([#69](https://github.com/lookatitude/guild/pull/69)) — @lookatitude
+- hooks: active lifecycle gate + review/verify-done close backstop (issue #59) ([#70](https://github.com/lookatitude/guild/pull/70)) — @lookatitude
+
+### Fixed
+
+- specialists: allow human-requested creation without history ([#37](https://github.com/lookatitude/guild/pull/37)) — @lookatitude
+- guards: anchor the live-surface freeze on tree hashes — the commit pin is orphaned by every squash-merge ([#40](https://github.com/lookatitude/guild/pull/40)) — @lookatitude
+- hooks: stop bundled CLI guards firing on the hook path (~1,400 tokens/prompt leak) ([#41](https://github.com/lookatitude/guild/pull/41)) — @lookatitude
+- tests: re-extract execute-plan into skill-src registry + re-ratify the skills surface ([#45](https://github.com/lookatitude/guild/pull/45)) — @lookatitude
+- docs-sync: HTML-aware command-coverage walk + .md pointer retarget + symbol-citation checker ([#47](https://github.com/lookatitude/guild/pull/47)) — @lookatitude
+- docs-sync: pinned-surface pointer retarget + host-world staleness, pin re-ratification (CE-9, CE-2) ([#48](https://github.com/lookatitude/guild/pull/48)) — @lookatitude
+- plugin: close five verified code defects from the drift campaign (CE-3/4/5/7/8) ([#50](https://github.com/lookatitude/guild/pull/50)) — @lookatitude
+- docs-sync: harden the HTML coverage scanner — six false-PASS/false-FAIL classes + token boundaries (CE-16) ([#51](https://github.com/lookatitude/guild/pull/51)) — @lookatitude
+- comms-lint: require a real YAML surface before flagging a hand-rolled reader (OD-3) ([#53](https://github.com/lookatitude/guild/pull/53)) — @lookatitude
+- resources: real shell fallback for plugin-root expansion in command/skill docs (issue #36) ([#61](https://github.com/lookatitude/guild/pull/61)) — @lookatitude
+- scripts: CI rail for plugin-root fallback + description-optimizer v2-layout fix ([#62](https://github.com/lookatitude/guild/pull/62)) — @lookatitude
+- hooks: ship the emit-learning-checkpoint CLI entrypoint + packaging rail (issue #55) ([#63](https://github.com/lookatitude/guild/pull/63)) — @lookatitude
+- dispatch: thread host permission-mode flags into local tmux Claude panes (issue #54) ([#65](https://github.com/lookatitude/guild/pull/65)) — @lookatitude
+
+### Documentation
+
+- retire the plugin docs set + reconcile docs/v2 references to the unnumbered design set ([#39](https://github.com/lookatitude/guild/pull/39)) — @lookatitude
+
+### Internal
+
+- sync back v2.2.0 release into next ([#32](https://github.com/lookatitude/guild/pull/32)) — @lookatitude
+- guards: version-tolerant live-surface freeze — kill the per-release pin re-ratification loop ([#34](https://github.com/lookatitude/guild/pull/34)) — @lookatitude
+
+### Changed
+
+- close + archive plugin-audit-remediation (shipped in v2.2.0) ([#33](https://github.com/lookatitude/guild/pull/33)) — @lookatitude
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.2.0...v2.3.0
 
 ## [2.2.0] — 2026-07-14
 

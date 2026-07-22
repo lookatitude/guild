@@ -1,6 +1,6 @@
 /**
  * __tests__/ingest-importance.test.ts — the write-time importance-at-ingest scorer +
- * frontmatter persistence (docs/v2/05 §Importance-at-ingest, LW: importance-at-ingest).
+ * frontmatter persistence (docs/v2/knowledge-memory.html §Importance-at-ingest, LW: importance-at-ingest).
  */
 
 import {

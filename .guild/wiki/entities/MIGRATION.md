@@ -18,7 +18,7 @@ related: [command-surface, v2-index, phase-entrypoints]
 > migration and the exact user-visible behavior of every removed/renamed
 > command. It does not execute the migration and does not edit anything under
 > `plugin/`. The canonical, authoritative copy lives **here at
-> `plugin/.guild/wiki/entities/MIGRATION.md`** (v2 — moved from the retired root
+> `plugin/.<HIGH_ENTROPY_REDACTED>.md`** (v2 — moved from the retired root
 > docs KB on 2026-06-27); cross-reference links resolve to the v2 wiki
 > (`../decisions/…`, sibling `entities/…`). **This is the single source of truth
 > — edit only this file.** The repo-root **`./MIGRATION.md`** is a *generated*
@@ -142,7 +142,7 @@ Full mapping: MIGRATION.md §2.
 Full mapping: MIGRATION.md §2.
 ```
 
-**The mega-verb `/guild:guild [brief]`** is renamed/restructured, not removed — it
+**The mega-verb `/guild:guild [brief]`** is <HIGH_ENTROPY_REDACTED>, not removed — it
 still works. The only behavioral change a user sees on first run is the
 **surfaced phase-detection prompt** and the **tuning flags** (retained — CLI-accepted; config keys are the persistent equivalent) (see §4).
 
@@ -297,7 +297,7 @@ frontmatter block if absent and are marked `importance_draft: true` +
 `--mode=dry-run` lists every planned grade without writing anything. The
 snapshot taken before conversion holds the original ungraded pages, so the
 documented restore command rolls the wiki back along with everything else.
-Grading taxonomy: `.guild/wiki/decisions/knowledge-base-hygiene-and-grading.md`.
+Grading taxonomy: `.<HIGH_ENTROPY_REDACTED>-base-hygiene-and-grading.md`.
 
 ---
 
@@ -310,7 +310,7 @@ Grading taxonomy: `.guild/wiki/decisions/knowledge-base-hygiene-and-grading.md`.
 | `--codex-cap=N` | **retained** — still parsed; `codex_cap:` persists it |
 | `--codex-review` | **removed in v2.0** — use `--review=cross` |
 | `--auto-approve=spec-and-plan` | `--auto-approve=spec,plan` |
-| `--auto-approve=implementation` | `--auto-approve=build` |
+| `--auto-<HIGH_ENTROPY_REDACTED>` | `--auto-approve=build` |
 | `--auto-approve=all` | `--auto-approve=all` (or bare `--auto-approve`) |
 | `--restart` (first word of `$ARGUMENTS`) | `/guild:resume --restart` |
 | `--allow-larger` (on `/guild:guild-team`) | `/guild:plan --team-size=N` |
@@ -363,7 +363,7 @@ lead, `guild.handoff.v2` schema, §task§agent lifecycle).
 Shipped on `next` after v2.1.0 (`machinery-agents-vs-specialist-template-library.md`).
 The plugin now registers only the machinery agents (`advisor`, `developer`); the 15
 domain specialists (architect … sales, incl. doc-writer) ship as type templates under
-`templates/specialists/*.md` and are minted into the consuming repo's
+`<HIGH_ENTROPY_REDACTED>*.md` and are minted into the consuming repo's
 `.guild/agents/<role>.md` at team-compose time, dispatching via the definition-path
 mechanism. **Mostly additive, with one breaking edge:**
 
@@ -423,7 +423,7 @@ mechanism. **Mostly additive, with one breaking edge:**
   gap-report-only `verify-done`-extension; it is now the full `guild:quality`
   skill that **auto-selects and executes** E2E/smoke/a11y/perf/integration
   from `CodebaseMap` + plan signals (surfaced + overridable, never silent)
-  behind a producer/challenger pair and an interactive release/blocker gate.
+  behind a composer-derived producer/challenger advisory panel and an interactive release/blocker gate.
   `/guild:ops` was a reserved notice; it is now the full `guild:operations`
   skill that **executes** release/monitoring/incident/rollback/maintenance
   runbooks under a split autonomy posture with four non-negotiable safety
@@ -455,7 +455,7 @@ mechanism. **Mostly additive, with one breaking edge:**
   never runtime-written. The single normative ownership map and the
   enforcement model (one PreToolUse approval guard reusing the existing
   always-ask sandbox prompt — no new gate) are specified in
-  [architecture/architecture-overview.md](../../../../.guild/wiki/entities/architecture-overview.md)
+  [architecture/architecture-overview.md](../../../../.<HIGH_ENTROPY_REDACTED>-overview.md)
   and the boundary ADR it points to; the canonical config/boundary contract
   is in [architecture/command-surface.md](command-surface.md)
   §4.4/§3.5. **Migration impact for v1 users:** project-authored or evolved

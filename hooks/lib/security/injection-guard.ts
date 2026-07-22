@@ -21,7 +21,7 @@
  *   - `unverified` is the absence state — caller must re-run sanitizer
  *
  * BINDING:
- *   docs/v2/11-security.md §D-INJECT (HK-08 cross-ref)
+ *   docs/v2/security.html §D-INJECT (HK-08 cross-ref)
  *   ADR: v2-security-and-untrusted-content (workspace wiki)
  */
 

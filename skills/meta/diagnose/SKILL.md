@@ -83,12 +83,12 @@ outside the repo and `.guild/` state.
 
 ## Adversarial review — G-diagnose (broker)
 
-G-diagnose is a **skill-internal gate** (`docs/v2/09-adversarial-review.md §Gate
+G-diagnose is a **skill-internal gate** (`docs/v2/adversarial-review.html §Gate
 ownership`): it fires here inside the `fix`/`diagnose` flow at the
 diagnosis→approval boundary. Wire the **review broker** at this boundary,
 **not** `guild:codex-review` directly: the broker is the host-agnostic front
 door, and `guild:codex-review` survives only as the internal Codex adapter the
-broker dispatches to (`docs/v2/09 §The review broker`).
+broker dispatches to (`docs/v2/adversarial-review.html §The review broker`).
 
 If `--review=cross` is present, or project config resolves `codex_review: true`,
 review the diagnosis and fix plan before asking the user to approve edits.
@@ -96,7 +96,7 @@ review the diagnosis and fix plan before asking the user to approve edits.
 Config resolution:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/read-guild-config.ts [--cwd <repo-root>] [raw /guild:fix flags]
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/read-guild-config.ts [--cwd <repo-root>] [raw /guild:fix flags]
 ```
 
 When `codex_review` resolves true the G-diagnose review is **required**, so the
@@ -202,7 +202,7 @@ prompt.
 A confirmed diagnosis whose root cause lives in the **Guild plugin itself** (any category except `unknown` where the evidence points at plugin code/hooks/commands — not at project `.guild/` state or user config) should ALSO be offered upstream, whether or not a local fix was applied — a locally-patched install still leaves every other installation broken. Route it deterministically, never by hand:
 
 1. Write the diagnosis as a one-element `RunLearningFinding[]` ARRAY in `.guild/feedback/<run-id-or-timestamp>/findings.json` (the CLI rejects a bare object) (`summary` = root cause one-liner, `details` = the report's Diagnosis section, `evidence_refs` = the plugin paths implicated, `proposed_change` = the fix plan or applied fix).
-2. Run `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/feedback-triage.ts triage --run-id <id> --findings <that file>` — it classifies (code, not judgement) and writes a **sanitized** issue draft for plugin/mixed findings.
+2. Run `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/feedback-triage.ts triage --run-id <id> --findings <that file>` — it classifies (code, not judgement) and writes a **sanitized** issue draft for plugin/mixed findings.
 3. **Ask the operator** whether Guild may file the draft as a GitHub issue (it contains no user-specific information — the redaction stack strips private paths, tokens, emails). Yes → `… file --finding <id> --approve "<operator>"`; no → `--deny`. Non-interactive ⇒ leave the draft pending and name it in the summary. The CLI refuses to file without the explicit approval.
 
 ## Output

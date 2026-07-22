@@ -43,7 +43,53 @@ export type SecurityEventType =
    * — being scoped by architect). The event type is registered here so the
    * audit-event family is whole and the host: field (HK-05) is auto-stamped.
    */
-  | "recall_quarantine";
+  | "recall_quarantine"
+  /**
+   * #58: a Guild specialist-lane `Agent` dispatch claimed a project-specialist
+   * persona (adoption prompt / GUILD_SPECIALIST+GUILD_TASK_ID) but was dispatched
+   * as subagent_type="general-purpose" WITHOUT a matching GUILD_AGENT_DEFINITION
+   * — a silently persona-stripped dispatch. Blocked fail-closed by the
+   * PreToolUse dispatch-integrity guard.
+   */
+  | "dispatch_attribution_missing"
+  /**
+   * #56: a Guild specialist lane was dispatched through the in-session `Agent`
+   * tool while the run's backend resolves to "team" (agent_mode "team", or
+   * "auto" that the D5 ladder resolves to team) AND a team substrate — tmux OR
+   * cmux — is available. That is a silent BACKEND DEGRADATION (no pane/surface,
+   * no named specialist). Blocked fail-closed by the PreToolUse
+   * backend-degradation detector; recorded with decision "allow" when the
+   * operator consciously overrode it via GUILD_ALLOW_BACKEND_DEGRADE, or when
+   * the downgrade is observable but not blockable (agent_mode "team" with no
+   * substrate — the launcher downgrades that case itself; or a lane recognised
+   * from prompt text alone). The full receipt, with the reason code, the
+   * lane-evidence tier, the substrate kind, and — when a team backend was
+   * reachable — the effective backend, is the
+   * `guild.backend_degradation.v1` record at
+   * `<runDir>/logs/backend-degradation.jsonl`; this security record is the
+   * audit-rail twin of the gate decision.
+   */
+  | "backend_degradation"
+  /**
+   * #60: a Guild specialist-lane `Agent` dispatch carried NO explicit `model`
+   * param (`reason: missing_model`), so it silently inherits the dispatching
+   * process's model — the exact post-/compact regression where an opus
+   * orchestrator turned every cheap/mid lane into an opus lane. Blocked
+   * fail-closed by the PreToolUse tier guard when the lane evidence is
+   * structured; recorded with decision "allow" when the operator consciously
+   * overrode it via GUILD_ALLOW_UNTIERED_DISPATCH, or when the missing-model
+   * lane is recognised from prompt text alone (not blockable). This twin is
+   * emitted ONLY for the genuine untiered case — a `tier_model_mismatch` or
+   * `tier_unverifiable` record carries an EXPLICIT model and is therefore NOT
+   * "untiered", so it never emits this event (a mismatch is recorded, never
+   * denied — the hook is not the authoritative multi-layer effective tier map).
+   * The full per-dispatch record — including the resurrected SKILL.md:113
+   * dispatch line `lane <task-id> · score N · tier <tier> · model <model>` and
+   * the compliant dispatches this audit twin deliberately omits — is the
+   * `guild.tier_dispatch.v1` record at `<runDir>/logs/tier-dispatch.jsonl`;
+   * this security record is the audit-rail twin of the gate decision.
+   */
+  | "tier_dispatch_untiered";
 
 /** The action Guild took for the gated tool call. */
 export type SecurityDecision = "ask" | "deny" | "allow" | "pass"
