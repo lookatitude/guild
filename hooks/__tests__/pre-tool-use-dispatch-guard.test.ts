@@ -88,10 +88,15 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
     expect(out.hookSpecificOutput.permissionDecisionReason).toContain("devops");
     expect(out.hookSpecificOutput.permissionDecisionReason).toContain("GUILD_AGENT_DEFINITION");
 
-    const events = securityEvents(tmp);
+    // Filter to the #58 event: this dispatch carries structured lane evidence
+    // (GUILD_SPECIALIST + GUILD_TASK_ID) but no model param, so #60 legitimately
+    // records a `tier_dispatch_untiered` twin for the same call — both defects
+    // are real and independently audited.
+    const events = securityEvents(tmp).filter(
+      (e) => e.event_type === "dispatch_attribution_missing",
+    );
     expect(events.length).toBe(1);
     expect(events[0].schema_version).toBe("guild.security_event.v1");
-    expect(events[0].event_type).toBe("dispatch_attribution_missing");
     expect(events[0].decision).toBe("deny");
     expect(events[0].tool).toBe("Agent");
   });
@@ -102,6 +107,9 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
         tool_name: "Agent",
         tool_input: {
           subagent_type: "general-purpose",
+          // #60: a structured Guild lane must also carry a model param; pin it so
+          // this fixture isolates the #58 dimension (#58 never reads model).
+          model: "sonnet",
           prompt: ADOPTION_PROMPT,
           env: {
             GUILD_RUN_ID: RUN,
@@ -158,6 +166,7 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
         tool_name: "Agent",
         tool_input: {
           subagent_type: "developer",
+          model: "sonnet", // #60: structured lane carries a model param
           prompt: ADOPTION_PROMPT,
           env: { GUILD_RUN_ID: RUN, GUILD_SPECIALIST: "developer", GUILD_TASK_ID: "wi-1" },
         },
@@ -331,6 +340,7 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
         tool_name: "Agent",
         tool_input: {
           subagent_type: "general-purpose",
+          model: "sonnet", // #60: structured lane carries a model param
           prompt:
             "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
             "You are dispatched as the Guild **devops** specialist for lane **nim-wi-30**. " +
@@ -356,6 +366,7 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
         tool_name: "Agent",
         tool_input: {
           subagent_type: "general-purpose",
+          model: "sonnet", // #60: structured lane carries a model param
           prompt:
             ADOPTION_PROMPT +
             " Your lane scope: `review .guild/agents/frontend.md for drift`.",
@@ -406,6 +417,7 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
         tool_name: "Agent",
         tool_input: {
           subagent_type: "general-purpose",
+          model: "sonnet", // #60: structured lane carries a model param
           prompt:
             "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
             "You are the `devops` teammate for run-id `test-run`. Your lane scope: " +

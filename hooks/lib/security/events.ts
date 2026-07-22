@@ -69,7 +69,27 @@ export type SecurityEventType =
    * `<runDir>/logs/backend-degradation.jsonl`; this security record is the
    * audit-rail twin of the gate decision.
    */
-  | "backend_degradation";
+  | "backend_degradation"
+  /**
+   * #60: a Guild specialist-lane `Agent` dispatch carried NO explicit `model`
+   * param (`reason: missing_model`), so it silently inherits the dispatching
+   * process's model — the exact post-/compact regression where an opus
+   * orchestrator turned every cheap/mid lane into an opus lane. Blocked
+   * fail-closed by the PreToolUse tier guard when the lane evidence is
+   * structured; recorded with decision "allow" when the operator consciously
+   * overrode it via GUILD_ALLOW_UNTIERED_DISPATCH, or when the missing-model
+   * lane is recognised from prompt text alone (not blockable). This twin is
+   * emitted ONLY for the genuine untiered case — a `tier_model_mismatch` or
+   * `tier_unverifiable` record carries an EXPLICIT model and is therefore NOT
+   * "untiered", so it never emits this event (a mismatch is recorded, never
+   * denied — the hook is not the authoritative multi-layer effective tier map).
+   * The full per-dispatch record — including the resurrected SKILL.md:113
+   * dispatch line `lane <task-id> · score N · tier <tier> · model <model>` and
+   * the compliant dispatches this audit twin deliberately omits — is the
+   * `guild.tier_dispatch.v1` record at `<runDir>/logs/tier-dispatch.jsonl`;
+   * this security record is the audit-rail twin of the gate decision.
+   */
+  | "tier_dispatch_untiered";
 
 /** The action Guild took for the gated tool call. */
 export type SecurityDecision = "ask" | "deny" | "allow" | "pass"

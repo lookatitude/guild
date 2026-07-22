@@ -164,10 +164,28 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * wave-2 skills round-trip byte-identical). commands + .claude-plugin pins
  * unchanged. The stale pin was observed RED locally against this tree before
  * the bump — anti-vacuity.
+ *
+ * Re-ratified 2026-07-21 (issue #60 tier guard, guild#69) — DELIBERATE:
+ * `skills/meta/execute-plan/dispatch.md` additionally documents the enforced
+ * tier contract + the guild.tier_dispatch.v1 receipt sink. SKILL.md unchanged
+ * vs guild#67 (registry round-trip re-verified, no re-extraction needed).
+ * commands + .claude-plugin pins unchanged. Stale pin observed RED locally
+ * against this tree before the bump — anti-vacuity.
+ *
+ * Re-ratified 2026-07-22 (merge-train integration, guild#69) — mechanical
+ * MERGE re-ratification on the tree carrying #61+#66+#67+#69 content
+ * (dispatch.md now documents backend-degradation AND tier contracts).
+ * Registry round-trip verified against the merged SKILL.md set; commands pin
+ * = the post-sweep value.
+ *
+ * Re-ratified 2026-07-22 (final merge-train integration, guild#69) — the
+ * merged tree now also carries guild#68 (§Expiry + lean-lead). Registry
+ * re-extracted for the fully merged SKILL.md; pins recomputed.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "7208297e98f22fd4ab250e8cc49db5e33f1f2ad4",});
+  skills: "1dbfae3ac45db8805a0f5063d788948f060bdbf3",
+});
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
