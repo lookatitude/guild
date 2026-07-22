@@ -868,6 +868,11 @@
       "event": "SessionStart"
     },
     {
+      "id": "Stop:lean-lead-guard.js",
+      "source_path": "hooks/dist/lean-lead-guard.js",
+      "event": "Stop"
+    },
+    {
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "event": "Stop"

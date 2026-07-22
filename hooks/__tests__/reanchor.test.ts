@@ -701,3 +701,99 @@ describe("reanchor — session-reanchor.js end-to-end (real bundle)", () => {
     expect(err).not.toMatch(/FATAL|fatal:/);
   });
 });
+
+describe("reanchor — LEAD-ONLY gate (oir-wi-57 round-4 fix)", () => {
+  // A dispatched specialist's own pane/subagent shares GUILD_RUN_ID with the
+  // lead, so PreCompact/SessionStart fire inside ITS session too. Reading
+  // "you are the lean LEAD, not a lane worker" there would recreate the exact
+  // role-collapse class issue #57 exists to prevent (a compacted specialist
+  // abandoning its lane to assume orchestration). This invocation's OWN
+  // GUILD_LANE_ID/GUILD_TASK_ID env is the only signal available to tell the
+  // two apart — see hooks/pre-compact.ts / hooks/session-reanchor.ts.
+  let root: string;
+  beforeEach(() => {
+    root = tmpRoot();
+  });
+  afterEach(() => cleanup(root));
+
+  function runWithEnv(bundle: string, payload: object, extraEnv: Record<string, string>): string {
+    return execFileSync("node", [path.join(DIST, bundle)], {
+      input: JSON.stringify(payload),
+      encoding: "utf8",
+      env: { ...process.env, ...extraEnv },
+    });
+  }
+
+  it("session-reanchor.js: silent for source=compact + an active OPEN run when THIS invocation is a dispatched worker's own session", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const out = runWithEnv("session-reanchor.js", { source: "compact", cwd: root }, { GUILD_TASK_ID: "T1-backend" });
+    expect(out.trim()).toBe("");
+  });
+
+  it("session-reanchor.js: GUILD_LANE_ID alone also silences a worker invocation", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const out = runWithEnv("session-reanchor.js", { source: "compact", cwd: root }, { GUILD_LANE_ID: "T1-backend" });
+    expect(out.trim()).toBe("");
+  });
+
+  it("session-reanchor.js: the lead's own invocation (no such env) still gets the header", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const out = runWithEnv("session-reanchor.js", { source: "compact", cwd: root }, {});
+    expect(out).toContain(REANCHOR_MARKER);
+  });
+
+  it("pre-compact.js: no header on stdout for an active OPEN run when THIS invocation is a dispatched worker's own session (telemetry still records lane_id)", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const runDir = path.join(root, ".guild", "runs", "run-fix-1");
+    fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
+    const out = runWithEnv(
+      "pre-compact.js",
+      { hook_event_name: "PreCompact", cwd: root },
+      { GUILD_RUN_ID: "run-fix-1", GUILD_TASK_ID: "T1-backend" },
+    );
+    expect(out.trim()).toBe(""); // no lead re-anchor header
+
+    const raw = fs
+      .readFileSync(path.join(runDir, "logs", "v1.4-events.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    const hookEvent = raw.find((e) => e.hook_name === "PreCompact");
+    expect(hookEvent.lane_id).toBe("T1-backend"); // telemetry still attributed
+  });
+
+  it("pre-compact.js: the lead's own invocation (no such env) still gets the header", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const runDir = path.join(root, ".guild", "runs", "run-fix-1");
+    fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
+    const out = runWithEnv(
+      "pre-compact.js",
+      { hook_event_name: "PreCompact", cwd: root },
+      { GUILD_RUN_ID: "run-fix-1" },
+    );
+    expect(out).toContain(REANCHOR_MARKER);
+  });
+
+  it("ROUND-5 REGRESSION: pre-compact.js — GUILD_LANE_ID=\"\" (present but blank) does not mask a valid GUILD_TASK_ID, so the header is still suppressed for the worker", () => {
+    // The exact bug: a bare `GUILD_LANE_ID ?? GUILD_TASK_ID` returns "" here,
+    // which would have been treated as "no attribution" and let the lead
+    // header through to this real worker invocation.
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const runDir = path.join(root, ".guild", "runs", "run-fix-1");
+    fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
+    const out = runWithEnv(
+      "pre-compact.js",
+      { hook_event_name: "PreCompact", cwd: root },
+      { GUILD_RUN_ID: "run-fix-1", GUILD_LANE_ID: "", GUILD_TASK_ID: "T1-backend" },
+    );
+    expect(out.trim()).toBe("");
+
+    const raw = fs
+      .readFileSync(path.join(runDir, "logs", "v1.4-events.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    const hookEvent = raw.find((e) => e.hook_name === "PreCompact");
+    expect(hookEvent.lane_id).toBe("T1-backend");
+  });
+});
