@@ -149,10 +149,17 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * (sweep-consistent) copy with the execute-plan entry re-extracted from the
  * merged SKILL.md (all 5 wave-2 skills round-trip byte-identical). commands
  * pin recomputed on the merged tree.
+ *
+ * Re-ratified 2026-07-21 (issue #56 backend-degradation detector, guild#67) —
+ * DELIBERATE: `skills/meta/execute-plan/dispatch.md` additionally documents the
+ * now-enforced refuse-don't-fallback backend contract + degradation receipts.
+ * SKILL.md unchanged vs guild#66, so skill-src/skill-registry.json needed no
+ * further re-extraction (round-trip verified). commands + .claude-plugin pins
+ * unchanged. Guard observed RED on guild#67 CI (run 29805091863) — anti-vacuity.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "9310e9a6cae2f03ec5201a11f9fffa1cdc88cd09",
+  skills: "17f8356bee2236797afa19f3f62e3888b980bc3a",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
