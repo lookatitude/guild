@@ -162,3 +162,52 @@ describe("run-trace-close — findTerminalCheckpoint — HK-09", () => {
     expect(result!.endsWith(".yaml")).toBe(true);
   });
 });
+
+// ── Import safety — #74 ─────────────────────────────────────────────────────
+//
+// run-trace-close.ts used to invoke `main()` unconditionally at module scope
+// (no `require.main === module` guard, unlike its siblings session-reanchor.ts
+// / lifecycle-gate.ts / using-guild-bootstrap.ts). That meant simply importing
+// this module — exactly what the describe block above does to reach
+// `findTerminalCheckpoint` — ran the real CLI path: it read stdin, failed to
+// parse it as JSON, hit the catch at run-trace-close.ts:137, and called the
+// REAL `process.exit(0)`. Under a full `jest --runInBand` run that killed the
+// whole worker process asynchronously, after this file's own tests had
+// already reported PASS, truncating the suite before its Tests:/Suites:
+// summary ever printed.
+describe("run-trace-close — module import does not trigger CLI side effects (regression #74)", () => {
+  const prevGuildCwd = process.env["GUILD_CWD"];
+
+  afterEach(() => {
+    if (prevGuildCwd === undefined) delete process.env["GUILD_CWD"];
+    else process.env["GUILD_CWD"] = prevGuildCwd;
+    jest.restoreAllMocks();
+  });
+
+  it("never calls process.exit merely from being required", async () => {
+    // Point any accidental CLI run at an isolated, guild-less tmpdir so it
+    // can't wander into (and mutate) this real checkout's own .guild/ state.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-rtc-import-safety-"));
+    process.env["GUILD_CWD"] = tmp;
+
+    const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+
+    jest.isolateModules(() => {
+      require("../run-trace-close");
+    });
+
+    // If the module (incorrectly) ran main() at load time, it registered
+    // stdin listeners and is awaiting `readHookStdin()`. Drive stdin's 'end'
+    // event and flush the microtask queue so any such dangling promise chain
+    // resolves before we assert — a correctly-guarded module never registers
+    // these listeners in the first place, making this a harmless no-op.
+    process.stdin.emit("end");
+    for (let i = 0; i < 5; i++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});
