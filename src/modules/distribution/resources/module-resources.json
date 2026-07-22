@@ -26,6 +26,13 @@
     },
     {
       "category": "scripts",
+      "id": "check-bundle-determinism",
+      "source_path": "scripts/check-bundle-determinism.ts",
+      "resource_path": "resources/scripts/check-bundle-determinism.ts",
+      "sha256": "c4d24dd72680f658c18e17b02a4328919410b26a5b63ef10c9d98c4d67167a33"
+    },
+    {
+      "category": "scripts",
       "id": "check-entrypoint-packaging",
       "source_path": "scripts/check-entrypoint-packaging.ts",
       "resource_path": "resources/scripts/check-entrypoint-packaging.ts",
@@ -155,7 +162,7 @@
       "id": "release-changelog",
       "source_path": "scripts/release-changelog.ts",
       "resource_path": "resources/scripts/release-changelog.ts",
-      "sha256": "787f2fe373d8c57df5bd7ebcefb8c6c8fc4e1c578e0ca9262ffa1d96a814cb90"
+      "sha256": "ef9f4bb21aee390e46b9baaaa2b8cfe84452f5af8489a9d45d072304ea7b8c76"
     },
     {
       "category": "scripts",

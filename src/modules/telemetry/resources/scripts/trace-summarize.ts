@@ -41,37 +41,86 @@ import { loadRunEvents, RunEvent } from "./lib/run-events";
  */
 type TelemetryEvent = RunEvent;
 
+// ── Event normalization ───────────────────────────────────────────────────
+
+/**
+ * Bridges the canonical v1.4 field names (`status`, `latency_ms`,
+ * `hook_name`) onto the `ok`/`ms`/`tool` fields the rest of this module
+ * reads, ONCE at ingest, without overwriting a field already present (the
+ * legacy hook-mirror shape already carries `ok`/`ms`/`tool` natively — this
+ * is a no-op for those lines). Everything downstream then reads ONE dialect:
+ * `ok`/`ms`/`tool`, tri-stated on `ok`.
+ *
+ * `status` is mapped via an explicit WHITELIST, not a `!== "n/a"` blacklist,
+ * because the v1.4 vocabulary reuses the `status` field name with three
+ * DIFFERENT enums (hooks/lib/v1.4/log-jsonl-schema.ts):
+ *   - `tool_call`  → "ok" | "err" | "n/a"
+ *   - `hook_event` → "ok" | "err"
+ *   - `phase_end`  → "ok" | "error" | "escalated"
+ * Across all three, exactly one value means success ("ok") and two spell
+ * failure ("err" for tool_call/hook_event, "error" for phase_end — the same
+ * verdict, two spellings). "n/a" and "escalated" are NOT failures: a
+ * blacklist would silently normalize a valid `phase_end status:"escalated"`
+ * into `ok:false`, reproducing this same issue's false-ERROR defect one
+ * layer up. Any status value outside the whitelist (including "n/a",
+ * "escalated", and any future/unrecognized value) leaves `ok` `undefined` —
+ * an unknown verdict, not a failure and not a success.
+ *
+ * `latency_ms`/`duration_ms` must be a non-negative number to map onto `ms`:
+ * the orphan-sweep producer (hooks/post-tool-use.ts) emits `latency_ms: -1`
+ * as an "unmeasured" sentinel on `status:"err"` rows, not a real duration.
+ *
+ * `hook_name` bridges to `tool` for `hook_event` rows so a canonical
+ * `hook_event status:"err"` (e.g. hooks/lib/context-compliance.ts) is
+ * visible in buildTimeline() the same way a `tool_call` error is, keeping
+ * the Timeline and the frontmatter error count in agreement. Mirrors
+ * mcp-servers/guild-telemetry/src/index.ts's normalizeEvent — the same fix
+ * already shipped there for this issue's sibling MCP-query symptom.
+ */
+function normalizeEvent(raw: TelemetryEvent): TelemetryEvent {
+  const e: TelemetryEvent = { ...raw };
+  if (e.ok === undefined && typeof e.status === "string") {
+    if (e.status === "ok") e.ok = true;
+    else if (e.status === "err" || e.status === "error") e.ok = false;
+  }
+  if (e.ms === undefined) {
+    if (typeof e.latency_ms === "number" && e.latency_ms >= 0) e.ms = e.latency_ms;
+    else if (typeof e.duration_ms === "number" && e.duration_ms >= 0) e.ms = e.duration_ms;
+  }
+  if (e.tool === undefined && e.event === "hook_event" && typeof e.hook_name === "string") {
+    e.tool = e.hook_name;
+  }
+  return e;
+}
+
 // ── Event predicates ───────────────────────────────────────────────────────
 
 /**
- * The failure statuses the v1.4 vocabulary actually uses:
- * `tool_call`/`hook_event` say `"err"`, `phase_end` says `"error"`
- * (v1.4-log-validator.ts TOOL_CALL_STATUS / HOOK_STATUS / PHASE_END_STATUS).
- */
-const FAILURE_STATUSES: ReadonlySet<string> = new Set(["err", "error"]);
-
-/**
- * #76 — an event FAILED only when it SAYS so, in whichever dialect it speaks.
+ * #76 — an event FAILED only when it SAYS so.
  *
- * The canonical log interleaves three shapes and only one of them has `ok`:
+ * The canonical log interleaves three shapes and only one of them natively
+ * has `ok`:
  *   - hook-mirror lines  → `ok: boolean`
- *   - v1.4 wrapped lines → `status: "ok" | "err" | "error" | …`, NO `ok`
+ *   - v1.4 wrapped lines → `status`, NO `ok` (normalizeEvent bridges it)
  *   - guild.trace.*.v1   → neither (dispatch / recall / degradation / config)
  *
  * The old `!e.ok` test collapsed all three: every `status`-dialect line and
  * every trace line became a phantom "⚠ ERROR" row, a per-specialist error
  * tally, and a bogus "skill-improvement candidates" hint — while a genuine
  * `status: "err"` was indistinguishable from a healthy `status: "ok"`. Both
- * halves are fixed here: absence of a verdict is NOT failure, and the `status`
- * dialect is now read instead of ignored. (Verified against a real run log:
- * 18 `status:"ok"` + 2 `status:"err"` tool_calls, none carrying `ok`.)
+ * halves are fixed: the `status` dialect is read (at ingest, by
+ * normalizeEvent), and absence of a verdict is NOT failure. (Verified against
+ * a real run log: 18 `status:"ok"` + 2 `status:"err"` tool_calls, none
+ * carrying `ok`.)
  *
  * This matters more now that the pane path (#76) puts a dispatch receipt on
- * the log for EVERY lane.
+ * the log for EVERY lane — a receipt carries no verdict in either dialect.
+ *
+ * Reads `ok` ONLY: every caller sees post-normalizeEvent events, so a second
+ * dialect-reader here would be a divergent duplicate of the bridge above.
  */
 function isErrorEvent(e: TelemetryEvent): boolean {
-  if (e.ok === false) return true;
-  return typeof e.status === "string" && FAILURE_STATUSES.has(e.status);
+  return e.ok === false;
 }
 
 /**
@@ -84,8 +133,17 @@ function isErrorEvent(e: TelemetryEvent): boolean {
  * contributes to NEITHER count.
  */
 function isSuccessEvent(e: TelemetryEvent): boolean {
-  if (e.ok === true) return true;
-  return e.status === "ok";
+  return e.ok === true;
+}
+
+/** `"<n>ms"` when a numeric duration is known, else `"n/a"` — never the bare `undefined` string. */
+function durationLabel(ms: unknown): string {
+  return typeof ms === "number" ? `${ms}ms` : "n/a";
+}
+
+/** The Timeline's rendering of the same tri-state isErrorEvent decides. */
+function errorLabel(e: TelemetryEvent): string {
+  return isErrorEvent(e) ? " ⚠ ERROR" : "";
 }
 
 /** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
@@ -253,9 +311,12 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
   const errors = events.filter(isErrorEvent).length;
   // ok_rate is a rate over events that ACTUALLY REPORT AN OUTCOME. The old
   // denominator was every line, so a verdict-less event silently scored as a
-  // success — and #76 makes that worse by putting one dispatch receipt per lane
-  // on the log: a pane-only run would read `ok_rate: 1` having verified nothing,
-  // and any mixed run's rate would be diluted upward by its own receipts.
+  // success — an undefined verdict (canonical status:"n/a"/"escalated", a
+  // guild.trace.*.v1 line) belongs in NEITHER the numerator nor the
+  // denominator (mirrors mcp-servers/guild-telemetry). #76 makes that worse by
+  // putting one dispatch receipt per lane on the log: a pane-only run would
+  // read `ok_rate: 1` having verified nothing, and any mixed run's rate would
+  // be diluted upward by its own receipts.
   // No verdict, no vote (same tri-state buildSpecialistActivity uses).
   const verdictBearing = events.filter((e) => isErrorEvent(e) || isSuccessEvent(e)).length;
   const okRate = verdictBearing > 0 ? (verdictBearing - errors) / verdictBearing : 1;
@@ -324,15 +385,13 @@ function buildTimeline(events: TelemetryEvent[]): string {
     const ts = event.ts;
     if (event.event === "SubagentStop") {
       const spec = event.specialist || "(main session)";
-      lines.push(`- \`${ts}\` — specialist **${spec}** completed (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — specialist **${spec}** completed (${durationLabel(event.ms)})`);
     } else if (event.tool === "Write" || event.tool === "Edit") {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = isErrorEvent(event) ? " ⚠ ERROR" : "";
-      lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — ${event.tool}${spec}${errorLabel(event)} (${durationLabel(event.ms)})`);
     } else if (event.tool) {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = isErrorEvent(event) ? " ⚠ ERROR" : "";
-      lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — ${event.tool}${spec}${errorLabel(event)} (${durationLabel(event.ms)})`);
     }
   }
   return lines.join("\n");
@@ -384,7 +443,9 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
 function buildNotableEvents(events: TelemetryEvent[]): string {
   const notable: string[] = [];
 
-  // Errors
+  // Errors — only an explicit failure verdict is an error; unknown/absent
+  // verdicts (canonical status:"n/a"/"escalated", verdict-less trace lines)
+  // are not.
   const errorEvents = events.filter(isErrorEvent);
   for (const e of errorEvents) {
     notable.push(
@@ -517,8 +578,10 @@ function main(): void {
     );
   }
 
-  // Build summary
-  const summary = buildSummary(runId, events);
+  // Build summary — normalize canonical status/latency_ms onto ok/ms first
+  // (scripts/lib/run-events.ts intentionally leaves shape interpretation to
+  // the caller; see normalizeEvent's docstring above).
+  const summary = buildSummary(runId, events.map(normalizeEvent));
 
   // Write output
   const outDir = path.dirname(outFile);

@@ -23,6 +23,7 @@
  * canonical `../lib/shared/bm25` import passes.
  */
 import { REPO, RailResult, report, walk, read, rel, proveAssert } from "./_common";
+import { parseBuildScript, parseEsbuildInvocations } from "../../scripts/check-bundle-determinism";
 import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -58,15 +59,60 @@ export function describeByteDiff(committed: Buffer, fresh: Buffer): string {
 interface Entry {
   entry: string;
   outfile: string;
+  /**
+   * The invocation's REAL flags, minus --outfile (which the rail retargets to a temp
+   * file). Replaying the build script's own flags — rather than a hardcoded copy of
+   * them — is what keeps this rail honest: a flag added to the build (e.g. the issue
+   * #75 `--alias:js-yaml=./node_modules/js-yaml` determinism pin) is picked up
+   * automatically instead of silently false-flagging every bundle as STALE.
+   */
+  flags: string[];
 }
 
-/** Parse `esbuild <entry> ... --outfile=<out>` triples out of hooks/package.json build. */
+/**
+ * Parse `esbuild <entry> <flags…> --outfile=<out>` invocations out of the
+ * hooks/package.json build script.
+ *
+ * The tokenizer is shared with scripts/check-bundle-determinism.ts (the issue #75
+ * rail) so the two rails can never disagree about what the build actually runs.
+ */
 export function parseBuildEntries(buildScript: string): Entry[] {
-  const re = /esbuild\s+(\S+)\s+--bundle[^&]*?--outfile=(\S+)/g;
   const out: Entry[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(buildScript))) out.push({ entry: m[1], outfile: m[2] });
+  for (const inv of parseEsbuildInvocations(buildScript)) {
+    if (!inv.entry || !inv.outfile) continue;
+    out.push({
+      entry: inv.entry,
+      outfile: inv.outfile,
+      flags: inv.flags.filter((f) => !f.startsWith("--outfile=")),
+    });
+  }
   return out;
+}
+
+/**
+ * Segments of the build script that parseBuildEntries could NOT model.
+ *
+ * Sharing the parser with scripts/check-bundle-determinism.ts buys consistency, but it
+ * also means a parser gap would blind BOTH rails at once. So this rail fails on any
+ * segment it cannot replay instead of rebuilding a silent subset of the bundles and
+ * reporting GREEN.
+ */
+export function unmodelledBuildSegments(buildScript: string): string[] {
+  return parseBuildScript(buildScript).unrecognized;
+}
+
+/**
+ * INDEPENDENT completeness signal — deliberately NOT the shared parser.
+ *
+ * unmodelledBuildSegments() above is still common-mode: if the shared tokenizer is fooled
+ * into modelling a decoy invocation while the shell runs a different one, both rails
+ * report the same wrong answer. This counts bare `esbuild` word occurrences in the raw
+ * script by a completely different mechanism and compares it to how many invocations were
+ * actually parsed. Any hidden or unparsed invocation makes the two disagree, and R-DIST
+ * fails on the discrepancy without needing to understand the segment at all.
+ */
+export function countEsbuildMentions(buildScript: string): number {
+  return (buildScript.match(/\besbuild\b/g) ?? []).length;
 }
 
 function esbuildBin(): string {
@@ -185,6 +231,31 @@ export function run(): RailResult {
   const entries = parseBuildEntries(pkg.scripts?.build ?? "");
   out.notes.push(`parsed ${entries.length} hooks build entrypoints from package.json`);
 
+  // Independent completeness assertion — see unmodelledBuildSegments(). A rail that
+  // rebuilds 19 of 20 bundles and reports GREEN is worse than one that fails.
+  for (const seg of unmodelledBuildSegments(pkg.scripts?.build ?? "")) {
+    out.violations.push(
+      `hooks/package.json: build segment cannot be replayed by this rail, so its output is ` +
+        `NOT byte-compared: \`${seg.slice(0, 120)}\`. Extend parseBuildScript() or express the ` +
+        `segment as a single-entry \`esbuild <entry> … --outfile=<out>\` invocation.`,
+    );
+  }
+  if (entries.length === 0) {
+    out.violations.push(
+      "hooks/package.json: no esbuild invocation parsed from the build script — refusing to " +
+        "report GREEN over a build this rail cannot read.",
+    );
+  }
+  // Cross-check the shared parser against an independent count (see countEsbuildMentions).
+  const mentions = countEsbuildMentions(pkg.scripts?.build ?? "");
+  if (mentions !== entries.length) {
+    out.violations.push(
+      `hooks/package.json: the build script mentions esbuild ${mentions} time(s) but only ` +
+        `${entries.length} invocation(s) were parsed. Some build command is NOT being byte-compared ` +
+        `— it may be wrapped, conditional, or written in a form the parser does not model.`,
+    );
+  }
+
   const bin = esbuildBin();
   const esbuildPresent = fs.existsSync(path.join(HOOKS, "node_modules", ".bin", "esbuild"));
   if (bin === "npx" && !esbuildPresent) {
@@ -192,7 +263,7 @@ export function run(): RailResult {
   } else {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "r-dist-"));
     let checked = 0;
-    for (const { entry, outfile } of entries) {
+    for (const { entry, outfile, flags } of entries) {
       const committed = path.join(HOOKS, outfile);
       if (!fs.existsSync(committed)) {
         out.violations.push(`${outfile}: committed bundle missing (entry ${entry})`);
@@ -200,24 +271,28 @@ export function run(): RailResult {
       }
       const tmpOut = path.join(tmp, `${checked}.js`);
       const args = [
-        bin === "npx" ? "esbuild" : entry,
-        ...(bin === "npx" ? [entry] : []),
-        "--bundle",
-        "--platform=node",
-        "--target=node18",
-        "--format=cjs",
+        ...(bin === "npx" ? ["esbuild"] : []),
+        entry,
+        ...flags,
         `--outfile=${tmpOut}`,
       ];
       try {
-        // Replicate the hooks build script's `export NODE_PATH=node_modules`
-        // prefix (hooks/package.json): yaml-loader's literal require("js-yaml")
-        // is imported from src/, outside hooks/node_modules' resolution walk,
-        // so without NODE_PATH the fresh build leaves it external and the
-        // byte-compare false-flags every js-yaml-carrying bundle as stale.
+        // Flags come from the build script itself (see parseBuildEntries), so this
+        // fresh build is the SAME build the committed bundle came from — including
+        // the issue #75 `--alias:js-yaml=./node_modules/js-yaml` determinism pin.
+        //
+        // NODE_PATH is deliberately NOT set. It used to be, to mirror the build
+        // script's old `export NODE_PATH=node_modules` prefix, but that ambient
+        // fallback is exactly what made the bundles environment-dependent: a bare
+        // import reached through a bundled ../scripts/** module resolved from
+        // plugin/scripts/node_modules when that sibling package happened to be
+        // installed, and fell through to hooks/node_modules when it did not. The
+        // explicit --alias pin replaced it; re-adding NODE_PATH here would hide a
+        // regression that scripts/check-bundle-determinism.ts is meant to catch.
         execFileSync(bin, args, {
           cwd: HOOKS,
           stdio: ["ignore", "ignore", "pipe"],
-          env: { ...process.env, NODE_PATH: "node_modules" },
+          env: process.env,
         });
       } catch (e: any) {
         out.violations.push(`${outfile}: esbuild failed — ${String(e?.stderr ?? e).slice(0, 200)}`);
@@ -277,9 +352,54 @@ function prove(): void {
 
   // build-script parser
   const parsed = parseBuildEntries(
-    "esbuild foo.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/foo.js && esbuild a/b.ts --bundle --format=cjs --outfile=a/dist/b.js",
+    "esbuild foo.ts --bundle --platform=node --target=node18 --format=cjs --alias:js-yaml=./node_modules/js-yaml --outfile=dist/foo.js && esbuild a/b.ts --bundle --format=cjs --outfile=a/dist/b.js",
   );
   proveAssert(parsed.length === 2 && parsed[1].outfile === "a/dist/b.js", "build-script parser extracts entry→outfile triples");
+  // The flags must be REPLAYED, not hardcoded — otherwise a determinism flag added to
+  // the build (issue #75) would make every bundle false-flag as STALE.
+  proveAssert(
+    parsed[0].flags.includes("--alias:js-yaml=./node_modules/js-yaml") &&
+      parsed[0].flags.includes("--bundle") &&
+      !parsed[0].flags.some((f) => f.startsWith("--outfile=")),
+    "build-script parser captures the invocation's REAL flags (and drops --outfile, which the rail retargets)",
+  );
+
+  // PLANTED CONTROLS for the completeness guard — a segment the parser cannot replay
+  // must be REPORTED, never silently skipped (that is how a rail goes vacuous).
+  proveAssert(
+    unmodelledBuildSegments("esbuild a.ts --bundle --format=cjs --outdir=dist").length === 1,
+    "PLANTED CONTROL: an esbuild `--outdir` invocation is reported as unmodelled (not silently skipped)",
+  );
+  proveAssert(
+    unmodelledBuildSegments("$BUILD a.ts --bundle --outfile=dist/a.js").length === 1,
+    "PLANTED CONTROL: an esbuild invocation hidden behind a shell variable is reported as unmodelled",
+  );
+  proveAssert(
+    unmodelledBuildSegments(
+      "esbuild a.ts --bundle --format=cjs --outfile=dist/a.js && esbuild b.ts --bundle --outfile=dist/b.js",
+    ).length === 0,
+    "two conventional single-entry invocations are fully modelled (the guard is not trigger-happy)",
+  );
+  proveAssert(
+    unmodelledBuildSegments(
+      "sh -c 'esbuild b.ts --bundle --outfile=elsewhere/b.js' ; true || esbuild a.ts --bundle --outfile=dist/a.js",
+    ).length >= 1,
+    "PLANTED CONTROL: a build hidden inside `sh -c '…'` behind `;`/`||` is reported, not modelled as a decoy",
+  );
+
+  // INDEPENDENT completeness signal — the decoy above is caught even if the shared parser
+  // were fooled into modelling one clean-looking invocation.
+  const decoy =
+    "sh -c 'esbuild b.ts --bundle --outfile=elsewhere/b.js' ; true || esbuild a.ts --bundle --outfile=dist/a.js";
+  proveAssert(
+    countEsbuildMentions(decoy) > parseBuildEntries(decoy).length,
+    "PLANTED CONTROL: the independent esbuild-mention count EXCEEDS the parsed invocation count on a decoy script",
+  );
+  const honest = "esbuild a.ts --bundle --format=cjs --outfile=dist/a.js";
+  proveAssert(
+    countEsbuildMentions(honest) === parseBuildEntries(honest).length,
+    "the independent count AGREES with the parser on an honest script (no false alarm)",
+  );
 
   // import canonicality — PLANTED CONTROL
   const canonical = new Set(["bm25", "graph-scoring", "share-set", "safe-object"]);
