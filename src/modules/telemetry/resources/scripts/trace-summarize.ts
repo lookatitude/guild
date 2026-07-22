@@ -41,6 +41,89 @@ import { loadRunEvents, RunEvent } from "./lib/run-events";
  */
 type TelemetryEvent = RunEvent;
 
+// ── Event predicates ───────────────────────────────────────────────────────
+
+/**
+ * The failure statuses the v1.4 vocabulary actually uses:
+ * `tool_call`/`hook_event` say `"err"`, `phase_end` says `"error"`
+ * (v1.4-log-validator.ts TOOL_CALL_STATUS / HOOK_STATUS / PHASE_END_STATUS).
+ */
+const FAILURE_STATUSES: ReadonlySet<string> = new Set(["err", "error"]);
+
+/**
+ * #76 — an event FAILED only when it SAYS so, in whichever dialect it speaks.
+ *
+ * The canonical log interleaves three shapes and only one of them has `ok`:
+ *   - hook-mirror lines  → `ok: boolean`
+ *   - v1.4 wrapped lines → `status: "ok" | "err" | "error" | …`, NO `ok`
+ *   - guild.trace.*.v1   → neither (dispatch / recall / degradation / config)
+ *
+ * The old `!e.ok` test collapsed all three: every `status`-dialect line and
+ * every trace line became a phantom "⚠ ERROR" row, a per-specialist error
+ * tally, and a bogus "skill-improvement candidates" hint — while a genuine
+ * `status: "err"` was indistinguishable from a healthy `status: "ok"`. Both
+ * halves are fixed here: absence of a verdict is NOT failure, and the `status`
+ * dialect is now read instead of ignored. (Verified against a real run log:
+ * 18 `status:"ok"` + 2 `status:"err"` tool_calls, none carrying `ok`.)
+ *
+ * This matters more now that the pane path (#76) puts a dispatch receipt on
+ * the log for EVERY lane.
+ */
+function isErrorEvent(e: TelemetryEvent): boolean {
+  if (e.ok === false) return true;
+  return typeof e.status === "string" && FAILURE_STATUSES.has(e.status);
+}
+
+/**
+ * The other half of the tri-state: an event SUCCEEDED only when it says so.
+ *
+ * "Not an error" is not "success". A dispatch receipt, a `run_started` marker
+ * and a recall trace all carry no verdict at all — folding them into the OK
+ * tally would replace one lie (every trace line is an error) with its mirror
+ * image (every trace line is a passing tool call). A verdict-less event
+ * contributes to NEITHER count.
+ */
+function isSuccessEvent(e: TelemetryEvent): boolean {
+  if (e.ok === true) return true;
+  return e.status === "ok";
+}
+
+/** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
+function isDispatchEvent(e: TelemetryEvent): boolean {
+  return e.schema_version === "guild.trace.dispatch.v1";
+}
+
+/**
+ * A CONFIRMED dispatch: the lane actually reached a backend.
+ *
+ * A bare `backend: "unknown"` receipt is excluded on purpose. write-task-run.ts
+ * emits one per TASK before any routing decision ("backend not determinable at
+ * emit time" — its own contract), so they are pre-dispatch INTENT, and they
+ * count in a different unit than the per-lane receipts the backends emit.
+ * Mixing the two would report `[tmux: 3, unknown: 5]` for a three-lane run.
+ */
+function isConfirmedDispatch(e: TelemetryEvent): boolean {
+  if (!isDispatchEvent(e)) return false;
+  // A surface the closed `backend` enum cannot name (cmux) rides
+  // `backend: "unknown"` and identifies itself in `pane_backend`. Its presence
+  // is what separates such a receipt from a pre-routing intent, which carries
+  // "unknown" and nothing else. The producer-side cross-field invariant
+  // (validateDispatchEvent) guarantees a `pane_backend` line really is a
+  // confirmed dispatch: backend "unknown" AND backend_rung >= 1.
+  if (typeof e.pane_backend === "string" && e.pane_backend !== "") return true;
+  return typeof e.backend === "string" && e.backend !== "" && e.backend !== "unknown";
+}
+
+/**
+ * The surface to report a dispatch under: the concrete `pane_backend` when the
+ * closed `backend` enum could not name it, else `backend` itself. Absent on
+ * every pre-#76 event, which simply report their `backend`.
+ */
+function dispatchSurface(e: TelemetryEvent): string {
+  if (typeof e.pane_backend === "string" && e.pane_backend) return e.pane_backend;
+  return e.backend as string;
+}
+
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
 function parseArgs(argv: string[]): {
@@ -75,6 +158,16 @@ interface RunStats {
   eventCount: number;
   specialists: string[];
   toolCounts: Array<{ tool: string; count: number }>;
+  /**
+   * #76 — DISTINCT LANES dispatched per surface ("tmux"/"cmux" for a visible
+   * pane, "remote" for an SSH lane, "agent" for the in-session Agent path).
+   * Pre-routing `unknown` intents are excluded — see isConfirmedDispatch.
+   * On a pane run these ARE the specialist signal: the panes are separate host
+   * sessions, so none of their tool calls land in this log.
+   */
+  dispatchCounts: Array<{ backend: string; count: number }>;
+  /** #76 — raw receipt lines per surface, so retry volume is not hidden. */
+  dispatchReceiptCounts: Array<{ backend: string; count: number }>;
   filesTouchedCount: number;
   errors: number;
   okRate: number;
@@ -90,6 +183,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
       eventCount: 0,
       specialists: [],
       toolCounts: [],
+      dispatchCounts: [],
+      dispatchReceiptCounts: [],
       filesTouchedCount: 0,
       errors: 0,
       okRate: 1,
@@ -121,12 +216,49 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     .map(([tool, count]) => ({ tool, count }))
     .sort((a, b) => b.count - a.count || a.tool.localeCompare(b.tool));
 
+  // #76: CONFIRMED dispatches grouped by surface, sorted count-desc then alpha
+  // (same ordering contract as toolCounts). BOTH numbers are reported, because
+  // they answer different questions and neither may hide the other:
+  //   dispatched_lanes   — distinct lanes (keyed task_id, else specialist).
+  //                        "How many specialists ran?" A retry must not inflate.
+  //   dispatch_receipts  — raw receipt lines. "How many dispatch attempts were
+  //                        committed?" Retry volume stays visible.
+  const dispatchLanes = new Map<string, Set<string>>();
+  const receiptMap = new Map<string, number>();
+  for (const event of events) {
+    if (!isConfirmedDispatch(event)) continue;
+    const surface = dispatchSurface(event);
+    receiptMap.set(surface, (receiptMap.get(surface) ?? 0) + 1);
+    const lane =
+      (typeof event.task_id === "string" && event.task_id) ||
+      (typeof event.specialist === "string" && event.specialist) ||
+      "";
+    if (!lane) continue;
+    if (!dispatchLanes.has(surface)) dispatchLanes.set(surface, new Set());
+    dispatchLanes.get(surface)!.add(lane);
+  }
+  const bySurface = (a: { backend: string; count: number }, b: { backend: string; count: number }) =>
+    b.count - a.count || a.backend.localeCompare(b.backend);
+  const dispatchCounts = Array.from(dispatchLanes.entries())
+    .map(([backend, lanes]) => ({ backend, count: lanes.size }))
+    .sort(bySurface);
+  const dispatchReceiptCounts = Array.from(receiptMap.entries())
+    .map(([backend, count]) => ({ backend, count }))
+    .sort(bySurface);
+
   const filesTouchedCount = events.filter(
     (e) => e.tool === "Write" || e.tool === "Edit"
   ).length;
 
-  const errors = events.filter((e) => e.ok === false).length;
-  const okRate = events.length > 0 ? (events.length - errors) / events.length : 1;
+  const errors = events.filter(isErrorEvent).length;
+  // ok_rate is a rate over events that ACTUALLY REPORT AN OUTCOME. The old
+  // denominator was every line, so a verdict-less event silently scored as a
+  // success — and #76 makes that worse by putting one dispatch receipt per lane
+  // on the log: a pane-only run would read `ok_rate: 1` having verified nothing,
+  // and any mixed run's rate would be diluted upward by its own receipts.
+  // No verdict, no vote (same tri-state buildSpecialistActivity uses).
+  const verdictBearing = events.filter((e) => isErrorEvent(e) || isSuccessEvent(e)).length;
+  const okRate = verdictBearing > 0 ? (verdictBearing - errors) / verdictBearing : 1;
 
   return {
     runId,
@@ -136,6 +268,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     eventCount: events.length,
     specialists,
     toolCounts,
+    dispatchCounts,
+    dispatchReceiptCounts,
     filesTouchedCount,
     errors,
     okRate: Math.round(okRate * 1000) / 1000,
@@ -155,6 +289,15 @@ function buildFrontmatter(stats: RunStats): string {
       ? stats.specialists.join(", ")
       : "(none)";
 
+  // #76: a pane run's dispatch signal, so "10 lanes ran" is answerable from the
+  // frontmatter alone even though no pane tool call reached this log.
+  const surfaceLine = (rows: Array<{ backend: string; count: number }>): string =>
+    rows.length > 0
+      ? rows.map(({ backend, count }) => `${backend}: ${count}`).join(", ")
+      : "(none)";
+  const dispatchedLanesLine = surfaceLine(stats.dispatchCounts);
+  const dispatchReceiptsLine = surfaceLine(stats.dispatchReceiptCounts);
+
   return [
     "---",
     `run_id: ${stats.runId}`,
@@ -163,6 +306,8 @@ function buildFrontmatter(stats: RunStats): string {
     `duration_ms: ${stats.durationMs}`,
     `event_count: ${stats.eventCount}`,
     `specialists_dispatched: [${specialistsLine}]`,
+    `dispatched_lanes: [${dispatchedLanesLine}]`,
+    `dispatch_receipts: [${dispatchReceiptsLine}]`,
     `tools_used: [${toolsLine}]`,
     `files_touched_count: ${stats.filesTouchedCount}`,
     `errors: ${stats.errors}`,
@@ -182,11 +327,11 @@ function buildTimeline(events: TelemetryEvent[]): string {
       lines.push(`- \`${ts}\` — specialist **${spec}** completed (${event.ms}ms)`);
     } else if (event.tool === "Write" || event.tool === "Edit") {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = event.ok ? "" : " ⚠ ERROR";
+      const status = isErrorEvent(event) ? " ⚠ ERROR" : "";
       lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
     } else if (event.tool) {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = event.ok ? "" : " ⚠ ERROR";
+      const status = isErrorEvent(event) ? " ⚠ ERROR" : "";
       lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
     }
   }
@@ -212,8 +357,9 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
       s.toolCalls++;
       if (event.tool === "Write" || event.tool === "Edit") s.fileOps++;
     }
-    if (!event.ok) s.errors++;
-    else s.ok++;
+    // Tri-state: failed / succeeded / no verdict at all (counted in neither).
+    if (isErrorEvent(event)) s.errors++;
+    else if (isSuccessEvent(event)) s.ok++;
   }
 
   // Sort: named specialists alphabetically first, then (main session)
@@ -239,7 +385,7 @@ function buildNotableEvents(events: TelemetryEvent[]): string {
   const notable: string[] = [];
 
   // Errors
-  const errorEvents = events.filter((e) => !e.ok);
+  const errorEvents = events.filter(isErrorEvent);
   for (const e of errorEvents) {
     notable.push(
       `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"} — digest: ${e.payload_digest}`
@@ -264,7 +410,7 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
 
   // Skill-improvement candidates: specialists with errors
   const specialistsWithErrors = Array.from(
-    new Set(events.filter((e) => !e.ok && e.specialist).map((e) => e.specialist))
+    new Set(events.filter((e) => isErrorEvent(e) && e.specialist).map((e) => e.specialist))
   ).sort();
   if (specialistsWithErrors.length > 0) {
     hints.push(

@@ -1754,6 +1754,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/host/pane-dispatch-trace",
+      "source_path": "scripts/lib/host/pane-dispatch-trace.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/host/remote-backend",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "kind": "lib"
