@@ -3,21 +3,27 @@
  * hooks/pre-compact.ts
  *
  * Event:   PreCompact
- * Purpose: No-op log-emitter per architect's audit. PreCompact fires
- *          before Claude Code compacts conversation context (clearing
- *          the working buffer). For Guild this is a useful trace
- *          point: any in-flight phase/lane state should be flushed to
- *          .guild/runs/<run-id>/logs before the host buffers reset.
+ * Purpose: Two jobs. (1) Trace point: PreCompact fires before Claude Code
+ *          compacts conversation context (clearing the working buffer), so we
+ *          emit a `hook_event` JSONL line via T3c's appendEvent() to capture the
+ *          compact boundary in the audit log. (2) Gap G1 re-anchor (oir-wi-00):
+ *          when an active OPEN run exists under the resolved guild root, emit a
+ *          compact re-anchor header (lead posture, agent_mode/backend,
+ *          named-specialist dispatch, tier contract, next pending gate,
+ *          guild:resume pointer) as `hookSpecificOutput.additionalContext` into
+ *          the context the host preserves.
  *
- *          The handler emits a `hook_event` JSONL line via T3c's
- *          appendEvent() so the audit log captures the compact
- *          boundary. Falls through cleanly when GUILD_RUN_ID is unset
- *          (host runs outside a tracked /guild lifecycle session).
+ *          PreCompact fires BEFORE compaction, so the injected header is
+ *          best-effort — the RELIABLE surface is the SessionStart source=compact
+ *          branch (hooks/session-reanchor.ts), which fires AFTER compaction. We
+ *          ship BOTH per the work-item. Both fall through cleanly (no stdout, no
+ *          log) when no active OPEN run exists — zero noise.
  *
  * Stdin:   JSON — Claude Code PreCompact hook payload.
- * Stdout:  Silent (Claude Code may consume it).
+ * Stdout:  The re-anchor additionalContext envelope when an active OPEN run
+ *          exists; otherwise silent.
  * Stderr:  Diagnostic warnings only.
- * Exit:    Always 0 — telemetry must not block.
+ * Exit:    Always 0 — telemetry / re-anchor must not block compaction.
  *
  * Run-id resolution: process.env.GUILD_RUN_ID. Unset → fall through.
  *
@@ -32,6 +38,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import {
+  buildReanchorHeader,
+  buildAdditionalContextEnvelope,
+} from "./lib/reanchor.js";
 import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header. Hook events are not LLM calls → no tokens.
@@ -91,16 +101,46 @@ export async function main(): Promise<void> {
   let payload: PreCompactPayload = {};
   try {
     if (raw.trim().length > 0) {
-      payload = JSON.parse(raw.trim()) as PreCompactPayload;
+      const parsed: unknown = JSON.parse(raw.trim());
+      // Type-guard the JSON boundary: VALID JSON can be null / a number / an
+      // array, and casting straight to the payload interface would make the
+      // `payload.cwd` read below throw. Only a plain object is usable; anything
+      // else degrades to an empty payload (bare event, cwd from env/process).
+      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+        payload = parsed as PreCompactPayload;
+      }
     }
   } catch {
     process.stderr.write("warn: [pre-compact] invalid JSON on stdin; emitting bare event.\n");
   }
 
-  const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  // `cwd` is only usable when it is actually a string.
+  const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : undefined;
+  const cwd = process.env["GUILD_CWD"] ?? payloadCwd ?? process.cwd();
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // Gap G1 (oir-wi-00): emit a compact re-anchor header into the context the
+  // host preserves BEFORE it compacts. Best-effort — PreCompact fires before
+  // compaction, so this may or may not survive; the reliable surface is the
+  // SessionStart source=compact branch (hooks/session-reanchor.ts). We ship
+  // BOTH per the work-item. Zero-noise: buildReanchorHeader returns null when
+  // there is no active OPEN run, and we write nothing. Wrapped so a re-anchor
+  // failure never blocks compaction (telemetry emit below still runs).
+  try {
+    const header = buildReanchorHeader(guildRoot);
+    if (header !== null) {
+      process.stdout.write(buildAdditionalContextEnvelope("PreCompact", header));
+    }
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-compact] re-anchor header build failed: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+  }
+
   const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(

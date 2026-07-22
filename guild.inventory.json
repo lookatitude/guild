@@ -853,6 +853,11 @@
       "event": "SessionStart"
     },
     {
+      "id": "SessionStart:session-reanchor.js",
+      "source_path": "hooks/dist/session-reanchor.js",
+      "event": "SessionStart"
+    },
+    {
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "event": "SessionStart"
@@ -974,6 +979,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-entrypoint-packaging",
+      "source_path": "scripts/check-entrypoint-packaging.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-lane-liveness",
       "source_path": "scripts/check-lane-liveness.ts",
       "kind": "cli"
@@ -981,6 +991,11 @@
     {
       "id": "check-module-ownership",
       "source_path": "scripts/check-module-ownership.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "check-plugin-root-fallback",
+      "source_path": "scripts/check-plugin-root-fallback.ts",
       "kind": "cli"
     },
     {

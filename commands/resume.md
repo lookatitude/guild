@@ -41,7 +41,7 @@ resumed run: read it back with `readResolvedSettingsSnapshot(runId, { cwd })`.
 
 **Re-enter resumable dead lanes (R-016).** Before locating the next pending
 gate, list any resumable dead lanes for the active run:
-`npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/resume-lanes.ts <runDir> --json` (the
+`npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/resume-lanes.ts <runDir> --json` (the
 `--json` flag is required for the parseable bare array; without it the CLI
 prints a human table — scans
 `<runDir>/lanes/*/resume.json`, applies the `guild.lane_resume.v1` version

@@ -8,7 +8,14 @@
       "id": "PreCompact:pre-compact.js",
       "source_path": "hooks/dist/pre-compact.js",
       "resource_path": "resources/hooks/dist/pre-compact.js",
-      "sha256": "510b52fad104c361ca1b105d84bb97bef297b0c95c0cff54069ebb9376271f4a"
+      "sha256": "6ee7b97f3bf87f3d7d0b2acb7320c05947e865575f5d3590999d010e4b3628eb"
+    },
+    {
+      "category": "hooks",
+      "id": "SessionStart:session-reanchor.js",
+      "source_path": "hooks/dist/session-reanchor.js",
+      "resource_path": "resources/hooks/dist/session-reanchor.js",
+      "sha256": "ee1b7986ed44e925b4c33349dd520aaf4ea16bad83b06e8c0d3617b5918bfbd8"
     },
     {
       "category": "scripts",

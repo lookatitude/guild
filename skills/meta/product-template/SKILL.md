@@ -28,11 +28,11 @@ it writes only under the run's `.guild/explore/` and `.guild/define/` artifact d
 - Planning lanes, composing a team, or editing code / runtime files.
 
 ## Available templates
-The product templates live at **`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/templates/products/<id>.template.json`**
+The product templates live at **`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/templates/products/<id>.template.json`**
 (each a `guild.template.v1`). Discover the set with:
 
 ```
-ls "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/templates/products/"
+ls "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/templates/products/"
 ```
 
 Each template carries the AC37 field set — `specialists`, `context_questions`,
@@ -47,10 +47,10 @@ template or a skeleton that would not pass `validateExploreV1` / `validateDefine
 
 ```
 # write .guild/explore/<slug>.json + .guild/define/<slug>.json (slug defaults to the template id)
-npx tsx "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/instantiate-template.ts" <template-id> --slug=<slug> --cwd="$PWD"
+npx tsx "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/instantiate-template.ts" <template-id> --slug=<slug> --cwd="$PWD"
 
 # or preview the pair without writing:
-npx tsx "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/instantiate-template.ts" <template-id> --stdout
+npx tsx "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/instantiate-template.ts" <template-id> --stdout
 ```
 
 - `<template-id>` — a stable id (e.g. `cli-tool`, `web-app`), OR an explicit path to a
@@ -77,7 +77,7 @@ validators.
 Both are **seeds**: they are deliberately generic (the template's archetype defaults). Hand
 them to `guild:product-explore` to pressure-test the idea's specifics, then to
 `guild:product-define` to harden the PRD. The schema sources are
-`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/{explore,define,template}-schema.ts`.
+`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/{explore,define,template}-schema.ts`.
 
 ## Hard rules
 - Never edit a runtime permission, skill, or agent file — instantiation is side-effect-free

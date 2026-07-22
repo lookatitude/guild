@@ -24,7 +24,7 @@ Two fields:
    (or regenerate it on demand if stale/absent):
 
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/analyze-runs.ts --cwd <repo-root>
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/analyze-runs.ts --cwd <repo-root>
    ```
 
    Its `proposals[]` entries name each skill at or above `--min-runs` (default 3)
@@ -36,7 +36,7 @@ Two fields:
 
 Ten ordered steps. Each step's input and output is explicit so a later step can re-read the prior artifact without re-executing.
 
-1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/evolve-loop.ts --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — copies it to `.guild/skill-versions/<skill>/v<N>/` (`N` increments monotonically), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/skill-versions/<skill>/v<N>/` + `.guild/evolve/<run-id>/pipeline.md`.
+1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/evolve-loop.ts --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — copies it to `.guild/skill-versions/<skill>/v<N>/` (`N` increments monotonically), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/skill-versions/<skill>/v<N>/` + `.guild/evolve/<run-id>/pipeline.md`.
 
    **Snapshot completeness verification (mandatory, defense-in-depth).** `copyDirRecursive` does copy the whole resolved dir — but `findLiveSkillDir` can resolve DIFFERENT dirs (project instance, source tree, or a rendered plugin-install path), and the orchestrator must never assume the resolved dir was the intended one or that the copy captured every companion. Immediately after the CLI runs, diff the snapshot's file list against the intended live skill dir (companions like `dispatch.md`-siblings included); on any mismatch, stop and reconcile (wrong dir resolved → re-run against the right one; genuinely missing file → supplement from VCS) before step 2 proceeds. The check costs one `ls`; an unverified snapshot silently corrupts every downstream A-variant artifact. *(Provenance note: an earlier cycle wrongly asserted the script skips companions — a probe disproved it; the verification stands on the resolution-variance rationale above, not on that withdrawn claim.)*
 
