@@ -26,6 +26,18 @@ import {
   defaultRun,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
+// P1-L10 permission-policy machinery (issue #54): resolve the host-native
+// launch flags a spawned Claude team pane should carry, instead of dropping
+// the resolved host_mode on the floor and launching every pane bare (which
+// stalls an unattended team run on a native permission prompt nobody is
+// watching). See resolveTeamPaneHostMode's own comment for the team-pane
+// "ask" -> "bypass_all" default and why it does not weaken Guild's own gates.
+import {
+  resolveHostLaunch,
+  RUNTIME_DEFAULT_CONFIG,
+  type RuntimePermissionConfig,
+} from "../permission-policy";
+import type { HostMode } from "../permission-policy-schema";
 
 // ── Pure command composition helpers ─────────────────────────────────────────
 
@@ -68,6 +80,60 @@ export function isDebugShellTitle(title: string): boolean {
   return title.startsWith(DEBUG_PANE_TITLE_PREFIX);
 }
 
+// ── Host launch-flag resolution for spawned LOCAL tmux team panes (issue #54) ─
+//
+// A spawned team pane is unattended by definition — no operator sits in it to
+// answer a native permission prompt. The capability_scope + security PreToolUse
+// hooks are the REAL guardrail (permission-policy.ts's orthogonality invariant:
+// host_mode can never lift a Guild gate), so a host-native "ask" prompt on a
+// team pane adds no safety, only a stall.
+//
+// Scope, deliberately narrow: this overlay is wired ONLY inside
+// composeTmuxCommands below — for EVERY Claude pane it builds, whether or not
+// `resolveAdapter` is wired for other (non-Claude) panes in the same local
+// team. composeTmuxCommands is exclusively the LOCAL tmux path
+// (`TmuxTeamBackend.plan()`); `RemoteTeamBackend` (remote-backend.ts) owns an
+// entirely separate `commandFor` and never calls into this file's
+// composeTmuxCommands, so this can never reach a remote/SSH pane. Guild's own
+// hooks are certainly installed for any local tmux pane (same local Claude
+// Code session that's running them). `paneCommand`'s own DEFAULT stays
+// byte-identical to its pre-fix behavior (bare `claude <prompt>`, no flags) —
+// so every OTHER caller is untouched:
+//   - `ClaudePaneAdapter.command()` (pane-adapter.ts) delegates to
+//     `paneCommand` with no launchArgs, used by `RemoteTeamBackend` for ALL
+//     remote (SSH) dispatch. Remote preflight only verifies the binary +
+//     tmux, not that Guild's hook/plugin is installed on the remote host —
+//     so silently bypassing native prompts there would remove the host's own
+//     guardrail without a proven Guild-side one behind it. Left unchanged; a
+//     real fix needs remote hook-installation verification first (a
+//     separate, tracked followup).
+//   - Codex is never touched here at all (see resolveClaudeTeamLaunchArgs).
+
+/**
+ * Resolve the host_mode a spawned team pane should launch under, given the
+ * project's `RuntimePermissionConfig`. An explicit non-"ask" `host_mode` (an
+ * operator opting a run into a stricter posture) is honored verbatim. The
+ * unset/default "ask" lifts to "bypass_all" for team panes specifically —
+ * matching the field-verified interim patch from issue #54.
+ */
+export function resolveTeamPaneHostMode(config: RuntimePermissionConfig): HostMode {
+  const configured = config.host_mode ?? "ask";
+  return configured === "ask" ? "bypass_all" : configured;
+}
+
+/**
+ * The Claude launch argv (e.g. `["--permission-mode", "bypassPermissions"]`)
+ * for a local team pane. Hard-coded to `"claude"` — NOT a generic per-host
+ * resolver — so this can never be asked to produce a Codex (or any other
+ * host's) flag: there is no parameter through which a caller could request
+ * one.
+ */
+export function resolveClaudeTeamLaunchArgs(
+  config: RuntimePermissionConfig = RUNTIME_DEFAULT_CONFIG,
+): string[] {
+  return resolveHostLaunch("claude", resolveTeamPaneHostMode(config)).args;
+}
+
 export function paneCommand(
   prompt: string,
   runId: string,
@@ -75,6 +141,17 @@ export function paneCommand(
   taskId?: string,
   specialist?: string,
   debug: boolean = paneDebugEnabled(),
+  /**
+   * Extra argv spliced between the binary and the prompt (issue #54). Empty
+   * by default — a caller that doesn't pass this gets the ORIGINAL,
+   * pre-issue-#54 command, byte-for-byte. Only composeTmuxCommands's local
+   * `hostKind === "claude"` branch supplies a non-empty value today
+   * (`resolveClaudeTeamLaunchArgs`), regardless of whether a resolver is
+   * wired for other (non-Claude) panes in the same local team; see this
+   * file's header comment above `resolveTeamPaneHostMode` for why every
+   * other caller (ClaudePaneAdapter/remote dispatch) stays untouched.
+   */
+  launchArgs: string[] = [],
 ): string {
   const taskFragment =
     taskId !== undefined && taskId.length > 0
@@ -101,13 +178,14 @@ export function paneCommand(
   // Debug ON: retitle the pane to the `guild-debug:` sentinel FIRST (so liveness
   // checks never mistake it for a worker), print an unmistakable notice, then drop
   // into a shell for the operator.
+  const launchFragment = launchArgs.length > 0 ? `${launchArgs.map(shellQuote).join(" ")} ` : "";
   const debugTitle = DEBUG_PANE_TITLE_PREFIX + (specialist !== undefined && specialist.length > 0 ? specialist : "orchestrator");
   const teardownTail = debug
-    ? `claude ${shellQuote(prompt)}; ` +
+    ? `claude ${launchFragment}${shellQuote(prompt)}; ` +
       `tmux select-pane -t "$TMUX_PANE" -T ${shellQuote(debugTitle)} 2>/dev/null || true; ` +
       `echo ${shellQuote("[GUILD_PANE_DEBUG] worker process exited — this is an operator debug shell, NOT a live worker.")}; ` +
       `exec $SHELL`
-    : `claude ${shellQuote(prompt)}`;
+    : `claude ${launchFragment}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
@@ -130,6 +208,8 @@ export function composeTmuxCommands(opts: {
   resolveAdapter?: AdapterResolver;
   orchestratorHostKind?: HostKind;
   teamPath?: string;
+  /** Issue #54: the project's permission config, feeding paneCommand's host launch-flag resolution. */
+  permissionConfig?: RuntimePermissionConfig;
 }): ParsedTmuxCommand[] {
   const {
     mode,
@@ -141,14 +221,44 @@ export function composeTmuxCommands(opts: {
     resolveAdapter,
     orchestratorHostKind = "claude",
     teamPath,
+    permissionConfig = RUNTIME_DEFAULT_CONFIG,
   } = opts;
   const cmds: ParsedTmuxCommand[] = [];
 
   const commandFor = (spec: Specialist | null): string => {
     const hostKind: HostKind = spec?.host_kind ?? orchestratorHostKind;
     const prompt = buildPrompt(slug, runId, spec, teamPath, hostKind);
-    if (!resolveAdapter)
+    // Issue #54: EVERY local Claude pane gets the resolved launch flags —
+    // whether or not `resolveAdapter` is wired for OTHER (non-Claude) panes
+    // in this same local team. composeTmuxCommands is exclusively the LOCAL
+    // tmux path: RemoteTeamBackend (remote-backend.ts) owns its own separate
+    // commandFor and never calls this function, so this branch can never run
+    // for a remote/SSH pane — that's what keeps this scoped to the verified-
+    // safe case (Guild's own hooks are certainly installed locally) without
+    // needing to thread anything through pane-adapter.ts's ClaudePaneAdapter
+    // (used by both local-mixed-host AND remote dispatch, so it stays
+    // untouched — see resolveClaudeTeamLaunchArgs's header comment).
+    // Resolved lazily, only when actually used, so there is no path where
+    // this computation happens without a claude pane consuming it.
+    if (hostKind === "claude") {
+      return paneCommand(
+        prompt,
+        runId,
+        spec?.capability_scope,
+        spec?.taskId,
+        spec?.name,
+        undefined,
+        resolveClaudeTeamLaunchArgs(permissionConfig),
+      );
+    }
+    if (!resolveAdapter) {
+      // Pre-#54 fallback contract, preserved verbatim: no resolver and a
+      // non-claude host_kind (should not occur via agent-team-launcher.ts's
+      // `adapterBacked` gate, but composeTmuxCommands is also called
+      // directly in tests) — paneCommand always builds a plain `claude`
+      // invocation with no launch flags.
       return paneCommand(prompt, runId, spec?.capability_scope, spec?.taskId, spec?.name);
+    }
     return resolveAdapter(hostKind).command({
       name: spec?.name ?? "orchestrator",
       scope: spec?.scope ?? "",
@@ -367,6 +477,14 @@ export class TmuxTeamBackend implements TeamBackend {
   }
 
   plan(req: TeamLaunchRequest): TmuxPlan {
+    // Issue #54: composeTmuxCommands defaults permissionConfig to
+    // RUNTIME_DEFAULT_CONFIG (host_mode unset), which resolveTeamPaneHostMode
+    // lifts to "bypass_all" for a team pane — the field-verified fix. There is
+    // no settings.json-backed host_mode to read yet (host_mode is not a
+    // registered key in the canonical config schema — see
+    // readRuntimePermissionConfig's own comment); `RuntimePermissionConfig`
+    // remains available for a caller to pass its own resolved config in
+    // programmatically once that surface exists.
     const commands = composeTmuxCommands({
       mode: req.mode,
       targetName: req.targetName,
