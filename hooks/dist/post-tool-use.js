@@ -708,6 +708,22 @@ function resolveDispatchAttribution(toolInput) {
   return out;
 }
 
+// lib/lane-attribution.ts
+var UNATTRIBUTED_WORKER_LANE_ID = "unattributed-worker";
+function isWorkerInvocation(env = process.env) {
+  const laneId = env["GUILD_LANE_ID"];
+  const taskId = env["GUILD_TASK_ID"];
+  return typeof laneId === "string" && laneId.length > 0 || typeof taskId === "string" && taskId.length > 0;
+}
+function resolveLaneAttribution(env = process.env) {
+  for (const candidate of [env["GUILD_LANE_ID"], env["GUILD_TASK_ID"]]) {
+    if (typeof candidate === "string" && candidate.length > 0 && isSafeLaneId(candidate)) {
+      return candidate;
+    }
+  }
+  return isWorkerInvocation(env) ? UNATTRIBUTED_WORKER_LANE_ID : void 0;
+}
+
 // lib/security/scrubbed-write.ts
 var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
@@ -1277,8 +1293,7 @@ async function main() {
     const earlyRunId = resolveRunId(guildRoot);
     const earlyRunIdSafe = typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId) ? earlyRunId : void 0;
     const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path7.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
-    const earlyRawLaneId = process.env["GUILD_LANE_ID"];
-    const earlyLaneId = typeof earlyRawLaneId === "string" && earlyRawLaneId.length > 0 && isSafeLaneId(earlyRawLaneId) ? earlyRawLaneId : void 0;
+    const earlyLaneId = resolveLaneAttribution();
     try {
       runGuildArtifactScrub(payload, guildRoot, earlyRunDir, earlyRunIdSafe, earlyLaneId);
     } catch (err) {
@@ -1309,6 +1324,7 @@ async function main() {
       "warn: [post-tool-use] invalid GUILD_LANE_ID \u2014 omitting lane_id.\n"
     );
   }
+  const attributionLaneId = resolveLaneAttribution();
   const tsPost = (/* @__PURE__ */ new Date()).toISOString();
   try {
     const sweep = sweepOrphanedSidecarFull(runDir);
@@ -1348,7 +1364,7 @@ async function main() {
         run_id: runId,
         tool: toolName,
         result_excerpt_redacted: resultExcerpt(payload),
-        ...laneId !== void 0 ? { lane_id: laneId } : {},
+        ...attributionLaneId !== void 0 ? { lane_id: attributionLaneId } : {},
         ...typeof payload.duration_ms === "number" ? { latency_ms_override: payload.duration_ms } : {}
       });
     } else {
@@ -1358,6 +1374,9 @@ async function main() {
         status: isOk(payload),
         result_excerpt_redacted: resultExcerpt(payload)
       });
+      if (attributionLaneId !== void 0) {
+        event.lane_id = attributionLaneId;
+      }
     }
     const isLlmCallTool = toolName === "Agent" || toolName === "Skill";
     const tokens = isLlmCallTool ? normalizeTokens(payload.tokens ?? payload.usage) : void 0;
@@ -1365,7 +1384,7 @@ async function main() {
       runId,
       eventType: "tool_call",
       ts: tsPost,
-      actorId: laneId ?? "main",
+      actorId: attributionLaneId ?? "main",
       tokens
     });
     if (toolName === "Agent") {

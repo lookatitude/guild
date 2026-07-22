@@ -156,11 +156,18 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * SKILL.md unchanged vs guild#66, so skill-src/skill-registry.json needed no
  * further re-extraction (round-trip verified). commands + .claude-plugin pins
  * unchanged. Guard observed RED on guild#67 CI (run 29805091863) — anti-vacuity.
+ *
+ * Re-ratified 2026-07-21 (issue #57 lean-lead expiry, guild#68) — DELIBERATE:
+ * `skills/meta/execute-plan/SKILL.md` gains the §Expiry contract for the
+ * inline shortcut (lapse after N lead edits or any compaction boundary).
+ * `skill-src/skill-registry.json` re-extracted in the SAME commit (all 5
+ * wave-2 skills round-trip byte-identical). commands + .claude-plugin pins
+ * unchanged. The stale pin was observed RED locally against this tree before
+ * the bump — anti-vacuity.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "17f8356bee2236797afa19f3f62e3888b980bc3a",
-});
+  skills: "7208297e98f22fd4ab250e8cc49db5e33f1f2ad4",});
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({

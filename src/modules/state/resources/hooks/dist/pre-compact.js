@@ -8241,6 +8241,22 @@ function rotateLocked(runDir2) {
 // lib/v1.4/log-jsonl-sidecar.ts
 var SIDECAR_MAX_BYTES3 = 1024 * 1024;
 
+// lib/lane-attribution.ts
+var UNATTRIBUTED_WORKER_LANE_ID = "unattributed-worker";
+function isWorkerInvocation(env = process.env) {
+  const laneId = env["GUILD_LANE_ID"];
+  const taskId = env["GUILD_TASK_ID"];
+  return typeof laneId === "string" && laneId.length > 0 || typeof taskId === "string" && taskId.length > 0;
+}
+function resolveLaneAttribution(env = process.env) {
+  for (const candidate of [env["GUILD_LANE_ID"], env["GUILD_TASK_ID"]]) {
+    if (typeof candidate === "string" && candidate.length > 0 && isSafeLaneId(candidate)) {
+      return candidate;
+    }
+  }
+  return isWorkerInvocation(env) ? UNATTRIBUTED_WORKER_LANE_ID : void 0;
+}
+
 // pre-compact.ts
 async function readStdin() {
   return new Promise((resolve6) => {
@@ -8289,16 +8305,19 @@ async function main() {
   const payloadCwd = typeof payload.cwd === "string" ? payload.cwd : void 0;
   const cwd = process.env["GUILD_CWD"] ?? payloadCwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
-  try {
-    const header = buildReanchorHeader(guildRoot);
-    if (header !== null) {
-      process.stdout.write(buildAdditionalContextEnvelope("PreCompact", header));
-    }
-  } catch (err) {
-    process.stderr.write(
-      `warn: [pre-compact] re-anchor header build failed: ${err instanceof Error ? err.message : String(err)}
+  const laneId = resolveLaneAttribution();
+  if (laneId === void 0) {
+    try {
+      const header = buildReanchorHeader(guildRoot);
+      if (header !== null) {
+        process.stdout.write(buildAdditionalContextEnvelope("PreCompact", header));
+      }
+    } catch (err) {
+      process.stderr.write(
+        `warn: [pre-compact] re-anchor header build failed: ${err instanceof Error ? err.message : String(err)}
 `
-    );
+      );
+    }
   }
   const runId = resolveRunId(guildRoot);
   if (typeof runId !== "string" || runId.length === 0) {
@@ -8316,13 +8335,14 @@ async function main() {
     hook_name: "PreCompact",
     payload_excerpt_redacted: payloadExcerpt(payload.payload),
     latency_ms: 0,
-    status: "ok"
+    status: "ok",
+    ...laneId !== void 0 ? { lane_id: laneId } : {}
   };
   const traceV2 = resolveTraceV2Fields({
     runId,
     eventType: "hook_event",
     ts,
-    actorId: "main"
+    actorId: laneId ?? "main"
   });
   try {
     appendEvent(runDir2, event, { traceV2 });
