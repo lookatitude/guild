@@ -50,7 +50,7 @@
       "id": "lib/host/tmux-backend",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "c1e8e7fb5ff5fe7d3c9eef082e0f30e15f711a567b89ae912c2db6156ce087fc"
+      "sha256": "047039d2b55e32b9c4f07e44fb2f09eb15567e9665a306b1ec001f42e1635512"
     },
     {
       "category": "scripts",

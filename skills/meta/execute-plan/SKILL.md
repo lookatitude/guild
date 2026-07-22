@@ -61,7 +61,7 @@ resolution and before spawning, invoke the writer CLI (one file per attempt; a
 re-dispatch overwrites — the writer handles it):
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/write-task-run.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/write-task-run.ts \
   --cwd <repo-root> --run-id <run-id> --task-id <task-id> \
   --specialist <owner-role> \
   --context-bundle .guild/context/<run-id>/<specialist>-<task-id>.md \
@@ -106,7 +106,7 @@ single-host run is therefore `weak`, recorded — never silently `strong`.
 
 Implements the cost-aware-tiering ADR (§2). Each lane is dispatched at the **lowest viable tier** — the default biases cheap; a `powerful` invocation must be justified by the score, an explicit override, or an advisor request.
 
-1. **Auto-score (deterministic, via `scripts/score-tier.ts`).** Invoke the pure, LLM-free scorer — `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/score-tier.ts --signals '<json>' --cwd <repo-root> [--model-tier <pin>]` → `{score, tier, model}` — passing the lane's signals (work-type verb read/summarize=0, draft/extract=+1, architect/review/schema=+2; blast-radius / file count; presence of an upstream `depends-on:` contract; security/correctness sensitivity; prior-attempt escalation on this lane +1, sticky for the run). The scorer is deterministic and costs **zero tokens** (a script call, not an LLM judgment) — so the dispatch trace is reproducible (SC-5). It applies steps 2–4 below internally and returns `score`+`tier`+`model` in one call. The plan's `complexity_score`/`tier` are the authoring estimate; the scorer confirms or supersedes them.
+1. **Auto-score (deterministic, via `scripts/score-tier.ts`).** Invoke the pure, LLM-free scorer — `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/score-tier.ts --signals '<json>' --cwd <repo-root> [--model-tier <pin>]` → `{score, tier, model}` — passing the lane's signals (work-type verb read/summarize=0, draft/extract=+1, architect/review/schema=+2; blast-radius / file count; presence of an upstream `depends-on:` contract; security/correctness sensitivity; prior-attempt escalation on this lane +1, sticky for the run). The scorer is deterministic and costs **zero tokens** (a script call, not an LLM judgment) — so the dispatch trace is reproducible (SC-5). It applies steps 2–4 below internally and returns `score`+`tier`+`model` in one call. The plan's `complexity_score`/`tier` are the authoring estimate; the scorer confirms or supersedes them.
 2. **Map score → tier** via the band cutoffs `models.thresholds` (default `{mid:1, powerful:3}`): `0 → cheap`, `1–2 → mid`, `≥3 → powerful`.
 3. **Apply the precedence ladder (normative):** `--model-tier=` CLI escape hatch > per-lane plan `tier:` pin > `settings.json` `models.tiers`/`models.thresholds` > built-in default. A `--model-tier` value pins **every** lane in the run; a per-lane plan `tier:` pin overrides the auto-score for that one lane.
 4. **Resolve tier → model** through the host-agnostic `models.tiers` map (ADR §1/§10 — bound by pointer; within Claude `cheap=haiku`, `mid=sonnet`, `powerful=opus`). Within Claude this binds directly to the Agent tool `model:` param at dispatch.
@@ -456,7 +456,7 @@ the new constraint — absorption is for after Wave 1 has begun.
 While lanes are in flight — parallel waves, or any wait on a lane's receipt — sweep liveness **each poll cycle** with the deterministic report tool; never eyeball heartbeat files or infer a stall from chat silence:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/check-lane-liveness.ts --run-dir <abs path to .guild/runs/<run-id>>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/check-lane-liveness.ts --run-dir <abs path to .guild/runs/<run-id>>
 ```
 
 It reads `run-state.json` (lenient — receipts-only when absent), the structured `in-progress/*.json` heartbeats, and `handoffs/*.md` receipts, and prints a per-lane report `{ lane, status, receipt_present, heartbeat_age_ms, stalled }` (stall threshold `GUILD_HEARTBEAT_TIMEOUT_MS`, default 600000; exit 0 always — it is a report, not a gate). This is the Rung-2/3 (subagent / in-process `agent`) watchdog complement to the team backend's pane-alive + `TeammateIdle` checks — same heartbeat records, one sweep across backends. On `stalled: true` for a lane:
@@ -475,12 +475,12 @@ A lane is **FAILED** when its receipt is missing/malformed (step 4) or the agent
 3. **On exhaustion** (all `max_attempts` attempts FAILED), mark the lane **dead via the bridge CLI** so the in-process / subagent path writes the **same checkpoint the SSH path does** — the single writer is hooks' `markLaneDead`:
 
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/mark-lane-dead.ts <runDir> <laneId> \
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/mark-lane-dead.ts <runDir> <laneId> \
      --attempts N [--last-error "..."] [--run-id <run-id>] \
      [--plan-slug <slug>] [--wave-index <n>] [--cwd <repo-root>]
    ```
 
-   `<runDir>` = `.guild/runs/<run-id>/`; `<laneId>` = the lane's `task-id`; `--attempts N` = total attempts made; `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}` = the plugin install root (the dir containing `scripts/`). This funnels to `markLaneDead` (`hooks/lib/run-state.ts`) → run-state `dead` + `resume.json` (the CLI writes the resume checkpoint **only when `defaults.resume.enabled` is true** — it reads that key tolerantly itself), so a later `/guild:resume` re-enters the dead lane from its checkpoint. **Do not write run-state directly** — the CLI is the only sanctioned funnel (parity with the SSH `runWithRetry` `onExhausted` path; both converge on `markLaneDead` for identical run-state + resume semantics).
+   `<runDir>` = `.guild/runs/<run-id>/`; `<laneId>` = the lane's `task-id`; `--attempts N` = total attempts made; `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}` = the plugin install root (the dir containing `scripts/`). This funnels to `markLaneDead` (`hooks/lib/run-state.ts`) → run-state `dead` + `resume.json` (the CLI writes the resume checkpoint **only when `defaults.resume.enabled` is true** — it reads that key tolerantly itself), so a later `/guild:resume` re-enters the dead lane from its checkpoint. **Do not write run-state directly** — the CLI is the only sanctioned funnel (parity with the SSH `runWithRetry` `onExhausted` path; both converge on `markLaneDead` for identical run-state + resume semantics).
 
 A dead lane is **not** a clean receipt — see `## Stop condition`.
 
@@ -490,13 +490,13 @@ The READ/re-enter half of dead-lettering (the WRITE half is `## Lane retry + dea
 
 1. **List resumable dead lanes** via the read-side bridge CLI (the mirror of `mark-lane-dead.ts`) — the `--json` flag is **required** for parseable output (without it the CLI prints a human table):
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/resume-lanes.ts <runDir> --json
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/resume-lanes.ts <runDir> --json
    ```
    It scans `<runDir>/lanes/*/resume.json`, applies the **`guild.lane_resume.v1`** schema-version guard (skips foreign/older versions), honors `defaults.resume.enabled`, joins each lane's `tier` from run-state, sorts by `lane_id`, and writes a **bare JSON array** (one object per resumable dead lane) to stdout:
    ```json
    [{ "lane_id": "...", "run_id": "...", "attempts": N, "last_attempt_at": "...", "last_error": "...", "resumable_at": "...", "tier": "mid" }, …]
    ```
-   **Consume the array directly — it is NOT wrapped in an object.** It is already version-guarded + `resume.enabled`-filtered + `lane_id`-sorted CLI-side. `tier` is present when run-state carried it (absent otherwise — default skill-side); `bundle_path` is **not** in the output — recover it skill-side (step 2). **An empty array `[]` ⇒ no resumable lanes ⇒ exactly today's resume behavior** (proceed straight to the next gate). `<runDir>` = `.guild/runs/<run-id>/`; an optional `--cwd <repo-root>` overrides the repo root for the `resume.enabled` read; `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}` = the plugin install root.
+   **Consume the array directly — it is NOT wrapped in an object.** It is already version-guarded + `resume.enabled`-filtered + `lane_id`-sorted CLI-side. `tier` is present when run-state carried it (absent otherwise — default skill-side); `bundle_path` is **not** in the output — recover it skill-side (step 2). **An empty array `[]` ⇒ no resumable lanes ⇒ exactly today's resume behavior** (proceed straight to the next gate). `<runDir>` = `.guild/runs/<run-id>/`; an optional `--cwd <repo-root>` overrides the repo root for the `resume.enabled` read; `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}` = the plugin install root.
 2. **Re-enter each resumable dead lane** through the normal dispatch path: spawn a **fresh** ephemeral `Agent()` against the lane's bundle, folding `last_error` in as backoff guidance. Use the entry's `tier` when present (else recover from run-state `lanes[<lane_id>].tier`, `hooks/lib/run-state.ts`); **recover/rebuild `bundle_path`** skill-side (the lane's `.guild/context/<run-id>/<specialist>-<task-id>.md`, or rebuild via `guild:context-assemble` if the bundle file is gone). This **resets the lane from `dead` back into `## Lane retry + dead-lettering`** — operator-initiated resume grants a **fresh retry budget** (`defaults.retry.max_attempts` again); the prior `attempts` count is preserved in the checkpoint for audit but does **not** subtract from the resumed budget (otherwise a lane already at `max_attempts` would re-dead immediately). Re-entry follows the same `## Per-lane flow` (bundle → tier → dispatch → receipt) as a first dispatch; a lane that re-fails past `max_attempts` on the resumed run is re-marked dead via the same `mark-lane-dead.ts` funnel.
 3. **Then continue** to the next pending gate as today.
 

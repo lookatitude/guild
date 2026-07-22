@@ -50,7 +50,7 @@ concerns remain". Do not re-introduce it.
    a. Increment `L1` counter via `incrementCounter(runDir, run_id, "L1")`.
    b. Emit `loop_round_start` event via `scripts/emit-loop-event.ts`:
       ```bash
-      npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/emit-loop-event.ts \
+      npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/emit-loop-event.ts \
         --event loop_round_start --layer L1 --lane phase:brainstorm \
         --round <N> --cap <cap> \
         [--run-id <run-id>] [--cwd <repo-root>]
@@ -61,7 +61,7 @@ concerns remain". Do not re-introduce it.
    e. Inspect researcher's body with the sentinel detector.
    f. Emit `loop_round_end` event via `scripts/emit-loop-event.ts`:
       ```bash
-      npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/emit-loop-event.ts \
+      npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/emit-loop-event.ts \
         --event loop_round_end --layer L1 --lane phase:brainstorm \
         --round <N> --terminated <satisfied|malformed_termination|cap_hit|escalation|error> \
         --terminator researcher \

@@ -25,7 +25,7 @@ Two hard constraints:
 When the snapshot-resolved backend is `in-process` (D5 `agent` rung — §RE-4 / VC-RE-4 of the runtime and execution model ADR), invoke the launcher the same way as the team backend (`## Agent-team launcher` below) but with `--agent-mode=agent` (or `--agent-mode=auto` when the ladder itself should decide) instead of relying on `team.yaml`'s `backend:` key — pass `--run-id <the run's own run-id>` so the descriptors' `GUILD_RUN_ID` matches the run directory `guild:execute-plan` already created (Input 4), or omit it only for a standalone `--dry-run` preview:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
 ```
 
 The process prints exactly one JSON line to stdout and exits 0:
@@ -296,7 +296,7 @@ When the target repo IS the Guild plugin itself (self-build), `team.yaml` is com
 When the snapshot-resolved backend is `agent-team` (the D5 ladder resolved `agent_mode` to `team` at intake; team is primary whenever tmux is present — not an opt-in), invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; it writes a session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root>
 ```
 
 `<resolved-team-path>` is the **`resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** result (`scripts/lib/team-file.ts`) — the per-phase `.guild/team/<slug>.<phase>.yaml` (or legacy `.guild/team/<slug>.yaml` on back-compat). **Never reconstruct `.guild/team/<slug>.yaml` here** — pass the resolved path the input step (`## Input`) already computed. The launcher's `slugFromTeamPath` tolerates the `<slug>.<phase>.yaml` basename. Pass `--dry-run` first to preview the tmux commands without spawning the session; use `--session-name` when a name collision would otherwise block launch.
