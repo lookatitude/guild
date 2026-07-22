@@ -578,6 +578,100 @@ The READ/re-enter half of dead-lettering (the WRITE half is `## Lane retry + dea
 
 Gated + graceful: the whole step is a no-op when `resume-lanes.ts` emits an empty list (no checkpoints written, or `defaults.resume.enabled: false`). This closes the R-016 write↔read symmetry — `## Lane retry + dead-lettering` WRITES dead-lane checkpoints; this section READS + re-enters them.
 
+### Close requires review + verify-done (issue #59 — resuming is not a shortcut past the gates)
+
+The forensic finding behind issue #59: a 39-hour session entered the
+lifecycle (initiative → team-compose → build → execute-plan) and abandoned
+it **38 seconds after its first compaction**. 91.9% of the session's Bash,
+77% of its Edit/Write and 94% of its Agent dispatches happened AFTER the
+last lifecycle skill fired, and `guild:review`, `guild:verify-done`,
+`guild:qa`, `guild:reflect` and `guild:resume` were never invoked at all
+across 8 compactions — a production-infra build closed with no review gate
+and no verify gate.
+
+So: **a build run MUST pass `guild:review` and then `guild:verify-done`
+before it may close** — whether it ran straight through or was picked back
+up here. Resuming re-enters dead lanes (steps 1–3 above) and then continues
+to *the next pending gate*, which for a `build`-phase run is `review`, then
+`verify-done`; it does not skip whatever the interrupted run had not yet
+passed. **Receipts are not close.** `## Stop condition` below is the handoff
+INTO `guild:review`, never a substitute for it, and `guild:verify-done` is
+the only thing that writes `.guild/runs/<run-id>/verify.md`. A run whose
+records show build activity (dispatched lanes, collected receipts) but no
+`review.md` / `verify.md` has not closed — it has been abandoned.
+
+**Enforcement lives in code, not prose.** Two surfaces, both in
+`hooks/lib/lifecycle-gate.ts`, reading the real v1.4 trace + run state
+rather than any self-report:
+
+1. **The active UserPromptSubmit gate** (`hooks/lifecycle-gate.ts`, invoked
+   from `hooks/check-skill-coverage.sh` — the advisory nudge this issue
+   upgraded). While the run is genuinely ACTIVE — the `reanchor.ts
+   isRunActive` activity window, NOT `status: open`, because the Stop hook
+   closes the run at the end of every assistant turn — and past build-start
+   (persisted phase, or a lane recorded in `run-state.json`), it counts the
+   LEAD's own `Bash`/`Edit`/`Write` `tool_call` events since the last time
+   anything was routed through the lifecycle. A "lifecycle touch" is a
+   lead-own, non-errored `Skill` call whose **parsed** skill name is a
+   lifecycle skill — parsed out of the tool input, never string-matched, so a
+   passing mention of `guild:review` in some other call's arguments cannot
+   forge one. Lane-attributed events are the worker's, not the lead's.
+   Crossing `.guild/settings.json`
+   `defaults.lifecycle_gate.adhoc_activity_threshold` (default **20**)
+   **blocks the prompt**, and the same body is delivered to the model as
+   `additionalContext` on the next accepted prompt — a block is shown to the
+   *operator*, so without that hand-off the drifting model would never see
+   the correction. Two tiers, because Bash mutates too (`sed -i`, `git
+   apply`, `>` redirects, deploys): the threshold applies when at least one
+   Edit/Write happened, and **3×** the threshold when the stretch is
+   shell-only, so read-only exploration stays silent while shell-driven
+   mutation is not a free pass. The drift must also be CURRENT (default 30
+   min) — an abandoned run's historical count never blocks a fresh prompt.
+2. **The close-time Stop backstop.** When the run has actually reached
+   `## Stop condition` — **every** lane `done` (a `failed`/`dead`/`skipped`
+   lane means dead-lettering, not review, so the gate stays silent there), each
+   lane bound to its own distinct, non-empty `handoffs/*.md` receipt through
+   the checkpoint's `receipt_ref` — but `review.md` and/or `verify.md` is
+   missing, empty, or not a real file, it emits a Stop `block` naming exactly
+   which artifact is absent, giving the lead a turn to run the gate that
+   produces it. It re-arms only when the missing SET changes (review.md
+   landed, verify.md still absent — including on the hook-continued turn, which
+   is exactly when the lead runs that gate), clears its latch once nothing is
+   missing so a later regression is still caught, and is hard-capped at a few
+   fires per run so it can never become a Stop loop.
+   **What it detects is a missing or blank artifact — not a failing one.** It
+   never parses a verdict, so a `verify.md` recording `fail` satisfies it just
+   as a passing one would; reading verdicts is `guild:verify-done`'s own job.
+   The rule above is the CONTRACT; this hook is a backstop against the case
+   that actually happened — the gates never running at all.
+
+Both are edge-triggered on CHANGE, not level — the prompt gate once per
+threshold crossing, the close gate once per missing-artifact set (under a hard
+per-run fire cap) — so neither can dead-end a session: re-sending the prompt
+proceeds, and the close gate deliberately evaluates on hook-continued turns
+rather than short-circuiting on `stop_hook_active`, because that is precisely
+the turn in which the lead runs the gate it was told about. An operator who wants one
+crossing dismissed adds `[guild:gate-override]` to the prompt — which
+**consumes** that crossing (so the next prompt is not blocked on the identical
+unchanged one) and drops any undelivered correction rather than letting it
+resurface later out of context. `GUILD_LIFECYCLE_GATE_OVERRIDE=1` dismisses for
+the session, and `defaults.lifecycle_gate.enabled: false` disables the gate
+outright.
+
+Both gates treat the trace, `run-state.json` and their own sentinels as
+UNTRUSTED workspace state: the trace is read through the canonical v1.4
+`validateEvent` schema validator, `run-state.json` is structurally validated,
+counting order never depends on a workspace-supplied timestamp, and no free
+text is ever persisted and replayed into model-visible context.
+
+**Known gaps, stated honestly.** (a) Same as `defaults.lean_lead.*`, these
+keys are not yet wired through `guild:config`'s validate/set/resolve
+surfaces, so only a direct hand-edit of `settings.json` takes effect today.
+(b) UserPromptSubmit fires between turns, so a single agentic turn can run
+hundreds of ad-hoc calls before the gate next evaluates; the gate bounds
+drift at turn boundaries and the Stop backstop covers close, but per-tool
+interception belongs on `PreToolUse` and is tracked separately.
+
 ## Stop condition
 
 Execution is complete when every lane has a non-error receipt under `handoffs/`:

@@ -2,9 +2,24 @@
 # hooks/check-skill-coverage.sh
 #
 # Event:   UserPromptSubmit
-# Purpose: Lightly nudges when the user prompt references a domain that has
-#          no shipped specialist TEMPLATE. Runs on every prompt — kept brief
-#          and non-blocking.
+# Purpose: TWO responsibilities, in priority order.
+#
+#          1. The LIFECYCLE GATE (issue #59 / oir-wi-59). This hook used to be
+#             an advisory nudge only, which is precisely the gap the forensic
+#             run exploited: with an active run past build-start, nothing
+#             detected "this session stopped routing work through skills" and
+#             34.7h of ad-hoc Bash/Edit ran with no review or verify gate.
+#             The detection is deterministic code in hooks/lib/lifecycle-gate.ts
+#             (run liveness, past-build-start, ad-hoc counting against the real
+#             v1.4 trace, fire-once, overrides) and runs as
+#             hooks/dist/lifecycle-gate.js. When it fires it prints the
+#             UserPromptSubmit block envelope, which must be this hook's ONLY
+#             stdout (mixing it with the plain-text nudge below would corrupt
+#             the JSON), so the gate short-circuits the rest of the script.
+#
+#          2. The original domain-coverage nudge: lightly nudges when the user
+#             prompt references a domain that has no shipped specialist
+#             TEMPLATE. Runs on every prompt — kept brief and non-blocking.
 #
 # Heuristic: grep the prompt text for keywords that map to a domain, then
 #   check WHETHER that domain is covered by looking for the matching template
@@ -23,9 +38,11 @@
 #   guild:team-compose. See plugin/AGENTS.md.
 #
 # Stdin:   JSON — Claude Code UserPromptSubmit hook payload.
-# Stdout:  Either empty (no nudge needed) or a 1-line nudge.
-# Stderr:  Error messages.
-# Exit:    Always 0 — never blocks the prompt.
+# Stdout:  Either empty, the lifecycle-gate block envelope (JSON), or a 1-line
+#          domain nudge — never more than one of the three.
+# Stderr:  Error messages + the gate body when the gate fires.
+# Exit:    Always 0 — the block, when there is one, travels in the JSON
+#          envelope, not in the exit code.
 
 set -uo pipefail
 
@@ -55,6 +72,67 @@ find /tmp -maxdepth 1 -name 'guild-skill-nudge-*' -mtime +7 -delete 2>/dev/null 
 PAYLOAD_FILE="$(mktemp /tmp/guild-nudge-payload.XXXXXX)"
 cat > "${PAYLOAD_FILE}"
 trap 'rm -f "${PAYLOAD_FILE}"' EXIT
+
+# ── 1. LIFECYCLE GATE (issue #59) ─────────────────────────────────────────
+# Delegated to the bundled hook so the detection stays real deterministic
+# code over the v1.4 trace rather than shell heuristics. Runs BEFORE the
+# per-session nudge lock is consulted — the domain nudge fires at most once
+# per session, and the gate must not be silenced for the rest of a session
+# just because that nudge already went out.
+#
+# Degrades to silence if node or the bundle is unavailable (a source-only
+# checkout, or a host without node): the gate is enforcement, but a missing
+# runtime must never wedge every prompt in the session.
+#
+# Resolved off GUILD_PLUGIN_ROOT_RESOLVED (same convention as
+# SPECIALIST_TEMPLATES_DIR above), which defaults to this script's own parent —
+# so in a normal install it IS `${SCRIPT_DIR}/dist/lifecycle-gate.js`.
+LIFECYCLE_GATE_BUNDLE="${GUILD_PLUGIN_ROOT_RESOLVED}/hooks/dist/lifecycle-gate.js"
+if command -v node &>/dev/null && [[ -f "${LIFECYCLE_GATE_BUNDLE}" ]]; then
+  # stderr is deliberately NOT redirected — the gate writes its body there too,
+  # so it stays visible on hosts that do not surface the JSON `reason`.
+  GATE_OUTPUT="$(node "${LIFECYCLE_GATE_BUNDLE}" < "${PAYLOAD_FILE}" || true)"
+  # Only a COMPLETE, well-formed envelope short-circuits. A crash message, a
+  # stray warning, or concatenated/partial JSON must never be forwarded as if
+  # it were a hook decision, and must never silently suppress the domain nudge
+  # below — a prefix test cannot tell those apart, so the whole payload is
+  # parsed and its exact shape checked.
+  #
+  # Validated with NODE, not python3: node is already proven present (we just
+  # ran the bundle with it), whereas python3 is optional on this path. Gating
+  # the check on python3 would silently DISABLE the gate on a node-only host —
+  # discarding a perfectly valid block envelope.
+  if [[ -n "${GATE_OUTPUT}" ]]; then
+    if printf '%s' "${GATE_OUTPUT}" | node -e '
+const chunks = [];
+process.stdin.on("data", (c) => chunks.push(c));
+process.stdin.on("end", () => {
+  let d;
+  try { d = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { process.exit(1); }
+  if (d === null || typeof d !== "object" || Array.isArray(d)) process.exit(1);
+  const keys = Object.keys(d).sort().join(",");
+  if (keys === "decision,reason" && d.decision === "block" && typeof d.reason === "string") {
+    process.exit(0);
+  }
+  if (keys === "hookSpecificOutput") {
+    const h = d.hookSpecificOutput;
+    if (h !== null && typeof h === "object" && !Array.isArray(h)
+        && Object.keys(h).sort().join(",") === "additionalContext,hookEventName"
+        && h.hookEventName === "UserPromptSubmit"
+        && typeof h.additionalContext === "string") {
+      process.exit(0);
+    }
+  }
+  process.exit(1);
+});
+'; then
+      # The envelope must be this hook's ONLY stdout — emit it and stop.
+      printf '%s\n' "${GATE_OUTPUT}"
+      exit 0
+    fi
+    printf 'warn: [check-skill-coverage] ignoring unrecognized lifecycle-gate output\n' >&2
+  fi
+fi
 
 PROMPT_TEXT=""
 SESSION_ID=""

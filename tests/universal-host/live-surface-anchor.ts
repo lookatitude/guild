@@ -181,10 +181,36 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * Re-ratified 2026-07-22 (final merge-train integration, guild#69) — the
  * merged tree now also carries guild#68 (§Expiry + lean-lead). Registry
  * re-extracted for the fully merged SKILL.md; pins recomputed.
+ *
+ * Re-ratified 2026-07-22 (issue #59 lifecycle adherence, oir-wi-59) —
+ * DELIBERATE: `skills/meta/execute-plan/SKILL.md` §"Resuming dead lanes" gains
+ * the §"Close requires review + verify-done" contract — a build run must pass
+ * guild:review + guild:verify-done before close, resuming is not a shortcut
+ * past a skipped gate — plus the code-not-prose enforcement pointer at the new
+ * `hooks/lib/lifecycle-gate.ts` (the active UserPromptSubmit gate and the
+ * close-time Stop backstop), their override/threshold semantics, and the two
+ * honestly-stated known gaps. `skill-src/skill-registry.json` re-extracted in
+ * the SAME commit (all 5 wave-2 skills round-trip byte-identical).
+ * commands + .claude-plugin pins unchanged (verified, not assumed). Both
+ * guards were observed RED locally against the old skills pin before the bump
+ * (SC-W2-5(1) and SC-W3-6(B), each naming
+ * `M skills/meta/execute-plan/SKILL.md`) — anti-vacuity.
+ *
+ * Re-ratified 2026-07-22 (merge-train integration, guild#70) — mechanical
+ * MERGE re-ratification on the tree carrying #61+#66+#68+#70 content
+ * (SKILL.md: §Expiry + #66 contract + §Close-requires-review+verify).
+ * Registry re-extracted for the merged SKILL.md (5/5 round-trip). commands
+ * pin = post-sweep value.
+ *
+ * Re-ratified 2026-07-22 (final merge-train integration, guild#70) — the
+ * merged tree carries ALL wave content (#61+#66+#67+#68+#69+#70:
+ * dispatch.md backend+tier contracts, SKILL.md §Expiry + #66 contract +
+ * §Close-requires-review+verify). Registry re-extracted for the fully
+ * merged SKILL.md; pins recomputed on this tree.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "1dbfae3ac45db8805a0f5063d788948f060bdbf3",
+  skills: "6287463dd440eb041e05f89ca6bc404aae7fa444",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
