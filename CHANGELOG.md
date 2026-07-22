@@ -34,6 +34,24 @@ from v1.0.0 onward.
   `.guild/wiki/decisions/` — it is cited as the source spec by six code modules,
   all repointed. — @lookatitude
 
+## [2.3.1] — 2026-07-23
+
+Patch release: the five run/release-tooling defects surfaced by `guild:reflect`
+on the v2.3.0 wave (issues #72–#76) — truthful run summaries, an un-truncated
+hooks test reporter, byte-reproducible hook bundles with a CI rail, a changelog
+generator that only links real merged PRs, and pane/remote lane dispatches
+recorded in the orchestrating run's trace.
+
+### Fixed
+
+- hooks: stop run-trace-close's process.exit from truncating jest's reporter (issue #74) ([#77](https://github.com/lookatitude/guild/pull/77)) — @lookatitude
+- telemetry: trace-summarize.ts stops rendering canonical tool_call events as false ERROR rows (issue #73) ([#78](https://github.com/lookatitude/guild/pull/78)) — @lookatitude
+- release-changelog: linkify only gh-confirmed merged PRs in window (issue #72) ([#79](https://github.com/lookatitude/guild/pull/79)) — @lookatitude
+- hooks: reproducible hook bundles + rebuild-determinism rail (issue #75) ([#80](https://github.com/lookatitude/guild/pull/80)) — @lookatitude
+- trace: record pane/remote lane dispatch in the orchestrating run (issue #76) ([#81](https://github.com/lookatitude/guild/pull/81)) — @lookatitude
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.3.0...v2.3.1
+
 ## [2.3.0] — 2026-07-22
 
 Highlights: the **compaction-drift hardening wave** — a forensic analysis of a
