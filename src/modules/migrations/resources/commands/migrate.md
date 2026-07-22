@@ -66,7 +66,7 @@ drafted-grades review table. Review each grade (edit the `importance:` value
 in place where the heuristic is wrong), then accept:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/dot-guild/migrate-guild.ts --accept-grades --root=<repo>
 ```
 
 Until accepted, wiki lint (`/guild:wiki lint` check #9 and the docs-hygiene
@@ -94,7 +94,7 @@ re-resolve.
 Before the converter is invoked, start a lightweight run (SC-B, §435):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
   --command=/guild:migrate \
   --run-class=lightweight \
   --cwd "$(pwd)"
@@ -108,10 +108,10 @@ No `--initiative` flag (NN#5).
 Invoke the migrate-guild CLI directly:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/dot-guild/migrate-guild.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/dot-guild/migrate-guild.ts \
   [--root=<path>] [--mode=migrate|dry-run|skip] [--workspace]
 ```
 
-`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}` resolves to the plugin install
+`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}` resolves to the plugin install
 root (the directory that contains this `commands/` folder). Default mode is
 `dry-run` — the command is always safe to run without arguments.
