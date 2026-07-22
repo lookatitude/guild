@@ -136,10 +136,24 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * wave-2 skills round-trip byte-identical). commands + .claude-plugin pins
  * unchanged. The stale pin was observed RED locally against this tree before
  * the bump — anti-vacuity.
+ *
+ * Re-ratified 2026-07-22 (issue #59 lifecycle adherence, oir-wi-59) —
+ * DELIBERATE: `skills/meta/execute-plan/SKILL.md` §"Resuming dead lanes" gains
+ * the §"Close requires review + verify-done" contract — a build run must pass
+ * guild:review + guild:verify-done before close, resuming is not a shortcut
+ * past a skipped gate — plus the code-not-prose enforcement pointer at the new
+ * `hooks/lib/lifecycle-gate.ts` (the active UserPromptSubmit gate and the
+ * close-time Stop backstop), their override/threshold semantics, and the two
+ * honestly-stated known gaps. `skill-src/skill-registry.json` re-extracted in
+ * the SAME commit (all 5 wave-2 skills round-trip byte-identical).
+ * commands + .claude-plugin pins unchanged (verified, not assumed). Both
+ * guards were observed RED locally against the old skills pin before the bump
+ * (SC-W2-5(1) and SC-W3-6(B), each naming
+ * `M skills/meta/execute-plan/SKILL.md`) — anti-vacuity.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
-  skills: "68d66b140315c16796c4e18f1c674d130dc58a31",
+  skills: "77b5839c953f7c6e37b78db35def3e88cbc7b996",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

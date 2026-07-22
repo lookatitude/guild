@@ -25,6 +25,13 @@
       "sha256": "814bbb09bf3fb5286668639efc9af99bcacfa9d8fca11bfb6d49ead7b80d30c9"
     },
     {
+      "category": "hooks",
+      "id": "Stop:lifecycle-gate.js",
+      "source_path": "hooks/dist/lifecycle-gate.js",
+      "resource_path": "resources/hooks/dist/lifecycle-gate.js",
+      "sha256": "93aee180675ff87ebde9a2742a9d88f7ecd46138b67e2f7c82d8085fe1b36e9e"
+    },
+    {
       "category": "scripts",
       "id": "lib/atomic-write",
       "source_path": "scripts/lib/atomic-write.ts",

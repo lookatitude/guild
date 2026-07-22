@@ -878,6 +878,11 @@
       "event": "Stop"
     },
     {
+      "id": "Stop:lifecycle-gate.js",
+      "source_path": "hooks/dist/lifecycle-gate.js",
+      "event": "Stop"
+    },
+    {
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "event": "Stop"

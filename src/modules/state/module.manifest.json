@@ -7,7 +7,12 @@
   "description": "Owns .guild root/path discovery, artifact paths, run replay/export, retention, and durable state helpers.",
   "depends_on": ["kernel", "migrations"],
   "owns": {
-    "hooks": ["PreCompact:pre-compact.js", "SessionStart:session-reanchor.js", "Stop:lean-lead-guard.js"],
+    "hooks": [
+      "PreCompact:pre-compact.js",
+      "SessionStart:session-reanchor.js",
+      "Stop:lean-lead-guard.js",
+      "Stop:lifecycle-gate.js"
+    ],
     "scripts": [
       "lib/atomic-write",
       "lib/frontmatter",

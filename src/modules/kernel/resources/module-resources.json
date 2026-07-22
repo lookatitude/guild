@@ -36,7 +36,7 @@
       "id": "UserPromptSubmit:check-skill-coverage.sh",
       "source_path": "hooks/check-skill-coverage.sh",
       "resource_path": "resources/hooks/check-skill-coverage.sh",
-      "sha256": "5cd5278ff4be7d18cfb9313c14596a0bae1b008e75c7f5d7af1049872b586260"
+      "sha256": "bc1c2b5273fa47c7254fce2d38cfac55060555c324a5f9d903bd23aaa2dd6c63"
     },
     {
       "category": "scripts",
