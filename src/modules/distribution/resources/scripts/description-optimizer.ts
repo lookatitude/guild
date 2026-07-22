@@ -15,14 +15,27 @@
  * Options:
  *   --skill <slug>  (required) Skill slug (e.g. "guild-brainstorm").
  *   --cwd <path>    (optional, default ".") Repo root.
- *                   Searches <cwd>/skills/<tier>/<slug>/evals.json across every
- *                   tier dir found under <cwd>/skills/ (dynamic enumeration —
- *                   not a hardcoded tier list, so new tiers like "knowledge"
- *                   are picked up automatically), plus dir-level skills whose
- *                   evals.json sits directly at <cwd>/skills/<slug>/evals.json
- *                   (e.g. guild-quality, guild-operations).
+ *                   Resolves the LIVE skill dir exactly like evolve-loop.ts's
+ *                   findLiveSkillDir (same three tiers, same priority, same SKILL.md
+ *                   gate), then reads that dir's evals.json sibling — so step 9 always
+ *                   finds the evals that steps 1-8 evolved against, never a same-slug
+ *                   corpus from an unrelated tier:
+ *                     1. <cwd>/.guild/skills/<slug>/{SKILL.md,evals.json} — v2 project
+ *                        instance (DH-3: wins over the plugin library when present).
+ *                     2. <cwd>/skills/<tier>/<slug>/{SKILL.md,evals.json} across every
+ *                        tier dir found under <cwd>/skills/ (dynamic enumeration, not a
+ *                        hardcoded tier list — new tiers like "knowledge" are picked up
+ *                        automatically), plus dir-level skills at
+ *                        <cwd>/skills/<slug>/{SKILL.md,evals.json} (e.g. guild-quality,
+ *                        guild-operations) — the self-build/plugin-repo layout.
+ *                     3. The plugin install root (GUILD_PLUGIN_ROOT or CLAUDE_PLUGIN_ROOT),
+ *                        same tier search as (2) — the shipped baseline, used when a
+ *                        consuming repo has no project instance yet.
+ *                   A live dir found with no evals.json sibling is treated as "not found"
+ *                   (evals not yet bootstrapped) — it never falls through to a different
+ *                   tier's evals.json for the same slug.
  *
- * Reads:  <cwd>/skills/<tier>/<slug>/evals.json
+ * Reads:  see resolution order above.
  * Writes: none (emits YAML on stdout; orchestrator decides whether to apply).
  *
  * Stdout: one-line YAML `description: <...>`.
@@ -94,19 +107,60 @@ function listSkillTierDirs(cwd: string): string[] {
   }
 }
 
-function findEvalsFile(cwd: string, slug: string): string | null {
-  // Dir-level skill: evals.json directly at skills/<slug>/ (e.g. guild-quality,
+/**
+ * Search the self-build/plugin layout under `root` for a LIVE skill dir (one that
+ * actually has a SKILL.md): dir-level then tier-nested. Gating on SKILL.md — not just
+ * evals.json — matters because a bare evals.json with no sibling SKILL.md is not a real
+ * skill instance; requiring both avoids picking up a stray/orphaned evals.json.
+ */
+function findSkillDirUnderSkillsRoot(root: string, slug: string): string | null {
+  // Dir-level skill: SKILL.md directly at skills/<slug>/ (e.g. guild-quality,
   // guild-operations — checked first so a slug that happens to match a tier
   // dir name doesn't get misread as a tier).
-  const direct = path.join(cwd, "skills", slug, "evals.json");
-  if (fs.existsSync(direct)) return direct;
+  const direct = path.join(root, "skills", slug);
+  if (fs.existsSync(path.join(direct, "SKILL.md"))) return direct;
 
   // Tier dirs — enumerated from disk, not a hardcoded list.
-  for (const tier of listSkillTierDirs(cwd)) {
-    const p = path.join(cwd, "skills", tier, slug, "evals.json");
-    if (fs.existsSync(p)) return p;
+  for (const tier of listSkillTierDirs(root)) {
+    const dir = path.join(root, "skills", tier, slug);
+    if (fs.existsSync(path.join(dir, "SKILL.md"))) return dir;
   }
   return null;
+}
+
+/**
+ * Resolve the LIVE skill directory for `slug`, mirroring evolve-loop.ts's
+ * findLiveSkillDir exactly (same three tiers, same priority, same SKILL.md gate, same
+ * env var fallback): v2 project instance first (DH-3), then the self-build/plugin-repo
+ * layout under `cwd`, then the shipped baseline under the plugin install root.
+ */
+function findLiveSkillDir(cwd: string, slug: string): string | null {
+  const project = path.join(cwd, ".guild", "skills", slug);
+  if (fs.existsSync(path.join(project, "SKILL.md"))) return project;
+
+  const selfBuild = findSkillDirUnderSkillsRoot(cwd, slug);
+  if (selfBuild) return selfBuild;
+
+  const pluginRoot =
+    process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
+  if (pluginRoot && path.resolve(pluginRoot) !== path.resolve(cwd)) {
+    const shipped = findSkillDirUnderSkillsRoot(pluginRoot, slug);
+    if (shipped) return shipped;
+  }
+  return null;
+}
+
+/**
+ * Resolve the evals.json for `slug` — always the evals.json sibling of the live
+ * SKILL.md, never a same-slug evals.json from a DIFFERENT tier. A live dir found with
+ * no evals.json sibling is a genuine "not ready to optimize" state (evals not yet
+ * bootstrapped), not a cue to fall through to an unrelated corpus for the same slug.
+ */
+function findEvalsFile(cwd: string, slug: string): string | null {
+  const liveDir = findLiveSkillDir(cwd, slug);
+  if (!liveDir) return null;
+  const evalsPath = path.join(liveDir, "evals.json");
+  return fs.existsSync(evalsPath) ? evalsPath : null;
 }
 
 // ── Tokenization ───────────────────────────────────────────────────────────
@@ -225,8 +279,9 @@ function main(): void {
   const evalsPath = findEvalsFile(cwd, skill);
   if (!evalsPath) {
     process.stderr.write(
-      `[description-optimizer] ERROR: evals.json not found for skill "${skill}" under ${cwd}/skills/${skill}/ ` +
-        `or ${cwd}/skills/<tier>/${skill}/ for any tier under skills/\n`
+      `[description-optimizer] ERROR: evals.json not found for skill "${skill}" under ` +
+        `${cwd}/.guild/skills/${skill}/, ${cwd}/skills/${skill}/, ${cwd}/skills/<tier>/${skill}/ ` +
+        `for any tier under skills/, or the plugin install root\n`
     );
     process.exit(1);
   }

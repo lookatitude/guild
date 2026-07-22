@@ -81,3 +81,11 @@ jobs:
       - name: Host-support matrix drift gate (generated matrix must match committed file)
         run: |
           cd scripts && npm run check:host-support-matrix
+
+      # Plugin-root fallback regression rail (issue #36 / G1) — forbids the two-level
+      # ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}} pattern (host-render-time only, expands
+      # to a nonexistent path in the Bash tool's shell) from being reintroduced in any
+      # command/skill resource doc. Fixed occurrences carry a terminal $HOME default.
+      - name: Plugin-root fallback rail (no two-level GUILD_PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT fallback)
+        run: |
+          npx tsx scripts/check-plugin-root-fallback.ts

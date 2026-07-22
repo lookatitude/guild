@@ -33,6 +33,13 @@
     },
     {
       "category": "scripts",
+      "id": "check-plugin-root-fallback",
+      "source_path": "scripts/check-plugin-root-fallback.ts",
+      "resource_path": "resources/scripts/check-plugin-root-fallback.ts",
+      "sha256": "70c22c6a07b68e52792e130497cce643f5a25b54cc4f0f39c338dff2f59e9af4"
+    },
+    {
+      "category": "scripts",
       "id": "check-roster-consistency",
       "source_path": "scripts/check-roster-consistency.ts",
       "resource_path": "resources/scripts/check-roster-consistency.ts",
@@ -50,7 +57,7 @@
       "id": "description-optimizer",
       "source_path": "scripts/description-optimizer.ts",
       "resource_path": "resources/scripts/description-optimizer.ts",
-      "sha256": "f89a3f741dd2c38b93e28e7b4f466a902793919c93dc3250d3effb0d59efbbc0"
+      "sha256": "4c13c7446d5c45ce50f9c809a7b545860ee1eca0eba1fa30754e480ba467fd53"
     },
     {
       "category": "scripts",

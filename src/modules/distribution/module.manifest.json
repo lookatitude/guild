@@ -16,6 +16,7 @@
       "build-inventory",
       "build-verify",
       "check-module-ownership",
+      "check-plugin-root-fallback",
       "check-roster-consistency",
       "codex-guild-prompt-bridge",
       "description-optimizer",
