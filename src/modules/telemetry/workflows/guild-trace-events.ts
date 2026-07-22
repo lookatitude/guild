@@ -75,6 +75,43 @@ export interface GuildTraceDispatchV1 extends GuildTraceEventBase {
   backend_rung: number;
   /** ISO-8601 timestamp when dispatch was initiated (same as ts or caller start). */
   dispatched_at: string;
+
+  // ── #76 additive pane-attribution fields ───────────────────────────────────
+  // ADDITIVE, not a schema bump: every field below is OPTIONAL and absence is
+  // valid, so every pre-#76 producer and consumer of guild.trace.dispatch.v1 is
+  // byte-unaffected (same discipline hooks/lib/trace-v2.ts states for the v2
+  // additive field set — omit, never serialize null). They are populated ONLY
+  // by the pane launch path (scripts/lib/host/pane-dispatch-trace.ts), which is
+  // the path that had NO run-trace presence at all before #76.
+
+  /**
+   * #58/#66 parity — the resolved specialist role attributed to THIS dispatch.
+   * The Agent-tool path stamps the same field name on its trace event
+   * (hooks/lib/trace-v2.ts `TraceV2Fields.attribution_specialist`), so a single
+   * consumer query spans the in-session Agent path AND the pane path. On the
+   * pane path this equals `specialist`; carrying it explicitly is what makes
+   * the two paths queryable as one.
+   */
+  attribution_specialist?: string;
+  /** Pane identifier the lane was launched into (e.g. a tmux `%12`). */
+  pane_id?: string;
+  /** The tmux session (new-session mode) or window (in-session mode) name. */
+  pane_target?: string;
+  /**
+   * The CONCRETE pane surface, for a surface `backend` cannot name.
+   *
+   * `backend` is a CLOSED enum: adding a value to it would make an event this
+   * version writes fail an OLDER validator reading the same
+   * `guild.trace.dispatch.v1` token — a silent break, not an additive change.
+   * A cmux surface therefore reports `backend: "unknown"` (literally true: the
+   * enum cannot name it) and identifies itself HERE. It deliberately does NOT
+   * borrow `backend: "tmux"`, whose contract is "tmux pane send-keys" — a
+   * consumer filtering `backend === "tmux"` for local panes must not silently
+   * collect cmux surfaces it never asked for.
+   *
+   * Absent when `backend` already names the surface exactly.
+   */
+  pane_backend?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -338,6 +375,38 @@ export function validateDispatchEvent(ev: unknown): ValidationResult {
   }
   if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"] as string)) {
     return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
+  }
+  // #76 additive pane fields — absence is valid; PRESENT-but-wrong-typed is not
+  // (a malformed receipt must be dropped by emitTraceEvent, never written).
+  for (const optKey of ["attribution_specialist", "pane_id", "pane_target", "pane_backend"]) {
+    if (e[optKey] === undefined) continue;
+    if (typeof e[optKey] !== "string" || e[optKey] === "") {
+      return { ok: false, reason: `${optKey}, when present, must be a non-empty string` };
+    }
+  }
+  // #76 cross-field invariant. `pane_backend` exists for ONE reason: to name a
+  // surface the closed `backend` enum cannot. Two shapes must therefore be
+  // impossible, because a consumer reading `pane_backend ?? backend` would be
+  // misled by either:
+  //   - a concrete backend carrying a contradicting surface
+  //     ({backend:"tmux", pane_backend:"cmux"} would count as cmux);
+  //   - a pre-routing INTENT dressed as a confirmed dispatch
+  //     ({backend:"unknown", backend_rung:0, pane_backend:"cmux"}).
+  if (e["pane_backend"] !== undefined) {
+    if (e["backend"] !== "unknown") {
+      return {
+        ok: false,
+        reason:
+          `pane_backend is only for a surface the backend enum cannot name; ` +
+          `it must not accompany backend "${e["backend"]}"`,
+      };
+    }
+    if ((e["backend_rung"] as number) < 1) {
+      return {
+        ok: false,
+        reason: "pane_backend marks a CONFIRMED dispatch, so backend_rung must be >= 1",
+      };
+    }
   }
   return { ok: true };
 }
