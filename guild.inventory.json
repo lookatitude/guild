@@ -984,6 +984,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-bundle-determinism",
+      "source_path": "scripts/check-bundle-determinism.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-docs-architecture",
       "source_path": "scripts/check-docs-architecture.ts",
       "kind": "cli"
