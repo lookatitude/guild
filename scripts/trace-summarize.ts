@@ -41,6 +41,61 @@ import { loadRunEvents, RunEvent } from "./lib/run-events";
  */
 type TelemetryEvent = RunEvent;
 
+// ── Event normalization ───────────────────────────────────────────────────
+
+/**
+ * Bridges the canonical v1.4 `tool_call`/`hook_event` field names (`status:
+ * "ok"|"err"|"n/a"`, `latency_ms`) onto the `ok`/`ms`/`tool` fields the rest
+ * of this module reads, without overwriting a field already present (the
+ * legacy hook-mirror shape already carries `ok`/`ms`/`tool` natively — this
+ * is a no-op for those lines).
+ *
+ * `status` is mapped via an explicit "ok"|"err" WHITELIST, not a `!== "n/a"`
+ * blacklist: other event types in the same v1.4 vocabulary reuse the
+ * `status` field name with a DIFFERENT enum (e.g. `phase_end` uses
+ * "ok"|"error"|"escalated" — see hooks/lib/v1.4/log-jsonl-schema.ts). A
+ * blacklist would silently normalize a valid `phase_end status:"escalated"`
+ * into `ok:false`, reproducing this same issue's false-ERROR defect one
+ * layer up. Any status value outside the whitelist (including "n/a", and
+ * any future/unrecognized value) leaves `ok` `undefined` — an unknown
+ * verdict, not a failure.
+ *
+ * `latency_ms`/`duration_ms` must be a non-negative number to map onto `ms`:
+ * the orphan-sweep producer (hooks/post-tool-use.ts) emits `latency_ms: -1`
+ * as an "unmeasured" sentinel on `status:"err"` rows, not a real duration.
+ *
+ * `hook_name` bridges to `tool` for `hook_event` rows so a canonical
+ * `hook_event status:"err"` (e.g. hooks/lib/context-compliance.ts) is
+ * visible in buildTimeline() the same way a `tool_call` error is, keeping
+ * the Timeline and the frontmatter error count in agreement. Mirrors
+ * mcp-servers/guild-telemetry/src/index.ts's normalizeEvent — the same fix
+ * already shipped there for this issue's sibling MCP-query symptom.
+ */
+function normalizeEvent(raw: TelemetryEvent): TelemetryEvent {
+  const e: TelemetryEvent = { ...raw };
+  if (e.ok === undefined && (e.status === "ok" || e.status === "err")) {
+    e.ok = e.status === "ok";
+  }
+  if (e.ms === undefined) {
+    if (typeof e.latency_ms === "number" && e.latency_ms >= 0) e.ms = e.latency_ms;
+    else if (typeof e.duration_ms === "number" && e.duration_ms >= 0) e.ms = e.duration_ms;
+  }
+  if (e.tool === undefined && e.event === "hook_event" && typeof e.hook_name === "string") {
+    e.tool = e.hook_name;
+  }
+  return e;
+}
+
+/** `"<n>ms"` when a numeric duration is known, else `"n/a"` — never the bare `undefined` string. */
+function durationLabel(ms: unknown): string {
+  return typeof ms === "number" ? `${ms}ms` : "n/a";
+}
+
+/** ERROR is only ever asserted from an explicit `ok === false` — an unknown/absent verdict is not an error. */
+function errorLabel(ok: unknown): string {
+  return ok === false ? " ⚠ ERROR" : "";
+}
+
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
 function parseArgs(argv: string[]): {
@@ -125,8 +180,13 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     (e) => e.tool === "Write" || e.tool === "Edit"
   ).length;
 
-  const errors = events.filter((e) => e.ok === false).length;
-  const okRate = events.length > 0 ? (events.length - errors) / events.length : 1;
+  // ok_rate is scoped to events with a defined ok/error verdict — an
+  // undefined verdict (e.g. canonical status:"n/a") must not deflate ok_rate
+  // as though it were a silent success, so it's excluded from both the
+  // numerator and the denominator (mirrors mcp-servers/guild-telemetry).
+  const okDefined = events.filter((e) => e.ok === true || e.ok === false);
+  const errors = okDefined.filter((e) => e.ok === false).length;
+  const okRate = okDefined.length > 0 ? (okDefined.length - errors) / okDefined.length : 1;
 
   return {
     runId,
@@ -179,15 +239,13 @@ function buildTimeline(events: TelemetryEvent[]): string {
     const ts = event.ts;
     if (event.event === "SubagentStop") {
       const spec = event.specialist || "(main session)";
-      lines.push(`- \`${ts}\` — specialist **${spec}** completed (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — specialist **${spec}** completed (${durationLabel(event.ms)})`);
     } else if (event.tool === "Write" || event.tool === "Edit") {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = event.ok ? "" : " ⚠ ERROR";
-      lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — ${event.tool}${spec}${errorLabel(event.ok)} (${durationLabel(event.ms)})`);
     } else if (event.tool) {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = event.ok ? "" : " ⚠ ERROR";
-      lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — ${event.tool}${spec}${errorLabel(event.ok)} (${durationLabel(event.ms)})`);
     }
   }
   return lines.join("\n");
@@ -212,8 +270,8 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
       s.toolCalls++;
       if (event.tool === "Write" || event.tool === "Edit") s.fileOps++;
     }
-    if (!event.ok) s.errors++;
-    else s.ok++;
+    if (event.ok === false) s.errors++;
+    else if (event.ok === true) s.ok++;
   }
 
   // Sort: named specialists alphabetically first, then (main session)
@@ -238,8 +296,9 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
 function buildNotableEvents(events: TelemetryEvent[]): string {
   const notable: string[] = [];
 
-  // Errors
-  const errorEvents = events.filter((e) => !e.ok);
+  // Errors — only an explicit ok === false is an error; unknown/absent
+  // verdicts (e.g. canonical status:"n/a") are not.
+  const errorEvents = events.filter((e) => e.ok === false);
   for (const e of errorEvents) {
     notable.push(
       `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"} — digest: ${e.payload_digest}`
@@ -264,7 +323,7 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
 
   // Skill-improvement candidates: specialists with errors
   const specialistsWithErrors = Array.from(
-    new Set(events.filter((e) => !e.ok && e.specialist).map((e) => e.specialist))
+    new Set(events.filter((e) => e.ok === false && e.specialist).map((e) => e.specialist))
   ).sort();
   if (specialistsWithErrors.length > 0) {
     hints.push(
@@ -371,8 +430,10 @@ function main(): void {
     );
   }
 
-  // Build summary
-  const summary = buildSummary(runId, events);
+  // Build summary — normalize canonical status/latency_ms onto ok/ms first
+  // (scripts/lib/run-events.ts intentionally leaves shape interpretation to
+  // the caller; see normalizeEvent's docstring above).
+  const summary = buildSummary(runId, events.map(normalizeEvent));
 
   // Write output
   const outDir = path.dirname(outFile);

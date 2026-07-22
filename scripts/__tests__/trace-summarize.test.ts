@@ -351,6 +351,169 @@ describe("trace-summarize.ts", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
+  // Canonical v1.4 tool_call shape (status/latency_ms, not ok/ms) — #73
+  // ─────────────────────────────────────────────────────────────
+  describe("canonical v1.4 tool_call shape — events-v14-tool-call.ndjson (#73)", () => {
+    // Real production `tool_call` events (hooks/post-tool-use.ts) carry
+    // `status: "ok"|"err"|"n/a"` + `latency_ms`, NOT the legacy hook-mirror
+    // `ok: boolean` + `ms: number` pair trace-summarize.ts reads. Before the
+    // fix, every row here — including the two "ok" rows, the "n/a" row, and
+    // the fieldless row — rendered "⚠ ERROR (undefinedms)" because `event.ok`
+    // and `event.ms` were simply undefined for all of them, and `event.ok ?
+    // "" : " ⚠ ERROR"` treats `undefined` as an error.
+    //
+    // Fixture rows: 1/2 status:"ok"; 3 status:"err" with the real orphan-sweep
+    // latency_ms:-1 sentinel (hooks/post-tool-use.ts); 4 status:"n/a"; 5 no
+    // status/latency_ms/ok/ms field at all (defensive fallback — this module's
+    // header comment: "every access below is defensive/undefined-safe"; not a
+    // literal producer shape, exercises the fully-fieldless path); 6 carries
+    // BOTH an explicit legacy ok:true/ms:77 AND a contradicting
+    // status:"err"/latency_ms:500 (proves existing ok/ms always wins — no
+    // legitimate producer emits both, but normalizeEvent must never clobber a
+    // field already present); 7 uses duration_ms instead of latency_ms; 8 a
+    // `phase_end status:"escalated"` — a DIFFERENT status enum than
+    // tool_call/hook_event's "ok"|"err"|"n/a" (see log-jsonl-schema.ts) that a
+    // `status !== "n/a"` blacklist would wrongly turn into an error; 9 a
+    // canonical `hook_event status:"err"` with `hook_name` (no `tool` field)
+    // proving the hook_name→tool Timeline bridge.
+    it("does not mark ok/n/a/fieldless/escalated rows as ERROR — only explicit status:err rows", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      const { exitCode } = runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const timelineLines = content
+        .split("\n")
+        .filter((l) => l.startsWith("- `"));
+      // 7 tool_call rows with a `tool` field + 1 hook_event bridged via
+      // hook_name. The phase_end row has neither `tool` nor `hook_name` and
+      // contributes no Timeline row.
+      expect(timelineLines).toHaveLength(8);
+
+      const errorLines = timelineLines.filter((l) => l.includes("ERROR"));
+      // status:"err" Bash row (a3) + status:"err" hook_event row (SessionStart)
+      // are real errors. The contradicting Grep row (a6) has an explicit
+      // ok:true that wins, and the escalated phase_end has no Timeline row.
+      expect(errorLines).toHaveLength(2);
+      expect(errorLines.some((l) => l.includes("Bash"))).toBe(true);
+      expect(errorLines.some((l) => l.includes("SessionStart"))).toBe(true);
+
+      const okLine = timelineLines.find((l) => l.includes("Skill"))!;
+      expect(okLine).not.toContain("ERROR");
+
+      const naStatusLine = timelineLines.find((l) => l.includes("WebFetch"))!;
+      expect(naStatusLine).not.toContain("ERROR");
+
+      const grepLine = timelineLines.find((l) => l.includes("Grep"))!;
+      expect(grepLine).not.toContain("ERROR");
+    });
+
+    it("does not classify a phase_end status:\"escalated\" as an error (different status enum than tool_call)", () => {
+      // Regression for the blacklist bug: `status !== "n/a"` would have
+      // mapped "escalated" to ok:false, inflating frontmatter `errors`.
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Only the two real status:"err" rows (Bash tool_call, SessionStart
+      // hook_event) count — "escalated" must not be a third.
+      expect(content).toMatch(/errors:\s*2/);
+    });
+
+    it("bridges hook_event.hook_name onto Timeline `tool` so its status:err is visible", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const hookLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("SessionStart"))!;
+      expect(hookLine).toBeDefined();
+      expect(hookLine).toContain("ERROR");
+      expect(hookLine).toContain("(5ms)");
+    });
+
+    it("renders (n/a) — never a literal (undefinedms) or a negative sentinel — for unknown durations", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      expect(content).not.toMatch(/undefinedms/);
+      expect(content).not.toMatch(/\(-1ms\)/);
+
+      const readLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("Read"))!;
+      expect(readLine).toContain("(n/a)");
+      expect(readLine).not.toContain("ERROR");
+
+      // The orphan-sweep sentinel latency_ms:-1 is not a real duration either.
+      const bashErrorLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("Bash") && l.includes("ERROR"))!;
+      expect(bashErrorLine).toContain("(n/a)");
+    });
+
+    it("maps a real positive latency_ms/duration_ms onto the rendered duration", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const timelineLines = content.split("\n").filter((l) => l.startsWith("- `"));
+      expect(timelineLines.find((l) => l.includes("Bash") && !l.includes("ERROR"))).toContain("(955ms)");
+      expect(timelineLines.find((l) => l.includes("Skill"))).toContain("(3ms)");
+      expect(timelineLines.find((l) => l.includes("WebFetch"))).toContain("(12ms)");
+      // duration_ms fallback (no latency_ms on this row).
+      expect(timelineLines.find((l) => l.includes("Glob"))).toContain("(42ms)");
+    });
+
+    it("never overwrites an existing ok/ms pair with a contradicting status/latency_ms", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const grepLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("Grep"))!;
+      // ok:true + ms:77 are already present on this row — status:"err" /
+      // latency_ms:500 must not override them.
+      expect(grepLine).not.toContain("ERROR");
+      expect(grepLine).toContain("(77ms)");
+    });
+
+    it("frontmatter errors/ok_rate agree with the timeline (2 errors out of 5 defined-verdict events)", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Verdict-bearing rows: 1 (ok), 2 (ok), 3 (err), 6 (ok, via existing
+      // ok:true), 9 (err, via hook_event status). Rows 4/5/7/8 have no
+      // defined ok verdict and are excluded from both errors and the
+      // ok_rate denominator.
+      expect(content).toMatch(/errors:\s*2/);
+      expect(content).toMatch(/ok_rate:\s*0\.6/);
+      const errorLines = content
+        .split("\n")
+        .filter((l) => l.startsWith("- `") && l.includes("ERROR"));
+      expect(errorLines).toHaveLength(2);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // CLI error handling
   // ─────────────────────────────────────────────────────────────
   describe("CLI error handling", () => {
