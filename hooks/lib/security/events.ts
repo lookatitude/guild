@@ -51,7 +51,25 @@ export type SecurityEventType =
    * — a silently persona-stripped dispatch. Blocked fail-closed by the
    * PreToolUse dispatch-integrity guard.
    */
-  | "dispatch_attribution_missing";
+  | "dispatch_attribution_missing"
+  /**
+   * #56: a Guild specialist lane was dispatched through the in-session `Agent`
+   * tool while the run's backend resolves to "team" (agent_mode "team", or
+   * "auto" that the D5 ladder resolves to team) AND a team substrate — tmux OR
+   * cmux — is available. That is a silent BACKEND DEGRADATION (no pane/surface,
+   * no named specialist). Blocked fail-closed by the PreToolUse
+   * backend-degradation detector; recorded with decision "allow" when the
+   * operator consciously overrode it via GUILD_ALLOW_BACKEND_DEGRADE, or when
+   * the downgrade is observable but not blockable (agent_mode "team" with no
+   * substrate — the launcher downgrades that case itself; or a lane recognised
+   * from prompt text alone). The full receipt, with the reason code, the
+   * lane-evidence tier, the substrate kind, and — when a team backend was
+   * reachable — the effective backend, is the
+   * `guild.backend_degradation.v1` record at
+   * `<runDir>/logs/backend-degradation.jsonl`; this security record is the
+   * audit-rail twin of the gate decision.
+   */
+  | "backend_degradation";
 
 /** The action Guild took for the gated tool call. */
 export type SecurityDecision = "ask" | "deny" | "allow" | "pass"

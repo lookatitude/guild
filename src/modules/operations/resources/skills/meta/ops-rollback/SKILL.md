@@ -77,17 +77,17 @@ plain deploy/release rollback.
 
 ```
 # One-time (or periodic) snapshot of a known-clean wiki state:
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/kb-snapshot.ts snapshot \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/kb-snapshot.ts snapshot \
   --wiki-dir <repo-root>/.guild/wiki --dest-dir <repo-root>/.guild/kb-snapshots --id <snapshot-id>
 
 # At rollback time: verify current state against that snapshot (detection only).
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/kb-snapshot.ts verify \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/kb-snapshot.ts verify \
   --manifest <repo-root>/.guild/kb-snapshots/<snapshot-id>.json
 
 # If tampered, get a plan-only diff (added/removed/tampered) — this NEVER
 # restores automatically; you drive the actual restore (git checkout / copy
 # from backup) per the plan:
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/kb-snapshot.ts rollback \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/kb-snapshot.ts rollback \
   --manifest <repo-root>/.guild/kb-snapshots/<snapshot-id>.json
 ```
 

@@ -33,8 +33,8 @@ __export(pre_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_tool_use_exports);
-var fs6 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var fs7 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -263,11 +263,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path6 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path6), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path6)) return;
+  const path7 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path7), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path7)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path6, "wx");
+    const fd = (0, import_node_fs.openSync)(path7, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -320,7 +320,12 @@ function withStableLock(runDir, fn, opts = {}) {
 }
 
 // lib/trace-v2.ts
+var crypto = __toESM(require("crypto"));
 var SIDECAR_MAX_BYTES = 16 * 1024;
+function genSpanId(runId, eventType, ts, actorId) {
+  const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
+  return crypto.createHash("sha256").update(material).digest("hex").slice(0, 16);
+}
 
 // lib/v1.4/log-jsonl-writer.ts
 function sidecarPath(runDir) {
@@ -360,14 +365,14 @@ function capSidecarText(existing, incomingLine, maxBytes) {
 }
 function appendSidecarPre(runDir, entry, opts = {}) {
   validateSidecarEntry(entry);
-  const path6 = sidecarPath(runDir);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path6), { recursive: true });
+  const path7 = sidecarPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path7), { recursive: true });
   const redacted = redactEventFields(entry, opts.fieldCap);
   const line = JSON.stringify(redacted) + "\n";
   const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
   const appendCapped = () => {
-    const existing = (0, import_node_fs2.existsSync)(path6) ? (0, import_node_fs2.readFileSync)(path6, "utf8") : "";
-    (0, import_node_fs2.writeFileSync)(path6, capSidecarText(existing, line, maxBytes));
+    const existing = (0, import_node_fs2.existsSync)(path7) ? (0, import_node_fs2.readFileSync)(path7, "utf8") : "";
+    (0, import_node_fs2.writeFileSync)(path7, capSidecarText(existing, line, maxBytes));
   };
   if (process.platform === "win32") {
     appendCapped();
@@ -529,7 +534,7 @@ function resolveRunAutonomyMode(opts) {
 // lib/security/scrubbed-write.ts
 var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
-var crypto = __toESM(require("node:crypto"));
+var crypto2 = __toESM(require("node:crypto"));
 
 // lib/security/secrets.ts
 function applySecretsPolicy(value, policy, opts) {
@@ -701,7 +706,7 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result.sha256 = crypto.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result;
   }
@@ -735,7 +740,7 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result.sha256 = crypto.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result;
   }
@@ -910,12 +915,12 @@ function resolveScopeDecision(args) {
 }
 
 // lib/security/mcp-hash-pin.ts
-var crypto2 = __toESM(require("node:crypto"));
+var crypto3 = __toESM(require("node:crypto"));
 function isMcpTool(toolName) {
   return typeof toolName === "string" && toolName.startsWith("mcp__");
 }
 function hashDescription(description) {
-  return crypto2.createHash("sha256").update(description, "utf8").digest("hex");
+  return crypto3.createHash("sha256").update(description, "utf8").digest("hex");
 }
 function verifyMcpDescription(toolName, liveDescription, pins) {
   const pinned = pins[toolName];
@@ -1010,6 +1015,249 @@ function describeViolation(v, role, attr) {
   }
 }
 
+// lib/backend-degradation.ts
+var import_node_child_process = require("node:child_process");
+var fs6 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+var OVERRIDE_ENV = "GUILD_ALLOW_BACKEND_DEGRADE";
+var BACKEND_DEGRADATION_EVENT = "backend_degradation";
+var BACKEND_DEGRADATION_SCHEMA = "guild.backend_degradation.v1";
+var RECEIPT_RELATIVE_PATH = "logs/backend-degradation.jsonl";
+var TEAM_AGENT_MODE = "team";
+var AUTO_AGENT_MODE = "auto";
+var HANDOFF_PROTOCOL_HEADER_RE = /^HANDOFF PROTOCOL \(mandatory\s*[—–-]\s*single channel/im;
+var HANDOFF_FINAL_ACTION_RE = /Your final action is writing your handoff receipt to the receipt file\./i;
+function escapeRe(v) {
+  return v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function hasHandoffProtocolBlock(prompt, runId) {
+  if (!HANDOFF_PROTOCOL_HEADER_RE.test(prompt)) return false;
+  if (!HANDOFF_FINAL_ACTION_RE.test(prompt)) return false;
+  const receiptPathRe = new RegExp(`\\.guild/runs/${escapeRe(runId)}/handoffs/`);
+  return receiptPathRe.test(prompt);
+}
+var STRUCTURED_CARRIER_KEYS = [
+  "GUILD_SPECIALIST",
+  "GUILD_TASK_ID",
+  "GUILD_AGENT_DEFINITION"
+];
+function hasStructuredCarrier(toolInput) {
+  if (toolInput === null || typeof toolInput !== "object") return false;
+  const env = toolInput["env"];
+  if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
+  const map = env;
+  return STRUCTURED_CARRIER_KEYS.some((k) => {
+    const v = map[k];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+}
+function classifyLaneEvidence(toolInput, attr, prompt, runId) {
+  if (hasStructuredCarrier(toolInput)) return "structured";
+  if (hasHandoffProtocolBlock(prompt, runId)) return "prompt_only";
+  if (attr.isSpecialistLane || attr.hasLaneSignature) return "prompt_only";
+  return "none";
+}
+function isGuildLaneDispatch(toolInput, attr, prompt, runId) {
+  return classifyLaneEvidence(toolInput, attr, prompt, runId) !== "none";
+}
+var LANE_PROCESS_ENV_KEYS = ["GUILD_LANE_ID", "GUILD_TASK_ID", "GUILD_SPECIALIST"];
+function isLeadProcess(env) {
+  return !LANE_PROCESS_ENV_KEYS.some((k) => {
+    const v = env[k];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+}
+function readSnapshotAgentMode(guildRoot, runId) {
+  const file = path5.join(guildRoot, ".guild", "runs", runId, "resolved-settings.json");
+  let raw;
+  try {
+    raw = fs6.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  let doc;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const effective = doc["effective"];
+  if (effective === null || typeof effective !== "object" || Array.isArray(effective)) {
+    return null;
+  }
+  const mode = effective["agent_mode"];
+  return typeof mode === "string" && mode.length > 0 ? mode : null;
+}
+var DEFAULT_BACKEND_GUARD_GRACE_MS = 3 * 60 * 60 * 1e3;
+function backendGuardGraceMs(env = process.env) {
+  const raw = env["GUILD_BACKEND_GUARD_GRACE_MS"];
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return DEFAULT_BACKEND_GUARD_GRACE_MS;
+}
+function dispatchAssertsRunId(toolInput, runId) {
+  if (toolInput === null || typeof toolInput !== "object") return false;
+  const env = toolInput["env"];
+  if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
+  const v = env["GUILD_RUN_ID"];
+  return typeof v === "string" && v.trim() === runId;
+}
+function newestRunSignalMs(guildRoot, runId) {
+  const dir = path5.join(guildRoot, ".guild", "runs", runId);
+  const candidates = [path5.join(dir, "resolved-settings.json")];
+  for (const sub of ["handoffs", "in-progress"]) {
+    try {
+      for (const name of fs6.readdirSync(path5.join(dir, sub))) {
+        candidates.push(path5.join(dir, sub, name));
+      }
+    } catch {
+    }
+  }
+  let newest = 0;
+  for (const p of candidates) {
+    try {
+      newest = Math.max(newest, fs6.statSync(p).mtimeMs);
+    } catch {
+    }
+  }
+  return newest;
+}
+function isRunFresh(guildRoot, runId, source, nowMs = Date.now(), graceMs = backendGuardGraceMs()) {
+  if (source === "env") return true;
+  const newest = newestRunSignalMs(guildRoot, runId);
+  if (newest === 0) return false;
+  return nowMs - newest <= graceMs;
+}
+function probeTmuxAvailable() {
+  try {
+    return (0, import_node_child_process.spawnSync)("tmux", ["-V"], { stdio: "ignore", timeout: 2e3 }).status === 0;
+  } catch {
+    return false;
+  }
+}
+function resolveTeamSubstrate(agentMode, env = process.env, probe = probeTmuxAvailable) {
+  const cmux = env["CMUX_WORKSPACE_ID"];
+  if (typeof cmux === "string" && cmux.trim().length > 0) return "cmux";
+  if (agentMode === AUTO_AGENT_MODE) {
+    const tmuxEnv = env["TMUX"];
+    if (typeof tmuxEnv === "string" && tmuxEnv.trim().length > 0) return "tmux";
+  }
+  return probe() ? "tmux" : "none";
+}
+function isOverrideEngaged(env) {
+  const raw = env[OVERRIDE_ENV];
+  if (typeof raw !== "string") return false;
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+var SAFE_SUBAGENT_TYPE_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+function safeSubagentType(value) {
+  if (value.length === 0) return "<absent>";
+  return SAFE_SUBAGENT_TYPE_RE.test(value) ? value : "<unsafe>";
+}
+function resolveBackendDegradation(facts) {
+  const evidence = classifyLaneEvidence(
+    facts.toolInput,
+    facts.attr,
+    facts.prompt,
+    facts.runId
+  );
+  const base = {
+    decision: "pass",
+    evidence,
+    subagentType: safeSubagentType(facts.attr.subagentType)
+  };
+  if (facts.attr.specialist !== void 0) base.specialist = facts.attr.specialist;
+  if (!facts.isLead) return base;
+  if (!facts.runFresh) return base;
+  if (evidence === "none") return base;
+  const hasSubstrate = facts.substrate !== "none";
+  if (facts.agentMode === TEAM_AGENT_MODE && !hasSubstrate) {
+    return { ...base, decision: "allow_recorded", reason: "team_substrate_unavailable" };
+  }
+  if (hasSubstrate) {
+    const reason = facts.agentMode === TEAM_AGENT_MODE ? "team_substrate_available" : facts.agentMode === AUTO_AGENT_MODE ? "auto_resolves_to_team" : null;
+    if (reason !== null) {
+      const blockable = evidence === "structured";
+      return {
+        ...base,
+        decision: !blockable ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny",
+        reason,
+        effectiveBackend: "team"
+      };
+    }
+  }
+  return base;
+}
+var LAUNCHER_HINT = "npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root> --run-id <run-id>";
+function remedyForSubstrate(substrate) {
+  if (substrate === "cmux") {
+    return `CMUX_WORKSPACE_ID is set, so the team substrate here is cmux (rung 0 of team, checked BEFORE tmux): dispatch each lane as its own VISIBLE cmux surface (cmux new-pane / new-surface --focus false, never a focus-stealing verb), arm a per-lane handoff watcher, and reap each surface on receipt \u2014 the lead assumes the launcher-owned obligations. Full mechanics: skills/meta/execute-plan/SKILL.md \xA7"Backend + routing (summary)". Do NOT route this through agent-team-launcher.ts; the cmux rung bypasses it.`;
+  }
+  return `Dispatch through the launcher instead: ${LAUNCHER_HINT} (it owns the D5 ladder, the CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS gate, and the tmux strategy).`;
+}
+function backendClause(reason) {
+  return reason === "auto_resolves_to_team" ? `this run's agent_mode is "auto" and a team substrate IS available, which the D5 ladder resolves to the TEAM backend` : `this run's resolved agent_mode is "team" and a team substrate IS available`;
+}
+function buildDenyMessage(reason, role, subagentType, substrate) {
+  return `Guild backend integrity (#56): ${backendClause(reason)}, but the "${role}" lane is being dispatched through the in-session Agent tool (subagent_type="${subagentType}") instead of a visible pane/surface. That is a silent BACKEND DEGRADATION: no pane, no named specialist, and lane execution semantics change out from under the approved plan. guild:execute-plan's contract is refuse-don't-fallback (skills/meta/execute-plan/dispatch.md \xA7"Backend choice"). ${remedyForSubstrate(substrate)} If the team backend genuinely cannot be honored, downgrade CONSCIOUSLY: re-run with ${OVERRIDE_ENV}=1 \u2014 the fallback is then allowed and a ${BACKEND_DEGRADATION_EVENT} receipt is written to the run record either way. Blocking this dispatch.`;
+}
+function buildAllowMessage(reason, role, subagentType, substrate, evidence) {
+  const head = `Guild backend integrity (#56): the "${role}" lane was dispatched through the in-session Agent tool (subagent_type="${subagentType}"). `;
+  const tail = `Recording a ${BACKEND_DEGRADATION_EVENT} receipt at .guild/runs/<run-id>/${RECEIPT_RELATIVE_PATH} so the downgrade is auditable post-hoc.`;
+  const promptOnlyClause = `The lane was identified from PROMPT TEXT alone (the handoff-protocol block, or the #58 adoption marker / role anchor / dispatch prose) \u2014 the dispatch env carries no GUILD_SPECIALIST / GUILD_TASK_ID / GUILD_AGENT_DEFINITION carrier. Quoted text is indistinguishable from a real brief, so this is recorded, not blocked.`;
+  if (reason === "team_substrate_unavailable") {
+    return head + `agent_mode="team" but NO team substrate (tmux/cmux) is available, so the resolved backend cannot be honored \u2014 agent-team-launcher.ts downgrades this case itself, so it is not blocked here. ` + (evidence === "prompt_only" ? `${promptOnlyClause} ` : "") + tail;
+  }
+  if (evidence === "prompt_only") {
+    return head + `${backendClause(reason)}. ${promptOnlyClause} If it IS a lane, honor the backend: ${remedyForSubstrate(substrate)} ${tail}`;
+  }
+  return head + `OVERRIDDEN: ${backendClause(reason)}, and the in-session fallback was allowed because ${OVERRIDE_ENV} is set. To honor the backend instead: ${remedyForSubstrate(substrate)} ${tail}`;
+}
+function buildBackendDegradationEvent(input) {
+  const evt = {
+    schema_version: BACKEND_DEGRADATION_SCHEMA,
+    ts: input.ts,
+    event: BACKEND_DEGRADATION_EVENT,
+    tool: "Agent",
+    specialist: input.specialist,
+    // A degradation is never an "ok" dispatch, whether or not it was allowed —
+    // an allowed downgrade is still a downgrade the run record must flag.
+    ok: false,
+    ms: 0,
+    run_id: input.runId,
+    decision: input.decision,
+    reason: input.reason,
+    snapshot_agent_mode: input.agentMode,
+    substrate: input.substrate,
+    lane_evidence: input.evidence,
+    attempted_subagent_type: safeSubagentType(input.subagentType),
+    detail: input.detail,
+    span_id: input.spanId
+  };
+  if (input.effectiveBackend !== void 0) evt.effective_backend = input.effectiveBackend;
+  if (input.decision === "allow_override") evt.override_env = OVERRIDE_ENV;
+  if (input.laneId !== void 0) evt.lane_id = input.laneId;
+  return evt;
+}
+function appendBackendDegradationEvent(runDir, event) {
+  try {
+    const file = path5.join(runDir, RECEIPT_RELATIVE_PATH);
+    fs6.mkdirSync(path5.dirname(file), { recursive: true });
+    fs6.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [backend-degradation] receipt write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
 // lib/guild-hook-event.ts
 async function readHookStdin() {
   return new Promise((resolve4) => {
@@ -1042,9 +1290,9 @@ function isKnownTool(name) {
   return TOOL_CALL_TOOL_VALUES.includes(name);
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path5.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path6.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs6.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs7.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -1076,8 +1324,8 @@ function readHostCapability(cwd) {
   addCandidate(candidates, legacyByRegistry[hostRes.id]);
   for (const hostId of candidates) {
     try {
-      const manifestPath = path5.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
-      const raw = fs6.readFileSync(manifestPath, "utf8");
+      const manifestPath = path6.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const raw = fs7.readFileSync(manifestPath, "utf8");
       return JSON.parse(raw);
     } catch {
     }
@@ -1086,8 +1334,8 @@ function readHostCapability(cwd) {
 }
 function writeApprovalRequest(runDir, opts) {
   try {
-    const approvalDir = path5.join(runDir, "agent-bus", "approvals");
-    fs6.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path6.join(runDir, "agent-bus", "approvals");
+    fs7.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-${opts.tool.toLowerCase()}.json`;
@@ -1102,7 +1350,7 @@ function writeApprovalRequest(runDir, opts) {
     if (opts.laneId) record["lane_id"] = opts.laneId;
     if (opts.dispatchRung) record["dispatch_rung"] = opts.dispatchRung;
     const content = JSON.stringify(record, null, 2) + "\n";
-    scrubbedWrite(path5.join(approvalDir, fileName), content, {
+    scrubbedWrite(path6.join(approvalDir, fileName), content, {
       surface: "bus",
       runDir,
       runId: opts.runId,
@@ -1130,7 +1378,7 @@ function hasGuildSignature(content) {
   return false;
 }
 function isInsideGuildDir(absPath) {
-  return path5.resolve(absPath).split(path5.sep).includes(".guild");
+  return path6.resolve(absPath).split(path6.sep).includes(".guild");
 }
 function runBoundaryGuard(payload, cwd, ctx) {
   const tool = payload.tool_name;
@@ -1154,7 +1402,7 @@ ${e.new_string}`;
     }
   }
   if (!hasGuildSignature(content)) return false;
-  const abs = path5.isAbsolute(filePath) ? filePath : path5.resolve(cwd, filePath);
+  const abs = path6.isAbsolute(filePath) ? filePath : path6.resolve(cwd, filePath);
   if (isInsideGuildDir(abs)) return false;
   const guardReason = `Guild-owned-file boundary (P5-boundary-001): a Guild-signed artifact would be written OUTSIDE the consuming repo's .guild/ (${abs}). Guild-owned files belong under .guild/ (or .guild/agents/proposed/, .guild/skills/proposed-*). Confirm this write is intentional.`;
   const toolName = payload.tool_name ?? "";
@@ -1209,8 +1457,8 @@ function readMcpDescription(payload, runDir, toolName) {
   }
   if (runDir !== void 0) {
     try {
-      const p = path5.join(runDir, "logs", "mcp-tool-descriptions.json");
-      const map = JSON.parse(fs6.readFileSync(p, "utf8"));
+      const p = path6.join(runDir, "logs", "mcp-tool-descriptions.json");
+      const map = JSON.parse(fs7.readFileSync(p, "utf8"));
       const d = map[toolName];
       if (typeof d === "string") return d;
     } catch {
@@ -1226,7 +1474,7 @@ function runSecurityEnforcement(payload, cwd) {
     const envRunId = process.env["GUILD_RUN_ID"];
     const envTaskId = process.env["GUILD_TASK_ID"];
     if (typeof envRunId === "string" && envRunId.length > 0 && typeof envTaskId === "string" && envTaskId.length > 0) {
-      const scopeFilePath = path5.join(
+      const scopeFilePath = path6.join(
         resolveGuildRoot(cwd),
         ".guild",
         "runs",
@@ -1400,6 +1648,100 @@ function runDispatchIntegrityGuard(payload, cwd) {
   );
   return true;
 }
+function evaluateBackendDegradation(payload, cwd) {
+  if (payload.tool_name !== "Agent") return null;
+  const envRunId = process.env["GUILD_RUN_ID"];
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) return null;
+  const runIdSource = typeof envRunId === "string" && envRunId.length > 0 || dispatchAssertsRunId(payload.tool_input, runId) ? "env" : "sentinel";
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return null;
+  const ti = payload.tool_input;
+  const prompt = typeof ti?.["prompt"] === "string" ? ti["prompt"] : "";
+  if (!isLeadProcess(process.env)) return null;
+  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+  const guildRoot = resolveGuildRoot(cwd);
+  const agentMode = readSnapshotAgentMode(guildRoot, runId);
+  if (agentMode !== TEAM_AGENT_MODE && agentMode !== AUTO_AGENT_MODE) return null;
+  const runFresh = isRunFresh(guildRoot, runId, runIdSource);
+  if (!runFresh) return null;
+  const substrate = resolveTeamSubstrate(agentMode, process.env);
+  const result = resolveBackendDegradation({
+    toolInput: payload.tool_input,
+    attr,
+    prompt,
+    runId,
+    agentMode,
+    substrate,
+    overrideEngaged: isOverrideEngaged(process.env),
+    isLead: true,
+    runFresh
+  });
+  if (result.decision === "pass" || result.reason === void 0) return null;
+  const role = result.specialist ?? "<unattributed>";
+  const message = result.decision === "deny" ? buildDenyMessage(result.reason, role, result.subagentType, substrate) : buildAllowMessage(
+    result.reason,
+    role,
+    result.subagentType,
+    substrate,
+    result.evidence
+  );
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId = typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : void 0;
+  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  try {
+    appendBackendDegradationEvent(
+      runDir,
+      buildBackendDegradationEvent({
+        runId,
+        ts,
+        spanId: genSpanId(runId, BACKEND_DEGRADATION_EVENT, ts, result.specialist ?? "main"),
+        decision: result.decision,
+        reason: result.reason,
+        specialist: result.specialist ?? "",
+        subagentType: result.subagentType,
+        agentMode,
+        effectiveBackend: result.effectiveBackend,
+        substrate,
+        evidence: result.evidence,
+        detail: message,
+        laneId
+      })
+    );
+  } catch {
+  }
+  try {
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        event_type: "backend_degradation",
+        decision: result.decision === "deny" ? "deny" : "allow",
+        tool: "Agent",
+        detail: message
+      })
+    );
+  } catch {
+  }
+  if (result.decision !== "deny") {
+    process.stderr.write(`warn: [pre-tool-use] ${message}
+`);
+  }
+  return { deny: result.decision === "deny", message };
+}
+function emitBackendDegradationDeny(message) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: message
+      }
+    })
+  );
+}
 async function main() {
   const raw = await readHookStdin();
   let payload = {};
@@ -1410,13 +1752,18 @@ async function main() {
     return;
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+  const backend = evaluateBackendDegradation(payload, cwd);
   if (runDispatchIntegrityGuard(payload, cwd)) return;
+  if (backend !== null && backend.deny) {
+    emitBackendDegradationDeny(backend.message);
+    return;
+  }
   if (runSecurityEnforcement(payload, cwd)) return;
   {
     const bgHostCap = readHostCapability(cwd);
     const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
     const bgRunId = resolveRunId(cwd);
-    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path5.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
+    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path6.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
     const bgLaneId = typeof bgLaneEnv === "string" && bgLaneEnv.length > 0 ? bgLaneEnv : void 0;
     const bgDispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || void 0;
@@ -1450,7 +1797,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path5.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path6.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
   const entry = {
     run_id: runId,
@@ -1466,7 +1813,7 @@ async function main() {
     );
   }
   try {
-    fs6.mkdirSync(path5.join(runDir, "logs"), { recursive: true });
+    fs7.mkdirSync(path6.join(runDir, "logs"), { recursive: true });
     appendSidecarPre(runDir, entry);
   } catch (err) {
     process.stderr.write(
