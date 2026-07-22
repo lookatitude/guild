@@ -77,6 +77,28 @@ import {
   dispatchViolations,
   resolveDispatchAttribution,
 } from "./lib/dispatch-attribution.js";
+// #56 backend-degradation detector — dispatch.md's "refuse-don't-fallback" prose
+// as code. Extends the #58 attribution above with the lane-brief signature and
+// the resolved-backend / tmux facts. See lib/backend-degradation.ts header.
+import {
+  appendBackendDegradationEvent,
+  AUTO_AGENT_MODE,
+  BACKEND_DEGRADATION_EVENT,
+  buildAllowMessage,
+  buildBackendDegradationEvent,
+  buildDenyMessage,
+  dispatchAssertsRunId,
+  isGuildLaneDispatch,
+  isLeadProcess,
+  isOverrideEngaged,
+  isRunFresh,
+  readSnapshotAgentMode,
+  resolveBackendDegradation,
+  resolveTeamSubstrate,
+  type RunIdSource,
+  TEAM_AGENT_MODE,
+} from "./lib/backend-degradation.js";
+import { genSpanId } from "./lib/trace-v2.js";
 // L5a: host-neutral hook payload + Claude emitter. PreToolUsePayload is now the
 // shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
 // PreToolUse security behavior is preserved byte-for-byte.
@@ -782,6 +804,187 @@ function runDispatchIntegrityGuard(payload: GuildHookEvent, cwd: string): boolea
   return true;
 }
 
+// ── Backend-degradation detector (#56) ──────────────────────────────────────
+//
+// Convert `dispatch.md §"Backend choice"`'s refuse-don't-fallback PROSE into a
+// runtime detector. When the run's backend resolves to team (agent_mode "team",
+// or "auto" that the D5 ladder resolves to team) and a team substrate (tmux or
+// cmux) IS available, a Guild specialist lane dispatched through the in-session
+// `Agent` tool is a silent BACKEND DEGRADATION — the exact ~26h collapse issue
+// #56 documents. Deny it loudly, or (with GUILD_ALLOW_BACKEND_DEGRADE) allow it
+// CONSCIOUSLY. Two cases are RECORDED but never blocked: team-with-no-substrate
+// (the launcher downgrades that itself), and a lane identified from prompt text
+// ALONE (indistinguishable from a prompt quoting a live brief). See
+// `BackendDegradationReason` / `LaneEvidence` for the per-row rationale.
+//
+// EVERY non-pass decision writes a `guild.backend_degradation.v1` receipt to
+// `<runDir>/logs/backend-degradation.jsonl` — a durable, greppable record of the
+// downgrade. (Consumer wiring in verify-done/reflect is a followup; the receipt
+// is auditable by path today.)
+//
+// Scope is as tight as the #58 guard's (never interfere with a non-Guild call):
+//   - only tool_name === "Agent";
+//   - only inside a resolvable, SAFE, and FRESH Guild run (a stale
+//     current-run-id sentinel from a long-finished run never gates);
+//   - only when the run's resolved-settings snapshot proves the configured
+//     agent_mode (no snapshot ⇒ no proof ⇒ no gate);
+//   - only when the dispatching process is the LEAD (a specialist already
+//     running in a pane that spawns a helper is not degrading anything);
+//   - only for a Guild LANE dispatch, and only STRUCTURED lane evidence blocks.
+// A learn-lane generic fan-out, an Explore sweep, an `agent`/`subagent`-mode run
+// (where Agent dispatch is the DESIGNED path), and any non-Guild Agent call all
+// fall through untouched.
+
+/** The detector's outcome, when it produced one. */
+interface BackendGuardOutcome {
+  /** True when the dispatch must be denied and this message shown. */
+  deny: boolean;
+  message: string;
+}
+
+/**
+ * Evaluate the detector AND emit its receipts. Returns null when the dispatch is
+ * clean (or unprovable) and undecided otherwise.
+ *
+ * Receipt emission is deliberately SEPARATE from the deny emission: the #58
+ * dispatch-integrity guard may own stdout for the same event, and a dispatch
+ * that is both persona-stripped AND backend-degraded must still leave a
+ * `backend_degradation` receipt (adversarial review round 1, finding 6).
+ */
+function evaluateBackendDegradation(
+  payload: GuildHookEvent,
+  cwd: string,
+): BackendGuardOutcome | null {
+  if (payload.tool_name !== "Agent") return null;
+
+  // The run id's PROVENANCE decides whether a freshness test applies: an
+  // explicit GUILD_RUN_ID is session-bound identity; the current-run-id sentinel
+  // outlives the run that wrote it (closeRun never clears it).
+  const envRunId = process.env["GUILD_RUN_ID"];
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) return null;
+  // Trusted identity = an exported GUILD_RUN_ID, OR the dispatch itself naming
+  // this run in its descriptor env (the `/guild:build` sentinel-only shape).
+  const runIdSource: RunIdSource =
+    (typeof envRunId === "string" && envRunId.length > 0) ||
+    dispatchAssertsRunId(payload.tool_input, runId)
+      ? "env"
+      : "sentinel";
+
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return null;
+  const ti = payload.tool_input as Record<string, unknown> | undefined;
+  const prompt = typeof ti?.["prompt"] === "string" ? (ti["prompt"] as string) : "";
+
+  // Cheap-first short-circuits — these only avoid work. `resolveBackendDegradation`
+  // re-checks every condition and remains the single authority on the matrix.
+  if (!isLeadProcess(process.env)) return null;
+  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+
+  const guildRoot = resolveGuildRoot(cwd);
+  const agentMode = readSnapshotAgentMode(guildRoot, runId);
+  if (agentMode !== TEAM_AGENT_MODE && agentMode !== AUTO_AGENT_MODE) return null;
+  const runFresh = isRunFresh(guildRoot, runId, runIdSource);
+  if (!runFresh) return null;
+
+  // Only now pay for the subprocess probe.
+  const substrate = resolveTeamSubstrate(agentMode, process.env);
+  const result = resolveBackendDegradation({
+    toolInput: payload.tool_input,
+    attr,
+    prompt,
+    runId,
+    agentMode,
+    substrate,
+    overrideEngaged: isOverrideEngaged(process.env),
+    isLead: true,
+    runFresh,
+  });
+  if (result.decision === "pass" || result.reason === undefined) return null;
+
+  const role = result.specialist ?? "<unattributed>";
+  const message =
+    result.decision === "deny"
+      ? buildDenyMessage(result.reason, role, result.subagentType, substrate)
+      : buildAllowMessage(
+          result.reason,
+          role,
+          result.subagentType,
+          substrate,
+          result.evidence,
+        );
+
+  // ── Receipt: the run-record artifact (the #56 acceptance criterion) ───────
+  // Written for EVERY non-pass decision — an allowed downgrade is exactly the
+  // silent degrade this issue is about, so it must leave a trail too.
+  const ts = new Date().toISOString();
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId =
+    typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
+      ? laneEnv
+      : undefined;
+  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  try {
+    appendBackendDegradationEvent(
+      runDir,
+      buildBackendDegradationEvent({
+        runId,
+        ts,
+        spanId: genSpanId(runId, BACKEND_DEGRADATION_EVENT, ts, result.specialist ?? "main"),
+        decision: result.decision,
+        reason: result.reason,
+        specialist: result.specialist ?? "",
+        subagentType: result.subagentType,
+        agentMode,
+        effectiveBackend: result.effectiveBackend,
+        substrate,
+        evidence: result.evidence,
+        detail: message,
+        laneId,
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  // Audit-rail twin of the decision, alongside the #58 guard's records. `detail`
+  // is redacted by buildSecurityEvent before it reaches disk.
+  try {
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        event_type: "backend_degradation",
+        decision: result.decision === "deny" ? "deny" : "allow",
+        tool: "Agent",
+        detail: message,
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  if (result.decision !== "deny") {
+    // Loud on stderr, but the dispatch proceeds.
+    process.stderr.write(`warn: [pre-tool-use] ${message}\n`);
+  }
+  return { deny: result.decision === "deny", message };
+}
+
+/** Emit the #56 deny decision. The caller must then own stdout for this event. */
+function emitBackendDegradationDeny(message: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: message,
+      },
+    }),
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export async function main(): Promise<void> {
@@ -796,13 +999,32 @@ export async function main(): Promise<void> {
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
 
+  // Both dispatch guards run BEFORE capability enforcement so an `Agent`
+  // dispatch defect is DENIED outright and can never be downgraded to an `ask`
+  // (and then approved) by a capability-scope gate. Each is scoped tightly to
+  // the `Agent` tool inside an active run and falls through untouched otherwise.
+  // Whichever denies owns stdout for this event, so the rest is skipped.
+  //
+  // #56 backend-degradation detector. EVALUATED FIRST (before #58 can own
+  // stdout) so its receipt is written even when the same dispatch is ALSO
+  // persona-stripped — the two defects are independent audit dimensions and a
+  // #58 deny must not swallow the #56 record. It does not emit its decision
+  // here, only its receipts.
+  const backend = evaluateBackendDegradation(payload, cwd);
+
   // #58 dispatch-integrity guard — fail closed on a persona-stripped Guild
-  // specialist dispatch. Runs FIRST (before capability enforcement) so a
-  // stripped `Agent` dispatch is DENIED outright and can never be downgraded to
-  // an `ask` (and then approved) by a capability-scope gate. Scoped tightly to
-  // the `Agent` tool inside an active run; falls through untouched otherwise. If
-  // it denies, it owns stdout for this event, so skip everything else.
+  // specialist dispatch. It emits first when both fire: a stripped persona is
+  // the more specific defect, and the #56 receipt is already on disk.
   if (runDispatchIntegrityGuard(payload, cwd)) return;
+
+  // #56 deny — runs before capability enforcement for the same reason the #58
+  // guard does: a backend downgrade must not be reachable through an `ask` a
+  // capability gate could approve. A recorded/overridden allow falls through so
+  // the rest of the hook (telemetry sidecar) still runs.
+  if (backend !== null && backend.deny) {
+    emitBackendDegradationDeny(backend.message);
+    return;
+  }
 
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
