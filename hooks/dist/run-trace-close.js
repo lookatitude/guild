@@ -8472,13 +8472,15 @@ async function main3() {
   });
   process.exit(0);
 }
-main3().catch((err) => {
-  process.stderr.write(
-    `[run-trace-close] FATAL: ${err instanceof Error ? err.message : String(err)}
+if (require.main === module) {
+  main3().catch((err) => {
+    process.stderr.write(
+      `[run-trace-close] FATAL: ${err instanceof Error ? err.message : String(err)}
 `
-  );
-  process.exit(0);
-});
+    );
+    process.exit(0);
+  });
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   findTerminalCheckpoint

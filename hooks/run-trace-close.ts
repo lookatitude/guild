@@ -202,9 +202,21 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-main().catch((err: unknown) => {
-  process.stderr.write(
-    `[run-trace-close] FATAL: ${err instanceof Error ? err.message : String(err)}\n`,
-  );
-  process.exit(0);
-});
+// CLI gate — only run main() when this file is the actual process entrypoint
+// (the `npx tsx` shebang invocation, or the bundled dist/run-trace-close.js
+// run directly). Without this guard, merely `import`/`require`-ing this
+// module (e.g. a test pulling in `findTerminalCheckpoint`) executes main()
+// as a side effect of module load: it reads stdin, fails to parse it, and
+// hits the catch at line 137, which calls `process.exit(0)` — killing the
+// whole jest process and truncating the reporter before its Tests:/Suites:
+// summary (#74). This file isn't imported into any other hook's bundle, so
+// `require.main === module` is safe here (see emit-learning-checkpoint.ts
+// for the case where it isn't).
+if (require.main === module) {
+  main().catch((err: unknown) => {
+    process.stderr.write(
+      `[run-trace-close] FATAL: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exit(0);
+  });
+}
