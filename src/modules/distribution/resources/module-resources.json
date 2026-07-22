@@ -155,7 +155,7 @@
       "id": "release-changelog",
       "source_path": "scripts/release-changelog.ts",
       "resource_path": "resources/scripts/release-changelog.ts",
-      "sha256": "787f2fe373d8c57df5bd7ebcefb8c6c8fc4e1c578e0ca9262ffa1d96a814cb90"
+      "sha256": "0f2027d2af57c98c450cda043145ffc18f13c7fd6e015546e4e22bd79693afc8"
     },
     {
       "category": "scripts",
