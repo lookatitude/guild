@@ -51,7 +51,7 @@ At the very top of the command body — before any filesystem scan — record a
 lightweight status run (SC-B OQ6, §435):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js status \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js status \
   --cwd "$(pwd)"
 ```
 

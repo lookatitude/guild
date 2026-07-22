@@ -55,7 +55,7 @@ Implements the near-duplicate / injection-amplification defence (D-INGEST-GATE).
 The similarity decision is **computed by tooling, not by the model.** Before writing any file, **call** `scripts/lib/ingest-similarity.ts` with the candidate (title + content) and the **target category**, and consume its verdict verbatim:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/ingest-similarity.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/ingest-similarity.ts \
   --cwd <repo-root> --category <target-category> \
   --title "<candidate title>" --content-file <path-to-candidate-text>
 ```
@@ -105,7 +105,7 @@ by the model** (docs/v2/knowledge-memory.html §"Importance-at-ingest"). Call th
 compute the 1–5 grade yourself:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/stamp-recall-importance.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/stamp-recall-importance.ts \
   --cwd <repo-root>
 ```
 

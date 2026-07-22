@@ -27,7 +27,7 @@ lifecycle, downstream).
 
 ## Required inputs
 - The validated `.guild/explore/<slug>.json` (`guild.explore.v1`) from `guild:product-explore`.
-- The canonical shape: `guild.define.v1` (`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/lib/define-schema.ts`),
+- The canonical shape: `guild.define.v1` (`${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/define-schema.ts`),
   whose `DEFINE_V1_EXAMPLE` is the golden shape to mirror.
 
 ## Output contract — `guild.define.v1`

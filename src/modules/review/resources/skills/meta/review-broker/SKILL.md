@@ -325,7 +325,7 @@ The broker MUST run the gate-pass verifier against the round's result and the
 current (post-scrub) artifact bytes, and consume its verdict:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/verify-gate-pass.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/verify-gate-pass.ts \
   --result .guild/runs/<run-id>/review/<gate>/result-<round>.json \
   --artifact <scrubbed-artifact-path> \
   --packet-id <packet-id issued for this round> \
