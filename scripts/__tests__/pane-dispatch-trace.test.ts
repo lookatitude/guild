@@ -37,6 +37,7 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import * as yaml from "js-yaml";
 
 const LAUNCHER = path.resolve(__dirname, "../agent-team-launcher.ts");
 const SUMMARIZER = path.resolve(__dirname, "../trace-summarize.ts");
@@ -208,6 +209,17 @@ function paneDispatches(lines: TraceLine[]): TraceLine[] {
   );
 }
 
+
+/**
+ * Parse the summary's YAML frontmatter with the shared js-yaml parser
+ * (comms-format OD-3: no line-anchored YAML-key regex extractors in tests).
+ */
+function readFrontmatter(summary: string): Record<string, unknown> {
+  const end = summary.indexOf("\n---", 4);
+  const block = summary.slice(4, end);
+  return yaml.load(block) as Record<string, unknown>;
+}
+
 describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", () => {
   let tmpDir: string;
 
@@ -372,7 +384,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       const runDir = seedPaneOnlyRun();
       runScript(SUMMARIZER, ["--run-id", RUN_ID, "--cwd", tmpDir]);
       const summary = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
-      expect(summary).toMatch(/^dispatched_lanes: \[tmux: 3\]$/m);
+      expect(readFrontmatter(summary)["dispatched_lanes"]).toEqual([{ tmux: 3 }]);
     });
 
     it("does not invent errors from ok-less trace lines", () => {
@@ -381,7 +393,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       const summary = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
       // A `guild.trace.*` line carries no `ok` field. Absence is NOT failure —
       // treating it as one buried the real signal under phantom ERROR rows.
-      expect(summary).toMatch(/^errors: 0$/m);
+      expect(readFrontmatter(summary)["errors"]).toBe(0);
       expect(summary).toMatch(/No notable events\./);
       expect(summary).not.toMatch(/⚠ ERROR/);
       expect(summary).not.toMatch(/skill-improvement candidates/);
@@ -429,7 +441,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       );
       runScript(SUMMARIZER, ["--run-id", "run-mixed-76", "--cwd", tmpDir]);
       const summary = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
-      expect(summary).toMatch(/^dispatched_lanes: \[tmux: 2\]$/m);
+      expect(readFrontmatter(summary)["dispatched_lanes"]).toEqual([{ tmux: 2 }]);
       expect(summary).not.toMatch(/unknown/);
     });
 
@@ -452,11 +464,11 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       );
       runScript(SUMMARIZER, ["--run-id", "run-status-76", "--cwd", tmpDir]);
       const summary = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
-      expect(summary).toMatch(/^errors: 2$/m);
+      expect(readFrontmatter(summary)["errors"]).toBe(2);
       // …and the healthy status:"ok" line must NOT be flagged.
       expect(summary.match(/⚠ ERROR/g) ?? []).toHaveLength(1);
       // 3 verdict-bearing events, 2 of them failures.
-      expect(summary).toMatch(/^ok_rate: 0\.333$/m);
+      expect(readFrontmatter(summary)["ok_rate"]).toBe(0.333);
     });
 
     // ok_rate must be a rate over events that REPORT an outcome. Counting
@@ -468,9 +480,9 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       runScript(SUMMARIZER, ["--run-id", RUN_ID, "--cwd", tmpDir]);
       const paneOnly = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
       // 4 events, NONE carrying a verdict → nothing to rate; not "all passed".
-      expect(paneOnly).toMatch(/^event_count: 4$/m);
-      expect(paneOnly).toMatch(/^errors: 0$/m);
-      expect(paneOnly).toMatch(/^ok_rate: 1$/m);
+      expect(readFrontmatter(paneOnly)["event_count"]).toBe(4);
+      expect(readFrontmatter(paneOnly)["errors"]).toBe(0);
+      expect(readFrontmatter(paneOnly)["ok_rate"]).toBe(1);
 
       // Mixed: the receipts must not dilute a real failure rate. One ok:true +
       // one ok:false alongside 3 receipts is 0.5, not 0.8.
@@ -502,10 +514,10 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       );
       runScript(SUMMARIZER, ["--run-id", mixedId, "--cwd", tmpDir]);
       const mixed = fs.readFileSync(path.join(mixedDir, "summary.md"), "utf8");
-      expect(mixed).toMatch(/^event_count: 5$/m);
-      expect(mixed).toMatch(/^errors: 1$/m);
-      expect(mixed).toMatch(/^ok_rate: 0\.5$/m);
-      expect(mixed).toMatch(/^dispatched_lanes: \[tmux: 3\]$/m);
+      expect(readFrontmatter(mixed)["event_count"]).toBe(5);
+      expect(readFrontmatter(mixed)["errors"]).toBe(1);
+      expect(readFrontmatter(mixed)["ok_rate"]).toBe(0.5);
+      expect(readFrontmatter(mixed)["dispatched_lanes"]).toEqual([{ tmux: 3 }]);
     });
 
     it("still reports a real ok:false event as an error", () => {
@@ -526,7 +538,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       );
       runScript(SUMMARIZER, ["--run-id", "run-real-err-76", "--cwd", tmpDir]);
       const summary = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
-      expect(summary).toMatch(/^errors: 1$/m);
+      expect(readFrontmatter(summary)["errors"]).toBe(1);
       expect(summary).toMatch(/⚠ ERROR/);
     });
   });
@@ -586,7 +598,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
         "utf8",
       );
       expect(summary).toMatch(/specialists_dispatched: \[backend, qa\]/);
-      expect(summary).toMatch(/^dispatched_lanes: \[cmux: 2\]$/m);
+      expect(readFrontmatter(summary)["dispatched_lanes"]).toEqual([{ cmux: 2 }]);
     });
 
     it("refuses bad input instead of writing a partial record", () => {
@@ -627,9 +639,9 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
         "utf8",
       );
       // …the LANE count does not inflate…
-      expect(summary).toMatch(/^dispatched_lanes: \[cmux: 2\]$/m);
+      expect(readFrontmatter(summary)["dispatched_lanes"]).toEqual([{ cmux: 2 }]);
       // …and the retry volume is still visible rather than hidden by it.
-      expect(summary).toMatch(/^dispatch_receipts: \[cmux: 4\]$/m);
+      expect(readFrontmatter(summary)["dispatch_receipts"]).toEqual([{ cmux: 4 }]);
     });
 
     // The count must come from real write verdicts, not from counting loop
@@ -852,7 +864,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       // THE DEFECT, end to end: this line read `[(none)]` on the real 10-lane run.
       expect(summary).toMatch(/specialists_dispatched: \[architect, backend, qa\]/);
       // Exactly 3 — the per-task pre-routing `unknown` intents are not dispatches.
-      expect(summary).toMatch(/^dispatched_lanes: \[tmux: 3\]$/m);
+      expect(readFrontmatter(summary)["dispatched_lanes"]).toEqual([{ tmux: 3 }]);
       expect(summary).not.toMatch(/⚠ ERROR/);
     });
   });

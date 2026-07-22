@@ -5176,6 +5176,26 @@ function validateDispatchEvent(ev) {
   if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"])) {
     return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
   }
+  for (const optKey of ["attribution_specialist", "pane_id", "pane_target", "pane_backend"]) {
+    if (e[optKey] === void 0) continue;
+    if (typeof e[optKey] !== "string" || e[optKey] === "") {
+      return { ok: false, reason: `${optKey}, when present, must be a non-empty string` };
+    }
+  }
+  if (e["pane_backend"] !== void 0) {
+    if (e["backend"] !== "unknown") {
+      return {
+        ok: false,
+        reason: `pane_backend is only for a surface the backend enum cannot name; it must not accompany backend "${e["backend"]}"`
+      };
+    }
+    if (e["backend_rung"] < 1) {
+      return {
+        ok: false,
+        reason: "pane_backend marks a CONFIRMED dispatch, so backend_rung must be >= 1"
+      };
+    }
+  }
   return { ok: true };
 }
 function validateRecallEvent(ev) {
@@ -5377,7 +5397,7 @@ function liveLogPath(runDir3) {
   return path6.join(runDir3, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir3) {
-  if (!runDir3) return;
+  if (!runDir3) return false;
   const validationResult = validateGuildTraceEvent(event);
   if (!validationResult.ok) {
     const schemaVersion = event["schema_version"];
@@ -5386,7 +5406,7 @@ function emitTraceEvent(event, runDir3) {
       `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}
 `
     );
-    return;
+    return false;
   }
   try {
     const live = liveLogPath(runDir3);
@@ -5394,11 +5414,13 @@ function emitTraceEvent(event, runDir3) {
     fs5.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
     fs5.appendFileSync(live, line, "utf8");
+    return true;
   } catch (err) {
     process.stderr.write(
       `[guild-trace-emit] WARN: could not write trace event to ${runDir3}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
 `
     );
+    return false;
   }
 }
 var fs5, path6;
