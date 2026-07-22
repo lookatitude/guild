@@ -213,8 +213,20 @@ function prLink(compareUrl: string | null, n: number): string {
 export function prependToChangelog(existing: string, section: string, version: string): string {
   // Match the version with or without the leading v and with or without
   // Keep-a-Changelog brackets: "## v2.1.0", "## [2.1.0] — …", "## [v2.1.0]".
-  const bare = version.replace(/^v/, "").replace(/\./g, "\\.");
-  if (new RegExp(`^## \\[?v?${bare}(\\]|\\s|—|-)`, "m").test(existing)) {
+  // Plain string comparison (no dynamic RegExp — the comms-format OD-3 gate
+  // rejects template-built regexes as hand-rolled field extractors).
+  const bare = version.replace(/^v/, "");
+  const BOUNDARIES = ["]", " ", "\t", "—", "-"];
+  const hasVersionHeading = existing.split("\n").some((line) => {
+    if (!line.startsWith("## ")) return false;
+    let rest = line.slice(3);
+    if (rest.startsWith("[")) rest = rest.slice(1);
+    if (rest.startsWith("v")) rest = rest.slice(1);
+    if (!rest.startsWith(bare)) return false;
+    const after = rest.slice(bare.length, bare.length + 1);
+    return after === "" || BOUNDARIES.includes(after);
+  });
+  if (hasVersionHeading) {
     return existing;
   }
   const lines = existing.split("\n");
@@ -254,10 +266,15 @@ function sh(cwd: string, cmd: string, args: string[]): string {
 // phrase alongside other text (e.g. wrapped in an HTTP error) is never
 // misclassified as "not a PR" — everything else aborts.
 export function isGhNotFoundMessage(message: string, n: number): boolean {
-  const pattern = new RegExp(
-    `^GraphQL: Could not resolve to a PullRequest with the number of ${n}\\.\\s*\\(repository\\.pullRequest\\)$`
-  );
-  return pattern.test(message.trim());
+  // Exact-string comparison (no dynamic RegExp — comms-format OD-3 gate). gh
+  // emits either one space or a newline between the sentence and the
+  // "(repository.pullRequest)" locator; both whole-message shapes are accepted.
+  const head = `GraphQL: Could not resolve to a PullRequest with the number of ${n}.`;
+  const tail = "(repository.pullRequest)";
+  const trimmed = message.trim();
+  if (!trimmed.startsWith(head) || !trimmed.endsWith(tail)) return false;
+  const between = trimmed.slice(head.length, trimmed.length - tail.length);
+  return /^\s*$/.test(between);
 }
 
 function ghErrorMessage(err: unknown): string {
