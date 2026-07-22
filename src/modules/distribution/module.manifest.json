@@ -15,6 +15,7 @@
       "build-host-packages",
       "build-inventory",
       "build-verify",
+      "check-entrypoint-packaging",
       "check-module-ownership",
       "check-plugin-root-fallback",
       "check-roster-consistency",
