@@ -941,6 +941,28 @@ var SAFE_ROLE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var ROLE_DEF_ANCHOR_RE = /role definition is at\s*[`'"]?\.guild\/agents\/([A-Za-z0-9._-]+)\.md/i;
 var DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{0,2}\s+specialist/i;
 var DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
+var PRODUCER_MARKER_HEAD = "GUILD_DISPATCH_PRODUCER=";
+var PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;
+var PRODUCER_MARKER_TOKEN_RE = /^[A-Za-z][A-Za-z0-9_]*=[^\s]+$/;
+function producerMarkerRole(firstLine) {
+  if (!firstLine.startsWith(PRODUCER_MARKER_HEAD)) return void 0;
+  const tokens = firstLine.split(/\s+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) return void 0;
+  const value = tokens[0].slice(PRODUCER_MARKER_HEAD.length);
+  if (!PRODUCER_MARKER_VALUE_RE.test(value)) return void 0;
+  let role;
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (!PRODUCER_MARKER_TOKEN_RE.test(t)) return void 0;
+    const eq = t.indexOf("=");
+    const k = t.slice(0, eq);
+    if (k === "role") {
+      if (role !== void 0) return void 0;
+      role = t.slice(eq + 1);
+    }
+  }
+  return safeRole(role);
+}
 var PRODUCER_HEAD_CHARS = 300;
 function safeRole(v) {
   return v !== void 0 && SAFE_ROLE_RE.test(v) ? v : void 0;
@@ -965,6 +987,7 @@ function resolveDispatchAttribution(toolInput) {
   const markerRole = safeRole(
     markerPath !== void 0 ? DEF_PATH_RE.exec(markerPath)?.[1] : void 0
   );
+  const producerMarkerRoleValue = producerMarkerRole(firstLine);
   const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
   const anchorRole = safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
   const proseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
@@ -973,15 +996,22 @@ function resolveDispatchAttribution(toolInput) {
   const defMatch = definitionPath !== void 0 && definitionPath.length > 0 ? DEF_PATH_RE.exec(definitionPath) : null;
   const defRole = safeRole(defMatch?.[1]);
   const hasValidDefinition = defMatch !== null && defRole !== void 0 && (specialistEnv === void 0 || defRole === specialistEnv);
-  const roles = [specialistEnv, defRole, markerRole, anchorRole, proseRole].filter(
-    (r) => r !== void 0
-  );
+  const roles = [
+    specialistEnv,
+    defRole,
+    markerRole,
+    producerMarkerRoleValue,
+    anchorRole,
+    proseRole
+  ].filter((r) => r !== void 0);
   const hasConsistentIdentity = roles.every((r) => r === roles[0]);
-  const specialist = specialistEnv ?? defRole ?? markerRole ?? anchorRole ?? proseRole;
+  const specialist = specialistEnv ?? defRole ?? markerRole ?? producerMarkerRoleValue ?? anchorRole ?? proseRole;
   const promptTeammate = /teammate for run-id/i.test(head);
   const isComposedLane = taskId !== void 0 && specialistEnv !== void 0;
   const isSpecialistLane = hasAdoptionPrompt || hasProseSignature || isComposedLane;
-  const hasLaneSignature = isSpecialistLane || promptTeammate || taskId !== void 0 || specialistEnv !== void 0;
+  const hasLaneSignature = isSpecialistLane || promptTeammate || taskId !== void 0 || specialistEnv !== void 0 || // G3 — the universal producer marker is a lane signature (not adoption proof,
+  // so it stays out of isSpecialistLane / the #58 persona-strip predicate).
+  producerMarkerRoleValue !== void 0;
   const out = {
     subagentType,
     isGeneric: subagentType === GENERIC_SUBAGENT_TYPE,
@@ -1020,6 +1050,7 @@ var import_node_child_process = require("node:child_process");
 var fs6 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 var OVERRIDE_ENV = "GUILD_ALLOW_BACKEND_DEGRADE";
+var BLOCK_UNMARKED_ENV = "GUILD_BLOCK_UNMARKED_LANES";
 var BACKEND_DEGRADATION_EVENT = "backend_degradation";
 var BACKEND_DEGRADATION_SCHEMA = "guild.backend_degradation.v1";
 var RECEIPT_RELATIVE_PATH = "logs/backend-degradation.jsonl";
@@ -1036,6 +1067,8 @@ function hasHandoffProtocolBlock(prompt, runId) {
   const receiptPathRe = new RegExp(`\\.guild/runs/${escapeRe(runId)}/handoffs/`);
   return receiptPathRe.test(prompt);
 }
+var PRODUCER_MARKER_ENV = "GUILD_DISPATCH_PRODUCER";
+var PRODUCER_MARKER_VALUE_RE2 = /^guild\.dispatch\.v\d+$/;
 var STRUCTURED_CARRIER_KEYS = [
   "GUILD_SPECIALIST",
   "GUILD_TASK_ID",
@@ -1046,10 +1079,18 @@ function hasStructuredCarrier(toolInput) {
   const env = toolInput["env"];
   if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
   const map = env;
-  return STRUCTURED_CARRIER_KEYS.some((k) => {
+  const composedCarrier = STRUCTURED_CARRIER_KEYS.some((k) => {
     const v = map[k];
     return typeof v === "string" && v.trim().length > 0;
   });
+  return composedCarrier || hasProducerMarker(toolInput);
+}
+function hasProducerMarker(toolInput) {
+  if (toolInput === null || typeof toolInput !== "object") return false;
+  const env = toolInput["env"];
+  if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
+  const v = env[PRODUCER_MARKER_ENV];
+  return typeof v === "string" && PRODUCER_MARKER_VALUE_RE2.test(v.trim());
 }
 function classifyLaneEvidence(toolInput, attr, prompt, runId) {
   if (hasStructuredCarrier(toolInput)) return "structured";
@@ -1153,6 +1194,12 @@ function isOverrideEngaged(env) {
   const v = raw.trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
 }
+function isBlockUnmarkedEngaged(env) {
+  const raw = env[BLOCK_UNMARKED_ENV];
+  if (typeof raw !== "string") return false;
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
 var SAFE_SUBAGENT_TYPE_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 function safeSubagentType(value) {
   if (value.length === 0) return "<absent>";
@@ -1181,7 +1228,8 @@ function resolveBackendDegradation(facts) {
   if (hasSubstrate) {
     const reason = facts.agentMode === TEAM_AGENT_MODE ? "team_substrate_available" : facts.agentMode === AUTO_AGENT_MODE ? "auto_resolves_to_team" : null;
     if (reason !== null) {
-      const blockable = evidence === "structured";
+      const blockUnmarked = facts.blockUnmarked === true;
+      const blockable = evidence === "structured" || blockUnmarked && evidence === "prompt_only" && !hasProducerMarker(facts.toolInput);
       return {
         ...base,
         decision: !blockable ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny",
@@ -1202,15 +1250,19 @@ function remedyForSubstrate(substrate) {
 function backendClause(reason) {
   return reason === "auto_resolves_to_team" ? `this run's agent_mode is "auto" and a team substrate IS available, which the D5 ladder resolves to the TEAM backend` : `this run's resolved agent_mode is "team" and a team substrate IS available`;
 }
-function buildDenyMessage(reason, role, subagentType, substrate) {
-  return `Guild backend integrity (#56): ${backendClause(reason)}, but the "${role}" lane is being dispatched through the in-session Agent tool (subagent_type="${subagentType}") instead of a visible pane/surface. That is a silent BACKEND DEGRADATION: no pane, no named specialist, and lane execution semantics change out from under the approved plan. guild:execute-plan's contract is refuse-don't-fallback (skills/meta/execute-plan/dispatch.md \xA7"Backend choice"). ${remedyForSubstrate(substrate)} If the team backend genuinely cannot be honored, downgrade CONSCIOUSLY: re-run with ${OVERRIDE_ENV}=1 \u2014 the fallback is then allowed and a ${BACKEND_DEGRADATION_EVENT} receipt is written to the run record either way. Blocking this dispatch.`;
+function buildDenyMessage(reason, role, subagentType, substrate, evidence = "structured") {
+  const unmarkedClause = evidence === "prompt_only" ? `This lane carries NO structured producer marker (${PRODUCER_MARKER_ENV}) \u2014 it was not composed by a Guild dispatch producer, which is the drift signature strict mode (${BLOCK_UNMARKED_ENV}) blocks. Dispatch it through the producer path so it carries the marker, or ` : "";
+  return `Guild backend integrity (#56): ${backendClause(reason)}, but the "${role}" lane is being dispatched through the in-session Agent tool (subagent_type="${subagentType}") instead of a visible pane/surface. That is a silent BACKEND DEGRADATION: no pane, no named specialist, and lane execution semantics change out from under the approved plan. guild:execute-plan's contract is refuse-don't-fallback (skills/meta/execute-plan/dispatch.md \xA7"Backend choice"). ${unmarkedClause}${remedyForSubstrate(substrate)} If the team backend genuinely cannot be honored, downgrade CONSCIOUSLY: re-run with ${OVERRIDE_ENV}=1 \u2014 the fallback is then allowed and a ${BACKEND_DEGRADATION_EVENT} receipt is written to the run record either way. Blocking this dispatch.`;
 }
-function buildAllowMessage(reason, role, subagentType, substrate, evidence) {
+function buildAllowMessage(reason, role, subagentType, substrate, evidence, decision = "allow_recorded") {
   const head = `Guild backend integrity (#56): the "${role}" lane was dispatched through the in-session Agent tool (subagent_type="${subagentType}"). `;
   const tail = `Recording a ${BACKEND_DEGRADATION_EVENT} receipt at .guild/runs/<run-id>/${RECEIPT_RELATIVE_PATH} so the downgrade is auditable post-hoc.`;
   const promptOnlyClause = `The lane was identified from PROMPT TEXT alone (the handoff-protocol block, or the #58 adoption marker / role anchor / dispatch prose) \u2014 the dispatch env carries no GUILD_SPECIALIST / GUILD_TASK_ID / GUILD_AGENT_DEFINITION carrier. Quoted text is indistinguishable from a real brief, so this is recorded, not blocked.`;
   if (reason === "team_substrate_unavailable") {
     return head + `agent_mode="team" but NO team substrate (tmux/cmux) is available, so the resolved backend cannot be honored \u2014 agent-team-launcher.ts downgrades this case itself, so it is not blocked here. ` + (evidence === "prompt_only" ? `${promptOnlyClause} ` : "") + tail;
+  }
+  if (decision === "allow_override") {
+    return head + `OVERRIDDEN: ${backendClause(reason)}` + (evidence === "prompt_only" ? ` and this lane carries NO structured producer marker (${PRODUCER_MARKER_ENV}) \u2014 strict mode (${BLOCK_UNMARKED_ENV}) would block it, but the in-session fallback was allowed because ${OVERRIDE_ENV} is set` : `, and the in-session fallback was allowed because ${OVERRIDE_ENV} is set`) + `. To honor the backend instead: ${remedyForSubstrate(substrate)} ${tail}`;
   }
   if (evidence === "prompt_only") {
     return head + `${backendClause(reason)}. ${promptOnlyClause} If it IS a lane, honor the backend: ${remedyForSubstrate(substrate)} ${tail}`;
@@ -1946,16 +1998,18 @@ function evaluateBackendDegradation(payload, cwd) {
     substrate,
     overrideEngaged: isOverrideEngaged(process.env),
     isLead: true,
-    runFresh
+    runFresh,
+    blockUnmarked: isBlockUnmarkedEngaged(process.env)
   });
   if (result.decision === "pass" || result.reason === void 0) return null;
   const role = result.specialist ?? "<unattributed>";
-  const message = result.decision === "deny" ? buildDenyMessage(result.reason, role, result.subagentType, substrate) : buildAllowMessage(
+  const message = result.decision === "deny" ? buildDenyMessage(result.reason, role, result.subagentType, substrate, result.evidence) : buildAllowMessage(
     result.reason,
     role,
     result.subagentType,
     substrate,
-    result.evidence
+    result.evidence,
+    result.decision
   );
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   const laneEnv = process.env["GUILD_LANE_ID"];

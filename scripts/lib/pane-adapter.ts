@@ -46,6 +46,10 @@ import {
   type PreflightResult,
   type RunFn,
 } from "./team-backend";
+import {
+  DISPATCH_PRODUCER_ENV,
+  DISPATCH_PRODUCER_TOKEN,
+} from "./core/contracts/team-backend";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "./host-registry-schema";
 import { registryIdToCanonicalHostKind } from "./host-id-namespace";
 import { spawnSync } from "child_process";
@@ -105,6 +109,23 @@ function taskAssignmentEnv(spec: PaneSpec): Record<string, string> {
   return spec.specialist ? { GUILD_TASK_ASSIGNMENT: taskAssignmentPathFor(spec) } : {};
 }
 
+// ── Universal structured producer marker (rf-wi-03 / G3) ─────────────────────
+//
+// Every producer-composed dispatch carries GUILD_DISPATCH_PRODUCER. The Claude
+// adapter gets it via `paneCommand` (command) already; every OTHER adapter emits
+// it here so the marker is universal across ALL pane backends (Codex / Pi /
+// Antigravity / wrapped-CLI), including remote dispatch which routes through
+// these adapters. Both channels — the shell `export …` fragment (command) and
+// the env map (env) — so the marker rides whichever the launcher/transport uses.
+/** `export GUILD_DISPATCH_PRODUCER=…; ` fragment for a non-Claude pane command. */
+function producerMarkerExport(): string {
+  return `export ${DISPATCH_PRODUCER_ENV}=${shellQuote(DISPATCH_PRODUCER_TOKEN)}; `;
+}
+/** The producer-marker entry for any adapter's env map. */
+function producerMarkerEnv(): Record<string, string> {
+  return { [DISPATCH_PRODUCER_ENV]: DISPATCH_PRODUCER_TOKEN };
+}
+
 /**
  * Claude Code pane. `command()` delegates to the shared `paneCommand`, so a
  * Claude-only team built through the adapter path is byte-identical to the
@@ -150,6 +171,7 @@ export class ClaudePaneAdapter implements PaneAdapter {
     return {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
@@ -252,6 +274,7 @@ export class CodexPaneAdapter implements PaneAdapter {
         : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment +
       specialistFragment +
       taskAssignmentExport(spec) +
@@ -264,6 +287,7 @@ export class CodexPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
@@ -329,6 +353,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `agy ${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -338,6 +363,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
@@ -398,6 +424,7 @@ export class PiPaneAdapter implements PaneAdapter {
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `pi -p ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -407,6 +434,7 @@ export class PiPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
@@ -516,6 +544,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
     const argv = [this.bin, ...this.argvPrefix(), "-p", shellQuote(spec.prompt)].join(" ");
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `${argv}; ` +
       `exec $SHELL`
@@ -525,6 +554,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined

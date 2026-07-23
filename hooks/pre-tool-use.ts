@@ -88,6 +88,7 @@ import {
   buildBackendDegradationEvent,
   buildDenyMessage,
   dispatchAssertsRunId,
+  isBlockUnmarkedEngaged,
   isGuildLaneDispatch,
   isLeadProcess,
   isOverrideEngaged,
@@ -913,19 +914,21 @@ function evaluateBackendDegradation(
     overrideEngaged: isOverrideEngaged(process.env),
     isLead: true,
     runFresh,
+    blockUnmarked: isBlockUnmarkedEngaged(process.env),
   });
   if (result.decision === "pass" || result.reason === undefined) return null;
 
   const role = result.specialist ?? "<unattributed>";
   const message =
     result.decision === "deny"
-      ? buildDenyMessage(result.reason, role, result.subagentType, substrate)
+      ? buildDenyMessage(result.reason, role, result.subagentType, substrate, result.evidence)
       : buildAllowMessage(
           result.reason,
           role,
           result.subagentType,
           substrate,
           result.evidence,
+          result.decision,
         );
 
   // ── Receipt: the run-record artifact (the #56 acceptance criterion) ───────
