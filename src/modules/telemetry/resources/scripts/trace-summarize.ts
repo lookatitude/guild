@@ -146,6 +146,27 @@ function errorLabel(e: TelemetryEvent): string {
   return isErrorEvent(e) ? " ⚠ ERROR" : "";
 }
 
+/**
+ * #G7b (v23x-deferred-followups) — a tool-call happened in EITHER dialect.
+ *
+ * Legacy hook-mirror lines name the activity `event: "PostToolUse"` (the
+ * literal Claude Code hook name); the canonical v1.4 shape
+ * (hooks/lib/v1.4/log-jsonl-schema.ts's ToolCallEvent) names the SAME
+ * activity `event: "tool_call"`. Gating on "PostToolUse" alone silently
+ * zeroed buildSpecialistActivity's toolCalls/fileOps tally and both
+ * slow-call detectors (buildNotableEvents' SLOW rows, buildReflectionHints'
+ * context-bundle-issues hint) for every canonical run — the counters never
+ * threw, they just always read 0/empty.
+ *
+ * Deliberately excludes `hook_event`: a lifecycle hook (SessionStart,
+ * PreCompact, ...) is bridged onto Timeline's `tool` field for error/duration
+ * display (see normalizeEvent), but it is not itself a tool CALL — counting
+ * it here would inflate the "Tool calls" tally with non-tool activity.
+ */
+function isToolCallEvent(e: TelemetryEvent): boolean {
+  return e.event === "PostToolUse" || e.event === "tool_call";
+}
+
 /** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
 function isDispatchEvent(e: TelemetryEvent): boolean {
   return e.schema_version === "guild.trace.dispatch.v1";
@@ -412,7 +433,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
       specialistMap.set(key, { toolCalls: 0, fileOps: 0, errors: 0, ok: 0 });
     }
     const s = specialistMap.get(key)!;
-    if (event.event === "PostToolUse" && event.tool) {
+    if (isToolCallEvent(event) && event.tool) {
       s.toolCalls++;
       if (event.tool === "Write" || event.tool === "Edit") s.fileOps++;
     }
@@ -440,6 +461,19 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
   return lines.join("\n").trim();
 }
 
+/**
+ * #G7b — the legacy hook-mirror `payload_digest` field has no canonical
+ * v1.4 equivalent by that name (log-jsonl-schema.ts's ToolCallEvent /
+ * HookEvent carry `result_excerpt_redacted` / `payload_excerpt_redacted`
+ * instead), so a canonical ERROR row printed the literal string
+ * "digest: undefined". Render whichever redacted excerpt IS present, and
+ * omit the "— digest: ..." segment entirely rather than print a non-value.
+ */
+function errorDigest(e: TelemetryEvent): string {
+  const digest = e.payload_digest ?? e.result_excerpt_redacted ?? e.payload_excerpt_redacted;
+  return typeof digest === "string" && digest.length > 0 ? ` — digest: ${digest}` : "";
+}
+
 function buildNotableEvents(events: TelemetryEvent[]): string {
   const notable: string[] = [];
 
@@ -449,13 +483,13 @@ function buildNotableEvents(events: TelemetryEvent[]): string {
   const errorEvents = events.filter(isErrorEvent);
   for (const e of errorEvents) {
     notable.push(
-      `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"} — digest: ${e.payload_digest}`
+      `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"}${errorDigest(e)}`
     );
   }
 
   // Very long tool calls (> 2000ms for tool use events, heuristic)
   const longCalls = events.filter(
-    (e) => e.event === "PostToolUse" && e.ms > 2000
+    (e) => isToolCallEvent(e) && typeof e.ms === "number" && e.ms > 2000
   );
   for (const e of longCalls) {
     notable.push(
@@ -481,7 +515,7 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
 
   // Missing-specialist candidates: events from main session (empty specialist) with tool use
   const mainSessionToolCalls = events.filter(
-    (e) => e.event === "PostToolUse" && !e.specialist && e.tool
+    (e) => isToolCallEvent(e) && !e.specialist && e.tool
   );
   if (mainSessionToolCalls.length > 0) {
     hints.push(
@@ -491,7 +525,7 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
 
   // Context-bundle issues: any tool calls over 5000ms
   const verySlowCalls = events.filter(
-    (e) => e.event === "PostToolUse" && e.ms > 5000
+    (e) => isToolCallEvent(e) && typeof e.ms === "number" && e.ms > 5000
   );
   if (verySlowCalls.length > 0) {
     hints.push(

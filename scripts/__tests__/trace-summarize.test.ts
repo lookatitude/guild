@@ -514,6 +514,92 @@ describe("trace-summarize.ts", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
+  // G7b — canonical tool_call events undercounted + digest cosmetic
+  // (rf-wi-07 / v23x-deferred-followups): buildSpecialistActivity and the
+  // slow-call detectors gated on the legacy hook-mirror `event.event ===
+  // "PostToolUse"` only — the canonical v1.4 shape (log-jsonl-schema.ts)
+  // names the same activity `event: "tool_call"`, so every canonical run
+  // silently zeroed these tallies. buildNotableEvents also printed the
+  // literal string "digest: undefined" for canonical rows, which carry no
+  // `payload_digest` field (legacy-only).
+  // ─────────────────────────────────────────────────────────────
+  describe("G7b — canonical tool_call gate + digest cosmetic", () => {
+    it("counts canonical tool_call events toward a specialist's Tool calls tally (events-v14-tool-call.ndjson)", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Row 5 is the sole tool_call carrying specialist:"backend-engineer"
+      // (a bare Read, no status/latency_ms/ok/ms at all).
+      const section = content.split("### backend-engineer")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*1/);
+    });
+
+    it("counts canonical tool_call events toward (main session)'s Tool calls tally", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Rows 1,2,3,4,6,7 are tool_call with no specialist field → "(main session)".
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*6/);
+    });
+
+    it("flags a canonical tool_call over 2000ms as SLOW in Notable events", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "slow-canon-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:35:26.666Z","event":"tool_call","run_id":"slow-canon-run","tool":"Bash","status":"ok","latency_ms":3000}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "slow-canon-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      expect(content).toMatch(/SLOW at .*Bash.*took 3000ms/);
+    });
+
+    it("flags a canonical tool_call over 5000ms as a context-bundle reflection hint", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "very-slow-canon-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:35:26.666Z","event":"tool_call","run_id":"very-slow-canon-run","tool":"Bash","status":"ok","latency_ms":6000}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "very-slow-canon-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      expect(content).toMatch(/context-bundle issues: 1 tool call\(s\) exceeded 5000ms/);
+    });
+
+    it("never prints the literal 'digest: undefined' for a canonical ERROR row", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      expect(content).not.toMatch(/digest: undefined/);
+    });
+
+    it("renders the real redacted excerpt as the digest when payload_digest is absent", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // The Bash status:"err" tool_call row carries result_excerpt_redacted:"<orphaned>".
+      expect(content).toMatch(/digest: <orphaned>/);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // CLI error handling
   // ─────────────────────────────────────────────────────────────
   describe("CLI error handling", () => {
