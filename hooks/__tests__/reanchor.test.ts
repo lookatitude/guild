@@ -26,6 +26,9 @@ import * as path from "path";
 import {
   REANCHOR_MARKER,
   buildReanchorHeader,
+  buildAdditionalContextEnvelope,
+  buildCompactSummaryInstructions,
+  renderCompactSummaryInstructions,
   deriveNextGate,
   readRunYamlFacts,
   renderReanchorHeader,
@@ -795,5 +798,117 @@ describe("reanchor — LEAD-ONLY gate (oir-wi-57 round-4 fix)", () => {
       .map((l) => JSON.parse(l));
     const hookEvent = raw.find((e) => e.hook_name === "PreCompact");
     expect(hookEvent.lane_id).toBe("T1-backend");
+  });
+});
+
+// ── G5(c) — PreCompact newCustomInstructions second channel ─────────────────
+// v23x-deferred-followups rf-wi-05, origin oir-wi-58: the compaction path
+// already CONSUMES newCustomInstructions; nothing emitted it. This is the
+// missing writer — a second channel alongside additionalContext, shaping the
+// post-compact SUMMARY itself rather than the model's live context.
+describe("reanchor — renderCompactSummaryInstructions / buildCompactSummaryInstructions (pure)", () => {
+  it("names the run id, initiative, phase, and next gate verbatim", () => {
+    const text = renderCompactSummaryInstructions({
+      runId: "run-abc",
+      agentMode: "team",
+      phase: "build",
+      initiative: "my-initiative",
+      nextGate: "review",
+    });
+    expect(text).toContain('run "run-abc"');
+    expect(text).toContain('initiative "my-initiative"');
+    expect(text).toContain('phase "build"');
+    expect(text).toContain('next pending gate "review"');
+  });
+
+  it("omits the initiative clause when there is none, and renders unknown for a null next gate", () => {
+    const text = renderCompactSummaryInstructions({
+      runId: "run-abc",
+      agentMode: "team",
+      phase: null,
+      initiative: null,
+      nextGate: null,
+    });
+    expect(text).not.toContain("initiative");
+    expect(text).toContain('phase "unknown"');
+    expect(text).toContain('next pending gate "unknown"');
+  });
+
+  it("buildCompactSummaryInstructions returns null under the SAME zero-noise gate as buildReanchorHeader (no active run)", () => {
+    const root = tmpRoot();
+    try {
+      makeRun(root, { noSentinel: true });
+      expect(buildReanchorHeader(root)).toBeNull();
+      expect(buildCompactSummaryInstructions(root)).toBeNull();
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it("buildCompactSummaryInstructions is non-null exactly when buildReanchorHeader is non-null", () => {
+    const root = tmpRoot();
+    try {
+      makeRun(root, { agentMode: "team", phase: "build" });
+      const header = buildReanchorHeader(root);
+      const instructions = buildCompactSummaryInstructions(root);
+      expect(header).not.toBeNull();
+      expect(instructions).not.toBeNull();
+      expect(instructions).toContain("run-fix-1");
+    } finally {
+      cleanup(root);
+    }
+  });
+});
+
+describe("buildAdditionalContextEnvelope — newCustomInstructions is additive", () => {
+  it("omits newCustomInstructions when not passed (byte-identical to the pre-G5(c) shape)", () => {
+    const json = buildAdditionalContextEnvelope("PreCompact", "HEADER");
+    const parsed = JSON.parse(json);
+    expect(parsed).toEqual({
+      hookSpecificOutput: { hookEventName: "PreCompact", additionalContext: "HEADER" },
+    });
+    expect("newCustomInstructions" in parsed.hookSpecificOutput).toBe(false);
+  });
+
+  it("includes newCustomInstructions when passed", () => {
+    const json = buildAdditionalContextEnvelope("PreCompact", "HEADER", "INSTRUCTIONS");
+    const parsed = JSON.parse(json);
+    expect(parsed.hookSpecificOutput.newCustomInstructions).toBe("INSTRUCTIONS");
+    expect(parsed.hookSpecificOutput.additionalContext).toBe("HEADER");
+  });
+});
+
+describe("reanchor — pre-compact.js emits newCustomInstructions end-to-end (real bundle)", () => {
+  let root: string;
+  beforeEach(() => {
+    root = tmpRoot();
+  });
+  afterEach(() => cleanup(root));
+
+  it("the lead's own invocation gets BOTH channels carrying consistent facts", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const runDir = path.join(root, ".guild", "runs", "run-fix-1");
+    fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
+    const out = execFileSync("node", [path.join(DIST, "pre-compact.js")], {
+      input: JSON.stringify({ hook_event_name: "PreCompact", cwd: root }),
+      encoding: "utf8",
+      env: { ...process.env, GUILD_RUN_ID: "run-fix-1" },
+    });
+    const parsed = JSON.parse(out);
+    expect(parsed.hookSpecificOutput.additionalContext).toContain(REANCHOR_MARKER);
+    expect(parsed.hookSpecificOutput.newCustomInstructions).toContain("run-fix-1");
+    expect(parsed.hookSpecificOutput.newCustomInstructions).toMatch(/preserve/i);
+  });
+
+  it("a dispatched worker's own session gets NEITHER channel", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const runDir = path.join(root, ".guild", "runs", "run-fix-1");
+    fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
+    const out = execFileSync("node", [path.join(DIST, "pre-compact.js")], {
+      input: JSON.stringify({ hook_event_name: "PreCompact", cwd: root }),
+      encoding: "utf8",
+      env: { ...process.env, GUILD_RUN_ID: "run-fix-1", GUILD_TASK_ID: "T1-backend" },
+    });
+    expect(out.trim()).toBe("");
   });
 });

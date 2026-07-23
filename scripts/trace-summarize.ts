@@ -29,6 +29,13 @@
 import * as fs from "fs";
 import * as path from "path";
 import { loadRunEvents, RunEvent } from "./lib/run-events";
+import {
+  loadRunSinks,
+  renderSinkAuditSection,
+  sinkAuditFrontmatterLines,
+  sinkAuditReflectionHint,
+  type RunSinkAudit,
+} from "./lib/run-sinks";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -512,7 +519,7 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
 
 // ── Summary sections ───────────────────────────────────────────────────────
 
-function buildFrontmatter(stats: RunStats): string {
+function buildFrontmatter(stats: RunStats, sinkAudit?: RunSinkAudit): string {
   const toolsLine =
     stats.toolCounts.length > 0
       ? stats.toolCounts.map(({ tool, count }) => `${tool}: ${count}`).join(", ")
@@ -532,6 +539,11 @@ function buildFrontmatter(stats: RunStats): string {
   const dispatchedLanesLine = surfaceLine(stats.dispatchCounts);
   const dispatchReceiptsLine = surfaceLine(stats.dispatchReceiptCounts);
 
+  // rf-wi-02: the dispatch-integrity sink counts, so a run with a silent backend
+  // downgrade or an un-tiered dispatch reads VISIBLY dirty from the frontmatter
+  // alone. Zero-valued on a clean run (affirmed, not silently absent).
+  const sinkLines = sinkAudit ? sinkAuditFrontmatterLines(sinkAudit) : [];
+
   return [
     "---",
     `run_id: ${stats.runId}`,
@@ -546,6 +558,7 @@ function buildFrontmatter(stats: RunStats): string {
     `files_touched_count: ${stats.filesTouchedCount}`,
     `errors: ${stats.errors}`,
     `ok_rate: ${stats.okRate}`,
+    ...sinkLines,
     "---",
   ].join("\n");
 }
@@ -663,8 +676,19 @@ function buildNotableEvents(events: TelemetryEvent[]): string {
   return notable.length > 0 ? notable.join("\n") : "No notable events.";
 }
 
-function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string {
+function buildReflectionHints(
+  stats: RunStats,
+  events: TelemetryEvent[],
+  sinkAudit?: RunSinkAudit
+): string {
   const hints: string[] = [];
+
+  // rf-wi-02: a backend degradation or un-tiered dispatch is a first-class
+  // reflection signal — surface it ahead of the softer heuristics so reflect
+  // routes it (skill-improvement / followup) instead of it staying auditable-by-
+  // path only.
+  const sinkHint = sinkAudit ? sinkAuditReflectionHint(sinkAudit) : null;
+  if (sinkHint) hints.push(sinkHint);
 
   // Skill-improvement candidates: specialists with errors
   const specialistsWithErrors = Array.from(
@@ -711,11 +735,15 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
   return hints.join("\n");
 }
 
-function buildSummary(runId: string, events: TelemetryEvent[]): string {
+function buildSummary(
+  runId: string,
+  events: TelemetryEvent[],
+  sinkAudit?: RunSinkAudit
+): string {
   const stats = computeStats(runId, events);
 
   const sections = [
-    buildFrontmatter(stats),
+    buildFrontmatter(stats, sinkAudit),
     "",
     `# Run ${runId} summary`,
     "",
@@ -731,9 +759,13 @@ function buildSummary(runId: string, events: TelemetryEvent[]): string {
     "",
     buildNotableEvents(events),
     "",
+    // rf-wi-02: the dispatch-integrity sink consumers. reflect reads summary.md,
+    // so surfacing degradations + un-tiered dispatches here wires the sinks into
+    // the reflection path without reflect re-reading the raw jsonl.
+    ...(sinkAudit ? [renderSinkAuditSection(sinkAudit), ""] : []),
     "## Reflection hints",
     "",
-    buildReflectionHints(stats, events),
+    buildReflectionHints(stats, events, sinkAudit),
     "",
   ];
 
@@ -776,10 +808,15 @@ function main(): void {
     );
   }
 
+  // rf-wi-02: read the dispatch-integrity sinks from the SAME run dir. They live
+  // OUTSIDE the event log (their own frozen-vocabulary jsonl), so they are read
+  // separately from `events` and folded into the summary — see run-sinks.ts.
+  const sinkAudit = loadRunSinks(runDir);
+
   // Build summary — normalize canonical status/latency_ms onto ok/ms first
   // (scripts/lib/run-events.ts intentionally leaves shape interpretation to
   // the caller; see normalizeEvent's docstring above).
-  const summary = buildSummary(runId, events.map(normalizeEvent));
+  const summary = buildSummary(runId, events.map(normalizeEvent), sinkAudit);
 
   // Write output
   const outDir = path.dirname(outFile);

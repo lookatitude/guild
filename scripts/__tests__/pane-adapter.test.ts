@@ -152,6 +152,7 @@ describe("ClaudePaneAdapter", () => {
     expect(adapter.env(spec())).toEqual({
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: "run-001",
+      GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
     });
   });
 
@@ -218,7 +219,7 @@ describe("CodexPaneAdapter", () => {
 
   it("env reports only the run id (no team gate)", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
-    expect(adapter.env(spec({ hostKind: "codex" }))).toEqual({ GUILD_RUN_ID: "run-001" });
+    expect(adapter.env(spec({ hostKind: "codex" }))).toEqual({ GUILD_RUN_ID: "run-001", GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1" });
   });
 
   // G-9 / C2-D1: env parity — Codex lane panes also export GUILD_SPECIALIST.
@@ -335,7 +336,7 @@ describe("CodexPaneAdapter", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
     const e = adapter.env(spec({ hostKind: "codex" })); // no taskId
     expect(e).not.toHaveProperty("GUILD_TASK_ID");
-    expect(e).toEqual({ GUILD_RUN_ID: "run-001" });
+    expect(e).toEqual({ GUILD_RUN_ID: "run-001", GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1" });
   });
 });
 
@@ -494,5 +495,31 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
     const r = backend.preflight([{ name: "security", scope: "audit", dependsOn: [], host_kind: "codex" }]);
     expect(r.ok).toBe(false);
     expect(r.failures.some((f) => f.hostKind === "codex")).toBe(true);
+  });
+});
+
+describe("rf-wi-03 (G3) — the producer marker is universal across ALL adapters", () => {
+  const MARKER = "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1";
+  const adapters = buildAdapters();
+  const hostKinds = Object.keys(adapters) as Array<keyof typeof adapters>;
+
+  it("buildAdapters returns every bespoke + wrapped-CLI adapter", () => {
+    // Anti-vacuity: the sweep must actually cover the non-Claude adapters.
+    expect(hostKinds.length).toBeGreaterThanOrEqual(4);
+    expect(hostKinds).toContain("claude");
+    expect(hostKinds).toContain("codex");
+  });
+
+  it.each(
+    // filter(Boolean) keeps the row typed; every buildAdapters value is defined.
+    (Object.entries(adapters) as Array<[string, (typeof adapters)[keyof typeof adapters]]>).filter(
+      ([, a]) => a !== undefined,
+    ),
+  )("adapter %s emits the marker on BOTH command and env", (hostKind, adapter) => {
+    const s = spec({ hostKind: hostKind as PaneSpec["hostKind"], specialist: "backend", taskId: "wi-1" });
+    // Claude's command routes through paneCommand (marker set there); every other
+    // adapter emits it in its own command fragment. Either way the marker is present.
+    expect(adapter!.command(s)).toContain(MARKER);
+    expect(adapter!.env(s)["GUILD_DISPATCH_PRODUCER"]).toBe("guild.dispatch.v1");
   });
 });

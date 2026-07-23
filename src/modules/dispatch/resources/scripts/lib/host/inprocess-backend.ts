@@ -15,7 +15,11 @@ import type {
   TeamLaunchRequest,
   TeamLaunchResult,
 } from "../core/contracts/team-backend";
-import { GENERIC_SUBAGENT_TYPE } from "../core/contracts/team-backend";
+import {
+  GENERIC_SUBAGENT_TYPE,
+  DISPATCH_PRODUCER_ENV,
+  DISPATCH_PRODUCER_TOKEN,
+} from "../core/contracts/team-backend";
 import { buildPrompt, shellQuote } from "./tmux-backend";
 
 export function composeInProcessDispatch(
@@ -56,6 +60,16 @@ export function composeInProcessDispatch(
         );
       }
     }
+    // rf-wi-03 (G3) — carry the scored tier on the lane's OWN env so the tier
+    // guard can verify MODEL↔TIER and reach `scored_compliant` instead of
+    // capping at `model_present`. The scored tier wins over the authoring
+    // default_tier (execute-plan writes the re-scored `tier:` back to team.yaml,
+    // ARCH-6 Part 2); GUILD_TIER_SCORE rides along only when a producer actually
+    // has the raw score (audit-only — the guard never gates on it). Absent tier
+    // ⇒ no GUILD_TIER (never a fabricated value): the model-param invariant still
+    // holds and the guard records `model_present`, exactly as before.
+    const resolvedTier = spec.tier ?? spec.default_tier;
+    const hasScore = typeof spec.score === "number" && Number.isFinite(spec.score);
     return {
       name: spec.name,
       subagentType: isProjectLocal ? GENERIC_SUBAGENT_TYPE : spec.name,
@@ -64,6 +78,13 @@ export function composeInProcessDispatch(
         GUILD_RUN_ID: req.runId,
         GUILD_SPECIALIST: spec.name,
         GUILD_TASK_ID: spec.taskId ?? spec.name,
+        // rf-wi-03 (G3) — the universal structured producer marker. Unforgeable
+        // by quoted prose (it lives in the dispatch's own env map), stamped on
+        // EVERY descriptor so a lane that lacks it is detectably NOT
+        // producer-composed (the backend guard's blockable prompt-only rung).
+        [DISPATCH_PRODUCER_ENV]: DISPATCH_PRODUCER_TOKEN,
+        ...(resolvedTier !== undefined ? { GUILD_TIER: resolvedTier } : {}),
+        ...(hasScore ? { GUILD_TIER_SCORE: String(spec.score) } : {}),
         ...(spec.capability_scope !== undefined
           ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
           : {}),

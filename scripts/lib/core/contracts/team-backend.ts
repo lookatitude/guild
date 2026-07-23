@@ -22,6 +22,13 @@ export interface Specialist extends SpecialistDispatchContract {
   host_kind?: HostKind;
   tier?: "cheap" | "mid" | "powerful";
   default_tier?: "cheap" | "mid" | "powerful";
+  /**
+   * The raw cost-scorer score for this lane (rf-wi-03 / G3), when a producer has
+   * one. Optional and audit-only: the tier guard records it in the dispatch line
+   * but never gates on it (a per-lane pin legitimately overrides the score→tier
+   * banding). Present ⇒ composeInProcessDispatch carries it as GUILD_TIER_SCORE.
+   */
+  score?: number;
   capabilityRequirements?: {
     needs_pr?: boolean;
     needs_parallel?: boolean;
@@ -49,6 +56,27 @@ export interface Specialist extends SpecialistDispatchContract {
  * tier — the former "degraded mid-tier" fallback made first-class.
  */
 export const GENERIC_SUBAGENT_TYPE = "general-purpose";
+
+// ── Structured producer marker (rf-wi-03 / G3) ───────────────────────────────
+//
+// Every Guild dispatch a producer composes carries this marker on BOTH the
+// dispatch env (unforgeable structural carrier — `composeInProcessDispatch`,
+// `paneCommand`) AND, via `buildPrompt`, as the prompt's line-1 identity anchor.
+// It is the universal, machine-detectable signal that "a Guild producer built
+// this dispatch" — the durable fix the backend-degradation guard's comment
+// queued behind the descriptor work. Two effects:
+//   - the backend-degradation guard's prompt-only rung can now BLOCK a lane that
+//     carries NO producer marker (drift) once the marker is universal (G3-3);
+//   - dispatch-attribution can read identity from a single line-1 anchor for
+//     every dispatch, unblocking the removal of the legacy 300-char producer-head
+//     parsing (rf-wi-07c / G7c — a downstream lane).
+// The hooks bundle restates these literals (same doctrine as GENERIC_SUBAGENT_TYPE);
+// keep the values in step.
+
+/** The dispatch-env key + prompt line-1 key naming a producer-composed dispatch. */
+export const DISPATCH_PRODUCER_ENV = "GUILD_DISPATCH_PRODUCER";
+/** The producer marker's self-versioned schema token (the marker's value). */
+export const DISPATCH_PRODUCER_TOKEN = "guild.dispatch.v1";
 
 // ── PaneAdapter seam (CH-2, cross-host ADR) ──────────────────────────────────
 
