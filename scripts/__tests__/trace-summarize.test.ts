@@ -597,6 +597,63 @@ describe("trace-summarize.ts", () => {
       // The Bash status:"err" tool_call row carries result_excerpt_redacted:"<orphaned>".
       expect(content).toMatch(/digest: <orphaned>/);
     });
+
+    // codex round-1 finding #1: a naive OR of both dialect names double-counts
+    // a mixed-dialect log. Pre-de-dup-fix canonical logs (see
+    // hooks/capture-telemetry.ts's de-duplication comment, and the checked-in
+    // tests/rearch/perf-corpus/run-medium-942.jsonl fixture) carry BOTH a
+    // legacy `PostToolUse` hook-mirror line AND post-tool-use.ts's richer
+    // `tool_call` line for the SAME invocation.
+    it("does not double-count a mixed-dialect log (PostToolUse + tool_call for the same invocation)", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "mixed-dialect-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          '{"ts":"2026-07-21T01:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T01:00:00.001Z","event":"tool_call","run_id":"mixed-dialect-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "mixed-dialect-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      // ONE invocation, represented twice — must tally as 1 Tool call, not 2.
+      expect(section).toMatch(/Tool calls:\s*1/);
+    });
+
+    it("omits the digest segment for a whitespace-only redacted excerpt", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "whitespace-digest-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:00:00.000Z","event":"tool_call","run_id":"whitespace-digest-run","tool":"Bash","status":"err","latency_ms":5,"result_excerpt_redacted":"   \\n  "}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "whitespace-digest-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const errorLine = content.split("\n").find((l) => l.startsWith("- ERROR"))!;
+      expect(errorLine).toBeDefined();
+      expect(errorLine).not.toContain("digest:");
+    });
+
+    it("collapses a multiline redacted excerpt to a single-line digest", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "multiline-digest-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:00:00.000Z","event":"tool_call","run_id":"multiline-digest-run","tool":"Bash","status":"err","latency_ms":5,"result_excerpt_redacted":"line one\\nline two"}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "multiline-digest-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const errorLine = content.split("\n").find((l) => l.startsWith("- ERROR"))!;
+      expect(errorLine).toBeDefined();
+      expect(errorLine).toContain("digest: line one line two");
+    });
   });
 
   // ─────────────────────────────────────────────────────────────

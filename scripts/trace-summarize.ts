@@ -147,7 +147,9 @@ function errorLabel(e: TelemetryEvent): string {
 }
 
 /**
- * #G7b (v23x-deferred-followups) — a tool-call happened in EITHER dialect.
+ * #G7b (v23x-deferred-followups) — which dialect names "a tool call happened"
+ * in THIS log, so a mixed-dialect log is counted once per invocation, not
+ * twice.
  *
  * Legacy hook-mirror lines name the activity `event: "PostToolUse"` (the
  * literal Claude Code hook name); the canonical v1.4 shape
@@ -155,16 +157,29 @@ function errorLabel(e: TelemetryEvent): string {
  * activity `event: "tool_call"`. Gating on "PostToolUse" alone silently
  * zeroed buildSpecialistActivity's toolCalls/fileOps tally and both
  * slow-call detectors (buildNotableEvents' SLOW rows, buildReflectionHints'
- * context-bundle-issues hint) for every canonical run — the counters never
- * threw, they just always read 0/empty.
+ * context-bundle-issues hint) for every canonical run.
  *
- * Deliberately excludes `hook_event`: a lifecycle hook (SessionStart,
- * PreCompact, ...) is bridged onto Timeline's `tool` field for error/duration
- * display (see normalizeEvent), but it is not itself a tool CALL — counting
- * it here would inflate the "Tool calls" tally with non-tool activity.
+ * A naive OR of both names double-counts: hooks/capture-telemetry.ts's
+ * de-duplication comment documents that pre-fix canonical logs carry BOTH a
+ * `PostToolUse` hook-mirror line AND post-tool-use.ts's richer `tool_call`
+ * line for the SAME invocation (verified against the checked-in
+ * tests/rearch/perf-corpus/run-medium-942.jsonl fixture — 465 `PostToolUse` +
+ * 462 `tool_call` rows, near-1:1 paired). Since post-tool-use.ts is the sole
+ * canonical writer for tool-call lines going forward, a log containing ANY
+ * `tool_call` row treats that dialect as authoritative for the WHOLE log and
+ * ignores `PostToolUse` entirely (never a mix within one summary); only a
+ * log with NO `tool_call` row at all (a pure-legacy events.ndjson mirror, or
+ * a canonical log with no post-tool-use.ts producer) falls back to
+ * `PostToolUse`.
+ *
+ * Deliberately excludes `hook_event` from BOTH dialects: a lifecycle hook
+ * (SessionStart, PreCompact, ...) is bridged onto Timeline's `tool` field for
+ * error/duration display (see normalizeEvent), but it is not itself a tool
+ * CALL — counting it here would inflate the "Tool calls" tally with non-tool
+ * activity.
  */
-function isToolCallEvent(e: TelemetryEvent): boolean {
-  return e.event === "PostToolUse" || e.event === "tool_call";
+function preferredToolCallDialect(events: TelemetryEvent[]): "tool_call" | "PostToolUse" {
+  return events.some((e) => e.event === "tool_call") ? "tool_call" : "PostToolUse";
 }
 
 /** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
@@ -426,6 +441,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
     string,
     { toolCalls: number; fileOps: number; errors: number; ok: number }
   >();
+  const toolCallDialect = preferredToolCallDialect(events);
 
   for (const event of events) {
     const key = event.specialist || "(main session)";
@@ -433,7 +449,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
       specialistMap.set(key, { toolCalls: 0, fileOps: 0, errors: 0, ok: 0 });
     }
     const s = specialistMap.get(key)!;
-    if (isToolCallEvent(event) && event.tool) {
+    if (event.event === toolCallDialect && event.tool) {
       s.toolCalls++;
       if (event.tool === "Write" || event.tool === "Edit") s.fileOps++;
     }
@@ -468,10 +484,19 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
  * instead), so a canonical ERROR row printed the literal string
  * "digest: undefined". Render whichever redacted excerpt IS present, and
  * omit the "— digest: ..." segment entirely rather than print a non-value.
+ *
+ * Collapses internal whitespace (including newlines) to single spaces before
+ * deciding presence and rendering: production `result_excerpt_redacted`
+ * (hooks/post-tool-use.ts's resultExcerpt()) preserves a raw string
+ * tool-response verbatim, so it can be whitespace-only (would otherwise
+ * render a visually-empty "— digest: " segment) or multiline (would
+ * otherwise break the single-line Notable-events list entry across lines).
  */
 function errorDigest(e: TelemetryEvent): string {
   const digest = e.payload_digest ?? e.result_excerpt_redacted ?? e.payload_excerpt_redacted;
-  return typeof digest === "string" && digest.length > 0 ? ` — digest: ${digest}` : "";
+  if (typeof digest !== "string") return "";
+  const collapsed = digest.replace(/\s+/g, " ").trim();
+  return collapsed.length > 0 ? ` — digest: ${collapsed}` : "";
 }
 
 function buildNotableEvents(events: TelemetryEvent[]): string {
@@ -488,8 +513,9 @@ function buildNotableEvents(events: TelemetryEvent[]): string {
   }
 
   // Very long tool calls (> 2000ms for tool use events, heuristic)
+  const toolCallDialect = preferredToolCallDialect(events);
   const longCalls = events.filter(
-    (e) => isToolCallEvent(e) && typeof e.ms === "number" && e.ms > 2000
+    (e) => e.event === toolCallDialect && typeof e.ms === "number" && e.ms > 2000
   );
   for (const e of longCalls) {
     notable.push(
@@ -514,8 +540,9 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
   }
 
   // Missing-specialist candidates: events from main session (empty specialist) with tool use
+  const toolCallDialect = preferredToolCallDialect(events);
   const mainSessionToolCalls = events.filter(
-    (e) => isToolCallEvent(e) && !e.specialist && e.tool
+    (e) => e.event === toolCallDialect && !e.specialist && e.tool
   );
   if (mainSessionToolCalls.length > 0) {
     hints.push(
@@ -525,7 +552,7 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
 
   // Context-bundle issues: any tool calls over 5000ms
   const verySlowCalls = events.filter(
-    (e) => isToolCallEvent(e) && typeof e.ms === "number" && e.ms > 5000
+    (e) => e.event === toolCallDialect && typeof e.ms === "number" && e.ms > 5000
   );
   if (verySlowCalls.length > 0) {
     hints.push(
