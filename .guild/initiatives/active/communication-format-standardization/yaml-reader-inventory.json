@@ -11,6 +11,10 @@
       "reason": "Surgical single-field frontmatter read + in-place rewrite of `recall_importance` (explicitly 'never a yaml.dump reformat'). A js-yaml load/dump round-trip would reserialize the whole doc and lose comments/ordering."
     },
     {
+      "file": "scripts/verify-codex-review-trail.ts",
+      "reason": "LIVE source of the already-inventoried mirror below (byte-identical). Bounded single-field read of `final_status` from a codex-review-trail frontmatter block, with whitespace/quote tolerance. Reads exactly one scalar; no general YAML structure is parsed. Pre-existing reader unchanged by rf-wi-06 (which only extended ALLOWED_FINAL_STATUS); listing the live path closes the live/mirror inventory gap."
+    },
+    {
       "file": "src/modules/review/resources/scripts/verify-codex-review-trail.ts",
       "reason": "Bounded single-field read of `final_status` from a codex-review-trail frontmatter block, with whitespace/quote tolerance. Reads exactly one scalar; no general YAML structure is parsed."
     },
