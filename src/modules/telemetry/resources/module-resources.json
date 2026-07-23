@@ -40,6 +40,13 @@
     },
     {
       "category": "scripts",
+      "id": "audit-run-sinks",
+      "source_path": "scripts/audit-run-sinks.ts",
+      "resource_path": "resources/scripts/audit-run-sinks.ts",
+      "sha256": "a647ff8987bb1fbef12442c4648fa2655ff407c402f1acc505e164847afe507d"
+    },
+    {
+      "category": "scripts",
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
@@ -61,6 +68,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/run-sinks",
+      "source_path": "scripts/lib/run-sinks.ts",
+      "resource_path": "resources/scripts/lib/run-sinks.ts",
+      "sha256": "51bd73f702a264d6a2b6952a8eeee8f43a571290df6ebc74850088582079874e"
+    },
+    {
+      "category": "scripts",
       "id": "recall-stats",
       "source_path": "scripts/recall-stats.ts",
       "resource_path": "resources/scripts/recall-stats.ts",
@@ -71,7 +85,7 @@
       "id": "trace-summarize",
       "source_path": "scripts/trace-summarize.ts",
       "resource_path": "resources/scripts/trace-summarize.ts",
-      "sha256": "64406d75196cb56bda6b786698ee1a2440638626d9bb7bfa8626a7c8a1bb5dc1"
+      "sha256": "ef9b7bcefc5182a4924ba509127fa6fe0514ac656d72339b8872c68e70633b47"
     },
     {
       "category": "scripts",

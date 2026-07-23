@@ -231,10 +231,30 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * `check-surface-pins.ts` checklist-as-code (G6b) was observed RED against the
  * old skills pin before this bump (registry_stale execute-plan + tree_pin_stale
  * skills) — anti-vacuity evidence the pin is live.
+ *
+ * Re-ratified 2026-07-23 (initiative v23x-deferred-followups, rf-wi-02) —
+ * DELIBERATE skill-surface change, two files, wiring the dispatch-integrity
+ * SINK CONSUMERS:
+ *   (a) `skills/meta/verify-done/SKILL.md` gains check #6 "Dispatch integrity
+ *       (sink audit)" — verify-done now gates on `scripts/audit-run-sinks.ts`
+ *       (exit 1 on a run with a backend degradation or an un-tiered dispatch),
+ *       so a downgraded/un-tiered run reads VISIBLY dirty instead of
+ *       auditable-by-path only. "Five checks" → "Six checks".
+ *   (b) `skills/meta/reflect/SKILL.md` §Input now names summary.md's new
+ *       `## Sink audit` section + `backend_degradations`/`tier_violations`/
+ *       `untiered_dispatches` frontmatter (produced by trace-summarize.ts via
+ *       `scripts/lib/run-sinks.ts`) as a first-class reflection signal.
+ * `skill-src/skill-registry.json` was re-extracted in the SAME commit
+ * (extractSkillV1 → all 5 WAVE2 skills round-trip byte-identical; only the
+ * verify-done `body` changed — reflect is not a registry skill). `commands/**`
+ * UNTOUCHED — its pin is UNCHANGED (verified equal, not assumed).
+ * `.claude-plugin/**` untouched. Pins recomputed AFTER the module-resource sync
+ * (both `--check` modes clean); `check-surface-pins.ts` observed RED
+ * (tree_pin_stale skills) against the prior pin before this bump.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "90bb59e5113dafa408d85e023a93f0a60d8b3598",
+  skills: "819d795207286ee81e50b142ff217d219df84e4d",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
