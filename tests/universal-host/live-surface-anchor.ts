@@ -207,10 +207,34 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * dispatch.md backend+tier contracts, SKILL.md §Expiry + #66 contract +
  * §Close-requires-review+verify). Registry re-extracted for the fully
  * merged SKILL.md; pins recomputed on this tree.
+ *
+ * Re-ratified 2026-07-23 (initiative v23x-deferred-followups, rf-wi-06) —
+ * DELIBERATE skill-surface change, two files:
+ *   (a) `skills/meta/execute-plan/SKILL.md` §"Backend + routing (summary)" cmux
+ *       obligation (a) now WIRES the cmux dispatch-receipt CLI
+ *       (`scripts/lib/host/pane-dispatch-trace.ts`) as the executable form of
+ *       "the dispatch records the launcher would have" — removing the
+ *       manual-lead-invocation limitation (G6a).
+ *   (d) `skills/meta/codex-review/SKILL.md` §"Cap handling"/"Trail format"/
+ *       "Output shape" now name the two codex-review cap TERMINAL states —
+ *       `cap-pushback-recorded` ("cap + reasoned pushback recorded") and
+ *       `cap-verification-only` ("verification-only round beyond cap") — matching
+ *       the two new clean terminals in `scripts/verify-codex-review-trail.ts`
+ *       (G6d).
+ * `skill-src/skill-registry.json` was re-extracted in the SAME commit
+ * (extractSkillV1 → all 5 WAVE2 skills round-trip byte-identical via
+ * renderSkillFromRegistry; only the execute-plan `body` changed —
+ * codex-review is not a registry skill). `commands/**` UNTOUCHED — its pin is
+ * UNCHANGED (verified equal, not assumed). `.claude-plugin/**` untouched —
+ * RATIFIED_MANIFESTS unchanged. The pins below were recomputed AFTER the hooks
+ * rebuild + module-resource sync (both `--check` modes clean). The
+ * `check-surface-pins.ts` checklist-as-code (G6b) was observed RED against the
+ * old skills pin before this bump (registry_stale execute-plan + tree_pin_stale
+ * skills) — anti-vacuity evidence the pin is live.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "6287463dd440eb041e05f89ca6bc404aae7fa444",
+  skills: "90bb59e5113dafa408d85e023a93f0a60d8b3598",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
