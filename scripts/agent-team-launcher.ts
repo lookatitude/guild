@@ -372,8 +372,14 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   // the SKILL-surface lane); the parse + descriptor plumbing is complete here so
   // the value flows the moment the writeback emits it.
   else if (key === "score") {
-    const n = Number(stripQuotes(value).trim());
-    if (Number.isFinite(n)) target.score = n;
+    const s = stripQuotes(value).trim();
+    // Guard the empty string — Number("") === 0 would fabricate a score of 0
+    // where none was written ("never a fake value"). A real 0 (cheap lane) is a
+    // non-empty "0" and still parses.
+    if (s.length > 0) {
+      const n = Number(s);
+      if (Number.isFinite(n)) target.score = n;
+    }
   }
   // GAP-A1/ARCH-2: capability requirements from team.yaml, forwarded by
   // planTeamRouting into route()'s capabilityGap() intersection (true round-trip:

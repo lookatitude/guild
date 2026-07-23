@@ -80,6 +80,13 @@ describe("G3 — tier env on every scored dispatch", () => {
     expect("GUILD_TIER_SCORE" in plan[0].env).toBe(false);
   });
 
+  it("emits a REAL score of 0 (a cheap lane's score is a legitimate value)", () => {
+    const plan = composeInProcessDispatch(
+      req([{ name: "reader", scope: "read", dependsOn: [], tier: "cheap", score: 0 }]),
+    );
+    expect(plan[0].env["GUILD_TIER_SCORE"]).toBe("0");
+  });
+
   it("omits GUILD_TIER when neither tier nor default_tier is present", () => {
     const plan = composeInProcessDispatch(
       req([{ name: "backend", scope: "api", dependsOn: [] }]),

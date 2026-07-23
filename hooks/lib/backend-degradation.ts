@@ -191,13 +191,12 @@ export type LaneEvidence = "structured" | "prompt_only" | "none";
 export const PRODUCER_MARKER_ENV = "GUILD_DISPATCH_PRODUCER";
 
 /**
- * The marker's valid value prefix (`guild.dispatch.` — versioned:
- * `guild.dispatch.v1`, future `…v2`, …). A bogus/stale value is NOT accepted as
- * a producer marker: it must be a recognizable Guild dispatch token, else a
- * hand-set `GUILD_DISPATCH_PRODUCER=junk` env could forge structured evidence
- * (adversarial review round 1, finding 3).
+ * The marker's valid value shape: `guild.dispatch.v<N>` EXACTLY (versioned —
+ * v1, future v2, …). Anything else (`guild.dispatch.junk`, `guild.dispatch.v1x`,
+ * a bare prefix, a hand-set junk value) is NOT a producer marker, so it cannot
+ * forge structured evidence (adversarial review rounds 1 + 2, finding 3).
  */
-const PRODUCER_MARKER_VALUE_PREFIX = "guild.dispatch.";
+const PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;
 
 /** The producer-set env keys `composeInProcessDispatch` puts on a lane dispatch. */
 const STRUCTURED_CARRIER_KEYS = [
@@ -246,9 +245,9 @@ export function hasProducerMarker(toolInput: unknown): boolean {
   const env = (toolInput as Record<string, unknown>)["env"];
   if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
   const v = (env as Record<string, unknown>)[PRODUCER_MARKER_ENV];
-  // Require a recognizable Guild dispatch token (versioned), not just any
-  // non-empty value — a stale/bogus marker must not forge structured evidence.
-  return typeof v === "string" && v.trim().startsWith(PRODUCER_MARKER_VALUE_PREFIX);
+  // Require the EXACT versioned Guild dispatch token, not just any non-empty
+  // value — a stale/bogus marker must not forge structured evidence.
+  return typeof v === "string" && PRODUCER_MARKER_VALUE_RE.test(v.trim());
 }
 
 /** Classify the lane evidence carried by this dispatch. */

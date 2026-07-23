@@ -82,8 +82,37 @@ const DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
  * Like the definition marker, it is a producer-owned FIRST-LINE position that the
  * lane's appended scope text can neither forge nor contradict.
  */
-const PRODUCER_MARKER_RE =
-  /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v\d+(?:\s+[A-Za-z0-9._-]+=[^\s]+)*\s+role=([A-Za-z0-9._-]+)(?:\s|$)/;
+const PRODUCER_MARKER_HEAD = "GUILD_DISPATCH_PRODUCER=";
+const PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;
+const PRODUCER_MARKER_TOKEN_RE = /^[A-Za-z][A-Za-z0-9_]*=[^\s]+$/;
+
+/**
+ * Parse the producer marker's role from a prompt's FIRST LINE, or undefined
+ * when the line is not a well-formed marker. The WHOLE line must parse — a
+ * malformed token, a bad version, a bad role, or a duplicate `role=` rejects the
+ * marker outright (adversarial review round 2, finding 3): `role=advisor/garbage`,
+ * `role=advisor trailing-junk`, and `role=advisor role=backend` all yield no
+ * attribution rather than a partial/last-wins guess.
+ */
+function producerMarkerRole(firstLine: string): string | undefined {
+  if (!firstLine.startsWith(PRODUCER_MARKER_HEAD)) return undefined;
+  const tokens = firstLine.split(/\s+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) return undefined;
+  const value = tokens[0].slice(PRODUCER_MARKER_HEAD.length);
+  if (!PRODUCER_MARKER_VALUE_RE.test(value)) return undefined;
+  let role: string | undefined;
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (!PRODUCER_MARKER_TOKEN_RE.test(t)) return undefined; // trailing junk ⇒ reject whole line
+    const eq = t.indexOf("=");
+    const k = t.slice(0, eq);
+    if (k === "role") {
+      if (role !== undefined) return undefined; // duplicate role ⇒ reject
+      role = t.slice(eq + 1);
+    }
+  }
+  return safeRole(role);
+}
 
 /**
  * How much of the prompt counts as the producer-owned OPENING for the legacy
@@ -178,7 +207,7 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
   // orchestrator dispatches, which have no GUILD_AGENT_DEFINITION line). An
   // identity carrier + lane signature, but NOT adoption proof (it never tells the
   // lane to read/adopt a definition), so it does not feed hasAdoptionPrompt.
-  const producerMarkerRole = safeRole(PRODUCER_MARKER_RE.exec(firstLine)?.[1]);
+  const producerMarkerRoleValue = producerMarkerRole(firstLine);
 
   const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
   // Legacy (pre-marker) producer wording, still accepted as adoption proof.
@@ -217,7 +246,7 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
     specialistEnv,
     defRole,
     markerRole,
-    producerMarkerRole,
+    producerMarkerRoleValue,
     anchorRole,
     proseRole,
   ].filter((r): r is string => r !== undefined);
@@ -227,7 +256,7 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
   // mention in ordinary prompt/scope text is NOT a carrier and never yields a
   // specialist.
   const specialist =
-    specialistEnv ?? defRole ?? markerRole ?? producerMarkerRole ?? anchorRole ?? proseRole;
+    specialistEnv ?? defRole ?? markerRole ?? producerMarkerRoleValue ?? anchorRole ?? proseRole;
 
   const promptTeammate = /teammate for run-id/i.test(head);
 
@@ -247,7 +276,7 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
     specialistEnv !== undefined ||
     // G3 — the universal producer marker is a lane signature (not adoption proof,
     // so it stays out of isSpecialistLane / the #58 persona-strip predicate).
-    producerMarkerRole !== undefined;
+    producerMarkerRoleValue !== undefined;
 
   const out: DispatchAttribution = {
     subagentType,

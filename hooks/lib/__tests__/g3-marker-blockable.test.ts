@@ -70,13 +70,23 @@ describe("G3 — universal line-1 producer marker is an identity anchor", () => 
     expect(attrOf(input).specialist).toBe("advisor");
   });
 
-  it("REJECTS a malformed role token (no partial attribution)", () => {
-    const input = {
-      subagent_type: "general-purpose",
-      prompt: "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=advisor/garbage\nwork",
-    };
-    // role= is not a clean token → the marker does not attribute a role.
+  it.each([
+    ["malformed role value", "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=advisor/garbage"],
+    ["trailing junk token", "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=advisor trailing-junk"],
+    ["duplicate role token", "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=advisor role=backend"],
+    ["bogus version", "GUILD_DISPATCH_PRODUCER=guild.dispatch.junk role=advisor"],
+    ["bare prefix value", "GUILD_DISPATCH_PRODUCER=guild.dispatch. role=advisor"],
+  ])("REJECTS %s (no partial/last-wins attribution)", (_label, line) => {
+    const input = { subagent_type: "general-purpose", prompt: `${line}\nwork` };
     expect(attrOf(input).specialist).toBeUndefined();
+  });
+
+  it("accepts extra well-formed tokens around role=", () => {
+    const input = {
+      subagent_type: "advisor",
+      prompt: "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 run=run-x role=advisor phase=build\nwork",
+    };
+    expect(attrOf(input).specialist).toBe("advisor");
   });
 });
 
