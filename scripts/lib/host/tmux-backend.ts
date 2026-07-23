@@ -100,13 +100,15 @@ export function isDebugShellTitle(title: string): boolean {
 // byte-identical to its pre-fix behavior (bare `claude <prompt>`, no flags) —
 // so every OTHER caller is untouched:
 //   - `ClaudePaneAdapter.command()` (pane-adapter.ts) delegates to
-//     `paneCommand` with no launchArgs, used by `RemoteTeamBackend` for ALL
-//     remote (SSH) dispatch. Remote preflight only verifies the binary +
-//     tmux, not that Guild's hook/plugin is installed on the remote host —
-//     so silently bypassing native prompts there would remove the host's own
-//     guardrail without a proven Guild-side one behind it. Left unchanged; a
-//     real fix needs remote hook-installation verification first (a
-//     separate, tracked followup).
+//     `paneCommand` with no launchArgs and stays the BARE path used for any
+//     remote host whose hooks are unproven. rf-wi-04 (G4) closed the former
+//     followup: RemoteTeamBackend now runs a hook-install preflight
+//     (RemoteTransport.probeHooks — Phase 1.6 in remote-backend.ts) and, ONLY
+//     when a far host proves Guild's hook bundle installed, resolves the remote
+//     Claude pane's command through `paneCommand(..., claudeLaunchArgs)`
+//     (bypassing the bare adapter) — so the permission-mode flag reaches a
+//     remote pane exclusively behind the proven Guild-side guardrail. A host
+//     that fails the preflight still launches bare (recorded, never silent).
 //   - Codex is never touched here at all (see resolveClaudeTeamLaunchArgs).
 
 /**

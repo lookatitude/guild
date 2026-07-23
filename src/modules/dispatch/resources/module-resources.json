@@ -8,7 +8,7 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "8df4d22806beee06a5e068a982b8a31d9231860c9b02539850e4f2c996bbb448"
+      "sha256": "e126b5bbfaac0ad0ec0c9b8f8b06e78aec803cc3f8b9c65a2468d9927f0bbe5b"
     },
     {
       "category": "scripts",
@@ -29,7 +29,14 @@
       "id": "lib/core/contracts/team-backend",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "84776d47be00b89ac3ef9a262adf88e32a8c28a4631dfb4c87eed1e61bf81f8b"
+      "sha256": "55b16930622cd2c618ed201187f0f92444fac1ce82a48f1635a4ffba737547e0"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/emit-remote-orphan",
+      "source_path": "scripts/lib/emit-remote-orphan.ts",
+      "resource_path": "resources/scripts/lib/emit-remote-orphan.ts",
+      "sha256": "c7981e7179be977fc13e2e8b77c7ce7dcdeee8902dffb8a8b111eebabe8fc03b"
     },
     {
       "category": "scripts",
@@ -50,21 +57,21 @@
       "id": "lib/host/remote-backend",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "b67b7f7f83ae8f5292c3075713fba5345283873aa28e6ccc420c1322c02746a4"
+      "sha256": "12a57828166f7c6e0fa8a366aff7c595116b414132dae64e15505b7c0a62eb24"
     },
     {
       "category": "scripts",
       "id": "lib/host/tmux-backend",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "047039d2b55e32b9c4f07e44fb2f09eb15567e9665a306b1ec001f42e1635512"
+      "sha256": "7752a1548bfa52c899f3ac817e01d458bd047a062b8a3e087c5689c324d9fc90"
     },
     {
       "category": "scripts",
       "id": "lib/team-backend",
       "source_path": "scripts/lib/team-backend.ts",
       "resource_path": "resources/scripts/lib/team-backend.ts",
-      "sha256": "2aea429a4ca2b43b35b959964ea271ea772c991eb964b64294dc9846e4ddea70"
+      "sha256": "83106b4522c4045bbe4db5f93527c2749b56b6b216c2cbd3c8df921d97b90d4e"
     },
     {
       "category": "skills",

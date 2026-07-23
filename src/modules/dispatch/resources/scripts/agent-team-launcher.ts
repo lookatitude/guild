@@ -78,6 +78,8 @@ import {
 import { terminatePane } from "./lib/host/tmux-backend";
 // #76 — pane-path dispatch receipts into the orchestrating run's trace.
 import { emitPaneDispatchEvents } from "./lib/host/pane-dispatch-trace";
+// rf-wi-04 item 2 — durable sink for orphaned remote lanes (Q2a).
+import { emitRemoteOrphan } from "./lib/emit-remote-orphan";
 import {
   findRunAcceptances,
   findRunTaskCells,
@@ -1733,6 +1735,12 @@ async function main(): Promise<void> {
             transport: new SshRemoteTransport(),
             resolveHostTarget,
             resolveAdapter: resolveAdapter(),
+            // rf-wi-04 item 2 (codex review Q2a) — route the orphaned-lane
+            // warning to a DURABLE run-scoped sink. launch() is wrapped in
+            // bounded retry below; a later successful attempt discards the
+            // failed attempt's envelope, so the orphan must be persisted at
+            // detection time (NDJSON events log + trace), not left on stderr.
+            warn: (msg) => emitRemoteOrphan(cwd, runId, msg),
           });
 
           // R-016a: wrap the ONE real TS-level dispatch call site in bounded retry.

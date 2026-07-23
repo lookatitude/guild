@@ -239,6 +239,37 @@ export class CodexPaneAdapter implements PaneAdapter {
     // NO CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS — Codex is not on the Claude bus.
     // D-CAP: export GUILD_TASK_ID (scope-file locator) and optionally
     // GUILD_CAPABILITY_SCOPE (env fast-path) so D-CAP enforces on Codex panes.
+    //
+    // rf-wi-04 (G4) — CODEX-SIDE PreToolUse ENFORCEMENT: NOT WIRED THIS WAVE,
+    // with a corrected rationale (not silence, and NOT the "infeasible" claim an
+    // earlier draft made — the rf-wi-04 codex review disproved that). A codex
+    // pane launches BARE here. The honest, current picture:
+    //
+    //   FEASIBLE at the CLI level: Codex CLI ships stable `hooks` (stable since
+    //   codex 0.124.0; live-observed on 0.144.5) whose `PreToolUse` hook can
+    //   intercept Bash/apply_patch/MCP/tool calls and DENY them before execution
+    //   (`permissionDecision:"deny"` / exit 2). See developers.openai.com/codex/
+    //   hooks. So a Guild-gated per-tool deny IS achievable on codex.
+    //
+    //   NOT YET ENABLED in Guild, for two concrete reasons:
+    //     1. Guild's generated codex hook bundle wires only `UserPromptSubmit`,
+    //        NOT `PreToolUse` (scripts/build-host-packages.ts, writeCodexHookBridge)
+    //        — there is no codex PreToolUse deny bridge to gate a bypass behind.
+    //     2. The codex capability rows still record `hooks.pre_tool_use: false`
+    //        (INFERRED / "confirm on-box", never verified) in BOTH
+    //        host-capabilities-schema.ts and host-registry-schema.ts — stale vs.
+    //        the live CLI. (Note the same rows DO already declare a bypass launch
+    //        mode `--dangerously-bypass-approvals-and-sandbox`, so the earlier
+    //        "launch_modes: {}" claim was also wrong.)
+    //
+    //   PRECONDITION to enable a codex bypass flag later (mirrors the remote-
+    //   Claude item-1 gate): (a) on-box confirm codex PreToolUse deny, (b) refresh
+    //   the codex capability rows to `pre_tool_use: true` (blast-radius: routing/
+    //   degradation/support-matrix consumers), (c) add a codex `PreToolUse` deny
+    //   bridge to writeCodexHookBridge, (d) add a codex-side probe analogous to
+    //   RemoteTransport.probeHooks and gate the bypass on it. That is a scoped
+    //   followup (host-package build + a new hook + capability-row refresh),
+    //   beyond this lane's remote-precondition core — filed, not silently dropped.
     const taskFragment =
       spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer
