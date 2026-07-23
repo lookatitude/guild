@@ -23,11 +23,13 @@
       "guild-telemetry"
     ],
     "scripts": [
+      "audit-run-sinks",
       "recall-stats",
       "trace-summarize",
       "v1.4-log-validator",
       "lib/guild-trace-emit",
       "lib/guild-trace-events",
+      "lib/run-sinks",
       "hooks/dist/run-trace"
     ]
   }

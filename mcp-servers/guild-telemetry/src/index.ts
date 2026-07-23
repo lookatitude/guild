@@ -37,6 +37,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as yaml from "js-yaml";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -174,9 +175,42 @@ interface RunStats {
   eventCount: number;
   specialists: string[];
   toolCounts: { tool: string; count: number }[];
+  // rf-wi-02: at PARITY with scripts/trace-summarize.ts — a pane run's dispatch
+  // signal. Each pane is a separate host session whose tool calls never land in
+  // this log, so the dispatch receipt is the only lane signal.
+  //   dispatchCounts        — DISTINCT lanes per surface (retry must not inflate).
+  //   dispatchReceiptCounts — raw receipt lines per surface (retry stays visible).
+  dispatchCounts: { backend: string; count: number }[];
+  dispatchReceiptCounts: { backend: string; count: number }[];
   filesTouchedCount: number;
   errors: number;
   okRate: number;
+}
+
+// ── Dispatch predicates (mirror scripts/trace-summarize.ts) ────────────────
+
+/** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
+function isDispatchEvent(e: TelemetryEvent): boolean {
+  return e.schema_version === "guild.trace.dispatch.v1";
+}
+
+/**
+ * A CONFIRMED dispatch: the lane actually reached a backend. A bare
+ * `backend: "unknown"` receipt is pre-routing INTENT (write-task-run.ts emits one
+ * per task before any routing decision) and is excluded — mixing the two would
+ * report `[tmux: 3, unknown: 5]` for a three-lane run. A cmux surface rides
+ * `backend: "unknown"` and identifies itself in `pane_backend`.
+ */
+function isConfirmedDispatch(e: TelemetryEvent): boolean {
+  if (!isDispatchEvent(e)) return false;
+  if (typeof e.pane_backend === "string" && e.pane_backend !== "") return true;
+  return typeof e.backend === "string" && e.backend !== "" && e.backend !== "unknown";
+}
+
+/** The surface to report a dispatch under: concrete `pane_backend` else `backend`. */
+function dispatchSurface(e: TelemetryEvent): string {
+  if (typeof e.pane_backend === "string" && e.pane_backend) return e.pane_backend;
+  return e.backend as string;
 }
 
 function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
@@ -189,6 +223,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
       eventCount: 0,
       specialists: [],
       toolCounts: [],
+      dispatchCounts: [],
+      dispatchReceiptCounts: [],
       filesTouchedCount: 0,
       errors: 0,
       okRate: 1,
@@ -212,6 +248,36 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     .map(([tool, count]) => ({ tool, count }))
     .sort((a, b) => b.count - a.count || a.tool.localeCompare(b.tool));
 
+  // rf-wi-02: CONFIRMED dispatches grouped by surface, sorted count-desc then
+  // alpha (same ordering + semantics as scripts/trace-summarize.ts). Both numbers
+  // are reported — dispatched_lanes counts DISTINCT lanes (task_id, else
+  // specialist) so a retry never inflates it; dispatch_receipts counts raw
+  // receipt lines so retry volume stays visible.
+  const dispatchLanes = new Map<string, Set<string>>();
+  const receiptMap = new Map<string, number>();
+  for (const e of events) {
+    if (!isConfirmedDispatch(e)) continue;
+    const surface = dispatchSurface(e);
+    receiptMap.set(surface, (receiptMap.get(surface) ?? 0) + 1);
+    const lane =
+      (typeof e.task_id === "string" && e.task_id) ||
+      (typeof e.specialist === "string" && e.specialist) ||
+      "";
+    if (!lane) continue;
+    if (!dispatchLanes.has(surface)) dispatchLanes.set(surface, new Set());
+    dispatchLanes.get(surface)!.add(lane);
+  }
+  const bySurface = (
+    a: { backend: string; count: number },
+    b: { backend: string; count: number }
+  ) => b.count - a.count || a.backend.localeCompare(b.backend);
+  const dispatchCounts = Array.from(dispatchLanes.entries())
+    .map(([backend, lanes]) => ({ backend, count: lanes.size }))
+    .sort(bySurface);
+  const dispatchReceiptCounts = Array.from(receiptMap.entries())
+    .map(([backend, count]) => ({ backend, count }))
+    .sort(bySurface);
+
   const filesTouchedCount = events.filter(
     (e) => e.tool === "Write" || e.tool === "Edit"
   ).length;
@@ -230,6 +296,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     eventCount: events.length,
     specialists,
     toolCounts,
+    dispatchCounts,
+    dispatchReceiptCounts,
     filesTouchedCount,
     errors,
     okRate: Math.round(okRate * 1000) / 1000,
@@ -245,6 +313,14 @@ function buildSummary(runId: string, events: TelemetryEvent[]): string {
   const specialistsLine =
     stats.specialists.length > 0 ? stats.specialists.join(", ") : "(none)";
 
+  // rf-wi-02: parity with scripts/trace-summarize.ts's frontmatter — a pane run's
+  // dispatch signal, answerable from the frontmatter alone even though no pane
+  // tool call reached this log.
+  const surfaceLine = (rows: { backend: string; count: number }[]): string =>
+    rows.length > 0
+      ? rows.map(({ backend, count }) => `${backend}: ${count}`).join(", ")
+      : "(none)";
+
   const frontmatter = [
     "---",
     `run_id: ${stats.runId}`,
@@ -253,6 +329,8 @@ function buildSummary(runId: string, events: TelemetryEvent[]): string {
     `duration_ms: ${stats.durationMs}`,
     `event_count: ${stats.eventCount}`,
     `specialists_dispatched: [${specialistsLine}]`,
+    `dispatched_lanes: [${surfaceLine(stats.dispatchCounts)}]`,
+    `dispatch_receipts: [${surfaceLine(stats.dispatchReceiptCounts)}]`,
     `tools_used: [${toolsLine}]`,
     `files_touched_count: ${stats.filesTouchedCount}`,
     `errors: ${stats.errors}`,
@@ -396,6 +474,45 @@ function errorResult(message: string): {
   };
 }
 
+/**
+ * rf-wi-02 (codex r3/r4 finding 2): does a stored summary.md carry BOTH dispatch
+ * parity fields as top-level FRONTMATTER KEYS? The frontmatter block (between the
+ * leading `---` and the next `---`) is parsed as YAML and checked for both keys
+ * as OWN top-level properties. A line-start substring scan was bypassable by a
+ * YAML multiline scalar that embeds the key names inside another value (e.g. a
+ * `description:` block), so the check must understand YAML structure, not text.
+ * A summary without a frontmatter block, or one that does not parse to an object,
+ * returns false (→ synthesize).
+ */
+function summaryHasDispatchFrontmatter(summary: string): boolean {
+  // The block is delimited by an opening `---` line and a closing `---` line —
+  // BOTH exact (a `---not-a-delimiter` line does not close it). Anything else is
+  // not a valid frontmatter block → synthesize.
+  const lines = summary.split("\n");
+  if (lines[0] !== "---") return false;
+  let end = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i] === "---") {
+      end = i;
+      break;
+    }
+  }
+  if (end < 0) return false;
+  const fm = lines.slice(1, end).join("\n");
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(fm);
+  } catch {
+    return false; // unparseable frontmatter — cannot trust it carries the fields
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const o = parsed as Record<string, unknown>;
+  return (
+    Object.prototype.hasOwnProperty.call(o, "dispatched_lanes") &&
+    Object.prototype.hasOwnProperty.call(o, "dispatch_receipts")
+  );
+}
+
 // ─── MCP server ──────────────────────────────────────────────────────────
 
 function buildServer(): McpServer {
@@ -434,10 +551,25 @@ function buildServer(): McpServer {
       const existing = path.join(runDir, "summary.md");
       if (fs.existsSync(existing)) {
         const summary = fs.readFileSync(existing, "utf8");
-        return jsonResult({ run_id, source: "file", summary });
+        // rf-wi-02: PARITY guard (codex r2/r3 finding 2). A stored summary.md is
+        // returned verbatim ONLY when its FRONTMATTER carries both dispatch-parity
+        // keys — i.e. it was produced by the current scripts/trace-summarize.ts
+        // (which always emits both, `[(none)]` when empty). A STALE summary
+        // (pre-parity) or a degraded STUB (hooks/maybe-reflect.ts writeStubSummary,
+        // written only when the real summarizer failed) lacks them; returning it
+        // verbatim would break the parity contract, so fall through to synthesize
+        // from the event log instead.
+        if (summaryHasDispatchFrontmatter(summary)) {
+          return jsonResult({ run_id, source: "file", summary });
+        }
       }
       const events = readEvents(runDir);
       if (events.length === 0) {
+        // No event log to synthesize from. If a (field-less) summary.md exists,
+        // returning it is still better than an error — it is all we have.
+        if (fs.existsSync(existing)) {
+          return jsonResult({ run_id, source: "file", summary: fs.readFileSync(existing, "utf8") });
+        }
         return errorResult(
           `No logs/v1.4-events.jsonl or events.ndjson found for run: ${run_id}`
         );
