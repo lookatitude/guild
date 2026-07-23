@@ -1335,7 +1335,11 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
   if (d["allowed_tools"] !== undefined && !Array.isArray(d["allowed_tools"]))
     rejects.push(`defaults.allowed_tools must be an array of strings`);
   // rf-wi-01 (G1): defaults.lean_lead.* — closed sub-key set + types
-  if (isPlainObject(d["lean_lead"])) {
+  if (d["lean_lead"] !== undefined && !isPlainObject(d["lean_lead"])) {
+    // codex-review fix (P2): a wrong-shaped value (string/array/number) must be
+    // REJECTED, not silently ignored (validate-before-persist would otherwise lie).
+    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(d["lean_lead"])})`);
+  } else if (isPlainObject(d["lean_lead"])) {
     const ll = d["lean_lead"] as Record<string, unknown>;
     const VALID_LEAN_LEAD_KEYS = new Set(["enabled", "hands_on_edit_threshold"]);
     for (const k of Object.keys(ll)) {
@@ -1350,7 +1354,10 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
     }
   }
   // rf-wi-01 (G1): defaults.lifecycle_gate.* — closed sub-key set + types
-  if (isPlainObject(d["lifecycle_gate"])) {
+  if (d["lifecycle_gate"] !== undefined && !isPlainObject(d["lifecycle_gate"])) {
+    // codex-review fix (P2): same non-object rejection as lean_lead above.
+    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(d["lifecycle_gate"])})`);
+  } else if (isPlainObject(d["lifecycle_gate"])) {
     const lg = d["lifecycle_gate"] as Record<string, unknown>;
     const VALID_LIFECYCLE_GATE_KEYS = new Set(["enabled", "adhoc_activity_threshold"]);
     for (const k of Object.keys(lg)) {

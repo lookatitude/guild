@@ -116,6 +116,9 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/dist/update-check.js",
   "hooks/agent-team/dist/task-created.js",
   "hooks/agent-team/dist/teammate-idle.js",
+  // rf-wi-01 (G1) codex-review round-1 fix: settings.local.json layering tests.
+  "hooks/lib/__tests__/lean-lead-guard.test.ts",
+  "hooks/lib/__tests__/lifecycle-gate.test.ts",
 ]);
 
 function gitLines(args: string[]): string[] {

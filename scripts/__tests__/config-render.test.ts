@@ -297,6 +297,33 @@ describe("SECURITY fail-closed (F-9) — local-scope values withheld from shared
     expect(r._redactions?.some((x) => x.reason === "local-scope" && x.field === "permissions")).toBe(true);
   });
 
+  // rf-wi-01 (G1 codex-review fix, P1) — host_mode now feeds the rendered permission
+  // decisions (config-cmd.ts resolvePermissionPolicy overlay); a local-only host_mode
+  // must withhold the block from every shared host shape, same as auto_approve/bypass.
+  it("withholds the permission block from EVERY host when host_mode is project-local", () => {
+    const all = renderAllHostConfigs(
+      baseInput({
+        config: { host_mode: "read_only" },
+        sources: { host_mode: "project-local" },
+      })
+    );
+    for (const id of HOST_IDS) {
+      expect(all[id].permissions).toBeUndefined(); // withheld everywhere
+      expect(all[id].ok).toBe(false);
+      expect(all[id].blocked).toBe(true);
+      expect(all[id]._redactions?.some((x) => x.reason === "local-scope" && x.field === "permissions")).toBe(true);
+    }
+  });
+
+  it("a SHARED host_mode source keeps the full permission block (no false withhold)", () => {
+    const r = renderHostConfig("claude-code-cli", baseInput({
+      config: { host_mode: "accept_edits" },
+      sources: { host_mode: "project" },
+    }));
+    expect(r.permissions).toBeDefined();
+    expect(r.ok).toBe(true);
+  });
+
   it("a SHARED feeder source keeps the full permission block (no false withhold)", () => {
     const r = renderHostConfig("claude-code-cli", baseInput({
       sources: { auto_approve: "project", "security.bypass_permissions_policy": "workspace" },

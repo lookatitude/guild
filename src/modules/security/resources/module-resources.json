@@ -36,7 +36,7 @@
       "id": "lib/permission-policy",
       "source_path": "scripts/lib/permission-policy.ts",
       "resource_path": "resources/scripts/lib/permission-policy.ts",
-      "sha256": "171ebd696cc988dcd78e35c899afd9bc4c357fc97ca8ee67abd700682e6a5c9d"
+      "sha256": "a30d14bf438632b06826fe2bf07f56640ff212e8f0f2289e4348b78a86cceb99"
     },
     {
       "category": "scripts",

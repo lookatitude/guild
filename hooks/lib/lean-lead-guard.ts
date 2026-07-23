@@ -147,36 +147,53 @@ export interface LeanLeadConfig {
 }
 
 /**
- * Tolerant reader for `.guild/settings.json` → `defaults.lean_lead.*`.
- * Mirrors `run-state.ts readResumeEnabled`'s degrade-to-default posture: a
- * missing file, malformed JSON, or wrong-typed field never throws — it just
- * falls back to the documented default (enabled, threshold=8). The threshold
- * must be a positive INTEGER — a fractional value (e.g. `0.5`) would floor to
- * 0 and defeat every downstream `count >= threshold` / `count / threshold`
- * check, so it is rejected rather than silently coerced.
+ * Tolerant reader for `.guild/settings.json` (+ `.guild/settings.local.json`
+ * overlay) → `defaults.lean_lead.*`. Mirrors `run-state.ts readResumeEnabled`'s
+ * degrade-to-default posture: a missing file, malformed JSON, or wrong-typed
+ * field never throws — it just falls back to the documented default (enabled,
+ * threshold=8). The threshold must be a positive INTEGER — a fractional value
+ * (e.g. `0.5`) would floor to 0 and defeat every downstream `count >= threshold`
+ * / `count / threshold` check, so it is rejected rather than silently coerced.
+ *
+ * rf-wi-01 (G1 codex-review fix, P1): reads settings.json THEN settings.local.json
+ * (applied second, so a local override wins per-field) — the resolved-config
+ * precedence chain for the ONE layer that matters to a project-local hook (project
+ * settings.json < project settings.local.json). Previously only settings.json was
+ * read, so a `defaults.lean_lead` override placed in settings.local.json (the
+ * documented team-vs-personal-override split) was silently ignored.
  */
-export function readLeanLeadConfig(guildRoot: string): LeanLeadConfig {
-  let enabled = DEFAULT_ENABLED;
-  let threshold = DEFAULT_THRESHOLD;
-  try {
-    const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const defs = parsed["defaults"];
-    if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-      const leanLead = (defs as Record<string, unknown>)["lean_lead"];
-      if (leanLead !== null && typeof leanLead === "object" && !Array.isArray(leanLead)) {
-        const ll = leanLead as Record<string, unknown>;
-        if (typeof ll["enabled"] === "boolean") enabled = ll["enabled"];
-        const rawThreshold = ll["hands_on_edit_threshold"];
-        if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-          threshold = rawThreshold;
-        }
+function applyLeanLeadOverride(parsed: Record<string, unknown>, current: LeanLeadConfig): LeanLeadConfig {
+  let { enabled, threshold } = current;
+  const defs = parsed["defaults"];
+  if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
+    const leanLead = (defs as Record<string, unknown>)["lean_lead"];
+    if (leanLead !== null && typeof leanLead === "object" && !Array.isArray(leanLead)) {
+      const ll = leanLead as Record<string, unknown>;
+      if (typeof ll["enabled"] === "boolean") enabled = ll["enabled"];
+      const rawThreshold = ll["hands_on_edit_threshold"];
+      if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
+        threshold = rawThreshold;
       }
     }
+  }
+  return { enabled, threshold };
+}
+
+export function readLeanLeadConfig(guildRoot: string): LeanLeadConfig {
+  let config: LeanLeadConfig = { enabled: DEFAULT_ENABLED, threshold: DEFAULT_THRESHOLD };
+  try {
+    const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");
+    config = applyLeanLeadOverride(JSON.parse(raw) as Record<string, unknown>, config);
   } catch {
     /* missing/corrupt settings.json → documented defaults */
   }
-  return { enabled, threshold };
+  try {
+    const rawLocal = fs.readFileSync(path.join(guildRoot, ".guild", "settings.local.json"), "utf8");
+    config = applyLeanLeadOverride(JSON.parse(rawLocal) as Record<string, unknown>, config);
+  } catch {
+    /* missing/corrupt settings.local.json → settings.json / defaults stand */
+  }
+  return config;
 }
 
 /** True when the operator has explicitly dismissed the guard for this session. */

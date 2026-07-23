@@ -24,10 +24,24 @@ import * as os from "os";
 import * as path from "path";
 
 import { CONFIG_SCHEMA, getFieldSpec } from "../lib/config-schema";
+import { defaultIsValidValue } from "../lib/config-reconcile-contract";
+import { reconcileConfig, type ReconcileIO } from "../lib/config-reconcile";
 
 const READ_GUILD_CONFIG = path.resolve(__dirname, "..", "read-guild-config.ts");
 const CONFIG_CMD = path.resolve(__dirname, "..", "config-cmd.ts");
 const ENV = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
+
+const RECONCILE_SETTINGS = "/repo/.guild/settings.json";
+const RECONCILE_PROV = "/repo/.guild/settings.provenance.json";
+function memReconcileIO(seed: Record<string, string> = {}): { io: ReconcileIO; store: Map<string, string> } {
+  const store = new Map<string, string>(Object.entries(seed));
+  const io: ReconcileIO = {
+    readFileText: (p) => (store.has(p) ? (store.get(p) as string) : null),
+    writeFileText: (p, text) => void store.set(p, text),
+    ensureDir: () => {},
+  };
+  return { io, store };
+}
 
 function runReadGuildConfig(args: string[]): { status: number; out: string; err: string } {
   const r = spawnSync("npx", ["tsx", READ_GUILD_CONFIG, ...args], { encoding: "utf8", env: ENV });
@@ -72,6 +86,43 @@ describe("config-schema.ts — G1 registration (CONFIG_SCHEMA)", () => {
     expect(spec?.most_restrictive).toBe(null);
   });
 
+  it("host_mode is a NULLABLE enum — not type 'object' (codex-review P1 fix)", () => {
+    // Before the fix, inferType(null) classified host_mode as type "object", under
+    // which defaultIsValidValue requires typeof value === "object" — a VALID enum
+    // string like "read_only" would be misclassified as malformed, and `reconcile
+    // repair` would silently reset a real user setting back to null.
+    const spec = getFieldSpec("host_mode");
+    expect(spec?.type).toBe("enum");
+    expect(spec?.nullable).toBe(true);
+    expect(spec?.enum_values).toEqual(["read_only", "ask", "accept_edits", "auto", "bypass_all"]);
+  });
+
+  it("isValidValue accepts both null and every enum member for host_mode (never flags a real value as malformed)", () => {
+    const spec = getFieldSpec("host_mode")!;
+    expect(defaultIsValidValue(spec, null)).toBe(true);
+    for (const v of spec.enum_values ?? []) {
+      expect(defaultIsValidValue(spec, v)).toBe(true);
+    }
+    expect(defaultIsValidValue(spec, "godmode")).toBe(false);
+    expect(defaultIsValidValue(spec, 123)).toBe(false);
+  });
+
+  it("reconcile repair does NOT reset a valid RECONCILED host_mode back to null (codex-review P1 regression)", () => {
+    // Before the fix: host_mode's inferred type "object" made "read_only" look
+    // malformed, so repair mode fired security_sensitive's repair-most-restrictive
+    // path and silently reset it to null even though it was a perfectly valid value.
+    const seed = {
+      [RECONCILE_SETTINGS]: JSON.stringify({ host_mode: "read_only" }, null, 2) + "\n",
+      [RECONCILE_PROV]:
+        JSON.stringify({ host_mode: { provenance: "reconciled", last_reconciled_at: "2026-06-15T12:00:00Z" } }, null, 2) + "\n",
+    };
+    const { io, store } = memReconcileIO(seed);
+    const r = reconcileConfig({ cwd: "/repo", mode: "repair", now: "2026-07-01T00:00:00Z", io });
+    const out = JSON.parse(store.get(RECONCILE_SETTINGS) as string);
+    expect(out.host_mode).toBe("read_only"); // unchanged — a valid value is NOT malformed
+    expect(r.findings.find((f) => f.key === "host_mode")?.status).not.toBe("malformed");
+  });
+
   it("every NEW_KEYS entry is present in the flattened schema exactly once", () => {
     for (const key of NEW_KEYS) {
       const matches = CONFIG_SCHEMA.filter((s) => s.key === key);
@@ -109,6 +160,22 @@ describe("read-guild-config.ts --validate — G1 keys", () => {
     const { status, out } = runReadGuildConfig(["--validate", "--cwd", dir]);
     expect(status).not.toBe(0);
     expect(out).toMatch(/unknown defaults\.lean_lead key "bogus_key"/);
+  });
+
+  it("rejects a wrong-SHAPE lean_lead/lifecycle_gate block (codex-review P2 fix)", () => {
+    // Before the fix, a non-object value silently passed validate --validate
+    // (the check was gated entirely behind isPlainObject, with no else-reject).
+    const dir1 = repo();
+    writeSettings(dir1, { defaults: { lean_lead: "oops" } });
+    const r1 = runReadGuildConfig(["--validate", "--cwd", dir1]);
+    expect(r1.status).not.toBe(0);
+    expect(r1.out).toMatch(/defaults\.lean_lead must be an object/);
+
+    const dir2 = repo();
+    writeSettings(dir2, { defaults: { lifecycle_gate: [1, 2, 3] } });
+    const r2 = runReadGuildConfig(["--validate", "--cwd", dir2]);
+    expect(r2.status).not.toBe(0);
+    expect(r2.out).toMatch(/defaults\.lifecycle_gate must be an object/);
   });
 
   it("rejects an unknown top-level key even after host_mode is registered", () => {

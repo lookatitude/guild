@@ -5811,7 +5811,9 @@ function validateDefaults(d, selfBuild) {
   }
   if (d["allowed_tools"] !== void 0 && !Array.isArray(d["allowed_tools"]))
     rejects.push(`defaults.allowed_tools must be an array of strings`);
-  if (isPlainObject3(d["lean_lead"])) {
+  if (d["lean_lead"] !== void 0 && !isPlainObject3(d["lean_lead"])) {
+    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(d["lean_lead"])})`);
+  } else if (isPlainObject3(d["lean_lead"])) {
     const ll = d["lean_lead"];
     const VALID_LEAN_LEAD_KEYS = /* @__PURE__ */ new Set(["enabled", "hands_on_edit_threshold"]);
     for (const k of Object.keys(ll)) {
@@ -5825,7 +5827,9 @@ function validateDefaults(d, selfBuild) {
         rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(v)})`);
     }
   }
-  if (isPlainObject3(d["lifecycle_gate"])) {
+  if (d["lifecycle_gate"] !== void 0 && !isPlainObject3(d["lifecycle_gate"])) {
+    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(d["lifecycle_gate"])})`);
+  } else if (isPlainObject3(d["lifecycle_gate"])) {
     const lg = d["lifecycle_gate"];
     const VALID_LIFECYCLE_GATE_KEYS = /* @__PURE__ */ new Set(["enabled", "adhoc_activity_threshold"]);
     for (const k of Object.keys(lg)) {
@@ -8427,27 +8431,38 @@ function safeTs(value) {
 }
 var GATE_STATE_SCHEMA = "guild.lifecycle_gate.v1";
 var CLOSE_STATE_SCHEMA = "guild.lifecycle_close.v1";
-function readLifecycleGateConfig(guildRoot) {
-  let enabled = DEFAULT_LIFECYCLE_GATE_ENABLED;
-  let threshold = DEFAULT_ADHOC_THRESHOLD;
-  try {
-    const raw = fs11.readFileSync(path13.join(guildRoot, ".guild", "settings.json"), "utf8");
-    const parsed = JSON.parse(raw);
-    const defs = parsed["defaults"];
-    if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-      const gate = defs["lifecycle_gate"];
-      if (gate !== null && typeof gate === "object" && !Array.isArray(gate)) {
-        const g = gate;
-        if (typeof g["enabled"] === "boolean") enabled = g["enabled"];
-        const rawThreshold = g["adhoc_activity_threshold"];
-        if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-          threshold = rawThreshold;
-        }
+function applyLifecycleGateOverride(parsed, current) {
+  let { enabled, threshold } = current;
+  const defs = parsed["defaults"];
+  if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
+    const gate = defs["lifecycle_gate"];
+    if (gate !== null && typeof gate === "object" && !Array.isArray(gate)) {
+      const g = gate;
+      if (typeof g["enabled"] === "boolean") enabled = g["enabled"];
+      const rawThreshold = g["adhoc_activity_threshold"];
+      if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
+        threshold = rawThreshold;
       }
     }
-  } catch {
   }
   return { enabled, threshold };
+}
+function readLifecycleGateConfig(guildRoot) {
+  let config = {
+    enabled: DEFAULT_LIFECYCLE_GATE_ENABLED,
+    threshold: DEFAULT_ADHOC_THRESHOLD
+  };
+  try {
+    const raw = fs11.readFileSync(path13.join(guildRoot, ".guild", "settings.json"), "utf8");
+    config = applyLifecycleGateOverride(JSON.parse(raw), config);
+  } catch {
+  }
+  try {
+    const rawLocal = fs11.readFileSync(path13.join(guildRoot, ".guild", "settings.local.json"), "utf8");
+    config = applyLifecycleGateOverride(JSON.parse(rawLocal), config);
+  } catch {
+  }
+  return config;
 }
 function isOverridden(env = process.env, promptText = null) {
   if (env[ENV_OVERRIDE_VAR] === "1") return true;

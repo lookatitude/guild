@@ -22,6 +22,15 @@ import {
 } from "./config-reconcile-contract";
 import { DEFAULTS } from "../read-guild-config";
 
+/**
+ * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
+ * Duplicated here as a small closed literal union (mirrors config-cli.ts's/
+ * settings-reader.ts's existing inline-enum convention) rather than an import,
+ * since permission-policy-schema.ts has not been migrated into a src/modules/*
+ * workflow yet.
+ */
+const HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const;
+
 // ---------------------------------------------------------------------------
 // Security-sensitive key classification (load-bearing — Lsec asserts coverage)
 // ---------------------------------------------------------------------------
@@ -145,11 +154,24 @@ const SECURITY_ENUM_OVERRIDES: Record<string, SecurityEnumOverride> = {
 const SECURITY_MOST_RESTRICTIVE_NONENUM: Record<string, unknown> = {
   auto_approve: [],
   "defaults.gates.auto_approve": [],
-  // rf-wi-01 (G1): host_mode's own default (null = no override; the host's own "ask"
-  // default applies, never a bypass) IS already the most-restrictive posture — declared
-  // explicitly (not merely relying on default-repair) so a malformed value gets ACTIVELY
-  // repaired-closed rather than passively held (config-reconcile-contract.ts F4).
-  host_mode: null,
+};
+
+/**
+ * rf-wi-01 (G1 codex-review fix) — NULLABLE enum fields: `null` is ALSO a valid value
+ * (not just a schema default) alongside the enum members. `inferType(null)` would
+ * otherwise classify these as type "object", under which `defaultIsValidValue`
+ * requires `typeof value === "object"` — so a genuinely VALID enum string (e.g.
+ * `host_mode: "read_only"`) would be misclassified as malformed and `reconcile
+ * repair` would reset it back to `null` (P1 finding, reproduced: a user's real
+ * `host_mode` setting got silently clobbered on repair). `most_restrictive: null`
+ * here IS the field's own default (already the safest — no override), declared
+ * explicitly so a malformed value repairs ACTIVELY (not the passive "security-hold").
+ */
+interface NullableEnumOverride {
+  enum_values: readonly string[];
+}
+const NULLABLE_ENUM_OVERRIDES: Record<string, NullableEnumOverride> = {
+  host_mode: { enum_values: HOST_MODES },
 };
 
 /**
@@ -167,9 +189,10 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
   const flat = flattenSettings(DEFAULTS as unknown as Record<string, unknown>);
   return Object.entries(flat).map(([key, def]) => {
     const override = SECURITY_ENUM_OVERRIDES[key];
+    const nullableEnum = NULLABLE_ENUM_OVERRIDES[key];
     const spec: ConfigFieldSpec = {
       key,
-      type: override ? "enum" : inferType(def),
+      type: override || nullableEnum ? "enum" : inferType(def),
       default: def,
       scope: "project",
       security_sensitive: isSecuritySensitiveKey(key),
@@ -177,6 +200,11 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
     if (override) {
       spec.enum_values = override.enum_values;
       spec.most_restrictive = override.most_restrictive;
+    } else if (nullableEnum) {
+      spec.enum_values = nullableEnum.enum_values;
+      spec.nullable = true;
+      // The field's own default (null = no override) IS the safest value.
+      spec.most_restrictive = null;
     } else if (key in SECURITY_MOST_RESTRICTIVE_NONENUM) {
       spec.most_restrictive = SECURITY_MOST_RESTRICTIVE_NONENUM[key];
     }

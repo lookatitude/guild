@@ -121,6 +121,10 @@ function writeSettings(root: string, settings: object): void {
   fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
   fs.writeFileSync(path.join(root, ".guild", "settings.json"), JSON.stringify(settings, null, 2));
 }
+function writeLocalSettings(root: string, settings: object): void {
+  fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), JSON.stringify(settings, null, 2));
+}
 
 function appendToolCall(
   runDir: string,
@@ -229,6 +233,25 @@ describe("lifecycle-gate — readLifecycleGateConfig", () => {
       writeSettings(root, { defaults: { lifecycle_gate: { adhoc_activity_threshold: bad } } });
       expect(readLifecycleGateConfig(root).threshold).toBe(20);
     }
+  });
+
+  // rf-wi-01 (G1 codex-review fix, P1): settings.local.json now overrides
+  // settings.json per-field — previously only settings.json was read.
+  it("a settings.local.json override wins over settings.json (resolved-config precedence)", () => {
+    writeSettings(root, { defaults: { lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 } } });
+    writeLocalSettings(root, { defaults: { lifecycle_gate: { enabled: false, adhoc_activity_threshold: 7 } } });
+    expect(readLifecycleGateConfig(root)).toEqual({ enabled: false, threshold: 7 });
+  });
+
+  it("settings.local.json alone (no settings.json) still applies", () => {
+    writeLocalSettings(root, { defaults: { lifecycle_gate: { adhoc_activity_threshold: 9 } } });
+    expect(readLifecycleGateConfig(root)).toEqual({ enabled: true, threshold: 9 });
+  });
+
+  it("a corrupt settings.local.json degrades gracefully, keeping the settings.json value", () => {
+    writeSettings(root, { defaults: { lifecycle_gate: { adhoc_activity_threshold: 6 } } });
+    fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), "{not json");
+    expect(readLifecycleGateConfig(root)).toEqual({ enabled: true, threshold: 6 });
   });
 });
 

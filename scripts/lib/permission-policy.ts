@@ -364,12 +364,13 @@ function isStringArray(v: unknown): v is string[] {
 }
 
 /**
- * Read the runtime permission config from `<cwd>/.guild/settings.json`:
+ * Apply one parsed settings file's fields onto `out` IN PLACE:
  *   defaults.gates.auto_approve         → auto_approve   (default [])
  *   security.bypass_permissions_policy  → bypass         (default "audit")
  *   host_mode                           → host_mode      (default undefined = no override)
- * Returns the documented defaults on ANY failure (missing file / parse error /
- * mistyped value). NEVER throws.
+ * A later call (the settings.local.json layer) overwrites an earlier one
+ * (settings.json) per-field, matching the resolved-config precedence chain
+ * (project settings.json < project settings.local.json).
  *
  * rf-wi-01 (v23x-deferred-followups G1): `host_mode` is now a registered key in the
  * canonical closed config schema (scripts/lib/core/config-cli.ts GuildSettings.host_mode
@@ -386,19 +387,8 @@ function isStringArray(v: unknown): v is string[] {
  * + `parseSecurityConfig`, kept consistent so the policy and the PreToolUse hook
  * agree on the live posture.)
  */
-export function readRuntimePermissionConfig(cwd: string): RuntimePermissionConfig {
-  const out: RuntimePermissionConfig = {
-    auto_approve: [],
-    bypass_permissions_policy: "audit",
-  };
-  let parsed: unknown;
-  try {
-    const settingsPath = path.join(cwd, ".guild", "settings.json");
-    parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-  } catch {
-    return out;
-  }
-  if (!isPlainObject(parsed)) return out;
+function applyRuntimePermissionOverride(parsed: unknown, out: RuntimePermissionConfig): void {
+  if (!isPlainObject(parsed)) return;
 
   // defaults.gates.auto_approve
   if (isPlainObject(parsed["defaults"])) {
@@ -420,6 +410,33 @@ export function readRuntimePermissionConfig(cwd: string): RuntimePermissionConfi
   const hm = parsed["host_mode"];
   if (typeof hm === "string" && (HOST_MODES as readonly string[]).includes(hm)) {
     out.host_mode = hm as HostMode;
+  }
+}
+
+/**
+ * rf-wi-01 (G1 codex-review fix, P1): reads `<cwd>/.guild/settings.json` THEN
+ * `<cwd>/.guild/settings.local.json` (applied second, so a local override wins
+ * per-field) — previously only settings.json was read, so an `auto_approve` /
+ * `bypass_permissions_policy` / `host_mode` override placed in settings.local.json
+ * was silently ignored, undermining the "resolved config" contract this function's
+ * own docstring claims.
+ */
+export function readRuntimePermissionConfig(cwd: string): RuntimePermissionConfig {
+  const out: RuntimePermissionConfig = {
+    auto_approve: [],
+    bypass_permissions_policy: "audit",
+  };
+  try {
+    const settingsPath = path.join(cwd, ".guild", "settings.json");
+    applyRuntimePermissionOverride(JSON.parse(fs.readFileSync(settingsPath, "utf8")), out);
+  } catch {
+    /* missing/corrupt settings.json → documented defaults */
+  }
+  try {
+    const localPath = path.join(cwd, ".guild", "settings.local.json");
+    applyRuntimePermissionOverride(JSON.parse(fs.readFileSync(localPath, "utf8")), out);
+  } catch {
+    /* missing/corrupt settings.local.json → settings.json / defaults stand */
   }
   return out;
 }
