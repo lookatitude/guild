@@ -395,7 +395,15 @@ export function readRuntimePermissionConfig(cwd: string): RuntimePermissionConfi
     // config-defaults.ts) — matching this function's pre-existing,
     // long-documented contract (see the doc comment above).
     const rawAutoApprove = config.defaults?.gates?.auto_approve;
-    const auto_approve = Array.isArray(rawAutoApprove) ? rawAutoApprove : [];
+    // codex-review round-3 P1 fix: the pre-round-2 implementation required EVERY
+    // element to be a string (isStringArray); Array.isArray alone let a malformed
+    // array (e.g. ["all", false]) through, which resolvePermissionPolicy would
+    // then treat as containing the "all" sentinel — a fail-OPEN regression
+    // (reproduced: 12 plan/qa cells flipped to auto-safe from malformed config).
+    const auto_approve: string[] =
+      Array.isArray(rawAutoApprove) && rawAutoApprove.every((x) => typeof x === "string")
+        ? (rawAutoApprove as string[])
+        : [];
     const bpp = config.security?.bypass_permissions_policy;
     const bypass_permissions_policy: BypassPolicy =
       bpp === "deny" || bpp === "allow" || bpp === "audit" ? bpp : "audit";

@@ -79,6 +79,18 @@ describe("readRuntimePermissionConfig — host_mode (G1 registration)", () => {
     expect(cfg.bypass_permissions_policy).toBe("allow");
   });
 
+  // rf-wi-01 (G1 codex-review round-3 fix, P1): the round-2 resolveSettings()
+  // rewrite regressed the "every element must be a string" guard the pre-round-2
+  // implementation had (isStringArray) down to a bare Array.isArray check — a
+  // malformed auto_approve (e.g. containing a stray `false`) would then be
+  // preserved as-is, and resolvePermissionPolicy's downstream `includes("all")`
+  // check still fires on it, fail-OPENING 12 plan/qa cells to auto-safe from a
+  // malformed value. codex's exact repro.
+  it("rejects a malformed auto_approve array (non-string element) — degrades to [] (codex round-3 regression)", () => {
+    writeSettings(root, { defaults: { gates: { auto_approve: ["all", false] } } });
+    expect(readRuntimePermissionConfig(root).auto_approve).toEqual([]);
+  });
+
   it("a corrupt settings.local.json degrades gracefully, keeping the settings.json value", () => {
     writeSettings(root, { host_mode: "auto" });
     fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), "{not json");
