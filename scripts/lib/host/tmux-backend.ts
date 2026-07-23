@@ -24,6 +24,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  DISPATCH_PRODUCER_ENV,
+  DISPATCH_PRODUCER_TOKEN,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
 // P1-L10 permission-policy machinery (issue #54): resolve the host-native
@@ -188,6 +190,10 @@ export function paneCommand(
     : `claude ${launchFragment}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
+    // rf-wi-03 (G3) — the universal structured producer marker on every pane env,
+    // parity with composeInProcessDispatch (the prompt also carries the line-1
+    // twin via buildPrompt).
+    `export ${DISPATCH_PRODUCER_ENV}=${shellQuote(DISPATCH_PRODUCER_TOKEN)}; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
     taskFragment +
     specialistFragment +

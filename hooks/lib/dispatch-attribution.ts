@@ -72,6 +72,20 @@ const DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{
 const DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
 
 /**
+ * The UNIVERSAL line-1 producer marker (rf-wi-03 / G3), emitted by `buildPrompt`
+ * as the first line of every NON-project (shipped specialist / orchestrator)
+ * dispatch: `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=<role>`. It carries
+ * producer identity for the dispatch class that has no GUILD_AGENT_DEFINITION
+ * line, making line-1 a universal identity anchor across both classes. This is
+ * the anchor that lets rf-wi-07c (G7c) drop the legacy 300-char producer-head
+ * parsing (ROLE_DEF_ANCHOR_RE / DISPATCH_PROSE_RE) once every producer emits it.
+ * Like the definition marker, it is a producer-owned FIRST-LINE position that the
+ * lane's appended scope text can neither forge nor contradict.
+ */
+const PRODUCER_MARKER_RE =
+  /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v1(?:\s+\S+)*?\s+role=([A-Za-z0-9._-]+)/;
+
+/**
  * How much of the prompt counts as the producer-owned OPENING for the legacy
  * (pre-marker) signatures. Identity is NEVER parsed past this — `buildPrompt`
  * appends the lane's arbitrary `scope` after it, and scope text must not be
@@ -160,6 +174,11 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
   const markerRole = safeRole(
     markerPath !== undefined ? DEF_PATH_RE.exec(markerPath)?.[1] : undefined,
   );
+  // G3 — the universal line-1 producer marker's role (shipped-specialist /
+  // orchestrator dispatches, which have no GUILD_AGENT_DEFINITION line). An
+  // identity carrier + lane signature, but NOT adoption proof (it never tells the
+  // lane to read/adopt a definition), so it does not feed hasAdoptionPrompt.
+  const producerMarkerRole = safeRole(PRODUCER_MARKER_RE.exec(firstLine)?.[1]);
 
   const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
   // Legacy (pre-marker) producer wording, still accepted as adoption proof.
@@ -194,15 +213,21 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
   // the prompt's marker/prose names `frontend` — the lane would run the wrong
   // persona (adversarial review rounds 2 + 3). All carriers are read from
   // producer-owned positions only, so appended scope text can never conflict.
-  const roles = [specialistEnv, defRole, markerRole, anchorRole, proseRole].filter(
-    (r): r is string => r !== undefined,
-  );
+  const roles = [
+    specialistEnv,
+    defRole,
+    markerRole,
+    producerMarkerRole,
+    anchorRole,
+    proseRole,
+  ].filter((r): r is string => r !== undefined);
   const hasConsistentIdentity = roles.every((r) => r === roles[0]);
 
   // Attribution role — from identity carriers ONLY. A stray `.guild/agents/x.md`
   // mention in ordinary prompt/scope text is NOT a carrier and never yields a
   // specialist.
-  const specialist = specialistEnv ?? defRole ?? markerRole ?? anchorRole ?? proseRole;
+  const specialist =
+    specialistEnv ?? defRole ?? markerRole ?? producerMarkerRole ?? anchorRole ?? proseRole;
 
   const promptTeammate = /teammate for run-id/i.test(head);
 
@@ -219,7 +244,10 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
     isSpecialistLane ||
     promptTeammate ||
     taskId !== undefined ||
-    specialistEnv !== undefined;
+    specialistEnv !== undefined ||
+    // G3 — the universal producer marker is a lane signature (not adoption proof,
+    // so it stays out of isSpecialistLane / the #58 persona-strip predicate).
+    producerMarkerRole !== undefined;
 
   const out: DispatchAttribution = {
     subagentType,
