@@ -71,7 +71,7 @@
       "id": "trace-summarize",
       "source_path": "scripts/trace-summarize.ts",
       "resource_path": "resources/scripts/trace-summarize.ts",
-      "sha256": "cd3ace8adb27b1567a13db583d40144e7793921a32bd436a86c1f120fd5e25d7"
+      "sha256": "b7dd2c94fcd1b9f5fc06b42d9c1cb8986f15cf149defec65880e2691458bdcf4"
     },
     {
       "category": "scripts",

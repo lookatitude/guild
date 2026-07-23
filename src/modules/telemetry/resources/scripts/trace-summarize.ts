@@ -177,16 +177,27 @@ function errorLabel(e: TelemetryEvent): string {
  * `PostToolUse`-only invocations + 18 `tool_call`-only orphans, alongside 444
  * genuinely paired duplicates — 483 total logical records, not 462 or 465).
  *
- * Algorithm: group same-`tool` rows per dialect, sort each group by
- * timestamp, and pair them off in timestamp order up to
- * min(postCount, callCount) for that tool — each pair is kept ONCE
- * (represented by its `tool_call` row, which carries the richer
- * latency_ms/status fields). Any rows beyond that pairable count — whichever
- * dialect has more, for that tool — are genuinely unpaired and kept as-is.
- * (Algebraically this always yields exactly max(postCount, callCount) kept
- * rows per tool: min(a,b) paired + (a-min) + (b-min) leftover = max(a,b).)
- * When one dialect is entirely absent from the log (the common, current
- * single-dialect shape), this is a no-op passthrough of the other dialect.
+ * Algorithm: IDENTITY, not cardinality. A pure "min(a,b) of this tool are
+ * paired" slice (an earlier version of this fix) gets the total COUNT right
+ * via max(a,b) = a+b-min(a,b), but silently mispairs whenever a tool has
+ * genuinely unpaired rows on BOTH sides at once (e.g. one real pair + one
+ * post-only orphan + one call-only orphan for the same tool: cardinality
+ * slicing reports max(2,2)=2, dropping a real record whose true count is 3;
+ * or a real pair alongside an unrelated unpaired post can get its OWN
+ * specialist/duration silently discarded in favor of the pair's, corrupting
+ * specialist attribution and the slow-call detectors even though the total
+ * count looks right). Group same-`tool` rows per dialect, then GREEDILY
+ * match each `PostToolUse` row (earliest timestamp first) to its NEAREST
+ * still-unclaimed `tool_call` row for the same tool, but ONLY within a
+ * MATCH_WINDOW_MS proximity window — a real pair's two hook-fired rows land
+ * within ~1ms of each other in production (verified against the checked-in
+ * corpus), while a genuine orphan (either dialect) has no counterpart nearby
+ * in time. A match consumes one row from each side (kept once, represented
+ * by the richer `tool_call` row); anything left unclaimed on either side —
+ * a real orphan — is kept as its own distinct row, preserving its own
+ * specialist/duration/tool fields. When one dialect is entirely absent from
+ * the log (the common, current single-dialect shape), this is a no-op
+ * passthrough of the other dialect.
  *
  * Deliberately excludes `hook_event` from both dialects: a lifecycle hook
  * (SessionStart, PreCompact, ...) is bridged onto Timeline's `tool` field for
@@ -194,6 +205,8 @@ function errorLabel(e: TelemetryEvent): string {
  * CALL — counting it here would inflate the "Tool calls" tally with non-tool
  * activity.
  */
+const MATCH_WINDOW_MS = 50;
+
 function reconcileToolCallEvents(events: TelemetryEvent[]): TelemetryEvent[] {
   const posts = events.filter((e) => e.event === "PostToolUse");
   const calls = events.filter((e) => e.event === "tool_call");
@@ -217,11 +230,29 @@ function reconcileToolCallEvents(events: TelemetryEvent[]): TelemetryEvent[] {
   const reconciled: TelemetryEvent[] = [];
   for (const { posts: toolPosts, calls: toolCalls } of byTool.values()) {
     const sortedPosts = [...toolPosts].sort(byTs);
-    const sortedCalls = [...toolCalls].sort(byTs);
-    const pairedCount = Math.min(sortedPosts.length, sortedCalls.length);
-    reconciled.push(...sortedCalls.slice(0, pairedCount)); // paired dupes, kept once
-    reconciled.push(...sortedPosts.slice(pairedCount)); // unpaired PostToolUse-only
-    reconciled.push(...sortedCalls.slice(pairedCount)); // unpaired tool_call-only (orphans)
+    const claimed = new Set<TelemetryEvent>();
+    for (const post of sortedPosts) {
+      const postTs = tsOf(post);
+      let nearest: TelemetryEvent | null = null;
+      let nearestDiff = Infinity;
+      for (const call of toolCalls) {
+        if (claimed.has(call)) continue;
+        const diff = Math.abs(tsOf(call) - postTs);
+        if (diff <= MATCH_WINDOW_MS && diff < nearestDiff) {
+          nearest = call;
+          nearestDiff = diff;
+        }
+      }
+      if (nearest) {
+        claimed.add(nearest);
+        reconciled.push(nearest); // paired dupe, kept once (richer tool_call representative)
+      } else {
+        reconciled.push(post); // unpaired PostToolUse-only — kept with its own fields
+      }
+    }
+    for (const call of toolCalls) {
+      if (!claimed.has(call)) reconciled.push(call); // unpaired tool_call-only (orphan)
+    }
   }
   return reconciled;
 }

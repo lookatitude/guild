@@ -649,6 +649,70 @@ describe("trace-summarize.ts", () => {
       expect(section).toMatch(/Tool calls:\s*2/);
     });
 
+    // codex round-3 finding: cardinality-only slicing (min(a,b) of a tool are
+    // "paired", by position after independently sorting each side) gets the
+    // COUNT right but can pick the WRONG identity — it can silently treat a
+    // real unpaired PostToolUse row as "the pair" and drop a DIFFERENT real
+    // unpaired row's specialist/duration. Proximity-based matching (only
+    // treat two same-tool rows as a pair when their timestamps are within
+    // MATCH_WINDOW_MS) must preserve the true unpaired row's OWN identity —
+    // proven here via a distinguishing specialist + a >2000ms duration that
+    // must survive into both the per-specialist tally AND the SLOW detector.
+    it("preserves a same-tool unpaired PostToolUse row's own specialist/duration (not the pair's)", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "same-tool-unpaired-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          // A real pair, ~1ms apart (within the match window).
+          '{"ts":"2026-07-21T01:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T01:00:00.001Z","event":"tool_call","run_id":"same-tool-unpaired-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+          // A genuinely unpaired PostToolUse-only Bash row, 10s later (well
+          // outside the match window) — its own specialist + a >2000ms
+          // duration must survive, not be silently discarded.
+          '{"ts":"2026-07-21T01:00:10.000Z","event":"PostToolUse","tool":"Bash","specialist":"backend-engineer","payload_digest":"d2","ok":true,"ms":6000,"span_id":"ccc"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "same-tool-unpaired-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const mainSection = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      const backendSection = content.split("### backend-engineer")[1]?.split("###")[0] ?? "";
+      expect(mainSection).toMatch(/Tool calls:\s*1/); // the pair
+      expect(backendSection).toMatch(/Tool calls:\s*1/); // the unpaired row, own bucket
+      // The unpaired row's own 6000ms duration must reach the SLOW detector —
+      // proof its identity (not the pair's 19ms) survived reconciliation.
+      expect(content).toMatch(/SLOW at .*Bash.*backend-engineer.*took 6000ms/);
+    });
+
+    // codex round-3 finding: a tool can have unpaired rows on BOTH sides at
+    // once (a real pair + a post-only orphan + a call-only orphan for the
+    // SAME tool) — cardinality slicing reports max(2,2)=2, silently dropping
+    // one real record whose true count is 3.
+    it("counts 3 distinct records for one same-tool pair + one post-only orphan + one call-only orphan", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "same-tool-double-orphan-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          // The real pair, ~1ms apart.
+          '{"ts":"2026-07-21T02:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T02:00:00.001Z","event":"tool_call","run_id":"same-tool-double-orphan-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+          // A post-only orphan, far in time.
+          '{"ts":"2026-07-21T02:00:20.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d2","ok":true,"ms":25,"span_id":"ccc"}',
+          // A call-only orphan, far in time from both the pair and the post-only orphan.
+          '{"ts":"2026-07-21T02:00:40.000Z","event":"tool_call","run_id":"same-tool-double-orphan-run","tool":"Bash","command_redacted":"","status":"err","latency_ms":-1,"result_excerpt_redacted":"<orphaned>","span_id":"ddd"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "same-tool-double-orphan-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*3/);
+    });
+
     it("omits the digest segment for a whitespace-only redacted excerpt", () => {
       const runDir = path.join(tmpDir, ".guild", "runs", "whitespace-digest-run");
       const logsDir = path.join(runDir, "logs");
