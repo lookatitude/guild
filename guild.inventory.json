@@ -826,6 +826,12 @@
       "matcher": "Write|Edit"
     },
     {
+      "id": "PostToolUse:gate-outcome-writer.js",
+      "source_path": "hooks/dist/gate-outcome-writer.js",
+      "event": "PostToolUse",
+      "matcher": "Write|Edit"
+    },
+    {
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "event": "PostToolUse",

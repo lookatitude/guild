@@ -380,7 +380,15 @@ export function renderReanchorHeader(f: ReanchorFields): string {
  * @param guildRoot resolved guild root (the `.guild/` parent).
  * @returns the header string, or null when nothing should be injected.
  */
-export function buildReanchorHeader(guildRoot: string): string | null {
+/**
+ * Resolve the shared re-anchor facts from on-disk run state, or null when
+ * there is no active OPEN run (zero-noise contract). Both `buildReanchorHeader`
+ * (the `additionalContext` channel) and `buildCompactSummaryInstructions` (the
+ * `newCustomInstructions` channel, G5(c)) are pure renderers over this ONE
+ * resolved fact set, so the two channels can never disagree about which run,
+ * phase, or next-gate they describe.
+ */
+function resolveReanchorFacts(guildRoot: string): ReanchorFields | null {
   const runId = resolveActiveRunId(guildRoot);
   if (!runId) return null;
   // Defense-in-depth: the run-id came from the current-run-id sentinel or
@@ -428,28 +436,94 @@ export function buildReanchorHeader(guildRoot: string): string | null {
 
   const nextGate = deriveNextGate(safePhaseValue, facts.passedGates);
 
-  return renderReanchorHeader({
+  return {
     runId: safeRunId,
     agentMode: safeMode,
     phase: safePhaseValue,
     initiative: safeInitiative,
     nextGate,
-  });
+  };
+}
+
+/**
+ * Build the re-anchor header from on-disk run state, or return null when there
+ * is no active OPEN run (zero-noise contract).
+ *
+ * @param guildRoot resolved guild root (the `.guild/` parent).
+ * @returns the header string, or null when nothing should be injected.
+ */
+export function buildReanchorHeader(guildRoot: string): string | null {
+  const facts = resolveReanchorFacts(guildRoot);
+  return facts === null ? null : renderReanchorHeader(facts);
+}
+
+/**
+ * Render the PreCompact `newCustomInstructions` directive — the SECOND
+ * channel (G5(c), v23x-deferred-followups rf-wi-05, origin oir-wi-58).
+ *
+ * Unlike `additionalContext` (delivered into the MODEL's own preserved
+ * context — what `renderReanchorHeader` builds), `newCustomInstructions` is
+ * meant to be consumed by the compactor itself and shape what IT writes into
+ * the post-compact summary. This renderer tells the compactor to preserve the
+ * run's identity/phase/next-gate facts VERBATIM rather than paraphrasing or
+ * dropping them while summarizing — the exact facts a lost re-anchor would
+ * otherwise have to reconstruct from a header that itself may not survive.
+ *
+ * KNOWN CAVEAT (codex-review finding, recorded honestly rather than
+ * overclaimed — see rf-wi-05 receipt): static inspection of an installed
+ * Claude Code build shows its PreCompact hook runner treats a `command`-type
+ * hook's raw stdout (not a parsed `hookSpecificOutput.newCustomInstructions`
+ * field) as the string it forwards to the compaction summarizer on a
+ * successful, non-blocking run. Under that reading, this key's PRESENCE in
+ * the JSON envelope may not be individually parsed by every host/version —
+ * the whole stdout blob (already including `additionalContext` before this
+ * change) is what actually reaches the summarizer either way. This addition
+ * is therefore safe (additive, no regression to the proven `additionalContext`
+ * path) but its host-consumption behavior could not be empirically confirmed
+ * in this lane — flagged as a followup for a live-session verification pass.
+ */
+export function renderCompactSummaryInstructions(f: ReanchorFields): string {
+  const initClause = f.initiative ? ` initiative "${f.initiative}",` : "";
+  return (
+    `Guild lifecycle facts MUST survive this compaction verbatim. When writing ` +
+    `the summary, explicitly preserve: active run "${f.runId}",${initClause} phase ` +
+    `"${f.phase ?? "unknown"}", and next pending gate "${f.nextGate ?? "unknown"}". ` +
+    `Do not paraphrase, generalize, or omit these identifiers.`
+  );
+}
+
+/**
+ * Build the PreCompact `newCustomInstructions` string from on-disk run state,
+ * or null when there is no active OPEN run — same zero-noise contract as
+ * `buildReanchorHeader` (both resolve from the identical `resolveReanchorFacts`
+ * gate, so one is never null while the other is not).
+ */
+export function buildCompactSummaryInstructions(guildRoot: string): string | null {
+  const facts = resolveReanchorFacts(guildRoot);
+  return facts === null ? null : renderCompactSummaryInstructions(facts);
 }
 
 /**
  * Wrap a header string in the Claude Code hook `additionalContext` envelope for
  * a given event. Exported so both hook surfaces (and their tests) share one
  * exact payload shape.
+ *
+ * @param newCustomInstructions G5(c) — PreCompact's SECOND channel, consumed
+ *   by the compactor itself (shapes the post-compact summary), distinct from
+ *   `additionalContext` (delivered into the model's own context). Optional so
+ *   the three OTHER call sites (SessionStart/Stop/UserPromptSubmit, which have
+ *   no such field) are byte-identical to before this parameter existed.
  */
 export function buildAdditionalContextEnvelope(
   hookEventName: string,
   header: string,
+  newCustomInstructions?: string,
 ): string {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
       additionalContext: header,
+      ...(newCustomInstructions !== undefined ? { newCustomInstructions } : {}),
     },
   });
 }

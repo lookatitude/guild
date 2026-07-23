@@ -23,6 +23,7 @@ import * as path from "path";
 import {
   createRunLifecycle,
   appendPhase,
+  appendGateOutcome,
   isCanonicalPhase,
   CANONICAL_PHASES,
   type RunLifecycleEnv,
@@ -352,6 +353,151 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
     expect(() => lc.closeRun("run-does-not-exist", { status: "closed" })).toThrow();
+  });
+
+  // ── G5(a) — current-run-id sentinel is cleared at close ──────────────────
+  // v23x-deferred-followups rf-wi-05, origin oir-wi-58: before this fix,
+  // closeRun never touched the sentinel, so every guard reading it stayed
+  // "armed" for a run that had already closed.
+  describe("G5(a) — current-run-id sentinel cleared at close", () => {
+    const sentinelPath = path.join(ROOT, ".guild", "runs", "current-run-id");
+
+    it("clears the sentinel when it still points at the run being closed", () => {
+      const mem = memFs();
+      const lc = createRunLifecycle(makeEnv(mem));
+      const runId = lc.startRun(baseStartOpts({ initiative: null }));
+      expect(mem.files.get(sentinelPath)).toBe(runId); // sanity: sentinel armed at start
+      lc.closeRun(runId, { status: "closed" });
+      const cleared = mem.files.get(sentinelPath);
+      // Every real reader (capture-telemetry.ts readCurrentRunId, run-trace.ts
+      // readSentinel, ...) treats a trimmed-empty value identically to a
+      // missing sentinel — this is the actual "cleared" contract.
+      expect(cleared === undefined || cleared.trim() === "").toBe(true);
+    });
+
+    it("does NOT clobber a NEWER run's sentinel when closing an OLDER run out of order", () => {
+      const mem = memFs();
+      const lc = createRunLifecycle(makeEnv(mem));
+      const olderRunId = lc.startRun(baseStartOpts({ initiative: "alpha" }));
+      const newerRunId = lc.startRun(baseStartOpts({ initiative: "beta" }));
+      expect(mem.files.get(sentinelPath)).toBe(newerRunId);
+      lc.closeRun(olderRunId, { status: "closed" });
+      // The sentinel still names the NEWER (still-current) run — closing an
+      // older run must never disarm guards for the run that is actually live.
+      expect(mem.files.get(sentinelPath)).toBe(newerRunId);
+    });
+  });
+});
+
+// ── G5(b) — run.yaml `gates:` writer ────────────────────────────────────────
+// v23x-deferred-followups rf-wi-05, origin oir-wi-58: run.yaml's `gates:`
+// block was written ONCE at start (always `{}`) and nothing ever updated it,
+// so hooks/lib/reanchor.ts's next-gate pointer could never advance past a
+// gate that had actually passed.
+describe("run-lifecycle — appendGateOutcome (G5(b))", () => {
+  function startRunFor(mem: MemFs): { runId: string; env: RunLifecycleEnv } {
+    const env = makeEnv(mem);
+    const lc = createRunLifecycle(env);
+    const runId = lc.startRun(baseStartOpts({ phase: "build" }));
+    return { runId, env };
+  }
+
+  it("converts the inline `gates: {}` map into a block carrying the recorded gate", () => {
+    const mem = memFs();
+    const { runId, env } = startRunFor(mem);
+    const rawBefore = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    expect(rawBefore).toContain("gates: {}");
+
+    const ok = appendGateOutcome(env.fs, ROOT, runId, "review", {
+      posture: "auto",
+      outcome: "pass",
+      codex_review: "unknown",
+    });
+    expect(ok).toBe(true);
+
+    const rawAfter = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    expect(rawAfter).not.toContain("gates: {}");
+    const doc = runField(rawAfter, "gates") as Record<string, { outcome: string }>;
+    expect(doc.review.outcome).toBe("pass");
+  });
+
+  it("appends a second gate alongside an already-recorded one", () => {
+    const mem = memFs();
+    const { runId, env } = startRunFor(mem);
+    appendGateOutcome(env.fs, ROOT, runId, "review", {
+      posture: "auto",
+      outcome: "pass",
+      codex_review: "unknown",
+    });
+    appendGateOutcome(env.fs, ROOT, runId, "verify-done", {
+      posture: "auto",
+      outcome: "pass",
+      codex_review: "unknown",
+    });
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    const doc = runField(raw, "gates") as Record<string, { outcome: string }>;
+    expect(doc.review.outcome).toBe("pass");
+    expect(doc["verify-done"].outcome).toBe("pass");
+  });
+
+  it("re-recording the SAME gate replaces its entry instead of duplicating it", () => {
+    const mem = memFs();
+    const { runId, env } = startRunFor(mem);
+    appendGateOutcome(env.fs, ROOT, runId, "review", {
+      posture: "auto",
+      outcome: "fail",
+      codex_review: "unknown",
+    });
+    appendGateOutcome(env.fs, ROOT, runId, "review", {
+      posture: "auto",
+      outcome: "pass",
+      codex_review: "unknown",
+    });
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    expect(raw.match(/^  review:$/m) ?? []).toHaveLength(1); // exactly one entry
+    const doc = runField(raw, "gates") as Record<string, { outcome: string }>;
+    expect(doc.review.outcome).toBe("pass");
+  });
+
+  it("every other run.yaml field is byte-unchanged", () => {
+    const mem = memFs();
+    const { runId, env } = startRunFor(mem);
+    const before = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    appendGateOutcome(env.fs, ROOT, runId, "review", {
+      posture: "auto",
+      outcome: "pass",
+      codex_review: "unknown",
+    });
+    const after = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    const beforeLines = new Set(before.split("\n").filter((l) => !l.startsWith("gates")));
+    const afterLines = after.split("\n");
+    for (const line of beforeLines) {
+      if (line.trim() === "") continue;
+      expect(afterLines).toContain(line);
+    }
+  });
+
+  it("is a fail-open no-op when run.yaml does not exist", () => {
+    const mem = memFs();
+    const ok = appendGateOutcome(mem.env, ROOT, "run-does-not-exist", "review", {
+      posture: "auto",
+      outcome: "pass",
+      codex_review: "unknown",
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("rejects a non-token gate name and never writes it", () => {
+    const mem = memFs();
+    const { runId, env } = startRunFor(mem);
+    const ok = appendGateOutcome(env.fs, ROOT, runId, "not a token!", {
+      posture: "auto",
+      outcome: "pass",
+      codex_review: "unknown",
+    });
+    expect(ok).toBe(false);
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    expect(raw).toContain("gates: {}");
   });
 });
 

@@ -114,6 +114,9 @@ import {
 } from "./lib/tier-dispatch.js";
 import { redactField as redactTierField } from "./lib/v1.4/redact-log.js";
 import { genSpanId } from "./lib/trace-v2.js";
+// G5(d) — per-tool lifecycle bound (v23x-deferred-followups rf-wi-05, origin
+// oir-wi-59). See lib/tool-turn-bound.ts header for the full mechanism.
+import { evaluateToolTurnBound, buildToolTurnAskReason } from "./lib/tool-turn-bound.js";
 // L5a: host-neutral hook payload + Claude emitter. PreToolUsePayload is now the
 // shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
 // PreToolUse security behavior is preserved byte-for-byte.
@@ -1318,6 +1321,35 @@ export async function main(): Promise<void> {
   } catch (err) {
     process.stderr.write(
       `warn: [pre-tool-use] sidecar write failed: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+  }
+
+  // G5(d): per-tool lifecycle bound — a soft advisory checkpoint when a SINGLE
+  // agentic turn has made an unbounded number of tool calls with no
+  // checkpoint back to the user. Runs LAST (lowest priority) — every guard
+  // above it may already have claimed stdout and returned before this point;
+  // this is advisory-only (`ask`, never `deny`) and must never override a
+  // security decision. Fail-open: evaluateToolTurnBound never throws, but the
+  // whole block is wrapped anyway so a future change to it can never turn an
+  // advisory checkpoint into a blocked tool call.
+  try {
+    const bound = evaluateToolTurnBound(runDir);
+    if (bound.ask) {
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: buildToolTurnAskReason(bound, toolName),
+          },
+        }),
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-tool-use] tool-turn-bound eval failed: ${
         err instanceof Error ? err.message : String(err)
       }\n`,
     );

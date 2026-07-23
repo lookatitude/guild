@@ -7791,6 +7791,11 @@ function createRunLifecycle(env) {
         env.fs.writeFile(provPath, provenanceContent);
       }
       flipRunStatus(env, root, runId, opts.status);
+      const sp = sentinelPath(root);
+      const currentSentinel = env.fs.readFile(sp);
+      if (currentSentinel !== null && currentSentinel.trim() === runId) {
+        env.fs.writeFile(sp, "");
+      }
     }
   };
 }

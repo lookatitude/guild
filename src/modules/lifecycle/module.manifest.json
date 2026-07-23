@@ -16,6 +16,7 @@
       "guild-verify-done",
       "init"
     ],
+    "hooks": ["PostToolUse:gate-outcome-writer.js"],
     "scripts": [
       "check-lane-liveness",
       "emit-loop-event",

@@ -7870,11 +7870,12 @@ function safeIdent(value) {
   return SAFE_IDENT.test(value) ? value : null;
 }
 var DEFAULT_REANCHOR_GRACE_MS = 3 * 60 * 60 * 1e3;
-function buildAdditionalContextEnvelope(hookEventName, header) {
+function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
-      additionalContext: header
+      additionalContext: header,
+      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
     }
   });
 }

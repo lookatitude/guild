@@ -22,7 +22,7 @@
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "52686b69d5bd1fffb37e32f3260185709a16338f87290da851f862b27d413837"
+      "sha256": "312445a7951bb0c967ddffe2c8a8a789b6680364a70d99ccf10b68bd75b60181"
     },
     {
       "category": "hooks",
@@ -50,7 +50,7 @@
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "db1ca39354b91c8e5373ec20e4722032d225f409c450010359d5a4be03f9bd9c"
+      "sha256": "b93cfcc2baadebe232ffb9e1edd6f2b60e28d21e5db8f614608cb8d25d3c036d"
     },
     {
       "category": "scripts",
