@@ -699,10 +699,13 @@ function resolveDispatchAttribution(toolInput) {
     markerPath !== void 0 ? DEF_PATH_RE.exec(markerPath)?.[1] : void 0
   );
   const producerMarkerRoleValue = producerMarkerRole(firstLine);
+  const hasProjectMarker = markerRole !== void 0;
+  const hasAnyMarker = hasProjectMarker || producerMarkerRoleValue !== void 0;
   const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
-  const anchorRole = safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
-  const proseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
-  const hasProseSignature = proseRole !== void 0;
+  const anchorRole = hasProjectMarker ? void 0 : safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
+  const rawProseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
+  const proseRole = hasAnyMarker ? void 0 : rawProseRole;
+  const hasProseSignature = rawProseRole !== void 0;
   const hasAdoptionPrompt = markerRole !== void 0 || anchorRole !== void 0;
   const defMatch = definitionPath !== void 0 && definitionPath.length > 0 ? DEF_PATH_RE.exec(definitionPath) : null;
   const defRole = safeRole(defMatch?.[1]);
