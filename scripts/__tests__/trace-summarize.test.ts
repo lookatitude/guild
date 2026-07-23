@@ -623,6 +623,32 @@ describe("trace-summarize.ts", () => {
       expect(section).toMatch(/Tool calls:\s*1/);
     });
 
+    // codex round-2 finding: a whole-log "prefer one dialect" heuristic
+    // silently DROPS real data — `tool_call.tool` is a closed enum
+    // (hooks/post-tool-use.ts's isKnownTool()) so a tool like Monitor never
+    // gets a `tool_call` row at all, only ever `PostToolUse`. A log with one
+    // genuinely PAIRED duplicate (Bash) plus one genuinely UNPAIRED
+    // PostToolUse-only tool (Monitor) must tally 2 Tool calls, not 1
+    // (whole-dialect-preference bug) and not 3 (round-1 OR-bug).
+    it("keeps an unpaired PostToolUse-only tool distinct alongside a paired duplicate", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "mixed-dialect-unpaired-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          '{"ts":"2026-07-21T01:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T01:00:00.001Z","event":"tool_call","run_id":"mixed-dialect-unpaired-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+          '{"ts":"2026-07-21T01:00:05.000Z","event":"PostToolUse","tool":"Monitor","specialist":"","payload_digest":"d2","ok":true,"ms":5,"span_id":"ccc"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "mixed-dialect-unpaired-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*2/);
+    });
+
     it("omits the digest segment for a whitespace-only redacted excerpt", () => {
       const runDir = path.join(tmpDir, ".guild", "runs", "whitespace-digest-run");
       const logsDir = path.join(runDir, "logs");

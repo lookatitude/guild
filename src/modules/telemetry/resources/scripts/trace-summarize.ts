@@ -147,39 +147,83 @@ function errorLabel(e: TelemetryEvent): string {
 }
 
 /**
- * #G7b (v23x-deferred-followups) — which dialect names "a tool call happened"
- * in THIS log, so a mixed-dialect log is counted once per invocation, not
- * twice.
+ * #G7b (v23x-deferred-followups) — reconciles a mixed-dialect log to ONE set
+ * of "logical tool-call events": a genuine duplicate PAIR counts once, but a
+ * genuinely UNPAIRED row from either dialect is never dropped.
  *
  * Legacy hook-mirror lines name the activity `event: "PostToolUse"` (the
  * literal Claude Code hook name); the canonical v1.4 shape
  * (hooks/lib/v1.4/log-jsonl-schema.ts's ToolCallEvent) names the SAME
- * activity `event: "tool_call"`. Gating on "PostToolUse" alone silently
- * zeroed buildSpecialistActivity's toolCalls/fileOps tally and both
- * slow-call detectors (buildNotableEvents' SLOW rows, buildReflectionHints'
- * context-bundle-issues hint) for every canonical run.
+ * activity `event: "tool_call"`. Gating on "PostToolUse" alone (pre-#G7b)
+ * silently zeroed buildSpecialistActivity's toolCalls/fileOps tally and both
+ * slow-call detectors for every canonical run — hooks.json's PostToolUse
+ * matcher runs BOTH hooks/capture-telemetry.ts and hooks/post-tool-use.ts,
+ * and a pre-de-dup-fix canonical log carries BOTH a `PostToolUse` row (from
+ * capture-telemetry.ts) AND a `tool_call` row (from post-tool-use.ts) for the
+ * SAME invocation, landing within a few ms of each other with the same
+ * `tool` name (verified against the checked-in
+ * tests/rearch/perf-corpus/run-medium-942.jsonl fixture).
  *
- * A naive OR of both names double-counts: hooks/capture-telemetry.ts's
- * de-duplication comment documents that pre-fix canonical logs carry BOTH a
- * `PostToolUse` hook-mirror line AND post-tool-use.ts's richer `tool_call`
- * line for the SAME invocation (verified against the checked-in
- * tests/rearch/perf-corpus/run-medium-942.jsonl fixture — 465 `PostToolUse` +
- * 462 `tool_call` rows, near-1:1 paired). Since post-tool-use.ts is the sole
- * canonical writer for tool-call lines going forward, a log containing ANY
- * `tool_call` row treats that dialect as authoritative for the WHOLE log and
- * ignores `PostToolUse` entirely (never a mix within one summary); only a
- * log with NO `tool_call` row at all (a pure-legacy events.ndjson mirror, or
- * a canonical log with no post-tool-use.ts producer) falls back to
- * `PostToolUse`.
+ * A whole-log "prefer one dialect" heuristic is WRONG: `tool_call.tool` is a
+ * closed enum (log-jsonl-schema.ts's TOOL_CALL_TOOL_VALUES) and
+ * post-tool-use.ts deliberately skips any tool outside it (isKnownTool()), so
+ * a tool like Monitor/SendMessage/ToolSearch/an MCP tool only EVER gets a
+ * `PostToolUse` row — real, distinct data, not a duplicate of anything.
+ * Conversely post-tool-use.ts's orphan-sweep can emit a `tool_call` row for a
+ * hung invocation that never completed (so no `PostToolUse` ever fired for
+ * it either) — also real, distinct data. Suppressing "the other dialect"
+ * wholesale (as an earlier version of this fix did) silently drops both of
+ * these real-data cases (confirmed against the perf-corpus fixture: 21
+ * `PostToolUse`-only invocations + 18 `tool_call`-only orphans, alongside 444
+ * genuinely paired duplicates — 483 total logical records, not 462 or 465).
  *
- * Deliberately excludes `hook_event` from BOTH dialects: a lifecycle hook
+ * Algorithm: group same-`tool` rows per dialect, sort each group by
+ * timestamp, and pair them off in timestamp order up to
+ * min(postCount, callCount) for that tool — each pair is kept ONCE
+ * (represented by its `tool_call` row, which carries the richer
+ * latency_ms/status fields). Any rows beyond that pairable count — whichever
+ * dialect has more, for that tool — are genuinely unpaired and kept as-is.
+ * (Algebraically this always yields exactly max(postCount, callCount) kept
+ * rows per tool: min(a,b) paired + (a-min) + (b-min) leftover = max(a,b).)
+ * When one dialect is entirely absent from the log (the common, current
+ * single-dialect shape), this is a no-op passthrough of the other dialect.
+ *
+ * Deliberately excludes `hook_event` from both dialects: a lifecycle hook
  * (SessionStart, PreCompact, ...) is bridged onto Timeline's `tool` field for
  * error/duration display (see normalizeEvent), but it is not itself a tool
  * CALL — counting it here would inflate the "Tool calls" tally with non-tool
  * activity.
  */
-function preferredToolCallDialect(events: TelemetryEvent[]): "tool_call" | "PostToolUse" {
-  return events.some((e) => e.event === "tool_call") ? "tool_call" : "PostToolUse";
+function reconcileToolCallEvents(events: TelemetryEvent[]): TelemetryEvent[] {
+  const posts = events.filter((e) => e.event === "PostToolUse");
+  const calls = events.filter((e) => e.event === "tool_call");
+  if (posts.length === 0 || calls.length === 0) {
+    return posts.length > 0 ? posts : calls;
+  }
+
+  const byTool = new Map<string, { posts: TelemetryEvent[]; calls: TelemetryEvent[] }>();
+  const bucket = (tool: unknown) => {
+    const key = typeof tool === "string" ? tool : "";
+    if (!byTool.has(key)) byTool.set(key, { posts: [], calls: [] });
+    return byTool.get(key)!;
+  };
+  for (const e of posts) bucket(e.tool).posts.push(e);
+  for (const e of calls) bucket(e.tool).calls.push(e);
+
+  const tsOf = (e: TelemetryEvent): number =>
+    typeof e.ts === "string" ? Date.parse(e.ts) : Number.NaN;
+  const byTs = (a: TelemetryEvent, b: TelemetryEvent) => tsOf(a) - tsOf(b);
+
+  const reconciled: TelemetryEvent[] = [];
+  for (const { posts: toolPosts, calls: toolCalls } of byTool.values()) {
+    const sortedPosts = [...toolPosts].sort(byTs);
+    const sortedCalls = [...toolCalls].sort(byTs);
+    const pairedCount = Math.min(sortedPosts.length, sortedCalls.length);
+    reconciled.push(...sortedCalls.slice(0, pairedCount)); // paired dupes, kept once
+    reconciled.push(...sortedPosts.slice(pairedCount)); // unpaired PostToolUse-only
+    reconciled.push(...sortedCalls.slice(pairedCount)); // unpaired tool_call-only (orphans)
+  }
+  return reconciled;
 }
 
 /** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
@@ -441,7 +485,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
     string,
     { toolCalls: number; fileOps: number; errors: number; ok: number }
   >();
-  const toolCallDialect = preferredToolCallDialect(events);
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
 
   for (const event of events) {
     const key = event.specialist || "(main session)";
@@ -449,7 +493,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
       specialistMap.set(key, { toolCalls: 0, fileOps: 0, errors: 0, ok: 0 });
     }
     const s = specialistMap.get(key)!;
-    if (event.event === toolCallDialect && event.tool) {
+    if (toolCallEvents.has(event) && event.tool) {
       s.toolCalls++;
       if (event.tool === "Write" || event.tool === "Edit") s.fileOps++;
     }
@@ -513,9 +557,9 @@ function buildNotableEvents(events: TelemetryEvent[]): string {
   }
 
   // Very long tool calls (> 2000ms for tool use events, heuristic)
-  const toolCallDialect = preferredToolCallDialect(events);
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
   const longCalls = events.filter(
-    (e) => e.event === toolCallDialect && typeof e.ms === "number" && e.ms > 2000
+    (e) => toolCallEvents.has(e) && typeof e.ms === "number" && e.ms > 2000
   );
   for (const e of longCalls) {
     notable.push(
@@ -540,9 +584,9 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
   }
 
   // Missing-specialist candidates: events from main session (empty specialist) with tool use
-  const toolCallDialect = preferredToolCallDialect(events);
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
   const mainSessionToolCalls = events.filter(
-    (e) => e.event === toolCallDialect && !e.specialist && e.tool
+    (e) => toolCallEvents.has(e) && !e.specialist && e.tool
   );
   if (mainSessionToolCalls.length > 0) {
     hints.push(
@@ -552,7 +596,7 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
 
   // Context-bundle issues: any tool calls over 5000ms
   const verySlowCalls = events.filter(
-    (e) => e.event === toolCallDialect && typeof e.ms === "number" && e.ms > 5000
+    (e) => toolCallEvents.has(e) && typeof e.ms === "number" && e.ms > 5000
   );
   if (verySlowCalls.length > 0) {
     hints.push(
