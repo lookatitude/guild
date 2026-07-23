@@ -57,7 +57,7 @@
       "id": "verify-codex-review-trail",
       "source_path": "scripts/verify-codex-review-trail.ts",
       "resource_path": "resources/scripts/verify-codex-review-trail.ts",
-      "sha256": "38f61338e95f2433e804776d6380c929f124c1856891907592ad3c3600586ab1"
+      "sha256": "e09c6b48c073aee45c89e7cc4ab3b01ca19153240e544f1f43526f6259e1a3f5"
     },
     {
       "category": "scripts",
@@ -78,7 +78,7 @@
       "id": "guild-codex-review",
       "source_path": "skills/meta/codex-review/SKILL.md",
       "resource_path": "resources/skills/meta/codex-review/SKILL.md",
-      "sha256": "3806e765d101e9b6c5e5237b300a1ddb482431543cfcedd04b7b3160a9920d0f"
+      "sha256": "665bb71e9a88c273d533577c253d8232c6e4abe584ed72f028a2e1f4a194c943"
     },
     {
       "category": "skills",

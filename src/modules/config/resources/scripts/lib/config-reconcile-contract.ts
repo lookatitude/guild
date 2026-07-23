@@ -84,6 +84,16 @@ export interface ConfigFieldSpec {
    * silently weakened. Ignored for non-security keys.
    */
   most_restrictive?: unknown;
+  /**
+   * rf-wi-01 (G1 codex-review fix) — true when `null` is ALSO a valid value for an
+   * `enum`-typed key (e.g. `host_mode`: null = no override, else a HOST_MODES
+   * member). Without this, a null-defaulting key inferred as type "object" would
+   * accept null but reject every real enum string (defaultIsValidValue's "object"
+   * case requires `typeof value === "object"`); typing it "enum" without this flag
+   * would instead reject its own `null` default as malformed. Ignored for
+   * non-enum types.
+   */
+  nullable?: boolean;
 }
 
 /**
@@ -273,6 +283,9 @@ export function defaultIsValidValue(spec: ConfigFieldSpec, value: unknown): bool
     case "object":
       return typeof value === "object" && value !== null && !Array.isArray(value);
     case "enum":
+      // rf-wi-01 (G1 codex-review fix): a nullable enum (host_mode) accepts null
+      // as its own valid, most-restrictive "no override" state.
+      if (value === null && spec.nullable) return true;
       return typeof value === "string" && !!spec.enum_values?.includes(value);
     default:
       return false;

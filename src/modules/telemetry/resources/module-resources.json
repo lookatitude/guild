@@ -22,14 +22,14 @@
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "f49b8cf65bbfeb42b1eb4c977b344161d1cfb7e5801af8ce76b6746404c396c2"
+      "sha256": "312445a7951bb0c967ddffe2c8a8a789b6680364a70d99ccf10b68bd75b60181"
     },
     {
       "category": "hooks",
       "id": "UserPromptSubmit:run-trace-start.js",
       "source_path": "hooks/dist/run-trace-start.js",
       "resource_path": "resources/hooks/dist/run-trace-start.js",
-      "sha256": "98cdc9546996a27f1e26abaaa6914ffe1383baa7dc25b43fc6f4c9cec17f95b8"
+      "sha256": "10c172a34711dabbd3f0c5580eba0292ee60c7315363eaa0525175722acac959"
     },
     {
       "category": "mcp_servers",
@@ -40,10 +40,17 @@
     },
     {
       "category": "scripts",
+      "id": "audit-run-sinks",
+      "source_path": "scripts/audit-run-sinks.ts",
+      "resource_path": "resources/scripts/audit-run-sinks.ts",
+      "sha256": "a647ff8987bb1fbef12442c4648fa2655ff407c402f1acc505e164847afe507d"
+    },
+    {
+      "category": "scripts",
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "636a1dd429c473ee6e272e9687a267d7c1be40d7b2494d5c5c75056deac6d136"
+      "sha256": "b93cfcc2baadebe232ffb9e1edd6f2b60e28d21e5db8f614608cb8d25d3c036d"
     },
     {
       "category": "scripts",
@@ -61,6 +68,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/run-sinks",
+      "source_path": "scripts/lib/run-sinks.ts",
+      "resource_path": "resources/scripts/lib/run-sinks.ts",
+      "sha256": "51bd73f702a264d6a2b6952a8eeee8f43a571290df6ebc74850088582079874e"
+    },
+    {
+      "category": "scripts",
       "id": "recall-stats",
       "source_path": "scripts/recall-stats.ts",
       "resource_path": "resources/scripts/recall-stats.ts",
@@ -71,7 +85,7 @@
       "id": "trace-summarize",
       "source_path": "scripts/trace-summarize.ts",
       "resource_path": "resources/scripts/trace-summarize.ts",
-      "sha256": "64406d75196cb56bda6b786698ee1a2440638626d9bb7bfa8626a7c8a1bb5dc1"
+      "sha256": "ef9b7bcefc5182a4924ba509127fa6fe0514ac656d72339b8872c68e70633b47"
     },
     {
       "category": "scripts",
