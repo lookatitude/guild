@@ -49,6 +49,8 @@ import {
   readLifecycleGateConfig,
   renderCloseGate,
   renderLifecycleGate,
+  validateReceiptEnvelope,
+  REQUIRED_RECEIPT_ENVELOPE_KEYS,
 } from "../lifecycle-gate";
 
 const RUN_ID = "run-fix-59";
@@ -183,10 +185,47 @@ function ageTree(dir: string, byMs: number): void {
   }
 }
 
+/** A well-formed LEAD-COLLECTED receipt: v1 wrapper + one valid guild.handoff.v2
+ * block carrying the required key set (status/changed_files/evidence/pr_url/codex). */
+function leadReceiptBody(taskId = "lane-a"): string {
+  return [
+    "---",
+    "schema_version: guild.handoff_receipt.v1",
+    `task_id: ${taskId}`,
+    "---",
+    "",
+    "## evidence",
+    "real",
+    "",
+    "```guild.handoff.v2",
+    JSON.stringify(
+      {
+        work_item: taskId,
+        status: "done",
+        pr_url: "https://example.test/pr/1",
+        changed_files: ["a.ts"],
+        evidence: ["red→green"],
+        codex: { verdict: "SATISFIED", rounds: 1 },
+      },
+      null,
+      2,
+    ),
+    "```",
+    "",
+  ].join("\n");
+}
+
 function writeReceipt(runDir: string, name: string): void {
   const dir = path.join(runDir, "handoffs");
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, name), "# receipt\nevidence: real\n");
+  fs.writeFileSync(path.join(dir, name), leadReceiptBody(name.replace(/\.md$/, "")));
+}
+
+/** Write a receipt with arbitrary raw content (used for malformed-envelope tests). */
+function writeRawReceipt(runDir: string, name: string, content: string): void {
+  const dir = path.join(runDir, "handoffs");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, name), content);
 }
 
 /** Env with both overrides and worker markers cleared. */
@@ -1078,6 +1117,198 @@ describe("lifecycle-gate — evaluateCloseGate (real fixtures)", () => {
       (await evaluateCloseGate(root, RUN_ID, cleanEnv({ GUILD_TASK_ID: "t-a" }))).advisory,
     ).toBeNull();
     expect(fs.existsSync(closeStatePath(runDir))).toBe(false);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// G6c — receipt-envelope shape validation (not mere existence)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("lifecycle-gate — validateReceiptEnvelope (unit)", () => {
+  const leadEnvelope = {
+    work_item: "rf-wi-06",
+    status: "done",
+    pr_url: "https://example.test/pr/1",
+    changed_files: ["a.ts"],
+    evidence: ["red→green"],
+    codex: { verdict: "SATISFIED", rounds: 1 },
+  };
+  const wrap = (obj: unknown): string =>
+    `---\nschema_version: guild.handoff_receipt.v1\n---\n\n\`\`\`guild.handoff.v2\n${JSON.stringify(obj)}\n\`\`\`\n`;
+
+  it("accepts a well-formed lead-collected envelope", () => {
+    expect(validateReceiptEnvelope(wrap(leadEnvelope)).ok).toBe(true);
+  });
+
+  it("accepts a canonical in-flight dispatch envelope (union shape)", () => {
+    const canonical = {
+      schema_version: "guild.handoff.v2",
+      task_id: "T2",
+      tier: "mid",
+      status: "done",
+      summary: "did the thing",
+      artifacts: ["a.ts:1-3"],
+      issues: [],
+    };
+    expect(validateReceiptEnvelope(wrap(canonical)).ok).toBe(true);
+  });
+
+  it("REJECTS a frontmatter-only receipt with no embedded block", () => {
+    const r = validateReceiptEnvelope("---\nschema_version: guild.handoff_receipt.v1\n---\n\nno block here\n");
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("no valid embedded");
+  });
+
+  it("REJECTS an unparseable JSON block", () => {
+    const r = validateReceiptEnvelope("```guild.handoff.v2\n{ not: json,, }\n```\n");
+    expect(r.ok).toBe(false);
+  });
+
+  it("REJECTS a block that omits a required key", () => {
+    for (const drop of REQUIRED_RECEIPT_ENVELOPE_KEYS) {
+      const partial: Record<string, unknown> = { ...leadEnvelope };
+      delete partial[drop];
+      const r = validateReceiptEnvelope(wrap(partial));
+      expect(r.ok).toBe(false);
+      expect(r.reason).toContain(drop);
+    }
+  });
+
+  it("REJECTS an empty receipt (no envelope at all)", () => {
+    expect(validateReceiptEnvelope("").ok).toBe(false);
+  });
+
+  it("REJECTS a key-present but wrong-TYPED envelope (F2 shape, not presence)", () => {
+    const junk = {
+      status: "done",
+      changed_files: false, // not an array
+      evidence: 0, // not an array
+      pr_url: {}, // not a string
+      codex: "not-reviewed", // not an object
+    };
+    const r = validateReceiptEnvelope(wrap(junk));
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("shape invalid");
+  });
+
+  it("REJECTS a blank status even when all keys are present (F2)", () => {
+    expect(validateReceiptEnvelope(wrap({ ...leadEnvelope, status: "   " })).ok).toBe(false);
+  });
+
+  it("REJECTS an empty pr_url string (F2)", () => {
+    expect(validateReceiptEnvelope(wrap({ ...leadEnvelope, pr_url: "" })).ok).toBe(false);
+  });
+
+  it("REJECTS junk INSIDE correctly-typed containers (F2 round-2: elements + nested)", () => {
+    // codex round-2 counterexample: outer types right, contents junk.
+    expect(
+      validateReceiptEnvelope(
+        wrap({ status: "done", changed_files: [false], evidence: [0], pr_url: "x", codex: {} }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("REJECTS a codex object missing verdict/rounds (F2 round-2: codex{verdict,rounds})", () => {
+    expect(validateReceiptEnvelope(wrap({ ...leadEnvelope, codex: { note: "hi" } })).ok).toBe(false);
+    expect(validateReceiptEnvelope(wrap({ ...leadEnvelope, codex: { verdict: "SATISFIED" } })).ok).toBe(false);
+    expect(validateReceiptEnvelope(wrap({ ...leadEnvelope, codex: { rounds: 2 } })).ok).toBe(false);
+  });
+});
+
+describe("lifecycle-gate — evaluateCloseGate envelope shape-validation (G6c)", () => {
+  let root: string;
+  let runDir: string;
+  beforeEach(() => {
+    root = tmpRoot();
+    runDir = makeRun(root);
+    seedLane(runDir, "lane-a", "done", "handoffs/backend-t1.md");
+    // A CLEAN close otherwise: both gate artifacts present, so only the receipt
+    // envelope drives the gate in these cases.
+    fs.writeFileSync(path.join(runDir, "review.md"), "| lane | pass |\n");
+    fs.writeFileSync(path.join(runDir, "verify.md"), "verdict: pass\n");
+  });
+  afterEach(() => cleanup(root));
+
+  it("is SILENT when the receipt embeds a valid guild.handoff.v2 envelope", async () => {
+    writeReceipt(runDir, "backend-t1.md");
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).toBeNull();
+  });
+
+  it("FIRES when a lane receipt is frontmatter-only (no embedded envelope)", async () => {
+    writeRawReceipt(runDir, "backend-t1.md", "---\nschema_version: guild.handoff_receipt.v1\n---\n\n# receipt\nevidence: real\n");
+    const r = await evaluateCloseGate(root, RUN_ID, cleanEnv());
+    expect(r.advisory).toContain(CLOSE_GATE_MARKER);
+    expect(r.advisory).toContain("guild.handoff.v2 envelope");
+    expect(r.advisory).toContain("backend-t1.md");
+    expect(loadCloseState(runDir).fired_for).toEqual(["envelope:backend-t1.md"]);
+  });
+
+  it("FIRES when a lane receipt envelope omits required keys", async () => {
+    writeRawReceipt(
+      runDir,
+      "backend-t1.md",
+      "```guild.handoff.v2\n" + JSON.stringify({ status: "done" }) + "\n```\n",
+    );
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).toContain("malformed");
+  });
+
+  it("re-arms once when a malformed receipt is then fixed-then-broken again", async () => {
+    writeRawReceipt(runDir, "backend-t1.md", "no envelope\n");
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).not.toBeNull();
+    // fixed → clears latch, silent
+    writeReceipt(runDir, "backend-t1.md");
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).toBeNull();
+    expect(loadCloseState(runDir).fired_for).toEqual([]);
+    // broken again → new information, fires again (a stale latch would swallow it)
+    writeRawReceipt(runDir, "backend-t1.md", "gone again\n");
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).not.toBeNull();
+  });
+
+  it("names BOTH a missing gate artifact and a malformed receipt together", async () => {
+    fs.rmSync(path.join(runDir, "verify.md"), { force: true });
+    writeRawReceipt(runDir, "backend-t1.md", "no envelope\n");
+    const r = await evaluateCloseGate(root, RUN_ID, cleanEnv());
+    expect(r.advisory).toContain("verify.md");
+    expect(r.advisory).toContain("guild.handoff.v2 envelope");
+  });
+
+  it("FIRES on a key-present but wrong-typed receipt envelope (F2)", async () => {
+    writeRawReceipt(
+      runDir,
+      "backend-t1.md",
+      "```guild.handoff.v2\n" +
+        JSON.stringify({
+          status: "done",
+          changed_files: false,
+          evidence: 0,
+          pr_url: {},
+          codex: "n/a",
+        }) +
+        "\n```\n",
+    );
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).not.toBeNull();
+  });
+
+  it("a fully-clean close RESETS fire_count so a LATER regression still fires (F3)", async () => {
+    // Keep verify.md ABSENT so the run is never fully clean — the problem set stays
+    // non-empty while we exhaust the fire cap by flipping the receipt-envelope
+    // problem in and out (each flip is a distinct set → an edge-triggered fire).
+    fs.rmSync(path.join(runDir, "verify.md"), { force: true });
+    for (let i = 0; i < 6; i++) {
+      if (i % 2 === 0) writeRawReceipt(runDir, "backend-t1.md", "broken\n");
+      else writeReceipt(runDir, "backend-t1.md");
+      await evaluateCloseGate(root, RUN_ID, cleanEnv());
+    }
+    expect(loadCloseState(runDir).fire_count).toBeGreaterThanOrEqual(3); // MAX_CLOSE_FIRES
+    // Reach a fully-clean close (fix receipt AND write verify.md) → fire_count resets.
+    writeReceipt(runDir, "backend-t1.md");
+    fs.writeFileSync(path.join(runDir, "verify.md"), "verdict: pass\n");
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).toBeNull();
+    expect(loadCloseState(runDir).fire_count).toBe(0);
+    // A brand-new regression after a clean state must STILL be reported (the old
+    // preserve-fire_count behavior would have permanently suppressed this).
+    writeRawReceipt(runDir, "backend-t1.md", "broken again\n");
+    expect((await evaluateCloseGate(root, RUN_ID, cleanEnv())).advisory).not.toBeNull();
   });
 });
 

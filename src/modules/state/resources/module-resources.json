@@ -29,7 +29,7 @@
       "id": "Stop:lifecycle-gate.js",
       "source_path": "hooks/dist/lifecycle-gate.js",
       "resource_path": "resources/hooks/dist/lifecycle-gate.js",
-      "sha256": "027232ee859b868ba471cc85813194ffc258687ed9bafef2066d4f1cdca5d9fc"
+      "sha256": "cbc977b162e58102fbb5d2008b2c30b68a8bb603b087d5273197995536451a25"
     },
     {
       "category": "scripts",

@@ -7699,6 +7699,134 @@ function loadRunState(runDir) {
 // lib/heartbeat.ts
 var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
 
+// lib/handoff-v2.ts
+var SUMMARY_MAX_CHARS = 600;
+var NOTES_MAX_CHARS = 200;
+var ALLOWED_INJECTION_CLEAN_VALUES = /* @__PURE__ */ new Set([
+  "clean",
+  "flagged",
+  "unverified"
+]);
+var VALID_TIERS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+var VALID_STATUSES = /* @__PURE__ */ new Set(["done", "blocked", "escalate"]);
+var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes",
+  "injection_clean"
+  // HK-08 additive-optional
+]);
+function validateHandoffV2(value) {
+  const errors = [];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { valid: false, errors: ["envelope must be a non-null object"] };
+  }
+  const obj = value;
+  for (const k of Object.keys(obj)) {
+    if (!ALLOWED_TOP_LEVEL_KEYS.has(k)) {
+      errors.push(
+        `unknown key "${k}" \u2014 strict guild.handoff.v2 rejects extra/misspelled keys`
+      );
+    }
+  }
+  if (obj["schema_version"] !== "guild.handoff.v2") {
+    errors.push(
+      `schema_version must be "guild.handoff.v2"; got ${JSON.stringify(obj["schema_version"])}`
+    );
+  }
+  if (typeof obj["task_id"] !== "string" || obj["task_id"].trim() === "") {
+    errors.push("task_id must be a non-empty string");
+  }
+  if (typeof obj["tier"] !== "string" || !VALID_TIERS.has(obj["tier"])) {
+    errors.push(`tier must be one of cheap|mid|powerful; got ${JSON.stringify(obj["tier"])}`);
+  }
+  if (typeof obj["status"] !== "string" || !VALID_STATUSES.has(obj["status"])) {
+    errors.push(
+      `status must be one of done|blocked|escalate; got ${JSON.stringify(obj["status"])}`
+    );
+  }
+  if (typeof obj["summary"] !== "string") {
+    errors.push("summary must be a string");
+  } else if (obj["summary"].trim() === "") {
+    errors.push("summary must not be empty");
+  } else if (obj["summary"].length > SUMMARY_MAX_CHARS) {
+    errors.push(
+      `summary exceeds ${SUMMARY_MAX_CHARS} char cap (bloat rejection SC-7): got ${obj["summary"].length} chars`
+    );
+  }
+  if (!Array.isArray(obj["artifacts"])) {
+    errors.push("artifacts must be an array (may be empty)");
+  } else {
+    for (let i = 0; i < obj["artifacts"].length; i++) {
+      if (typeof obj["artifacts"][i] !== "string") {
+        errors.push(`artifacts[${i}] must be a string`);
+      }
+    }
+  }
+  if (!Array.isArray(obj["issues"])) {
+    errors.push("issues must be an array (may be empty)");
+  } else {
+    for (let i = 0; i < obj["issues"].length; i++) {
+      if (typeof obj["issues"][i] !== "string") {
+        errors.push(`issues[${i}] must be a string`);
+      }
+    }
+  }
+  if (obj["status"] === "escalate") {
+    if (obj["escalate_reason"] === void 0 || obj["escalate_reason"] === null || typeof obj["escalate_reason"] === "string" && obj["escalate_reason"].trim() === "") {
+      errors.push("escalate_reason is required and must be non-empty when status is 'escalate'");
+    }
+  }
+  if (obj["escalate_reason"] !== void 0 && typeof obj["escalate_reason"] !== "string") {
+    errors.push("escalate_reason must be a string when provided");
+  }
+  if (obj["learnings"] !== void 0) {
+    if (!Array.isArray(obj["learnings"])) {
+      errors.push("learnings must be an array when provided");
+    } else {
+      for (let i = 0; i < obj["learnings"].length; i++) {
+        if (typeof obj["learnings"][i] !== "string") {
+          errors.push(`learnings[${i}] must be a string`);
+        }
+      }
+    }
+  }
+  if (obj["notes"] !== void 0) {
+    if (typeof obj["notes"] !== "string") {
+      errors.push("notes must be a string when provided");
+    } else if (obj["notes"].length > NOTES_MAX_CHARS) {
+      errors.push(
+        `notes exceeds ${NOTES_MAX_CHARS} char cap (O-4 binding resolution): got ${obj["notes"].length} chars`
+      );
+    }
+  }
+  if (obj["injection_clean"] !== void 0) {
+    if (!ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"])) {
+      errors.push(
+        `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
+      );
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+function extractHandoffEnvelope(content) {
+  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
+  const match = pattern.exec(content);
+  if (!match || !match[1]) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
 // lib/run-trace.ts
 function resolveRunIdForTrace(root, env) {
   const fromEnv = env.GUILD_RUN_ID;
@@ -8661,11 +8789,23 @@ function renderLifecycleGate(runId, activity, threshold, phase, nextGate) {
     `- Intentional? Re-send this prompt (the gate fires once per crossing), add ${PROMPT_OVERRIDE_TOKEN} to it, or export ${ENV_OVERRIDE_VAR}=1 for the session.`
   ].join("\n");
 }
-function renderCloseGate(runId, missing, laneCount) {
+function renderCloseGate(runId, missing, laneCount, malformed = []) {
+  const clauses = [];
+  if (missing.length > 0) {
+    clauses.push(
+      `${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} missing or empty`
+    );
+  }
+  if (malformed.length > 0) {
+    clauses.push(
+      `lane receipt(s) ${malformed.join(", ")} carry a missing or malformed guild.handoff.v2 envelope`
+    );
+  }
   return [
-    `${CLOSE_GATE_MARKER} run ${runId} completed all ${laneCount} lane(s) with receipts, but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} missing or empty.`,
+    `${CLOSE_GATE_MARKER} run ${runId} completed all ${laneCount} lane(s) with receipts, but ${clauses.join("; and ")}.`,
     "- A build run must pass guild:review (writes review.md) AND guild:verify-done (writes verify.md) before close.",
-    "- Run the missing gate(s) now, or re-enter via guild:resume \u2014 do not close this run on receipts alone.",
+    "- Every lane receipt must embed a valid guild.handoff.v2 envelope (status, changed_files, evidence, pr_url, codex).",
+    "- Run the missing gate(s) / fix the receipt(s) now, or re-enter via guild:resume \u2014 do not close this run on receipts alone.",
     `- Intentional? Export ${ENV_OVERRIDE_VAR}=1 to dismiss for this session.`
   ].join("\n");
 }
@@ -8774,6 +8914,64 @@ async function evaluateLifecycleGate(guildRoot, runId, promptText, env = process
     return silent;
   });
 }
+var REQUIRED_RECEIPT_ENVELOPE_KEYS = Object.freeze([
+  "status",
+  "changed_files",
+  "evidence",
+  "pr_url",
+  "codex"
+]);
+function validateReceiptEnvelope(content) {
+  let block;
+  try {
+    block = extractHandoffEnvelope(content);
+  } catch {
+    return { ok: false, reason: "guild.handoff.v2 envelope could not be read" };
+  }
+  if (block === null) {
+    return {
+      ok: false,
+      reason: "no valid embedded guild.handoff.v2 JSON block (frontmatter-only or unparseable)"
+    };
+  }
+  if (typeof block !== "object" || Array.isArray(block)) {
+    return { ok: false, reason: "guild.handoff.v2 envelope is not a JSON object" };
+  }
+  if (validateHandoffV2(block).valid) return { ok: true, reason: null };
+  const obj = block;
+  const missing = REQUIRED_RECEIPT_ENVELOPE_KEYS.filter(
+    (k) => obj[k] === void 0 || obj[k] === null
+  );
+  if (missing.length > 0) {
+    return { ok: false, reason: `envelope missing required key(s): ${missing.join(", ")}` };
+  }
+  const typeErrors = [];
+  if (typeof obj["status"] !== "string" || obj["status"].trim() === "") {
+    typeErrors.push("status must be a non-empty string");
+  }
+  const stringArray = (v) => Array.isArray(v) && v.every((e) => typeof e === "string");
+  if (!stringArray(obj["changed_files"])) typeErrors.push("changed_files must be a string[]");
+  if (!stringArray(obj["evidence"])) typeErrors.push("evidence must be a string[]");
+  if (typeof obj["pr_url"] !== "string" || obj["pr_url"].trim() === "") {
+    typeErrors.push("pr_url must be a non-empty string");
+  }
+  const codex = obj["codex"];
+  if (typeof codex !== "object" || codex === null || Array.isArray(codex)) {
+    typeErrors.push("codex must be an object");
+  } else {
+    const c = codex;
+    if (typeof c["verdict"] !== "string" || c["verdict"].trim() === "") {
+      typeErrors.push("codex.verdict must be a non-empty string");
+    }
+    if (typeof c["rounds"] !== "number" || !Number.isFinite(c["rounds"])) {
+      typeErrors.push("codex.rounds must be a number");
+    }
+  }
+  if (typeErrors.length > 0) {
+    return { ok: false, reason: `envelope shape invalid: ${typeErrors.join("; ")}` };
+  }
+  return { ok: true, reason: null };
+}
 function hasContent(filePath) {
   try {
     const st = fs11.lstatSync(filePath);
@@ -8796,6 +8994,7 @@ async function evaluateCloseGate(guildRoot, runId, env = process.env) {
   if (!lanes.every((status) => status === COMPLETED_LANE_STATUS)) return silent;
   const handoffsDir = path13.resolve(ctx.runDir, "handoffs");
   const seenReceipts = /* @__PURE__ */ new Set();
+  const malformed = [];
   for (const ref of ctx.runState.receiptRefs) {
     if (ref === null) return silent;
     const resolved = path13.resolve(ctx.runDir, ref);
@@ -8804,22 +9003,32 @@ async function evaluateCloseGate(guildRoot, runId, env = process.env) {
     if (!resolved.endsWith(".md")) return silent;
     if (seenReceipts.has(resolved)) return silent;
     seenReceipts.add(resolved);
-    if (!hasContent(resolved)) return silent;
+    let receiptText;
+    try {
+      const st = fs11.lstatSync(resolved);
+      if (!st.isFile()) return silent;
+      receiptText = fs11.readFileSync(resolved, "utf8");
+    } catch {
+      return silent;
+    }
+    if (!validateReceiptEnvelope(receiptText).ok) malformed.push(path13.basename(resolved));
   }
+  malformed.sort();
   const missing = [];
   for (const artifact of ["review.md", "verify.md"]) {
     if (!hasContent(path13.join(ctx.runDir, artifact))) missing.push(artifact);
   }
   missing.sort();
+  const problems = [...missing, ...malformed.map((m) => `envelope:${m}`)].sort();
   return withGateLock(ctx.runDir, () => {
     const prior = loadCloseState(ctx.runDir);
-    const sameSet = prior.fired_for.length === missing.length && prior.fired_for.every((name, i) => name === missing[i]);
-    if (missing.length === 0) {
-      if (prior.fired_for.length > 0) {
+    const sameSet = prior.fired_for.length === problems.length && prior.fired_for.every((name, i) => name === problems[i]);
+    if (problems.length === 0) {
+      if (prior.fired_for.length > 0 || prior.fire_count > 0) {
         writeCloseState(ctx.runDir, {
           schema_version: CLOSE_STATE_SCHEMA,
           fired_for: [],
-          fire_count: prior.fire_count
+          fire_count: 0
         });
       }
       return silent;
@@ -8827,10 +9036,10 @@ async function evaluateCloseGate(guildRoot, runId, env = process.env) {
     if (sameSet || prior.fire_count >= MAX_CLOSE_FIRES) return silent;
     writeCloseState(ctx.runDir, {
       schema_version: CLOSE_STATE_SCHEMA,
-      fired_for: missing,
+      fired_for: problems,
       fire_count: prior.fire_count + 1
     });
-    return { advisory: renderCloseGate(ctx.safeRunId, missing, lanes.length) };
+    return { advisory: renderCloseGate(ctx.safeRunId, missing, lanes.length, malformed) };
   });
 }
 

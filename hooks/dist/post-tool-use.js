@@ -652,6 +652,28 @@ var SAFE_ROLE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var ROLE_DEF_ANCHOR_RE = /role definition is at\s*[`'"]?\.guild\/agents\/([A-Za-z0-9._-]+)\.md/i;
 var DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{0,2}\s+specialist/i;
 var DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
+var PRODUCER_MARKER_HEAD = "GUILD_DISPATCH_PRODUCER=";
+var PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;
+var PRODUCER_MARKER_TOKEN_RE = /^[A-Za-z][A-Za-z0-9_]*=[^\s]+$/;
+function producerMarkerRole(firstLine) {
+  if (!firstLine.startsWith(PRODUCER_MARKER_HEAD)) return void 0;
+  const tokens = firstLine.split(/\s+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) return void 0;
+  const value = tokens[0].slice(PRODUCER_MARKER_HEAD.length);
+  if (!PRODUCER_MARKER_VALUE_RE.test(value)) return void 0;
+  let role;
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (!PRODUCER_MARKER_TOKEN_RE.test(t)) return void 0;
+    const eq = t.indexOf("=");
+    const k = t.slice(0, eq);
+    if (k === "role") {
+      if (role !== void 0) return void 0;
+      role = t.slice(eq + 1);
+    }
+  }
+  return safeRole(role);
+}
 var PRODUCER_HEAD_CHARS = 300;
 function safeRole(v) {
   return v !== void 0 && SAFE_ROLE_RE.test(v) ? v : void 0;
@@ -676,23 +698,34 @@ function resolveDispatchAttribution(toolInput) {
   const markerRole = safeRole(
     markerPath !== void 0 ? DEF_PATH_RE.exec(markerPath)?.[1] : void 0
   );
+  const producerMarkerRoleValue = producerMarkerRole(firstLine);
+  const hasProjectMarker = markerRole !== void 0;
+  const hasAnyMarker = hasProjectMarker || producerMarkerRoleValue !== void 0;
   const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
-  const anchorRole = safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
-  const proseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
-  const hasProseSignature = proseRole !== void 0;
+  const anchorRole = hasProjectMarker ? void 0 : safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
+  const rawProseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
+  const proseRole = hasAnyMarker ? void 0 : rawProseRole;
+  const hasProseSignature = rawProseRole !== void 0;
   const hasAdoptionPrompt = markerRole !== void 0 || anchorRole !== void 0;
   const defMatch = definitionPath !== void 0 && definitionPath.length > 0 ? DEF_PATH_RE.exec(definitionPath) : null;
   const defRole = safeRole(defMatch?.[1]);
   const hasValidDefinition = defMatch !== null && defRole !== void 0 && (specialistEnv === void 0 || defRole === specialistEnv);
-  const roles = [specialistEnv, defRole, markerRole, anchorRole, proseRole].filter(
-    (r) => r !== void 0
-  );
+  const roles = [
+    specialistEnv,
+    defRole,
+    markerRole,
+    producerMarkerRoleValue,
+    anchorRole,
+    proseRole
+  ].filter((r) => r !== void 0);
   const hasConsistentIdentity = roles.every((r) => r === roles[0]);
-  const specialist = specialistEnv ?? defRole ?? markerRole ?? anchorRole ?? proseRole;
+  const specialist = specialistEnv ?? defRole ?? markerRole ?? producerMarkerRoleValue ?? anchorRole ?? proseRole;
   const promptTeammate = /teammate for run-id/i.test(head);
   const isComposedLane = taskId !== void 0 && specialistEnv !== void 0;
   const isSpecialistLane = hasAdoptionPrompt || hasProseSignature || isComposedLane;
-  const hasLaneSignature = isSpecialistLane || promptTeammate || taskId !== void 0 || specialistEnv !== void 0;
+  const hasLaneSignature = isSpecialistLane || promptTeammate || taskId !== void 0 || specialistEnv !== void 0 || // G3 — the universal producer marker is a lane signature (not adoption proof,
+  // so it stays out of isSpecialistLane / the #58 persona-strip predicate).
+  producerMarkerRoleValue !== void 0;
   const out = {
     subagentType,
     isGeneric: subagentType === GENERIC_SUBAGENT_TYPE,
