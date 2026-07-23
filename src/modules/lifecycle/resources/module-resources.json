@@ -74,6 +74,13 @@
       "sha256": "0b596798041bc42d4ee2365b14b54e41855470ae9d1150e102c2d526531a58c1"
     },
     {
+      "category": "hooks",
+      "id": "PostToolUse:gate-outcome-writer.js",
+      "source_path": "hooks/dist/gate-outcome-writer.js",
+      "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
+      "sha256": "93b2e3761e279685a4e900eb33ba1cd1dd6bb21d9de38fdcf74d8036c4b5ff19"
+    },
+    {
       "category": "scripts",
       "id": "check-lane-liveness",
       "source_path": "scripts/check-lane-liveness.ts",

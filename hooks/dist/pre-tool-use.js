@@ -33,8 +33,8 @@ __export(pre_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_tool_use_exports);
-var fs8 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
+var fs9 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -263,11 +263,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path8 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path8), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path8)) return;
+  const path9 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path9), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path9)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path8, "wx");
+    const fd = (0, import_node_fs.openSync)(path9, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -365,14 +365,14 @@ function capSidecarText(existing, incomingLine, maxBytes) {
 }
 function appendSidecarPre(runDir, entry, opts = {}) {
   validateSidecarEntry(entry);
-  const path8 = sidecarPath(runDir);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path8), { recursive: true });
+  const path9 = sidecarPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path9), { recursive: true });
   const redacted = redactEventFields(entry, opts.fieldCap);
   const line = JSON.stringify(redacted) + "\n";
   const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
   const appendCapped = () => {
-    const existing = (0, import_node_fs2.existsSync)(path8) ? (0, import_node_fs2.readFileSync)(path8, "utf8") : "";
-    (0, import_node_fs2.writeFileSync)(path8, capSidecarText(existing, line, maxBytes));
+    const existing = (0, import_node_fs2.existsSync)(path9) ? (0, import_node_fs2.readFileSync)(path9, "utf8") : "";
+    (0, import_node_fs2.writeFileSync)(path9, capSidecarText(existing, line, maxBytes));
   };
   if (process.platform === "win32") {
     appendCapped();
@@ -1529,6 +1529,60 @@ function appendTierDispatchEvent(runDir, event) {
   }
 }
 
+// lib/tool-turn-bound.ts
+var fs8 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
+var DEFAULT_TOOL_TURN_MAX = 40;
+function toolTurnMax(env = process.env) {
+  const raw = env["GUILD_TOOL_TURN_MAX"];
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  }
+  return DEFAULT_TOOL_TURN_MAX;
+}
+function loadTurnEventLines(eventsFile) {
+  let content;
+  try {
+    content = fs8.readFileSync(eventsFile, "utf8");
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      out.push(JSON.parse(trimmed));
+    } catch {
+    }
+  }
+  return out;
+}
+function countToolCallsThisTurn(events) {
+  let boundary = -1;
+  events.forEach((e, i) => {
+    if (e.event === "UserPromptSubmit") boundary = i;
+  });
+  let count = 0;
+  for (let i = boundary + 1; i < events.length; i++) {
+    const e = events[i];
+    if (e.event === "tool_call" || e.event === "PostToolUse") count++;
+  }
+  return count;
+}
+function evaluateToolTurnBound(runDir, env = process.env) {
+  const threshold = toolTurnMax(env);
+  const eventsFile = path7.join(runDir, "logs", "v1.4-events.jsonl");
+  const events = loadTurnEventLines(eventsFile);
+  const countSoFar = countToolCallsThisTurn(events);
+  const wouldBeCount = countSoFar + 1;
+  return { ask: wouldBeCount > threshold, countSoFar, wouldBeCount, threshold };
+}
+function buildToolTurnAskReason(result, toolName) {
+  return `Guild lifecycle (per-tool bound, G5d): this turn has made ${result.countSoFar} tool call(s); "${toolName}" would be call #${result.wouldBeCount}, over the ${result.threshold}-call soft bound (GUILD_TOOL_TURN_MAX). Confirm to continue this turn, or wrap up and return control to the user.`;
+}
+
 // lib/guild-hook-event.ts
 async function readHookStdin() {
   return new Promise((resolve4) => {
@@ -1561,9 +1615,9 @@ function isKnownTool(name) {
   return TOOL_CALL_TOOL_VALUES.includes(name);
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path7.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path8.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs8.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs9.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -1595,8 +1649,8 @@ function readHostCapability(cwd) {
   addCandidate(candidates, legacyByRegistry[hostRes.id]);
   for (const hostId of candidates) {
     try {
-      const manifestPath = path7.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
-      const raw = fs8.readFileSync(manifestPath, "utf8");
+      const manifestPath = path8.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const raw = fs9.readFileSync(manifestPath, "utf8");
       return JSON.parse(raw);
     } catch {
     }
@@ -1605,8 +1659,8 @@ function readHostCapability(cwd) {
 }
 function writeApprovalRequest(runDir, opts) {
   try {
-    const approvalDir = path7.join(runDir, "agent-bus", "approvals");
-    fs8.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path8.join(runDir, "agent-bus", "approvals");
+    fs9.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-${opts.tool.toLowerCase()}.json`;
@@ -1621,7 +1675,7 @@ function writeApprovalRequest(runDir, opts) {
     if (opts.laneId) record["lane_id"] = opts.laneId;
     if (opts.dispatchRung) record["dispatch_rung"] = opts.dispatchRung;
     const content = JSON.stringify(record, null, 2) + "\n";
-    scrubbedWrite(path7.join(approvalDir, fileName), content, {
+    scrubbedWrite(path8.join(approvalDir, fileName), content, {
       surface: "bus",
       runDir,
       runId: opts.runId,
@@ -1649,7 +1703,7 @@ function hasGuildSignature(content) {
   return false;
 }
 function isInsideGuildDir(absPath) {
-  return path7.resolve(absPath).split(path7.sep).includes(".guild");
+  return path8.resolve(absPath).split(path8.sep).includes(".guild");
 }
 function runBoundaryGuard(payload, cwd, ctx) {
   const tool = payload.tool_name;
@@ -1673,7 +1727,7 @@ ${e.new_string}`;
     }
   }
   if (!hasGuildSignature(content)) return false;
-  const abs = path7.isAbsolute(filePath) ? filePath : path7.resolve(cwd, filePath);
+  const abs = path8.isAbsolute(filePath) ? filePath : path8.resolve(cwd, filePath);
   if (isInsideGuildDir(abs)) return false;
   const guardReason = `Guild-owned-file boundary (P5-boundary-001): a Guild-signed artifact would be written OUTSIDE the consuming repo's .guild/ (${abs}). Guild-owned files belong under .guild/ (or .guild/agents/proposed/, .guild/skills/proposed-*). Confirm this write is intentional.`;
   const toolName = payload.tool_name ?? "";
@@ -1728,8 +1782,8 @@ function readMcpDescription(payload, runDir, toolName) {
   }
   if (runDir !== void 0) {
     try {
-      const p = path7.join(runDir, "logs", "mcp-tool-descriptions.json");
-      const map = JSON.parse(fs8.readFileSync(p, "utf8"));
+      const p = path8.join(runDir, "logs", "mcp-tool-descriptions.json");
+      const map = JSON.parse(fs9.readFileSync(p, "utf8"));
       const d = map[toolName];
       if (typeof d === "string") return d;
     } catch {
@@ -1745,7 +1799,7 @@ function runSecurityEnforcement(payload, cwd) {
     const envRunId = process.env["GUILD_RUN_ID"];
     const envTaskId = process.env["GUILD_TASK_ID"];
     if (typeof envRunId === "string" && envRunId.length > 0 && typeof envTaskId === "string" && envTaskId.length > 0) {
-      const scopeFilePath = path7.join(
+      const scopeFilePath = path8.join(
         resolveGuildRoot(cwd),
         ".guild",
         "runs",
@@ -2121,7 +2175,7 @@ async function main() {
     const bgHostCap = readHostCapability(cwd);
     const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
     const bgRunId = resolveRunId(cwd);
-    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path7.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
+    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path8.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
     const bgLaneId = typeof bgLaneEnv === "string" && bgLaneEnv.length > 0 ? bgLaneEnv : void 0;
     const bgDispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || void 0;
@@ -2155,7 +2209,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path7.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path8.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
   const entry = {
     run_id: runId,
@@ -2171,11 +2225,30 @@ async function main() {
     );
   }
   try {
-    fs8.mkdirSync(path7.join(runDir, "logs"), { recursive: true });
+    fs9.mkdirSync(path8.join(runDir, "logs"), { recursive: true });
     appendSidecarPre(runDir, entry);
   } catch (err) {
     process.stderr.write(
       `warn: [pre-tool-use] sidecar write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+  try {
+    const bound = evaluateToolTurnBound(runDir);
+    if (bound.ask) {
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: buildToolTurnAskReason(bound, toolName)
+          }
+        })
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-tool-use] tool-turn-bound eval failed: ${err instanceof Error ? err.message : String(err)}
 `
     );
   }
