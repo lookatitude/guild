@@ -76,13 +76,17 @@ import {
 // the P1 permission model (host_mode × guild_gates baseline golden), the per-host config
 // renderer (LW1-6), and the never-clobber provenance type — all consumed READ-ONLY here.
 import {
-  resolveBaselineGolden,
   PHASES,
   GATE_TYPES,
   cellKey,
   type BypassPolicy,
   type PermissionDecision,
+  type HostMode,
 } from "./lib/permission-policy-schema";
+// rf-wi-01 (G1): resolvePermissionPolicy overlays the now-registered `host_mode` config
+// key onto the C2 baseline golden (host_mode ⊥ guild_gates orthogonality invariant) —
+// resolveBaselineGolden alone ignores host_mode entirely.
+import { resolvePermissionPolicy } from "./lib/permission-policy";
 import { renderAllHostConfigs } from "./lib/config-render";
 import type {
   RenderConfigLike,
@@ -119,6 +123,7 @@ const SCALAR_TIER1_KEYS = new Set([
   "auto_approve",
   "review",
   "host",
+  "host_mode", // rf-wi-01 (G1): nullable P1-L10 host-autonomy override
   "initiative_default",
   "index",
   "record_status_runs",
@@ -171,6 +176,9 @@ const ROLE_ALIASES = new Set(["host", "advisory", "adversarial"]);
 
 /** Known canonical registry host ids — value set for roles/host_profiles. */
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
+
+/** rf-wi-01 (G1): valid host_mode values (permission-policy-schema.ts HOST_MODES). */
+const HOST_MODES_SET = new Set<string>(["read_only", "ask", "accept_edits", "auto", "bypass_all"]);
 
 /** `host_profiles.<host_id>.enabled` — the one host_profiles leaf that must coerce to a boolean. */
 const HP_ENABLED_RE = /^host_profiles\.[^.]+\.enabled$/;
@@ -263,7 +271,15 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "capability_manifest_ttl_s", // R-018
   "allowed_tools",             // R-020
   "update",                    // plugin-update-lifecycle AC-6
+  "lean_lead",                 // rf-wi-01 (G1)
+  "lifecycle_gate",            // rf-wi-01 (G1)
 ]);
+
+/** Valid sub-keys for defaults.lean_lead.* (rf-wi-01 / G1) */
+const DEFAULTS_LEAN_LEAD_KEYS = new Set(["enabled", "hands_on_edit_threshold"]);
+
+/** Valid sub-keys for defaults.lifecycle_gate.* (rf-wi-01 / G1) */
+const DEFAULTS_LIFECYCLE_GATE_KEYS = new Set(["enabled", "adhoc_activity_threshold"]);
 
 /** Valid sub-keys for defaults.team.* */
 const DEFAULTS_TEAM_KEYS = new Set(["size", "always_include"]);
@@ -505,6 +521,19 @@ function validateKeyPath(keyPath: string): string | null {
       }
       return null;
     }
+    // rf-wi-01 (G1): lean_lead.* and lifecycle_gate.* sub-paths
+    if (seg1 === "lean_lead") {
+      if (!DEFAULTS_LEAN_LEAD_KEYS.has(seg2)) {
+        return `unknown defaults.lean_lead key "${seg2}" (valid: ${[...DEFAULTS_LEAN_LEAD_KEYS].join(", ")})`;
+      }
+      return null;
+    }
+    if (seg1 === "lifecycle_gate") {
+      if (!DEFAULTS_LIFECYCLE_GATE_KEYS.has(seg2)) {
+        return `unknown defaults.lifecycle_gate key "${seg2}" (valid: ${[...DEFAULTS_LIFECYCLE_GATE_KEYS].join(", ")})`;
+      }
+      return null;
+    }
     // plugin-update-lifecycle AC-6: defaults.update.{mode,cadence_hours}
     if (seg1 === "update") {
       if (parts.length > 2 && seg2 !== "mode" && seg2 !== "cadence_hours") {
@@ -547,6 +576,8 @@ const BOOLEAN_PATHS = new Set([
   "models.structuredOutputRequired",
   "models.compositeRecall",       // boolean control in CONFIG_UI_METADATA — was uncoerced (persisted a string the resolver rejects)
   "models.importanceAtIngest",
+  "defaults.lean_lead.enabled",        // rf-wi-01 (G1)
+  "defaults.lifecycle_gate.enabled",   // rf-wi-01 (G1)
 ]);
 
 /** Paths that must be integers (whole number strings). */
@@ -573,6 +604,8 @@ const INTEGER_PATHS = new Set([
   "models.knowledge.maxFiles",
   "models.knowledge.maxTokens",
   "models.knowledge.batchSize",
+  "defaults.lean_lead.hands_on_edit_threshold",           // rf-wi-01 (G1)
+  "defaults.lifecycle_gate.adhoc_activity_threshold",     // rf-wi-01 (G1)
 ]);
 
 /** Paths that must be numbers (possibly non-integer). */
@@ -630,6 +663,9 @@ const NUMERIC_RANGE: Record<string, { min: number; max?: number; exclusiveMin?: 
   "defaults.index.links_edge_threshold": { min: 1 },
   "defaults.index.runs_threshold": { min: 1 },
   "defaults.index.wiki_file_threshold": { min: 1 },
+  // rf-wi-01 (G1): positive-integer thresholds — the guards ignore <1 (degrade to default).
+  "defaults.lean_lead.hands_on_edit_threshold": { min: 1 },
+  "defaults.lifecycle_gate.adhoc_activity_threshold": { min: 1 },
 };
 
 /** Range-check `n` for `keyPath`; returns an error string or null. */
@@ -721,6 +757,16 @@ function validateValue(keyPath: string, rawValue: string): string | null {
     return rejects.length > 0 ? rejects[0] : null;
   }
 
+  // rf-wi-01 (G1): host_mode — nullable P1-L10 host-autonomy override. null/none clears
+  // the override (host default "ask" applies); otherwise must be a HOST_MODES member.
+  if (keyPath === "host_mode") {
+    if (rawValue === "null" || rawValue === "none") return null;
+    if (!HOST_MODES_SET.has(rawValue)) {
+      return `invalid value "${rawValue}" for key "host_mode" — valid: ${[...HOST_MODES_SET].join("|")} or null`;
+    }
+    return null;
+  }
+
   // Closed-enum check
   if (keyPath in VALID_VALUES) {
     const valid = VALID_VALUES[keyPath];
@@ -794,6 +840,10 @@ function coerceValue(keyPath: string, rawValue: string): unknown {
     return rawValue === "true";
   }
   if (rawValue === "null" && (keyPath === "initiative_default" || keyPath === "loops")) {
+    return null;
+  }
+  // rf-wi-01 (G1): host_mode — null/none clears the override.
+  if (keyPath === "host_mode" && (rawValue === "null" || rawValue === "none")) {
     return null;
   }
   if (BOOLEAN_PATHS.has(keyPath)) {
@@ -1484,16 +1534,25 @@ function cmdShowSources(cwd: string): number {
 // Phase-permission decision layers (shared by show --sources and show --render)
 // ---------------------------------------------------------------------------
 
-/** The two config inputs the baseline-golden resolver reads (+ a safe default). */
+/** The config inputs the L10 policy resolver reads (+ safe defaults). */
 function permissionInputs(config: ReturnType<typeof resolveSettings>["config"]): {
   auto_approve: string[];
   bypass_permissions_policy: BypassPolicy;
+  host_mode?: HostMode;
 } {
   const auto_approve = Array.isArray(config.auto_approve) ? config.auto_approve : [];
   const bp = config.security?.bypass_permissions_policy;
   const bypass_permissions_policy: BypassPolicy =
     bp === "deny" || bp === "allow" || bp === "audit" ? bp : "audit";
-  return { auto_approve, bypass_permissions_policy };
+  // rf-wi-01 (G1): the now-registered top-level host_mode override. Absent/null ⇒
+  // omitted so resolvePermissionPolicy's default (no overlay) reproduces the C2
+  // baseline golden byte-for-byte, exactly like the pre-registration behavior.
+  const hm = (config as unknown as { host_mode?: unknown }).host_mode;
+  const host_mode: HostMode | undefined =
+    typeof hm === "string" && ["read_only", "ask", "accept_edits", "auto", "bypass_all"].includes(hm)
+      ? (hm as HostMode)
+      : undefined;
+  return { auto_approve, bypass_permissions_policy, ...(host_mode !== undefined ? { host_mode } : {}) };
 }
 
 /**
@@ -1508,24 +1567,27 @@ function appendPermissionSourceLines(
   config: ReturnType<typeof resolveSettings>["config"],
   sources: Record<string, Source>
 ): void {
-  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
-  const golden = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  const { auto_approve, bypass_permissions_policy, host_mode } = permissionInputs(config);
+  // rf-wi-01 (G1): resolvePermissionPolicy overlays the registered host_mode onto the
+  // golden (host_mode ⊥ guild_gates orthogonality invariant — guild_gates/bypass are
+  // NEVER touched by the overlay); absent host_mode reproduces the golden byte-for-byte.
+  const table = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
 
   const gatesSrc: Source = (sources["auto_approve"] as Source) ?? "builtin";
   const bypassSrc: Source = (sources["security"] as Source) ?? "builtin";
-  const hostModeSrc: Source = "builtin"; // baseline host_mode is the host default
+  const hostModeSrc: Source = (sources["host_mode"] as Source) ?? "builtin";
 
   lines.push("");
   lines.push("── phase-permission decisions (host_mode × guild_gates × bypass) ──");
   lines.push(
     `inputs: auto_approve=${JSON.stringify(auto_approve)} [${gatesSrc}]  ·  ` +
       `security.bypass_permissions_policy=${bypass_permissions_policy} [${bypassSrc}]  ·  ` +
-      `host_mode baseline=ask [${hostModeSrc}]`
+      `host_mode=${host_mode ?? "unset (host default: ask)"} [${hostModeSrc}]`
   );
   for (const phase of PHASES) {
     for (const gate of GATE_TYPES) {
       const key = cellKey(phase, gate);
-      const d: PermissionDecision = golden[key];
+      const d: PermissionDecision = table[key];
       lines.push(
         `${key.padEnd(18)} host_mode=${d.host_mode} [${hostModeSrc}]  ` +
           `guild_gates=${d.guild_gates} [${gatesSrc}]  bypass=${d.bypass} [${bypassSrc}]`
@@ -1559,8 +1621,10 @@ function cmdShowRender(cwd: string): number {
     return 1;
   }
   const { config, sources } = result;
-  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
-  const permissions = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  // rf-wi-01 (G1): overlay the registered host_mode (resolvePermissionPolicy; absent
+  // ⇒ byte-identical to the golden, same as before registration).
+  const { auto_approve, bypass_permissions_policy, host_mode } = permissionInputs(config);
+  const permissions = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
 
   const renderedAt = new Date().toISOString();
   const renders = renderAllHostConfigs({
@@ -1655,8 +1719,10 @@ function buildUiSurfaceFor(
     return { error: `could not resolve settings — ${(e as Error).message}` };
   }
   const { config, sources } = result;
-  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
-  const permissions = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  // rf-wi-01 (G1): overlay the registered host_mode (resolvePermissionPolicy; absent
+  // ⇒ byte-identical to the golden, same as before registration).
+  const { auto_approve, bypass_permissions_policy, host_mode } = permissionInputs(config);
+  const permissions = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
   const surface = buildHostConfigUiSurface({
     host,
     config: config as unknown as RenderConfigLike & Record<string, unknown>,

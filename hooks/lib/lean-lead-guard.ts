@@ -115,12 +115,22 @@ import { readAllEvents, ORPHAN_RESULT_EXCERPT } from "./v1.4/log-jsonl.js";
 import { safeIdent } from "./reanchor.js";
 import { isWorkerInvocation } from "./lane-attribution.js";
 import { validateRunId } from "../../scripts/lib/run-lifecycle.js";
+// rf-wi-01 (v23x-deferred-followups G1): the canonical `defaults.lean_lead.*` default
+// values (single source of truth — scripts/lib/config-schema.ts CONFIG_SCHEMA derives
+// from this SAME tree), so this guard's fallback can never drift from what
+// `config validate/resolve/show` report as the documented default. Pure data, zero
+// internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
+import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
 
 /** Stable marker string — pinned by tests and the dist-grep rail. */
 export const LEAN_LEAD_MARKER = "[GUILD LEAN-LEAD]";
 
-/** Sane default: after 8 direct lead Edit/Write ops, surface the advisory. */
-const DEFAULT_THRESHOLD = 8;
+/** Sane default: after 8 direct lead Edit/Write ops, surface the advisory (schema SoT). */
+// Widened explicitly: CONFIG_DEFAULTS is `as const`, so its property types are the
+// narrow literals `true`/`8` — annotate so `let enabled/threshold` below can hold any
+// boolean/number the settings.json override resolves to.
+const DEFAULT_THRESHOLD: number = CONFIG_DEFAULTS.defaults.lean_lead.hands_on_edit_threshold;
+const DEFAULT_ENABLED: boolean = CONFIG_DEFAULTS.defaults.lean_lead.enabled;
 
 /** Lane statuses that count as "open" — dispatched or seeded, not yet terminal. */
 const OPEN_LANE_STATUSES = new Set(["pending", "in_progress"]);
@@ -137,36 +147,46 @@ export interface LeanLeadConfig {
 }
 
 /**
- * Tolerant reader for `.guild/settings.json` → `defaults.lean_lead.*`.
- * Mirrors `run-state.ts readResumeEnabled`'s degrade-to-default posture: a
- * missing file, malformed JSON, or wrong-typed field never throws — it just
- * falls back to the documented default (enabled, threshold=8). The threshold
- * must be a positive INTEGER — a fractional value (e.g. `0.5`) would floor to
- * 0 and defeat every downstream `count >= threshold` / `count / threshold`
- * check, so it is rejected rather than silently coerced.
+ * Reader for `defaults.lean_lead.*` — degrades to the documented default
+ * (enabled, threshold=8) on ANY failure, never throws. The threshold must be a
+ * positive INTEGER — a fractional value (e.g. `0.5`) would floor to 0 and
+ * defeat every downstream `count >= threshold` / `count / threshold` check, so
+ * it is rejected rather than silently coerced.
+ *
+ * rf-wi-01 (G1 codex-review round-2 fix, P1): delegates to the canonical
+ * `resolveSettings()` — the SAME 5-layer resolver `config show`/`config resolve`
+ * use (builtin < workspace settings.json < workspace settings.local.json <
+ * project settings.json < project settings.local.json < CLI flags) — rather
+ * than a hand-rolled project-file-only read. The round-1 fix (settings.json +
+ * settings.local.json, applied in order) still missed WORKSPACE-level
+ * inheritance: a workspace child's `defaults.lean_lead` override in the
+ * PARENT workspace's settings.json was invisible to this guard even though
+ * `resolveSettings()` (and therefore `config show`) sees it. Mirrors the
+ * established precedent in hooks/update-check.ts's `readUpdateConfig` (itself
+ * fixing an identical prior "workspace default not honored" finding) — a
+ * lazy `require()` (not a static import) so a require failure degrades
+ * gracefully inside the same try/catch, matching that file's style.
  */
 export function readLeanLeadConfig(guildRoot: string): LeanLeadConfig {
-  let enabled = true;
-  let threshold = DEFAULT_THRESHOLD;
   try {
-    const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const defs = parsed["defaults"];
-    if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-      const leanLead = (defs as Record<string, unknown>)["lean_lead"];
-      if (leanLead !== null && typeof leanLead === "object" && !Array.isArray(leanLead)) {
-        const ll = leanLead as Record<string, unknown>;
-        if (typeof ll["enabled"] === "boolean") enabled = ll["enabled"];
-        const rawThreshold = ll["hands_on_edit_threshold"];
-        if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-          threshold = rawThreshold;
-        }
-      }
-    }
+    const { resolveSettings } = require("../../src/modules/config/workflows/settings-resolver") as {
+      resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
+    };
+    const parsed = resolveSettings({ cwd: guildRoot }).config as {
+      defaults?: { lean_lead?: { enabled?: unknown; hands_on_edit_threshold?: unknown } };
+    };
+    const ll = parsed.defaults?.lean_lead ?? {};
+    const enabled = typeof ll.enabled === "boolean" ? ll.enabled : DEFAULT_ENABLED;
+    const threshold =
+      typeof ll.hands_on_edit_threshold === "number" &&
+      Number.isInteger(ll.hands_on_edit_threshold) &&
+      ll.hands_on_edit_threshold >= 1
+        ? ll.hands_on_edit_threshold
+        : DEFAULT_THRESHOLD;
+    return { enabled, threshold };
   } catch {
-    /* missing/corrupt settings.json → documented defaults */
+    return { enabled: DEFAULT_ENABLED, threshold: DEFAULT_THRESHOLD };
   }
-  return { enabled, threshold };
 }
 
 /** True when the operator has explicitly dismissed the guard for this session. */

@@ -54,6 +54,10 @@ function writeSettings(root: string, settings: object): void {
   fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
   fs.writeFileSync(path.join(root, ".guild", "settings.json"), JSON.stringify(settings, null, 2));
 }
+function writeLocalSettings(root: string, settings: object): void {
+  fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), JSON.stringify(settings, null, 2));
+}
 
 function seedLane(runDir: string, runId: string, laneId: string, status: string): void {
   upsertLane(runDir, { runId }, laneId, { status: status as never });
@@ -148,6 +152,39 @@ describe("lean-lead-guard — readLeanLeadConfig", () => {
     // silently defeat every count>=threshold / count/threshold check downstream.
     writeSettings(root, { defaults: { lean_lead: { hands_on_edit_threshold: 0.5 } } });
     expect(readLeanLeadConfig(root).threshold).toBe(8);
+  });
+
+  // rf-wi-01 (G1 codex-review fix, P1): settings.local.json now overrides
+  // settings.json per-field — previously only settings.json was read, so this
+  // documented team-vs-personal-override split was silently ignored.
+  it("a settings.local.json override wins over settings.json (resolved-config precedence)", () => {
+    writeSettings(root, { defaults: { lean_lead: { enabled: true, hands_on_edit_threshold: 8 } } });
+    writeLocalSettings(root, { defaults: { lean_lead: { enabled: false, hands_on_edit_threshold: 3 } } });
+    expect(readLeanLeadConfig(root)).toEqual({ enabled: false, threshold: 3 });
+  });
+
+  it("settings.local.json alone (no settings.json) still applies", () => {
+    writeLocalSettings(root, { defaults: { lean_lead: { hands_on_edit_threshold: 5 } } });
+    expect(readLeanLeadConfig(root)).toEqual({ enabled: true, threshold: 5 });
+  });
+
+  it("a corrupt settings.local.json degrades gracefully, keeping the settings.json value", () => {
+    writeSettings(root, { defaults: { lean_lead: { hands_on_edit_threshold: 4 } } });
+    fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), "{not json");
+    expect(readLeanLeadConfig(root)).toEqual({ enabled: true, threshold: 4 });
+  });
+
+  // rf-wi-01 (G1 codex-review round-2 fix, P1): a workspace-level default is now
+  // honored, not just the project's own two files — codex's exact repro (a
+  // workspace child sees resolveSettings()'s parent-workspace override, but the
+  // round-1 project-file-only fix did not).
+  it("honors a WORKSPACE-level defaults.lean_lead override for a child project (codex round-2 regression)", () => {
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "workspace.json"), JSON.stringify({ is_workspace: true }));
+    writeSettings(root, { defaults: { lean_lead: { enabled: false, hands_on_edit_threshold: 6 } } });
+    const child = path.join(root, "child-project");
+    fs.mkdirSync(path.join(child, ".guild"), { recursive: true });
+    expect(readLeanLeadConfig(child)).toEqual({ enabled: false, threshold: 6 });
   });
 });
 

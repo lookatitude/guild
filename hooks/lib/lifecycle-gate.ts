@@ -117,6 +117,12 @@ import { isWorkerInvocation } from "./lane-attribution.js";
 import { extractHandoffEnvelope, validateHandoffV2 } from "./handoff-v2.js";
 import { validateRunId } from "../../scripts/lib/run-lifecycle.js";
 import { validateEvent } from "../../scripts/v1.4-log-validator.js";
+// rf-wi-01 (v23x-deferred-followups G1): the canonical `defaults.lifecycle_gate.*`
+// default values (single source of truth — scripts/lib/config-schema.ts CONFIG_SCHEMA
+// derives from this SAME tree), so this guard's fallback can never drift from what
+// `config validate/resolve/show` report as the documented default. Pure data, zero
+// internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
+import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
 
 /** Stable marker strings — pinned by tests and the dist-grep rail. */
 export const LIFECYCLE_GATE_MARKER = "[GUILD LIFECYCLE GATE]";
@@ -138,7 +144,11 @@ export const ENV_OVERRIDE_VAR = "GUILD_LIFECYCLE_GATE_OVERRIDE";
  * while staying two orders of magnitude below the 836 Bash calls the forensic
  * session logged after its last skill.
  */
-const DEFAULT_ADHOC_THRESHOLD = 20;
+// Widened explicitly: CONFIG_DEFAULTS is `as const`, so its property types are the
+// narrow literals `true`/`20` — annotate so `let enabled/threshold` below can hold any
+// boolean/number the settings.json override resolves to.
+const DEFAULT_ADHOC_THRESHOLD: number = CONFIG_DEFAULTS.defaults.lifecycle_gate.adhoc_activity_threshold;
+const DEFAULT_LIFECYCLE_GATE_ENABLED: boolean = CONFIG_DEFAULTS.defaults.lifecycle_gate.enabled;
 
 /** Tools that count as ad-hoc session activity (matches ToolCallTool values). */
 const ADHOC_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit"]);
@@ -205,34 +215,38 @@ export interface LifecycleGateConfig {
 }
 
 /**
- * Tolerant reader for `.guild/settings.json` → `defaults.lifecycle_gate.*`.
- * Mirrors `lean-lead-guard.ts readLeanLeadConfig`: a missing file, malformed
- * JSON, or wrong-typed field degrades to the documented defaults rather than
- * throwing. The threshold must be a positive INTEGER — a fractional value would
- * defeat the `floor(count/threshold)` re-arm arithmetic below.
+ * Reader for `defaults.lifecycle_gate.*` — degrades to the documented default
+ * (enabled, threshold=20) on ANY failure, never throws. The threshold must be
+ * a positive INTEGER — a fractional value would defeat the
+ * `floor(count/threshold)` re-arm arithmetic below.
+ *
+ * rf-wi-01 (G1 codex-review round-2 fix, P1): delegates to the canonical
+ * `resolveSettings()` — the SAME 5-layer resolver `config show`/`config resolve`
+ * use — rather than a hand-rolled project-file-only read. The round-1 fix
+ * (settings.json + settings.local.json, applied in order) still missed
+ * WORKSPACE-level inheritance. Mirrors `lean-lead-guard.ts readLeanLeadConfig`
+ * and the established precedent in hooks/update-check.ts's `readUpdateConfig`.
  */
 export function readLifecycleGateConfig(guildRoot: string): LifecycleGateConfig {
-  let enabled = true;
-  let threshold = DEFAULT_ADHOC_THRESHOLD;
   try {
-    const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const defs = parsed["defaults"];
-    if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-      const gate = (defs as Record<string, unknown>)["lifecycle_gate"];
-      if (gate !== null && typeof gate === "object" && !Array.isArray(gate)) {
-        const g = gate as Record<string, unknown>;
-        if (typeof g["enabled"] === "boolean") enabled = g["enabled"];
-        const rawThreshold = g["adhoc_activity_threshold"];
-        if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-          threshold = rawThreshold;
-        }
-      }
-    }
+    const { resolveSettings } = require("../../src/modules/config/workflows/settings-resolver") as {
+      resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
+    };
+    const parsed = resolveSettings({ cwd: guildRoot }).config as {
+      defaults?: { lifecycle_gate?: { enabled?: unknown; adhoc_activity_threshold?: unknown } };
+    };
+    const g = parsed.defaults?.lifecycle_gate ?? {};
+    const enabled = typeof g.enabled === "boolean" ? g.enabled : DEFAULT_LIFECYCLE_GATE_ENABLED;
+    const threshold =
+      typeof g.adhoc_activity_threshold === "number" &&
+      Number.isInteger(g.adhoc_activity_threshold) &&
+      g.adhoc_activity_threshold >= 1
+        ? g.adhoc_activity_threshold
+        : DEFAULT_ADHOC_THRESHOLD;
+    return { enabled, threshold };
   } catch {
-    /* missing/corrupt settings.json → documented defaults */
+    return { enabled: DEFAULT_LIFECYCLE_GATE_ENABLED, threshold: DEFAULT_ADHOC_THRESHOLD };
   }
-  return { enabled, threshold };
 }
 
 /**

@@ -13,6 +13,9 @@
  *   degraded  tmux unavailable is a recorded degradation, not a silent success.
  */
 
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import type { RunFn } from "../lib/core/contracts/team-backend";
 import {
   DEBUG_PANE_TITLE_PREFIX,
@@ -277,6 +280,58 @@ describe("TmuxTeamBackend.plan() — the real launcher call chain resolves the s
     const splitCmd = plan.commands.find((c) => c.argv[1] === "split-window")!;
     const teammateCmd = splitCmd.argv[splitCmd.argv.length - 1]!;
     expect(teammateCmd).toContain("claude --permission-mode bypassPermissions");
+  });
+
+  // rf-wi-01 (G1 codex-review fix, P1) — plan() now actually reads the project's
+  // registered `host_mode` (readRuntimePermissionConfig(req.cwd)) instead of
+  // always defaulting to RUNTIME_DEFAULT_CONFIG. Before the fix, `config show
+  // --sources` could report a configured host_mode while the real dispatch path
+  // silently ignored it and launched bypassed anyway.
+  it("an explicit non-'ask' host_mode in the project's settings.json is honored verbatim on the real pane", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tmux-backend-host-mode-"));
+    try {
+      fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+      fs.writeFileSync(path.join(root, ".guild", "settings.json"), JSON.stringify({ host_mode: "read_only" }));
+
+      const backend = new TmuxTeamBackend();
+      const plan = backend.plan({
+        mode: "new-session",
+        targetName: "guild-team",
+        cwd: root,
+        slug: "my-slug",
+        runId: "run-1",
+        specialists: [{ name: "backend", scope: "backend work" } as never],
+        dryRun: true,
+      });
+      const orchestratorCmd = plan.commands[0]!.argv[plan.commands[0]!.argv.length - 1]!;
+      // resolveHostLaunch("claude", "read_only") -> ["--tools", "Read,Grep,Glob"], NOT bypassPermissions.
+      // codex round-2 P2 fix: a POSITIVE assertion — the earlier not.toContain alone
+      // would also pass for a bare `claude` command with no flags at all.
+      expect(orchestratorCmd).toContain("claude --tools Read,Grep,Glob");
+      expect(orchestratorCmd).not.toContain("bypassPermissions");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("no settings.json at all still falls back to the unset->bypass_all team-pane default", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tmux-backend-no-settings-"));
+    try {
+      const backend = new TmuxTeamBackend();
+      const plan = backend.plan({
+        mode: "new-session",
+        targetName: "guild-team",
+        cwd: root,
+        slug: "my-slug",
+        runId: "run-1",
+        specialists: [{ name: "backend", scope: "backend work" } as never],
+        dryRun: true,
+      });
+      const orchestratorCmd = plan.commands[0]!.argv[plan.commands[0]!.argv.length - 1]!;
+      expect(orchestratorCmd).toContain("claude --permission-mode bypassPermissions");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
