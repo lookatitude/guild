@@ -66,6 +66,7 @@ import {
   PHASES,
   GATE_TYPES,
   ALWAYS_ASK_HARD_SET,
+  HOST_MODES,
 } from "./permission-policy-schema";
 
 import {
@@ -366,16 +367,20 @@ function isStringArray(v: unknown): v is string[] {
  * Read the runtime permission config from `<cwd>/.guild/settings.json`:
  *   defaults.gates.auto_approve         → auto_approve   (default [])
  *   security.bypass_permissions_policy  → bypass         (default "audit")
+ *   host_mode                           → host_mode      (default undefined = no override)
  * Returns the documented defaults on ANY failure (missing file / parse error /
  * mistyped value). NEVER throws.
  *
- * `host_mode` / `host_mode_by_phase` are NOT read from settings.json here —
- * neither is a registered key in the canonical closed config schema
- * (config-cli.ts / config-cmd.ts own that surface; adding an ad-hoc key here
- * would bypass it). `RuntimePermissionConfig.host_mode` remains an in-memory/
- * programmatic override point only (its pre-existing contract, unchanged) —
- * registering a real settings.json surface for it is a followup that needs
- * its own lane through the canonical config-schema files.
+ * rf-wi-01 (v23x-deferred-followups G1): `host_mode` is now a registered key in the
+ * canonical closed config schema (scripts/lib/core/config-cli.ts GuildSettings.host_mode
+ * + scripts/lib/config-schema.ts CONFIG_SCHEMA, derived from config-defaults.ts DEFAULTS —
+ * top-level, NOT under `security.`; the #54 lane reverted an ad-hoc `security.host_mode`
+ * key for bypassing this schema). This reader is the sanctioned settings.json surface for
+ * it — a settings.json `null` (the default) or absent key leaves `out.host_mode` unset,
+ * so `resolvePermissionPolicy`'s default (no overlay) still reproduces the C2 baseline
+ * golden byte-for-byte, exactly matching this function's pre-registration behavior.
+ * `host_mode_by_phase` remains unregistered (out of scope for G1 — a narrower, separate
+ * per-phase surface; see the handoff receipt followups).
  *
  * (Reads the SAME locations as hooks/lib/security/config.ts `readSettingsAutoApprove`
  * + `parseSecurityConfig`, kept consistent so the policy and the PreToolUse hook
@@ -408,6 +413,13 @@ export function readRuntimePermissionConfig(cwd: string): RuntimePermissionConfi
     if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
       out.bypass_permissions_policy = bpp;
     }
+  }
+  // rf-wi-01 (G1): host_mode — top-level, nullable. `null` (the schema default) or an
+  // absent key leaves out.host_mode unset (RuntimePermissionConfig.host_mode stays
+  // optional) so resolvePermissionPolicy's no-overlay default is unchanged.
+  const hm = parsed["host_mode"];
+  if (typeof hm === "string" && (HOST_MODES as readonly string[]).includes(hm)) {
+    out.host_mode = hm as HostMode;
   }
   return out;
 }

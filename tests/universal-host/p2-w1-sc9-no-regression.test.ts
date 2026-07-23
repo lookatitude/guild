@@ -76,6 +76,25 @@ const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
 // The allowlist stays EXPLICIT (named files, never a wildcard) so any OTHER entry-path
 // change still fails the A/B guard below — anti-vacuity preserved. After the lead commits
 // these files HEAD advances, the diff empties, and these entries become harmless no-ops.
+//
+// rf-wi-01 (v23x-deferred-followups G1): registered `defaults.lean_lead.*`,
+// `defaults.lifecycle_gate.*`, and `host_mode` in the canonical config schema
+// (config-defaults.ts DEFAULTS — the single source config-schema.ts's CONFIG_SCHEMA
+// derives from). The two guard hooks that ALREADY tolerantly read
+// `defaults.lean_lead`/`defaults.lifecycle_gate` (they now source their fallback
+// default from CONFIG_DEFAULTS instead of a duplicated hardcoded literal) are
+// rebuilt, and every other hooks/dist bundle that transitively embeds the shared
+// config-defaults tree (maybe-reflect, update-check, the agent-team dispatch hooks)
+// picks up the same additive default-tree growth on rebuild — verified (git diff HEAD)
+// to be exactly this schema addition, no behavior deletions/corruption:
+//   - hooks/lib/lean-lead-guard.ts / hooks/dist/lean-lead-guard.js ... schema-anchored
+//     DEFAULT_THRESHOLD/DEFAULT_ENABLED (was a local hardcoded literal).
+//   - hooks/lib/lifecycle-gate.ts / hooks/dist/lifecycle-gate.js ..... same, for
+//     DEFAULT_ADHOC_THRESHOLD/DEFAULT_LIFECYCLE_GATE_ENABLED.
+//   - hooks/dist/maybe-reflect.js, hooks/dist/update-check.js,
+//     hooks/agent-team/dist/{task-created,teammate-idle}.js ........... recompiled
+//     bundles embedding the additive config-defaults.ts DEFAULTS tree (host_mode +
+//     defaults.lean_lead + defaults.lifecycle_gate) — no other behavior change.
 const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/lib/guild-hook-event.ts",
   "hooks/lib/run-state.ts",
@@ -88,6 +107,15 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/lib/__tests__/guild-hook-event.test.ts",
   "hooks/__tests__/using-guild-bootstrap.test.ts",
   "hooks/__tests__/golden/using-guild-session-start.json",
+  // rf-wi-01 (G1) — see doc comment above.
+  "hooks/lib/lean-lead-guard.ts",
+  "hooks/lib/lifecycle-gate.ts",
+  "hooks/dist/lean-lead-guard.js",
+  "hooks/dist/lifecycle-gate.js",
+  "hooks/dist/maybe-reflect.js",
+  "hooks/dist/update-check.js",
+  "hooks/agent-team/dist/task-created.js",
+  "hooks/agent-team/dist/teammate-idle.js",
 ]);
 
 function gitLines(args: string[]): string[] {

@@ -1007,6 +1007,16 @@ var init_config_defaults = __esm({
       auto_approve: [],
       review: "local",
       host: "auto",
+      /**
+       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+       * this top-level placement (sibling of the `host` dispatch selector) is the registered
+       * replacement. One of only three keys ever legitimately null-typed at the top level.
+       */
+      host_mode: null,
       roles: { host: null, advisory: null, adversarial: null },
       host_profiles: {},
       initiative_default: null,
@@ -1111,7 +1121,20 @@ var init_config_defaults = __esm({
         // the SessionStart signal; `auto` additionally stages the host apply path;
         // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
         update: { mode: "notify", cadence_hours: 24 },
-        allowed_tools: []
+        allowed_tools: [],
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+         * "Inline shortcut under high autonomy").
+         */
+        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+         * activity count before the lifecycle gate advisory fires.
+         */
+        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
       }
     };
   }
@@ -4387,6 +4410,9 @@ function parseSettingsFile_fromParsed(parsed) {
     const normalized = normalizeDispatchHostId(parsed["host"]);
     if (normalized) out.host = normalized;
   }
+  if (parsed["host_mode"] === null) out.host_mode = null;
+  else if (typeof parsed["host_mode"] === "string" && HOST_MODES.includes(parsed["host_mode"]))
+    out.host_mode = parsed["host_mode"];
   if (isPlainObject2(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"]);
   if (isPlainObject2(parsed["host_profiles"]))
@@ -4811,7 +4837,7 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs3, path4, yaml, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
+var fs3, path4, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
 var init_settings_reader = __esm({
   "../src/modules/config/workflows/settings-reader.ts"() {
     fs3 = __toESM(require("fs"));
@@ -4824,6 +4850,7 @@ var init_settings_reader = __esm({
     init_kernel();
     init_workspace_manifest();
     yaml = loadYamlApi();
+    HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
     DEFAULTS2 = DEFAULTS;
     VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
     KNOWN_HOST_IDS2 = new Set(HOST_IDS);
@@ -4856,8 +4883,11 @@ var init_settings_reader = __esm({
       // R-018
       "allowed_tools",
       // R-020
-      "update"
+      "update",
       // plugin-update-lifecycle AC-6
+      "lean_lead",
+      "lifecycle_gate"
+      // rf-wi-01 (G1)
     ]);
   }
 });

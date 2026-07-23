@@ -479,12 +479,13 @@ export class TmuxTeamBackend implements TeamBackend {
   plan(req: TeamLaunchRequest): TmuxPlan {
     // Issue #54: composeTmuxCommands defaults permissionConfig to
     // RUNTIME_DEFAULT_CONFIG (host_mode unset), which resolveTeamPaneHostMode
-    // lifts to "bypass_all" for a team pane — the field-verified fix. There is
-    // no settings.json-backed host_mode to read yet (host_mode is not a
-    // registered key in the canonical config schema — see
-    // readRuntimePermissionConfig's own comment); `RuntimePermissionConfig`
-    // remains available for a caller to pass its own resolved config in
-    // programmatically once that surface exists.
+    // lifts to "bypass_all" for a team pane — the field-verified fix. rf-wi-01
+    // (v23x-deferred-followups G1) registered `host_mode` as a real settings.json
+    // surface (readRuntimePermissionConfig now reads it) — but THIS call site still
+    // does not read it: wiring an operator's settings.json host_mode into the local
+    // tmux dispatch path is a separate, dispatch-safety-scoped followup (G1 was
+    // scoped to config-surface registration only). `RuntimePermissionConfig` remains
+    // available for a caller to pass its own resolved config in programmatically.
     const commands = composeTmuxCommands({
       mode: req.mode,
       targetName: req.targetName,

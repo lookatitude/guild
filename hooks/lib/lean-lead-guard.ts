@@ -115,12 +115,22 @@ import { readAllEvents, ORPHAN_RESULT_EXCERPT } from "./v1.4/log-jsonl.js";
 import { safeIdent } from "./reanchor.js";
 import { isWorkerInvocation } from "./lane-attribution.js";
 import { validateRunId } from "../../scripts/lib/run-lifecycle.js";
+// rf-wi-01 (v23x-deferred-followups G1): the canonical `defaults.lean_lead.*` default
+// values (single source of truth — scripts/lib/config-schema.ts CONFIG_SCHEMA derives
+// from this SAME tree), so this guard's fallback can never drift from what
+// `config validate/resolve/show` report as the documented default. Pure data, zero
+// internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
+import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
 
 /** Stable marker string — pinned by tests and the dist-grep rail. */
 export const LEAN_LEAD_MARKER = "[GUILD LEAN-LEAD]";
 
-/** Sane default: after 8 direct lead Edit/Write ops, surface the advisory. */
-const DEFAULT_THRESHOLD = 8;
+/** Sane default: after 8 direct lead Edit/Write ops, surface the advisory (schema SoT). */
+// Widened explicitly: CONFIG_DEFAULTS is `as const`, so its property types are the
+// narrow literals `true`/`8` — annotate so `let enabled/threshold` below can hold any
+// boolean/number the settings.json override resolves to.
+const DEFAULT_THRESHOLD: number = CONFIG_DEFAULTS.defaults.lean_lead.hands_on_edit_threshold;
+const DEFAULT_ENABLED: boolean = CONFIG_DEFAULTS.defaults.lean_lead.enabled;
 
 /** Lane statuses that count as "open" — dispatched or seeded, not yet terminal. */
 const OPEN_LANE_STATUSES = new Set(["pending", "in_progress"]);
@@ -146,7 +156,7 @@ export interface LeanLeadConfig {
  * check, so it is rejected rather than silently coerced.
  */
 export function readLeanLeadConfig(guildRoot: string): LeanLeadConfig {
-  let enabled = true;
+  let enabled = DEFAULT_ENABLED;
   let threshold = DEFAULT_THRESHOLD;
   try {
     const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");

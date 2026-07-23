@@ -40,7 +40,11 @@ export function isSecuritySensitiveKey(key: string): boolean {
     key.startsWith("security.") ||
     key.startsWith("secrets_policy.") ||
     key.startsWith("defaults.cross_host") ||
-    key === "mcp.tool_description_hashes"
+    key === "mcp.tool_description_hashes" ||
+    // rf-wi-01 (G1): host_mode governs P1-L10 host autonomy (bypass_all can disable a
+    // host's native tool-permission prompt) — the sanctioned, schema-registered
+    // replacement for the ad-hoc `security.host_mode` key the #54 lane reverted.
+    key === "host_mode"
   );
 }
 
@@ -141,6 +145,11 @@ const SECURITY_ENUM_OVERRIDES: Record<string, SecurityEnumOverride> = {
 const SECURITY_MOST_RESTRICTIVE_NONENUM: Record<string, unknown> = {
   auto_approve: [],
   "defaults.gates.auto_approve": [],
+  // rf-wi-01 (G1): host_mode's own default (null = no override; the host's own "ask"
+  // default applies, never a bypass) IS already the most-restrictive posture — declared
+  // explicitly (not merely relying on default-repair) so a malformed value gets ACTIVELY
+  // repaired-closed rather than passively held (config-reconcile-contract.ts F4).
+  host_mode: null,
 };
 
 /**

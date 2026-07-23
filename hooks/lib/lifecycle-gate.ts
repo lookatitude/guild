@@ -116,6 +116,12 @@ import {
 import { isWorkerInvocation } from "./lane-attribution.js";
 import { validateRunId } from "../../scripts/lib/run-lifecycle.js";
 import { validateEvent } from "../../scripts/v1.4-log-validator.js";
+// rf-wi-01 (v23x-deferred-followups G1): the canonical `defaults.lifecycle_gate.*`
+// default values (single source of truth — scripts/lib/config-schema.ts CONFIG_SCHEMA
+// derives from this SAME tree), so this guard's fallback can never drift from what
+// `config validate/resolve/show` report as the documented default. Pure data, zero
+// internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
+import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
 
 /** Stable marker strings — pinned by tests and the dist-grep rail. */
 export const LIFECYCLE_GATE_MARKER = "[GUILD LIFECYCLE GATE]";
@@ -137,7 +143,11 @@ export const ENV_OVERRIDE_VAR = "GUILD_LIFECYCLE_GATE_OVERRIDE";
  * while staying two orders of magnitude below the 836 Bash calls the forensic
  * session logged after its last skill.
  */
-const DEFAULT_ADHOC_THRESHOLD = 20;
+// Widened explicitly: CONFIG_DEFAULTS is `as const`, so its property types are the
+// narrow literals `true`/`20` — annotate so `let enabled/threshold` below can hold any
+// boolean/number the settings.json override resolves to.
+const DEFAULT_ADHOC_THRESHOLD: number = CONFIG_DEFAULTS.defaults.lifecycle_gate.adhoc_activity_threshold;
+const DEFAULT_LIFECYCLE_GATE_ENABLED: boolean = CONFIG_DEFAULTS.defaults.lifecycle_gate.enabled;
 
 /** Tools that count as ad-hoc session activity (matches ToolCallTool values). */
 const ADHOC_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit"]);
@@ -211,7 +221,7 @@ export interface LifecycleGateConfig {
  * defeat the `floor(count/threshold)` re-arm arithmetic below.
  */
 export function readLifecycleGateConfig(guildRoot: string): LifecycleGateConfig {
-  let enabled = true;
+  let enabled = DEFAULT_LIFECYCLE_GATE_ENABLED;
   let threshold = DEFAULT_ADHOC_THRESHOLD;
   try {
     const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");
