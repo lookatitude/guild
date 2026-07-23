@@ -713,6 +713,39 @@ describe("trace-summarize.ts", () => {
       expect(section).toMatch(/Tool calls:\s*3/);
     });
 
+    // codex round-4 finding: greedy nearest-first matching (process posts
+    // oldest-first, each claims its nearest still-free call) is NOT
+    // guaranteed to find the maximum-cardinality/minimum-cost matching.
+    // Concrete counterexample (relative ms): posts at 0/40, calls at -35/30,
+    // window 50ms. True optimal: post0<->call-35 (dist 35) + post40<->call30
+    // (dist 10) = 2 matches. Greedy lets post0 grab call30 first (dist 30 <
+    // 35, nearer), stranding post40 and call-35 unmatched = 3 reported
+    // records instead of 2. Requires the exact DP (maxCardinalityMinCostMatch),
+    // not greedy.
+    it("finds the true optimal matching, not a greedy one that strands a valid pair", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "optimal-matching-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          // post0 = t+0ms
+          '{"ts":"2026-07-21T03:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"p1","ok":true,"ms":10,"span_id":"p0"}',
+          // post40 = t+40ms
+          '{"ts":"2026-07-21T03:00:00.040Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"p2","ok":true,"ms":11,"span_id":"p40"}',
+          // call-35 = t-35ms (true match for post0, dist 35)
+          '{"ts":"2026-07-21T02:59:59.965Z","event":"tool_call","run_id":"optimal-matching-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":10,"result_excerpt_redacted":"{}","span_id":"cm35"}',
+          // call30 = t+30ms (true match for post40, dist 10 — but nearer to post0, dist 30, which is what greedy wrongly grabs)
+          '{"ts":"2026-07-21T03:00:00.030Z","event":"tool_call","run_id":"optimal-matching-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":11,"result_excerpt_redacted":"{}","span_id":"c30"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "optimal-matching-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*2/);
+    });
+
     it("omits the digest segment for a whitespace-only redacted excerpt", () => {
       const runDir = path.join(tmpDir, ".guild", "runs", "whitespace-digest-run");
       const logsDir = path.join(runDir, "logs");
