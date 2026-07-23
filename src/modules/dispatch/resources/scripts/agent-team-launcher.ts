@@ -230,6 +230,9 @@ function parseYaml(raw: string): TeamYaml {
         // This ensures generated teams (default_tier only) route at their roster tier,
         // not collapse to mid. Scored tier wins when execute-plan writes it.
         tier: cur.tier ?? cur.default_tier,
+        // rf-wi-03 (G3): the raw cost score, carried through to GUILD_TIER_SCORE
+        // on the dispatch env (audit-only). Undefined until a producer writes it.
+        score: cur.score,
         capabilityRequirements: cur.capabilityRequirements, // GAP-A1/ARCH-2 (may be undefined)
         // D-CAP: thread capability_scope onto the Specialist — undefined when absent
         // (no restrictions). Populated by applyMapEntry + block-list interceptor above.
@@ -361,6 +364,16 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
     if (t === "cheap" || t === "mid" || t === "powerful") {
       target.default_tier = t as "cheap" | "mid" | "powerful";
     }
+  }
+  // rf-wi-03 (G3): the raw cost-scorer `score:` for this specialist, when a
+  // producer wrote one back to team.yaml. composeInProcessDispatch carries it as
+  // GUILD_TIER_SCORE (audit-only — the tier guard never gates on it). Populating
+  // this key is the execute-plan writeback's job (a followup owned by rf-wi-06,
+  // the SKILL-surface lane); the parse + descriptor plumbing is complete here so
+  // the value flows the moment the writeback emits it.
+  else if (key === "score") {
+    const n = Number(stripQuotes(value).trim());
+    if (Number.isFinite(n)) target.score = n;
   }
   // GAP-A1/ARCH-2: capability requirements from team.yaml, forwarded by
   // planTeamRouting into route()'s capabilityGap() intersection (true round-trip:

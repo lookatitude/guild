@@ -652,7 +652,7 @@ var SAFE_ROLE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var ROLE_DEF_ANCHOR_RE = /role definition is at\s*[`'"]?\.guild\/agents\/([A-Za-z0-9._-]+)\.md/i;
 var DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{0,2}\s+specialist/i;
 var DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
-var PRODUCER_MARKER_RE = /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v1(?:\s+\S+)*?\s+role=([A-Za-z0-9._-]+)/;
+var PRODUCER_MARKER_RE = /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v\d+(?:\s+[A-Za-z0-9._-]+=[^\s]+)*\s+role=([A-Za-z0-9._-]+)(?:\s|$)/;
 var PRODUCER_HEAD_CHARS = 300;
 function safeRole(v) {
   return v !== void 0 && SAFE_ROLE_RE.test(v) ? v : void 0;

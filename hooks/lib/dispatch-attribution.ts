@@ -83,7 +83,7 @@ const DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
  * lane's appended scope text can neither forge nor contradict.
  */
 const PRODUCER_MARKER_RE =
-  /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v1(?:\s+\S+)*?\s+role=([A-Za-z0-9._-]+)/;
+  /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v\d+(?:\s+[A-Za-z0-9._-]+=[^\s]+)*\s+role=([A-Za-z0-9._-]+)(?:\s|$)/;
 
 /**
  * How much of the prompt counts as the producer-owned OPENING for the legacy

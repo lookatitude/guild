@@ -13,6 +13,11 @@
  *      producer set, and the backend guard's prompt-only rung stays un-blockable.
  */
 
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
 import {
   composeInProcessDispatch,
   buildPrompt,
@@ -23,6 +28,8 @@ import {
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
 } from "../lib/core/contracts/team-backend";
+
+const LAUNCHER = path.resolve(__dirname, "..", "agent-team-launcher.ts");
 
 function req(specialists: Specialist[], overrides: Partial<TeamLaunchRequest> = {}): TeamLaunchRequest {
   return {
@@ -120,5 +127,56 @@ describe("G3 — universal structured producer marker", () => {
     });
     const firstLine = prompt.split("\n", 1)[0];
     expect(firstLine).toBe("GUILD_AGENT_DEFINITION=.guild/agents/devops.md");
+  });
+});
+
+describe("G3 — end-to-end: team.yaml tier + score reach the dispatch env", () => {
+  it("the launcher's in-process dispatchPlan carries GUILD_TIER + GUILD_TIER_SCORE", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-g3-e2e-"));
+    const teamDir = path.join(tmpDir, ".guild", "team");
+    fs.mkdirSync(teamDir, { recursive: true });
+    const teamPath = path.join(teamDir, "g3-slug.yaml");
+    fs.writeFileSync(
+      teamPath,
+      [
+        "spec: .guild/spec/g3-slug.md",
+        "backend: subagent",
+        "specialists:",
+        "  - name: backend",
+        '    scope: "api"',
+        "    depends-on: []",
+        "    tier: mid",
+        "    score: 2",
+        "",
+      ].join("\n"),
+    );
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined && k !== "TMUX") env[k] = v;
+    }
+    const result = spawnSync(
+      "npx",
+      [
+        "tsx",
+        LAUNCHER,
+        "--team",
+        teamPath,
+        "--cwd",
+        tmpDir,
+        "--agent-mode=agent",
+        "--run-id",
+        "run-g3-e2e",
+        "--dry-run",
+      ],
+      { encoding: "utf8", env, timeout: 120_000 },
+    );
+    expect(result.status).toBe(0);
+    const signal = JSON.parse(result.stdout) as {
+      dispatchPlan?: Array<{ env: Record<string, string> }>;
+    };
+    const laneEnv = signal.dispatchPlan?.[0]?.env ?? {};
+    expect(laneEnv["GUILD_TIER"]).toBe("mid");
+    expect(laneEnv["GUILD_TIER_SCORE"]).toBe("2");
+    expect(laneEnv[DISPATCH_PRODUCER_ENV]).toBe(DISPATCH_PRODUCER_TOKEN);
   });
 });

@@ -61,6 +61,23 @@ describe("G3 — universal line-1 producer marker is an identity anchor", () => 
     const input = { subagent_type: "advisor", prompt: SHIPPED_BRIEF };
     expect(attrOf(input).hasLaneSignature).toBe(true);
   });
+
+  it("tolerates extra k=v tokens before role= in the marker", () => {
+    const input = {
+      subagent_type: "advisor",
+      prompt: "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 run=run-x role=advisor\nwork",
+    };
+    expect(attrOf(input).specialist).toBe("advisor");
+  });
+
+  it("REJECTS a malformed role token (no partial attribution)", () => {
+    const input = {
+      subagent_type: "general-purpose",
+      prompt: "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=advisor/garbage\nwork",
+    };
+    // role= is not a clean token → the marker does not attribute a role.
+    expect(attrOf(input).specialist).toBeUndefined();
+  });
 });
 
 describe("G3 — the producer marker is structured lane evidence", () => {
@@ -81,6 +98,25 @@ describe("G3 — the producer marker is structured lane evidence", () => {
     };
     expect(hasStructuredCarrier(input)).toBe(true);
     expect(classifyLaneEvidence(input, attrOf(input), input.prompt, RUN_ID)).toBe("structured");
+  });
+
+  it("a BOGUS marker value is NOT a producer marker (no forged structured evidence)", () => {
+    const bogus = {
+      subagent_type: "advisor",
+      prompt: "Do the work.",
+      env: { [PRODUCER_MARKER_ENV]: "not-a-real-token" },
+    };
+    expect(hasProducerMarker(bogus)).toBe(false);
+    expect(hasStructuredCarrier(bogus)).toBe(false);
+  });
+
+  it("tolerates a future marker version prefix", () => {
+    const v2 = {
+      subagent_type: "advisor",
+      prompt: "Do the work.",
+      env: { [PRODUCER_MARKER_ENV]: "guild.dispatch.v2" },
+    };
+    expect(hasProducerMarker(v2)).toBe(true);
   });
 
   it("a hand-rolled lane with no marker is NOT structured (still prompt_only)", () => {

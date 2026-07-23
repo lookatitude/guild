@@ -941,7 +941,7 @@ var SAFE_ROLE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var ROLE_DEF_ANCHOR_RE = /role definition is at\s*[`'"]?\.guild\/agents\/([A-Za-z0-9._-]+)\.md/i;
 var DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{0,2}\s+specialist/i;
 var DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
-var PRODUCER_MARKER_RE = /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v1(?:\s+\S+)*?\s+role=([A-Za-z0-9._-]+)/;
+var PRODUCER_MARKER_RE = /^GUILD_DISPATCH_PRODUCER=guild\.dispatch\.v\d+(?:\s+[A-Za-z0-9._-]+=[^\s]+)*\s+role=([A-Za-z0-9._-]+)(?:\s|$)/;
 var PRODUCER_HEAD_CHARS = 300;
 function safeRole(v) {
   return v !== void 0 && SAFE_ROLE_RE.test(v) ? v : void 0;
@@ -1047,30 +1047,29 @@ function hasHandoffProtocolBlock(prompt, runId) {
   return receiptPathRe.test(prompt);
 }
 var PRODUCER_MARKER_ENV = "GUILD_DISPATCH_PRODUCER";
+var PRODUCER_MARKER_VALUE_PREFIX = "guild.dispatch.";
 var STRUCTURED_CARRIER_KEYS = [
   "GUILD_SPECIALIST",
   "GUILD_TASK_ID",
-  "GUILD_AGENT_DEFINITION",
-  // G3 — the universal producer marker: a dispatch carrying ONLY this is still
-  // structurally producer-composed (out of reach of quoted prose).
-  PRODUCER_MARKER_ENV
+  "GUILD_AGENT_DEFINITION"
 ];
 function hasStructuredCarrier(toolInput) {
   if (toolInput === null || typeof toolInput !== "object") return false;
   const env = toolInput["env"];
   if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
   const map = env;
-  return STRUCTURED_CARRIER_KEYS.some((k) => {
+  const composedCarrier = STRUCTURED_CARRIER_KEYS.some((k) => {
     const v = map[k];
     return typeof v === "string" && v.trim().length > 0;
   });
+  return composedCarrier || hasProducerMarker(toolInput);
 }
 function hasProducerMarker(toolInput) {
   if (toolInput === null || typeof toolInput !== "object") return false;
   const env = toolInput["env"];
   if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
   const v = env[PRODUCER_MARKER_ENV];
-  return typeof v === "string" && v.trim().length > 0;
+  return typeof v === "string" && v.trim().startsWith(PRODUCER_MARKER_VALUE_PREFIX);
 }
 function classifyLaneEvidence(toolInput, attr, prompt, runId) {
   if (hasStructuredCarrier(toolInput)) return "structured";

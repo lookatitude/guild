@@ -190,14 +190,20 @@ export type LaneEvidence = "structured" | "prompt_only" | "none";
  */
 export const PRODUCER_MARKER_ENV = "GUILD_DISPATCH_PRODUCER";
 
+/**
+ * The marker's valid value prefix (`guild.dispatch.` — versioned:
+ * `guild.dispatch.v1`, future `…v2`, …). A bogus/stale value is NOT accepted as
+ * a producer marker: it must be a recognizable Guild dispatch token, else a
+ * hand-set `GUILD_DISPATCH_PRODUCER=junk` env could forge structured evidence
+ * (adversarial review round 1, finding 3).
+ */
+const PRODUCER_MARKER_VALUE_PREFIX = "guild.dispatch.";
+
 /** The producer-set env keys `composeInProcessDispatch` puts on a lane dispatch. */
 const STRUCTURED_CARRIER_KEYS = [
   "GUILD_SPECIALIST",
   "GUILD_TASK_ID",
   "GUILD_AGENT_DEFINITION",
-  // G3 — the universal producer marker: a dispatch carrying ONLY this is still
-  // structurally producer-composed (out of reach of quoted prose).
-  PRODUCER_MARKER_ENV,
 ] as const;
 
 /**
@@ -216,10 +222,15 @@ export function hasStructuredCarrier(toolInput: unknown): boolean {
   const env = (toolInput as Record<string, unknown>)["env"];
   if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
   const map = env as Record<string, unknown>;
-  return STRUCTURED_CARRIER_KEYS.some((k) => {
+  const composedCarrier = STRUCTURED_CARRIER_KEYS.some((k) => {
     const v = map[k];
     return typeof v === "string" && v.trim().length > 0;
   });
+  // G3 — the universal producer marker is also a structured carrier: a dispatch
+  // carrying ONLY a VALID `GUILD_DISPATCH_PRODUCER` is still producer-composed
+  // (out of reach of quoted prose). Routed through the validated
+  // `hasProducerMarker` so a bogus value is NOT counted as structured.
+  return composedCarrier || hasProducerMarker(toolInput);
 }
 
 /**
@@ -235,7 +246,9 @@ export function hasProducerMarker(toolInput: unknown): boolean {
   const env = (toolInput as Record<string, unknown>)["env"];
   if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
   const v = (env as Record<string, unknown>)[PRODUCER_MARKER_ENV];
-  return typeof v === "string" && v.trim().length > 0;
+  // Require a recognizable Guild dispatch token (versioned), not just any
+  // non-empty value — a stale/bogus marker must not forge structured evidence.
+  return typeof v === "string" && v.trim().startsWith(PRODUCER_MARKER_VALUE_PREFIX);
 }
 
 /** Classify the lane evidence carried by this dispatch. */
