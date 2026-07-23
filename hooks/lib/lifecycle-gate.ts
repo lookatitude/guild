@@ -214,56 +214,38 @@ export interface LifecycleGateConfig {
 }
 
 /**
- * Tolerant reader for `.guild/settings.json` (+ `.guild/settings.local.json`
- * overlay) → `defaults.lifecycle_gate.*`. Mirrors `lean-lead-guard.ts
- * readLeanLeadConfig`: a missing file, malformed JSON, or wrong-typed field
- * degrades to the documented defaults rather than throwing. The threshold must
- * be a positive INTEGER — a fractional value would defeat the
+ * Reader for `defaults.lifecycle_gate.*` — degrades to the documented default
+ * (enabled, threshold=20) on ANY failure, never throws. The threshold must be
+ * a positive INTEGER — a fractional value would defeat the
  * `floor(count/threshold)` re-arm arithmetic below.
  *
- * rf-wi-01 (G1 codex-review fix, P1): reads settings.json THEN settings.local.json
- * (applied second, so a local override wins per-field) — previously only
- * settings.json was read, so a `defaults.lifecycle_gate` override placed in
- * settings.local.json was silently ignored.
+ * rf-wi-01 (G1 codex-review round-2 fix, P1): delegates to the canonical
+ * `resolveSettings()` — the SAME 5-layer resolver `config show`/`config resolve`
+ * use — rather than a hand-rolled project-file-only read. The round-1 fix
+ * (settings.json + settings.local.json, applied in order) still missed
+ * WORKSPACE-level inheritance. Mirrors `lean-lead-guard.ts readLeanLeadConfig`
+ * and the established precedent in hooks/update-check.ts's `readUpdateConfig`.
  */
-function applyLifecycleGateOverride(
-  parsed: Record<string, unknown>,
-  current: LifecycleGateConfig
-): LifecycleGateConfig {
-  let { enabled, threshold } = current;
-  const defs = parsed["defaults"];
-  if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-    const gate = (defs as Record<string, unknown>)["lifecycle_gate"];
-    if (gate !== null && typeof gate === "object" && !Array.isArray(gate)) {
-      const g = gate as Record<string, unknown>;
-      if (typeof g["enabled"] === "boolean") enabled = g["enabled"];
-      const rawThreshold = g["adhoc_activity_threshold"];
-      if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-        threshold = rawThreshold;
-      }
-    }
-  }
-  return { enabled, threshold };
-}
-
 export function readLifecycleGateConfig(guildRoot: string): LifecycleGateConfig {
-  let config: LifecycleGateConfig = {
-    enabled: DEFAULT_LIFECYCLE_GATE_ENABLED,
-    threshold: DEFAULT_ADHOC_THRESHOLD,
-  };
   try {
-    const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");
-    config = applyLifecycleGateOverride(JSON.parse(raw) as Record<string, unknown>, config);
+    const { resolveSettings } = require("../../src/modules/config/workflows/settings-resolver") as {
+      resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
+    };
+    const parsed = resolveSettings({ cwd: guildRoot }).config as {
+      defaults?: { lifecycle_gate?: { enabled?: unknown; adhoc_activity_threshold?: unknown } };
+    };
+    const g = parsed.defaults?.lifecycle_gate ?? {};
+    const enabled = typeof g.enabled === "boolean" ? g.enabled : DEFAULT_LIFECYCLE_GATE_ENABLED;
+    const threshold =
+      typeof g.adhoc_activity_threshold === "number" &&
+      Number.isInteger(g.adhoc_activity_threshold) &&
+      g.adhoc_activity_threshold >= 1
+        ? g.adhoc_activity_threshold
+        : DEFAULT_ADHOC_THRESHOLD;
+    return { enabled, threshold };
   } catch {
-    /* missing/corrupt settings.json → documented defaults */
+    return { enabled: DEFAULT_LIFECYCLE_GATE_ENABLED, threshold: DEFAULT_ADHOC_THRESHOLD };
   }
-  try {
-    const rawLocal = fs.readFileSync(path.join(guildRoot, ".guild", "settings.local.json"), "utf8");
-    config = applyLifecycleGateOverride(JSON.parse(rawLocal) as Record<string, unknown>, config);
-  } catch {
-    /* missing/corrupt settings.local.json → settings.json / defaults stand */
-  }
-  return config;
 }
 
 /**

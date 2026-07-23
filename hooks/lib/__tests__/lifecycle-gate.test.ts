@@ -253,6 +253,18 @@ describe("lifecycle-gate — readLifecycleGateConfig", () => {
     fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), "{not json");
     expect(readLifecycleGateConfig(root)).toEqual({ enabled: true, threshold: 6 });
   });
+
+  // rf-wi-01 (G1 codex-review round-2 fix, P1): a workspace-level default is now
+  // honored — codex's exact repro (a workspace child sees resolveSettings()'s
+  // parent-workspace override).
+  it("honors a WORKSPACE-level defaults.lifecycle_gate override for a child project (codex round-2 regression)", () => {
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "workspace.json"), JSON.stringify({ is_workspace: true }));
+    writeSettings(root, { defaults: { lifecycle_gate: { enabled: false, adhoc_activity_threshold: 7 } } });
+    const child = path.join(root, "child-project");
+    fs.mkdirSync(path.join(child, ".guild"), { recursive: true });
+    expect(readLifecycleGateConfig(child)).toEqual({ enabled: false, threshold: 7 });
+  });
 });
 
 describe("lifecycle-gate — isOverridden", () => {

@@ -80,10 +80,15 @@ describe("config-schema.ts — G1 registration (CONFIG_SCHEMA)", () => {
     expect(getFieldSpec("host_mode")?.default).toBe(null);
   });
 
-  it("host_mode is flagged security-sensitive with a fail-closed most_restrictive", () => {
+  it("host_mode is flagged security-sensitive with a fail-closed most_restrictive (codex round-2 fix: 'read_only', not null)", () => {
+    // round-2 codex-review P1: null is NOT universally the safest value for
+    // host_mode — tmux-backend.ts's resolveTeamPaneHostMode lifts an unset/null
+    // host_mode to "bypass_all" for team panes, so repairing a malformed value to
+    // null would fail OPEN on that path. "read_only" never grants edit/bypass
+    // autonomy to any host, regardless of consumer.
     const spec = getFieldSpec("host_mode");
     expect(spec?.security_sensitive).toBe(true);
-    expect(spec?.most_restrictive).toBe(null);
+    expect(spec?.most_restrictive).toBe("read_only");
   });
 
   it("host_mode is a NULLABLE enum — not type 'object' (codex-review P1 fix)", () => {
@@ -121,6 +126,21 @@ describe("config-schema.ts — G1 registration (CONFIG_SCHEMA)", () => {
     const out = JSON.parse(store.get(RECONCILE_SETTINGS) as string);
     expect(out.host_mode).toBe("read_only"); // unchanged — a valid value is NOT malformed
     expect(r.findings.find((f) => f.key === "host_mode")?.status).not.toBe("malformed");
+  });
+
+  it("reconcile repair of a genuinely MALFORMED host_mode fails closed to 'read_only', not null (codex round-2 regression)", () => {
+    // codex's exact repro: a malformed reconciled host_mode ("godmode") used to
+    // repair to null, whose EFFECTIVE team-pane mode is "bypass_all" (fail-open).
+    const seed = {
+      [RECONCILE_SETTINGS]: JSON.stringify({ host_mode: "godmode" }, null, 2) + "\n",
+      [RECONCILE_PROV]:
+        JSON.stringify({ host_mode: { provenance: "reconciled", last_reconciled_at: "2026-06-15T12:00:00Z" } }, null, 2) + "\n",
+    };
+    const { io, store } = memReconcileIO(seed);
+    const r = reconcileConfig({ cwd: "/repo", mode: "repair", now: "2026-07-01T00:00:00Z", io });
+    const out = JSON.parse(store.get(RECONCILE_SETTINGS) as string);
+    expect(out.host_mode).toBe("read_only"); // fail-closed, not null (which would fail OPEN via tmux's ask->bypass_all lift)
+    expect(r.findings.find((f) => f.key === "host_mode")?.action).toBe("repair-most-restrictive");
   });
 
   it("every NEW_KEYS entry is present in the flattened schema exactly once", () => {

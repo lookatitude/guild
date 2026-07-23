@@ -5206,6 +5206,14 @@ var init_telemetry = __esm({
 });
 
 // ../src/modules/config/workflows/settings-resolver.ts
+var settings_resolver_exports = {};
+__export(settings_resolver_exports, {
+  deepMerge: () => deepMerge,
+  initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
+  isPlainObject: () => isPlainObject2,
+  resolveSettings: () => resolveSettings2,
+  rigorProfile: () => rigorProfile
+});
 function resolveSettings2(opts) {
   const t0 = Date.now();
   const result = resolveSettings(opts);
@@ -7886,35 +7894,17 @@ var DEFAULT_ENABLED = DEFAULTS.defaults.lean_lead.enabled;
 var OPEN_LANE_STATUSES = /* @__PURE__ */ new Set(["pending", "in_progress"]);
 var HANDS_ON_TOOLS = /* @__PURE__ */ new Set(["Edit", "Write"]);
 var ADVISORY_STATE_SCHEMA = "guild.lean_lead_advisory.v1";
-function applyLeanLeadOverride(parsed, current) {
-  let { enabled, threshold } = current;
-  const defs = parsed["defaults"];
-  if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-    const leanLead = defs["lean_lead"];
-    if (leanLead !== null && typeof leanLead === "object" && !Array.isArray(leanLead)) {
-      const ll = leanLead;
-      if (typeof ll["enabled"] === "boolean") enabled = ll["enabled"];
-      const rawThreshold = ll["hands_on_edit_threshold"];
-      if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-        threshold = rawThreshold;
-      }
-    }
-  }
-  return { enabled, threshold };
-}
 function readLeanLeadConfig(guildRoot) {
-  let config = { enabled: DEFAULT_ENABLED, threshold: DEFAULT_THRESHOLD };
   try {
-    const raw = fs10.readFileSync(path12.join(guildRoot, ".guild", "settings.json"), "utf8");
-    config = applyLeanLeadOverride(JSON.parse(raw), config);
+    const { resolveSettings: resolveSettings3 } = (init_settings_resolver(), __toCommonJS(settings_resolver_exports));
+    const parsed = resolveSettings3({ cwd: guildRoot }).config;
+    const ll = parsed.defaults?.lean_lead ?? {};
+    const enabled = typeof ll.enabled === "boolean" ? ll.enabled : DEFAULT_ENABLED;
+    const threshold = typeof ll.hands_on_edit_threshold === "number" && Number.isInteger(ll.hands_on_edit_threshold) && ll.hands_on_edit_threshold >= 1 ? ll.hands_on_edit_threshold : DEFAULT_THRESHOLD;
+    return { enabled, threshold };
   } catch {
+    return { enabled: DEFAULT_ENABLED, threshold: DEFAULT_THRESHOLD };
   }
-  try {
-    const rawLocal = fs10.readFileSync(path12.join(guildRoot, ".guild", "settings.local.json"), "utf8");
-    config = applyLeanLeadOverride(JSON.parse(rawLocal), config);
-  } catch {
-  }
-  return config;
 }
 function isOverridden(env = process.env) {
   return env["GUILD_LEAN_LEAD_OVERRIDE"] === "1";

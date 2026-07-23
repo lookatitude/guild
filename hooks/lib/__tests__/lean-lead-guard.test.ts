@@ -173,6 +173,19 @@ describe("lean-lead-guard — readLeanLeadConfig", () => {
     fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), "{not json");
     expect(readLeanLeadConfig(root)).toEqual({ enabled: true, threshold: 4 });
   });
+
+  // rf-wi-01 (G1 codex-review round-2 fix, P1): a workspace-level default is now
+  // honored, not just the project's own two files — codex's exact repro (a
+  // workspace child sees resolveSettings()'s parent-workspace override, but the
+  // round-1 project-file-only fix did not).
+  it("honors a WORKSPACE-level defaults.lean_lead override for a child project (codex round-2 regression)", () => {
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "workspace.json"), JSON.stringify({ is_workspace: true }));
+    writeSettings(root, { defaults: { lean_lead: { enabled: false, hands_on_edit_threshold: 6 } } });
+    const child = path.join(root, "child-project");
+    fs.mkdirSync(path.join(child, ".guild"), { recursive: true });
+    expect(readLeanLeadConfig(child)).toEqual({ enabled: false, threshold: 6 });
+  });
 });
 
 describe("lean-lead-guard — isOverridden", () => {

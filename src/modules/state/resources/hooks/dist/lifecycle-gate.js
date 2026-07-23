@@ -5206,6 +5206,14 @@ var init_telemetry = __esm({
 });
 
 // ../src/modules/config/workflows/settings-resolver.ts
+var settings_resolver_exports = {};
+__export(settings_resolver_exports, {
+  deepMerge: () => deepMerge,
+  initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
+  isPlainObject: () => isPlainObject2,
+  resolveSettings: () => resolveSettings2,
+  rigorProfile: () => rigorProfile
+});
 function resolveSettings2(opts) {
   const t0 = Date.now();
   const result = resolveSettings(opts);
@@ -8431,38 +8439,17 @@ function safeTs(value) {
 }
 var GATE_STATE_SCHEMA = "guild.lifecycle_gate.v1";
 var CLOSE_STATE_SCHEMA = "guild.lifecycle_close.v1";
-function applyLifecycleGateOverride(parsed, current) {
-  let { enabled, threshold } = current;
-  const defs = parsed["defaults"];
-  if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-    const gate = defs["lifecycle_gate"];
-    if (gate !== null && typeof gate === "object" && !Array.isArray(gate)) {
-      const g = gate;
-      if (typeof g["enabled"] === "boolean") enabled = g["enabled"];
-      const rawThreshold = g["adhoc_activity_threshold"];
-      if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-        threshold = rawThreshold;
-      }
-    }
-  }
-  return { enabled, threshold };
-}
 function readLifecycleGateConfig(guildRoot) {
-  let config = {
-    enabled: DEFAULT_LIFECYCLE_GATE_ENABLED,
-    threshold: DEFAULT_ADHOC_THRESHOLD
-  };
   try {
-    const raw = fs11.readFileSync(path13.join(guildRoot, ".guild", "settings.json"), "utf8");
-    config = applyLifecycleGateOverride(JSON.parse(raw), config);
+    const { resolveSettings: resolveSettings3 } = (init_settings_resolver(), __toCommonJS(settings_resolver_exports));
+    const parsed = resolveSettings3({ cwd: guildRoot }).config;
+    const g = parsed.defaults?.lifecycle_gate ?? {};
+    const enabled = typeof g.enabled === "boolean" ? g.enabled : DEFAULT_LIFECYCLE_GATE_ENABLED;
+    const threshold = typeof g.adhoc_activity_threshold === "number" && Number.isInteger(g.adhoc_activity_threshold) && g.adhoc_activity_threshold >= 1 ? g.adhoc_activity_threshold : DEFAULT_ADHOC_THRESHOLD;
+    return { enabled, threshold };
   } catch {
+    return { enabled: DEFAULT_LIFECYCLE_GATE_ENABLED, threshold: DEFAULT_ADHOC_THRESHOLD };
   }
-  try {
-    const rawLocal = fs11.readFileSync(path13.join(guildRoot, ".guild", "settings.local.json"), "utf8");
-    config = applyLifecycleGateOverride(JSON.parse(rawLocal), config);
-  } catch {
-  }
-  return config;
 }
 function isOverridden(env = process.env, promptText = null) {
   if (env[ENV_OVERRIDE_VAR] === "1") return true;

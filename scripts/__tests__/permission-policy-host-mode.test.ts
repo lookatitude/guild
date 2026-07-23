@@ -84,4 +84,28 @@ describe("readRuntimePermissionConfig — host_mode (G1 registration)", () => {
     fs.writeFileSync(path.join(root, ".guild", "settings.local.json"), "{not json");
     expect(readRuntimePermissionConfig(root).host_mode).toBe("auto");
   });
+
+  // rf-wi-01 (G1 codex-review round-2 fix, P1): a workspace-level host_mode is now
+  // honored for a child project — codex's exact repro (a workspace child sees
+  // resolveSettings()'s parent-workspace override, but the round-1 project-file-
+  // only fix did not).
+  it("honors a WORKSPACE-level host_mode override for a child project (codex round-2 regression)", () => {
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "workspace.json"), JSON.stringify({ is_workspace: true }));
+    writeSettings(root, { host_mode: "read_only" });
+    const child = path.join(root, "child-project");
+    fs.mkdirSync(path.join(child, ".guild"), { recursive: true });
+    expect(readRuntimePermissionConfig(child).host_mode).toBe("read_only");
+  });
+
+  // rf-wi-01 (G1 codex-review round-2 fix, P1): an explicit `host_mode: null` at a
+  // LOWER-precedence layer now actually CLEARS a higher layer's non-null value —
+  // codex's exact repro (project host_mode:"bypass_all" + project-local host_mode:
+  // null used to still resolve to "bypass_all" under the old per-field
+  // "apply if string" merge, which had no way to represent "clear").
+  it("an explicit host_mode:null in settings.local.json CLEARS a project settings.json value", () => {
+    writeSettings(root, { host_mode: "bypass_all" });
+    writeLocalSettings(root, { host_mode: null });
+    expect(readRuntimePermissionConfig(root).host_mode).toBeUndefined();
+  });
 });

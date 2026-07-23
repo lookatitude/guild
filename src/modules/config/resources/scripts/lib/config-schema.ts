@@ -163,15 +163,22 @@ const SECURITY_MOST_RESTRICTIVE_NONENUM: Record<string, unknown> = {
  * requires `typeof value === "object"` — so a genuinely VALID enum string (e.g.
  * `host_mode: "read_only"`) would be misclassified as malformed and `reconcile
  * repair` would reset it back to `null` (P1 finding, reproduced: a user's real
- * `host_mode` setting got silently clobbered on repair). `most_restrictive: null`
- * here IS the field's own default (already the safest — no override), declared
- * explicitly so a malformed value repairs ACTIVELY (not the passive "security-hold").
+ * `host_mode` setting got silently clobbered on repair).
+ *
+ * `most_restrictive` is an EXPLICIT enum member, NOT `null` (round-2 codex-review
+ * P1 fix): `null` reads as "safest" in isolation, but for `host_mode` specifically
+ * it is NOT — `tmux-backend.ts`'s `resolveTeamPaneHostMode` lifts an unset/null
+ * host_mode to `"bypass_all"` for team panes (the #54 fix), so repairing a
+ * malformed value to `null` would fail-OPEN, not fail-closed, on that path.
+ * `"read_only"` is the genuinely most-restrictive HOST_MODES member regardless of
+ * consumer (it never grants edit/bypass autonomy to any host).
  */
 interface NullableEnumOverride {
   enum_values: readonly string[];
+  most_restrictive: string;
 }
 const NULLABLE_ENUM_OVERRIDES: Record<string, NullableEnumOverride> = {
-  host_mode: { enum_values: HOST_MODES },
+  host_mode: { enum_values: HOST_MODES, most_restrictive: "read_only" },
 };
 
 /**
@@ -203,8 +210,7 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
     } else if (nullableEnum) {
       spec.enum_values = nullableEnum.enum_values;
       spec.nullable = true;
-      // The field's own default (null = no override) IS the safest value.
-      spec.most_restrictive = null;
+      spec.most_restrictive = nullableEnum.most_restrictive;
     } else if (key in SECURITY_MOST_RESTRICTIVE_NONENUM) {
       spec.most_restrictive = SECURITY_MOST_RESTRICTIVE_NONENUM[key];
     }

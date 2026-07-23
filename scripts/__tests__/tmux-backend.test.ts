@@ -304,7 +304,10 @@ describe("TmuxTeamBackend.plan() — the real launcher call chain resolves the s
         dryRun: true,
       });
       const orchestratorCmd = plan.commands[0]!.argv[plan.commands[0]!.argv.length - 1]!;
-      // resolveHostLaunch("claude", "read_only") -> the read-only launch mode, NOT bypassPermissions.
+      // resolveHostLaunch("claude", "read_only") -> ["--tools", "Read,Grep,Glob"], NOT bypassPermissions.
+      // codex round-2 P2 fix: a POSITIVE assertion — the earlier not.toContain alone
+      // would also pass for a bare `claude` command with no flags at all.
+      expect(orchestratorCmd).toContain("claude --tools Read,Grep,Glob");
       expect(orchestratorCmd).not.toContain("bypassPermissions");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

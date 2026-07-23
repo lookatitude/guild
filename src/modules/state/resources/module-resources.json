@@ -22,14 +22,14 @@
       "id": "Stop:lean-lead-guard.js",
       "source_path": "hooks/dist/lean-lead-guard.js",
       "resource_path": "resources/hooks/dist/lean-lead-guard.js",
-      "sha256": "5a67d04c43ed809601767b12d4744e585d8a1d91fba0af789421255b2c42c356"
+      "sha256": "e245044f8ab03e934db4ce71d764f39bd51bfad4ebeef7f47dcc8cda63f4c8bf"
     },
     {
       "category": "hooks",
       "id": "Stop:lifecycle-gate.js",
       "source_path": "hooks/dist/lifecycle-gate.js",
       "resource_path": "resources/hooks/dist/lifecycle-gate.js",
-      "sha256": "acb1b248637eb6ca4a2ec1a55e10d1f4dfc200b7d1d58551ed98bde221be3052"
+      "sha256": "027232ee859b868ba471cc85813194ffc258687ed9bafef2066d4f1cdca5d9fc"
     },
     {
       "category": "scripts",
