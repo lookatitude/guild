@@ -251,6 +251,11 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * `.claude-plugin/**` untouched. Pins recomputed AFTER the module-resource sync
  * (both `--check` modes clean); `check-surface-pins.ts` observed RED
  * (tree_pin_stale skills) against the prior pin before this bump.
+ *
+ * MERGE-TRAIN re-ratification 2026-07-23: this branch merged post-#86 `next`
+ * (execute-plan surface change), so the skills tree is the UNION of #86 + #89
+ * surface changes; recomputed hash EQUALS this branch's pre-merge pin (the
+ * branch already carried #86's content — stacked) — verified, not assumed.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
