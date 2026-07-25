@@ -158,6 +158,17 @@ export interface TeamLaunchResult {
     degraded_from: string;
     reason: string;
   };
+  /**
+   * rf-wi-04 item 1 — per-host hook-install preflight verdicts (remote backend).
+   * A host with `installed:false` had the bypass flag WITHHELD from its Claude
+   * panes (they launched bare) — recorded, never silent.
+   */
+  remoteHookProbes?: Array<{ hostId: string; endpoint: string; installed: boolean; detail: string }>;
+  /**
+   * rf-wi-04 item 2 — the teardown verdict from a rollback teardown (e.g. after a
+   * spawn failure). `outcome === "orphaned"` ⇒ a remote lane may still be live.
+   */
+  remoteTeardown?: TeardownVerdict;
 }
 
 export interface TeamBackend {
@@ -236,10 +247,48 @@ export interface RemoteProbeResult {
   missing: string[];
 }
 
+/**
+ * rf-wi-04 (G4) item 1 — the hook-install preflight verdict for a far host.
+ * `installed:true` is the PRECONDITION that lets a remote Claude pane launch
+ * under a resolved permission-mode bypass flag: it proves Guild's own hook
+ * gate (PreToolUse etc.) is present on the remote, so bypassing the host's
+ * native prompt does not remove a guardrail without a Guild-side one behind it.
+ * `installed:false` ⇒ the pane MUST launch bare (no bypass flag) — an honest
+ * partial, never an unsafe bypass.
+ */
+export interface RemoteHookProbeResult {
+  installed: boolean;
+  detail: string;
+}
+
+/**
+ * rf-wi-04 (G4) item 2 — the teardown verdict. Teardown can no longer fail
+ * silently: a spawn-fail + teardown-fail must SURFACE any pane whose kill hop
+ * did not confirm, so a live remote lane is recorded (`orphaned`) rather than
+ * leaked with no receipt describing it.
+ */
+export interface TeardownVerdict {
+  /** "clean" ⇒ every tracked pane confirmed torn down; "orphaned" ⇒ ≥1 unknown. */
+  outcome: "clean" | "orphaned";
+  /** remoteIds whose kill hop returned success. */
+  killed: string[];
+  /** Panes whose teardown hop failed — they MAY still be live with no receipt. */
+  orphaned: RemotePaneHandle[];
+  detail: string;
+}
+
 export interface RemoteTransport {
   readonly kind: string;
   connect(host: RemoteHostTarget): RemoteConnectResult;
   probe(host: RemoteHostTarget, binaries: string[]): RemoteProbeResult;
+  /**
+   * rf-wi-04 item 1 — verify Guild's hook bundle is installed on the far host
+   * BEFORE a remote Claude pane is trusted with a permission-mode bypass flag.
+   * Distinct from `probe` (which only checks binaries on PATH): a host can have
+   * `claude` + `tmux` yet no Guild plugin/hooks, in which case bypassing native
+   * prompts would strip the host's own guardrail with nothing behind it.
+   */
+  probeHooks(host: RemoteHostTarget): RemoteHookProbeResult;
   /**
    * Spawn the pane's command on the remote host. Implementations MUST detach
    * the process (e.g. wrap in `tmux new-session -d`) so it outlives this call
@@ -251,16 +300,49 @@ export interface RemoteTransport {
    * former inbox-file `send()` had no reader and duplicated both.
    */
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle;
-  teardown(): void;
+  /**
+   * Tear down every pane this transport spawned. Returns a {@link TeardownVerdict}
+   * (rf-wi-04 item 2) so a failed teardown hop surfaces an orphaned lane instead
+   * of vanishing — the former `void` return let a spawn-fail + teardown-fail
+   * leave a live remote pane no receipt described.
+   */
+  teardown(): TeardownVerdict;
 }
 
 export interface RemoteTeamBackendOpts {
   transport?: RemoteTransport;
   resolveHostTarget?: (spec: Specialist) => RemoteHostTarget;
   resolveAdapter?: AdapterResolver;
+  /**
+   * rf-wi-04 item 3 — resolved `--permission-mode …` argv spliced onto a remote
+   * CLAUDE pane's launch, applied ONLY when that host's hook-install preflight
+   * (item 1) verified AND the caller passed these args. Absent/empty ⇒ BARE — the
+   * remote path deliberately does NOT default to the local tmux bypass args,
+   * because probeHooks proves the hook bundle is present, not that Claude loaded
+   * it (a stale remote checkout would be a false positive). Remote bypass is
+   * therefore OPT-IN on top of the presence proof. Codex/other panes are never
+   * touched (only `hostKind === "claude"` consumes it).
+   */
+  claudeLaunchArgs?: string[];
+  /**
+   * rf-wi-04 item 2 (codex review Q2a, round 2) — durable sink for an orphaned-
+   * lane warning, emitted at DETECTION time inside launch(). This exists because
+   * the production caller wraps launch() in bounded retry (retry-lane.ts): a
+   * later successful attempt DISCARDS an earlier failed attempt's result, which
+   * would otherwise drop the orphan record surfaced only in that result. Emitting
+   * here guarantees the orphan reaches a durable channel regardless of how the
+   * caller handles the returned envelope. Defaults to a stderr writer.
+   */
+  warn?: (message: string) => void;
 }
 
 export interface MockTransportOpts {
   failConnectFor?: (host: RemoteHostTarget) => boolean;
   missingBinaries?: (host: RemoteHostTarget) => string[];
+  /** rf-wi-04 item 1 — simulate the far-host hook-install verdict (default: not installed). */
+  hooksInstalledFor?: (host: RemoteHostTarget) => boolean;
+  /** rf-wi-04 item 2 — simulate a spawn failure on matching hosts. */
+  failSpawnFor?: (host: RemoteHostTarget) => boolean;
+  /** rf-wi-04 item 2 — simulate a teardown hop that leaves spawned panes orphaned. */
+  orphanOnTeardown?: boolean;
 }
