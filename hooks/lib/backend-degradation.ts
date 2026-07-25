@@ -61,6 +61,17 @@ import type { DispatchAttribution } from "./dispatch-attribution.js";
 /** The env var an operator sets to consciously accept a backend downgrade. */
 export const OVERRIDE_ENV = "GUILD_ALLOW_BACKEND_DEGRADE";
 
+/**
+ * The env var an operator sets to turn on STRICT mode: block a Guild lane that
+ * carries NO structured producer marker (drift), not just record it (rf-wi-03 /
+ * G3). Deliberately an ENV flag (not a config key) this wave to avoid touching
+ * the closed config schema (owned by rf-wi-01) and the pinned skill surface
+ * (rf-wi-06); registering it as `defaults.dispatch.block_unmarked_lanes` is a
+ * followup. Default OFF preserves the no-false-positive-on-a-quoted-brief
+ * invariant unless the operator opts in.
+ */
+export const BLOCK_UNMARKED_ENV = "GUILD_BLOCK_UNMARKED_LANES";
+
 /** The receipt's self-versioned schema token and its `event` value. */
 export const BACKEND_DEGRADATION_EVENT = "backend_degradation";
 export const BACKEND_DEGRADATION_SCHEMA = "guild.backend_degradation.v1" as const;
@@ -169,6 +180,24 @@ export function hasHandoffProtocolBlock(prompt: string, runId: string): boolean 
  */
 export type LaneEvidence = "structured" | "prompt_only" | "none";
 
+/**
+ * The universal structured producer marker key (rf-wi-03 / G3). Set on EVERY
+ * producer-composed dispatch env (`composeInProcessDispatch` /
+ * `paneCommand`); restated here (same doctrine as GENERIC_SUBAGENT_TYPE — the
+ * hooks bundle is separate). Its presence is the unforgeable "a Guild producer
+ * built this dispatch" signal that lets the prompt-only rung block a lane which
+ * carries no marker (drift).
+ */
+export const PRODUCER_MARKER_ENV = "GUILD_DISPATCH_PRODUCER";
+
+/**
+ * The marker's valid value shape: `guild.dispatch.v<N>` EXACTLY (versioned —
+ * v1, future v2, …). Anything else (`guild.dispatch.junk`, `guild.dispatch.v1x`,
+ * a bare prefix, a hand-set junk value) is NOT a producer marker, so it cannot
+ * forge structured evidence (adversarial review rounds 1 + 2, finding 3).
+ */
+const PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;
+
 /** The producer-set env keys `composeInProcessDispatch` puts on a lane dispatch. */
 const STRUCTURED_CARRIER_KEYS = [
   "GUILD_SPECIALIST",
@@ -192,10 +221,33 @@ export function hasStructuredCarrier(toolInput: unknown): boolean {
   const env = (toolInput as Record<string, unknown>)["env"];
   if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
   const map = env as Record<string, unknown>;
-  return STRUCTURED_CARRIER_KEYS.some((k) => {
+  const composedCarrier = STRUCTURED_CARRIER_KEYS.some((k) => {
     const v = map[k];
     return typeof v === "string" && v.trim().length > 0;
   });
+  // G3 — the universal producer marker is also a structured carrier: a dispatch
+  // carrying ONLY a VALID `GUILD_DISPATCH_PRODUCER` is still producer-composed
+  // (out of reach of quoted prose). Routed through the validated
+  // `hasProducerMarker` so a bogus value is NOT counted as structured.
+  return composedCarrier || hasProducerMarker(toolInput);
+}
+
+/**
+ * Does the dispatch's own `env` map carry the universal producer marker
+ * (`GUILD_DISPATCH_PRODUCER`)? The narrow twin of `hasStructuredCarrier`: it
+ * asks specifically "did a Guild producer stamp this dispatch?", which the
+ * blockable prompt-only rung reads (G3-3). A dispatch with lane-shaped PROSE but
+ * no marker is not producer-composed — drift, blockable when the operator opts
+ * into `blockUnmarked`.
+ */
+export function hasProducerMarker(toolInput: unknown): boolean {
+  if (toolInput === null || typeof toolInput !== "object") return false;
+  const env = (toolInput as Record<string, unknown>)["env"];
+  if (env === null || typeof env !== "object" || Array.isArray(env)) return false;
+  const v = (env as Record<string, unknown>)[PRODUCER_MARKER_ENV];
+  // Require the EXACT versioned Guild dispatch token, not just any non-empty
+  // value — a stale/bogus marker must not forge structured evidence.
+  return typeof v === "string" && PRODUCER_MARKER_VALUE_RE.test(v.trim());
 }
 
 /** Classify the lane evidence carried by this dispatch. */
@@ -505,6 +557,18 @@ export function isOverrideEngaged(env: NodeJS.ProcessEnv): boolean {
   return v === "1" || v === "true" || v === "yes";
 }
 
+/**
+ * Is STRICT unmarked-lane blocking engaged (`GUILD_BLOCK_UNMARKED_LANES`)? Same
+ * affirmative-allowlist doctrine as the override — unset / "0" / "false" leaves
+ * the guard in its default record-not-block posture for prompt-only drift.
+ */
+export function isBlockUnmarkedEngaged(env: NodeJS.ProcessEnv): boolean {
+  const raw = env[BLOCK_UNMARKED_ENV];
+  if (typeof raw !== "string") return false;
+  const v = raw.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 // ── Display sanitization ─────────────────────────────────────────────────────
 
 /**
@@ -585,6 +649,15 @@ export interface BackendDegradationFacts {
   isLead: boolean;
   /** Whether the run identity is trustworthy enough to gate on (stale sentinel guard). */
   runFresh: boolean;
+  /**
+   * G3 — the operator opted into blocking a lane that carries NO structured
+   * producer marker (`GUILD_BLOCK_UNMARKED_LANES`). When engaged, a prompt-only
+   * degradation (which is by construction unmarked) becomes blockable instead of
+   * merely recorded. Default false ⇒ the pre-G3 record-not-block behaviour, so
+   * the no-false-positive invariant on a quoted live brief holds unless the
+   * operator turns strict mode on. Absent on hand-built facts ⇒ treated false.
+   */
+  blockUnmarked?: boolean;
 }
 
 export interface BackendDegradationResult {
@@ -669,15 +742,22 @@ export function resolveBackendDegradation(
           ? "auto_resolves_to_team"
           : null;
     if (reason !== null) {
-      // Only STRUCTURED evidence may block. Prompt-only evidence cannot be
-      // told apart from an audit prompt quoting a live brief, so it is recorded
-      // instead — the degradation stays visible without a false-positive DENY.
+      // Only STRUCTURED evidence may block by default. Prompt-only evidence
+      // cannot be told apart from an audit prompt quoting a live brief, so it is
+      // recorded instead — the degradation stays visible without a
+      // false-positive DENY.
       //
-      // The override therefore only applies to a case that WOULD have been
-      // denied. Stamping `allow_override` on a prompt-only dispatch would claim
-      // the override opened a door that was never shut (adversarial review
-      // round 4, finding 3).
-      const blockable = evidence === "structured";
+      // G3 — once the structured producer marker is UNIVERSAL, a genuine lane
+      // always carries it, so a prompt-only (⇒ unmarked, by construction — the
+      // marker is a structured carrier) lane is drift the guard CAN block when
+      // the operator opts into `blockUnmarked`. The residual quoted-live-brief
+      // false positive is the conscious cost of strict mode, and the override
+      // (`GUILD_ALLOW_BACKEND_DEGRADE`) is its documented escape — so the
+      // override still only applies to a case that WOULD have been denied.
+      const blockUnmarked = facts.blockUnmarked === true;
+      const blockable =
+        evidence === "structured" ||
+        (blockUnmarked && evidence === "prompt_only" && !hasProducerMarker(facts.toolInput));
       return {
         ...base,
         decision: !blockable
@@ -749,7 +829,19 @@ export function buildDenyMessage(
   role: string,
   subagentType: string,
   substrate: SubstrateKind,
+  evidence: LaneEvidence = "structured",
 ): string {
+  // G3 — a prompt-only DENY only happens under strict mode (`blockUnmarked`):
+  // the lane carries no structured producer marker, so it was not composed by a
+  // Guild producer (drift). Name that explicitly so the operator understands why
+  // an unmarked lane is now blocked, and how to make it legitimate.
+  const unmarkedClause =
+    evidence === "prompt_only"
+      ? `This lane carries NO structured producer marker (${PRODUCER_MARKER_ENV}) — it was ` +
+        `not composed by a Guild dispatch producer, which is the drift signature strict ` +
+        `mode (${BLOCK_UNMARKED_ENV}) blocks. Dispatch it through the producer path so it ` +
+        `carries the marker, or `
+      : "";
   return (
     `Guild backend integrity (#56): ${backendClause(reason)}, but the "${role}" lane is ` +
     `being dispatched through the in-session Agent tool ` +
@@ -757,7 +849,7 @@ export function buildDenyMessage(
     `silent BACKEND DEGRADATION: no pane, no named specialist, and lane execution ` +
     `semantics change out from under the approved plan. guild:execute-plan's contract is ` +
     `refuse-don't-fallback (skills/meta/execute-plan/dispatch.md §"Backend choice"). ` +
-    `${remedyForSubstrate(substrate)} ` +
+    `${unmarkedClause}${remedyForSubstrate(substrate)} ` +
     `If the team backend genuinely cannot be honored, downgrade CONSCIOUSLY: re-run with ` +
     `${OVERRIDE_ENV}=1 — the fallback is then allowed and a ` +
     `${BACKEND_DEGRADATION_EVENT} receipt is written to the run record either way. ` +
@@ -778,6 +870,7 @@ export function buildAllowMessage(
   subagentType: string,
   substrate: SubstrateKind,
   evidence: LaneEvidence,
+  decision: BackendDegradationDecision = "allow_recorded",
 ): string {
   const head =
     `Guild backend integrity (#56): the "${role}" lane was dispatched through the ` +
@@ -804,6 +897,22 @@ export function buildAllowMessage(
       `so it is not blocked here. ` +
       (evidence === "prompt_only" ? `${promptOnlyClause} ` : "") +
       tail
+    );
+  }
+  // G3 — a conscious OVERRIDE wins over the evidence tier. Under strict mode
+  // (`blockUnmarked`) a prompt-only lane CAN be denied, so an allow_override can
+  // now carry prompt_only evidence; describing it as merely "recorded, not
+  // blocked" would misreport that the override opened a door that WAS shut.
+  if (decision === "allow_override") {
+    return (
+      head +
+      `OVERRIDDEN: ${backendClause(reason)}` +
+      (evidence === "prompt_only"
+        ? ` and this lane carries NO structured producer marker (${PRODUCER_MARKER_ENV}) — ` +
+          `strict mode (${BLOCK_UNMARKED_ENV}) would block it, but the in-session fallback ` +
+          `was allowed because ${OVERRIDE_ENV} is set`
+        : `, and the in-session fallback was allowed because ${OVERRIDE_ENV} is set`) +
+      `. To honor the backend instead: ${remedyForSubstrate(substrate)} ${tail}`
     );
   }
   if (evidence === "prompt_only") {

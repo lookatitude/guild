@@ -22,14 +22,14 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "870beb22cae13cbef5d87203e2461a51fecc3db1dbbf4c18cab285af2ee6f8a5"
+      "sha256": "5eb61a1f89cc4491e995cc8ea0f870dda789ee69f2d1ba910585e64f3431caa3"
     },
     {
       "category": "hooks",
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "1b977120934a003411ea049eb4dc34494ed428ba03b89b3122b790f280b3d5cc"
+      "sha256": "89ca01cc45c6a5e600538af1bcd524a3b6ac0682ff4b25860ec1a2f437e29027"
     },
     {
       "category": "scripts",
@@ -127,7 +127,7 @@
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "75fe4ae366699d4ab9228735f7892bc69eb257e8cea92366336bba84e579da6e"
+      "sha256": "1c57be19408f1ff4d4f9f4be00c0edb4a20c9917bf8952fc7f5a64b0b27b380c"
     },
     {
       "category": "skills",

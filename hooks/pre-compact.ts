@@ -54,6 +54,7 @@ import { resolveGuildRoot } from "./lib/guild-root.js";
 import {
   buildReanchorHeader,
   buildAdditionalContextEnvelope,
+  buildCompactSummaryInstructions,
 } from "./lib/reanchor.js";
 import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
@@ -163,7 +164,18 @@ export async function main(): Promise<void> {
     try {
       const header = buildReanchorHeader(guildRoot);
       if (header !== null) {
-        process.stdout.write(buildAdditionalContextEnvelope("PreCompact", header));
+        // G5(c) (v23x-deferred-followups rf-wi-05, origin oir-wi-58): the
+        // compaction path already CONSUMES `newCustomInstructions` — nothing
+        // emitted it. Use it as the SECOND channel (alongside the existing
+        // `additionalContext` header) to shape the post-compact SUMMARY
+        // itself, telling the compactor to preserve the run's identity/
+        // phase/next-gate facts verbatim. Derived from the identical facts
+        // the header uses, so the two channels never disagree; null only
+        // when the header is also null (same zero-noise gate).
+        const customInstructions = buildCompactSummaryInstructions(guildRoot);
+        process.stdout.write(
+          buildAdditionalContextEnvelope("PreCompact", header, customInstructions ?? undefined),
+        );
       }
     } catch (err) {
       process.stderr.write(

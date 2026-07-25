@@ -24,6 +24,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  DISPATCH_PRODUCER_ENV,
+  DISPATCH_PRODUCER_TOKEN,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
 // P1-L10 permission-policy machinery (issue #54): resolve the host-native
@@ -35,6 +37,7 @@ import type { HostKind } from "../host-types";
 import {
   resolveHostLaunch,
   RUNTIME_DEFAULT_CONFIG,
+  readRuntimePermissionConfig,
   type RuntimePermissionConfig,
 } from "../permission-policy";
 import type { HostMode } from "../permission-policy-schema";
@@ -190,6 +193,10 @@ export function paneCommand(
     : `claude ${launchFragment}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
+    // rf-wi-03 (G3) — the universal structured producer marker on every pane env,
+    // parity with composeInProcessDispatch (the prompt also carries the line-1
+    // twin via buildPrompt).
+    `export ${DISPATCH_PRODUCER_ENV}=${shellQuote(DISPATCH_PRODUCER_TOKEN)}; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
     taskFragment +
     specialistFragment +
@@ -481,12 +488,16 @@ export class TmuxTeamBackend implements TeamBackend {
   plan(req: TeamLaunchRequest): TmuxPlan {
     // Issue #54: composeTmuxCommands defaults permissionConfig to
     // RUNTIME_DEFAULT_CONFIG (host_mode unset), which resolveTeamPaneHostMode
-    // lifts to "bypass_all" for a team pane — the field-verified fix. There is
-    // no settings.json-backed host_mode to read yet (host_mode is not a
-    // registered key in the canonical config schema — see
-    // readRuntimePermissionConfig's own comment); `RuntimePermissionConfig`
-    // remains available for a caller to pass its own resolved config in
-    // programmatically once that surface exists.
+    // lifts to "bypass_all" for a team pane — the field-verified fix. rf-wi-01
+    // (v23x-deferred-followups G1 codex-review fix, P1) registered `host_mode` as
+    // a real settings.json surface AND wires it here: an operator's configured
+    // host_mode (project settings.json, overridable via settings.local.json) now
+    // actually reaches the spawned pane's launch flags via readRuntimePermissionConfig
+    // + resolveTeamPaneHostMode, instead of `show --sources` reporting a value the
+    // dispatch path silently ignored. readRuntimePermissionConfig never throws
+    // (degrades to RUNTIME_DEFAULT_CONFIG-equivalent on any read/parse failure), so
+    // this call is safe even on a missing/corrupt settings.json.
+    const permissionConfig = readRuntimePermissionConfig(req.cwd);
     const commands = composeTmuxCommands({
       mode: req.mode,
       targetName: req.targetName,
@@ -497,6 +508,7 @@ export class TmuxTeamBackend implements TeamBackend {
       resolveAdapter: this.resolveAdapter,
       orchestratorHostKind: req.orchestratorHostKind ?? "claude",
       teamPath: req.teamPath,
+      permissionConfig,
     });
     return { mode: req.mode, targetName: req.targetName, commands };
   }

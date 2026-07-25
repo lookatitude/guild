@@ -183,6 +183,11 @@ const EXPLICIT: Record<string, ConfigUiMeta> = {
 
   // ── Host & roles ───────────────────────────────────────────────────────
   host: meta({ group: "host_roles", label: "Execution host", control: "enum", safety_class: "advanced" }),
+  // rf-wi-01 (G1): the sanctioned, schema-registered P1-L10 host-autonomy override
+  // (the #54 lane reverted an ad-hoc `security.host_mode` key for bypassing this schema).
+  // bypass_all can disable a host's native tool-permission prompt — security_sensitive,
+  // matching security.bypass_permissions_policy's classification.
+  host_mode: meta({ group: "host_roles", label: "Host autonomy override (host_mode)", control: "enum", safety_class: "security_sensitive" }),
   "roles.host": meta({ group: "host_roles", label: "Host role pin", control: "enum", safety_class: "advanced" }),
   "roles.advisory": meta({ group: "host_roles", label: "Advisory role pin", control: "enum", safety_class: "advanced" }),
   "roles.adversarial": meta({ group: "host_roles", label: "Adversarial role pin", control: "enum", safety_class: "advanced" }),
@@ -257,6 +262,12 @@ const EXPLICIT: Record<string, ConfigUiMeta> = {
   "defaults.capability_manifest_ttl_s": meta({ group: "cross_host_runtime", label: "Capability manifest TTL (s)", control: "number", safety_class: "advanced" }),
   "defaults.update.mode": meta({ group: "cross_host_runtime", label: "Update check mode (auto|notify|off)", control: "enum", safety_class: "normal" }),
   "defaults.update.cadence_hours": meta({ group: "cross_host_runtime", label: "Update check cadence (hours)", control: "number", safety_class: "advanced" }),
+
+  // ── Lifecycle guards (rf-wi-01 / G1) — advisory nags, no security impact ───
+  "defaults.lean_lead.enabled": meta({ group: "lifecycle_guards", label: "Lean-lead inline-shortcut advisory", control: "boolean", safety_class: "normal" }),
+  "defaults.lean_lead.hands_on_edit_threshold": meta({ group: "lifecycle_guards", label: "Lean-lead edit threshold", control: "number", safety_class: "normal" }),
+  "defaults.lifecycle_gate.enabled": meta({ group: "lifecycle_guards", label: "Lifecycle-gate ad-hoc-activity advisory", control: "boolean", safety_class: "normal" }),
+  "defaults.lifecycle_gate.adhoc_activity_threshold": meta({ group: "lifecycle_guards", label: "Lifecycle-gate activity threshold", control: "number", safety_class: "normal" }),
 
   // ── Safety / platform ──────────────────────────────────────────────────
   "security.bypass_permissions_policy": meta({ group: "safety_platform", label: "Bypass-permissions policy", control: "enum", safety_class: "security_sensitive" }),

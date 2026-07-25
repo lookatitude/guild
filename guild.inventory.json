@@ -826,6 +826,12 @@
       "matcher": "Write|Edit"
     },
     {
+      "id": "PostToolUse:gate-outcome-writer.js",
+      "source_path": "hooks/dist/gate-outcome-writer.js",
+      "event": "PostToolUse",
+      "matcher": "Write|Edit"
+    },
+    {
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "event": "PostToolUse",
@@ -966,6 +972,11 @@
     {
       "id": "analyze-runs",
       "source_path": "scripts/analyze-runs.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "audit-run-sinks",
+      "source_path": "scripts/audit-run-sinks.ts",
       "kind": "cli"
     },
     {
@@ -1971,6 +1982,11 @@
     {
       "id": "lib/run-manifest-wiring",
       "source_path": "scripts/lib/run-manifest-wiring.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/run-sinks",
+      "source_path": "scripts/lib/run-sinks.ts",
       "kind": "lib"
     },
     {
