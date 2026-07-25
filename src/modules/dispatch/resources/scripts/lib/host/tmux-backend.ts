@@ -24,6 +24,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  DISPATCH_PRODUCER_ENV,
+  DISPATCH_PRODUCER_TOKEN,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
 // P1-L10 permission-policy machinery (issue #54): resolve the host-native
@@ -35,6 +37,7 @@ import type { HostKind } from "../host-types";
 import {
   resolveHostLaunch,
   RUNTIME_DEFAULT_CONFIG,
+  readRuntimePermissionConfig,
   type RuntimePermissionConfig,
 } from "../permission-policy";
 import type { HostMode } from "../permission-policy-schema";
@@ -100,13 +103,15 @@ export function isDebugShellTitle(title: string): boolean {
 // byte-identical to its pre-fix behavior (bare `claude <prompt>`, no flags) —
 // so every OTHER caller is untouched:
 //   - `ClaudePaneAdapter.command()` (pane-adapter.ts) delegates to
-//     `paneCommand` with no launchArgs, used by `RemoteTeamBackend` for ALL
-//     remote (SSH) dispatch. Remote preflight only verifies the binary +
-//     tmux, not that Guild's hook/plugin is installed on the remote host —
-//     so silently bypassing native prompts there would remove the host's own
-//     guardrail without a proven Guild-side one behind it. Left unchanged; a
-//     real fix needs remote hook-installation verification first (a
-//     separate, tracked followup).
+//     `paneCommand` with no launchArgs and stays the BARE path used for any
+//     remote host whose hooks are unproven. rf-wi-04 (G4) closed the former
+//     followup: RemoteTeamBackend now runs a hook-install preflight
+//     (RemoteTransport.probeHooks — Phase 1.6 in remote-backend.ts) and, ONLY
+//     when a far host proves Guild's hook bundle installed, resolves the remote
+//     Claude pane's command through `paneCommand(..., claudeLaunchArgs)`
+//     (bypassing the bare adapter) — so the permission-mode flag reaches a
+//     remote pane exclusively behind the proven Guild-side guardrail. A host
+//     that fails the preflight still launches bare (recorded, never silent).
 //   - Codex is never touched here at all (see resolveClaudeTeamLaunchArgs).
 
 /**
@@ -188,6 +193,10 @@ export function paneCommand(
     : `claude ${launchFragment}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
+    // rf-wi-03 (G3) — the universal structured producer marker on every pane env,
+    // parity with composeInProcessDispatch (the prompt also carries the line-1
+    // twin via buildPrompt).
+    `export ${DISPATCH_PRODUCER_ENV}=${shellQuote(DISPATCH_PRODUCER_TOKEN)}; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
     taskFragment +
     specialistFragment +
@@ -479,12 +488,16 @@ export class TmuxTeamBackend implements TeamBackend {
   plan(req: TeamLaunchRequest): TmuxPlan {
     // Issue #54: composeTmuxCommands defaults permissionConfig to
     // RUNTIME_DEFAULT_CONFIG (host_mode unset), which resolveTeamPaneHostMode
-    // lifts to "bypass_all" for a team pane — the field-verified fix. There is
-    // no settings.json-backed host_mode to read yet (host_mode is not a
-    // registered key in the canonical config schema — see
-    // readRuntimePermissionConfig's own comment); `RuntimePermissionConfig`
-    // remains available for a caller to pass its own resolved config in
-    // programmatically once that surface exists.
+    // lifts to "bypass_all" for a team pane — the field-verified fix. rf-wi-01
+    // (v23x-deferred-followups G1 codex-review fix, P1) registered `host_mode` as
+    // a real settings.json surface AND wires it here: an operator's configured
+    // host_mode (project settings.json, overridable via settings.local.json) now
+    // actually reaches the spawned pane's launch flags via readRuntimePermissionConfig
+    // + resolveTeamPaneHostMode, instead of `show --sources` reporting a value the
+    // dispatch path silently ignored. readRuntimePermissionConfig never throws
+    // (degrades to RUNTIME_DEFAULT_CONFIG-equivalent on any read/parse failure), so
+    // this call is safe even on a missing/corrupt settings.json.
+    const permissionConfig = readRuntimePermissionConfig(req.cwd);
     const commands = composeTmuxCommands({
       mode: req.mode,
       targetName: req.targetName,
@@ -495,6 +508,7 @@ export class TmuxTeamBackend implements TeamBackend {
       resolveAdapter: this.resolveAdapter,
       orchestratorHostKind: req.orchestratorHostKind ?? "claude",
       teamPath: req.teamPath,
+      permissionConfig,
     });
     return { mode: req.mode, targetName: req.targetName, commands };
   }

@@ -1,10 +1,10 @@
 {
   "schema_version": "guild.inventory.v1",
   "generated_at": "1970-01-01T00:00:00.000Z",
-  "plugin_version": "2.3.1",
+  "plugin_version": "2.3.2",
   "manifest": {
     "name": "guild",
-    "version": "2.3.1",
+    "version": "2.3.2",
     "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 2 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
@@ -826,6 +826,12 @@
       "matcher": "Write|Edit"
     },
     {
+      "id": "PostToolUse:gate-outcome-writer.js",
+      "source_path": "hooks/dist/gate-outcome-writer.js",
+      "event": "PostToolUse",
+      "matcher": "Write|Edit"
+    },
+    {
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "event": "PostToolUse",
@@ -966,6 +972,11 @@
     {
       "id": "analyze-runs",
       "source_path": "scripts/analyze-runs.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "audit-run-sinks",
+      "source_path": "scripts/audit-run-sinks.ts",
       "kind": "cli"
     },
     {
@@ -1589,6 +1600,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/emit-remote-orphan",
+      "source_path": "scripts/lib/emit-remote-orphan.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/equivalence-contract",
       "source_path": "scripts/lib/equivalence-contract.ts",
       "kind": "lib"
@@ -1971,6 +1987,11 @@
     {
       "id": "lib/run-manifest-wiring",
       "source_path": "scripts/lib/run-manifest-wiring.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/run-sinks",
+      "source_path": "scripts/lib/run-sinks.ts",
       "kind": "lib"
     },
     {

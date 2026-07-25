@@ -12,6 +12,7 @@ import type {
   MockTransportOpts,
   PaneSpec,
   RemoteConnectResult,
+  RemoteHookProbeResult,
   RemoteHostTarget,
   RemotePaneHandle,
   RemoteProbeResult,
@@ -22,12 +23,42 @@ import type {
   TeamBackend,
   TeamLaunchRequest,
   TeamLaunchResult,
+  TeardownVerdict,
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
 } from "../core/contracts/team-backend";
-import { buildPrompt, paneCommand, shellQuote, wrapLoginShell, binaryForHostKind } from "./tmux-backend";
+import {
+  buildPrompt,
+  paneCommand,
+  shellQuote,
+  wrapLoginShell,
+  binaryForHostKind,
+} from "./tmux-backend";
 import type { HostKind } from "../host-types";
+
+/**
+ * rf-wi-04 item 1 — the remote shell snippet that verifies Guild's hook bundle
+ * is installed. Guild resolves its plugin root from GUILD_PLUGIN_ROOT (Claude's
+ * CLAUDE_PLUGIN_ROOT is the compat alias — see hooks/bootstrap.sh); the hooks
+ * that actually wire the PreToolUse gate live at `<root>/hooks/hooks.json`. So
+ * "hooks bundle present on the far host" ⟺ that file exists under the resolved
+ * root. This is NECESSARY BUT NOT SUFFICIENT: it proves the bundle is on disk,
+ * NOT that Claude actually loaded/enabled/trusts it (a stale or partial checkout
+ * pointed at by GUILD_PLUGIN_ROOT would be a false positive). That gap is why
+ * rf-wi-04 makes the remote bypass flag OPT-IN on top of this proof (see
+ * RemoteTeamBackend.claudeLaunchArgs) rather than auto-granting it — presence
+ * gates OUT the clearly-unsafe hosts (no Guild install at all) without being
+ * trusted as a full guarantee. Residual (matching connect/probe/spawn): the far
+ * host's non-interactive shell must have GUILD_PLUGIN_ROOT exported (or reachable
+ * via the host's login_shell wrap) — the same PATH-visibility residual the binary
+ * probe documents. A tighter proof (query the live Claude for its loaded hook
+ * set) is a followup.
+ */
+const HOOK_INSTALL_PROBE =
+  'root="${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"; ' +
+  '[ -n "$root" ] && [ -f "$root/hooks/hooks.json" ] && echo GUILD_HOOKS_INSTALLED || true';
+const HOOK_INSTALL_SIGNAL = "GUILD_HOOKS_INSTALLED";
 
 // ── MockTransport ─────────────────────────────────────────────────────────────
 
@@ -37,13 +68,21 @@ export class MockTransport implements RemoteTransport {
   readonly spawns: Array<{ host: RemoteHostTarget; spec: PaneSpec; command: string }> = [];
   teardowns = 0;
   readonly probes: Array<{ host: RemoteHostTarget; binaries: string[] }> = [];
+  readonly hookProbes: RemoteHostTarget[] = [];
+  private handles: RemotePaneHandle[] = [];
   private failConnectFor?: (host: RemoteHostTarget) => boolean;
   private missingBinaries?: (host: RemoteHostTarget) => string[];
+  private hooksInstalledFor?: (host: RemoteHostTarget) => boolean;
+  private failSpawnFor?: (host: RemoteHostTarget) => boolean;
+  private orphanOnTeardown: boolean;
   private counter = 0;
 
   constructor(opts: MockTransportOpts = {}) {
     this.failConnectFor = opts.failConnectFor;
     this.missingBinaries = opts.missingBinaries;
+    this.hooksInstalledFor = opts.hooksInstalledFor;
+    this.failSpawnFor = opts.failSpawnFor;
+    this.orphanOnTeardown = opts.orphanOnTeardown ?? false;
   }
 
   connect(host: RemoteHostTarget): RemoteConnectResult {
@@ -63,9 +102,25 @@ export class MockTransport implements RemoteTransport {
     };
   }
 
-  spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
-    this.spawns.push({ host, spec, command });
+  probeHooks(host: RemoteHostTarget): RemoteHookProbeResult {
+    this.hookProbes.push(host);
+    // Default: NOT installed — so a caller that doesn't opt in sees the safe
+    // bare-launch path (bypass flag withheld), matching real unproven hosts.
+    const installed = this.hooksInstalledFor?.(host) ?? false;
     return {
+      installed,
+      detail: installed
+        ? `mock: hooks verified on ${host.hostId}`
+        : `mock: hooks NOT verified on ${host.hostId}`,
+    };
+  }
+
+  spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
+    if (this.failSpawnFor?.(host)) {
+      throw new Error(`mock: spawn refused for ${spec.name} on ${host.hostId} (${host.endpoint})`);
+    }
+    this.spawns.push({ host, spec, command });
+    const handle: RemotePaneHandle = {
       specialist: spec.name,
       hostId: host.hostId,
       hostKind: host.hostKind,
@@ -73,10 +128,28 @@ export class MockTransport implements RemoteTransport {
       remoteId: `mock-${++this.counter}`,
       loginShell: host.loginShell,
     };
+    this.handles.push(handle);
+    return handle;
   }
 
-  teardown(): void {
+  teardown(): TeardownVerdict {
     this.teardowns++;
+    const handles = this.handles;
+    this.handles = [];
+    if (this.orphanOnTeardown && handles.length > 0) {
+      return {
+        outcome: "orphaned",
+        killed: [],
+        orphaned: handles,
+        detail: `mock: teardown hop failed — ${handles.length} pane(s) may still be live`,
+      };
+    }
+    return {
+      outcome: "clean",
+      killed: handles.map((h) => h.remoteId),
+      orphaned: [],
+      detail: `mock: ${handles.length} pane(s) torn down`,
+    };
   }
 }
 
@@ -86,6 +159,15 @@ export class SshRemoteTransport implements RemoteTransport {
   readonly kind = "ssh";
   private run: RunFn;
   private handles: RemotePaneHandle[] = [];
+  /**
+   * rf-wi-04 item 2 (codex review Q2a) — panes whose `tmux new-session` MAY have
+   * been created remotely but whose spawn ssh hop failed before we could confirm
+   * (e.g. the connection dropped after the session started). The remoteId is
+   * deterministic and computed BEFORE the hop, so teardown can still target them:
+   * without this, such a pane would be untracked and thus invisible to teardown —
+   * a silent live orphan exactly the item-2 gate exists to prevent.
+   */
+  private suspected: RemotePaneHandle[] = [];
   private counter = 0;
 
   constructor(opts: { run?: RunFn } = {}) {
@@ -121,6 +203,24 @@ export class SshRemoteTransport implements RemoteTransport {
     };
   }
 
+  probeHooks(host: RemoteHostTarget): RemoteHookProbeResult {
+    // rf-wi-04 item 1 — check the remote for Guild's hook bundle (the
+    // PreToolUse gate wiring). See HOOK_INSTALL_PROBE for the exact signal.
+    const remoteCmd = host.loginShell ? wrapLoginShell(HOOK_INSTALL_PROBE, host.loginShell) : HOOK_INSTALL_PROBE;
+    const r = this.run("ssh", ["-o", "BatchMode=yes", host.endpoint, remoteCmd]);
+    const installed =
+      r.status === 0 && (r.stdout ?? "").split("\n").some((l) => l.trim() === HOOK_INSTALL_SIGNAL);
+    return {
+      installed,
+      detail: installed
+        ? `ssh: Guild hooks verified at $GUILD_PLUGIN_ROOT/hooks/hooks.json on ${host.endpoint}`
+        : `ssh: Guild hooks NOT found on ${host.endpoint} (ssh exit ${r.status ?? "null"}) — ` +
+          `remote Claude panes launch BARE (bypass flag withheld). Install the Guild plugin on ` +
+          `the remote and ensure GUILD_PLUGIN_ROOT is on the non-interactive shell (or set ` +
+          `defaults.cross_host.hosts.${host.hostId}.login_shell).`,
+    };
+  }
+
   spawn(host: RemoteHostTarget, spec: PaneSpec, command: string): RemotePaneHandle {
     // The session name IS the remoteId — that's what makes teardown's
     // `tmux kill-session -t <remoteId>` an exact, guaranteed match (a bare
@@ -139,17 +239,6 @@ export class SshRemoteTransport implements RemoteTransport {
     // forever (or until the lane process exits) — that can never work for a
     // real dispatched lane, only for the short synchronous probes this
     // transport also runs (connect/probe).
-    const tmuxCmd = `tmux new-session -d -s ${shellQuote(remoteId)} ${shellQuote(command)}`;
-    const wired = host.loginShell ? wrapLoginShell(tmuxCmd, host.loginShell) : tmuxCmd;
-    const r = this.run("ssh", [host.endpoint, wired]);
-    if (r.status !== 0) {
-      // Surface the failure — silently returning a handle would let the
-      // backend report ok:true for a pane that never existed.
-      throw new Error(
-        `remote spawn failed on ${host.endpoint} (ssh/tmux exit ${r.status ?? "null"}): ` +
-          `${(r.stderr ?? "").trim().slice(0, 400) || "no stderr"}`,
-      );
-    }
     const handle: RemotePaneHandle = {
       specialist: spec.name,
       hostId: host.hostId,
@@ -158,17 +247,87 @@ export class SshRemoteTransport implements RemoteTransport {
       remoteId,
       loginShell: host.loginShell,
     };
+    const tmuxCmd = `tmux new-session -d -s ${shellQuote(remoteId)} ${shellQuote(command)}`;
+    const wired = host.loginShell ? wrapLoginShell(tmuxCmd, host.loginShell) : tmuxCmd;
+    const r = this.run("ssh", [host.endpoint, wired]);
+    if (r.status !== 0) {
+      // rf-wi-04 item 2 (Q2a): a non-zero ssh exit does NOT prove the remote
+      // `tmux new-session` never ran — the hop can fail AFTER the session was
+      // created (connection dropped mid-flight). Record the handle as SUSPECTED
+      // so teardown still targets it; otherwise it would be an untracked, silent
+      // live orphan. Then surface the failure (a spawn that can't be confirmed
+      // must not report ok:true).
+      this.suspected.push(handle);
+      throw new Error(
+        `remote spawn failed on ${host.endpoint} (ssh/tmux exit ${r.status ?? "null"}): ` +
+          `${(r.stderr ?? "").trim().slice(0, 400) || "no stderr"}. ` +
+          `Session "${remoteId}" MAY have been created and is tracked for teardown.`,
+      );
+    }
     this.handles.push(handle);
     return handle;
   }
 
-  teardown(): void {
-    for (const h of this.handles) {
-      const killCmd = `tmux kill-session -t ${shellQuote(h.remoteId)} 2>/dev/null || true`;
-      const wired = h.loginShell ? wrapLoginShell(killCmd, h.loginShell) : killCmd;
-      this.run("ssh", [h.endpoint, wired]);
+  teardown(): TeardownVerdict {
+    const killed: string[] = [];
+    const orphaned: RemotePaneHandle[] = [];
+    // Sweep confirmed AND suspected panes (Q2a) — a suspected session that was
+    // never actually created simply reports GONE and costs nothing.
+    const targets = [...this.handles, ...this.suspected];
+    for (const h of targets) {
+      // rf-wi-04 item 2 (codex review Q2b, rounds 1+2): the old
+      // `kill-session ... || true` swallowed a real kill FAILURE, so any healthy
+      // ssh hop reported "killed" even when the pane survived. Kill, then VERIFY
+      // with has-session — BUT `has-session` exits non-zero for MANY reasons
+      // (session absent, server down, `tmux` not found, socket/permission
+      // error). A bare `then ALIVE else GONE` would misclassify every non-absent
+      // failure as GONE (round-2 counterexample). So we only emit GONE when the
+      // failure message is a RECOGNISED "session absent"/"server down" signal
+      // (server down is genuine absence here: ssh already succeeded, so tmux ran
+      // on the host — after our kill an empty server exiting means our session is
+      // gone). Any other/unrecognised failure → UNKNOWN. Verdict per pane:
+      //   ssh hop failed   → orphaned (host unreachable, fate unknown)
+      //   ALIVE            → orphaned (kill failed, pane still live)
+      //   UNKNOWN          → orphaned (couldn't verify — never assume dead)
+      //   GONE             → killed (verified absent)
+      const q = shellQuote(h.remoteId);
+      const verifyCmd =
+        `tmux kill-session -t ${q} 2>/dev/null; ` +
+        `out=$(tmux has-session -t ${q} 2>&1); rc=$?; ` +
+        `if [ "$rc" -eq 0 ]; then echo ALIVE; ` +
+        `elif printf '%s' "$out" | grep -qiE "can.t find|no server running|no such session|session not found"; then echo GONE; ` +
+        `else echo UNKNOWN; fi`;
+      const wired = h.loginShell ? wrapLoginShell(verifyCmd, h.loginShell) : verifyCmd;
+      const r = this.run("ssh", [h.endpoint, wired]);
+      const out = (r.stdout ?? "").split("\n").map((l) => l.trim());
+      // Require a POSITIVE GONE token AND no ALIVE/UNKNOWN — conservative: any
+      // ambiguity leaves the pane recorded as an orphan.
+      if (r.status === 0 && out.includes("GONE") && !out.includes("ALIVE") && !out.includes("UNKNOWN")) {
+        killed.push(h.remoteId);
+      } else {
+        orphaned.push(h);
+      }
     }
     this.handles = [];
+    this.suspected = [];
+    return orphaned.length > 0
+      ? {
+          outcome: "orphaned",
+          killed,
+          orphaned,
+          detail:
+            `remote teardown could not confirm ${orphaned.length} pane(s) killed: ` +
+            orphaned.map((h) => `${h.remoteId}@${h.endpoint}`).join(", ") +
+            ` — ssh kill hop failed OR the session was still ALIVE after kill; these ` +
+            `may still be LIVE. Verify manually with ` +
+            `\`ssh <endpoint> tmux kill-session -t <remoteId>\`.`,
+        }
+      : {
+          outcome: "clean",
+          killed,
+          orphaned: [],
+          detail: `remote teardown verified ${killed.length} pane(s) gone`,
+        };
   }
 }
 
@@ -179,21 +338,41 @@ export class RemoteTeamBackend implements TeamBackend {
   private transport?: RemoteTransport;
   private resolveHostTarget?: (spec: Specialist) => RemoteHostTarget;
   private resolveAdapter?: AdapterResolver;
+  /**
+   * rf-wi-04 item 3 — resolved `--permission-mode …` argv for a remote CLAUDE
+   * pane. Applied ONLY when BOTH (a) the caller EXPLICITLY opted in by passing
+   * these args, and (b) the pane's far host cleared the hook-install preflight
+   * (item 1). DEFAULT is `[]` (BARE) — deliberately NOT the local tmux path's
+   * default bypass. This is the safety fix from the rf-wi-04 codex review:
+   * probeHooks proves the hook bundle is PRESENT, not that Claude loaded/enabled
+   * it, so file-presence alone must not auto-grant bypass (a stale/partial remote
+   * checkout would be a false positive). Bypass on a remote pane therefore
+   * requires deliberate operator intent on top of the presence proof — never a
+   * silent default. Withholding the flag only ever launches bare, which is safe.
+   */
+  private claudeLaunchArgs: string[];
+  /** rf-wi-04 item 2 (Q2a) — durable orphan-warning sink; see RemoteTeamBackendOpts.warn. */
+  private warn: (message: string) => void;
 
   constructor(opts: RemoteTeamBackendOpts = {}) {
     this.transport = opts.transport;
     this.resolveHostTarget = opts.resolveHostTarget;
     this.resolveAdapter = opts.resolveAdapter;
+    // Default BARE (safe). resolveClaudeTeamLaunchArgs is intentionally NOT the
+    // fallback here — see the field doc: presence-not-load means remote bypass
+    // must be opt-in, not the local-parity default.
+    this.claudeLaunchArgs = opts.claudeLaunchArgs ?? [];
+    this.warn = opts.warn ?? ((m) => process.stderr.write(`${m}\n`));
   }
 
   isAvailable(): boolean {
     return !!this.transport;
   }
 
-  private commandFor(spec: Specialist, req: TeamLaunchRequest): { paneSpec: PaneSpec; command: string } {
+  private paneSpecFor(spec: Specialist, req: TeamLaunchRequest): PaneSpec {
     const hostKind: HostKind = spec.host_kind ?? req.orchestratorHostKind ?? "claude";
     const prompt = buildPrompt(req.slug, req.runId, spec, req.teamPath, hostKind);
-    const paneSpec: PaneSpec = {
+    return {
       name: spec.name,
       scope: spec.scope,
       runId: req.runId,
@@ -204,14 +383,54 @@ export class RemoteTeamBackend implements TeamBackend {
       capability_scope: spec.capability_scope,
       specialist: spec.name,
     };
-    const command = this.resolveAdapter
-      ? this.resolveAdapter(hostKind).command(paneSpec)
-      : paneCommand(prompt, req.runId, spec.capability_scope, spec.taskId, spec.name);
-    return { paneSpec, command };
   }
 
-  teardown(): void {
-    this.transport?.teardown();
+  /**
+   * Build the pane's launch command. The resolved permission-mode flags are
+   * spliced onto a Claude pane ONLY when BOTH gates pass (rf-wi-04 items 1+3):
+   *   - `hooksVerified` — the far host cleared the hook-install preflight, AND
+   *   - `this.claudeLaunchArgs.length > 0` — the caller explicitly opted in.
+   * Default (no explicit args) ⇒ bare, even on a hooks-verified host.
+   *
+   * Codex and every other host_kind are untouched — the flags are hard-scoped to
+   * `hostKind === "claude"`. NOTE the resolveAdapter fallback is a TRUSTED
+   * internal seam (ClaudePaneAdapter/CodexPaneAdapter, always bare); it is not a
+   * threat-model boundary. A caller wiring a hostile resolveAdapter could return
+   * any command — but that caller already controls the whole dispatch and could
+   * bypass this class entirely, so gating it here would be security theatre. The
+   * invariant this method guarantees is narrower and real: THIS backend never
+   * ADDS a bypass flag to a remote Claude pane without both gates above.
+   */
+  private commandFor(spec: Specialist, paneSpec: PaneSpec, hooksVerified: boolean): string {
+    const hostKind = paneSpec.hostKind;
+    if (hostKind === "claude" && hooksVerified && this.claudeLaunchArgs.length > 0) {
+      // Same shape the local tmux path uses (composeTmuxCommands) — call
+      // paneCommand directly so the resolved flags reach the argv; the
+      // ClaudePaneAdapter (shared with untrusted-remote dispatch) stays bare.
+      return paneCommand(
+        paneSpec.prompt,
+        paneSpec.runId,
+        spec.capability_scope,
+        spec.taskId,
+        spec.name,
+        undefined,
+        this.claudeLaunchArgs,
+      );
+    }
+    return this.resolveAdapter
+      ? this.resolveAdapter(hostKind).command(paneSpec)
+      : paneCommand(paneSpec.prompt, paneSpec.runId, spec.capability_scope, spec.taskId, spec.name);
+  }
+
+  teardown(): TeardownVerdict {
+    return (
+      this.transport?.teardown() ?? {
+        outcome: "clean",
+        killed: [],
+        orphaned: [],
+        detail: "no transport — nothing to tear down",
+      }
+    );
   }
 
   launch(req: TeamLaunchRequest): TeamLaunchResult {
@@ -233,13 +452,17 @@ export class RemoteTeamBackend implements TeamBackend {
 
     const planned = req.specialists.map((spec) => {
       const target = resolveHostTarget(spec);
-      const { paneSpec, command } = this.commandFor(spec, req);
-      return { spec, target, paneSpec, command };
+      const paneSpec = this.paneSpecFor(spec, req);
+      return { spec, target, paneSpec };
     });
+    // The plan preview shows the BARE command: hooks are not probed until the
+    // real launch (dry-run touches no transport), so the resolved permission-mode
+    // flags cannot be shown here without over-claiming a precondition we have not
+    // verified. The actual spawn command upgrades per-host once hooks are proven.
     const plannedCommands = planned.map(
       (p) =>
         `remote[${transport.kind}] spawn ${p.spec.name} → ${p.target.hostId} ` +
-        `(${p.target.endpoint}) [${p.paneSpec.hostKind}]: ${p.command}`
+        `(${p.target.endpoint}) [${p.paneSpec.hostKind}]: ${this.commandFor(p.spec, p.paneSpec, false)}`
     );
 
     if (req.dryRun) {
@@ -249,7 +472,10 @@ export class RemoteTeamBackend implements TeamBackend {
         plannedCommands,
         orchestratorPaneId: null,
         teammatePaneIds: {},
-        notes: [`dry-run: ${transport.kind} transport not invoked`],
+        notes: [
+          `dry-run: ${transport.kind} transport not invoked`,
+          `dry-run: hook-install preflight not run — panes planned BARE (permission-mode flags withheld until hooks are verified at launch)`,
+        ],
       };
     }
 
@@ -300,22 +526,87 @@ export class RemoteTeamBackend implements TeamBackend {
       }
     }
 
+    // Phase 1.6 — hook-install preflight (rf-wi-04 item 1). BEFORE trusting a
+    // remote Claude pane with a resolved permission-mode bypass flag, verify
+    // Guild's hook bundle is present on the far host. A host that lacks it is
+    // NOT failed (bare launch is safe) — the bypass flag is simply WITHHELD from
+    // its Claude panes and the condition is recorded. An honest partial beats an
+    // unsafe bypass that strips the host's native guardrail with nothing behind.
+    const hooksByHost = new Map<string, boolean>();
+    const remoteHookProbes: NonNullable<TeamLaunchResult["remoteHookProbes"]> = [];
+    const hookNotes: string[] = [];
+    for (const target of distinctTargets) {
+      const hp = transport.probeHooks(target);
+      hooksByHost.set(target.hostId, hp.installed);
+      remoteHookProbes.push({
+        hostId: target.hostId,
+        endpoint: target.endpoint,
+        installed: hp.installed,
+        detail: hp.detail,
+      });
+      if (!hp.installed) {
+        hookNotes.push(
+          `hook-install preflight: "${target.hostId}" (${target.endpoint}) has NO verified Guild ` +
+            `hooks — Claude panes there launch BARE (permission-mode bypass flag withheld). ${hp.detail}`,
+        );
+      }
+    }
+
     // Phase 2 — spawn each pane. The task brief needs no separate delivery: the
-    // full prompt is already the pane command's argv (`p.command`, built by
-    // commandFor/paneCommand), and GUILD_TASK_ASSIGNMENT is already exported
-    // into that same command's env (docs/v2 §08 `guild.task_assignment.v1`).
+    // full prompt is already the pane command's argv (built by commandFor/
+    // paneCommand), and GUILD_TASK_ASSIGNMENT is already exported into that same
+    // command's env (docs/v2 §08 `guild.task_assignment.v1`). The command is
+    // resolved per-pane HERE so the hooks-gated permission-mode flags are applied
+    // only to Claude panes whose host cleared Phase 1.6.
     const teammatePaneIds: Record<string, string> = {};
+    // Track the hosts where a Claude pane ACTUALLY received the resolved flags —
+    // not merely where hooks were verified. Both gates (hooks + explicit opt-in
+    // args + a claude pane) must hold, else the success note would over-claim
+    // (codex review Q1/round-2 Medium: "flags applied" on a bare default host).
+    const flaggedHosts = new Set<string>();
+    const flagsOptedIn = this.claudeLaunchArgs.length > 0;
     for (const p of planned) {
+      const hooksVerified = hooksByHost.get(p.target.hostId) ?? false;
+      const command = this.commandFor(p.spec, p.paneSpec, hooksVerified);
+      if (p.paneSpec.hostKind === "claude" && hooksVerified && flagsOptedIn) {
+        flaggedHosts.add(p.target.hostId);
+      }
       let handle: RemotePaneHandle;
       try {
-        handle = transport.spawn(p.target, p.paneSpec, p.command);
+        handle = transport.spawn(p.target, p.paneSpec, command);
       } catch (err) {
         // A failed spawn must not report ok:true. Tear down any panes we did
-        // spawn so a partial dispatch doesn't leak detached remote sessions.
+        // spawn so a partial dispatch doesn't leak detached remote sessions —
+        // and CAPTURE the teardown verdict (rf-wi-04 item 2): a teardown hop
+        // that fails leaves a LIVE remote lane, which must be surfaced as an
+        // orphan rather than silently swallowed.
+        let teardownVerdict: TeardownVerdict;
         try {
-          transport.teardown();
-        } catch {
-          /* best-effort cleanup */
+          teardownVerdict = transport.teardown();
+        } catch (teardownErr) {
+          teardownVerdict = {
+            outcome: "orphaned",
+            killed: [],
+            orphaned: [],
+            detail:
+              `teardown threw during rollback (${teardownErr instanceof Error ? teardownErr.message : String(teardownErr)}) — ` +
+              `previously spawned remote pane(s) may still be LIVE and could not be enumerated.`,
+          };
+        }
+        const orphanNote =
+          teardownVerdict.outcome === "orphaned"
+            ? `ORPHANED remote lane(s) after rollback: ${teardownVerdict.detail}`
+            : `Previously spawned pane(s) were torn down; no partial team left running.`;
+        // rf-wi-04 item 2 (Q2a, round 2): emit the orphan to a DURABLE channel at
+        // detection time. The production caller retries launch() and a later
+        // success discards this failed result — so relying on the returned
+        // envelope alone would drop the orphan record. This warn() fires
+        // regardless of what the caller does with the return value.
+        if (teardownVerdict.outcome === "orphaned") {
+          this.warn(
+            `[guild][remote-orphan] spawn-fail rollback left an unconfirmed remote lane ` +
+              `(run ${req.runId}, lane "${p.spec.name}", ${p.target.endpoint}): ${teardownVerdict.detail}`,
+          );
         }
         return {
           kind: this.kind,
@@ -323,10 +614,13 @@ export class RemoteTeamBackend implements TeamBackend {
           plannedCommands,
           orchestratorPaneId: null,
           teammatePaneIds: {},
+          remoteHookProbes,
+          remoteTeardown: teardownVerdict,
           notes: [
+            ...hookNotes,
             `remote spawn failed for lane "${p.spec.name}" on ${p.target.endpoint}: ` +
               `${err instanceof Error ? err.message : String(err)}. ` +
-              `Previously spawned pane(s) were torn down; no partial team left running.`,
+              orphanNote,
           ],
         };
       }
@@ -339,7 +633,14 @@ export class RemoteTeamBackend implements TeamBackend {
       plannedCommands,
       orchestratorPaneId: null,
       teammatePaneIds,
-      notes: [`spawned ${planned.length} remote pane(s) via ${transport.kind}`],
+      remoteHookProbes,
+      notes: [
+        `spawned ${planned.length} remote pane(s) via ${transport.kind}`,
+        ...hookNotes,
+        ...(flaggedHosts.size > 0
+          ? [`permission-mode flags applied to Claude pane(s) on hooks-verified host(s): ${[...flaggedHosts].join(", ")}`]
+          : []),
+      ],
     };
   }
 }

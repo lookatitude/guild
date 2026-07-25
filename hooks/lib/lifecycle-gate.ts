@@ -114,8 +114,15 @@ import {
   safePhase,
 } from "./reanchor.js";
 import { isWorkerInvocation } from "./lane-attribution.js";
+import { extractHandoffEnvelope, validateHandoffV2 } from "./handoff-v2.js";
 import { validateRunId } from "../../scripts/lib/run-lifecycle.js";
 import { validateEvent } from "../../scripts/v1.4-log-validator.js";
+// rf-wi-01 (v23x-deferred-followups G1): the canonical `defaults.lifecycle_gate.*`
+// default values (single source of truth — scripts/lib/config-schema.ts CONFIG_SCHEMA
+// derives from this SAME tree), so this guard's fallback can never drift from what
+// `config validate/resolve/show` report as the documented default. Pure data, zero
+// internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
+import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
 
 /** Stable marker strings — pinned by tests and the dist-grep rail. */
 export const LIFECYCLE_GATE_MARKER = "[GUILD LIFECYCLE GATE]";
@@ -137,7 +144,11 @@ export const ENV_OVERRIDE_VAR = "GUILD_LIFECYCLE_GATE_OVERRIDE";
  * while staying two orders of magnitude below the 836 Bash calls the forensic
  * session logged after its last skill.
  */
-const DEFAULT_ADHOC_THRESHOLD = 20;
+// Widened explicitly: CONFIG_DEFAULTS is `as const`, so its property types are the
+// narrow literals `true`/`20` — annotate so `let enabled/threshold` below can hold any
+// boolean/number the settings.json override resolves to.
+const DEFAULT_ADHOC_THRESHOLD: number = CONFIG_DEFAULTS.defaults.lifecycle_gate.adhoc_activity_threshold;
+const DEFAULT_LIFECYCLE_GATE_ENABLED: boolean = CONFIG_DEFAULTS.defaults.lifecycle_gate.enabled;
 
 /** Tools that count as ad-hoc session activity (matches ToolCallTool values). */
 const ADHOC_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit"]);
@@ -204,34 +215,38 @@ export interface LifecycleGateConfig {
 }
 
 /**
- * Tolerant reader for `.guild/settings.json` → `defaults.lifecycle_gate.*`.
- * Mirrors `lean-lead-guard.ts readLeanLeadConfig`: a missing file, malformed
- * JSON, or wrong-typed field degrades to the documented defaults rather than
- * throwing. The threshold must be a positive INTEGER — a fractional value would
- * defeat the `floor(count/threshold)` re-arm arithmetic below.
+ * Reader for `defaults.lifecycle_gate.*` — degrades to the documented default
+ * (enabled, threshold=20) on ANY failure, never throws. The threshold must be
+ * a positive INTEGER — a fractional value would defeat the
+ * `floor(count/threshold)` re-arm arithmetic below.
+ *
+ * rf-wi-01 (G1 codex-review round-2 fix, P1): delegates to the canonical
+ * `resolveSettings()` — the SAME 5-layer resolver `config show`/`config resolve`
+ * use — rather than a hand-rolled project-file-only read. The round-1 fix
+ * (settings.json + settings.local.json, applied in order) still missed
+ * WORKSPACE-level inheritance. Mirrors `lean-lead-guard.ts readLeanLeadConfig`
+ * and the established precedent in hooks/update-check.ts's `readUpdateConfig`.
  */
 export function readLifecycleGateConfig(guildRoot: string): LifecycleGateConfig {
-  let enabled = true;
-  let threshold = DEFAULT_ADHOC_THRESHOLD;
   try {
-    const raw = fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8");
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const defs = parsed["defaults"];
-    if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-      const gate = (defs as Record<string, unknown>)["lifecycle_gate"];
-      if (gate !== null && typeof gate === "object" && !Array.isArray(gate)) {
-        const g = gate as Record<string, unknown>;
-        if (typeof g["enabled"] === "boolean") enabled = g["enabled"];
-        const rawThreshold = g["adhoc_activity_threshold"];
-        if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-          threshold = rawThreshold;
-        }
-      }
-    }
+    const { resolveSettings } = require("../../src/modules/config/workflows/settings-resolver") as {
+      resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
+    };
+    const parsed = resolveSettings({ cwd: guildRoot }).config as {
+      defaults?: { lifecycle_gate?: { enabled?: unknown; adhoc_activity_threshold?: unknown } };
+    };
+    const g = parsed.defaults?.lifecycle_gate ?? {};
+    const enabled = typeof g.enabled === "boolean" ? g.enabled : DEFAULT_LIFECYCLE_GATE_ENABLED;
+    const threshold =
+      typeof g.adhoc_activity_threshold === "number" &&
+      Number.isInteger(g.adhoc_activity_threshold) &&
+      g.adhoc_activity_threshold >= 1
+        ? g.adhoc_activity_threshold
+        : DEFAULT_ADHOC_THRESHOLD;
+    return { enabled, threshold };
   } catch {
-    /* missing/corrupt settings.json → documented defaults */
+    return { enabled: DEFAULT_LIFECYCLE_GATE_ENABLED, threshold: DEFAULT_ADHOC_THRESHOLD };
   }
-  return { enabled, threshold };
 }
 
 /**
@@ -774,17 +789,35 @@ export function renderLifecycleGate(
   ].join("\n");
 }
 
-/** Render the close-time gate body (pure — pinned by tests). */
+/** Render the close-time gate body (pure — pinned by tests). `missing` is the
+ * absent/blank review.md/verify.md set; `malformed` is the receipt basenames
+ * whose embedded guild.handoff.v2 envelope failed shape-validation (G6c). At
+ * least one of the two is non-empty whenever this renders. Both are caller-
+ * sanitized (fixed artifact names / basenames off the run's own handoffs dir). */
 export function renderCloseGate(
   runId: string,
   missing: readonly string[],
   laneCount: number,
+  malformed: readonly string[] = [],
 ): string {
+  const clauses: string[] = [];
+  if (missing.length > 0) {
+    clauses.push(
+      `${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} missing or empty`,
+    );
+  }
+  if (malformed.length > 0) {
+    clauses.push(
+      `lane receipt(s) ${malformed.join(", ")} carry a missing or malformed ` +
+        `guild.handoff.v2 envelope`,
+    );
+  }
   return [
     `${CLOSE_GATE_MARKER} run ${runId} completed all ${laneCount} lane(s) with receipts, but ` +
-      `${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} missing or empty.`,
+      `${clauses.join("; and ")}.`,
     "- A build run must pass guild:review (writes review.md) AND guild:verify-done (writes verify.md) before close.",
-    "- Run the missing gate(s) now, or re-enter via guild:resume — do not close this run on receipts alone.",
+    "- Every lane receipt must embed a valid guild.handoff.v2 envelope (status, changed_files, evidence, pr_url, codex).",
+    "- Run the missing gate(s) / fix the receipt(s) now, or re-enter via guild:resume — do not close this run on receipts alone.",
     `- Intentional? Export ${ENV_OVERRIDE_VAR}=1 to dismiss for this session.`,
   ].join("\n");
 }
@@ -1026,6 +1059,113 @@ export async function evaluateLifecycleGate(
 }
 
 /**
+ * Required top-level keys for a LEAD-COLLECTED `guild.handoff.v2` receipt
+ * envelope — the initiative / PR handoff shape a lane emits at close: the
+ * terminal `status`, the `changed_files` it touched, the `evidence` a reviewer
+ * checks, the `pr_url` it opened, and the `codex` adversarial-review verdict.
+ *
+ * This is DISTINCT from the in-flight DISPATCH envelope validated by
+ * `hooks/lib/handoff-v2.ts validateHandoffV2` (`task_id`/`tier`/`summary`/
+ * `artifacts`/`issues`), which a §task§agent emits mid-run. The close backstop
+ * accepts EITHER shape (see `validateReceiptEnvelope`) so it never false-fires on
+ * a canonical dispatched-lane build while still rejecting a receipt that carries
+ * neither a valid dispatch envelope nor the lead-collected key set. (G6c.)
+ */
+export const REQUIRED_RECEIPT_ENVELOPE_KEYS: readonly string[] = Object.freeze([
+  "status",
+  "changed_files",
+  "evidence",
+  "pr_url",
+  "codex",
+]);
+
+export interface ReceiptEnvelopeCheck {
+  ok: boolean;
+  /** Human-readable rejection reason, or null when ok. RENDER-safe: fixed
+   * strings only — no workspace bytes are interpolated into it. */
+  reason: string | null;
+}
+
+/**
+ * Shape-validate the `guild.handoff.v2` envelope embedded in a receipt's
+ * markdown, NOT merely its existence (G6c). A receipt whose fenced
+ * ```guild.handoff.v2``` block is absent (frontmatter-only), unparseable, not a
+ * JSON object, or missing the required keys FAILS — the close backstop then
+ * surfaces it instead of closing on a hollow receipt.
+ *
+ * Two accepted shapes, so the gate is correct on BOTH backends:
+ *   - a valid in-flight DISPATCH envelope (`validateHandoffV2`), which real
+ *     §task§agents write; or
+ *   - the LEAD-COLLECTED receipt shape (`REQUIRED_RECEIPT_ENVELOPE_KEYS` all
+ *     present, `status` a non-empty string).
+ * A block that satisfies neither is malformed.
+ *
+ * NEVER throws — an unreadable/garbled receipt resolves to `ok:false` with a
+ * fixed reason, never an exception the hook runner would fail open on.
+ */
+export function validateReceiptEnvelope(content: string): ReceiptEnvelopeCheck {
+  let block: unknown;
+  try {
+    block = extractHandoffEnvelope(content);
+  } catch {
+    return { ok: false, reason: "guild.handoff.v2 envelope could not be read" };
+  }
+  if (block === null) {
+    return {
+      ok: false,
+      reason: "no valid embedded guild.handoff.v2 JSON block (frontmatter-only or unparseable)",
+    };
+  }
+  if (typeof block !== "object" || Array.isArray(block)) {
+    return { ok: false, reason: "guild.handoff.v2 envelope is not a JSON object" };
+  }
+  // Accept a canonical in-flight dispatch envelope as-is (real dispatched lanes).
+  if (validateHandoffV2(block).valid) return { ok: true, reason: null };
+
+  const obj = block as Record<string, unknown>;
+  const missing = REQUIRED_RECEIPT_ENVELOPE_KEYS.filter(
+    (k) => obj[k] === undefined || obj[k] === null,
+  );
+  if (missing.length > 0) {
+    return { ok: false, reason: `envelope missing required key(s): ${missing.join(", ")}` };
+  }
+  // SHAPE — not just presence: each required key must carry its contract TYPE, so a
+  // structurally-junk receipt (`changed_files: false`, `evidence: 0`, `pr_url: {}`,
+  // `codex: "n/a"`) cannot pass as a valid lead envelope.
+  const typeErrors: string[] = [];
+  if (typeof obj["status"] !== "string" || (obj["status"] as string).trim() === "") {
+    typeErrors.push("status must be a non-empty string");
+  }
+  // Arrays must be arrays OF STRINGS — a `[false]` / `[0]` slips a junk receipt
+  // past an outer-type-only check.
+  const stringArray = (v: unknown): boolean =>
+    Array.isArray(v) && v.every((e) => typeof e === "string");
+  if (!stringArray(obj["changed_files"])) typeErrors.push("changed_files must be a string[]");
+  if (!stringArray(obj["evidence"])) typeErrors.push("evidence must be a string[]");
+  if (typeof obj["pr_url"] !== "string" || (obj["pr_url"] as string).trim() === "") {
+    typeErrors.push("pr_url must be a non-empty string");
+  }
+  // codex is the documented `codex{verdict, rounds}` contract — an empty `{}`
+  // does not describe a review, so require the two nested fields with their types.
+  const codex = obj["codex"];
+  if (typeof codex !== "object" || codex === null || Array.isArray(codex)) {
+    typeErrors.push("codex must be an object");
+  } else {
+    const c = codex as Record<string, unknown>;
+    if (typeof c["verdict"] !== "string" || (c["verdict"] as string).trim() === "") {
+      typeErrors.push("codex.verdict must be a non-empty string");
+    }
+    if (typeof c["rounds"] !== "number" || !Number.isFinite(c["rounds"])) {
+      typeErrors.push("codex.rounds must be a number");
+    }
+  }
+  if (typeErrors.length > 0) {
+    return { ok: false, reason: `envelope shape invalid: ${typeErrors.join("; ")}` };
+  }
+  return { ok: true, reason: null };
+}
+
+/**
  * Is this a real artifact — a REGULAR file (not a directory, not a symlink)
  * carrying non-whitespace content? `lstat` rather than `stat` so a symlink is
  * judged as a symlink instead of following it, and the content check rejects
@@ -1046,7 +1186,12 @@ export function hasContent(filePath: string): boolean {
  * The close-time backstop (Stop hook). Fires ONCE per run when a build run has
  * genuinely reached `guild:execute-plan §Stop condition` — EVERY lane `done`
  * (not merely terminal) and at least one receipt per lane — while `review.md`
- * and/or `verify.md` is missing, empty, or not a real file.
+ * and/or `verify.md` is missing/empty OR a lane receipt's embedded
+ * `guild.handoff.v2` envelope fails shape-validation (G6c: the receipt contract
+ * is SHAPE-validated via `validateReceiptEnvelope`, not mere existence). A
+ * receipt file that is gone / a directory / a symlink still resolves to silence
+ * (cannot identify the receipt → not a clean close boundary); a present receipt
+ * whose envelope is missing or malformed fires.
  *
  * "Every lane done with receipts collected" is the closest deterministic proxy
  * for close-time this codebase has: `hooks/run-trace-close.ts` writes
@@ -1094,6 +1239,7 @@ export async function evaluateCloseGate(
   // for a lane that never produced a receipt.
   const handoffsDir = path.resolve(ctx.runDir, "handoffs");
   const seenReceipts = new Set<string>();
+  const malformed: string[] = [];
   for (const ref of ctx.runState.receiptRefs) {
     if (ref === null) return silent;
     const resolved = path.resolve(ctx.runDir, ref);
@@ -1102,8 +1248,22 @@ export async function evaluateCloseGate(
     if (!resolved.endsWith(".md")) return silent;
     if (seenReceipts.has(resolved)) return silent; // two lanes, one receipt
     seenReceipts.add(resolved);
-    if (!hasContent(resolved)) return silent;
+    // A receipt path that is GONE / a directory / a symlink is "cannot identify
+    // the receipt" → stay silent (not at a clean close boundary), unchanged. A
+    // receipt that is a real file but whose embedded guild.handoff.v2 envelope
+    // is missing/malformed is a close-boundary DEFECT the backstop must surface
+    // (G6c) — shape-validation, not the mere-existence check this replaced.
+    let receiptText: string;
+    try {
+      const st = fs.lstatSync(resolved);
+      if (!st.isFile()) return silent;
+      receiptText = fs.readFileSync(resolved, "utf8");
+    } catch {
+      return silent;
+    }
+    if (!validateReceiptEnvelope(receiptText).ok) malformed.push(path.basename(resolved));
   }
+  malformed.sort();
 
   const missing: string[] = [];
   for (const artifact of ["review.md", "verify.md"]) {
@@ -1111,35 +1271,49 @@ export async function evaluateCloseGate(
   }
   missing.sort();
 
+  // The latch SET spans both problem categories, so "review.md landed but a
+  // receipt is still malformed" re-arms correctly and a fully-clean close clears
+  // it. Envelope tokens are namespaced so a receipt named `review.md` (in
+  // handoffs/) can never collide with the review.md artifact key.
+  const problems = [...missing, ...malformed.map((m) => `envelope:${m}`)].sort();
+
   return withGateLock(ctx.runDir, (): { advisory: string | null } => {
     const prior = loadCloseState(ctx.runDir);
     const sameSet =
-      prior.fired_for.length === missing.length &&
-      prior.fired_for.every((name, i) => name === missing[i]);
+      prior.fired_for.length === problems.length &&
+      prior.fired_for.every((name, i) => name === problems[i]);
 
-    // Fully satisfied ⇒ CLEAR the latch. Leaving a stale `fired_for` would mean
-    // a later regression (the artifact deleted or blanked) is never reported.
-    if (missing.length === 0) {
-      if (prior.fired_for.length > 0) {
+    // Fully satisfied ⇒ CLEAR the latch AND reset `fire_count`. A genuinely clean
+    // close resets the backstop's fire budget: leaving `fire_count` at the cap
+    // would let a LATER regression (an artifact deleted/blanked, a receipt
+    // envelope broken after the run looked done) be permanently suppressed once
+    // MAX_CLOSE_FIRES had been reached earlier. This cannot loop — every fire
+    // still requires the problem SET to CHANGE (edge-triggered), and reaching a
+    // fully-clean state at all is the strongest possible evidence the run is not
+    // stuck. The wider problem space this gate now covers (review/verify PLUS
+    // per-receipt envelope tokens) makes the old preserve-across-clear behavior
+    // reachable in normal operation, so the reset is load-bearing, not cosmetic.
+    if (problems.length === 0) {
+      if (prior.fired_for.length > 0 || prior.fire_count > 0) {
         writeCloseState(ctx.runDir, {
           schema_version: CLOSE_STATE_SCHEMA,
           fired_for: [],
-          fire_count: prior.fire_count,
+          fire_count: 0,
         });
       }
       return silent;
     }
 
-    // Latched on the missing SET: an unchanged situation stays silent, but
-    // "review.md landed, verify.md still absent" is new information and
-    // re-arms exactly once — bounded overall by MAX_CLOSE_FIRES.
+    // Latched on the problem SET: an unchanged situation stays silent, but a
+    // changed set (a gate landed, or a receipt got fixed/broken) is new
+    // information and re-arms exactly once — bounded overall by MAX_CLOSE_FIRES.
     if (sameSet || prior.fire_count >= MAX_CLOSE_FIRES) return silent;
 
     writeCloseState(ctx.runDir, {
       schema_version: CLOSE_STATE_SCHEMA,
-      fired_for: missing,
+      fired_for: problems,
       fire_count: prior.fire_count + 1,
     });
-    return { advisory: renderCloseGate(ctx.safeRunId, missing, lanes.length) };
+    return { advisory: renderCloseGate(ctx.safeRunId, missing, lanes.length, malformed) };
   });
 }

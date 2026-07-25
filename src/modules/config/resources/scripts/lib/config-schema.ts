@@ -22,6 +22,15 @@ import {
 } from "./config-reconcile-contract";
 import { DEFAULTS } from "../read-guild-config";
 
+/**
+ * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
+ * Duplicated here as a small closed literal union (mirrors config-cli.ts's/
+ * settings-reader.ts's existing inline-enum convention) rather than an import,
+ * since permission-policy-schema.ts has not been migrated into a src/modules/*
+ * workflow yet.
+ */
+const HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const;
+
 // ---------------------------------------------------------------------------
 // Security-sensitive key classification (load-bearing — Lsec asserts coverage)
 // ---------------------------------------------------------------------------
@@ -40,7 +49,11 @@ export function isSecuritySensitiveKey(key: string): boolean {
     key.startsWith("security.") ||
     key.startsWith("secrets_policy.") ||
     key.startsWith("defaults.cross_host") ||
-    key === "mcp.tool_description_hashes"
+    key === "mcp.tool_description_hashes" ||
+    // rf-wi-01 (G1): host_mode governs P1-L10 host autonomy (bypass_all can disable a
+    // host's native tool-permission prompt) — the sanctioned, schema-registered
+    // replacement for the ad-hoc `security.host_mode` key the #54 lane reverted.
+    key === "host_mode"
   );
 }
 
@@ -144,6 +157,31 @@ const SECURITY_MOST_RESTRICTIVE_NONENUM: Record<string, unknown> = {
 };
 
 /**
+ * rf-wi-01 (G1 codex-review fix) — NULLABLE enum fields: `null` is ALSO a valid value
+ * (not just a schema default) alongside the enum members. `inferType(null)` would
+ * otherwise classify these as type "object", under which `defaultIsValidValue`
+ * requires `typeof value === "object"` — so a genuinely VALID enum string (e.g.
+ * `host_mode: "read_only"`) would be misclassified as malformed and `reconcile
+ * repair` would reset it back to `null` (P1 finding, reproduced: a user's real
+ * `host_mode` setting got silently clobbered on repair).
+ *
+ * `most_restrictive` is an EXPLICIT enum member, NOT `null` (round-2 codex-review
+ * P1 fix): `null` reads as "safest" in isolation, but for `host_mode` specifically
+ * it is NOT — `tmux-backend.ts`'s `resolveTeamPaneHostMode` lifts an unset/null
+ * host_mode to `"bypass_all"` for team panes (the #54 fix), so repairing a
+ * malformed value to `null` would fail-OPEN, not fail-closed, on that path.
+ * `"read_only"` is the genuinely most-restrictive HOST_MODES member regardless of
+ * consumer (it never grants edit/bypass autonomy to any host).
+ */
+interface NullableEnumOverride {
+  enum_values: readonly string[];
+  most_restrictive: string;
+}
+const NULLABLE_ENUM_OVERRIDES: Record<string, NullableEnumOverride> = {
+  host_mode: { enum_values: HOST_MODES, most_restrictive: "read_only" },
+};
+
+/**
  * The `guild.config_schema.v1` field registry, derived from the canonical DEFAULTS
  * tree. One ConfigFieldSpec per flattened leaf; `default` is the canonical value
  * (single source ⇒ no drift). Scope is "project" (today's settings.json target).
@@ -158,9 +196,10 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
   const flat = flattenSettings(DEFAULTS as unknown as Record<string, unknown>);
   return Object.entries(flat).map(([key, def]) => {
     const override = SECURITY_ENUM_OVERRIDES[key];
+    const nullableEnum = NULLABLE_ENUM_OVERRIDES[key];
     const spec: ConfigFieldSpec = {
       key,
-      type: override ? "enum" : inferType(def),
+      type: override || nullableEnum ? "enum" : inferType(def),
       default: def,
       scope: "project",
       security_sensitive: isSecuritySensitiveKey(key),
@@ -168,6 +207,10 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
     if (override) {
       spec.enum_values = override.enum_values;
       spec.most_restrictive = override.most_restrictive;
+    } else if (nullableEnum) {
+      spec.enum_values = nullableEnum.enum_values;
+      spec.nullable = true;
+      spec.most_restrictive = nullableEnum.most_restrictive;
     } else if (key in SECURITY_MOST_RESTRICTIVE_NONENUM) {
       spec.most_restrictive = SECURITY_MOST_RESTRICTIVE_NONENUM[key];
     }

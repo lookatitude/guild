@@ -4910,7 +4910,7 @@ function renderReanchorHeader(f) {
     f.nextGate === null ? "- Next pending gate: unknown for this phase \u2014 run /guild:status before proceeding." : `- Next pending gate: ${f.nextGate}.`
   ].join("\n");
 }
-function buildReanchorHeader(guildRoot) {
+function resolveReanchorFacts(guildRoot) {
   const runId = resolveActiveRunId(guildRoot);
   if (!runId) return null;
   if (!validateRunId(runId)) return null;
@@ -4933,19 +4933,32 @@ function buildReanchorHeader(guildRoot) {
   const safePhaseValue = safePhase(facts.phase);
   const safeInitiative = safeIdent(facts.initiative);
   const nextGate = deriveNextGate(safePhaseValue, facts.passedGates);
-  return renderReanchorHeader({
+  return {
     runId: safeRunId,
     agentMode: safeMode,
     phase: safePhaseValue,
     initiative: safeInitiative,
     nextGate
-  });
+  };
 }
-function buildAdditionalContextEnvelope(hookEventName, header) {
+function buildReanchorHeader(guildRoot) {
+  const facts = resolveReanchorFacts(guildRoot);
+  return facts === null ? null : renderReanchorHeader(facts);
+}
+function renderCompactSummaryInstructions(f) {
+  const initClause = f.initiative ? ` initiative "${f.initiative}",` : "";
+  return `Guild lifecycle facts MUST survive this compaction verbatim. When writing the summary, explicitly preserve: active run "${f.runId}",${initClause} phase "${f.phase ?? "unknown"}", and next pending gate "${f.nextGate ?? "unknown"}". Do not paraphrase, generalize, or omit these identifiers.`;
+}
+function buildCompactSummaryInstructions(guildRoot) {
+  const facts = resolveReanchorFacts(guildRoot);
+  return facts === null ? null : renderCompactSummaryInstructions(facts);
+}
+function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
-      additionalContext: header
+      additionalContext: header,
+      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
     }
   });
 }
@@ -5253,7 +5266,10 @@ async function main() {
     try {
       const header = buildReanchorHeader(guildRoot);
       if (header !== null) {
-        process.stdout.write(buildAdditionalContextEnvelope("PreCompact", header));
+        const customInstructions = buildCompactSummaryInstructions(guildRoot);
+        process.stdout.write(
+          buildAdditionalContextEnvelope("PreCompact", header, customInstructions ?? void 0)
+        );
       }
     } catch (err) {
       process.stderr.write(

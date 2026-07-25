@@ -102,6 +102,7 @@ const VALUE_OVERRIDES: Record<string, string> = {
   codex_skip_enforcement: "block",
   agent_mode: "team",
   host: "codex",
+  host_mode: "accept_edits", // rf-wi-01 (G1) — P1-L10 host-autonomy override enum
   "roles.host": "claude-code-cli",
   "roles.advisory": "codex-cli",
   "roles.adversarial": "claude-code-cli",
@@ -180,7 +181,9 @@ function writePathFor(key: string): string {
 describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () => {
   it("one edit per metadata key, no gaps (generated, so it can't silently drift)", () => {
     expect(KEY_EDITS.length).toBe(Object.keys(CONFIG_UI_METADATA).length);
-    expect(KEY_EDITS.length).toBe(132);
+    // rf-wi-01 (G1): +5 — host_mode, defaults.lean_lead.{enabled,hands_on_edit_threshold},
+    // defaults.lifecycle_gate.{enabled,adhoc_activity_threshold}.
+    expect(KEY_EDITS.length).toBe(137);
     // every enum/object_editor key resolved to a concrete value (no generator throw)
     for (const e of KEY_EDITS) expect(typeof e.value).toBe("string");
   });

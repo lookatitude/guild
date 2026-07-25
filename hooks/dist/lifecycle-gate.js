@@ -59,6 +59,16 @@ var init_config_defaults = __esm({
       auto_approve: [],
       review: "local",
       host: "auto",
+      /**
+       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+       * this top-level placement (sibling of the `host` dispatch selector) is the registered
+       * replacement. One of only three keys ever legitimately null-typed at the top level.
+       */
+      host_mode: null,
       roles: { host: null, advisory: null, adversarial: null },
       host_profiles: {},
       initiative_default: null,
@@ -163,7 +173,20 @@ var init_config_defaults = __esm({
         // the SessionStart signal; `auto` additionally stages the host apply path;
         // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
         update: { mode: "notify", cadence_hours: 24 },
-        allowed_tools: []
+        allowed_tools: [],
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+         * "Inline shortcut under high autonomy").
+         */
+        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+         * activity count before the lifecycle gate advisory fires.
+         */
+        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
       }
     };
   }
@@ -4388,6 +4411,9 @@ function parseSettingsFile_fromParsed(parsed) {
     const normalized = normalizeDispatchHostId(parsed["host"]);
     if (normalized) out.host = normalized;
   }
+  if (parsed["host_mode"] === null) out.host_mode = null;
+  else if (typeof parsed["host_mode"] === "string" && HOST_MODES.includes(parsed["host_mode"]))
+    out.host_mode = parsed["host_mode"];
   if (isPlainObject2(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"]);
   if (isPlainObject2(parsed["host_profiles"]))
@@ -4812,7 +4838,7 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs3, path4, yaml, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
+var fs3, path4, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
 var init_settings_reader = __esm({
   "../src/modules/config/workflows/settings-reader.ts"() {
     fs3 = __toESM(require("fs"));
@@ -4825,6 +4851,7 @@ var init_settings_reader = __esm({
     init_kernel();
     init_workspace_manifest();
     yaml = loadYamlApi();
+    HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
     DEFAULTS2 = DEFAULTS;
     VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
     KNOWN_HOST_IDS2 = new Set(HOST_IDS);
@@ -4857,8 +4884,11 @@ var init_settings_reader = __esm({
       // R-018
       "allowed_tools",
       // R-020
-      "update"
+      "update",
       // plugin-update-lifecycle AC-6
+      "lean_lead",
+      "lifecycle_gate"
+      // rf-wi-01 (G1)
     ]);
   }
 });
@@ -5176,6 +5206,14 @@ var init_telemetry = __esm({
 });
 
 // ../src/modules/config/workflows/settings-resolver.ts
+var settings_resolver_exports = {};
+__export(settings_resolver_exports, {
+  deepMerge: () => deepMerge,
+  initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
+  isPlainObject: () => isPlainObject2,
+  resolveSettings: () => resolveSettings2,
+  rigorProfile: () => rigorProfile
+});
 function resolveSettings2(opts) {
   const t0 = Date.now();
   const result = resolveSettings(opts);
@@ -5781,6 +5819,38 @@ function validateDefaults(d, selfBuild) {
   }
   if (d["allowed_tools"] !== void 0 && !Array.isArray(d["allowed_tools"]))
     rejects.push(`defaults.allowed_tools must be an array of strings`);
+  if (d["lean_lead"] !== void 0 && !isPlainObject3(d["lean_lead"])) {
+    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(d["lean_lead"])})`);
+  } else if (isPlainObject3(d["lean_lead"])) {
+    const ll = d["lean_lead"];
+    const VALID_LEAN_LEAD_KEYS = /* @__PURE__ */ new Set(["enabled", "hands_on_edit_threshold"]);
+    for (const k of Object.keys(ll)) {
+      if (!VALID_LEAN_LEAD_KEYS.has(k)) rejects.push(`unknown defaults.lean_lead key "${k}" (valid: enabled, hands_on_edit_threshold)`);
+    }
+    if (ll["enabled"] !== void 0 && typeof ll["enabled"] !== "boolean")
+      rejects.push(`defaults.lean_lead.enabled must be a boolean (got ${JSON.stringify(ll["enabled"])})`);
+    if (ll["hands_on_edit_threshold"] !== void 0) {
+      const v = ll["hands_on_edit_threshold"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(v)})`);
+    }
+  }
+  if (d["lifecycle_gate"] !== void 0 && !isPlainObject3(d["lifecycle_gate"])) {
+    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(d["lifecycle_gate"])})`);
+  } else if (isPlainObject3(d["lifecycle_gate"])) {
+    const lg = d["lifecycle_gate"];
+    const VALID_LIFECYCLE_GATE_KEYS = /* @__PURE__ */ new Set(["enabled", "adhoc_activity_threshold"]);
+    for (const k of Object.keys(lg)) {
+      if (!VALID_LIFECYCLE_GATE_KEYS.has(k)) rejects.push(`unknown defaults.lifecycle_gate key "${k}" (valid: enabled, adhoc_activity_threshold)`);
+    }
+    if (lg["enabled"] !== void 0 && typeof lg["enabled"] !== "boolean")
+      rejects.push(`defaults.lifecycle_gate.enabled must be a boolean (got ${JSON.stringify(lg["enabled"])})`);
+    if (lg["adhoc_activity_threshold"] !== void 0) {
+      const v = lg["adhoc_activity_threshold"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(v)})`);
+    }
+  }
   if (isPlainObject3(d["index"])) {
     const idx = d["index"];
     for (const ik of Object.keys(idx)) {
@@ -5825,6 +5895,7 @@ function loadFileConfig(cwd, selfBuild) {
       "auto_approve",
       "review",
       "host",
+      "host_mode",
       "roles",
       "host_profiles",
       "initiative_default",
@@ -5869,6 +5940,21 @@ function loadFileConfig(cwd, selfBuild) {
           `host "${parsed["host"]}" is invalid for the top-level dispatch selector (valid: auto or dispatch-selectable host ids ${[...DISPATCH_HOST_IDS2].join("|")})`
         );
       }
+    }
+    if (parsed["host_mode"] === null) {
+      out.host_mode = null;
+    } else if (typeof parsed["host_mode"] === "string") {
+      if (HOST_MODES2.includes(parsed["host_mode"])) {
+        out.host_mode = parsed["host_mode"];
+      } else {
+        rejects.push(
+          `host_mode "${parsed["host_mode"]}" is invalid \u2014 valid: ${HOST_MODES2.join("|")} or null`
+        );
+      }
+    } else if (parsed["host_mode"] !== void 0) {
+      rejects.push(
+        `host_mode must be a string (${HOST_MODES2.join("|")}) or null (got ${JSON.stringify(parsed["host_mode"])})`
+      );
     }
     if (isPlainObject3(parsed["roles"])) {
       const rawRoles = parsed["roles"];
@@ -6172,7 +6258,7 @@ function main() {
   }
   process.stdout.write(JSON.stringify(output, null, 2) + "\n");
 }
-var fs6, path8, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, DEFAULTS_ALLOWED_KEYS2;
+var fs6, path8, HOST_MODES2, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, DEFAULTS_ALLOWED_KEYS2;
 var init_config_cli = __esm({
   "../scripts/lib/core/config-cli.ts"() {
     fs6 = __toESM(require("fs"));
@@ -6184,6 +6270,7 @@ var init_config_cli = __esm({
     init_safe_object2();
     init_config_defaults2();
     init_tier_model();
+    HOST_MODES2 = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
     DEFAULTS3 = DEFAULTS;
     HELP = {
       rigor: "quick | standard | deep \u2014 profile knob; expands loops/caps/review depth",
@@ -6271,6 +6358,12 @@ var init_config_cli = __esm({
       "defaults.update": '{ mode: "auto"|"notify"|"off" (default "notify"), cadence_hours: number > 0 (default 24) } \u2014 channel-aware update-check behavior. Consumed by hooks/update-check.ts (SessionStart signal + background cache refresh) and guild-run update. Dev/symlink installs are always excluded.',
       // ── R-020: defaults.allowed_tools
       "defaults.allowed_tools": "string[] (default []) \u2014 explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F). Replaces, not extends, the shared tool allow-list. [] \u21D2 no restriction.",
+      // ── rf-wi-01 (G1): host_mode + defaults.lean_lead.* + defaults.lifecycle_gate.*
+      host_mode: `read_only|ask|accept_edits|auto|bypass_all|null (default null) \u2014 the sanctioned, schema-registered P1-L10 host-autonomy override (permission-policy-schema.ts HOST_MODES). null = no override (host default "ask" applies, lifted to bypass_all for unattended local tmux team panes per issue #54's resolveTeamPaneHostMode). NEVER lifts a Guild lifecycle gate (host_mode \u22A5 guild_gates orthogonality invariant) \u2014 see permission-policy.ts. NOT under security. \u2014 the #54 lane reverted an ad-hoc security.host_mode key for bypassing this schema; this is the registered replacement.`,
+      "defaults.lean_lead.enabled": 'bool (default true) \u2014 master toggle for the lean-lead inline-shortcut-expired advisory (hooks/lib/lean-lead-guard.ts, SKILL.md "Inline shortcut under high autonomy").',
+      "defaults.lean_lead.hands_on_edit_threshold": "int >= 1 (default 8) \u2014 direct lead Edit/Write ops (while lanes are open) before the advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
+      "defaults.lifecycle_gate.enabled": "bool (default true) \u2014 master toggle for the lifecycle-gate ad-hoc-activity advisory (hooks/lib/lifecycle-gate.ts).",
+      "defaults.lifecycle_gate.adhoc_activity_threshold": "int >= 1 (default 20) \u2014 ad-hoc (non-skill) activity count before the lifecycle-gate advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
       _precedence: "CLI flag > --rigor profile > settings.json > built-in default. For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
       _docs: "Canonical schema: architecture/command-surface.md \xA74.4. Regenerate with: /guild config init"
     };
@@ -6353,8 +6446,12 @@ var init_config_cli = __esm({
       // R-018: number s (host-router.ts CR-5 manifest freshness)
       "update",
       // plugin-update-lifecycle AC-6: { mode: "auto"|"notify"|"off", cadence_hours: number }
-      "allowed_tools"
+      "allowed_tools",
       // R-020: string[] (boundary-config-and-tracking Decision F)
+      "lean_lead",
+      // rf-wi-01 (G1): { enabled: bool, hands_on_edit_threshold: int }
+      "lifecycle_gate"
+      // rf-wi-01 (G1): { enabled: bool, adhoc_activity_threshold: int }
     ]);
   }
 });
@@ -7602,6 +7699,134 @@ function loadRunState(runDir) {
 // lib/heartbeat.ts
 var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
 
+// lib/handoff-v2.ts
+var SUMMARY_MAX_CHARS = 600;
+var NOTES_MAX_CHARS = 200;
+var ALLOWED_INJECTION_CLEAN_VALUES = /* @__PURE__ */ new Set([
+  "clean",
+  "flagged",
+  "unverified"
+]);
+var VALID_TIERS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+var VALID_STATUSES = /* @__PURE__ */ new Set(["done", "blocked", "escalate"]);
+var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes",
+  "injection_clean"
+  // HK-08 additive-optional
+]);
+function validateHandoffV2(value) {
+  const errors = [];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { valid: false, errors: ["envelope must be a non-null object"] };
+  }
+  const obj = value;
+  for (const k of Object.keys(obj)) {
+    if (!ALLOWED_TOP_LEVEL_KEYS.has(k)) {
+      errors.push(
+        `unknown key "${k}" \u2014 strict guild.handoff.v2 rejects extra/misspelled keys`
+      );
+    }
+  }
+  if (obj["schema_version"] !== "guild.handoff.v2") {
+    errors.push(
+      `schema_version must be "guild.handoff.v2"; got ${JSON.stringify(obj["schema_version"])}`
+    );
+  }
+  if (typeof obj["task_id"] !== "string" || obj["task_id"].trim() === "") {
+    errors.push("task_id must be a non-empty string");
+  }
+  if (typeof obj["tier"] !== "string" || !VALID_TIERS.has(obj["tier"])) {
+    errors.push(`tier must be one of cheap|mid|powerful; got ${JSON.stringify(obj["tier"])}`);
+  }
+  if (typeof obj["status"] !== "string" || !VALID_STATUSES.has(obj["status"])) {
+    errors.push(
+      `status must be one of done|blocked|escalate; got ${JSON.stringify(obj["status"])}`
+    );
+  }
+  if (typeof obj["summary"] !== "string") {
+    errors.push("summary must be a string");
+  } else if (obj["summary"].trim() === "") {
+    errors.push("summary must not be empty");
+  } else if (obj["summary"].length > SUMMARY_MAX_CHARS) {
+    errors.push(
+      `summary exceeds ${SUMMARY_MAX_CHARS} char cap (bloat rejection SC-7): got ${obj["summary"].length} chars`
+    );
+  }
+  if (!Array.isArray(obj["artifacts"])) {
+    errors.push("artifacts must be an array (may be empty)");
+  } else {
+    for (let i = 0; i < obj["artifacts"].length; i++) {
+      if (typeof obj["artifacts"][i] !== "string") {
+        errors.push(`artifacts[${i}] must be a string`);
+      }
+    }
+  }
+  if (!Array.isArray(obj["issues"])) {
+    errors.push("issues must be an array (may be empty)");
+  } else {
+    for (let i = 0; i < obj["issues"].length; i++) {
+      if (typeof obj["issues"][i] !== "string") {
+        errors.push(`issues[${i}] must be a string`);
+      }
+    }
+  }
+  if (obj["status"] === "escalate") {
+    if (obj["escalate_reason"] === void 0 || obj["escalate_reason"] === null || typeof obj["escalate_reason"] === "string" && obj["escalate_reason"].trim() === "") {
+      errors.push("escalate_reason is required and must be non-empty when status is 'escalate'");
+    }
+  }
+  if (obj["escalate_reason"] !== void 0 && typeof obj["escalate_reason"] !== "string") {
+    errors.push("escalate_reason must be a string when provided");
+  }
+  if (obj["learnings"] !== void 0) {
+    if (!Array.isArray(obj["learnings"])) {
+      errors.push("learnings must be an array when provided");
+    } else {
+      for (let i = 0; i < obj["learnings"].length; i++) {
+        if (typeof obj["learnings"][i] !== "string") {
+          errors.push(`learnings[${i}] must be a string`);
+        }
+      }
+    }
+  }
+  if (obj["notes"] !== void 0) {
+    if (typeof obj["notes"] !== "string") {
+      errors.push("notes must be a string when provided");
+    } else if (obj["notes"].length > NOTES_MAX_CHARS) {
+      errors.push(
+        `notes exceeds ${NOTES_MAX_CHARS} char cap (O-4 binding resolution): got ${obj["notes"].length} chars`
+      );
+    }
+  }
+  if (obj["injection_clean"] !== void 0) {
+    if (!ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"])) {
+      errors.push(
+        `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
+      );
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+function extractHandoffEnvelope(content) {
+  const pattern = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/;
+  const match = pattern.exec(content);
+  if (!match || !match[1]) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
 // lib/run-trace.ts
 function resolveRunIdForTrace(root, env) {
   const fromEnv = env.GUILD_RUN_ID;
@@ -7880,11 +8105,12 @@ function isRunActive(guildRoot, runId, status, nowMs = Date.now()) {
   if (newest === 0) return false;
   return nowMs - newest <= reanchorGraceMs();
 }
-function buildAdditionalContextEnvelope(hookEventName, header) {
+function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
-      additionalContext: header
+      additionalContext: header,
+      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
     }
   });
 }
@@ -8306,11 +8532,13 @@ if (isMainModule()) {
 }
 
 // lib/lifecycle-gate.ts
+init_config_defaults2();
 var LIFECYCLE_GATE_MARKER = "[GUILD LIFECYCLE GATE]";
 var CLOSE_GATE_MARKER = "[GUILD CLOSE GATE]";
 var PROMPT_OVERRIDE_TOKEN = "[guild:gate-override]";
 var ENV_OVERRIDE_VAR = "GUILD_LIFECYCLE_GATE_OVERRIDE";
-var DEFAULT_ADHOC_THRESHOLD = 20;
+var DEFAULT_ADHOC_THRESHOLD = DEFAULTS.defaults.lifecycle_gate.adhoc_activity_threshold;
+var DEFAULT_LIFECYCLE_GATE_ENABLED = DEFAULTS.defaults.lifecycle_gate.enabled;
 var ADHOC_TOOLS = /* @__PURE__ */ new Set(["Bash", "Edit", "Write", "NotebookEdit"]);
 var MUTATING_TOOLS = /* @__PURE__ */ new Set(["Edit", "Write", "NotebookEdit"]);
 var BUILD_OR_LATER_PHASES = /* @__PURE__ */ new Set(["build", "qa", "ops"]);
@@ -8341,26 +8569,16 @@ function safeTs(value) {
 var GATE_STATE_SCHEMA = "guild.lifecycle_gate.v1";
 var CLOSE_STATE_SCHEMA = "guild.lifecycle_close.v1";
 function readLifecycleGateConfig(guildRoot) {
-  let enabled = true;
-  let threshold = DEFAULT_ADHOC_THRESHOLD;
   try {
-    const raw = fs11.readFileSync(path13.join(guildRoot, ".guild", "settings.json"), "utf8");
-    const parsed = JSON.parse(raw);
-    const defs = parsed["defaults"];
-    if (defs !== null && typeof defs === "object" && !Array.isArray(defs)) {
-      const gate = defs["lifecycle_gate"];
-      if (gate !== null && typeof gate === "object" && !Array.isArray(gate)) {
-        const g = gate;
-        if (typeof g["enabled"] === "boolean") enabled = g["enabled"];
-        const rawThreshold = g["adhoc_activity_threshold"];
-        if (typeof rawThreshold === "number" && Number.isInteger(rawThreshold) && rawThreshold >= 1) {
-          threshold = rawThreshold;
-        }
-      }
-    }
+    const { resolveSettings: resolveSettings3 } = (init_settings_resolver(), __toCommonJS(settings_resolver_exports));
+    const parsed = resolveSettings3({ cwd: guildRoot }).config;
+    const g = parsed.defaults?.lifecycle_gate ?? {};
+    const enabled = typeof g.enabled === "boolean" ? g.enabled : DEFAULT_LIFECYCLE_GATE_ENABLED;
+    const threshold = typeof g.adhoc_activity_threshold === "number" && Number.isInteger(g.adhoc_activity_threshold) && g.adhoc_activity_threshold >= 1 ? g.adhoc_activity_threshold : DEFAULT_ADHOC_THRESHOLD;
+    return { enabled, threshold };
   } catch {
+    return { enabled: DEFAULT_LIFECYCLE_GATE_ENABLED, threshold: DEFAULT_ADHOC_THRESHOLD };
   }
-  return { enabled, threshold };
 }
 function isOverridden(env = process.env, promptText = null) {
   if (env[ENV_OVERRIDE_VAR] === "1") return true;
@@ -8572,11 +8790,23 @@ function renderLifecycleGate(runId, activity, threshold, phase, nextGate) {
     `- Intentional? Re-send this prompt (the gate fires once per crossing), add ${PROMPT_OVERRIDE_TOKEN} to it, or export ${ENV_OVERRIDE_VAR}=1 for the session.`
   ].join("\n");
 }
-function renderCloseGate(runId, missing, laneCount) {
+function renderCloseGate(runId, missing, laneCount, malformed = []) {
+  const clauses = [];
+  if (missing.length > 0) {
+    clauses.push(
+      `${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} missing or empty`
+    );
+  }
+  if (malformed.length > 0) {
+    clauses.push(
+      `lane receipt(s) ${malformed.join(", ")} carry a missing or malformed guild.handoff.v2 envelope`
+    );
+  }
   return [
-    `${CLOSE_GATE_MARKER} run ${runId} completed all ${laneCount} lane(s) with receipts, but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} missing or empty.`,
+    `${CLOSE_GATE_MARKER} run ${runId} completed all ${laneCount} lane(s) with receipts, but ${clauses.join("; and ")}.`,
     "- A build run must pass guild:review (writes review.md) AND guild:verify-done (writes verify.md) before close.",
-    "- Run the missing gate(s) now, or re-enter via guild:resume \u2014 do not close this run on receipts alone.",
+    "- Every lane receipt must embed a valid guild.handoff.v2 envelope (status, changed_files, evidence, pr_url, codex).",
+    "- Run the missing gate(s) / fix the receipt(s) now, or re-enter via guild:resume \u2014 do not close this run on receipts alone.",
     `- Intentional? Export ${ENV_OVERRIDE_VAR}=1 to dismiss for this session.`
   ].join("\n");
 }
@@ -8685,6 +8915,64 @@ async function evaluateLifecycleGate(guildRoot, runId, promptText, env = process
     return silent;
   });
 }
+var REQUIRED_RECEIPT_ENVELOPE_KEYS = Object.freeze([
+  "status",
+  "changed_files",
+  "evidence",
+  "pr_url",
+  "codex"
+]);
+function validateReceiptEnvelope(content) {
+  let block;
+  try {
+    block = extractHandoffEnvelope(content);
+  } catch {
+    return { ok: false, reason: "guild.handoff.v2 envelope could not be read" };
+  }
+  if (block === null) {
+    return {
+      ok: false,
+      reason: "no valid embedded guild.handoff.v2 JSON block (frontmatter-only or unparseable)"
+    };
+  }
+  if (typeof block !== "object" || Array.isArray(block)) {
+    return { ok: false, reason: "guild.handoff.v2 envelope is not a JSON object" };
+  }
+  if (validateHandoffV2(block).valid) return { ok: true, reason: null };
+  const obj = block;
+  const missing = REQUIRED_RECEIPT_ENVELOPE_KEYS.filter(
+    (k) => obj[k] === void 0 || obj[k] === null
+  );
+  if (missing.length > 0) {
+    return { ok: false, reason: `envelope missing required key(s): ${missing.join(", ")}` };
+  }
+  const typeErrors = [];
+  if (typeof obj["status"] !== "string" || obj["status"].trim() === "") {
+    typeErrors.push("status must be a non-empty string");
+  }
+  const stringArray = (v) => Array.isArray(v) && v.every((e) => typeof e === "string");
+  if (!stringArray(obj["changed_files"])) typeErrors.push("changed_files must be a string[]");
+  if (!stringArray(obj["evidence"])) typeErrors.push("evidence must be a string[]");
+  if (typeof obj["pr_url"] !== "string" || obj["pr_url"].trim() === "") {
+    typeErrors.push("pr_url must be a non-empty string");
+  }
+  const codex = obj["codex"];
+  if (typeof codex !== "object" || codex === null || Array.isArray(codex)) {
+    typeErrors.push("codex must be an object");
+  } else {
+    const c = codex;
+    if (typeof c["verdict"] !== "string" || c["verdict"].trim() === "") {
+      typeErrors.push("codex.verdict must be a non-empty string");
+    }
+    if (typeof c["rounds"] !== "number" || !Number.isFinite(c["rounds"])) {
+      typeErrors.push("codex.rounds must be a number");
+    }
+  }
+  if (typeErrors.length > 0) {
+    return { ok: false, reason: `envelope shape invalid: ${typeErrors.join("; ")}` };
+  }
+  return { ok: true, reason: null };
+}
 function hasContent(filePath) {
   try {
     const st = fs11.lstatSync(filePath);
@@ -8707,6 +8995,7 @@ async function evaluateCloseGate(guildRoot, runId, env = process.env) {
   if (!lanes.every((status) => status === COMPLETED_LANE_STATUS)) return silent;
   const handoffsDir = path13.resolve(ctx.runDir, "handoffs");
   const seenReceipts = /* @__PURE__ */ new Set();
+  const malformed = [];
   for (const ref of ctx.runState.receiptRefs) {
     if (ref === null) return silent;
     const resolved = path13.resolve(ctx.runDir, ref);
@@ -8715,22 +9004,32 @@ async function evaluateCloseGate(guildRoot, runId, env = process.env) {
     if (!resolved.endsWith(".md")) return silent;
     if (seenReceipts.has(resolved)) return silent;
     seenReceipts.add(resolved);
-    if (!hasContent(resolved)) return silent;
+    let receiptText;
+    try {
+      const st = fs11.lstatSync(resolved);
+      if (!st.isFile()) return silent;
+      receiptText = fs11.readFileSync(resolved, "utf8");
+    } catch {
+      return silent;
+    }
+    if (!validateReceiptEnvelope(receiptText).ok) malformed.push(path13.basename(resolved));
   }
+  malformed.sort();
   const missing = [];
   for (const artifact of ["review.md", "verify.md"]) {
     if (!hasContent(path13.join(ctx.runDir, artifact))) missing.push(artifact);
   }
   missing.sort();
+  const problems = [...missing, ...malformed.map((m) => `envelope:${m}`)].sort();
   return withGateLock(ctx.runDir, () => {
     const prior = loadCloseState(ctx.runDir);
-    const sameSet = prior.fired_for.length === missing.length && prior.fired_for.every((name, i) => name === missing[i]);
-    if (missing.length === 0) {
-      if (prior.fired_for.length > 0) {
+    const sameSet = prior.fired_for.length === problems.length && prior.fired_for.every((name, i) => name === problems[i]);
+    if (problems.length === 0) {
+      if (prior.fired_for.length > 0 || prior.fire_count > 0) {
         writeCloseState(ctx.runDir, {
           schema_version: CLOSE_STATE_SCHEMA,
           fired_for: [],
-          fire_count: prior.fire_count
+          fire_count: 0
         });
       }
       return silent;
@@ -8738,10 +9037,10 @@ async function evaluateCloseGate(guildRoot, runId, env = process.env) {
     if (sameSet || prior.fire_count >= MAX_CLOSE_FIRES) return silent;
     writeCloseState(ctx.runDir, {
       schema_version: CLOSE_STATE_SCHEMA,
-      fired_for: missing,
+      fired_for: problems,
       fire_count: prior.fire_count + 1
     });
-    return { advisory: renderCloseGate(ctx.safeRunId, missing, lanes.length) };
+    return { advisory: renderCloseGate(ctx.safeRunId, missing, lanes.length, malformed) };
   });
 }
 

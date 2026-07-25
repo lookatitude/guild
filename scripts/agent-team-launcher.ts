@@ -78,6 +78,8 @@ import {
 import { terminatePane } from "./lib/host/tmux-backend";
 // #76 — pane-path dispatch receipts into the orchestrating run's trace.
 import { emitPaneDispatchEvents } from "./lib/host/pane-dispatch-trace";
+// rf-wi-04 item 2 — durable sink for orphaned remote lanes (Q2a).
+import { emitRemoteOrphan } from "./lib/emit-remote-orphan";
 import {
   findRunAcceptances,
   findRunTaskCells,
@@ -230,6 +232,9 @@ function parseYaml(raw: string): TeamYaml {
         // This ensures generated teams (default_tier only) route at their roster tier,
         // not collapse to mid. Scored tier wins when execute-plan writes it.
         tier: cur.tier ?? cur.default_tier,
+        // rf-wi-03 (G3): the raw cost score, carried through to GUILD_TIER_SCORE
+        // on the dispatch env (audit-only). Undefined until a producer writes it.
+        score: cur.score,
         capabilityRequirements: cur.capabilityRequirements, // GAP-A1/ARCH-2 (may be undefined)
         // D-CAP: thread capability_scope onto the Specialist — undefined when absent
         // (no restrictions). Populated by applyMapEntry + block-list interceptor above.
@@ -360,6 +365,22 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
     const t = stripQuotes(value).trim().toLowerCase();
     if (t === "cheap" || t === "mid" || t === "powerful") {
       target.default_tier = t as "cheap" | "mid" | "powerful";
+    }
+  }
+  // rf-wi-03 (G3): the raw cost-scorer `score:` for this specialist, when a
+  // producer wrote one back to team.yaml. composeInProcessDispatch carries it as
+  // GUILD_TIER_SCORE (audit-only — the tier guard never gates on it). Populating
+  // this key is the execute-plan writeback's job (a followup owned by rf-wi-06,
+  // the SKILL-surface lane); the parse + descriptor plumbing is complete here so
+  // the value flows the moment the writeback emits it.
+  else if (key === "score") {
+    const s = stripQuotes(value).trim();
+    // Guard the empty string — Number("") === 0 would fabricate a score of 0
+    // where none was written ("never a fake value"). A real 0 (cheap lane) is a
+    // non-empty "0" and still parses.
+    if (s.length > 0) {
+      const n = Number(s);
+      if (Number.isFinite(n)) target.score = n;
     }
   }
   // GAP-A1/ARCH-2: capability requirements from team.yaml, forwarded by
@@ -1733,6 +1754,12 @@ async function main(): Promise<void> {
             transport: new SshRemoteTransport(),
             resolveHostTarget,
             resolveAdapter: resolveAdapter(),
+            // rf-wi-04 item 2 (codex review Q2a) — route the orphaned-lane
+            // warning to a DURABLE run-scoped sink. launch() is wrapped in
+            // bounded retry below; a later successful attempt discards the
+            // failed attempt's envelope, so the orphan must be persisted at
+            // detection time (NDJSON events log + trace), not left on stderr.
+            warn: (msg) => emitRemoteOrphan(cwd, runId, msg),
           });
 
           // R-016a: wrap the ONE real TS-level dispatch call site in bounded retry.
