@@ -8,6 +8,7 @@ source_refs:
   - plugin/scripts/build-host-packages.ts
   - plugin/scripts/guild-run.ts
   - plugin/scripts/lib/self-update.ts
+  - plugin/src/modules/host-runtime/workflows/host-capabilities-schema.ts
   - plugin/src/modules/host-runtime/workflows/host-registry-schema.ts
   - plugin/.github/workflows/release.yml
   - plugin/hooks/hooks.json
@@ -135,7 +136,7 @@ current wiring. Classes below describe *what Guild does today*; the
 | Class | What Guild does today | Updatable? |
 |---|---|---|
 | **A — remote ref** | registers a git ref; host's `marketplace update`/`upgrade` re-fetches the snapshot | **Explicitly updatable** — an operator command refreshes it. Whether an *installed* plugin then moves to the new version is host-dependent and **unverified for Codex** (see the behavior table above). Not "automatic". |
-| **B — local path** | registers a filesystem path into a rendered `dist/` tree | **No** — `marketplace upgrade` rejects a local source outright |
+| **B — local path** | registers a filesystem path into a rendered `dist/` tree | **Not by the host's own refresh** — `marketplace upgrade` rejects a local source outright. Guild-side paths still exist for an INSTALLER-MANAGED install: `install.sh --update` re-renders and reinstalls from the receipt, and the registry declares `guild-run update` as the canonical command. A registration the installer did not create (hand-run `codex plugin marketplace add`) has no receipt and neither path sees it. |
 | **C — rendered tree** | leaves a `dist/<host>/` tree. Wrapper-package hosts re-render via `guild-run update`; **file-surface** hosts (`agents-file`, `kiro`, `qoder`, `trae`) are refused it and told their real command instead — the AC-7 honesty guard in `self-update.ts:104-113` rejects any host whose capability row is not `apply: "self_update"` | Only on an explicit update command — and **which** command differs *within* the class |
 | **D — refused** | recognized by `is_refuse_host` (install.sh:151); the refuse block at install.sh:320-336 collects them and `exit 4`s | n/a |
 
@@ -152,15 +153,15 @@ the registry does.
 
 | Host | Class | Host supports | Guild's install path | Version resolution | Publish mechanism | Update command | Staleness signal | Ev |
 |---|---|---|---|---|---|---|---|---|
-| `claude-code-cli` | A *(README)* / B *(install.sh)* | git ref **and** local path | README:108,121 → `claude plugin marketplace add lookatitude/guild[@next]`; **but** install.sh:504 registers `$RENDERED_DIST/claude-code`, a local path | git ref, or local snapshot via install.sh | git push to `main`/`next` | `claude plugin marketplace update guild` | **Yes** — `hooks/hooks.json:16` `SessionStart` → `update-check.js` | V |
-| `codex-cli` | B *(as wired)* — A *available today* | **git ref, verified working** (`--ref main` → 2.3.2) **and** local path | install.sh:526 registers `$RENDERED_DIST/codex-marketplace` (local); README:167 documents the same | pinned semver dir `plugins/cache/guild/guild/<v>/`; version from `.codex-plugin/plugin.json` (local) or `.claude-plugin/marketplace.json` (git) | git push — **already works, unused** | git: `codex plugin marketplace upgrade`; local: **fails** (not a Git marketplace) — only a re-`codex plugin add` re-resolves | **No** — generated `codex-hooks.json` wires only `UserPromptSubmit` | V |
+| `claude-code-cli` | A *(README)* / B *(install.sh)* | git ref **and** local path | README:108,121 → `claude plugin marketplace add lookatitude/guild[@next]`; **but** install.sh:504 registers `$RENDERED_DIST/claude-code`, a local path | git ref, or local snapshot via install.sh | git push to `main`/`next` | **`claude plugin marketplace update guild && claude plugin update guild@guild`** — the canonical pair per `UPDATE_COMMANDS.marketplace_cli` (`host-capabilities-schema.ts:94`, wired at `:282`, `auto_capable: true`). Refreshing the marketplace alone does NOT move the installed plugin; that second command is not optional, and this page records no live proof that the first alone suffices. | **Yes** — `hooks/hooks.json:16` `SessionStart` → `update-check.js` | V |
+| `codex-cli` | B *(as wired)* — A *available today* | **git ref, verified working** (`--ref main` → 2.3.2) **and** local path | install.sh:526 registers `$RENDERED_DIST/codex-marketplace` (local); README:167 documents the same | pinned semver dir `plugins/cache/guild/guild/<v>/`; version from `.codex-plugin/plugin.json` (local) or `.claude-plugin/marketplace.json` (git) | git push — **already works, unused** | **git source:** `codex plugin marketplace upgrade` (propagation to an installed plugin UNVERIFIED — see the behavior table). **local source:** `marketplace upgrade` **fails** (not a Git marketplace); a re-`codex plugin add` re-resolves. **Guild-side, installer-managed only:** registry-canonical `guild-run update` (`UPDATE_COMMANDS.self_update`, `host-capabilities-schema.ts:95`, wired at `:378`, `auto_capable: false`), and `install.sh --update`, which reinstalls from the receipt (install.sh:212 consumes receipts, :529 writes the codex one). Its per-receipt-channel re-render applies to the **no-checkout/fetched** path only — run from a checkout, the working tree is the source and the channel is ignored (install.sh:428-430, note at :432). **A registration the installer did not create has no receipt and neither Guild-side path sees it** — which is the reporting machine's exact state. | **No** — generated `codex-hooks.json` wires only `UserPromptSubmit` | V |
 | `pi-cli` | C *(provisional)* | **`npm:` · `git:` · `https://` · `ssh://` · local path** (`pi install --help`) | install.sh:545 → `pi install $RENDERED_DIST/pi` — the local-path option | render-time snapshot *(assumed — depends on what `pi install` copies/links)* | none used; git/npm sources available | `guild-run update` (guild-run.ts:74,300) | No | **capability V** (`--help` run) · **Guild path S** — install not executed, so B-vs-C is not forced |
 | `antigravity-cli` | C *(provisional)* | `install <target>` incl. **`plugin@marketplace`**, plus `link <mp> <target>` (`agy plugin --help`) | install.sh:561 → `agy plugin install $RENDERED_DIST/antigravity` — local path | render-time snapshot *(assumed — same caveat)* | none used; marketplace mechanism available | `guild-run update` | No | **capability V** (`--help` run) · **Guild path S** — install not executed |
-| `agents-file` | C | n/a — file surface | install.sh:576 renders only; user copies `dist/agents/` | copy-time snapshot, no version marker in the copied tree | none | `install.sh --update` (**not** `guild-run update` — the AC-7 guard at self-update.ts:104-113 refuses any host whose capability row is not `apply: "self_update"`) | No | S |
-| `cursor` | C | unknown | install.sh:591 renders `dist/cursor/` + `bin/guild-run` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; registry `provenance: inferred` |
-| `github-copilot` | C | unknown | install.sh:591 renders `dist/github-copilot/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
-| `opencode` | C | unknown | install.sh:591 renders `dist/opencode/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
-| `rovo-dev` | C | unknown | install.sh:591 renders `dist/rovo-dev/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
+| `agents-file` | C | n/a — file surface | install.sh:576 writes the receipt; the copy instructions it prints are :578-581 — the installer renders only, the user copies `dist/agents/` | copy-time snapshot, no version marker in the copied tree | none | `install.sh --update` (**not** `guild-run update` — the AC-7 guard at self-update.ts:104-113 refuses any host whose capability row is not `apply: "self_update"`) | No | S |
+| `cursor` | C | unknown | install.sh:591 sets `NEW_CLI_PATH`; the launcher it points at is :594/:607-608 — renders `dist/cursor/` + `bin/guild-run` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; registry `provenance: inferred` |
+| `github-copilot` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/github-copilot/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
+| `opencode` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/opencode/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
+| `rovo-dev` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/rovo-dev/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
 | `kiro` | C | n/a — editor file surface (`adapter_binding: agents-file`) | install.sh:624 reuses `dist/agents/`; user copies to project root | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — editor not exercised; `inferred` |
 | `qoder` | C | same as `kiro` | install.sh:624 reuses `dist/agents/` | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — `inferred` |
 | `trae` | C | same as `kiro` | install.sh:624 reuses `dist/agents/` | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — `inferred` |
@@ -211,7 +212,8 @@ G4/G5 acceptance test with a concrete trigger, not an open curiosity.
 
 - **`install.sh` cannot render a beta package from a checkout.** When
   `build-host-packages.ts` sits next to the script, the working tree *is* the
-  source and `--channel` is ignored with a note (install.sh:429-431). The channel
+  source (install.sh:428 detects the checkout, :429-430 states it) and `--channel`
+  is ignored with the note printed at :432. The channel
   selector governs only the no-checkout clone fallback, so `--channel beta` from
   a clone silently installs whatever branch is checked out.
 - **Receipts are written by `install.sh` only.** `write_receipt` (install.sh:479)
@@ -236,9 +238,9 @@ Restricted to what the evidence forces:
 | Goal | What follows |
 |---|---|
 | **G2** version SoT | Two manifests are load-bearing for install: `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (Codex reads the latter over git). `.codex-plugin/plugin.json` is load-bearing for the local path. A version field in the *generated Codex marketplace manifest* is **not** required — both install paths already resolve a version without it. The SoT requirement is that these agree; the drift gate is still justified. |
-| **G3** publish matrix | **Scope shrinks substantially.** Codex needs no new publish infrastructure — the repo is already a working git marketplace. The deliverable is switching Guild's *default registration* from local to remote (install.sh + README) for codex, and evaluating the same for pi (`git:`) and antigravity (`plugin@marketplace`). A GitHub Release artifact per host is **not** forced by the evidence; it is one option for genuinely file-surface hosts. **Constraint:** the switch must apply to *fetched* stable/beta installs only — install.sh:428 deliberately treats a checkout's working tree as the source, and making every invocation remote would break the development install path. **Channel switching requires `marketplace remove` + `add`**, not a re-`add`. |
+| **G3** publish matrix | **Scope shrinks substantially.** Codex needs no new publish infrastructure — the repo is already a working git marketplace. The deliverable is switching Guild's *default registration* from local to remote (install.sh + README) for codex, and evaluating the same for pi (`git:`) and antigravity (`plugin@marketplace`). A GitHub Release artifact per host is **not** forced by the evidence; it is one option for genuinely file-surface hosts. **Constraint:** the switch must apply to *fetched* stable/beta installs only — install.sh:428-430 deliberately treats a checkout's working tree as the source, and making every invocation remote would break the development install path. **Channel switching requires `marketplace remove` + `add`**, not a re-`add`. |
 | **G4** staleness signal | Codex's generated hook manifest carries only `UserPromptSubmit`, so Codex has no session-start signal — that gap is real. But distribution class does not determine hook availability, and wrapper hosts already have `guild-run update`. The requirement is *a* reachable signal per host, not specifically a SessionStart port. |
-| **G5** update parity | Two defects are evidenced: receipts are not written by host-native installs, and `plugin_version_from` reads the wrong tree. The correct per-host update command differs by class (`marketplace update`/`upgrade` · `guild-run update` · `install.sh --update`) and the current docs do not say which applies where. |
+| **G5** update parity | Three defects are evidenced. (1) Receipts are written ONLY by `install.sh` — a host-native install (including the documented primary Claude path and the working Codex git path) leaves `install.sh --update` and `guild-run update` blind, which is the reporting machine's exact state. (2) `plugin_version_from` reads the Claude tree for every host's receipt. (3) The documented Guild-side Codex update paths assume an INSTALLER-MANAGED install. README:144-151 already matches the registry (the Claude two-command pair; `guild-run update` for the wrapper hosts incl. codex) — so the gap is NOT a docs-vs-registry mismatch. It is that the two **Guild-side** paths — `guild-run update` (`self-update.ts:95-99`) and `install.sh --update` (`install.sh:220-224`) — are both receipt-dependent, and a host-native install writes no receipt. The Claude marketplace pair is host-native and needs no receipt, so this does NOT affect a native Claude install; it bites Codex specifically, whose only documented command is the receipt-dependent `guild-run update`. The reporting machine had Guild on Codex, no receipt, and therefore no working documented update path. G5 owes that case a real answer, not a third mapping. |
 
 ## Verification method
 
@@ -267,8 +269,8 @@ exercised, and was deleted. The operator's `~/.codex/config.toml` was read but
 never modified — it still carries the stale `local` registration, so the
 reported defect remains reproducible until the operator applies the fix above.
 
-**Review provenance.** This page survived two rounds of Codex adversarial review
-and was materially wrong before both.
+**Review provenance.** This page survived SIX rounds of Codex adversarial review and was materially
+wrong before each of the first five.
 
 - **Round 1** refuted the central thesis. The first draft claimed Codex had no
   working update path and marked all 16 rows empirically verified. Codex
@@ -286,5 +288,14 @@ and was materially wrong before both.
   upgrade-propagation row is now an explicit UNVERIFIED with a named blocker and
   a concrete re-test trigger.
 
+- **Round 6** (cap extended by the operator, because round 5's fix landed
+  unreviewed) confirmed the round-5 scoping fix and then caught three more: the
+  update-path rows understated reality (`install.sh --update` and the
+  registry-canonical `guild-run update` both reach an installer-managed local
+  Codex install — "none that works" was wrong), the Claude row listed half of a
+  two-command chain, and four `install.sh` citations pointed at adjacent lines
+  rather than the ones carrying the claim.
+
 The lesson worth carrying: *"the host cannot do X"* is the claim most likely to
-be wrong, because it is the one nobody tests. Both rounds turned on it.
+be wrong, because it is the one nobody tests. Rounds 1, 3 and 6 all turned on
+some version of it.
