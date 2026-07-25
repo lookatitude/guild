@@ -1600,6 +1600,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/emit-remote-orphan",
+      "source_path": "scripts/lib/emit-remote-orphan.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/equivalence-contract",
       "source_path": "scripts/lib/equivalence-contract.ts",
       "kind": "lib"
