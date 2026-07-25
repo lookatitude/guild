@@ -153,6 +153,179 @@ function errorLabel(e: TelemetryEvent): string {
   return isErrorEvent(e) ? " ⚠ ERROR" : "";
 }
 
+/**
+ * #G7b (v23x-deferred-followups) — reconciles a mixed-dialect log to ONE set
+ * of "logical tool-call events": a genuine duplicate PAIR counts once, but a
+ * genuinely UNPAIRED row from either dialect is never dropped.
+ *
+ * Legacy hook-mirror lines name the activity `event: "PostToolUse"` (the
+ * literal Claude Code hook name); the canonical v1.4 shape
+ * (hooks/lib/v1.4/log-jsonl-schema.ts's ToolCallEvent) names the SAME
+ * activity `event: "tool_call"`. Gating on "PostToolUse" alone (pre-#G7b)
+ * silently zeroed buildSpecialistActivity's toolCalls/fileOps tally and both
+ * slow-call detectors for every canonical run — hooks.json's PostToolUse
+ * matcher runs BOTH hooks/capture-telemetry.ts and hooks/post-tool-use.ts,
+ * and a pre-de-dup-fix canonical log carries BOTH a `PostToolUse` row (from
+ * capture-telemetry.ts) AND a `tool_call` row (from post-tool-use.ts) for the
+ * SAME invocation, landing within a few ms of each other with the same
+ * `tool` name (verified against the checked-in
+ * tests/rearch/perf-corpus/run-medium-942.jsonl fixture).
+ *
+ * A whole-log "prefer one dialect" heuristic is WRONG: `tool_call.tool` is a
+ * closed enum (log-jsonl-schema.ts's TOOL_CALL_TOOL_VALUES) and
+ * post-tool-use.ts deliberately skips any tool outside it (isKnownTool()), so
+ * a tool like Monitor/SendMessage/ToolSearch/an MCP tool only EVER gets a
+ * `PostToolUse` row — real, distinct data, not a duplicate of anything.
+ * Conversely post-tool-use.ts's orphan-sweep can emit a `tool_call` row for a
+ * hung invocation that never completed (so no `PostToolUse` ever fired for
+ * it either) — also real, distinct data. Suppressing "the other dialect"
+ * wholesale (as an earlier version of this fix did) silently drops both of
+ * these real-data cases (confirmed against the perf-corpus fixture: 21
+ * `PostToolUse`-only invocations + 18 `tool_call`-only orphans, alongside 444
+ * genuinely paired duplicates — 483 total logical records, not 462 or 465).
+ *
+ * Algorithm: IDENTITY, not just cardinality. A pure "min(a,b) of this tool
+ * are paired" slice (an earlier version of this fix) gets the total COUNT
+ * right via max(a,b) = a+b-min(a,b), but silently mispairs whenever a tool
+ * has genuinely unpaired rows on BOTH sides at once (one real pair + one
+ * post-only orphan + one call-only orphan for the same tool: cardinality
+ * slicing reports max(2,2)=2, dropping a real record whose true count is 3).
+ * A GREEDY nearest-first match (a later version) fixes that, but is not
+ * guaranteed optimal either: greedily claiming each post's single nearest
+ * still-free call, in timestamp order, can grab a call that a LATER post
+ * needed more, stranding both that later post and the call the greedy pick
+ * ignored (e.g. posts at relative ts 0/40, calls at -35/30, window 50ms: the
+ * true optimal is post0↔call-35 (dist 35) + post40↔call30 (dist 10) = 2
+ * matches, but greedy lets post0 grab call30 first (dist 30 < 35), stranding
+ * post40 and call-35 unmatched = 3 reported records instead of 2).
+ *
+ * Group same-`tool` rows per dialect, then compute the TRUE
+ * maximum-cardinality (most pairs), minimum-total-distance (tie-break)
+ * matching subject to each pair being within MATCH_WINDOW_MS — a real
+ * pair's two hook-fired rows land within ~1ms of each other in production,
+ * (measured max separation 48ms in the checked-in corpus), while a genuine
+ * orphan has no counterpart nearby in time. This is the classical 1-D
+ * assignment problem: for any cost that is a sum of |timestamp differences|,
+ * an optimal matching between two TIME-SORTED sequences never needs to
+ * "cross" pairs (if postA↔callX and postB↔callY with postA before postB,
+ * an optimal solution has callX before callY too) — so a
+ * sequence-alignment-style DP over the two sorted lists (same recurrence as
+ * edit distance / LCS: at each step, skip the next post, skip the next call,
+ * or match them if within window) finds the true optimum in O(postCount ×
+ * callCount) per tool, exact rather than heuristic. A matched pair is kept
+ * once (represented by the richer `tool_call` row); anything left unmatched
+ * on either side — a real orphan — is kept as its own distinct row,
+ * preserving its own specialist/duration/tool fields. When one dialect is
+ * entirely absent from the log (the common, current single-dialect shape),
+ * this is a no-op passthrough of the other dialect.
+ *
+ * Deliberately excludes `hook_event` from both dialects: a lifecycle hook
+ * (SessionStart, PreCompact, ...) is bridged onto Timeline's `tool` field for
+ * error/duration display (see normalizeEvent), but it is not itself a tool
+ * CALL — counting it here would inflate the "Tool calls" tally with non-tool
+ * activity.
+ */
+const MATCH_WINDOW_MS = 50;
+
+/**
+ * Exact maximum-cardinality, minimum-total-distance matching between two
+ * timestamp-sorted sequences, restricted to pairs within `windowMs`. See
+ * reconcileToolCallEvents's docstring for why this must be a DP (greedy
+ * nearest-first is not optimal) and why a non-crossing DP is exact here.
+ */
+function maxCardinalityMinCostMatch(
+  sortedPosts: TelemetryEvent[],
+  sortedCalls: TelemetryEvent[],
+  tsOf: (e: TelemetryEvent) => number,
+  windowMs: number
+): Array<[TelemetryEvent, TelemetryEvent]> {
+  const n = sortedPosts.length;
+  const m = sortedCalls.length;
+  // count[i][j]/cost[i][j] = best (most pairs, then least total distance)
+  // matching using only sortedPosts[0..i) and sortedCalls[0..j).
+  const count: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  const cost: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  const betterThan = (aCount: number, aCost: number, bCount: number, bCost: number): boolean =>
+    aCount > bCount || (aCount === bCount && aCost < bCost);
+
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      let bestCount = count[i - 1][j];
+      let bestCost = cost[i - 1][j];
+      if (betterThan(count[i][j - 1], cost[i][j - 1], bestCount, bestCost)) {
+        bestCount = count[i][j - 1];
+        bestCost = cost[i][j - 1];
+      }
+      const diff = Math.abs(tsOf(sortedPosts[i - 1]) - tsOf(sortedCalls[j - 1]));
+      if (diff <= windowMs) {
+        const matchCount = count[i - 1][j - 1] + 1;
+        const matchCost = cost[i - 1][j - 1] + diff;
+        if (betterThan(matchCount, matchCost, bestCount, bestCost)) {
+          bestCount = matchCount;
+          bestCost = matchCost;
+        }
+      }
+      count[i][j] = bestCount;
+      cost[i][j] = bestCost;
+    }
+  }
+
+  const matches: Array<[TelemetryEvent, TelemetryEvent]> = [];
+  let i = n;
+  let j = m;
+  while (i > 0 && j > 0) {
+    const diff = Math.abs(tsOf(sortedPosts[i - 1]) - tsOf(sortedCalls[j - 1]));
+    if (diff <= windowMs && count[i - 1][j - 1] + 1 === count[i][j] && cost[i - 1][j - 1] + diff === cost[i][j]) {
+      matches.push([sortedPosts[i - 1], sortedCalls[j - 1]]);
+      i--;
+      j--;
+    } else if (count[i - 1][j] === count[i][j] && cost[i - 1][j] === cost[i][j]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return matches;
+}
+
+function reconcileToolCallEvents(events: TelemetryEvent[]): TelemetryEvent[] {
+  const posts = events.filter((e) => e.event === "PostToolUse");
+  const calls = events.filter((e) => e.event === "tool_call");
+  if (posts.length === 0 || calls.length === 0) {
+    return posts.length > 0 ? posts : calls;
+  }
+
+  const byTool = new Map<string, { posts: TelemetryEvent[]; calls: TelemetryEvent[] }>();
+  const bucket = (tool: unknown) => {
+    const key = typeof tool === "string" ? tool : "";
+    if (!byTool.has(key)) byTool.set(key, { posts: [], calls: [] });
+    return byTool.get(key)!;
+  };
+  for (const e of posts) bucket(e.tool).posts.push(e);
+  for (const e of calls) bucket(e.tool).calls.push(e);
+
+  const tsOf = (e: TelemetryEvent): number =>
+    typeof e.ts === "string" ? Date.parse(e.ts) : Number.NaN;
+  const byTs = (a: TelemetryEvent, b: TelemetryEvent) => tsOf(a) - tsOf(b);
+
+  const reconciled: TelemetryEvent[] = [];
+  for (const { posts: toolPosts, calls: toolCalls } of byTool.values()) {
+    const sortedPosts = [...toolPosts].sort(byTs);
+    const sortedCalls = [...toolCalls].sort(byTs);
+    const matches = maxCardinalityMinCostMatch(sortedPosts, sortedCalls, tsOf, MATCH_WINDOW_MS);
+    const matchedPosts = new Set(matches.map(([post]) => post));
+    const matchedCalls = new Set(matches.map(([, call]) => call));
+    for (const [, call] of matches) reconciled.push(call); // paired dupe, kept once (richer tool_call representative)
+    for (const post of sortedPosts) {
+      if (!matchedPosts.has(post)) reconciled.push(post); // unpaired PostToolUse-only — kept with its own fields
+    }
+    for (const call of sortedCalls) {
+      if (!matchedCalls.has(call)) reconciled.push(call); // unpaired tool_call-only (orphan)
+    }
+  }
+  return reconciled;
+}
+
 /** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
 function isDispatchEvent(e: TelemetryEvent): boolean {
   return e.schema_version === "guild.trace.dispatch.v1";
@@ -418,6 +591,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
     string,
     { toolCalls: number; fileOps: number; errors: number; ok: number }
   >();
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
 
   for (const event of events) {
     const key = event.specialist || "(main session)";
@@ -425,7 +599,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
       specialistMap.set(key, { toolCalls: 0, fileOps: 0, errors: 0, ok: 0 });
     }
     const s = specialistMap.get(key)!;
-    if (event.event === "PostToolUse" && event.tool) {
+    if (toolCallEvents.has(event) && event.tool) {
       s.toolCalls++;
       if (event.tool === "Write" || event.tool === "Edit") s.fileOps++;
     }
@@ -453,6 +627,28 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
   return lines.join("\n").trim();
 }
 
+/**
+ * #G7b — the legacy hook-mirror `payload_digest` field has no canonical
+ * v1.4 equivalent by that name (log-jsonl-schema.ts's ToolCallEvent /
+ * HookEvent carry `result_excerpt_redacted` / `payload_excerpt_redacted`
+ * instead), so a canonical ERROR row printed the literal string
+ * "digest: undefined". Render whichever redacted excerpt IS present, and
+ * omit the "— digest: ..." segment entirely rather than print a non-value.
+ *
+ * Collapses internal whitespace (including newlines) to single spaces before
+ * deciding presence and rendering: production `result_excerpt_redacted`
+ * (hooks/post-tool-use.ts's resultExcerpt()) preserves a raw string
+ * tool-response verbatim, so it can be whitespace-only (would otherwise
+ * render a visually-empty "— digest: " segment) or multiline (would
+ * otherwise break the single-line Notable-events list entry across lines).
+ */
+function errorDigest(e: TelemetryEvent): string {
+  const digest = e.payload_digest ?? e.result_excerpt_redacted ?? e.payload_excerpt_redacted;
+  if (typeof digest !== "string") return "";
+  const collapsed = digest.replace(/\s+/g, " ").trim();
+  return collapsed.length > 0 ? ` — digest: ${collapsed}` : "";
+}
+
 function buildNotableEvents(events: TelemetryEvent[]): string {
   const notable: string[] = [];
 
@@ -462,13 +658,14 @@ function buildNotableEvents(events: TelemetryEvent[]): string {
   const errorEvents = events.filter(isErrorEvent);
   for (const e of errorEvents) {
     notable.push(
-      `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"} — digest: ${e.payload_digest}`
+      `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"}${errorDigest(e)}`
     );
   }
 
   // Very long tool calls (> 2000ms for tool use events, heuristic)
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
   const longCalls = events.filter(
-    (e) => e.event === "PostToolUse" && e.ms > 2000
+    (e) => toolCallEvents.has(e) && typeof e.ms === "number" && e.ms > 2000
   );
   for (const e of longCalls) {
     notable.push(
@@ -504,8 +701,9 @@ function buildReflectionHints(
   }
 
   // Missing-specialist candidates: events from main session (empty specialist) with tool use
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
   const mainSessionToolCalls = events.filter(
-    (e) => e.event === "PostToolUse" && !e.specialist && e.tool
+    (e) => toolCallEvents.has(e) && !e.specialist && e.tool
   );
   if (mainSessionToolCalls.length > 0) {
     hints.push(
@@ -515,7 +713,7 @@ function buildReflectionHints(
 
   // Context-bundle issues: any tool calls over 5000ms
   const verySlowCalls = events.filter(
-    (e) => e.event === "PostToolUse" && e.ms > 5000
+    (e) => toolCallEvents.has(e) && typeof e.ms === "number" && e.ms > 5000
   );
   if (verySlowCalls.length > 0) {
     hints.push(
