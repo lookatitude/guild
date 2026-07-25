@@ -1,0 +1,73 @@
+name: channel-integrity
+
+# Mechanizes release-discipline rule 4 — the sync-back.
+# (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
+#
+# Branches ARE distribution channels: main = STABLE (default marketplace
+# installs), next = BETA (`@next` followers). After a release merges to main,
+# next must be advanced to the release point. When that does not happen, the
+# beta channel serves OLDER code than stable — the inverse of what a beta
+# channel is for.
+#
+# That failure is invisible to every other gate: per-PR checks all stay green
+# because nothing is wrong with any individual PR. It happened for real —
+# v2.3.2 merged to main on 2026-07-25 and the sync-back never landed, leaving
+# next at 2.3.1 with nothing reporting it. Rule 4 was prose; prose does not
+# enforce process.
+#
+# WHY THESE TRIGGERS:
+#   push to main      — a release just landed, so the sync-back is now DUE. This
+#                       is the earliest honest moment to start asking.
+#   push to next      — confirms a sync-back actually cleared the debt.
+#   schedule (daily)  — catches the window between those two: a release that
+#                       merged and was then left alone. Without this, a repo
+#                       with no pushes stays silently broken.
+#   workflow_dispatch — manual re-check after an operator fixes it.
+#
+# Deliberately NOT `pull_request`: an unrelated contributor's PR must not fail
+# for a channel-state problem they neither caused nor can fix.
+
+on:
+  push:
+    branches: [main, next]
+  schedule:
+    # 07:00 UTC daily — a stale beta channel is a "notice within a day" problem,
+    # not a "notice within a minute" one.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  channel-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history — the gate reads both channel refs)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch both channel refs
+        run: git fetch origin main next --quiet
+
+      - name: Install scripts/ dependencies
+        run: |
+          if [ -f scripts/package.json ]; then
+            cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
+          fi
+
+      # Exit 2 = beta trails stable. The script prints the exact rule-8 remedy,
+      # including the diverged-branches case where --ff-only is impossible.
+      #
+      # Run through `npm --prefix scripts` rather than a bare `npx tsx` at the repo
+      # root: tsx is installed in scripts/node_modules by the step above, and a
+      # root-level `npx` would not find it and would silently fetch another copy
+      # from the network (slower, and unpinned relative to the lockfile).
+      - name: Beta channel must not trail stable (release-discipline rule 8)
+        run: npm --prefix scripts run check:channel-integrity -- --json

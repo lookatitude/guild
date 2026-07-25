@@ -9,16 +9,18 @@ source_refs:
   - plugin/.githooks/pre-push
   - plugin/install.sh
   - plugin/scripts/release-changelog.ts
+  - plugin/.github/workflows/channel-integrity.yml
+  - plugin/scripts/check-channel-integrity.ts
 created_at: 2026-07-12
-updated_at: 2026-07-12
+updated_at: 2026-07-25
 sensitivity: internal
 ---
 
 # Release discipline
 
 The rules that govern how Guild plugin changes reach users. Referenced by
-`.githooks/pre-push`, `.github/workflows/release.yml`, and
-`.github/workflows/branch-policy.yml` — the hooks/gates are the deterministic
+`.githooks/pre-push`, `.<HIGH_ENTROPY_REDACTED>.yml`, and
+`.<HIGH_ENTROPY_REDACTED>-policy.yml` — the hooks/gates are the deterministic
 enforcement; this page is the rationale and the numbered rule list they cite.
 
 ## The channel model
@@ -77,9 +79,54 @@ only release PRs (rule 8).
    - **Releasing:** cut `release/vX.Y.Z` **from `next`**, bump versions
      (`plugin.json` + `marketplace.json`), update `CHANGELOG.md` and the
      release notes, PR into `main`. Merge → rule 7 tags + publishes.
-   - **Sync-back:** immediately after the release merges, merge `main` back
-     into `next` (PR or fast-forward when clean) so the two channels share the
-     release point. `next` history never rewrites.
+   - **Sync-back:** immediately after the release merges, advance `next` to the
+     release point (fast-forward when the release point is a **descendant of**
+     `next`; otherwise a sync-back PR merged with *Rebase and merge*) so the two
+     channels share it. `next` history never rewrites.
+
+     **Mechanized (xhrd-wi-06).** This step is no longer prose-only:
+     `.<HIGH_ENTROPY_REDACTED>-integrity.yml` runs
+     `scripts/check-channel-integrity.ts` on every push to `main`/`next`, daily,
+     and on demand. It fails when `next`'s `plugin.json` version trails
+     `main`'s — i.e. when **beta users are running older code than stable**.
+     Run it locally with `npm run check:channel-integrity` (from `scripts/`).
+
+     **It DETECTS, it does not PREVENT.** `release.yml` tags and publishes on
+     the merged-PR event; a `push`-triggered workflow runs concurrently and
+     cannot block that. This gate reports outstanding sync-back debt — it does
+     not stop a new release from being cut while the debt stands. Closing that
+     gap means putting the check on the release path itself (followup).
+
+     *Why a gate was needed:* v2.3.2 merged to `main` on 2026-07-25 and the
+     sync-back never landed. `next` sat at 2.3.1 for the rest of that day with
+     every per-PR gate green — the failure is invisible to checks scoped to a
+     single PR, because no individual PR is wrong.
+
+     *Why the check is on version, not commit ancestry:* `next` legitimately
+     carries commits `main` lacks — that is what an integration branch is. Only
+     the released version can answer "is beta behind stable".
+
+     *When `--ff-only` will not work — decide by ANCESTRY, not by dates:*
+
+     ```bash
+     git merge-base --is-ancestor origin/next <release-tag> && echo ff-possible || echo diverged
+     ```
+
+     If diverged, the fast-forward above is impossible; the remedy is a
+     sync-back PR carrying the release delta (version bump, changelog section,
+     regenerated inventory) merged with *Rebase and merge*.
+
+     **The v2.3.2 case, and the trap it exposes.** `next` (`066a83c`, 18:35) and
+     `main` (`127a868`, 20:34) diverged — 8 commits on `next`, 1 on `main`,
+     merge-base `814dd60` — even though **`next` never moved after the
+     release**. The release PR (#96) was **squash-merged**, producing a
+     single-parent commit on `main` that is not a descendant of `next`. Squashing
+     the release PR destroys ancestry and makes the `--ff-only` sync-back in this
+     rule structurally impossible every time.
+
+     ⇒ **Merge release PRs with a merge commit or rebase — never squash.** The
+     two-commit release shape (bump + changelog) exists precisely so that merge
+     stays linear and the sync-back is a fast-forward.
    - A **hotfix** is just a patch release: cut the next patch version's
      `release/vX.Y.Z` branch (e.g. `release/v2.1.1`) from `main`, apply the
      fix, PR into `main`, then sync-back into `next`.
