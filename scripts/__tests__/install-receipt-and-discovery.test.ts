@@ -191,12 +191,27 @@ describe("REGRESSION: the receipt path install.sh actually uses", () => {
       fs.utimesSync(dir("2.3.2"), base + 100, base + 100);
       fs.utimesSync(dir("2.2.0"), base + 200, base + 200); // just-installed
 
-      // A GNU-semantics stat shim: `-c %Y` works, `-f` SUCCEEDS with a mount
-      // point — the exact behavior that silently broke the BSD-first chain.
+      // A GNU-semantics stat shim, PLATFORM-INDEPENDENT: perl supplies the
+      // mtime (present on macOS and ubuntu runners alike) — a first version
+      // delegated to BSD `/usr/bin/stat`, which broke the shim itself on the
+      // Linux CI runner. The `-f` branch models real GNU 9.11 behavior:
+      // filesystem-status garbage on STDOUT with a non-zero exit (measured on
+      // coreutils 9.11), which inside `$(A || B)` gets captured with B's
+      // output appended — the pollution that made the old BSD-first chain's
+      // captured value garbage on Linux. These tests prove the POSITIVE
+      // contract (correct selection when `-c %Y` is the working spelling);
+      // they are not a revert-tripwire, since the polluted capture can still
+      // limp to a correct pick on the trailing valid line.
       gnubin = fs.mkdtempSync(path.join(os.tmpdir(), "guild-gnustat-"));
       fs.writeFileSync(
         path.join(gnubin, "stat"),
-        '#!/bin/bash\nif [ "$1" = "-c" ] && [ "$2" = "%Y" ]; then exec /usr/bin/stat -f %m "$3"; fi\nif [ "$1" = "-f" ]; then echo "/"; exit 0; fi\nexit 1\n',
+        [
+          "#!/bin/bash",
+          'if [ "$1" = "-c" ] && [ "$2" = "%Y" ]; then exec perl -e \'print +(stat($ARGV[0]))[9]\' "$3"; fi',
+          'if [ "$1" = "-f" ]; then echo "  Inodes: Total: 999999 Free: 424242"; exit 1; fi',
+          "exit 1",
+          "",
+        ].join("\n"),
         { mode: 0o755 }
       );
     });
@@ -217,11 +232,18 @@ describe("REGRESSION: the receipt path install.sh actually uses", () => {
       expect(path.basename(out)).toBe("2.2.0");
     });
 
-    it("tracks a change in which version is newest", () => {
+    it("tracks a change in which version is newest — native AND GNU shim", () => {
       const d = path.join(cache, "plugins", "cache", "guild", "guild", "2.3.2");
       const t = Date.UTC(2026, 5, 1) / 1000;
       fs.utimesSync(d, t, t);
       expect(path.basename(sh(`${fnSel}\ncodex_cache_plugin_dir ${cache}`))).toBe("2.3.2");
+      // Round-5 caught that the reverse direction only ran under native stat,
+      // so "verified under the shim in both directions" was unproven. Run it.
+      const out = execFileSync("bash", ["-c", `${fnSel}\ncodex_cache_plugin_dir ${cache}`], {
+        encoding: "utf8",
+        env: { ...process.env, PATH: `${gnubin}:${process.env.PATH ?? ""}` },
+      }).trim();
+      expect(path.basename(out)).toBe("2.3.2");
     });
 
     it("empty/absent cache yields empty so the caller falls back", () => {

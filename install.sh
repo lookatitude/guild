@@ -613,11 +613,16 @@ install_claude_code_cli() {
 # (`codex plugin add` creates/touches the one it installs; `find | head -1`
 # is filesystem order and could pick a STALE version).
 #
-# mtime portability is ASYMMETRIC and the order below is load-bearing:
-# GNU `stat -c %Y` fails cleanly on BSD, but BSD-style `stat -f %m` on GNU
-# SUCCEEDS with garbage — there `-f` is filesystem status and `%m` the MOUNT
-# POINT — so a BSD-first chain never falls through on Linux and sorts by
-# mount point. GNU first, BSD second.
+# mtime portability is ASYMMETRIC and the order below is load-bearing.
+# GNU `stat -c %Y` fails CLEANLY on BSD (error, no stdout). BSD-style
+# `stat -f %m <dir>` on GNU is `-f` = filesystem-status MODE with "%m" taken
+# as a FILE operand: it prints multi-line filesystem status for <dir> on
+# stdout and exits non-zero (measured on coreutils 9.11). Inside `$(A || B)`
+# that stdout is CAPTURED with B's output appended, so a BSD-first chain
+# pollutes the captured value on Linux; selection may still limp through on
+# the trailing valid line, but the value is garbage and the behavior
+# version-dependent. Prefer the ordering whose cross-platform failure mode is
+# CLEAN: GNU first, BSD second.
 codex_cache_plugin_dir() {
   # $1 = codex home
   find "$1/plugins/cache/guild" -maxdepth 4 -type d \
