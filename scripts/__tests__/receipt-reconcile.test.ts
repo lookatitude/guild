@@ -1580,9 +1580,23 @@ process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out
     expect(scanReceiptJournal(p.journal).record_count).toBe(1);
   }, 120_000);
 
-  it("fails closed when the journal moves under a lock that LIES about holding it", () => {
+  it("fails closed BEFORE any repair write when a lock LIES about holding it", () => {
+    // MH-06-R7-NB1 moved this refusal earlier. A primitive that reports exclusive
+    // access as a bare `true` — returning no `JournalLockGrant` and, because it
+    // never called the default primitive, publishing none out of band either —
+    // named no lock object. Round 7 recorded that as an identity of `null` and
+    // read it as "an injected seam, skip the lock checks", so the repair ran: the
+    // checkpoint was rewritten and only then refused, by a verify pass that
+    // noticed the journal had moved underneath it.
+    //
+    // That ordering was the defect. The verify pass is a backstop, not the gate:
+    // the write it was catching had already landed, and the release that follows
+    // deletes the lock by pathname. An acquisition this writer cannot identify is
+    // now refused at the acquisition, so `writeCheckpoint` is never reached and
+    // nothing is deleted at a name this writer cannot recognise as its own.
     const p = oneRecordDamagedCheckpoint();
     let landed: Record<string, unknown> | null = null;
+    let released = false;
     const io: JournalIo = {
       ...defaultJournalIo,
       // A primitive that reports exclusive access it never took.
@@ -1590,7 +1604,7 @@ process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out
         return true;
       },
       releaseLock() {
-        /* nothing was taken */
+        released = true;
       },
       writeCheckpoint(cpPath, content) {
         if (landed === null) landed = landRecordFromAnotherProcess(p.root, 2);
@@ -1600,21 +1614,19 @@ process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out
 
     const out = reconcileRepair(p, { io });
 
-    // The write landed exactly what reconciliation computed…
-    expect(out.checkpoint_repair.persisted).toBe(true);
-    expect(landed).toMatchObject({ disposition: "succeeded", sequence: 2 });
-    // …and is still refused, because the CURRENT journal no longer matches it.
+    // No repair was attempted, so nothing was persisted and the concurrent writer
+    // was never even invited to race — `landed` stays null because the seam that
+    // spawns it is downstream of the refusal.
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.persisted).toBe(false);
     expect(out.checkpoint_repair.verified).toBe(false);
-    expect(out.checkpoint_repair.failure?.code).toBe("repair_verify_failed");
-    // Sequence, count and named event all disagree. `updated_at` does NOT: both
-    // fixture records carry the same `recorded_at`, which is exactly why staleness
-    // must be checked on the identity of the record named, not on a timestamp
-    // alone.
-    expect(out.checkpoint_repair.residual_disagreements.map((d) => d.code)).toEqual([
-      "checkpoint_sequence_mismatch",
-      "checkpoint_count_mismatch",
-      "checkpoint_event_mismatch",
-    ]);
+    expect(landed).toBeNull();
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_failed");
+    // The damaged checkpoint is left damaged rather than half-repaired.
+    expect(readCheckpointState(p.checkpoint).state).toBe("malformed");
+    // Nothing was taken, so nothing is released by pathname.
+    expect(released).toBe(false);
+    // A denied mutation the caller asked for is still a blocking outcome.
     expect(out.disposition).toBe("failed");
     expect(out.blocks_clean_close).toBe(true);
   }, 60_000);

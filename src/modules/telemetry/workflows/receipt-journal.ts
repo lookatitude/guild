@@ -618,8 +618,17 @@ export interface JournalIo {
    * The default primitive returns a `JournalLockGrant` — the identity of the
    * object it just created — because an identity sampled after the call returns
    * is the identity of whatever is there NOW, not of what was acquired
-   * (MH-06-R6-B1). A seam that returns a plain `boolean` still type-checks and
-   * still works; it simply supplies no identity of its own.
+   * (MH-06-R6-B1).
+   *
+   * A bare `true` still type-checks, and it still works for the wrapper that
+   * calls the default primitive and throws the returned grant away, because that
+   * primitive ALSO published the identity out of band. What a bare `true` cannot
+   * do is stand alone. An acquisition that neither returns a grant nor leaves one
+   * published named no object, and the name it was given cannot be asked
+   * afterwards — the answer would be whatever is there now, which is exactly the
+   * substitution MH-06-R6-B1 turns on. Such an acquisition fails closed before
+   * any mutation, and the object at that name is left alone rather than deleted
+   * (MH-06-R7-NB1).
    *
    * Optional so existing `JournalIo` fakes keep type-checking; the default
    * implementation is used whenever a seam does not supply one.
@@ -1032,15 +1041,64 @@ export interface LockFailure {
   message: string;
 }
 
-/** What an acquisition attempt yielded: the object it created, or why it did not. */
-interface JournalLockAcquisition {
-  grant: JournalLockGrant | null;
-  failure: LockFailure | null;
-}
+/**
+ * What an acquisition attempt yielded: the object it created, or why it did not.
+ *
+ * The two states are exclusive BY TYPE. There is no "held, but unnamed" value to
+ * fall through with, so no caller can reach a mutation holding a lock it cannot
+ * identify — round 7 recorded exactly that as `grant: null` and treated it as a
+ * successful acquisition (MH-06-R7-NB1).
+ */
+type JournalLockAcquisition =
+  | { grant: JournalLockGrant; failure: null }
+  | { grant: null; failure: LockFailure };
 
 /** Let go of a grant nobody retained, so a descriptor cannot outlive its use. */
 function discardLockGrant(grant: JournalLockGrant | null): void {
   if (grant && grant.fd !== null) closeQuietly(grant.fd);
+}
+
+function lockRefusal(code: LockFailureCode, message: string): JournalLockAcquisition {
+  return { grant: null, failure: { code, message } };
+}
+
+/**
+ * The `JournalLockGrant` a seam actually returned, or null when what came back is
+ * not one.
+ *
+ * Nothing here touches the filesystem. The identity has to come OUT of the
+ * acquiring primitive, so a claim that is missing or malformed is rejected rather
+ * than completed from an `lstat` of the pathname — that lookup would name
+ * whatever occupies the name now, which is the substitution itself.
+ */
+function asLockGrant(value: boolean | JournalLockGrant, lockPath: string): JournalLockGrant | null {
+  if (typeof value !== "object" || value === null) return null;
+  const claim = value as Partial<JournalLockGrant>;
+  if (claim.path !== lockPath) return null;
+  if (typeof claim.device !== "number" || !Number.isFinite(claim.device)) return null;
+  if (typeof claim.inode !== "number" || !Number.isFinite(claim.inode)) return null;
+  if (claim.fd !== null && (typeof claim.fd !== "number" || !Number.isInteger(claim.fd) || claim.fd < 0)) return null;
+  return {
+    path: claim.path,
+    device: claim.device,
+    inode: claim.inode,
+    fd: typeof claim.fd === "number" ? claim.fd : null,
+  };
+}
+
+/** Do two grants name the same object? */
+function sameLockObject(a: JournalLockGrant, b: JournalLockGrant): boolean {
+  return a === b || (a.path === b.path && a.device === b.device && a.inode === b.inode);
+}
+
+/**
+ * Close a duplicate grant's OWN descriptor without ever closing the retained
+ * one's. A wrapper that copies a grant carries the same fd NUMBER, and closing it
+ * would hand the OS a descriptor this transaction is still using.
+ */
+function discardDuplicateGrant(candidate: JournalLockGrant | null, retained: JournalLockGrant): void {
+  if (candidate === null || candidate === retained) return;
+  if (candidate.fd !== null && candidate.fd !== retained.fd) closeQuietly(candidate.fd);
 }
 
 /**
@@ -1049,11 +1107,16 @@ function discardLockGrant(grant: JournalLockGrant | null): void {
  *
  * The identity is whatever the acquiring primitive produced — never a later
  * observation of the pathname, which is the substitution MH-06-R6-B1 exploited.
- * A seam that hands back the grant it created is believed first; a seam that
- * discards it cannot erase what the default primitive captured, so the
- * out-of-band publication is consulted next; and a seam that is not a real
- * directory at all supplies no identity, which is recorded honestly as `null`
- * rather than guessed.
+ * The default primitive's out-of-band publication is authoritative when there is
+ * one, because it was written inside the frame that ran the `mkdir` with no seam
+ * in between; a wrapper may pass that same grant back, or discard it, but it may
+ * not contradict it. A seam that never called the default primitive is believed
+ * about the object it returns, since it IS the primitive.
+ *
+ * An acquisition that reports success and produces neither is refused
+ * (MH-06-R7-NB1). Round 7 recorded that case as an identity of `null` and let the
+ * transaction run with the lock checks switched off; there is no honest identity
+ * to record, so there is no acquisition to hand back.
  */
 function acquireJournalLockHeld(
   lockPath: string,
@@ -1072,31 +1135,51 @@ function acquireJournalLockHeld(
       // A real IO fault on the lock itself is a durability failure, not a
       // reason to proceed unguarded.
       discardLockGrant(claimLockGrant(lockPath));
-      return {
-        grant: null,
-        failure: {
-          code: "journal_lock_failed",
-          message: `journal lock could not be evaluated at ${lockPath}: ${err instanceof Error ? err.message : String(err)}`,
-        },
-      };
+      return lockRefusal(
+        "journal_lock_failed",
+        `journal lock could not be evaluated at ${lockPath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
     if (got) {
-      const returned = typeof got === "object" ? got : null;
+      const returned = asLockGrant(got, lockPath);
       const published = claimLockGrant(lockPath);
-      if (returned !== null && published !== null && published !== returned) discardLockGrant(published);
-      return { grant: returned ?? published, failure: null };
+      if (published !== null) {
+        if (returned !== null && !sameLockObject(returned, published)) {
+          // The seam called the default primitive and then named a DIFFERENT
+          // object. One of those two is not what this call holds, and there is no
+          // way to tell which, so neither is adopted and the name is left alone.
+          discardDuplicateGrant(returned, published);
+          discardLockGrant(published);
+          return lockRefusal(
+            "journal_lock_failed",
+            `the acquisition of the journal lock at ${lockPath} returned a lock object that is not the one its own ` +
+              "primitive created for this call — refusing to hold an exclusion whose identity the acquisition disputes",
+          );
+        }
+        discardDuplicateGrant(returned, published);
+        return { grant: published, failure: null };
+      }
+      if (returned !== null) return { grant: returned, failure: null };
+      // HELD, BUT UNNAMED (MH-06-R7-NB1). Round 7 carried this on as `grant: null`
+      // and read it as "an injected seam, skip the lock checks": the append and
+      // the checkpoint landed under a directory this writer never created, and
+      // the release then deleted it by pathname. The pathname cannot be consulted
+      // to recover what was taken — it answers with whatever is there now — so
+      // the only sound move is to refuse and to touch nothing at that name.
+      return lockRefusal(
+        "journal_lock_failed",
+        `the journal lock at ${lockPath} was reported as taken by an acquisition that named no lock object — ` +
+          "refusing to mutate under an exclusion this writer cannot identify, and leaving that lock in place " +
+          "rather than deleting an object it cannot recognise as its own",
+      );
     }
     if (i < attempts - 1) sleepSync(wait);
   }
-  return {
-    grant: null,
-    failure: {
-      code: "journal_lock_unavailable",
-      message:
-        `journal lock at ${lockPath} is held by another writer after ${attempts} attempts — ` +
-        "refusing to append without exclusive access (remove the lock only after confirming no writer is live)",
-    },
-  };
+  return lockRefusal(
+    "journal_lock_unavailable",
+    `journal lock at ${lockPath} is held by another writer after ${attempts} attempts — ` +
+      "refusing to append without exclusive access (remove the lock only after confirming no writer is live)",
+  );
 }
 
 /**
@@ -1108,6 +1191,9 @@ function acquireJournalLockHeld(
  *
  * This boolean-shaped entry point retains no identity, so it releases the grant's
  * descriptor immediately; `acquireJournalAuthority` is the path that HOLDS one.
+ * It still requires the acquisition to HAVE produced one, because a caller told
+ * "held" about an object nobody can name goes on to release it by pathname —
+ * which is how a replacement holder's exclusion gets deleted (MH-06-R7-NB1).
  */
 export function acquireJournalLock(
   lockPath: string,
@@ -1262,14 +1348,14 @@ export function acquireJournalAuthority(
   const identity = resolved.identity;
 
   const acquisition = acquireJournalLockHeld(identity.lock, io, lockOptions);
-  if (acquisition.failure) return { ok: false, authority: null, identity, failure: acquisition.failure };
+  if (acquisition.failure !== null) return { ok: false, authority: null, identity, failure: acquisition.failure };
 
   // The exclusion domain. The lock is the object the ACQUISITION named — round 6
   // sampled the pathname afterwards and adopted whatever replacement was sitting
-  // there (MH-06-R6-B1). A lock primitive that is not a real directory (an
-  // injected seam) yields no grant, and the corresponding checks are skipped
-  // rather than guessed.
-  const grant = acquisition.grant;
+  // there (MH-06-R6-B1). Reaching this line means such an object exists: an
+  // acquisition that named none is a refusal above, not a grant of `null` that
+  // silently turns the lock checks off (MH-06-R7-NB1).
+  const grant: JournalLockGrant = acquisition.grant;
   const journalParent = path.dirname(identity.path);
   const parentStat = statOrNull(journalParent);
   const parentDevice = parentStat !== null ? parentStat.dev : null;
@@ -1435,23 +1521,23 @@ export function acquireJournalAuthority(
 
     // 4. The lock at the canonical name is still the EXACT object the acquisition
     //    created — compared against the identity that acquisition produced, not
-    //    against a stat taken after it returned.
-    if (grant !== null) {
-      if (grant.fd !== null) {
-        const heldLock = fstatOrNull(grant.fd);
-        if (heldLock === null || heldLock.dev !== grant.device || heldLock.ino !== grant.inode) {
-          return unstable(
-            `the lock object this writer acquired at "${identity.lock}" can no longer be inspected ${stage}`,
-          );
-        }
-      }
-      const lockNow = lstatOrNull(identity.lock);
-      if (lockNow === null || !lockNow.isDirectory() || lockNow.dev !== grant.device || lockNow.ino !== grant.inode) {
+    //    against a stat taken after it returned. This check is UNCONDITIONAL:
+    //    round 7 skipped it whenever the acquisition supplied no identity, which
+    //    made "supply no identity" the way past it (MH-06-R7-NB1).
+    if (grant.fd !== null) {
+      const heldLock = fstatOrNull(grant.fd);
+      if (heldLock === null || heldLock.dev !== grant.device || heldLock.ino !== grant.inode) {
         return unstable(
-          `the lock this writer acquired is no longer the lock at "${identity.lock}" ${stage} — ` +
-            "another holder now owns that exclusion, so this operation is refused",
+          `the lock object this writer acquired at "${identity.lock}" can no longer be inspected ${stage}`,
         );
       }
+    }
+    const lockNow = lstatOrNull(identity.lock);
+    if (lockNow === null || !lockNow.isDirectory() || lockNow.dev !== grant.device || lockNow.ino !== grant.inode) {
+      return unstable(
+        `the lock this writer acquired is no longer the lock at "${identity.lock}" ${stage} — ` +
+          "another holder now owns that exclusion, so this operation is refused",
+      );
     }
 
     // 5. The caller's own spelling still means this journal. A repointed parent
@@ -1516,12 +1602,10 @@ export function acquireJournalAuthority(
       closeQuietly(pinnedCheckpointParent.fd);
       checkpointParentPin = { ...pinnedCheckpointParent, fd: null };
     }
-    if (grant === null) {
-      // Not a lock object this module can identify — an injected seam. Release it
-      // exactly as every earlier round did.
-      releaseJournalLock(identity.lock, io);
-      return;
-    }
+    // There is no "release whatever is at that name" branch left. An authority
+    // only exists when its acquisition named the lock, so the release always has
+    // something to compare against, and an unidentifiable acquisition never gets
+    // this far to delete a stranger's directory by pathname (MH-06-R7-NB1).
     const lockNow = lstatOrNull(identity.lock);
     const stillOurs =
       lockNow !== null && lockNow.isDirectory() && lockNow.dev === grant.device && lockNow.ino === grant.inode;

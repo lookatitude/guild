@@ -41,6 +41,7 @@ import {
   repairTornTail,
   RECEIPT_CONTRACT_VERSION,
   type JournalIo,
+  type JournalLockGrant,
   type ReceiptAppendInput,
 } from "../../src/modules/telemetry/workflows/receipt-journal";
 
@@ -2322,6 +2323,408 @@ describe("MH-06-R6-B3 — an append holds the checkpoint's parent when it lives 
     expect(out.sequence).toBe(2);
     expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
     expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R7-NB1 — an acquisition that names no lock object cannot mutate, and
+// cannot be released by pathname
+//
+// Round 6 was closed by making the acquiring primitive name what it created, and
+// round 7 kept that identity alive across a wrapper that discards the returned
+// grant by ALSO publishing it out of band. Both fixes assumed the acquisition
+// would leave an identity somewhere. The round-7 review supplied one that does
+// not: a fully custom `JournalIo.acquireLock` that really does `mkdir` the lock,
+// replaces the directory before returning, and reports success as a bare `true`.
+//
+// With no returned grant and no publication the module recorded `grant: null`,
+// which it read as "an injected seam — skip the lock checks". So the lock-object
+// comparison never ran, the append and the checkpoint landed under a directory
+// this writer never created, and the release deleted it by pathname: the
+// REPLACEMENT holder's exclusion, taken away by a writer that could not name
+// either lock. The reviewer measured disposition=succeeded, durable=true,
+// sequence=2, journal and checkpoint at 2, and the replacement gone.
+//
+// "I hold it but I cannot tell you what I took" is therefore not a success this
+// module may act on. It fails closed at the acquisition, before any journal,
+// checkpoint, truncation or repair mutation, and it LEAKS the object at that
+// name rather than deleting an exclusion it cannot recognise — a wedged journal
+// needs an operator, two writers sharing one journal need a forensics team.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R7-NB1 — a grantless acquisition fails closed and is never released by pathname", () => {
+  /** One durable record, so the journal is a real file with a real inode. */
+  function seeded() {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(appendReceipt(p, input({ event_id: "seed", operation_id: "op-seed" })).disposition).toBe("succeeded");
+    return { root, ...p };
+  }
+
+  const TORN_TAIL = '{"schema_version":"guild.receipt_record.v1","seq';
+
+  /**
+   * The reviewer's exact seam. Nothing here is a stub: it takes a real
+   * `mkdir`-based lock, it reports contention as `false`, it raises real IO
+   * faults, and it releases by pathname. The one thing it never does is say WHAT
+   * it took — and, optionally, it hands the name to a different directory in the
+   * instant before it returns.
+   */
+  function bareBooleanSeam(opts: { substitute: boolean }): {
+    io: JournalIo;
+    acquired: () => boolean;
+    substituted: () => boolean;
+    released: () => boolean;
+  } {
+    let acquired = false;
+    let substituted = false;
+    let released = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+        try {
+          fs.mkdirSync(lockPath);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+          throw err;
+        }
+        acquired = true;
+        if (opts.substitute && !substituted) {
+          substituted = true;
+          // Another holder takes the NAME in the window only the seam can occupy.
+          fs.rmSync(lockPath, { recursive: true, force: true });
+          fs.mkdirSync(lockPath);
+        }
+        return true; // …and the caller is told nothing about the object.
+      },
+      releaseLock(lockPath) {
+        released = true;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+      },
+    };
+    return { io, acquired: () => acquired, substituted: () => substituted, released: () => released };
+  }
+
+  it("refuses the bare-boolean substitution instead of appending and deleting the replacement", () => {
+    const p = seeded();
+    const lock = journalLockPath(p);
+    const seam = bareBooleanSeam({ substitute: true });
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), seam.io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(seam.acquired()).toBe(true);
+    expect(seam.substituted()).toBe(true); // the race really happened
+
+    // One assertion, so a regression prints the reviewer's whole observation at
+    // once: on the round-7 bytes this reads succeeded/true/2/2/2/false/true.
+    expect({
+      disposition: out.disposition,
+      durable: out.durable,
+      sequence: out.sequence,
+      failure_code: out.failure?.code ?? null,
+      journal_records: scanReceiptJournal(p.journal).record_count,
+      checkpoint_sequence: readCheckpoint(p.checkpoint)?.last_sequence ?? null,
+      replacement_lock_still_exists: fs.existsSync(lock),
+      released_by_pathname: seam.released(),
+    }).toEqual({
+      disposition: "failed",
+      durable: false,
+      sequence: null,
+      failure_code: "journal_lock_failed",
+      journal_records: 1,
+      checkpoint_sequence: 1,
+      replacement_lock_still_exists: true,
+      released_by_pathname: false,
+    });
+
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("refuses a grantless acquisition even when nothing substitutes it, and leaks rather than deletes", () => {
+    // No substitution at all: the seam holds the very directory it created. It
+    // still cannot be adopted, because the module has no way to tell this case
+    // apart from the substituted one — that indistinguishability IS the defect.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    const seam = bareBooleanSeam({ substitute: false });
+
+    const acquired = acquireJournalAuthority(p.journal, seam.io, { lock_max_attempts: 2, lock_wait_ms: 1 }, "append");
+
+    expect(seam.acquired()).toBe(true);
+    expect(acquired.ok).toBe(false);
+    expect(acquired.authority).toBeNull();
+    expect(acquired.failure?.code).toBe("journal_lock_failed");
+    // Releasing by pathname is precisely how a replacement holder's exclusion
+    // gets deleted, so an unidentifiable lock is left exactly where it is.
+    expect(seam.released()).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("refuses a torn-tail repair under a grantless acquisition, with every byte untouched", () => {
+    const p = seeded();
+    fs.appendFileSync(p.journal, TORN_TAIL);
+    const before = fs.readFileSync(p.journal);
+    const lock = journalLockPath(p);
+    const seam = bareBooleanSeam({ substitute: true });
+
+    const repair = repairTornTail(p.journal, seam.io, { lock_max_attempts: 2, lock_wait_ms: 1 });
+
+    expect(seam.substituted()).toBe(true);
+    expect(repair.disposition).toBe("failed");
+    expect(repair.failure?.code).toBe("journal_lock_failed");
+    expect(repair.removed_bytes).toBe(0);
+    // A truncation is irreversible; refusing after it has run is not refusing.
+    expect(fs.readFileSync(p.journal).equals(before)).toBe(true);
+    expect(seam.released()).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("refuses a returned grant that contradicts the primitive which created the lock", () => {
+    // The neighbouring shape: the seam DOES return a well-formed grant, but it
+    // calls the default primitive first and then names the replacement it put
+    // at that name instead. Believing the returned object over the primitive's
+    // own publication reinstates the whole round-6 substitution — with a valid
+    // identity attached, so every later check agrees and the release deletes the
+    // stranger's directory.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let contradicted = false;
+    let released = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        const real = defaultJournalIo.acquireLock!(lockPath);
+        if (typeof real !== "object") return real;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+        fs.mkdirSync(lockPath);
+        const replacement = fs.lstatSync(lockPath);
+        contradicted = true;
+        return { path: lockPath, device: replacement.dev, inode: replacement.ino, fd: null };
+      },
+      releaseLock(lockPath) {
+        released = true;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(contradicted).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_lock_failed");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(released).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("refuses a malformed grant claim instead of repairing it from the pathname", () => {
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let released = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+        fs.mkdirSync(lockPath);
+        // Shaped like a grant, names nothing: no device, no inode, no descriptor.
+        return { path: lockPath } as unknown as JournalLockGrant;
+      },
+      releaseLock(lockPath) {
+        released = true;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_lock_failed");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(released).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  // ── Controls. These separate "a grantless acquisition fails closed" from
+  //    "custom lock seams stopped working", which is the way a fail-closed rule
+  //    usually goes wrong.
+
+  it("still appends under a wrapper that calls the default primitive and returns bare true", () => {
+    // The attempt-7 shape, kept alive: the returned grant is thrown away, but the
+    // primitive published it out of band, so the identity is still claimed and
+    // still verified.
+    const p = seeded();
+    let discarded = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        const got = defaultJournalIo.acquireLock!(lockPath);
+        if (!got) return false;
+        discarded = true;
+        return true;
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(discarded).toBe(true);
+    expect(out.disposition).toBe("succeeded");
+    expect(out.durable).toBe(true);
+    expect(out.sequence).toBe(2);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+
+  it("still catches a substitution under that same discarding wrapper", () => {
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let swapped = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        const got = defaultJournalIo.acquireLock!(lockPath);
+        if (!got) return false;
+        swapped = true;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+        fs.mkdirSync(lockPath);
+        return true; // the grant is discarded — the publication is not
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(swapped).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("still appends under a custom seam that returns its own valid grant", () => {
+    const p = seeded();
+    let granted = false;
+    let released = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+        try {
+          fs.mkdirSync(lockPath);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+          throw err;
+        }
+        // Named inside the frame that created it, with nothing in between — the
+        // same discipline the default primitive follows. `fd: null` is the
+        // platform that will not open a directory.
+        const created = fs.lstatSync(lockPath);
+        granted = true;
+        return { path: lockPath, device: created.dev, inode: created.ino, fd: null };
+      },
+      releaseLock(lockPath) {
+        released = true;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(granted).toBe(true);
+    expect(out.disposition).toBe("succeeded");
+    expect(out.durable).toBe(true);
+    expect(out.sequence).toBe(2);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
+    // A lock this writer CAN name is the one it is allowed to take away again.
+    expect(released).toBe(true);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+
+  it("keeps ordinary contention typed, bounded and non-mutating", () => {
+    const p = seeded();
+    let attempts = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock() {
+        attempts += 1;
+        return false; // somebody else holds it — not a grantless success
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 3,
+      lock_wait_ms: 1,
+    });
+
+    expect(attempts).toBe(3); // bounded, and every attempt was made
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_lock_unavailable");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+  });
+
+  it("keeps a thrown lock IO fault typed, unretried and non-mutating", () => {
+    const p = seeded();
+    let calls = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock() {
+        calls += 1;
+        throw new Error("EROFS: read-only file system, mkdir");
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 3,
+      lock_wait_ms: 1,
+    });
+
+    expect(calls).toBe(1); // a fault is not contention, so it is not retried
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_lock_failed");
+    expect(out.failure?.message).toContain("EROFS");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+
+  it("still appends under the untouched default primitive", () => {
+    // The plain path, last, so a failure here says the fix reached past the seams.
+    const p = seeded();
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }));
+
+    expect(out.disposition).toBe("succeeded");
+    expect(out.durable).toBe(true);
+    expect(out.sequence).toBe(2);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
     expect(fs.existsSync(journalLockPath(p))).toBe(false);
   });
 });
