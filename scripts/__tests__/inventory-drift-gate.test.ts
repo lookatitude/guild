@@ -144,12 +144,13 @@ export function runsCommand(body: string, re: RegExp): boolean {
  * realistic shape in this repo (`check:claude-install`, `build:hosts`, …), so
  * the terminator must be whitespace or end-of-segment.
  */
-const END = "(?:\\s|$)";
-export const GATE_RE = new RegExp(`^npm run check:inventory${END}`);
-export const REWRITERS_RE = new RegExp(
-  `^(npx tsx )?(?:[^\\s]*/)?build-host-packages(?:\\.ts)?${END}` +
-    `|^npm run (verify:host-packages|build:hosts|sync:claude-install|check:claude-install)${END}`
-);
+// Written as literals rather than `new RegExp(\`^…\`)`: the comms-format lint
+// flags a backtick template opening with `^` and containing a `:` as a
+// hand-rolled YAML field extractor, and `check:inventory` trips it. Literals are
+// clearer here anyway. The `(?:\s|$)` tail is the token terminator described above.
+export const GATE_RE = /^npm run check:inventory(?:\s|$)/;
+export const REWRITERS_RE =
+  /^(npx tsx )?(?:[^\s]*\/)?build-host-packages(?:\.ts)?(?:\s|$)|^npm run (verify:host-packages|build:hosts|sync:claude-install|check:claude-install)(?:\s|$)/;
 
 /** Run build-inventory.ts against `root`, returning exit code + stderr. */
 function runCheck(root: string, invPath: string): { code: number; err: string } {
