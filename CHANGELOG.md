@@ -8,6 +8,21 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
+_Entries are generated at the release cut by `scripts/release-changelog.ts`._
+
+## [2.3.2] — 2026-07-25
+
+Closes the declared-deferred backlog of the v2.3.0/v2.3.1 waves (initiative
+`v23x-deferred-followups`, 7 grouped goals). Alongside it, the plugin's `docs/`
+set is retired in favor of the canonical design set + docs site.
+
+### Added
+
+- dispatch: GUILD_TIER env + structured producer marker; block prompt-only drift ([#85](https://github.com/lookatitude/guild/pull/85)) — @lookatitude
+- execute-plan: wire cmux dispatch-receipt CLI + checklist-as-code + envelope/cap contracts ([#86](https://github.com/lookatitude/guild/pull/86)) — @lookatitude
+- remote: hook-install preflight + teardown verdict, then remote pane flags; codex precondition documented ([#88](https://github.com/lookatitude/guild/pull/88)) — @lookatitude
+- observability: verify-done/reflect consume degradation+tier sinks; trace_summary dispatch parity ([#89](https://github.com/lookatitude/guild/pull/89)) — @lookatitude
+
 ### Changed
 
 - docs: the plugin's `docs/` set is **retired**. The public docs are generated from
@@ -18,6 +33,12 @@ from v1.0.0 onward.
 - docs: the canonical design docs are **no longer numbered** (`docs/v2/03-lifecycle.md`
   → `lifecycle.md`, …). Every citation in this repo is reconciled; reading order was
   never carried by the filenames (the design set's README sequences it explicitly). — @lookatitude
+
+### Fixed
+
+- lifecycle: clear run-id sentinel, write run.yaml gates, per-tool bound ([#83](https://github.com/lookatitude/guild/pull/83)) — @lookatitude
+- tooling: reconcile js-yaml pin + count canonical events in trace-summarize ([#84](https://github.com/lookatitude/guild/pull/84)) — @lookatitude
+- config: register lean_lead/lifecycle_gate/host_mode in canonical schema ([#87](https://github.com/lookatitude/guild/pull/87)) — @lookatitude
 
 ### Removed
 
@@ -33,6 +54,12 @@ from v1.0.0 onward.
 - The universal-host P1-L0 foundation contracts ADR addendum moved to
   `.guild/wiki/decisions/` — it is cited as the source spec by six code modules,
   all repointed. — @lookatitude
+
+### Internal
+
+- dispatch-attribution: drop legacy 300-char producer-head parse (marker now universal) ([#90](https://github.com/lookatitude/guild/pull/90)) — @lookatitude
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.3.1...v2.3.2
 
 ## [2.3.1] — 2026-07-23
 
