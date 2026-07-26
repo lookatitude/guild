@@ -63,10 +63,15 @@ function paths(root: string) {
 }
 
 function input(over: Partial<ReceiptAppendInput> = {}): ReceiptAppendInput {
+  const operation_id = over.operation_id ?? "op-1";
   return makeReceiptInput({
     run_id: "run-mh-06",
-    operation_id: "op-1",
-    correlation_id: "corr-1",
+    operation_id,
+    // MHRC-RCT-001 requires every correlation id to resolve to exactly ONE
+    // operation lineage, so the default fixture derives the correlation from the
+    // operation. Tests that deliberately exercise a shared or split lineage pass
+    // `correlation_id` explicitly (the `...over` spread wins).
+    correlation_id: `corr-${operation_id}`,
     event_id: "evt-1",
     causation_id: null,
     scenario_id: "MHRC-RCT-001",
@@ -153,6 +158,95 @@ describe("MHRC-RCT-001 — receipt journal preserves total logical order", () =>
       { correlation_id: "c-B", operation_ids: ["op-B"], event_ids: ["e3"] },
     ]);
     expect(scan.split_lineages).toEqual([]);
+  });
+
+  // ── MH-06-R1-B4 ───────────────────────────────────────────────────────────
+  it("MH-06-R1-B4: refuses an append that would split one correlation across two operations", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(
+      appendReceipt(p, input({ event_id: "e1", operation_id: "op-A", correlation_id: "corr-shared" }))
+        .disposition,
+    ).toBe("succeeded");
+
+    const split = appendReceipt(
+      p,
+      input({ event_id: "e2", operation_id: "op-B", correlation_id: "corr-shared" }),
+    );
+
+    expect(split.disposition).toBe("failed");
+    expect(split.durable).toBe(false);
+    expect(split.blocks_dependent_completion).toBe(true);
+    // The journal is untouched — the split never reaches disk.
+    expect(scanReceiptJournal(p.journal).records.map((r) => r.event_id)).toEqual(["e1"]);
+  });
+
+  it("MH-06-R1-B4: a split correlation lineage degrades integrity and blocks clean close", () => {
+    // appendReceipt refuses to create this shape, so it can only arrive from
+    // another writer, a merge, or a recovery — the scanner must still fail closed.
+    const root = mkRoot();
+    const p = paths(root);
+    const recs = [
+      sealReceiptRecord({
+        ...input({ event_id: "e1", operation_id: "op-A", correlation_id: "corr-shared" }),
+        sequence: 1,
+      }),
+      sealReceiptRecord({
+        ...input({ event_id: "e2", operation_id: "op-B", correlation_id: "corr-shared" }),
+        sequence: 2,
+      }),
+    ];
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.writeFileSync(p.journal, recs.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.split_lineages).toEqual(["corr-shared"]);
+    expect(scan.integrity).not.toBe("intact");
+    expect(scan.observation_state).not.toBe("checked_clean");
+    expect(scan.blocks_clean_close).toBe(true);
+  });
+
+  it("MH-06-R1-B4: refuses an append carrying a foreign run id", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1" }));
+
+    const foreign = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2", run_id: "other-run" }));
+    expect(foreign.disposition).toBe("failed");
+    expect(foreign.failure?.code).toBe("foreign_run_id");
+    expect(scanReceiptJournal(p.journal).records).toHaveLength(1);
+  });
+
+  it("MH-06-R1-B4: a journal mixing two runs is a lineage violation", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const recs = [
+      sealReceiptRecord({ ...input({ event_id: "e1", operation_id: "op-1" }), sequence: 1 }),
+      sealReceiptRecord({
+        ...input({ event_id: "e2", operation_id: "op-2", run_id: "other-run" }),
+        sequence: 2,
+      }),
+    ];
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.writeFileSync(p.journal, recs.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.run_ids).toEqual(["run-mh-06", "other-run"]);
+    expect(scan.integrity).toBe("lineage_violation");
+    expect(scan.blocks_clean_close).toBe(true);
+  });
+
+  it("a clean single-run journal reports exactly one run id", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1" }));
+    appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }));
+
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.run_ids).toEqual(["run-mh-06"]);
+    expect(scan.integrity).toBe("intact");
+    expect(scan.split_lineages).toEqual([]);
+    expect(scan.blocks_clean_close).toBe(false);
   });
 
   it("flags a terminal receipt that precedes its cause as an order violation", () => {

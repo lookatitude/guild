@@ -316,7 +316,22 @@ export interface RejectedLine {
   reason: RejectionReason;
 }
 
-export type JournalIntegrity = "absent" | "intact" | "truncated_tail" | "corrupt" | "order_violation";
+/**
+ * `lineage_violation` covers the two ways a journal's IDENTITY graph can be
+ * incoherent even though every individual record verifies: one correlation id
+ * spanning more than one operation, or one journal mixing more than one run.
+ * MHRC-RCT-001 asserts "all correlation ids resolve to one operation lineage",
+ * so a split lineage is an integrity defect — reporting it while still returning
+ * `intact` would be exactly the "exposes the defect, returns the clean shape"
+ * failure BR-07 forbids.
+ */
+export type JournalIntegrity =
+  | "absent"
+  | "intact"
+  | "truncated_tail"
+  | "corrupt"
+  | "order_violation"
+  | "lineage_violation";
 
 export interface OrderViolation {
   event_id: string;
@@ -346,6 +361,112 @@ export interface JournalScanResult {
   order_violations: OrderViolation[];
   lineages: Lineage[];
   split_lineages: string[];
+  /** Distinct run ids present. More than one means the journal mixes runs. */
+  run_ids: string[];
+}
+
+/**
+ * The structural verdict over a SET OF RECORDS, independent of how they were
+ * obtained (parsed from disk, or merged with side-channel recoveries).
+ *
+ * Exported because reconciliation must re-derive this over the MERGED lineage:
+ * judging a recovery only by its own hash, and cleanliness only by the original
+ * scan, is what let an invalid recovery close a gap (MHRC-RCT-003/004).
+ */
+export interface ReceiptRecordAnalysis {
+  duplicate_sequences: number[];
+  regressing_sequences: number[];
+  order_violations: OrderViolation[];
+  lineages: Lineage[];
+  split_lineages: string[];
+  run_ids: string[];
+  structural_integrity: "intact" | "order_violation" | "lineage_violation";
+  observation_state: ObservationState;
+}
+
+/**
+ * Derive sequence integrity, causal order, lineage coherence, and observation
+ * state from records alone. Pure: no IO, no clock, order-stable.
+ */
+export function analyzeReceiptRecords(records: ReceiptRecordV1[]): ReceiptRecordAnalysis {
+  // ── sequence integrity ──────────────────────────────────────────────────
+  const seen = new Map<number, number>();
+  const duplicate_sequences: number[] = [];
+  const regressing_sequences: number[] = [];
+  let prev = 0;
+  for (const r of records) {
+    seen.set(r.sequence, (seen.get(r.sequence) ?? 0) + 1);
+    if ((seen.get(r.sequence) ?? 0) === 2) duplicate_sequences.push(r.sequence);
+    if (r.sequence <= prev) regressing_sequences.push(r.sequence);
+    prev = Math.max(prev, r.sequence);
+  }
+
+  // ── causal order: a cause must sit strictly before its effect ───────────
+  const bySequence = new Map<string, number>();
+  for (const r of records) if (!bySequence.has(r.event_id)) bySequence.set(r.event_id, r.sequence);
+  const order_violations: OrderViolation[] = [];
+  for (const r of records) {
+    if (!r.causation_id) continue;
+    const causeSeq = bySequence.get(r.causation_id) ?? null;
+    if (causeSeq === null) {
+      order_violations.push({
+        event_id: r.event_id,
+        sequence: r.sequence,
+        reason: "cause_missing",
+        causation_id: r.causation_id,
+        cause_sequence: null,
+      });
+    } else if (causeSeq >= r.sequence) {
+      order_violations.push({
+        event_id: r.event_id,
+        sequence: r.sequence,
+        reason: "cause_not_before_effect",
+        causation_id: r.causation_id,
+        cause_sequence: causeSeq,
+      });
+    }
+  }
+
+  // ── lineages: one correlation id resolves to ONE operation lineage ──────
+  const lineageMap = new Map<string, Lineage>();
+  const run_ids: string[] = [];
+  for (const r of records) {
+    if (!run_ids.includes(r.run_id)) run_ids.push(r.run_id);
+    let l = lineageMap.get(r.correlation_id);
+    if (!l) {
+      l = { correlation_id: r.correlation_id, operation_ids: [], event_ids: [] };
+      lineageMap.set(r.correlation_id, l);
+    }
+    if (!l.operation_ids.includes(r.operation_id)) l.operation_ids.push(r.operation_id);
+    l.event_ids.push(r.event_id);
+  }
+  const lineages = [...lineageMap.values()];
+  const split_lineages = lineages.filter((l) => l.operation_ids.length > 1).map((l) => l.correlation_id);
+
+  // ── structural verdict (most severe wins) ──────────────────────────────
+  let structural_integrity: ReceiptRecordAnalysis["structural_integrity"] = "intact";
+  if (order_violations.length > 0 || duplicate_sequences.length > 0 || regressing_sequences.length > 0) {
+    structural_integrity = "order_violation";
+  } else if (split_lineages.length > 0 || run_ids.length > 1) {
+    structural_integrity = "lineage_violation";
+  }
+
+  // ── observation state (BR-07: never infer cleanliness) ─────────────────
+  let observation_state: ObservationState = "checked_clean";
+  if (records.length === 0) observation_state = "not_observed";
+  else if (records.some((r) => r.observation_state === "observation_failed")) observation_state = "observation_failed";
+  else if (records.some((r) => r.observation_state === "not_observed")) observation_state = "not_observed";
+
+  return {
+    duplicate_sequences,
+    regressing_sequences,
+    order_violations,
+    lineages,
+    split_lineages,
+    run_ids,
+    structural_integrity,
+    observation_state,
+  };
 }
 
 const REQUIRED_STRING_FIELDS = [
@@ -357,7 +478,15 @@ const REQUIRED_STRING_FIELDS = [
   "recorded_at",
 ] as const;
 
-function isValidRecordShape(value: unknown): value is ReceiptRecordV1 {
+/**
+ * Structural + closed-vocabulary gate for one record.
+ *
+ * Exported because `record_hash` verification is NOT a substitute: a producer
+ * can seal a record carrying an out-of-vocabulary disposition and the hash will
+ * verify perfectly. Any path that admits a record from outside the journal
+ * (recovery, merge) must run this first.
+ */
+export function isValidReceiptRecordShape(value: unknown): value is ReceiptRecordV1 {
   if (!value || typeof value !== "object") return false;
   const r = value as Record<string, unknown>;
   if (r.schema_version !== "guild.receipt_record.v1") return false;
@@ -400,6 +529,7 @@ export function scanReceiptJournal(journalPath: string, io: JournalIo = defaultJ
     order_violations: [],
     lineages: [],
     split_lineages: [],
+    run_ids: [],
   });
 
   if (raw === null) return empty("absent");
@@ -430,7 +560,7 @@ export function scanReceiptJournal(journalPath: string, io: JournalIo = defaultJ
       rejected.push({ line_number: lineNumber, reason: isTornTail ? "truncated" : "unparsable" });
       return;
     }
-    if (!isValidRecordShape(parsed)) {
+    if (!isValidReceiptRecordShape(parsed)) {
       rejected.push({ line_number: lineNumber, reason: isTornTail ? "truncated" : "schema_invalid" });
       return;
     }
@@ -441,74 +571,22 @@ export function scanReceiptJournal(journalPath: string, io: JournalIo = defaultJ
     records.push(parsed);
   });
 
-  // ── sequence integrity ────────────────────────────────────────────────────
-  const seen = new Map<number, number>();
-  const duplicate_sequences: number[] = [];
-  const regressing_sequences: number[] = [];
-  let prev = 0;
-  for (const r of records) {
-    seen.set(r.sequence, (seen.get(r.sequence) ?? 0) + 1);
-    if ((seen.get(r.sequence) ?? 0) === 2) duplicate_sequences.push(r.sequence);
-    if (r.sequence <= prev) regressing_sequences.push(r.sequence);
-    prev = Math.max(prev, r.sequence);
-  }
-
-  // ── causal order: a cause must sit strictly before its effect ─────────────
-  const bySequence = new Map<string, number>();
-  for (const r of records) if (!bySequence.has(r.event_id)) bySequence.set(r.event_id, r.sequence);
-  const order_violations: OrderViolation[] = [];
-  for (const r of records) {
-    if (!r.causation_id) continue;
-    const causeSeq = bySequence.get(r.causation_id) ?? null;
-    if (causeSeq === null) {
-      order_violations.push({
-        event_id: r.event_id,
-        sequence: r.sequence,
-        reason: "cause_missing",
-        causation_id: r.causation_id,
-        cause_sequence: null,
-      });
-    } else if (causeSeq >= r.sequence) {
-      order_violations.push({
-        event_id: r.event_id,
-        sequence: r.sequence,
-        reason: "cause_not_before_effect",
-        causation_id: r.causation_id,
-        cause_sequence: causeSeq,
-      });
-    }
-  }
-
-  // ── lineages: one correlation id should resolve to one operation lineage ──
-  const lineageMap = new Map<string, Lineage>();
-  for (const r of records) {
-    let l = lineageMap.get(r.correlation_id);
-    if (!l) {
-      l = { correlation_id: r.correlation_id, operation_ids: [], event_ids: [] };
-      lineageMap.set(r.correlation_id, l);
-    }
-    if (!l.operation_ids.includes(r.operation_id)) l.operation_ids.push(r.operation_id);
-    l.event_ids.push(r.event_id);
-  }
-  const lineages = [...lineageMap.values()];
-  const split_lineages = lineages.filter((l) => l.operation_ids.length > 1).map((l) => l.correlation_id);
+  // ── structure, lineage, causal order, observation (shared primitive) ──────
+  const analysis = analyzeReceiptRecords(records);
 
   // ── integrity verdict (most severe wins) ──────────────────────────────────
-  let integrity: JournalIntegrity = "intact";
+  let integrity: JournalIntegrity = analysis.structural_integrity;
   if (rejected.some((r) => r.reason === "hash_mismatch" || r.reason === "unparsable" || r.reason === "schema_invalid")) {
     integrity = "corrupt";
   } else if (rejected.some((r) => r.reason === "truncated")) {
     integrity = "truncated_tail";
-  } else if (order_violations.length > 0 || duplicate_sequences.length > 0 || regressing_sequences.length > 0) {
-    integrity = "order_violation";
   }
 
   // ── observation state (BR-07: never infer cleanliness) ────────────────────
-  let observation_state: ObservationState = "checked_clean";
-  if (records.length === 0) observation_state = "not_observed";
-  else if (records.some((r) => r.observation_state === "observation_failed")) observation_state = "observation_failed";
-  else if (records.some((r) => r.observation_state === "not_observed")) observation_state = "not_observed";
-  else if (integrity !== "intact") observation_state = "not_observed";
+  const observation_state: ObservationState =
+    analysis.observation_state === "checked_clean" && integrity !== "intact"
+      ? "not_observed"
+      : analysis.observation_state;
 
   return {
     schema_version: "guild.receipt_scan.v1",
@@ -519,11 +597,12 @@ export function scanReceiptJournal(journalPath: string, io: JournalIo = defaultJ
     blocks_clean_close: observation_state !== "checked_clean" || integrity !== "intact",
     last_sequence: records.reduce((m, r) => Math.max(m, r.sequence), 0),
     record_count: records.length,
-    duplicate_sequences,
-    regressing_sequences,
-    order_violations,
-    lineages,
-    split_lineages,
+    duplicate_sequences: analysis.duplicate_sequences,
+    regressing_sequences: analysis.regressing_sequences,
+    order_violations: analysis.order_violations,
+    lineages: analysis.lineages,
+    split_lineages: analysis.split_lineages,
+    run_ids: analysis.run_ids,
   };
 }
 
@@ -537,7 +616,9 @@ export type AppendFailureCode =
   | "unknown_causation"
   | "journal_not_reconciled"
   | "journal_append_failed"
-  | "checkpoint_write_failed";
+  | "checkpoint_write_failed"
+  | "correlation_lineage_split"
+  | "foreign_run_id";
 
 export interface ReceiptAppendOutcome {
   schema_version: "guild.receipt_outcome.v1";
@@ -632,6 +713,32 @@ export function appendReceipt(
 
   if (input.causation_id && !scan.records.some((r) => r.event_id === input.causation_id)) {
     return failed(input, "unknown_causation", `causation_id not present in journal: ${input.causation_id}`);
+  }
+
+  // A journal belongs to exactly ONE run. Mixing runs makes every downstream
+  // identity binding (E-RECEIPT run_id, the checkpoint's run_id) ambiguous.
+  const foreignRun = scan.records.find((r) => r.run_id !== input.run_id);
+  if (foreignRun) {
+    return failed(
+      input,
+      "foreign_run_id",
+      `journal belongs to run "${foreignRun.run_id}" — refusing to append run "${input.run_id}"`,
+    );
+  }
+
+  // MHRC-RCT-001: all correlation ids resolve to ONE operation lineage. Refuse
+  // to CREATE the split rather than only reporting it after the fact — an
+  // accepted split is a durable defect no reader can undo.
+  const otherOperation = scan.records.find(
+    (r) => r.correlation_id === input.correlation_id && r.operation_id !== input.operation_id,
+  );
+  if (otherOperation) {
+    return failed(
+      input,
+      "correlation_lineage_split",
+      `correlation_id "${input.correlation_id}" already resolves to operation "${otherOperation.operation_id}" — ` +
+        `refusing to split it across "${input.operation_id}"`,
+    );
   }
 
   const record = sealReceiptRecord({ ...input, sequence: scan.last_sequence + 1 });
