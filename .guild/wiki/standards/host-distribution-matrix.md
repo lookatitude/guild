@@ -208,26 +208,56 @@ which the close gate already permits, but only if it is stated, not assumed.
 The upgrade-propagation row above is a second such gate: it is a required
 G4/G5 acceptance test with a concrete trigger, not an open curiosity.
 
-## Why the remote switch applies to Codex only (xhrd-wi-03 / G3)
+## The remote switch is BLOCKED on payload parity (xhrd-wi-03 / G3)
 
-G1 established that `codex-cli`, `pi-cli`, and `antigravity-cli` all accept a
-remote source and were all wired to a local path. G3 switched **only Codex**.
-The reason is an asymmetry G1 did not surface:
+G1 concluded "Codex needs no publish infrastructure — only the registration is
+wrong." **G3 attempted the switch and that conclusion is REFUTED.**
 
-| Host | Remote source accepted | Can it consume THIS repo? |
-|---|---|---|
-| `codex-cli` | `owner/repo` or a git URL, `--ref <branch\|tag>` | **Yes** — the repo root already carries `.claude-plugin/marketplace.json`, which Codex reads. Verified installing 2.3.2 from both `lookatitude/guild --ref main` and the full `https://…/guild.git --ref next`. |
-| `pi-cli` | `npm:` · `git:` · `https://` · `ssh://` | **No** — a pi package is identified by a root `pi-manifest.json`, which exists only in the *rendered* `dist/pi`, never at the repo root. |
-| `antigravity-cli` | `plugin@marketplace`, plus `link <mp> <target>` | **No** — same shape problem: `antigravity-manifest.json` is rendered-only, and no agy marketplace publishes Guild. |
+`codex plugin marketplace add lookatitude/guild --ref <branch>` succeeds and
+resolves the right version — but the repo-root marketplace entry is
+`"source": "./"`, so Codex installs **the repository root**, which is not the
+Codex package. Measured on a real install (isolated `CODEX_HOME`, `--ref next`):
 
-So Codex needed a *registration* change; pi and antigravity would need a
-*published artifact* (an npm package, a dedicated branch, or a rendered-tree
-repo) before their remote support is reachable. That is a larger change than G3
-scoped, and is deliberately NOT adopted here — recorded rather than silently
-skipped, per the goal's "adopt, or record why not".
+| Artifact the rendered package provides | Present in a remote install? |
+|---|---|
+| `.codex-plugin/plugin.json` | **✗ missing** |
+| `.agents/skills/guild/` | **✗ missing** |
+| `hooks/codex-hooks.json` | **✗ missing** |
+| `hooks/codex-guild-prompt-bridge.js` | **✗ missing** |
+| `bin/guild-run` | **✗ missing** |
+| `.claude-plugin/plugin.json`, `skills/`, `agents/`, `commands/` | ✓ (Claude-shaped) |
 
-Both remain class C. The gap is real but is a publishing question, not a
-registration one.
+The prompt bridge is not optional — Codex has no Claude slash-command format,
+which is the whole reason it is rendered. So the remote switch trades **frozen
+but functional** for **current but missing the adapter layer**: a net
+regression. The registration change was reverted.
+
+⇒ **The operator fix earlier in this page carries the same defect.** Removing a
+working local registration in favour of `--ref main` yields a *newer, more
+broken* install. Do not run it until payload parity exists.
+
+**What G3 actually needs**, in ascending cost: make the rendered Codex tree
+remotely addressable (a build-artifact branch or published package that
+`--ref` can target), or make the repo root natively Codex-consumable. Both are
+publishing work, not a registration flag — which is what G1 ruled out and
+should not have.
+
+**Lesson.** G1 verified that a remote install produced *a version*. It never
+verified *what was installed*. "It installs" and "it installs the right thing"
+are different claims and need different probes.
+
+### pi and antigravity — the earlier rationale was also wrong
+
+An earlier draft claimed neither could consume this repo because
+`pi-manifest.json` / `antigravity-manifest.json` are rendered-only. Refuted:
+pi identifies a package by `package.json#pi` or conventional directories
+(`skills/`, `extensions/`), not `pi-manifest.json`, and a probe **successfully
+installed** `git:github.com/lookatitude/guild@main`. Antigravity's required
+marker is a root `plugin.json`, not `antigravity-manifest.json`.
+
+So their remote support may well be reachable — but, exactly as with Codex,
+*installing* is not the same as *installing a working payload*. Functional
+parity is unmeasured for both. Treat them as OPEN, not as ruled out.
 
 ## Secondary findings
 

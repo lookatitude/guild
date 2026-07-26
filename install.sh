@@ -397,11 +397,6 @@ abs_path() {
 # ── Build once: render every host package a single time (ADR §8 step 3) ───────
 RENDERED_DIST=""
 RENDERED=0
-# 1 when the render source is a local checkout (dev install), 0 when it was
-# fetched from the channel ref. Hosts whose plugin manager accepts a REMOTE
-# source register that remote for a fetched install, so the install tracks a
-# moving ref instead of freezing at a rendered directory (xhrd-wi-03 / G3).
-SOURCE_IS_CHECKOUT=0
 
 # Materialize the scripts/ runtime dependency closure (js-yaml et al.) in the
 # render source root so build-host-packages.ts can vendor it into every host
@@ -433,7 +428,6 @@ render_host_packages_once() {
   if [ -f "$SCRIPT_DIR/scripts/build-host-packages.ts" ]; then
     # Running from a checkout: the working tree IS the source — the channel
     # selector only governs the no-checkout clone fallback below.
-    SOURCE_IS_CHECKOUT=1
     if [ "$CHANNEL" != "stable" ]; then
       say "note: --channel $CHANNEL ignored — installing from the local checkout at $SCRIPT_DIR (check out the 'next' branch there to test beta)"
     fi
@@ -528,35 +522,13 @@ install_codex_cli() {
   say "Codex CLI — $1"
   CODEX_MARKETPLACE_PATH="$(abs_path "$RENDERED_DIST/codex-marketplace")"
   CODEX_MARKETPLACE_MANIFEST="$(abs_path "$CODEX_MARKETPLACE_PATH/.agents/plugins/marketplace.json")"
-  # A marketplace cannot be re-pointed in place ("already added from a different
-  # source"), so switching source or channel requires remove-then-add.
   run_allow_fail codex plugin marketplace remove guild
-  if [ "$SOURCE_IS_CHECKOUT" -eq 1 ]; then
-    # DEV PATH — the checkout is the source of truth, so register the rendered
-    # tree. This install is intentionally frozen to the working tree.
-    run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
-    CODEX_MARKETPLACE_SOURCE="$CODEX_MARKETPLACE_PATH (local — dev checkout)"
-  else
-    # FETCHED PATH — register the REMOTE git marketplace so the install tracks
-    # the channel ref and `codex plugin marketplace upgrade` can refresh it.
-    # A local source cannot be refreshed at all: Codex rejects it with
-    # "marketplace `guild` is not configured as a Git marketplace". Registering
-    # a rendered directory here is what froze the reporting machine at 2.2.0.
-    run codex plugin marketplace add "$SOURCE_REPO" --ref "$SOURCE_REF"
-    CODEX_MARKETPLACE_SOURCE="$SOURCE_REPO#$SOURCE_REF (git — channel: $CHANNEL)"
-  fi
+  run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
   run codex plugin add "$PLUGIN_SPEC"
   installed_any=1
   write_receipt codex-cli "$CODEX_MARKETPLACE_PATH"
   say ""
   say "Guild installed into Codex CLI."
-  say "Marketplace source: $CODEX_MARKETPLACE_SOURCE"
-  if [ "$SOURCE_IS_CHECKOUT" -eq 0 ]; then
-    say "Update with:  codex plugin marketplace upgrade && codex plugin add $PLUGIN_SPEC"
-    say "Switch channel with:  codex plugin marketplace remove guild, then re-run with --channel"
-  else
-    say "Dev install — frozen to this checkout. Re-run install.sh after changing it."
-  fi
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild."
   say "Codex App local plugin link:"
   say "    codex://plugins/guild?marketplacePath=$CODEX_MARKETPLACE_MANIFEST"
