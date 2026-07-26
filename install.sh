@@ -623,8 +623,20 @@ install_codex_cli() {
   # version probe resolves the CODEX version rather than the checkout's Claude
   # one. Writing only into the marketplace SOURCE dir left the installed cache
   # with no receipt at all, so `guild-run update` refused (xhrd-wi-05 / G5).
-  CODEX_PLUGIN_ROOT_DIR="$(find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/guild" \
-    -maxdepth 4 -type d -path '*/guild/*' -exec test -f '{}/.codex-plugin/plugin.json' ';' -print 2>/dev/null | head -1 || true)"
+  # Pick the MOST RECENTLY MODIFIED cached version dir: `codex plugin add` just
+  # created/touched the one it installed. `find | head -1` returns filesystem
+  # order, not newest — with 2.2.0 and 2.3.2 both cached it returned different
+  # answers on different layouts, so it could record a STALE version. stat is
+  # spelled differently on BSD and GNU; try both.
+  CODEX_PLUGIN_ROOT_DIR="$(
+    find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/guild" -maxdepth 4 -type d \
+      -exec test -f '{}/.codex-plugin/plugin.json' ';' -print 2>/dev/null \
+    | while IFS= read -r _d; do
+        _mt="$(stat -f %m "$_d" 2>/dev/null || stat -c %Y "$_d" 2>/dev/null || echo 0)"
+        printf '%s\t%s\n' "$_mt" "$_d"
+      done \
+    | sort -rn | head -1 | cut -f2- || true
+  )"
   # Fall back to the marketplace source dir when the cache is not resolvable
   # (dry-run, or a Codex layout we do not recognise) — a correct machine receipt
   # is still better than none.
