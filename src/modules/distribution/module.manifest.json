@@ -16,6 +16,7 @@
       "build-inventory",
       "build-verify",
       "check-bundle-determinism",
+      "check-channel-integrity",
       "check-entrypoint-packaging",
       "check-module-ownership",
       "check-plugin-root-fallback",

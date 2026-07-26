@@ -33,6 +33,13 @@
     },
     {
       "category": "scripts",
+      "id": "check-channel-integrity",
+      "source_path": "scripts/check-channel-integrity.ts",
+      "resource_path": "resources/scripts/check-channel-integrity.ts",
+      "sha256": "0378d766689d0eab6f3dc40ea34253e353ffc3ea10397960c82c96f1b8a6bffe"
+    },
+    {
+      "category": "scripts",
       "id": "check-entrypoint-packaging",
       "source_path": "scripts/check-entrypoint-packaging.ts",
       "resource_path": "resources/scripts/check-entrypoint-packaging.ts",

@@ -186,9 +186,9 @@ Day-to-day workflow (features, fixes, docs — everything non-release):
    channel for testing; it reaches stable only with the next release.
 
 Release workflow (operator-driven, when `next` is ready). A release adds only
-**two commits** on top of `next` — a version bump and a changelog — so the whole
-cut stays linear and the sync-back is a fast-forward, not a merge that loops content
-back:
+**two commits** on top of `next` — a version bump and a changelog — so the cut
+stays small and, *provided the release PR is merged with a merge commit*, the
+sync-back is a fast-forward rather than a delta copy:
 1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump the
    version in **`.claude-plugin/plugin.json` ONLY** — the single canonical
    version field — then propagate it with
@@ -207,14 +207,24 @@ back:
    CI regenerates it from the bumped inventory.
 2. PR `release/vX.Y.Z` → `main` (the ONLY PR shape `main` accepts — enforced by
    `.github/workflows/branch-policy.yml`).
-3. Merge → `release.yml` auto-tags and publishes the GitHub Release (PR body =
-   release notes).
-4. Sync back by **fast-forward**, not a merge commit: `next` is a strict ancestor
-   of the release point, so advance it with `git merge --ff-only <release-tip>`.
-   Because `next` is push-protected, land it either as a sync-back PR merged with
-   *Rebase and merge* (no merge commit), or with the `GUILD_ALLOW_PUSH_MAIN=1`
-   bootstrap override for a direct `--ff-only` push. Both channels now share the
-   exact release commit with zero extra merge nodes.
+3. Merge with a **MERGE COMMIT**. Do NOT squash and do NOT rebase-merge: both
+   rewrite SHAs, leaving `next`'s commits as non-ancestors of `main` and making
+   step 4's fast-forward impossible. (v2.3.2 was squash-merged as PR #96, which
+   is exactly why its sync-back could not fast-forward.) On merge, `release.yml`
+   auto-tags and publishes the GitHub Release (PR body = release notes).
+4. Sync back. First decide by **ancestry, not dates**:
+   `git merge-base --is-ancestor origin/next <release-tag>`.
+   - **Ancestor (the normal case after step 3):** fast-forward —
+     `git merge --ff-only <release-tip>`. `next` is push-protected, so land it
+     with the `GUILD_ALLOW_PUSH_MAIN=1` bootstrap override. Both channels then
+     share the *exact* release commit.
+   - **Diverged:** the fast-forward is impossible. Open a sync-back PR carrying
+     the release delta (version bump + changelog + regenerated inventory).
+     Ancestry is already lost, so merge style no longer matters — the channels
+     will agree on content and version, **not** on SHA.
+   Either way the debt is visible: `channel-integrity.yml` fails while `next`'s
+   version trails `main`'s. It DETECTS only — `release.yml` publishes on the
+   merged-PR event, so it cannot block a release.
 
 **Mechanical enforcement.** `branch-policy.yml` rejects any PR into `main` whose
 head is not `release/vX.Y.Z`; the repo-checked-in `pre-push` hook at

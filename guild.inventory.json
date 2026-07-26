@@ -1000,6 +1000,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-channel-integrity",
+      "source_path": "scripts/check-channel-integrity.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-docs-architecture",
       "source_path": "scripts/check-docs-architecture.ts",
       "kind": "cli"

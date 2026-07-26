@@ -17,6 +17,7 @@
     "check:module-source-of-truth": "npm run check:modules -- --root .. && npm run check:module-resources -- --root .. && npm run check:live-resources -- --root .. && npm run check:claude-install -- --root ..",
     "verify:host-packages": "npx tsx sync-live-resources.ts --check --root .. && npx tsx build-host-packages.ts --check-claude-install && npx tsx verify-host-packages.ts",
     "check:host-support-matrix": "npx tsx generate-support-matrix.ts --check",
+    "check:channel-integrity": "npx tsx check-channel-integrity.ts",
     "verify:installer": "npx tsx verify-installer.ts",
     "verify:installer-execution": "npx tsx verify-installer.ts --execute-fixtures",
     "verify:installer-live": "npx tsx verify-installer.ts --execute-live-isolated",
@@ -47,7 +48,14 @@
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs" } }]
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "module": "commonjs"
+          }
+        }
+      ]
     },
     "testTimeout": 30000
   }
