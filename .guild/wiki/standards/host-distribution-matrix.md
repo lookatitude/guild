@@ -236,11 +236,35 @@ regression. The registration change was reverted.
 working local registration in favour of `--ref main` yields a *newer, more
 broken* install. Do not run it until payload parity exists.
 
-**What G3 actually needs**, in ascending cost: make the rendered Codex tree
-remotely addressable (a build-artifact branch or published package that
-`--ref` can target), or make the repo root natively Codex-consumable. Both are
-publishing work, not a registration flag — which is what G1 ruled out and
-should not have.
+### The mechanism that makes G3 solvable (measured)
+
+Codex reads **`.agents/plugins/marketplace.json` in preference to
+`.claude-plugin/marketplace.json`**, and its plugin `source` may be a
+**subdirectory**. Verified with a fixture carrying both manifests pointing at
+different payloads — the `.agents/plugins` subdirectory entry won:
+
+```console
+$ codex plugin marketplace add <fixture>   # both manifests present
+$ codex plugin add prec@prec
+Installed plugin root: …/plugins/cache/prec/prec/1.0.0-SUBDIR   # the subdir, not "./"
+```
+
+That resolves the hard part: Guild can point Codex at a rendered Codex tree
+**without disturbing `.claude-plugin/marketplace.json`**, which Claude needs at
+`source: "./"`. No build-artifact branch and no separate published package are
+required.
+
+**The remaining decision is architectural, not technical.** Codex clones the
+repo and uses only the named subdirectory, so that subdirectory must be
+*committed* — i.e. the rendered Codex package becomes a tracked artifact. That
+cuts against the standing "`dist/` is generated, never committed" rule
+(`xhrd-def-nongoal-2`). Two mitigations already exist: the SC-2 equivalence gate
+and the module-resource drift gates (xhrd-wi-02) would keep a committed tree
+honest, exactly as they do for `.claude-plugin/*`.
+
+⇒ G3 is **unblocked technically and pending a decision** on committing a
+rendered payload (repo size vs. a working remote install). It is NOT the
+open-ended publishing problem the previous revision assumed.
 
 **Lesson.** G1 verified that a remote install produced *a version*. It never
 verified *what was installed*. "It installs" and "it installs the right thing"
