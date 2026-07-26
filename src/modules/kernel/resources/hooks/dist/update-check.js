@@ -5573,6 +5573,10 @@ function main() {
   if (!pluginRoot) return;
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;
+  const hostArg = process.argv.indexOf("--host");
+  const hostId = hostArg !== -1 ? process.argv[hostArg + 1] : "claude-code-cli";
+  const caps = updateCapsForHost(hostId);
+  const hostKind = caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
   const state = resolveInstallState(pluginRoot);
   if (state.channel === "dev") return;
   const cacheFile = cachePath();
@@ -5580,16 +5584,18 @@ function main() {
   if (!cacheIsFresh(cache, cadenceHours, /* @__PURE__ */ new Date())) {
     spawnDetached(process.execPath, [__filename, "--refresh"]);
   }
-  const signal = computeSignal({ state, cache, hostKind: "claude", hostId: "claude-code-cli" });
+  const signal = computeSignal({ state, cache, hostKind, hostId });
   const line = renderSignalLine(signal);
   if (!line) return;
   if (mode === "auto") {
     const target = signal.available ?? "";
     if (!alreadyStaged(target)) {
-      spawnDetached("/bin/sh", [
-        "-c",
-        "claude plugin marketplace update guild && claude plugin update guild@guild"
-      ]);
+      if (!caps?.command) {
+        process.stdout.write(`${line}
+`);
+        return;
+      }
+      spawnDetached("/bin/sh", ["-c", caps.command]);
       markStaged(target);
       process.stdout.write(
         `${line}

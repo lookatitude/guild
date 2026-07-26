@@ -32,6 +32,7 @@ import {
   renderSignalLine,
   resolveInstallState,
   type UpdateMode,
+  updateCapsForHost,
 } from "../scripts/lib/update-check";
 
 function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number } {
@@ -116,6 +117,19 @@ function main(): void {
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;
 
+  // Which host is this signal for? The per-host package's hook manifest names
+  // its own host (`--host codex-cli`), so no detection is needed and no receipt
+  // is required — a host-native install that never wrote one still gets the
+  // right command. Absent the flag we stay on the Claude default, which is what
+  // hooks/hooks.json has always meant.
+  const hostArg = process.argv.indexOf("--host");
+  const hostId = hostArg !== -1 ? process.argv[hostArg + 1] : "claude-code-cli";
+  const caps = updateCapsForHost(hostId);
+  // AC-7 honesty: an unknown id yields caps === null, computeSignal then emits
+  // command: null, and renderSignalLine degrades rather than naming a wrong one.
+  const hostKind: "claude" | "wrapper" | "agents-file" =
+    caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
+
   const state = resolveInstallState(pluginRoot);
   if (state.channel === "dev") return; // AC-5: dev installs are silent
 
@@ -128,7 +142,7 @@ function main(): void {
     spawnDetached(process.execPath, [__filename, "--refresh"]);
   }
 
-  const signal = computeSignal({ state, cache, hostKind: "claude", hostId: "claude-code-cli" });
+  const signal = computeSignal({ state, cache, hostKind, hostId });
   const line = renderSignalLine(signal);
   if (!line) return;
 
@@ -136,12 +150,15 @@ function main(): void {
     const target = signal.available ?? "";
     if (!alreadyStaged(target)) {
       // Headless staged update (OQ-2 resolved: non-TTY-safe CLI; takes effect
-      // next session). Chained via a shell so the marketplace refresh lands
-      // before the plugin update.
-      spawnDetached("/bin/sh", [
-        "-c",
-        "claude plugin marketplace update guild && claude plugin update guild@guild",
-      ]);
+      // next session). The command comes from the AC-7 capability row, NOT a
+      // hardcoded Claude chain — auto-mode on a non-Claude host used to run
+      // `claude …`, which is simply the wrong binary. A host with no declared
+      // apply command stages nothing and falls through to notify-only.
+      if (!caps?.command) {
+        process.stdout.write(`${line}\n`);
+        return;
+      }
+      spawnDetached("/bin/sh", ["-c", caps.command]);
       markStaged(target);
       process.stdout.write(
         `${line}\n[guild-update] auto mode: update staged — it takes effect next session.\n`
