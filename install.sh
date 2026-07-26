@@ -220,7 +220,78 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
   RECEIPTS_GLOB="${GUILD_RECEIPTS_DIR:-$HOME/.guild/receipts}"
   if [ ! -d "$RECEIPTS_GLOB" ] || [ -z "$(ls "$RECEIPTS_GLOB"/*.json 2>/dev/null)" ]; then
     printf 'guild-install: --update found no install receipts under %s\n' "$RECEIPTS_GLOB" >&2
-    printf '  Receipts are written by installs from this version onward; run a normal install once first.\n' >&2
+    # A bare "no receipts" refusal is useless to the common case: Guild IS
+    # installed, just by the HOST's own plugin manager, which never writes a
+    # Guild receipt. Detect those and name that host's real update command
+    # rather than sending the user back to a fresh install (xhrd-wi-05 / G5).
+    _found_native=0
+    # CODEX — require an actual installed PAYLOAD, not a bare cache directory:
+    # `plugins/cache/guild/**/<version>/.codex-plugin/plugin.json`. An empty
+    # cache dir is not an install and must not be reported as one.
+    _cx_home="${CODEX_HOME:-$HOME/.codex}"
+    _cx_manifest="$(find "$_cx_home/plugins/cache/guild" -maxdepth 5 -name plugin.json -path '*/.codex-plugin/*' 2>/dev/null | head -1 || true)"
+    if [ -n "$_cx_manifest" ]; then
+      _found_native=1
+      _cx_ver="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*$/\1/p' "$_cx_manifest" 2>/dev/null | head -1 || true)"
+      printf '\n  Detected a HOST-NATIVE Codex install (version %s).\n' "${_cx_ver:-unknown}" >&2
+      printf '  install.sh did not create it, so there is no receipt to update from.\n' >&2
+      # The right command depends on how the marketplace was REGISTERED. Codex
+      # refuses to upgrade a local source ("not configured as a Git
+      # marketplace"), so advising `marketplace upgrade` for a local install
+      # would simply fail for the user it targets.
+      # Accept every table header Codex itself accepts: [marketplaces.guild],
+      # [marketplaces."guild"], and surrounding whitespace. An exact-string
+      # header match misclassified those as unreadable.
+      # sed -E: `\?` is a GNU extension BSD sed does not support, so a BRE
+      # version of this matched NOTHING on macOS. -E is portable across both.
+      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*marketplaces\."?guild"?[[:space:]]*\]/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      case "$_cx_src" in
+        git)
+          printf '      codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2
+          ;;
+        local)
+          printf '  Its marketplace is a LOCAL rendered directory, which Codex cannot refresh.\n' >&2
+          printf '  Re-render and re-register it by running a NORMAL install (not --update):\n' >&2
+          printf '      curl -fsSL https://guildstack.dev/install.sh | bash -s -- --host codex-cli\n' >&2
+          ;;
+        *)
+          printf '  Could not read its marketplace source from %s/config.toml.\n' "$_cx_home" >&2
+          printf '  If it is a git marketplace:  codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2
+          printf '  If it is a local directory:  re-run a normal install (not --update).\n' >&2
+          ;;
+      esac
+    fi
+    # CLAUDE — read the AUTHORITATIVE registry. Listing directory names both
+    # missed real installs and false-positived on a marketplace-only entry;
+    # installed_plugins.json is keyed by "<plugin>@<marketplace>".
+    _cl_reg="$HOME/.claude/plugins/installed_plugins.json"
+    # Parse it. A `grep '"guild@'` false-positived on an EMPTY plugin array, on
+    # the string appearing in unrelated metadata, and on malformed JSON — none
+    # of which is an installed plugin. Require a guild@* key whose install list
+    # is a non-empty array. Malformed JSON exits non-zero and counts as absent.
+    _cl_installed=0
+    if [ -f "$_cl_reg" ] && command -v node >/dev/null 2>&1; then
+      node -e '
+        const fs = require("fs");
+        try {
+          const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const p = (r && r.plugins) || {};
+          const hit = Object.keys(p).some(
+            (k) => /^guild@/.test(k) && Array.isArray(p[k]) && p[k].length > 0
+          );
+          process.exit(hit ? 0 : 1);
+        } catch { process.exit(1); }
+      ' "$_cl_reg" 2>/dev/null && _cl_installed=1
+    fi
+    if [ "$_cl_installed" -eq 1 ]; then
+      _found_native=1
+      printf '\n  Detected a HOST-NATIVE Claude Code install (%s). Use Claude:\n' "$_cl_reg" >&2
+      printf '      claude plugin marketplace update guild && claude plugin update %s\n' "$PLUGIN_SPEC" >&2
+    fi
+    if [ "$_found_native" -eq 0 ]; then
+      printf '  No host-native Guild install detected either.\n' >&2
+      printf '  Receipts are written by installs from this version onward; run a normal install once first.\n' >&2
+    fi
     exit 1
   fi
   for rf in "$RECEIPTS_GLOB"/*.json; do
@@ -471,16 +542,35 @@ RECEIPTS_DIR="${GUILD_RECEIPTS_DIR:-$HOME/.guild/receipts}"
 SOURCE_COMMIT=""
 
 plugin_version_from() {
-  # $1 = dir containing .claude-plugin/plugin.json
-  sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*$/\1/p' \
-    "$1/.claude-plugin/plugin.json" 2>/dev/null | head -1
+  # $1 = a package root. Probes each host's OWN manifest in turn: a Codex
+  # package carries .codex-plugin/plugin.json and no .claude-plugin/, so
+  # reading only the latter recorded the CLAUDE version — or "unknown" — in
+  # every non-Claude receipt (xhrd-wi-05 / G5).
+  for _mf in ".claude-plugin/plugin.json" ".codex-plugin/plugin.json"; do
+    [ -f "$1/$_mf" ] || continue
+    # `|| true` keeps a non-matching sed from tripping inherited errexit before
+    # the next candidate is probed.
+    _v="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*$/\1/p' \
+      "$1/$_mf" 2>/dev/null | head -1 || true)"
+    if [ -n "$_v" ]; then
+      printf '%s' "$_v"
+      return 0
+    fi
+  done
+  return 0
 }
 
 write_receipt() {
   # $1 = host id, $2 = optional package dir to drop a copy into
   [ "$DRY_RUN" -eq 1 ] && return 0
   host_id="$1"; pkg_dir="${2:-}"
-  version="$(plugin_version_from "$SCRIPT_DIR")"
+  # Prefer the host's OWN package, then the checkout, then the Claude render.
+  # Recording a version from a tree the host did not install is what made every
+  # non-Claude receipt claim Claude's version.
+  version=""
+  [ -n "$pkg_dir" ] && version="$(plugin_version_from "$pkg_dir")"
+  [ -z "$version" ] && version="$(plugin_version_from "$SCRIPT_DIR")"
+  [ -z "$version" ] && [ -n "$RENDERED_DIST" ] && version="$(plugin_version_from "$RENDERED_DIST/$host_id" 2>/dev/null)"
   [ -z "$version" ] && [ -n "$RENDERED_DIST" ] && version="$(plugin_version_from "$RENDERED_DIST/claude-code" 2>/dev/null)"
   installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   receipt=$(printf '{\n  "schema_version": "guild.install_receipt.v1",\n  "host": "%s",\n  "channel": "%s",\n  "ref": "%s",\n  "commit": %s,\n  "version": "%s",\n  "installed_at": "%s"\n}\n' \
@@ -518,6 +608,32 @@ install_claude_code_cli() {
   say ""
 }
 
+# Resolve the just-installed Codex plugin dir inside the version cache:
+# the MOST RECENTLY MODIFIED version dir carrying .codex-plugin/plugin.json
+# (`codex plugin add` creates/touches the one it installs; `find | head -1`
+# is filesystem order and could pick a STALE version).
+#
+# mtime portability is ASYMMETRIC and the order below is load-bearing.
+# GNU `stat -c %Y` fails CLEANLY on BSD (error, no stdout). BSD-style
+# `stat -f %m <dir>` on GNU is `-f` = filesystem-status MODE with "%m" taken
+# as a FILE operand: it prints multi-line filesystem status for <dir> on
+# stdout and exits non-zero (measured on coreutils 9.11). Inside `$(A || B)`
+# that stdout is CAPTURED with B's output appended, so a BSD-first chain
+# pollutes the captured value on Linux; selection may still limp through on
+# the trailing valid line, but the value is garbage and the behavior
+# version-dependent. Prefer the ordering whose cross-platform failure mode is
+# CLEAN: GNU first, BSD second.
+codex_cache_plugin_dir() {
+  # $1 = codex home
+  find "$1/plugins/cache/guild" -maxdepth 4 -type d \
+    -exec test -f '{}/.codex-plugin/plugin.json' ';' -print 2>/dev/null \
+  | while IFS= read -r _d; do
+      _mt="$(stat -c %Y "$_d" 2>/dev/null || stat -f %m "$_d" 2>/dev/null || echo 0)"
+      printf '%s\t%s\n' "$_mt" "$_d"
+    done \
+  | sort -rn | head -1 | cut -f2- || true
+}
+
 install_codex_cli() {
   say "Codex CLI — $1"
   CODEX_MARKETPLACE_PATH="$(abs_path "$RENDERED_DIST/codex-marketplace")"
@@ -526,7 +642,19 @@ install_codex_cli() {
   run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
   run codex plugin add "$PLUGIN_SPEC"
   installed_any=1
-  write_receipt codex-cli "$CODEX_MARKETPLACE_PATH"
+  # Prefer the INSTALLED CACHE dir that `codex plugin add` just populated:
+  # ~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/. That is the root
+  # guild-run/self-update resolve a receipt against (self-update.ts readReceipt
+  # reads its own package root), AND it carries .codex-plugin/plugin.json so the
+  # version probe resolves the CODEX version rather than the checkout's Claude
+  # one. Writing only into the marketplace SOURCE dir left the installed cache
+  # with no receipt at all, so `guild-run update` refused (xhrd-wi-05 / G5).
+  CODEX_PLUGIN_ROOT_DIR="$(codex_cache_plugin_dir "${CODEX_HOME:-$HOME/.codex}")"
+  # Fall back to the marketplace source dir when the cache is not resolvable
+  # (dry-run, or a Codex layout we do not recognise) — a correct machine receipt
+  # is still better than none.
+  [ -z "$CODEX_PLUGIN_ROOT_DIR" ] && CODEX_PLUGIN_ROOT_DIR="$CODEX_MARKETPLACE_PATH/plugins/guild"
+  write_receipt codex-cli "$CODEX_PLUGIN_ROOT_DIR"
   say ""
   say "Guild installed into Codex CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild."

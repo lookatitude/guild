@@ -134,7 +134,7 @@
       "id": "lib/self-update",
       "source_path": "scripts/lib/self-update.ts",
       "resource_path": "resources/scripts/lib/self-update.ts",
-      "sha256": "7da08b616446352b2a67dab770d3b068f8676aac1d03f554264194efc721de76"
+      "sha256": "bc9991fd8ab468018b497f77542594ba6209c18b258e3153d28a4b48d197bf92"
     },
     {
       "category": "scripts",
