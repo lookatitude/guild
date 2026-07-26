@@ -165,8 +165,12 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
 - Update `CHANGELOG.md` as part of the release PR — generate the section with
   `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (groups the
   PRs merged since the last tag; `--notes` seeds the PR body), then polish.
-- Bump `.claude-plugin/plugin.json` **and** `.claude-plugin/marketplace.json`
-  `version` to match the tag.
+- Bump `.claude-plugin/plugin.json` `version` to match the tag — that file is
+  the **single canonical version field**. Then propagate it:
+  `cd scripts && npm run sync:claude-install && npm run build:inventory`.
+  **Do not hand-edit `.claude-plugin/marketplace.json`** — it is generated from
+  `plugin.json`, and CI (`check:claude-install`) fails any hand edit that
+  disagrees with the canonical field.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues
