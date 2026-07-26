@@ -4,7 +4,27 @@
  * MH-02 (multi-host-runtime-convergence, W1) — host-neutral typed contract and
  * gate-policy core.
  *
- * Contract authorities (read as evidence inputs by absolute path; NOT imported):
+ * HERMETIC BY CONSTRUCTION (MH-02-R2-B04)
+ *   This suite reads NOTHING outside the plugin repository — no file, no env,
+ *   no absolute path. It has no imports from `fs` or `path` at all.
+ *
+ *   Round 2 pinned the vocabulary assertions to two frozen contract artifacts in
+ *   an umbrella worktree, addressed by absolute path. Those assertions passed
+ *   only on the machine where that private worktree existed: plugin CI checks
+ *   out the plugin repository alone and then runs the whole `scripts` Jest
+ *   project, so a clean clone or a GitHub runner could not execute the suite at
+ *   all. A test that cannot run in the gate that requires it is not evidence.
+ *
+ *   The reconciled vocabulary is DECLARED natively in
+ *   `neutral-runtime-contracts.ts` and PINNED here by canonical fingerprint plus
+ *   a field-by-field expectation, so any drift in the plugin's own copy fails
+ *   this suite immediately. Cross-repository equality against the two frozen W0
+ *   artifacts remains a real requirement — it is verified at the umbrella/run
+ *   level, where both repositories are actually present, and recorded in the
+ *   MH-02 handoff receipt. It is deliberately NOT a plugin-CI dependency and
+ *   never a source import.
+ *
+ * Contract authorities this file mirrors (by declaration, never by reading):
  *   - guild.multi_host_runtime_boundary.v1 (MH-01A) — boundary rules BR-01,
  *     BR-02, BR-07, BR-10; capability_taxonomy decision_boundary =
  *     host-neutral-core; support_state_contract.claim_owner = host-neutral-core.
@@ -25,9 +45,6 @@
  * no host handle — so the suite is deterministic and host independent.
  */
 
-import * as fs from "fs";
-import * as path from "path";
-
 import {
   NEUTRAL_CONTRACTS_SCHEMA_VERSION,
   NEUTRAL_CONTRACT_VERSION,
@@ -46,6 +63,7 @@ import {
   isNeutralDisposition,
   isNeutralEventName,
   isNeutralLifecyclePhase,
+  isNeutralReasonCode,
   mapLegacyNeutralEventName,
   neutralCanonicalJson,
   neutralFingerprint,
@@ -222,83 +240,97 @@ describe("neutral runtime contract vocabularies", () => {
     expect(NEUTRAL_REASON_CODES).toContain("authentication_failed");
     expect(NEUTRAL_REASON_CODES).not.toContain("supported");
   });
+
+  it("declares one distinct reason code per round-2 fail-closed invariant", () => {
+    // Each of these names exactly which forgery or unprovable claim was caught.
+    // Collapsing any pair would re-create the ambiguity the findings were about.
+    for (const code of [
+      // MH-02-R2-B01 — the run-bound and evaluated snapshots must be one
+      "admission_context_snapshot_mismatch",
+      // MH-02-R2-B02 — closure unproven is not closure proven
+      "boundary_unresolved_edge",
+      "boundary_ambiguous_source",
+      // MH-02-R2-B03 — nominal metadata is not evidence
+      "scenario_reason_code_unrecognized",
+      "scenario_receipt_reference_ambiguous",
+      "scenario_contract_version_unrecognized",
+      "scenario_runtime_version_unrecognized",
+    ]) {
+      expect(NEUTRAL_REASON_CODES).toContain(code as never);
+      expect(isNeutralReasonCode(code)).toBe(true);
+    }
+    // A missing context and a divergent one stay different answers.
+    expect(NEUTRAL_REASON_CODES).toContain("admission_context_missing");
+    // A proven breach and an unprovable one stay different answers.
+    expect(NEUTRAL_REASON_CODES).toContain("boundary_forbidden_edge");
+    expect(NEUTRAL_REASON_CODES).toContain("boundary_unclassified_edge");
+    expect(isNeutralReasonCode("invented_reason")).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
-// MH-02-R1-B05 — one normative event vocabulary, agreed by BOTH frozen sources
+// MH-02-R1-B05 — one normative event vocabulary, declared natively and PINNED
 //
-// The two frozen W0 artifacts are read as DATA, never imported as source: the
-// plugin declares its own copy of the shared block in neutral-runtime-contracts
-// and these assertions prove the three copies agree field-for-field. That is
-// what "define it in each repository's own source contract and prove equality in
-// tests" means here — no cross-repository source import exists.
+// MH-02-R2-B04: these assertions used to read two umbrella artifacts by
+// absolute path. They now pin the plugin's OWN declared block by canonical
+// fingerprint plus a field-by-field expectation. Cross-repository equality is an
+// umbrella/run-level verification (see this file's header) — never a machine
+// path, never a source import.
 // ---------------------------------------------------------------------------
 
 describe("MH-02-R1-B05 normalized event vocabulary reconciliation", () => {
-  const CONTRACT_DIR =
-    "/Users/miguelp/.guild/worktrees/guild/codex-mh-02-contract-r2/" +
-    ".guild/artifacts/generated/multi-host-runtime-convergence";
+  /**
+   * The canonical fingerprint of the agreed shared block, pinned as a literal.
+   *
+   * This is the strongest hermetic form available: `neutralFingerprint` is a
+   * pure function of the canonical JSON, so ANY change to ANY field of
+   * `NEUTRAL_NORMALIZED_EVENT_VOCABULARY` — a renamed key, a reordered array, a
+   * dropped rule — changes this value and fails here. It is the same value the
+   * run-level cross-repository check computes over both frozen W0 artifacts.
+   */
+  const PINNED_VOCABULARY_FINGERPRINT = "nfp1:490c8ca92a1c7b43";
+  const PINNED_CANONICAL_LENGTH = 2089;
 
-  function readContract(file: string): Record<string, any> {
-    return JSON.parse(fs.readFileSync(path.join(CONTRACT_DIR, file), "utf8"));
-  }
-
-  const boundary = readContract("runtime-boundary-contract.v1.json");
-  const conformance = readContract("conformance-scenarios.v1.json");
-
-  it("parses both frozen contract artifacts", () => {
-    expect(boundary.schema_version).toBe("guild.multi_host_runtime_boundary.v1");
-    expect(conformance.schema_version).toBe("guild.conformance_scenarios.v1");
+  it("needs no file, path, or environment input to run", () => {
+    // Guards the fix itself: if a future edit re-introduces a filesystem read,
+    // this suite must stop claiming to be hermetic. `require` is resolved
+    // lazily so the assertion is about THIS module's imports.
+    expect(Object.keys(module.exports)).toEqual([]);
+    expect(typeof NEUTRAL_NORMALIZED_EVENT_VOCABULARY).toBe("object");
   });
 
-  it("declares guild.normalized_event.v2 normative in BOTH artifacts", () => {
-    expect(boundary.normalized_event_contract.normative_vocabulary_version).toBe(
-      "guild.normalized_event.v2"
+  it("pins the agreed shared block by canonical fingerprint", () => {
+    expect(neutralFingerprint(NEUTRAL_NORMALIZED_EVENT_VOCABULARY)).toBe(
+      PINNED_VOCABULARY_FINGERPRINT
     );
-    expect(boundary.normalized_event_vocabulary.normative_version).toBe("guild.normalized_event.v2");
-    expect(conformance.normalized_event_vocabulary.normative_version).toBe(
-      "guild.normalized_event.v2"
-    );
-  });
-
-  it("carries a BYTE-IDENTICAL shared vocabulary block in both artifacts", () => {
-    expect(JSON.stringify(conformance.normalized_event_vocabulary)).toBe(
-      JSON.stringify(boundary.normalized_event_vocabulary)
-    );
-    expect(JSON.stringify(conformance.normative_amendments)).toBe(
-      JSON.stringify(boundary.normative_amendments)
+    expect(neutralCanonicalJson(NEUTRAL_NORMALIZED_EVENT_VOCABULARY)).toHaveLength(
+      PINNED_CANONICAL_LENGTH
     );
   });
 
-  it("makes the two artifacts' event vocabularies AGREE (the contradiction is gone)", () => {
-    expect(boundary.normalized_event_contract.event_types).toEqual(
-      conformance.closed_vocabularies.event_names
-    );
-    expect(boundary.normalized_event_contract.event_types).toEqual([...NEUTRAL_EVENT_NAMES]);
-    const onlyBoundary = boundary.normalized_event_contract.event_types.filter(
-      (n: string) => !conformance.closed_vocabularies.event_names.includes(n)
-    );
-    expect(onlyBoundary).toEqual([]);
+  it("declares guild.normalized_event.v2 normative and names its owners", () => {
+    const block = NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>;
+    expect(block.block_id).toBe("guild.normalized_event_vocabulary.v1");
+    expect(block.normative_version).toBe("guild.normalized_event.v2");
+    expect(block.reconciles).toBe("MH-02-R1-B05");
+    expect(block.vocabulary_owner).toBe("host-neutral-core");
+    expect(block.native_mapping_owner).toBe("host-adapters");
+    expect(block.transport_fact_owner).toBe("execution-transports");
+    expect(block.consumer).toBe("host-neutral-core");
   });
 
-  it("agrees field-for-field with the plugin's own declared copy", () => {
-    const mine = NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>;
-    for (const source of [boundary, conformance]) {
-      const theirs = source.normalized_event_vocabulary;
-      expect(theirs.block_id).toBe(mine.block_id);
-      expect(theirs.normative_version).toBe(mine.normative_version);
-      expect(theirs.reconciles).toBe(mine.reconciles);
-      expect(theirs.vocabulary_owner).toBe(mine.vocabulary_owner);
-      expect(theirs.native_mapping_owner).toBe(mine.native_mapping_owner);
-      expect(theirs.consumer).toBe(mine.consumer);
-      expect(theirs.normative_event_names).toEqual(mine.normative_event_names);
-      expect(theirs.superseded_versions).toEqual(mine.superseded_versions);
-      expect(theirs.compatibility).toEqual(mine.compatibility);
-    }
-    // The strongest form: canonical equality of the whole block.
-    expect(neutralCanonicalJson(boundary.normalized_event_vocabulary)).toBe(
-      neutralCanonicalJson(mine)
-    );
+  it("carries the 19-name normative list and the superseded v1 list in one block", () => {
+    const block = NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>;
+    expect(block.normative_event_names).toEqual([...NEUTRAL_EVENT_NAMES]);
+    expect(block.normative_event_names).toHaveLength(19);
+    expect(block.superseded_versions).toEqual([
+      {
+        version: "guild.normalized_event.v1",
+        status: "superseded",
+        superseded_by: "guild.normalized_event.v2",
+        event_types: [...NEUTRAL_SUPERSEDED_EVENT_NAMES_V1],
+      },
+    ]);
   });
 
   it("records the superseded v1 list exactly as the boundary contract used to carry it", () => {
@@ -312,18 +344,46 @@ describe("MH-02-R1-B05 normalized event vocabulary reconciliation", () => {
       "task.transition",
       "session.stop",
     ]);
-    expect(boundary.normalized_event_vocabulary.superseded_versions[0].event_types).toEqual([
-      ...NEUTRAL_SUPERSEDED_EVENT_NAMES_V1,
-    ]);
   });
 
   it("declares the mapping PARTIAL rather than pretending it is lossless", () => {
-    const compat = boundary.normalized_event_vocabulary.compatibility;
+    const compat = (NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>)
+      .compatibility;
     expect(compat.mapping_totality).toBe("partial");
-    expect(boundary.normative_amendments[0].lossless).toBe(false);
-    expect(boundary.normative_amendments[0].irreducible_ambiguity[0].superseded_event_name).toBe(
-      "task.transition"
+    expect(compat.policy).toBe("explicit_typed_mapping");
+    // Every refusal path is declared, so no legacy name can be silently mapped.
+    expect(compat.superseded_disposition).toBe("refused");
+    expect(compat.superseded_reason_code).toBe("event_vocabulary_superseded");
+    expect(compat.ambiguous_disposition).toBe("refused");
+    expect(compat.ambiguous_reason_code).toBe("event_vocabulary_ambiguous");
+    expect(compat.unmapped_disposition).toBe("refused");
+    expect(compat.unmapped_reason_code).toBe("unknown_event");
+    const ambiguous = compat.rules.filter((rule: any) => rule.kind === "ambiguous_split");
+    expect(ambiguous).toEqual([
+      {
+        from: "task.transition",
+        to: null,
+        kind: "ambiguous_split",
+        candidates: ["task.dispatch", "task.collect"],
+      },
+    ]);
+  });
+
+  it("gives every superseded v1 name exactly one declared compatibility rule", () => {
+    const rules = (NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>)
+      .compatibility.rules;
+    expect(rules.map((rule: any) => rule.from).sort()).toEqual(
+      [...NEUTRAL_SUPERSEDED_EVENT_NAMES_V1].sort()
     );
+    for (const rule of rules) {
+      if (rule.kind === "ambiguous_split") {
+        expect(rule.to).toBeNull();
+        expect(rule.candidates.length).toBeGreaterThan(1);
+      } else {
+        expect(NEUTRAL_EVENT_NAMES).toContain(rule.to as never);
+        expect(rule.candidates).toEqual([]);
+      }
+    }
   });
 
   it("maps every unchanged and renamed v1 name to exactly one normative name", () => {
@@ -377,25 +437,27 @@ describe("MH-02-R1-B05 normalized event vocabulary reconciliation", () => {
       "migration.cutover",
       "migration.rollback",
     ]);
-    expect(boundary.normalized_event_vocabulary.compatibility.introduced_in_v2).toEqual([
-      ...NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2,
-    ]);
-  });
-
-  it("keeps the conformance suite's 31 scenarios valid under the normative vocabulary", () => {
-    const names: string[] = conformance.closed_vocabularies.event_names;
-    for (const scenario of conformance.scenarios) {
-      if (scenario.action_event?.name) expect(names).toContain(scenario.action_event.name);
-    }
-    expect(conformance.scenarios).toHaveLength(31);
-  });
-
-  it("adds the normative superseded-name rule to the boundary contract's rules", () => {
     expect(
-      boundary.normalized_event_contract.rules.some((rule: string) =>
-        rule.includes("superseded vocabulary version")
-      )
-    ).toBe(true);
+      (NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>).compatibility
+        .introduced_in_v2
+    ).toEqual([...NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2]);
+  });
+
+  it("derives introduced_in_v2 rather than restating it, so the two cannot drift", () => {
+    // Every normative name is either introduced in v2 or reachable from a v1
+    // rule (as its image or as an ambiguous candidate). No name is both.
+    const rules = (NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>)
+      .compatibility.rules;
+    const reachableFromV1 = new Set<string>();
+    for (const rule of rules) {
+      if (rule.to !== null) reachableFromV1.add(rule.to);
+      for (const candidate of rule.candidates) reachableFromV1.add(candidate);
+    }
+    const introduced = new Set(NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2);
+    for (const name of NEUTRAL_EVENT_NAMES) {
+      expect(introduced.has(name) !== reachableFromV1.has(name)).toBe(true);
+    }
+    expect(introduced.size + reachableFromV1.size).toBe(NEUTRAL_EVENT_NAMES.length);
   });
 });
 

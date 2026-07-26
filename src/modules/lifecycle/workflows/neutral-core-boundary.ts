@@ -177,17 +177,37 @@ function isSpace(ch: string): boolean {
 
 /**
  * Decide whether a `/` at this point starts a regex literal rather than a
- * division. The standard lexical heuristic: a regex may begin only where a value
- * may begin, i.e. NOT directly after something that ends a value. Getting this
- * right matters because a regex literal can otherwise hide a whole call —
- * a literal containing `require("fs")` must not be read as an edge.
+ * division, and say whether that decision is DECIDABLE without a parser.
+ *
+ * The standard lexical heuristic is "a regex may begin only where a value may
+ * begin". Three positions defeat it, and all three are real (MH-02-R2-B02):
+ *
+ *   `)`     `if (x) /re/.test(s)` is a regex; `f(x) / 2` is division.
+ *   `}`     `function f(){} /re/` is a regex; `obj.m() / 2` after a block is not.
+ *   `++`/`--`  postfix (`x++ / y`, division) vs prefix (`++ /re/`, nonsense but
+ *              lexically indistinguishable without knowing the operand).
+ *
+ * The round-2 extractor got the third one wrong in the unsafe direction: it read
+ * `x++ / require("fs") / y` — valid code, plain division — as a regex literal
+ * and swallowed the whole `require` call, then reported the core import-closed.
+ * A sentinel that can be silenced by an increment proves nothing.
+ *
+ * So the choice at all three positions is DIVISION (which keeps ordinary
+ * arithmetic working and keeps calls visible), and the position is reported as
+ * `ambiguous` so the caller can fail closed when the counterfactual regex
+ * reading would have hidden a dependency edge.
  */
-function regexMayStart(previous: NeutralToken | undefined): boolean {
-  if (previous === undefined) return true;
-  if (previous.kind === "string") return false;
+type NeutralSlashReading = "regex" | "division" | "ambiguous_division";
+
+function readSlashAs(
+  previous: NeutralToken | undefined,
+  beforePrevious: NeutralToken | undefined
+): NeutralSlashReading {
+  if (previous === undefined) return "regex";
+  if (previous.kind === "string") return "division";
   if (previous.kind === "ident") {
     // Keywords may be followed by a regex; value-like identifiers may not.
-    return (
+    const keyword =
       previous.value === "return" ||
       previous.value === "typeof" ||
       previous.value === "instanceof" ||
@@ -200,10 +220,61 @@ function regexMayStart(previous: NeutralToken | undefined): boolean {
       previous.value === "do" ||
       previous.value === "else" ||
       previous.value === "yield" ||
-      previous.value === "await"
-    );
+      previous.value === "await";
+    return keyword ? "regex" : "division";
   }
-  return previous.value !== ")" && previous.value !== "]" && previous.value !== "}";
+  if (previous.value === ")" || previous.value === "}") return "ambiguous_division";
+  if (previous.value === "]") return "division";
+  // `++` and `--` reach here as two consecutive single-character punct tokens.
+  const doubled =
+    beforePrevious !== undefined &&
+    beforePrevious.kind === "punct" &&
+    beforePrevious.value === previous.value;
+  if (doubled && (previous.value === "+" || previous.value === "-")) return "ambiguous_division";
+  return "regex";
+}
+
+/**
+ * A lexical position where the regex-vs-division reading is undecidable AND the
+ * two readings disagree about the dependency graph, because the text a regex
+ * reading would have swallowed mentions `import` or `require`.
+ *
+ * Only that conjunction is reported. Ordinary arithmetic after a call or a block
+ * is ambiguous too, but both readings agree there is no edge, so it is silent.
+ */
+export interface NeutralSourceAmbiguity {
+  readonly kind: "regex_or_division";
+  /** The text a regex reading would have consumed, trimmed for reporting. */
+  readonly hidden_text: string;
+}
+
+const DEPENDENCY_WORD = new RegExp("(^|[^A-Za-z0-9_$])(import|require)([^A-Za-z0-9_$]|$)");
+
+/**
+ * Walk a would-be regex literal starting at the `/` at `start`. Used BOTH to
+ * consume a real regex and to compute the counterfactual body at an ambiguous
+ * position, so the two can never drift apart.
+ */
+function scanRegexLiteral(source: string, start: number): { closed: boolean; end: number } {
+  let j = start + 1;
+  let inClass = false;
+  while (j < source.length) {
+    const c = source.charAt(j);
+    if (c === "\\") {
+      j += 2;
+      continue;
+    }
+    if (c === "\n") return { closed: false, end: j };
+    if (c === "[") inClass = true;
+    else if (c === "]") inClass = false;
+    else if (c === "/" && !inClass) {
+      j += 1;
+      while (j < source.length && isIdentPart(source.charAt(j))) j += 1;
+      return { closed: true, end: j };
+    }
+    j += 1;
+  }
+  return { closed: false, end: j };
 }
 
 /**
@@ -215,7 +286,19 @@ function regexMayStart(previous: NeutralToken | undefined): boolean {
  * edge cannot hide inside an interpolation.
  */
 export function tokenizeNeutralSource(source: string): NeutralToken[] {
+  return tokenizeNeutralSourceWithDiagnostics(source).tokens;
+}
+
+/**
+ * The same lexer, plus the ambiguity ledger. `tokenizeNeutralSource` is the
+ * token-only view kept for callers that do not need to fail closed.
+ */
+export function tokenizeNeutralSourceWithDiagnostics(source: string): {
+  readonly tokens: NeutralToken[];
+  readonly ambiguities: NeutralSourceAmbiguity[];
+} {
   const tokens: NeutralToken[] = [];
+  const ambiguities: NeutralSourceAmbiguity[] = [];
   const templateDepths: number[] = [];
   let braceDepth = 0;
   let i = 0;
@@ -240,33 +323,32 @@ export function tokenizeNeutralSource(source: string): NeutralToken[] {
       continue;
     }
 
-    // Regex literal — consumed and discarded (it can never be a specifier).
-    if (ch === "/" && regexMayStart(tokens[tokens.length - 1])) {
-      let j = i + 1;
-      let inClass = false;
-      let closed = false;
-      while (j < source.length) {
-        const c = source.charAt(j);
-        if (c === "\\") {
-          j += 2;
+    // Regex literal, division, or the undecidable position between them.
+    if (ch === "/") {
+      const reading = readSlashAs(tokens[tokens.length - 1], tokens[tokens.length - 2]);
+      if (reading === "regex") {
+        const scan = scanRegexLiteral(source, i);
+        if (scan.closed) {
+          // Consumed and discarded: a regex literal can never be a specifier,
+          // which is what keeps `/require\("fs"\)/` from inventing an edge.
+          i = scan.end;
           continue;
         }
-        if (c === "\n") break;
-        if (c === "[") inClass = true;
-        else if (c === "]") inClass = false;
-        else if (c === "/" && !inClass) {
-          closed = true;
-          j += 1;
-          break;
+        // Unterminated: fall through and treat as punctuation.
+      } else if (reading === "ambiguous_division") {
+        // Read it as division (so the call stays visible), but record the
+        // ambiguity when the discarded alternative would have hidden an edge.
+        const scan = scanRegexLiteral(source, i);
+        if (scan.closed) {
+          const hidden = source.slice(i, scan.end);
+          if (DEPENDENCY_WORD.test(hidden)) {
+            ambiguities.push({
+              kind: "regex_or_division",
+              hidden_text: hidden.length > 120 ? `${hidden.slice(0, 117)}...` : hidden,
+            });
+          }
         }
-        j += 1;
       }
-      if (closed) {
-        while (j < source.length && isIdentPart(source.charAt(j))) j += 1;
-        i = j;
-        continue;
-      }
-      // Unterminated: fall through and treat as punctuation.
     }
 
     // Quoted strings.
@@ -382,7 +464,7 @@ export function tokenizeNeutralSource(source: string): NeutralToken[] {
     i += 1;
   }
 
-  return tokens;
+  return { tokens, ambiguities };
 }
 
 const OPENERS = "([{";
@@ -396,18 +478,94 @@ function bracketDelta(token: NeutralToken): number {
 }
 
 /**
- * Every module specifier a source file references, de-duplicated, first-seen
- * order. Recognised forms, all indentation- and comment-insensitive:
+ * One dependency edge the scan found, resolved or not.
+ *
+ * WHY UNRESOLVED IS AN EDGE, NOT A NON-EVENT (MH-02-R2-B02)
+ *   The round-2 extractor recorded a call's argument only when it was a string
+ *   token, and silently dropped every other argument shape. So
+ *   `const builtin = "fs"; require(builtin)` extracted nothing and the verdict
+ *   was `succeeded` — the core could execute a Node builtin while the sentinel
+ *   reported it import-closed. Closure is a claim about ALL edges, so an edge
+ *   whose destination the scanner cannot resolve is not "no edge"; it is
+ *   "closure unproven", and it must fail.
+ */
+export interface NeutralImportEdge {
+  readonly kind: "resolved" | "unresolved";
+  /** Present only when `kind === "resolved"`. */
+  readonly specifier?: string;
+  /** The syntactic form the edge was recognised in, for actionable reporting. */
+  readonly form: string;
+  /** Present only when `kind === "unresolved"`: why it could not be resolved. */
+  readonly detail?: string;
+}
+
+const OPTIONAL_CALL = "optional_call";
+
+/**
+ * Collect the tokens of a call's FIRST argument, given the index of its `(`.
+ * Returns `undefined` when the call never closes (truncated source).
+ */
+function firstArgumentTokens(
+  tokens: readonly NeutralToken[],
+  openIndex: number
+): NeutralToken[] | undefined {
+  const collected: NeutralToken[] = [];
+  let depth = 1;
+  for (let j = openIndex + 1; j < tokens.length; j += 1) {
+    const token = tokens[j];
+    const delta = bracketDelta(token);
+    if (delta > 0) depth += 1;
+    else if (delta < 0) {
+      depth -= 1;
+      if (depth === 0) return collected;
+    }
+    // A top-level comma ends the first argument (e.g. import attributes).
+    if (depth === 1 && token.kind === "punct" && token.value === ",") return collected;
+    collected.push(token);
+  }
+  return undefined;
+}
+
+function describeTokens(tokens: readonly NeutralToken[]): string {
+  const rendered = tokens
+    .map((token) => (token.kind === "string" ? `"${token.value}"` : token.value))
+    .join(" ");
+  return rendered.length > 80 ? `${rendered.slice(0, 77)}...` : rendered;
+}
+
+/**
+ * Every dependency edge a source file declares, de-duplicated, first-seen order.
+ * Recognised RESOLVED forms, all indentation- and comment-insensitive:
  *
  *   import x from "s"      import type {T} from "s"      import * as n from "s"
  *   import "s"             export {x} from "s"           export * from "s"
  *   import("s")            require("s")                  import /_ c _/ ("s")
+ *
+ * Everything else that reaches an `import`/`require` token is UNRESOLVED and
+ * fails the verdict: a computed argument (`require(name)`), a concatenated or
+ * interpolated one, a conditional one, an empty or absent one, an optional call
+ * (`require?.("s")` — resolvable, but only once the form is recognised at all),
+ * and any use of `require` as a value rather than as a callee.
+ *
+ * `import` used as `import.meta` is deliberately NOT an edge: it is a property
+ * access on the module record, not a module reference. A STATIC import
+ * specifier cannot be computed in the language, so a static form that yields no
+ * `from "s"` is likewise not treated as unresolved — there is nothing to hide.
  */
-export function extractNeutralImportSpecifiers(source: string): string[] {
+export function extractNeutralImportEdges(source: string): NeutralImportEdge[] {
   const tokens = tokenizeNeutralSource(source);
-  const found: string[] = [];
-  const add = (specifier: string): void => {
-    if (specifier.length > 0 && found.indexOf(specifier) === -1) found.push(specifier);
+  const edges: NeutralImportEdge[] = [];
+  const seen: string[] = [];
+
+  const push = (edge: NeutralImportEdge): void => {
+    const key = `${edge.kind}|${edge.specifier ?? ""}|${edge.form}|${edge.detail ?? ""}`;
+    if (seen.indexOf(key) !== -1) return;
+    seen.push(key);
+    edges.push(edge);
+  };
+  const add = (specifier: string, form: string): void => {
+    if (specifier.length > 0) push({ kind: "resolved", specifier, form });
+    else push({ kind: "unresolved", form, detail: "empty specifier" });
   };
 
   for (let index = 0; index < tokens.length; index += 1) {
@@ -420,22 +578,67 @@ export function extractNeutralImportSpecifiers(source: string): string[] {
     if (!isImport && !isExport && !isRequire) continue;
 
     const next = tokens[index + 1];
-    if (next === undefined) continue;
-
-    // Call form: `import(...)` / `require(...)`. Comments between the callee and
-    // the parenthesis have already been dropped, so `import /* c */ ("fs")`
-    // reaches here as the same three tokens as `import("fs")`.
-    if ((isImport || isRequire) && next.kind === "punct" && next.value === "(") {
-      const argument = tokens[index + 2];
-      if (argument !== undefined && argument.kind === "string") add(argument.value);
+    if (next === undefined) {
+      if (isRequire) push({ kind: "unresolved", form: "require", detail: "require used as a value" });
       continue;
     }
 
-    if (isRequire) continue;
+    // Call form, plain or optional. Comments between the callee and the
+    // parenthesis have already been dropped, so `import /* c */ ("fs")` reaches
+    // here as the same tokens as `import("fs")`; `require?.("fs")` reaches here
+    // as `require` `?` `.` `(` and is the same call.
+    const optional =
+      next.kind === "punct" &&
+      next.value === "?" &&
+      tokens[index + 2]?.kind === "punct" &&
+      tokens[index + 2]?.value === "." &&
+      tokens[index + 3]?.kind === "punct" &&
+      tokens[index + 3]?.value === "(";
+    const plainCall = next.kind === "punct" && next.value === "(";
+
+    if ((isImport || isRequire) && (plainCall || optional)) {
+      const callee = isImport ? "import" : "require";
+      const form = optional ? `${callee}${OPTIONAL_CALL}` : `${callee}()`;
+      const openIndex = optional ? index + 3 : index + 1;
+      const argument = firstArgumentTokens(tokens, openIndex);
+      if (argument === undefined) {
+        push({ kind: "unresolved", form, detail: "unterminated call" });
+      } else if (argument.length === 0) {
+        push({ kind: "unresolved", form, detail: "no argument" });
+      } else if (argument.length === 1 && argument[0].kind === "string") {
+        add(argument[0].value, form);
+      } else {
+        // A computed, concatenated, interpolated, or conditional specifier. The
+        // destination is decided at RUNTIME, so the scanner cannot prove it
+        // stays inside the core, and must not pretend the edge is absent.
+        push({
+          kind: "unresolved",
+          form,
+          detail: `non-literal specifier: ${describeTokens(argument)}`,
+        });
+      }
+      continue;
+    }
+
+    if (isRequire) {
+      // `require` reached in any position that is not a call: aliased
+      // (`const r = require`), member-invoked (`require.call(this, "fs")`), or
+      // passed along. Each of those can perform a real import that no lexical
+      // scan can follow, so the core declaring one is a closure failure.
+      push({
+        kind: "unresolved",
+        form: "require",
+        detail: `require used as a value (followed by ${describeTokens([next])})`,
+      });
+      continue;
+    }
+
+    // `import.meta` — a property access on the module record, not an edge.
+    if (isImport && next.kind === "punct" && next.value === ".") continue;
 
     // Bare side-effect import: `import "s"`.
     if (isImport && next.kind === "string") {
-      add(next.value);
+      add(next.value, "import");
       continue;
     }
 
@@ -455,12 +658,31 @@ export function extractNeutralImportSpecifiers(source: string): string[] {
       }
       if (candidate.kind === "ident" && candidate.value === "from") {
         const specifier = tokens[j + 1];
-        if (specifier !== undefined && specifier.kind === "string") add(specifier.value);
+        if (specifier !== undefined && specifier.kind === "string") {
+          add(specifier.value, isExport ? "export from" : "import from");
+        }
         break;
       }
     }
   }
 
+  return edges;
+}
+
+/**
+ * Literal specifiers only, de-duplicated, first-seen order.
+ *
+ * Kept as the narrow view for callers that want the resolved destinations. It
+ * is NOT the closure check: an unresolved edge is invisible here by
+ * construction, which is exactly why `evaluateNeutralCoreBoundary` reads
+ * `extractNeutralImportEdges` instead.
+ */
+export function extractNeutralImportSpecifiers(source: string): string[] {
+  const found: string[] = [];
+  for (const edge of extractNeutralImportEdges(source)) {
+    if (edge.kind !== "resolved" || edge.specifier === undefined) continue;
+    if (found.indexOf(edge.specifier) === -1) found.push(edge.specifier);
+  }
   return found;
 }
 
@@ -481,6 +703,20 @@ export interface NeutralCoreBoundaryEdge {
   readonly boundary?: string;
 }
 
+/** An edge that exists but whose destination the scan could not determine. */
+export interface NeutralCoreUnresolvedEdge {
+  readonly importer: string;
+  readonly form: string;
+  readonly detail: string;
+}
+
+/** A lexing ambiguity that could conceal an edge in the importer's source. */
+export interface NeutralCoreSourceAmbiguity {
+  readonly importer: string;
+  readonly kind: string;
+  readonly hidden_text: string;
+}
+
 function isIntraCoreSpecifier(specifier: string): boolean {
   if (specifier.charAt(0) !== ".") return false;
   const tail = specifier.replace(/^\.\//, "");
@@ -491,13 +727,27 @@ function isIntraCoreSpecifier(specifier: string): boolean {
 
 /**
  * Verdict on the core's import closure. Reason-code priority is
- * membership → forbidden → unclassified: a membership disagreement means the
- * scan was not looking at the declared core at all, so reporting edge findings
- * from it would be misleading.
  *
- * An UNCLASSIFIED destination fails rather than passes, mirroring the
- * MHRC-MOD-001 rule "unclassified destinations fail the verdict". A boundary
- * scan that silently ignores what it does not recognise proves nothing.
+ *   membership → forbidden → unresolved → ambiguous → unclassified
+ *
+ * A membership disagreement comes first because the scan was then not looking at
+ * the declared core at all, so reporting edge findings from it would mislead. A
+ * PROVEN breach (`forbidden`) outranks an UNPROVABLE one, so the most actionable
+ * named boundary is what a reader sees when both are present.
+ *
+ * Every one of the five is a FAILURE. Three of them exist because the round-2
+ * scan answered "succeeded" in cases where it had simply not looked:
+ *
+ *   unresolved    an edge whose destination is computed at runtime
+ *                 (`require(name)`, `import(\`${m}\`)`, `require?.()` unread)
+ *   ambiguous     a `/` the lexer cannot classify without a parser, where the
+ *                 discarded reading would have swallowed an import/require
+ *   unclassified  a destination outside the core that matches no named boundary
+ *                 (MHRC-MOD-001: "unclassified destinations fail the verdict")
+ *
+ * Closure is a universal claim. A scan that silently ignores what it cannot
+ * resolve is not evidence of closure; it is absence of evidence, and BR-07
+ * already says absence is never success.
  */
 export function evaluateNeutralCoreBoundary(
   files: readonly NeutralCoreSourceFile[]
@@ -510,9 +760,27 @@ export function evaluateNeutralCoreBoundary(
   const forbidden: NeutralCoreBoundaryEdge[] = [];
   const unclassified: NeutralCoreBoundaryEdge[] = [];
   const intraCore: NeutralCoreBoundaryEdge[] = [];
+  const unresolved: NeutralCoreUnresolvedEdge[] = [];
+  const ambiguous: NeutralCoreSourceAmbiguity[] = [];
 
   for (const file of files) {
-    for (const specifier of extractNeutralImportSpecifiers(file.source)) {
+    for (const ambiguity of tokenizeNeutralSourceWithDiagnostics(file.source).ambiguities) {
+      ambiguous.push({
+        importer: file.path,
+        kind: ambiguity.kind,
+        hidden_text: ambiguity.hidden_text,
+      });
+    }
+    for (const edge of extractNeutralImportEdges(file.source)) {
+      if (edge.kind === "unresolved" || edge.specifier === undefined) {
+        unresolved.push({
+          importer: file.path,
+          form: edge.form,
+          detail: edge.detail ?? "unresolved specifier",
+        });
+        continue;
+      }
+      const specifier = edge.specifier;
       const matcher = NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS.find((candidate) =>
         candidate.pattern.test(specifier)
       );
@@ -533,7 +801,7 @@ export function evaluateNeutralCoreBoundary(
     }
   }
 
-  const edgeCount = forbidden.length + unclassified.length + intraCore.length;
+  const edgeCount = forbidden.length + unclassified.length + intraCore.length + unresolved.length;
   const facts = {
     declared_members: [...declared],
     missing_members: missingMembers,
@@ -543,6 +811,8 @@ export function evaluateNeutralCoreBoundary(
     intra_core_edges: intraCore,
     forbidden_edges: forbidden,
     unclassified_edges: unclassified,
+    unresolved_edges: unresolved,
+    source_ambiguities: ambiguous,
   };
 
   if (missingMembers.length > 0 || undeclaredFiles.length > 0) {
@@ -571,6 +841,33 @@ export function evaluateNeutralCoreBoundary(
     });
   }
 
+  if (unresolved.length > 0) {
+    return neutralOutcome({
+      type: "guild.boundary_outcome.v1",
+      disposition: "failed",
+      reason_code: "boundary_unresolved_edge",
+      assertions: [
+        "every dependency edge must resolve to a destination the scan can classify",
+        "a runtime-computed specifier cannot be proven to stay inside the core",
+        "an unresolvable edge is closure unproven, never closure proven",
+      ],
+      facts,
+    });
+  }
+
+  if (ambiguous.length > 0) {
+    return neutralOutcome({
+      type: "guild.boundary_outcome.v1",
+      disposition: "failed",
+      reason_code: "boundary_ambiguous_source",
+      assertions: [
+        "the source must lex unambiguously wherever the reading could hide an edge",
+        "a regex-versus-division ambiguity spanning an import or require is not resolved by guess",
+      ],
+      facts,
+    });
+  }
+
   if (unclassified.length > 0) {
     return neutralOutcome({
       type: "guild.boundary_outcome.v1",
@@ -590,6 +887,8 @@ export function evaluateNeutralCoreBoundary(
     assertions: [
       "no core-to-concrete dependency edge exists",
       "dynamic and re-export edges are included",
+      "every edge resolved to a declared core member",
+      "no lexical ambiguity could have hidden an edge",
       "the core is closed under import, so no transitive escape exists",
     ],
     facts,

@@ -103,6 +103,27 @@ export interface NeutralAdmissionContext {
 }
 
 /**
+ * The run-bound snapshot hash carried by an admission context, or `undefined`
+ * when there is no context (or a hand-built one with no snapshot at all).
+ *
+ * ONE SNAPSHOT PER RUN, MECHANICALLY (MH-02-R2-B01)
+ *   `capability_snapshot_hash` on the state and `admission_context.snapshot`
+ *   used to arrive independently: a run could CLAIM one snapshot hash and be
+ *   DECIDED against another, and the outcome binding recorded the claim. That
+ *   made a typed receipt attributable to a snapshot nobody evaluated. The two
+ *   are now required to be the same string at construction, re-checked before
+ *   every event, and the outcome binding names the EVALUATED snapshot rather
+ *   than the claimed one — three independent places, because a state can be
+ *   assembled without the constructor (a restored checkpoint, a fixture).
+ */
+export function neutralAdmissionContextSnapshotHash(
+  context: NeutralAdmissionContext | null | undefined
+): string | undefined {
+  const carried = context?.snapshot?.snapshot_hash;
+  return typeof carried === "string" && carried.length > 0 ? carried : undefined;
+}
+
+/**
  * A typed rule under which an observation is INAPPLICABLE. The frozen contract
  * defines `not_applicable` as inapplicability under an explicit typed rule
  * recorded with the operation, so an unruled `not_applicable` must fail closed
@@ -171,6 +192,20 @@ export function neutralInitialLifecycleState(
     if (!rule.rule_id || !rule.applies_to_observation) {
       throw new Error(
         "neutralInitialLifecycleState: every not_applicable rule needs a rule_id and an applies_to_observation"
+      );
+    }
+  }
+  // CI-03, at the only moment a run's snapshot identity is chosen: the snapshot
+  // the run BINDS to and the snapshot its admission decisions will be EVALUATED
+  // against must be one snapshot. Accepting two here is what let a later outcome
+  // name a snapshot that was never consulted (MH-02-R2-B01).
+  if (input.admission_context !== undefined) {
+    const contextHash = neutralAdmissionContextSnapshotHash(input.admission_context);
+    if (contextHash !== input.capability_snapshot_hash) {
+      throw new Error(
+        "neutralInitialLifecycleState: admission_context.snapshot.snapshot_hash " +
+          `${JSON.stringify(contextHash ?? null)} must equal capability_snapshot_hash ` +
+          `${JSON.stringify(input.capability_snapshot_hash)} — exactly one snapshot binds a run`
       );
     }
   }
@@ -358,13 +393,20 @@ function unchanged(
   }) as NeutralTransition;
 }
 
-/** A success that advances state; records the transition id for idempotency. */
+/**
+ * A success that advances state; records the transition id for idempotency.
+ *
+ * `bindingOverride` exists for one reason: an admission success must name the
+ * snapshot the evaluator actually consulted (MH-02-R2-B01), which is a property
+ * of the decision, not of the state record.
+ */
 function advance(
   state: NeutralLifecycleState,
   event: NeutralLifecycleEvent,
   patch: Partial<NeutralLifecycleState>,
   facts: Record<string, unknown>,
-  assertions: readonly string[]
+  assertions: readonly string[],
+  bindingOverride?: Record<string, unknown>
 ): NeutralTransition {
   const next = neutralFreeze({
     ...state,
@@ -378,7 +420,7 @@ function advance(
       type: "guild.lifecycle_outcome.v1",
       disposition: "succeeded",
       assertions: [...assertions],
-      binding: bindingFor(next, event),
+      binding: { ...bindingFor(next, event), ...(bindingOverride ?? {}) },
       facts: { event_name: event.name, ...facts },
     }),
   }) as NeutralTransition;
@@ -467,6 +509,12 @@ function handleToolBefore(
   }
 
   const context = state.admission_context;
+  // The snapshot this decision will actually be taken against. `applyNeutral-
+  // LifecycleEvent` has already refused any state where this disagrees with the
+  // run-bound hash, so from here the two are the same string — and every
+  // binding below names THIS one, so the outcome can never attribute a decision
+  // to a snapshot that was not consulted (MH-02-R2-B01).
+  const evaluatedSnapshotHash = neutralAdmissionContextSnapshotHash(context);
   const gate = context.gates.find((candidate) => candidate.gate_id === gateId);
   if (gateId === undefined || gate === undefined) {
     return refuse(
@@ -515,7 +563,12 @@ function handleToolBefore(
     admission_outcome_type: admission.type,
     admission_disposition: admission.disposition,
     admission_reason_code: admission.reason_code,
+    // Stated in the facts as well as the binding, so a receipt reader can see
+    // WHICH snapshot produced the answer without trusting the binding merge.
+    evaluated_capability_snapshot_hash: evaluatedSnapshotHash ?? null,
+    run_bound_capability_snapshot_hash: state.capability_snapshot_hash,
   };
+  const evaluatedBinding = { capability_snapshot_hash: evaluatedSnapshotHash };
 
   if (admission.disposition !== "succeeded") {
     // The admission answer IS the lifecycle answer. Its own outcome type is
@@ -529,8 +582,15 @@ function handleToolBefore(
         type: admission.type,
         disposition: admission.disposition,
         reason_code: admission.reason_code,
-        assertions: [...admission.assertions],
-        binding: { ...admission.binding, ...bindingFor(state, event) },
+        assertions: [
+          ...admission.assertions,
+          "the outcome names the capability snapshot that was evaluated",
+        ],
+        // Order matters: `bindingFor` supplies the run/operation identity, and
+        // `evaluatedBinding` then RE-asserts the evaluated snapshot hash so the
+        // state's own field can never overwrite it (that overwrite was the
+        // defect — the claimed hash won over the evaluated one).
+        binding: { ...admission.binding, ...bindingFor(state, event), ...evaluatedBinding },
         facts: {
           event_name: event.name,
           side_effect: false,
@@ -549,7 +609,9 @@ function handleToolBefore(
     [
       "the gate produced a typed satisfied outcome",
       "capability, authentication, policy, approval, and gate were all decided by the core",
-    ]
+      "the outcome names the capability snapshot that was evaluated",
+    ],
+    evaluatedBinding
   );
 }
 
@@ -879,12 +941,17 @@ function handleRunStop(
  * Apply one normalized event. Never mutates `state`; always returns a frozen
  * result. Check order is deliberate:
  *
- *   snapshot binding → event vocabulary → idempotent replay → terminal status
+ *   event snapshot binding → STATE snapshot coherence → event vocabulary
+ *   → idempotent replay → terminal status
  *
  * Snapshot binding first, because a run whose capability truth changed cannot be
- * reasoned about at all. Idempotent replay BEFORE the terminal-status check, so
- * re-delivering the very event that closed a run is a harmless replay rather
- * than a spurious `run_already_closed` refusal.
+ * reasoned about at all. State snapshot coherence immediately after, and BEFORE
+ * anything else can succeed: a state that binds one snapshot hash while carrying
+ * an admission context built from a different snapshot has no single capability
+ * truth, so no event applied to it — not `run.stop`, not an idempotent replay —
+ * may produce an attributable outcome (MH-02-R2-B01). Idempotent replay BEFORE
+ * the terminal-status check, so re-delivering the very event that closed a run
+ * is a harmless replay rather than a spurious `run_already_closed` refusal.
  */
 export function applyNeutralLifecycleEvent(
   state: NeutralLifecycleState,
@@ -901,6 +968,31 @@ export function applyNeutralLifecycleEvent(
       },
       ["no capability snapshot mutation is permitted", "exactly one snapshot binds a run"]
     );
+  }
+
+  // The constructor already refuses this pairing; this second check is what
+  // makes it hold for a state assembled by ANY other route — a restored
+  // checkpoint, a deserialized record, a hand-built fixture.
+  if (state.admission_context !== null) {
+    const contextHash = neutralAdmissionContextSnapshotHash(state.admission_context);
+    if (contextHash !== state.capability_snapshot_hash) {
+      return refuse(
+        state,
+        event,
+        "admission_context_snapshot_mismatch",
+        {
+          run_bound_capability_snapshot_hash: state.capability_snapshot_hash,
+          admission_context_snapshot_hash: contextHash ?? null,
+          side_effect: false,
+        },
+        [
+          "exactly one snapshot binds a run",
+          "a decision is never evaluated against a snapshot the run is not bound to",
+          "an outcome never names a capability snapshot that was not evaluated",
+          "no tool side effect occurs",
+        ]
+      );
+    }
   }
 
   if (!isNeutralEventName(event.name)) {

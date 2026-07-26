@@ -762,6 +762,175 @@ describe("MH-02-R1-B02 not_applicable requires an explicit typed rule", () => {
 });
 
 // ---------------------------------------------------------------------------
+// MH-02-R2-B01 — one snapshot per run, and the outcome names the snapshot that
+// was actually EVALUATED
+//
+// Round 2 let `capability_snapshot_hash` and `admission_context.snapshot` arrive
+// independently and never compared them. The reviewer initialised a state with
+// CLAIMED-STATE-HASH and an admission context built from ACTUAL-CONTEXT-HASH; a
+// tool.before carrying CLAIMED-STATE-HASH succeeded, the evaluator consumed the
+// ACTUAL-CONTEXT-HASH snapshot, and the outcome binding recorded CLAIMED —
+// because `bindingFor(state, event)` overwrote the evaluator's binding. The
+// receipt was then attributable to a snapshot nobody looked at.
+// ---------------------------------------------------------------------------
+
+describe("MH-02-R2-B01 the evaluated snapshot IS the run-bound snapshot", () => {
+  const CLAIMED = "CLAIMED-STATE-HASH";
+  const ACTUAL = "ACTUAL-CONTEXT-HASH";
+
+  function contextBoundTo(snapshotHash: string): NeutralAdmissionContext {
+    return admissionContext({
+      snapshot: freezeNeutralCapabilitySnapshot({
+        snapshot_hash: snapshotHash,
+        host_id: "host-a",
+        host_version: "1.0.0",
+        capabilities: [
+          { capability_id: "tool.exec", supported: true, authenticated: true },
+          { capability_id: "tool.unauthenticated", supported: true, authenticated: false },
+        ],
+      }),
+    });
+  }
+
+  /** A state assembled WITHOUT the constructor — a restored checkpoint shape. */
+  function divergentState(): NeutralLifecycleState {
+    const coherent = neutralInitialLifecycleState({
+      run_id: "run-mh02-b01",
+      capability_snapshot_hash: CLAIMED,
+      phase: "init",
+      required_gate_ids: [],
+      required_observations: [],
+      admission_context: contextBoundTo(CLAIMED),
+    });
+    return { ...coherent, admission_context: contextBoundTo(ACTUAL) } as NeutralLifecycleState;
+  }
+
+  /** The reviewer's exact probe, at the point of construction. */
+  it("REJECTS a state whose bound hash and admission context disagree", () => {
+    expect(() =>
+      neutralInitialLifecycleState({
+        run_id: "run-mh02-b01",
+        capability_snapshot_hash: CLAIMED,
+        phase: "init",
+        required_gate_ids: ["G-spec"],
+        required_observations: [],
+        admission_context: contextBoundTo(ACTUAL),
+      })
+    ).toThrow(/exactly one snapshot binds a run/i);
+  });
+
+  it("accepts the coherent pairing so the check is not merely refusing everything", () => {
+    const state = neutralInitialLifecycleState({
+      run_id: "run-mh02-b01",
+      capability_snapshot_hash: CLAIMED,
+      phase: "init",
+      required_gate_ids: ["G-spec"],
+      required_observations: [],
+      admission_context: contextBoundTo(CLAIMED),
+    });
+    expect(state.capability_snapshot_hash).toBe(CLAIMED);
+    expect(state.admission_context?.snapshot.snapshot_hash).toBe(CLAIMED);
+  });
+
+  /**
+   * Defence in depth: the constructor is one route into a state. A restored
+   * checkpoint, a deserialized record, or a hand-built fixture is another, and
+   * the invariant has to hold for all of them — so it is re-checked before EVERY
+   * event, not only before an admission.
+   */
+  /** Every event carries the RUN-BOUND hash, so only the state's own incoherence
+   *  can be what refuses it — the event-hash check must not mask the finding. */
+  function onClaimedRun(evt: NeutralLifecycleEvent): NeutralLifecycleEvent {
+    return { ...evt, capability_snapshot_hash: CLAIMED };
+  }
+
+  it.each([
+    ["tool.before", toolBefore("t-b01-before", { gate_condition: "satisfied" })],
+    [
+      "run.stop",
+      event({
+        name: "run.stop",
+        transition_id: "t-b01-stop",
+        input: { requested_terminal_state: "completed" },
+      }),
+    ],
+    [
+      "receipt.append",
+      event({
+        name: "receipt.append",
+        transition_id: "t-b01-obs",
+        input: { observation: "scope_diff", observation_state: "checked_clean" },
+      }),
+    ],
+    ["prompt.submit", event({ transition_id: "t-b01-phase" })],
+    ["context.compact", event({ name: "context.compact", transition_id: "t-b01-compact", input: {} })],
+  ])("fails %s closed when the state carries a divergent admission context", (_label, evt) => {
+    const before = divergentState();
+    const result = applyNeutralLifecycleEvent(before, onClaimedRun(evt as NeutralLifecycleEvent));
+    expect(result.outcome.disposition).toBe("refused");
+    expect(result.outcome.reason_code).toBe("admission_context_snapshot_mismatch");
+    expect(result.state_changed).toBe(false);
+    expect(result.state.status).toBe("open");
+    expect(result.outcome.facts.run_bound_capability_snapshot_hash).toBe(CLAIMED);
+    expect(result.outcome.facts.admission_context_snapshot_hash).toBe(ACTUAL);
+    expect(result.outcome.facts.side_effect).toBe(false);
+    expect(neutralLifecycleFingerprint(result.state)).toBe(neutralLifecycleFingerprint(before));
+  });
+
+  it("refuses even an otherwise-idempotent replay on a divergent state", () => {
+    // The coherence check runs BEFORE the replay short-circuit, so a divergent
+    // state cannot launder a transition through the "already applied" path.
+    const divergent = {
+      ...divergentState(),
+      applied_transitions: ["t-b01-replay"],
+    } as NeutralLifecycleState;
+    const result = applyNeutralLifecycleEvent(
+      divergent,
+      onClaimedRun(toolBefore("t-b01-replay"))
+    );
+    expect(result.outcome.disposition).toBe("refused");
+    expect(result.outcome.reason_code).toBe("admission_context_snapshot_mismatch");
+  });
+
+  it("still reports a MISSING context distinctly from a DIVERGENT one", () => {
+    const result = applyNeutralLifecycleEvent(
+      openState({ admission_context: undefined }),
+      toolBefore("t-b01-none", { gate_condition: "satisfied" })
+    );
+    expect(result.outcome.reason_code).toBe("admission_context_missing");
+    expect(result.outcome.reason_code).not.toBe("admission_context_snapshot_mismatch");
+  });
+
+  /**
+   * The other half of the finding: even when the two agree, the binding must
+   * name the EVALUATED snapshot rather than re-derive it from the state field.
+   */
+  it.each([
+    ["admitted", {}, "succeeded"],
+    ["policy-denied", { operation: "forbidden-write" }, "refused"],
+    ["capability-absent", { required_capability: "tool.missing" }, "unsupported"],
+    ["gate-unsatisfied", { satisfied_conditions: [] }, "refused"],
+  ])("binds the evaluated snapshot on a %s outcome", (_label, patch, disposition) => {
+    const state = openState();
+    const evaluated = state.admission_context?.snapshot.snapshot_hash;
+    const result = applyNeutralLifecycleEvent(
+      state,
+      toolBefore("t-b01-bind", patch as Record<string, unknown>)
+    );
+    expect(result.outcome.disposition).toBe(disposition);
+    expect(result.outcome.binding.capability_snapshot_hash).toBe(evaluated);
+    expect(result.outcome.facts.evaluated_capability_snapshot_hash).toBe(evaluated);
+    expect(result.outcome.facts.run_bound_capability_snapshot_hash).toBe(
+      state.capability_snapshot_hash
+    );
+    // The two are the same value precisely because divergence cannot exist.
+    expect(result.outcome.facts.evaluated_capability_snapshot_hash).toBe(
+      result.outcome.facts.run_bound_capability_snapshot_hash
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Purity — no hidden inputs, no mutation of the caller's state
 // ---------------------------------------------------------------------------
 

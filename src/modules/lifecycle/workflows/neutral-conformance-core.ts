@@ -32,10 +32,12 @@
  */
 
 import {
+  NEUTRAL_CONTRACT_VERSION,
   NEUTRAL_SUPPORT_STATES,
   isNeutralDisposition,
   isNeutralEventName,
   isNeutralOutcomeType,
+  isNeutralReasonCode,
   isNeutralScenarioCategory,
   isNeutralSupportStatus,
   neutralFreeze,
@@ -537,12 +539,50 @@ export function deriveNeutralSupportClaim(record: NeutralSupportRecord): Neutral
 // ---------------------------------------------------------------------------
 
 /**
- * The REQUIRED scenario set for this suite version. Declared by the core, not
- * chosen by the caller (MH-02-R1-B04): when the caller picked the required set,
- * it could pick the empty set and promote `conformant` without running anything.
+ * The REQUIRED scenario TUPLE for this suite version — ordered, immutable, and
+ * declared by the core rather than chosen by the caller.
+ *
+ * MH-02-R1-B04 established that a caller-picked required SET could be the empty
+ * set. MH-02-R2-B03 established two further holes that a set alone cannot close:
+ * the decision function still accepted a caller-supplied `scenarios` array (so a
+ * caller could re-derive the required set from a one-scenario suite of its own),
+ * and the comparison was set-based (so the caller could reorder both the tuple
+ * and the results together and still promote). This constant is now the ONLY
+ * source of the required set, and it is compared element-by-element in ORDER,
+ * because an ordered tuple is what makes `results[i]` attributable to
+ * `required[i]` at all.
  */
 export const NEUTRAL_REQUIRED_CORE_SCENARIO_IDS: readonly string[] = neutralFreeze(
   NEUTRAL_CORE_SCENARIOS.map((scenario) => scenario.stable_id)
+);
+
+/**
+ * The canonical receipt-reference form: `guild.receipt_ref.v1:<journal>#<seq>`.
+ *
+ * A conformance result cites the durable receipt that records it (MH-06 owns
+ * the journal). Round 2 accepted the literal string `bogus` for all five
+ * results, which is a reference to nothing — the check was "non-empty string",
+ * and a non-empty string is not a reference. The core cannot READ the journal
+ * (it performs no I/O), so what it CAN require is that the citation be a
+ * well-formed, resolvable, per-scenario-distinct address into one: a schema
+ * marker, a journal id, and a canonical sequence number.
+ */
+export const NEUTRAL_RECEIPT_REF_SCHEMA = "guild.receipt_ref.v1";
+const NEUTRAL_RECEIPT_REF_PATTERN = new RegExp(
+  "^guild\\.receipt_ref\\.v1:[A-Za-z0-9][A-Za-z0-9._-]{2,}#(0|[1-9][0-9]*)$"
+);
+
+/**
+ * The runtime identities this core recognizes: `guild-<major>.<minor>.<patch>`
+ * with an optional pre-release tail.
+ *
+ * The frozen suite's `support_claim` rule says a host is conformant only for the
+ * EXACT runtime, contract, and scenario-suite versions its evidence names. A
+ * version string the core cannot even recognize as a runtime identity cannot be
+ * the exact one, so it is refused rather than accepted as opaque text.
+ */
+const NEUTRAL_RUNTIME_VERSION_PATTERN = new RegExp(
+  "^guild-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
 );
 
 /** Evidence freshness. `unknown` is not a soft `fresh`. */
@@ -618,6 +658,10 @@ function refuseConformance(
     | "scenario_results_unordered"
     | "scenario_evidence_incomplete"
     | "scenario_receipt_reference_missing"
+    | "scenario_receipt_reference_ambiguous"
+    | "scenario_reason_code_unrecognized"
+    | "scenario_contract_version_unrecognized"
+    | "scenario_runtime_version_unrecognized"
     | "scenario_runtime_binding_mismatch"
     | "scenario_evidence_stale",
   assertions: readonly string[],
@@ -633,32 +677,44 @@ function refuseConformance(
 }
 
 /**
- * Decide whether `conformant` may be promoted (MH-02-R1-B04).
+ * Decide whether `conformant` may be promoted (MH-02-R1-B04, MH-02-R2-B03).
  *
- * Round 1 accepted `({}, [])` and five bare `{disposition}` strings, which meant
- * a caller could publish a conformance claim without running a scenario. Every
- * gate below exists because its absence was exploitable:
+ * There is deliberately NO scenario-set parameter. Round 2 kept one — defaulted
+ * to the core's set, so it looked harmless — and it was the whole hole: a caller
+ * passing a one-scenario array got a one-scenario "required set", ran that one
+ * scenario, and promoted `conformant`. A suite the claimant chooses is not a
+ * suite. The pinned tuple is read from the core constant and nothing else.
  *
- *   1. the suite version tuple must be the pinned one          (no silent drift)
- *   2. the required set must be the CORE's set, non-empty      (no empty suite)
- *   3. results must be ordered against that set                (no re-association)
- *   4. each result must be a typed outcome, not a string       (no bare verdicts)
- *   5. each result must cite a receipt reference               (no evidence-free pass)
- *   6. each result must bind the EXACT activated runtime       (no cross-release reuse)
- *   7. every result's freshness verdict must be `fresh`        (no stale evidence)
- *   8. each disposition must match the scenario's expectation  (the original check)
+ * Every gate below exists because its absence was demonstrably exploitable:
+ *
+ *    1. the suite id + version must be the pinned pair         (no silent drift)
+ *    2. the required tuple must EQUAL the core tuple, in order (no narrowing,
+ *                                                              no re-ordering)
+ *    3. results must be ordered against that tuple             (no re-association)
+ *    4. each result must be a typed outcome, not a string      (no bare verdicts)
+ *    5. each non-succeeded reason code must be in the closed
+ *       vocabulary                                             (no invented reasons)
+ *    6. each outcome TYPE must be the scenario's expected type (no wrong-but-
+ *                                                              closed types)
+ *    7. each receipt reference must be well-formed AND distinct(no "bogus")
+ *    8. the contract version must be the one this core implements
+ *    9. the runtime version must be a recognized identity
+ *   10. each result must bind the EXACT activated runtime      (no cross-release
+ *                                                              reuse)
+ *   11. every result's freshness verdict must be `fresh`       (no stale evidence)
+ *   12. each disposition must match the scenario's expectation (the original check)
  *
  * An expected REFUSAL that actually refused is still a pass — explicitly
  * refusing is the correct behaviour for the refusal scenarios, and it is what
  * "passed or explicitly refused every required scenario" means.
  */
 export function evaluateNeutralConformanceDecision(
-  evidence: NeutralConformanceEvidence,
-  scenarios: readonly NeutralScenarioDefinition[] = NEUTRAL_CORE_SCENARIOS
+  evidence: NeutralConformanceEvidence
 ): NeutralOutcome {
+  const scenarios: readonly NeutralScenarioDefinition[] = NEUTRAL_CORE_SCENARIOS;
   const required = evidence?.required_scenario_ids ?? [];
   const results = evidence?.results ?? [];
-  const expectedRequired = scenarios.map((scenario) => scenario.stable_id);
+  const expectedRequired = NEUTRAL_REQUIRED_CORE_SCENARIO_IDS;
 
   const baseFacts = {
     suite_id: NEUTRAL_SCENARIO_SUITE_ID,
@@ -684,21 +740,33 @@ export function evaluateNeutralConformanceDecision(
     );
   }
 
-  // 2 — the required set is the core's, and it is not empty
+  // 2 — the required tuple IS the core's tuple, element-by-element, in order
   const missingRequired = expectedRequired.filter((id) => required.indexOf(id) === -1);
   const extraRequired = required.filter((id) => expectedRequired.indexOf(id) === -1);
-  if (required.length === 0 || missingRequired.length > 0 || extraRequired.length > 0) {
+  const tupleMisordered =
+    required.length === expectedRequired.length &&
+    missingRequired.length === 0 &&
+    extraRequired.length === 0 &&
+    expectedRequired.some((id, index) => required[index] !== id);
+  if (
+    required.length !== expectedRequired.length ||
+    missingRequired.length > 0 ||
+    extraRequired.length > 0 ||
+    tupleMisordered
+  ) {
     return refuseConformance(
       "scenario_required_set_mismatch",
       [
-        "the required scenario set is declared by the core for this suite version",
-        "an empty or caller-selected required set cannot back a conformance claim",
+        "the required scenario tuple is declared by the core for this suite version",
+        "an empty, narrowed, inflated, or re-ordered required tuple cannot back a conformance claim",
       ],
       {
         ...baseFacts,
         declared_required_scenario_ids: [...expectedRequired],
+        submitted_required_scenario_ids: [...required],
         omitted_required_scenarios: missingRequired,
         undeclared_scenarios: extraRequired,
+        tuple_misordered: tupleMisordered,
       }
     );
   }
@@ -728,9 +796,10 @@ export function evaluateNeutralConformanceDecision(
     );
   }
 
-  // 4/5 — typed outcomes with receipt references
+  // 4 — typed outcomes, not bare dispositions
   const untyped: Array<Record<string, unknown>> = [];
-  const receiptless: string[] = [];
+  const invented: Array<Record<string, unknown>> = [];
+  const receiptless: Array<Record<string, unknown>> = [];
   for (const result of results) {
     const typedOk =
       isNeutralOutcomeType(result.outcome_type) &&
@@ -745,9 +814,23 @@ export function evaluateNeutralConformanceDecision(
         disposition: result.disposition ?? null,
         reason_code: result.reason_code ?? null,
       });
+      continue;
     }
-    if (typeof result.receipt_ref !== "string" || result.receipt_ref.length === 0) {
-      receiptless.push(result.stable_id);
+    // 5 — a non-succeeded reason code must be IN the closed vocabulary. Round 2
+    // required only "a non-empty string", so `invented_reason` passed and the
+    // refusal it labelled meant nothing.
+    if (result.disposition !== "succeeded" && !isNeutralReasonCode(result.reason_code)) {
+      invented.push({ stable_id: result.stable_id, reason_code: result.reason_code ?? null });
+    }
+    // 7a — a receipt reference must be a REFERENCE, not merely a string.
+    if (
+      typeof result.receipt_ref !== "string" ||
+      !NEUTRAL_RECEIPT_REF_PATTERN.test(result.receipt_ref)
+    ) {
+      receiptless.push({
+        stable_id: result.stable_id,
+        receipt_ref: (result.receipt_ref as unknown) ?? null,
+      });
     }
   }
   if (untyped.length > 0) {
@@ -760,18 +843,132 @@ export function evaluateNeutralConformanceDecision(
       { ...baseFacts, untyped_results: untyped }
     );
   }
+  if (invented.length > 0) {
+    return refuseConformance(
+      "scenario_reason_code_unrecognized",
+      [
+        "every non-succeeded result names one reason code from the closed vocabulary",
+        "an invented reason code cannot be compared across hosts and proves nothing",
+      ],
+      { ...baseFacts, unrecognized_reason_codes: invented }
+    );
+  }
+
+  // 6 — the outcome TYPE must be the one the scenario declares. A closed-but-
+  // wrong type (round 2 promoted five `guild.migration_outcome.v1` results for
+  // four lifecycle scenarios and a policy scenario) is evidence of a different
+  // experiment, not of this suite.
+  const mistyped = results
+    .map((result) => {
+      const definition = scenarios.find((scenario) => scenario.stable_id === result.stable_id);
+      return {
+        stable_id: result.stable_id,
+        expected_outcome_type: definition?.expected_typed_outcome.type ?? null,
+        observed_outcome_type: result.outcome_type,
+      };
+    })
+    .filter((entry) => entry.expected_outcome_type !== entry.observed_outcome_type);
+  if (mistyped.length > 0) {
+    return neutralOutcome({
+      type: "guild.support_transition_outcome.v1",
+      disposition: "failed",
+      reason_code: "scenario_result_mismatch",
+      assertions: [
+        "each result carries the typed outcome envelope its scenario declares",
+        "a closed but wrong outcome type is not the scenario's expected outcome",
+      ],
+      facts: { ...baseFacts, mistyped_scenarios: mistyped, may_promote_conformant: false },
+    });
+  }
+
+  // 7b — receipt references: well-formed, and DISTINCT per scenario. Two
+  // scenarios citing one journal entry attribute neither.
   if (receiptless.length > 0) {
     return refuseConformance(
       "scenario_receipt_reference_missing",
       [
         "every scenario result cites the receipt that records it",
-        "a result with no receipt reference is unverifiable",
+        `a receipt reference has the canonical form ${NEUTRAL_RECEIPT_REF_SCHEMA}:<journal>#<sequence>`,
+        "a result whose receipt reference resolves to nothing is unverifiable",
       ],
       { ...baseFacts, results_without_receipt_reference: receiptless }
     );
   }
+  const duplicateReceipts = results
+    .map((result, index) => ({ stable_id: result.stable_id, receipt_ref: result.receipt_ref, index }))
+    .filter(
+      (entry) =>
+        results.findIndex((other) => other.receipt_ref === entry.receipt_ref) !== entry.index
+    )
+    .map((entry) => ({ stable_id: entry.stable_id, receipt_ref: entry.receipt_ref }));
+  if (duplicateReceipts.length > 0) {
+    return refuseConformance(
+      "scenario_receipt_reference_ambiguous",
+      [
+        "each scenario result cites its own receipt entry",
+        "one receipt entry cited by two scenarios attributes neither",
+      ],
+      { ...baseFacts, duplicate_receipt_references: duplicateReceipts }
+    );
+  }
 
-  // 6 — exact activated-runtime binding
+  // 8/9 — the contract and runtime versions must be ones this core recognizes.
+  // `support_claim` binds conformance to EXACT versions; a version the core
+  // cannot recognize cannot be the exact one.
+  const activatedContractVersion = evidence.activated_runtime?.contract_version;
+  const contractOffenders = [
+    ...(activatedContractVersion === NEUTRAL_CONTRACT_VERSION
+      ? []
+      : [{ scope: "activated_runtime", contract_version: activatedContractVersion ?? null }]),
+    ...results
+      .filter((result) => result.runtime_binding?.contract_version !== NEUTRAL_CONTRACT_VERSION)
+      .map((result) => ({
+        scope: result.stable_id,
+        contract_version: result.runtime_binding?.contract_version ?? null,
+      })),
+  ];
+  if (contractOffenders.length > 0) {
+    return refuseConformance(
+      "scenario_contract_version_unrecognized",
+      [
+        `a conformance claim binds to contract version ${NEUTRAL_CONTRACT_VERSION}, the one this core implements`,
+        "a consumer pinned to a different contract major refuses rather than downgrades",
+      ],
+      {
+        ...baseFacts,
+        recognized_contract_version: NEUTRAL_CONTRACT_VERSION,
+        unrecognized_contract_versions: contractOffenders,
+      }
+    );
+  }
+  const runtimeOffenders = [
+    ...(NEUTRAL_RUNTIME_VERSION_PATTERN.test(evidence.activated_runtime?.runtime_version ?? "")
+      ? []
+      : [
+          {
+            scope: "activated_runtime",
+            runtime_version: evidence.activated_runtime?.runtime_version ?? null,
+          },
+        ]),
+    ...results
+      .filter((result) => !NEUTRAL_RUNTIME_VERSION_PATTERN.test(result.runtime_binding?.runtime_version ?? ""))
+      .map((result) => ({
+        scope: result.stable_id,
+        runtime_version: result.runtime_binding?.runtime_version ?? null,
+      })),
+  ];
+  if (runtimeOffenders.length > 0) {
+    return refuseConformance(
+      "scenario_runtime_version_unrecognized",
+      [
+        "a conformance claim names a runtime identity the core recognizes",
+        "an unrecognized runtime version cannot be the exact activated runtime",
+      ],
+      { ...baseFacts, unrecognized_runtime_versions: runtimeOffenders }
+    );
+  }
+
+  // 10 — exact activated-runtime binding
   if (!runtimeBindingComplete(evidence.activated_runtime)) {
     return refuseConformance(
       "scenario_runtime_binding_mismatch",
@@ -800,7 +997,7 @@ export function evaluateNeutralConformanceDecision(
     );
   }
 
-  // 7 — explicit freshness verdict
+  // 11 — explicit freshness verdict
   const notFresh = results
     .filter((result) => result.evidence_freshness !== "fresh")
     .map((result) => ({ stable_id: result.stable_id, evidence_freshness: result.evidence_freshness ?? null }));
@@ -815,7 +1012,7 @@ export function evaluateNeutralConformanceDecision(
     );
   }
 
-  // 8 — disposition matches the scenario's expectation
+  // 12 — disposition matches the scenario's expectation
   const mismatched = results
     .map((result) => {
       const definition = scenarios.find((scenario) => scenario.stable_id === result.stable_id);

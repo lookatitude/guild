@@ -201,6 +201,10 @@ export const NEUTRAL_REASON_CODES = [
   "approval_required",
   // admission (MH-02-R1-B01): the lifecycle path decides, it never trusts a verdict
   "admission_context_missing",
+  // one-snapshot-per-run (MH-02-R2-B01): the snapshot a decision is EVALUATED
+  // against and the snapshot the run is BOUND to must be the same snapshot, or
+  // no outcome from that run can be attributed to a capability truth at all.
+  "admission_context_snapshot_mismatch",
   "execution_failed",
   // not-applicable rule binding (MH-02-R1-B02)
   "not_applicable_rule_missing",
@@ -222,10 +226,21 @@ export const NEUTRAL_REASON_CODES = [
   "scenario_receipt_reference_missing",
   "scenario_runtime_binding_mismatch",
   "scenario_evidence_stale",
+  // conformance evidence integrity (MH-02-R2-B03): nominal metadata is not
+  // evidence. Each code names exactly which forgery the decision caught.
+  "scenario_reason_code_unrecognized",
+  "scenario_receipt_reference_ambiguous",
+  "scenario_contract_version_unrecognized",
+  "scenario_runtime_version_unrecognized",
   // core boundary
   "boundary_forbidden_edge",
   "boundary_unclassified_edge",
   "boundary_membership_mismatch",
+  // import closure fails closed (MH-02-R2-B02): an edge whose destination
+  // cannot be RESOLVED, and a source whose lexing is ambiguous in a way that
+  // could hide an edge, are both "closure unproven" — never "closure proven".
+  "boundary_unresolved_edge",
+  "boundary_ambiguous_source",
 ] as const;
 export type NeutralReasonCode = (typeof NEUTRAL_REASON_CODES)[number];
 

@@ -34,6 +34,7 @@ import {
   NEUTRAL_CORE_SCENARIOS,
   NEUTRAL_CORE_WAVE_OWNER,
   NEUTRAL_EVIDENCE_PROFILES,
+  NEUTRAL_RECEIPT_REF_SCHEMA,
   NEUTRAL_REQUIRED_CORE_SCENARIO_IDS,
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
@@ -238,6 +239,137 @@ describe("MH-02 acceptance 3 — core import closure", () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // MH-02-R2-B02 — closure FAILS CLOSED on what the scan cannot resolve
+  //
+  // The round-2 recognizer recorded a call's argument only when it was a string
+  // token and silently dropped every other shape, so five valid-source probes
+  // extracted zero specifiers and returned `succeeded`. Closure is a universal
+  // claim: an edge whose destination the scanner cannot determine is not "no
+  // edge", it is "closure unproven".
+  // -------------------------------------------------------------------------
+
+  describe("MH-02-R2-B02 unresolvable edges and lexer ambiguity fail closed", () => {
+    function verdictFor(source: string) {
+      return evaluateNeutralCoreBoundary(
+        NEUTRAL_CORE_MEMBERS.map((member, index) => ({
+          path: member,
+          source: index === 0 ? source : "",
+        }))
+      );
+    }
+
+    /** The reviewer's four extraction probes, plus near neighbours. */
+    it.each([
+      ["computed require", 'const builtin = "fs"; require(builtin);'],
+      ["computed dynamic import", 'const pkg = "fs"; import(pkg);'],
+      ["multiline computed import", "import(\n  name\n);"],
+      ["template-hole specifier", "require(`${mod}`);"],
+      ["concatenated specifier", 'import("f" + "s");'],
+      ["conditional specifier", 'import(cond ? "fs" : "path");'],
+      ["zero-argument require", "require();"],
+      ["empty-string specifier", 'require("");'],
+      ["require aliased as a value", "const r = require; r(\"fs\");"],
+      ["require invoked through call()", 'require.call(null, "fs");'],
+      ["member-accessed require", 'const p = require.resolve("fs");'],
+    ])("refuses a %s as an unresolved edge", (_label, source) => {
+      const verdict = verdictFor(source);
+      expect(verdict.disposition).toBe("failed");
+      expect(verdict.reason_code).toBe("boundary_unresolved_edge");
+      expect((verdict.facts.unresolved_edges as unknown[]).length).toBeGreaterThan(0);
+    });
+
+    /** The reviewer's optional-call probe: previously invisible entirely. */
+    it("recognises an optional require call and classifies its destination", () => {
+      expect(extractNeutralImportSpecifiers('require?.("fs")')).toEqual(["fs"]);
+      const verdict = verdictFor('require?.("fs")');
+      expect(verdict.disposition).toBe("failed");
+      expect(verdict.reason_code).toBe("boundary_forbidden_edge");
+      expect(
+        (verdict.facts.forbidden_edges as Array<{ specifier: string; matcher_id: string }>)[0]
+      ).toMatchObject({ specifier: "fs", matcher_id: "node_io_builtin" });
+    });
+
+    it("refuses an optional call with a COMPUTED specifier as unresolved", () => {
+      const verdict = verdictFor("const m = \"fs\"; require?.(m);");
+      expect(verdict.reason_code).toBe("boundary_unresolved_edge");
+    });
+
+    /**
+     * The reviewer's lexer probe. `x++ / require("fs") / y` is valid code and
+     * plain division; round 2 read the `/` as a regex start and swallowed the
+     * whole call. The `/` is now division, so the call is visible again — AND
+     * the undecidable position is recorded, because a parser-free lexer cannot
+     * prove which reading was intended.
+     */
+    it.each([
+      ["postfix increment", 'const v = x++ / require("fs") / y;'],
+      ["postfix decrement", 'const v = x-- / require("fs") / y;'],
+    ])("does not let a %s hide a require call", (_label, source) => {
+      expect(extractNeutralImportSpecifiers(source)).toEqual(["fs"]);
+      const verdict = verdictFor(source);
+      expect(verdict.disposition).toBe("failed");
+      expect(verdict.reason_code).toBe("boundary_forbidden_edge");
+      expect((verdict.facts.source_ambiguities as unknown[]).length).toBeGreaterThan(0);
+    });
+
+    it("reports an ambiguous slash that would have swallowed an import", () => {
+      // After `)` the reading is genuinely undecidable. Both readings are kept
+      // honest: division keeps the statement scannable, and the ambiguity is
+      // recorded because the discarded reading spans a dependency word.
+      const verdict = verdictFor('const v = f(a) / import("./x") / b;');
+      expect(verdict.disposition).toBe("failed");
+      expect(
+        (verdict.facts.source_ambiguities as Array<{ kind: string }>).every(
+          (entry) => entry.kind === "regex_or_division"
+        )
+      ).toBe(true);
+    });
+
+    it("stays SILENT on an ambiguous slash that could not have hidden an edge", () => {
+      // Ordinary arithmetic after a call or a block is ambiguous too, but both
+      // readings agree there is no edge, so failing there would be noise.
+      for (const source of [
+        "const r = f(a) / 2;",
+        "const q = compute() / total() / 3;",
+        "function g() {} const z = w / 4;",
+        "const n = counter++ / limit;",
+      ]) {
+        const verdict = verdictFor(source);
+        expect([source, verdict.disposition]).toEqual([source, "succeeded"]);
+        expect([source, verdict.facts.source_ambiguities]).toEqual([source, []]);
+      }
+    });
+
+    it("keeps import.meta out of the edge set", () => {
+      const verdict = verdictFor("const here = import.meta.url;");
+      expect(verdict.disposition).toBe("succeeded");
+      expect(verdict.facts.unresolved_edges).toEqual([]);
+    });
+
+    it("still resolves every ordinary form, so the tightening is not a blanket refusal", () => {
+      const verdict = verdictFor(
+        [
+          'import a from "./neutral-runtime-contracts";',
+          'export * from "./neutral-gate-policy";',
+          'const c = await import("./neutral-conformance-core");',
+          'const d = require("./neutral-core-boundary");',
+          "const e = require(`./neutral-runtime-contracts`);",
+        ].join("\n")
+      );
+      expect(verdict.disposition).toBe("succeeded");
+      expect(verdict.reason_code).toBeNull();
+      expect(verdict.facts.unresolved_edges).toEqual([]);
+      expect(verdict.facts.source_ambiguities).toEqual([]);
+    });
+
+    it("counts unresolved edges in edge_count so the fact set stays honest", () => {
+      const verdict = verdictFor('const m = "fs"; require(m);');
+      expect(verdict.facts.edge_count).toBe(1);
+      expect((verdict.facts.unresolved_edges as Array<{ form: string }>)[0].form).toBe("require()");
+    });
+  });
+
   it("declares a forbidden matcher for every boundary class MH-02 acceptance 3 names", () => {
     const ids = NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS.map((matcher) => matcher.id);
     for (const required of [
@@ -253,6 +385,111 @@ describe("MH-02 acceptance 3 — core import closure", () => {
     ]) {
       expect(ids).toContain(required);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MH-02-R2-B04 — the MH-02 surface is reproducible in plugin CI
+//
+// Round 2 pinned the contract assertions to an absolute umbrella worktree. The
+// plugin test workflow checks out ONLY the plugin repository and then runs the
+// whole `scripts` Jest project, so the suite that gated MH-02 could not execute
+// on a clean clone or a runner — it passed solely because that private path
+// happened to exist on the review machine.
+//
+// Removing the path once would be a fix that silently rots. This guard makes it
+// an INVARIANT: the MH-02 surface may not name a machine-local root or any
+// sibling repository, in tests or in source. Cross-repository equality is still
+// required — it is verified at the umbrella/run level, where both repositories
+// are present, and recorded in the MH-02 handoff receipt.
+// ---------------------------------------------------------------------------
+
+describe("MH-02-R2-B04 the MH-02 surface is hermetic to the plugin repository", () => {
+  const TESTS_DIR = path.resolve(__dirname);
+  const MH02_TEST_FILES = [
+    "neutral-runtime-contracts.test.ts",
+    "neutral-lifecycle-machine.test.ts",
+    "neutral-conformance-core.test.ts",
+  ];
+
+  /**
+   * Assembled from fragments on purpose. Writing any of these roots as one
+   * contiguous literal — in the array, in a comment, anywhere in this file —
+   * would be found by the very scan below, and the guard would trip on itself.
+   * Interpolation keeps the matcher expressive without making the file a match.
+   */
+  const MACHINE_LOCAL_ROOTS = [
+    `/${"Users"}/`,
+    `/${"home"}/`,
+    `/private/${"var"}/`,
+    `.guild/${"worktrees"}`,
+    `${"Projects"}/guild/`,
+  ];
+  const SIBLING_REPOSITORIES = [
+    `worktrees/${"guild"}`,
+    `codex-mh-02-${"contract"}`,
+    `codex-review-mh-02-${"contract"}`,
+    `codex-mh-w0-${"lead"}`,
+  ];
+
+  function surfaceSources(): Array<{ label: string; source: string }> {
+    return [
+      ...MH02_TEST_FILES.map((file) => ({
+        label: `__tests__/${file}`,
+        source: fs.readFileSync(path.join(TESTS_DIR, file), "utf8"),
+      })),
+      ...NEUTRAL_CORE_MEMBERS.map((member) => ({
+        label: `workflows/${member}`,
+        source: fs.readFileSync(path.join(CORE_DIR, member), "utf8"),
+      })),
+    ];
+  }
+
+  it("names no machine-local filesystem root anywhere in the MH-02 surface", () => {
+    const offenders: string[] = [];
+    for (const { label, source } of surfaceSources()) {
+      for (const root of MACHINE_LOCAL_ROOTS) {
+        if (source.indexOf(root) !== -1) offenders.push(`${label} -> ${root}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("names no sibling repository, so nothing can become a cross-repo import", () => {
+    const offenders: string[] = [];
+    for (const { label, source } of surfaceSources()) {
+      for (const needle of SIBLING_REPOSITORIES) {
+        if (source.indexOf(needle) !== -1) offenders.push(`${label} -> ${needle}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("reads only paths derived from this checkout", () => {
+    // Both filesystem roots this suite uses resolve from __dirname, so the
+    // suite relocates with the repository instead of pointing outside it.
+    for (const root of [TESTS_DIR, CORE_DIR]) {
+      expect(path.isAbsolute(root)).toBe(true);
+      expect(root.startsWith(path.resolve(__dirname, "..", ".."))).toBe(true);
+    }
+  });
+
+  it("proves the guard actually bites", () => {
+    // A guard that cannot fail is not a guard. Same matcher, seeded input.
+    const seeded = `const CONTRACT_DIR = "/${"Users"}/someone/.guild/${"worktrees"}/guild/x";`;
+    const caught = MACHINE_LOCAL_ROOTS.filter((root) => seeded.indexOf(root) !== -1);
+    expect(caught.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the reconciled vocabulary declared natively rather than read as data", () => {
+    const source = fs.readFileSync(
+      path.join(CORE_DIR, "neutral-runtime-contracts.ts"),
+      "utf8"
+    );
+    // The core declares the shared block itself and imports nothing to get it.
+    expect(source).toContain("NEUTRAL_NORMALIZED_EVENT_VOCABULARY");
+    expect(source).toContain("guild.normalized_event.v2");
+    expect(extractNeutralImportSpecifiers(source)).toEqual([]);
   });
 });
 
@@ -505,7 +742,10 @@ describe("neutral conformance decision", () => {
                 : scenario.stable_id === "MHRC-UNS-002"
                   ? "policy_denied"
                   : "gate_unsatisfied",
-            receipt_ref: `receipt:run-1#${scenario.stable_id}`,
+            // The canonical receipt-reference form: a schema marker, a journal
+            // id, and a per-scenario sequence. MH-02-R2-B03 established that
+            // "any non-empty string" was not a reference at all.
+            receipt_ref: `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#${index + 1}`,
             runtime_binding: ACTIVATED_RUNTIME,
             evidence_freshness: "fresh",
           },
@@ -620,7 +860,11 @@ describe("neutral conformance decision", () => {
       evidence({}, (r) => (r.stable_id === "MHRC-LIF-003" ? { ...r, receipt_ref: "" } : r))
     );
     expect(outcome.reason_code).toBe("scenario_receipt_reference_missing");
-    expect(outcome.facts.results_without_receipt_reference).toEqual(["MHRC-LIF-003"]);
+    // The offending value is reported verbatim, so a reader can see WHAT was
+    // cited rather than only that something was wrong.
+    expect(outcome.facts.results_without_receipt_reference).toEqual([
+      { stable_id: "MHRC-LIF-003", receipt_ref: "" },
+    ]);
   });
 
   it("refuses a succeeded result that carries a reason code, and a refusal that omits one", () => {
@@ -690,5 +934,209 @@ describe("neutral conformance decision", () => {
   it("declares the required set itself rather than accepting the caller's", () => {
     expect(NEUTRAL_REQUIRED_CORE_SCENARIO_IDS).toEqual(required);
     expect(NEUTRAL_REQUIRED_CORE_SCENARIO_IDS).toHaveLength(5);
+  });
+
+  // -------------------------------------------------------------------------
+  // MH-02-R2-B03 — the suite is not the claimant's to choose, and nominal
+  // metadata is not evidence
+  //
+  // Round 2 still took a caller-supplied `scenarios` array (defaulted to the
+  // core's, so it read as harmless) and derived the required set FROM IT. A
+  // caller passing one scenario got a one-scenario suite and promoted
+  // `conformant`. Six further probes promoted on forged nominal metadata.
+  // -------------------------------------------------------------------------
+
+  describe("MH-02-R2-B03 promotion is neither caller-selectable nor nominally forgeable", () => {
+    /** The reviewer's exact probe: a suite of one, chosen by the claimant. */
+    it("refuses a caller-selected one-scenario suite", () => {
+      const only = NEUTRAL_CORE_SCENARIOS[0];
+      const outcome = evaluateNeutralConformanceDecision({
+        suite_id: NEUTRAL_SCENARIO_SUITE_ID,
+        suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
+        required_scenario_ids: [only.stable_id],
+        activated_runtime: ACTIVATED_RUNTIME,
+        results: [evidence().results[0]],
+      });
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
+      expect(outcome.facts.may_promote_conformant).toBe(false);
+      expect(outcome.facts.omitted_required_scenarios).toEqual(required.slice(1));
+    });
+
+    /**
+     * The structural half of the same finding: there is no scenario parameter
+     * left to pass. A caller handing one over cannot change the verdict.
+     */
+    it("takes no scenario-set parameter at all", () => {
+      expect(evaluateNeutralConformanceDecision).toHaveLength(1);
+      const smuggled = (
+        evaluateNeutralConformanceDecision as unknown as (
+          e: NeutralConformanceEvidence,
+          s?: unknown
+        ) => ReturnType<typeof evaluateNeutralConformanceDecision>
+      )(evidence(), [NEUTRAL_CORE_SCENARIOS[0]]);
+      // The smuggled one-scenario suite is ignored; the core tuple still rules.
+      expect(smuggled.disposition).toBe("succeeded");
+      expect(smuggled.facts.may_promote_conformant).toBe(true);
+    });
+
+    it("refuses a required tuple that is the right SET in the wrong ORDER", () => {
+      const reversedIds = [...required].reverse();
+      const reversedResults = [...evidence().results].reverse();
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({ required_scenario_ids: reversedIds, results: reversedResults })
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
+      expect(outcome.facts.tuple_misordered).toBe(true);
+    });
+
+    it("refuses a caller-INFLATED required tuple that still contains the core set", () => {
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({
+          required_scenario_ids: [...required, "MHRC-RCT-001"],
+          results: [
+            ...evidence().results,
+            { ...evidence().results[0], stable_id: "MHRC-RCT-001" },
+          ],
+        })
+      );
+      expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
+      expect(outcome.facts.undeclared_scenarios).toEqual(["MHRC-RCT-001"]);
+    });
+
+    /** A closed-but-wrong outcome type is evidence of a different experiment. */
+    it("fails a result whose outcome TYPE is not the scenario's expected type", () => {
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({}, (r) => ({ ...r, outcome_type: "guild.migration_outcome.v1" }))
+      );
+      expect(outcome.disposition).toBe("failed");
+      expect(outcome.reason_code).toBe("scenario_result_mismatch");
+      expect(outcome.facts.may_promote_conformant).toBe(false);
+      expect(outcome.facts.mistyped_scenarios).toHaveLength(5);
+      expect((outcome.facts.mistyped_scenarios as Array<Record<string, unknown>>)[0]).toEqual({
+        stable_id: "MHRC-LIF-001",
+        expected_outcome_type: "guild.lifecycle_outcome.v1",
+        observed_outcome_type: "guild.migration_outcome.v1",
+      });
+    });
+
+    it("keeps MHRC-UNS-002's policy outcome type distinct from the lifecycle ones", () => {
+      // The scenario that legitimately expects guild.policy_outcome.v1 must not
+      // be satisfiable by a lifecycle outcome, or the type check would be
+      // uniform rather than per-scenario.
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({}, (r) =>
+          r.stable_id === "MHRC-UNS-002"
+            ? { ...r, outcome_type: "guild.lifecycle_outcome.v1" }
+            : r
+        )
+      );
+      expect(outcome.reason_code).toBe("scenario_result_mismatch");
+      expect(outcome.facts.mistyped_scenarios).toHaveLength(1);
+    });
+
+    it("refuses an invented reason code on a non-succeeded result", () => {
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({}, (r) =>
+          r.disposition === "succeeded" ? r : { ...r, reason_code: "invented_reason" }
+        )
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_reason_code_unrecognized");
+      expect(outcome.facts.unrecognized_reason_codes).toEqual([
+        { stable_id: "MHRC-LIF-002", reason_code: "invented_reason" },
+        { stable_id: "MHRC-UNS-002", reason_code: "invented_reason" },
+      ]);
+    });
+
+    it.each([
+      ["a word", "bogus"],
+      ["a bare id", "receipt-1"],
+      ["the schema alone", NEUTRAL_RECEIPT_REF_SCHEMA],
+      ["a missing sequence", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1`],
+      ["a non-numeric sequence", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#later`],
+      ["a non-canonical sequence", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#007`],
+      ["a foreign schema", "other.receipt_ref.v1:jrn-run-1#1"],
+    ])("refuses %s as a receipt reference", (_label, ref) => {
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({}, (r) => ({ ...r, receipt_ref: ref }))
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_receipt_reference_missing");
+      expect(outcome.facts.may_promote_conformant).toBe(false);
+    });
+
+    it("refuses one receipt entry cited by two scenarios", () => {
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({}, (r) => ({ ...r, receipt_ref: `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#7` }))
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_receipt_reference_ambiguous");
+      expect(outcome.facts.duplicate_receipt_references).toHaveLength(4);
+    });
+
+    it.each([
+      ["an unrecognized major", 999],
+      ["a zero", 0],
+      ["a string", "1" as unknown as number],
+    ])("refuses %s as the contract version", (_label, version) => {
+      const bad = { ...ACTIVATED_RUNTIME, contract_version: version as number };
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({ activated_runtime: bad }, (r) => ({ ...r, runtime_binding: bad }))
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_contract_version_unrecognized");
+      expect(outcome.facts.recognized_contract_version).toBe(1);
+    });
+
+    it("refuses a contract version that drifts on ONE result only", () => {
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({}, (r) =>
+          r.stable_id === "MHRC-LIF-004"
+            ? { ...r, runtime_binding: { ...ACTIVATED_RUNTIME, contract_version: 2 } }
+            : r
+        )
+      );
+      expect(outcome.reason_code).toBe("scenario_contract_version_unrecognized");
+      expect(outcome.facts.unrecognized_contract_versions).toEqual([
+        { scope: "MHRC-LIF-004", contract_version: 2 },
+      ]);
+    });
+
+    it.each([
+      ["free text", "totally-unknown-runtime"],
+      ["a bare semver", "2.2.0"],
+      ["a foreign product", "codex-2.2.0"],
+      ["an empty string", ""],
+    ])("refuses %s as a runtime version", (_label, version) => {
+      const bad = { ...ACTIVATED_RUNTIME, runtime_version: version };
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({ activated_runtime: bad }, (r) => ({ ...r, runtime_binding: bad }))
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_runtime_version_unrecognized");
+    });
+
+    it("accepts a recognized runtime identity with a pre-release tail", () => {
+      const ok = { ...ACTIVATED_RUNTIME, runtime_version: "guild-2.3.0-beta.1" };
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence({ activated_runtime: ok }, (r) => ({ ...r, runtime_binding: ok }))
+      );
+      expect(outcome.disposition).toBe("succeeded");
+      expect(outcome.facts.may_promote_conformant).toBe(true);
+    });
+
+    /**
+     * The whole point of the tightening is that HONEST evidence still promotes.
+     * If every package refused, the gate would prove nothing either.
+     */
+    it("still promotes a complete, ordered, receipt-bound, exactly-versioned package", () => {
+      const outcome = evaluateNeutralConformanceDecision(evidence());
+      expect(outcome.disposition).toBe("succeeded");
+      expect(outcome.reason_code).toBeNull();
+      expect(outcome.facts.may_promote_conformant).toBe(true);
+      expect(outcome.facts.evaluated_scenarios).toHaveLength(5);
+    });
   });
 });
