@@ -244,7 +244,7 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
       # header match misclassified those as unreadable.
       # sed -E: `\?` is a GNU extension BSD sed does not support, so a BRE
       # version of this matched NOTHING on macOS. -E is portable across both.
-      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*marketplaces\."?guild"?[[:space:]]*\]/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*marketplaces[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*\][[:space:]]*$/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
       case "$_cx_src" in
         git)
           printf '      codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2
@@ -273,15 +273,25 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
     if [ -f "$_cl_reg" ] && command -v node >/dev/null 2>&1; then
       node -e '
         const fs = require("fs");
+        // A non-empty array is NOT proof of an install: [{}] and entries
+        // scoped to a DIFFERENT project both counted before. An entry counts
+        // only when it is an object carrying a version or installPath, and is
+        // either user-scoped or project-scoped FOR THE DIRECTORY WE ARE IN
+        // (process.argv[2] = the caller pwd).
         try {
           const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const here = process.argv[2] || "";
           const p = (r && r.plugins) || {};
+          const valid = (e) =>
+            e && typeof e === "object" &&
+            (typeof e.version === "string" || typeof e.installPath === "string") &&
+            (e.scope === "user" || (e.scope === "project" && e.projectPath === here));
           const hit = Object.keys(p).some(
-            (k) => /^guild@/.test(k) && Array.isArray(p[k]) && p[k].length > 0
+            (k) => /^guild@/.test(k) && Array.isArray(p[k]) && p[k].some(valid)
           );
           process.exit(hit ? 0 : 1);
         } catch { process.exit(1); }
-      ' "$_cl_reg" 2>/dev/null && _cl_installed=1
+      ' "$_cl_reg" "$PWD" 2>/dev/null && _cl_installed=1
     fi
     if [ "$_cl_installed" -eq 1 ]; then
       _found_native=1

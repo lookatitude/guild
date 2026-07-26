@@ -359,6 +359,64 @@ describe("host-native discovery on --update with no receipts", () => {
     expect(runUpdate()).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
   });
 
+  it("does NOT count an entry with no version/installPath — [{}] is not an install", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(
+      path.join(reg, "installed_plugins.json"),
+      JSON.stringify({ version: 2, plugins: { "guild@guild": [{}] } })
+    );
+    expect(runUpdate()).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
+  it("does NOT count a project-scoped entry for a DIFFERENT project", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(
+      path.join(reg, "installed_plugins.json"),
+      JSON.stringify({
+        version: 2,
+        plugins: { "guild@guild": [{ scope: "project", projectPath: "/somewhere/else", version: "2.3.2" }] },
+      })
+    );
+    expect(runUpdate()).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
+  it("DOES count a user-scoped entry with a version", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(
+      path.join(reg, "installed_plugins.json"),
+      JSON.stringify({ version: 2, plugins: { "guild@guild": [{ scope: "user", version: "2.3.2" }] } })
+    );
+    expect(runUpdate()).toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
+  it("rejects TOML headers with trailing junk and near-miss names; accepts quoted/spaced", () => {
+    // Drives the REAL sed line from install.sh over the shapes the gate named.
+    const line = fs
+      .readFileSync(INSTALL_SH, "utf8")
+      .split("\n")
+      .find((l) => l.includes('_cx_src="$(sed'))!
+      .trim();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-toml-"));
+    const probe = (toml: string): string => {
+      const f = path.join(dir, "config.toml");
+      fs.writeFileSync(f, toml);
+      return sh(`${line.replace(/"\$_cx_home\/config.toml"/, f)}\necho "$_cx_src"`);
+    };
+    try {
+      expect(probe('[marketplaces.guild]\nsource_type = "local"\n')).toBe("local");
+      expect(probe('[marketplaces."guild"]\nsource_type = "local"\n')).toBe("local");
+      expect(probe("[marketplaces.'guild']\nsource_type = \"local\"\n")).toBe("local");
+      expect(probe('[ marketplaces . guild ]\nsource_type = "git"\n')).toBe("git");
+      expect(probe('[marketplaces.guild].junk\nsource_type = "local"\n')).toBe("");
+      expect(probe('[marketplaces.guilded]\nsource_type = "git"\n')).toBe("");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("does NOT false-positive on a marketplace-only directory", () => {
     // The first attempt grepped top-level directory names and matched this.
     const reg = path.join(home, ".claude", "plugins");

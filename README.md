@@ -141,23 +141,36 @@ tag on stable, new `next` commit on beta. `defaults.update.mode` controls it:
 `notify` (default), `auto` (stages the update headlessly; applies next
 session), or `off`. Dev checkouts are never touched.
 
-Applying updates per host:
+Applying updates per host — the full 16-host registry:
 
 ```bash
-# Claude Code (marketplace-managed):
+# claude-code-cli (marketplace-managed):
 claude plugin marketplace update guild && claude plugin update guild@guild
 
-# Wrapper hosts (codex, pi, antigravity, cursor, copilot, opencode, rovo-dev):
+# Wrapper-package hosts — codex-cli, pi-cli, antigravity-cli, cursor,
+# github-copilot, opencode, rovo-dev (installer-managed; needs the receipt):
 guild-run update
+
+# File-surface hosts — agents-file, kiro, qoder, trae (snapshot copies;
+# guild-run update refuses these by design and names this instead):
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
+# …then re-copy the refreshed dist/agents tree into the project.
 
 # Everything with an install receipt, in one go (any host mix):
 curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
 ```
 
+The four app/connector surfaces (`claude-code-app`, `claude-code-web`,
+`codex-app`, `claude-ai-connector`) take no install and therefore no update
+command; `codex-app` follows whatever its shared Codex CLI registration does.
+
 Each install writes a `guild.install_receipt.v1` (host, channel, ref, commit)
 under `~/.guild/receipts/` — that receipt is what `--update` and `guild-run
 update` re-render from, keeping every host on the channel it was installed
-from.
+from. A **host-native** install (e.g. a hand-run `codex plugin add`) writes no
+machine receipt: `--update` will detect it and name that host's real command,
+and the session-start update check mints a package-local receipt so
+`guild-run update` works from the next session on.
 
 Installing manually into Codex CLI uses Codex's plugin manager:
 

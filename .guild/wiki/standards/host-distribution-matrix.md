@@ -201,9 +201,22 @@ block final acceptance:**
 - The **initiative close gate** requires observing a validation release reach
   every host in this matrix.
 
-Either those four hosts get installed and exercised, or the initiative closes
-with an explicit documented carve-out per host plus a filed followup issue —
-which the close gate already permits, but only if it is stated, not assumed.
+**CARVE-OUT RECORDED (2026-07-26, xhrd-wi-05 close-out).** The four hosts were
+not installable on the executing machine after three sessions of initiative
+work; the carve-out below is the explicit close-gate path, with the followup
+issue filed on `lookatitude/guild` naming per-host verification steps:
+
+| Host | What verification needs | Until then |
+|---|---|---|
+| `cursor` | install the CLI; run the rendered `dist/cursor` package's `bin/guild-run`; confirm the launch staleness notice and `guild-run update` | class C row stays `U`; update command documented as `guild-run update` per the capability row |
+| `github-copilot` | same, against `dist/github-copilot` | same |
+| `opencode` | same, against `dist/opencode` | same |
+| `rovo-dev` | same, against `dist/rovo-dev` | same |
+
+All four already receive the wrapper-package machinery this initiative fixed
+(per-host receipt version, launch staleness notice via `bin/guild-run`, the
+corrected self-update swap source), so the untested surface is the HOST's
+acceptance of the package, not Guild's side of the contract.
 
 The upgrade-propagation row above is a second such gate: it is a required
 G4/G5 acceptance test with a concrete trigger, not an open curiosity.

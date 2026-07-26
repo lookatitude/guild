@@ -33,6 +33,8 @@ import {
   resolveInstallState,
   type UpdateMode,
   updateCapsForHost,
+  RECEIPT_BASENAME,
+  RECEIPT_SCHEMA,
 } from "../scripts/lib/update-check";
 
 function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number } {
@@ -141,6 +143,50 @@ function main(): void {
 
   const state = resolveInstallState(pluginRoot);
   if (state.channel === "dev") return; // AC-5: dev installs are silent
+
+  // RECEIPT MINTING for host-native installs (xhrd-wi-05 / G5). A `codex
+  // plugin add` (or any host-native install path) runs no Guild code at
+  // install time, so the package has no guild-install-receipt.json and
+  // `guild-run update` refuses (AC-7 needs the receipt's host row). The first
+  // session start IS the earliest Guild code that runs — mint the receipt
+  // here, PACKAGE-LOCAL ONLY:
+  //   - version from the package's own manifest (state.version — the per-host
+  //     probe order landed in readInstalledVersion);
+  //   - channel/ref from resolveInstallState's default (stable/main) — commit
+  //     unknowable for a native install, recorded null;
+  //   - NEVER written to ~/.guild/receipts. The machine registry is the
+  //     installer's ledger: a minted machine receipt would make
+  //     `install.sh --update` re-render and RE-REGISTER the marketplace,
+  //     silently converting a user's git registration into a frozen local one.
+  //     --update's contract for native installs is detect-and-advise, and this
+  //     deliberately keeps it that way.
+  // Fail-open: an unwritable package root (or an existing receipt) skips.
+  if (state.source === "default" && state.version) {
+    try {
+      const receiptPath = path.join(pluginRoot, RECEIPT_BASENAME);
+      if (!fs.existsSync(receiptPath)) {
+        fs.writeFileSync(
+          receiptPath,
+          JSON.stringify(
+            {
+              schema_version: RECEIPT_SCHEMA,
+              host: hostId,
+              channel: state.channel,
+              ref: state.channel === "beta" ? "next" : "main",
+              commit: null,
+              version: state.version,
+              installed_at: new Date().toISOString(),
+              minted_by: "update-check-session-start",
+            },
+            null,
+            2
+          ) + "\n"
+        );
+      }
+    } catch {
+      // fail-open — the signal below still works without a receipt
+    }
+  }
 
   const cacheFile = cachePath();
   const cache = readCache(cacheFile);

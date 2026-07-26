@@ -5587,6 +5587,31 @@ function main() {
   const hostKind = caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
   const state = resolveInstallState(pluginRoot);
   if (state.channel === "dev") return;
+  if (state.source === "default" && state.version) {
+    try {
+      const receiptPath = path7.join(pluginRoot, RECEIPT_BASENAME);
+      if (!fs5.existsSync(receiptPath)) {
+        fs5.writeFileSync(
+          receiptPath,
+          JSON.stringify(
+            {
+              schema_version: RECEIPT_SCHEMA,
+              host: hostId,
+              channel: state.channel,
+              ref: state.channel === "beta" ? "next" : "main",
+              commit: null,
+              version: state.version,
+              installed_at: (/* @__PURE__ */ new Date()).toISOString(),
+              minted_by: "update-check-session-start"
+            },
+            null,
+            2
+          ) + "\n"
+        );
+      }
+    } catch {
+    }
+  }
   const cacheFile = cachePath();
   const cache = readCache(cacheFile);
   if (!cacheIsFresh(cache, cadenceHours, /* @__PURE__ */ new Date())) {

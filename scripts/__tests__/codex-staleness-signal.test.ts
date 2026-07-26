@@ -165,6 +165,15 @@ describe("the RENDERED Codex package (not the source text)", () => {
     expect(readInstalledVersion(codexRoot)).toMatch(/^\d+\.\d+\.\d+/);
   });
 
+  it("agents tree ships the update-check bundle its AGENTS.md preamble names (G4 file-surface fallback)", () => {
+    const agentsRoot = path.join(out, "agents");
+    // The instruction and its binary must ship together (issue-#55 class).
+    expect(fs.existsSync(path.join(agentsRoot, "hooks", "dist", "update-check.js"))).toBe(true);
+    const md = fs.readFileSync(path.join(agentsRoot, "AGENTS.md"), "utf8");
+    expect(md).toContain("node hooks/dist/update-check.js --host agents-file");
+    expect(md).toContain("## Update check (once per session)");
+  });
+
   it("end to end: a stale RENDERED package produces a Codex-shaped signal", () => {
     const installed = readInstalledVersion(codexRoot);
     expect(installed).not.toBeNull();
@@ -180,5 +189,89 @@ describe("the RENDERED Codex package (not the source text)", () => {
     };
     expect(s.update_available).toBe(true);
     expect(s.command).toBe("guild-run update");
+  });
+});
+
+// RECEIPT MINTING (xhrd-wi-05): the SessionStart hook is the earliest Guild
+// code a host-native install ever runs, so it mints the package-local receipt
+// that `guild-run update` needs. Spawn-based on purpose: the child process
+// gets a REAL environment, so HOME isolation works here (unlike in-process
+// jest, where env mutations never reach os.homedir()).
+describe("update-check mints a package-local receipt for host-native installs", () => {
+  const HOOK = path.join(PLUGIN_ROOT, "hooks", "dist", "update-check.js");
+  let base: string;
+  let pkg: string;
+  let home: string;
+
+  const runHook = (extraEnv: Record<string, string> = {}) =>
+    execFileSync("node", [HOOK, "--host", "codex-cli"], {
+      encoding: "utf8",
+      env: { ...process.env, HOME: home, GUILD_PLUGIN_ROOT: pkg, ...extraEnv },
+    });
+
+  beforeEach(() => {
+    base = fs.mkdtempSync(path.join(os.tmpdir(), "guild-mint-"));
+    pkg = path.join(base, "pkg");
+    home = path.join(base, "home");
+    fs.mkdirSync(path.join(pkg, ".codex-plugin"), { recursive: true });
+    fs.writeFileSync(
+      path.join(pkg, ".codex-plugin", "plugin.json"),
+      '{\n  "name": "guild",\n  "version": "2.3.2"\n}\n'
+    );
+    fs.mkdirSync(path.join(home, ".guild"), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, ".guild", "update-check.json"),
+      JSON.stringify({
+        schema_version: "guild.update_check_cache.v1",
+        checked_at: "2099-01-01T00:00:00Z",
+        source_repo: "fixture",
+        remote: { latest_tag: "9.9.9", latest_sha: null },
+      })
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(base, { recursive: true, force: true });
+  });
+
+  it("mints host/version/channel from the package itself, and still emits the signal", () => {
+    const out = runHook();
+    expect(out).toContain("2.3.2 → 9.9.9 — run: guild-run update");
+    const r = JSON.parse(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    expect(r["schema_version"]).toBe("guild.install_receipt.v1");
+    expect(r["host"]).toBe("codex-cli");
+    expect(r["version"]).toBe("2.3.2");
+    expect(r["channel"]).toBe("stable");
+    expect(r["commit"]).toBeNull();
+  });
+
+  it("does NOT clobber an existing receipt on later sessions", () => {
+    runHook();
+    const first = fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8");
+    runHook();
+    expect(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")).toBe(first);
+  });
+
+  it("fail-open: an unwritable package root still emits the signal, no receipt, no crash", () => {
+    fs.chmodSync(pkg, 0o555);
+    try {
+      const out = runHook();
+      expect(out).toContain("2.3.2 → 9.9.9");
+      expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(false);
+    } finally {
+      fs.chmodSync(pkg, 0o755);
+    }
+  });
+
+  it("the minted receipt is accepted by self-update's readReceipt", () => {
+    runHook();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { readReceipt } = require("../lib/self-update") as typeof import("../lib/self-update");
+    const r = readReceipt(pkg);
+    expect(r).not.toBeNull();
+    expect(r!.host).toBe("codex-cli");
   });
 });
