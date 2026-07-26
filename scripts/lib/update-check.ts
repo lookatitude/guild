@@ -264,15 +264,34 @@ export function resolveInstallState(
   return { channel: "stable", version, commit: null, source: "default" };
 }
 
+/**
+ * Per-host plugin manifests, in probe order.
+ *
+ * Reading ONLY `.claude-plugin/plugin.json` silently broke every non-Claude
+ * host: a rendered Codex package ships `.codex-plugin/plugin.json`, so version
+ * resolution returned null, `computeSignal` saw no installed version, the
+ * stable comparison short-circuited to "up-to-date", and the staleness signal
+ * emitted NOTHING. The hook fired into silence — which is indistinguishable
+ * from being up to date, and is why a Codex install could sit three releases
+ * behind without a word (xhrd-wi-04 / G4).
+ */
+const PLUGIN_MANIFEST_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
+  [".claude-plugin", "plugin.json"],
+  [".codex-plugin", "plugin.json"],
+];
+
 export function readInstalledVersion(pluginRoot: string, fsi: typeof fs = fs): string | null {
-  try {
-    const manifest = JSON.parse(
-      fsi.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")
-    ) as { version?: string };
-    return typeof manifest.version === "string" ? manifest.version : null;
-  } catch {
-    return null;
+  for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
+    try {
+      const manifest = JSON.parse(fsi.readFileSync(path.join(pluginRoot, dir, file), "utf8")) as {
+        version?: string;
+      };
+      if (typeof manifest.version === "string") return manifest.version;
+    } catch {
+      // try the next candidate — an absent manifest is not an error here
+    }
   }
+  return null;
 }
 
 // ── Cache ───────────────────────────────────────────────────────────────────

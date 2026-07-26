@@ -5418,15 +5418,19 @@ function resolveInstallState(pluginRoot, opts = {}) {
   }
   return { channel: "stable", version, commit: null, source: "default" };
 }
+var PLUGIN_MANIFEST_CANDIDATES = [
+  [".claude-plugin", "plugin.json"],
+  [".codex-plugin", "plugin.json"]
+];
 function readInstalledVersion(pluginRoot, fsi = fs) {
-  try {
-    const manifest = JSON.parse(
-      fsi.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")
-    );
-    return typeof manifest.version === "string" ? manifest.version : null;
-  } catch {
-    return null;
+  for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
+    try {
+      const manifest = JSON.parse(fsi.readFileSync(path.join(pluginRoot, dir, file), "utf8"));
+      if (typeof manifest.version === "string") return manifest.version;
+    } catch {
+    }
   }
+  return null;
 }
 function cachePath(homedir3 = os.homedir()) {
   return path.join(homedir3, ".guild", "update-check.json");
@@ -5574,7 +5578,11 @@ function main() {
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;
   const hostArg = process.argv.indexOf("--host");
-  const hostId = hostArg !== -1 ? process.argv[hostArg + 1] : "claude-code-cli";
+  let hostId = "claude-code-cli";
+  if (hostArg !== -1) {
+    const raw = process.argv[hostArg + 1];
+    hostId = raw === void 0 || raw.startsWith("-") || raw === "" ? "unknown-host" : raw;
+  }
   const caps = updateCapsForHost(hostId);
   const hostKind = caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
   const state = resolveInstallState(pluginRoot);
@@ -5587,14 +5595,17 @@ function main() {
   const signal = computeSignal({ state, cache, hostKind, hostId });
   const line = renderSignalLine(signal);
   if (!line) return;
+  if (mode === "auto" && caps?.auto_capable !== true) {
+    process.stdout.write(
+      `${line}
+[guild-update] auto mode: ${hostId} cannot auto-apply \u2014 run the command above.
+`
+    );
+    return;
+  }
   if (mode === "auto") {
-    const target = signal.available ?? "";
+    const target = `${hostId}@${signal.available ?? ""}`;
     if (!alreadyStaged(target)) {
-      if (!caps?.command) {
-        process.stdout.write(`${line}
-`);
-        return;
-      }
       spawnDetached("/bin/sh", ["-c", caps.command]);
       markStaged(target);
       process.stdout.write(

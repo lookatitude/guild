@@ -22,12 +22,15 @@
  * reporting machine's state.
  */
 
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import {
   computeSignal,
   renderSignalLine,
+  readInstalledVersion,
   updateCapsForHost,
 } from "../lib/update-check";
 
@@ -87,26 +90,68 @@ describe("the signal names the CORRECT command per host", () => {
   });
 });
 
-describe("the Codex package actually carries the wiring", () => {
-  const buildSrc = fs.readFileSync(path.join(PLUGIN_ROOT, "scripts", "build-host-packages.ts"), "utf8");
+// Asserting on build-host-packages.ts's SOURCE TEXT proves nothing about what it
+// EMITS — a regex matches while the render could be misplaced or unusable. These
+// render for real and inspect the output. The version-resolution case matters
+// most: this rail's first version injected a synthetic state carrying
+// version "2.2.0", so it could not have caught that a real Codex package
+// resolved to null and the signal never fired at all.
+describe("the RENDERED Codex package (not the source text)", () => {
+  let out: string;
+  let codexRoot: string;
 
-  it("wires SessionStart into the generated codex-hooks.json", () => {
-    expect(buildSrc).toMatch(/SessionStart:\s*\[/);
-    expect(buildSrc).toContain("CODEX_UPDATE_CHECK_COMMAND");
+  beforeAll(() => {
+    out = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex-render-"));
+    execFileSync(
+      "npx",
+      ["tsx", "build-host-packages.ts", "--root", "..", "--out", out, "--generated-at", "1970-01-01T00:00:00Z"],
+      { cwd: path.join(PLUGIN_ROOT, "scripts"), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+    );
+    codexRoot = path.join(out, "codex");
+  }, 900_000);
+
+  afterAll(() => {
+    if (out) fs.rmSync(out, { recursive: true, force: true });
   });
 
-  it("passes --host codex-cli so no receipt is needed", () => {
-    expect(buildSrc).toMatch(/update-check\.js.*--host codex-cli/);
+  it("wires SessionStart at --host codex-cli in the EMITTED manifest", () => {
+    const m = JSON.parse(fs.readFileSync(path.join(codexRoot, "hooks", "codex-hooks.json"), "utf8")) as {
+      hooks: Record<string, { hooks: { command: string }[] }[]>;
+    };
+    const cmd = m.hooks["SessionStart"]?.[0]?.hooks?.[0]?.command ?? "";
+    expect(cmd).toContain("hooks/dist/update-check.js");
+    expect(cmd).toContain("--host codex-cli");
+    // additive — the prompt bridge must survive
+    expect(m.hooks["UserPromptSubmit"]?.[0]?.hooks?.[0]?.command ?? "").toContain("codex-guild-prompt-bridge");
   });
 
-  it("SHIPS the binary the SessionStart entry points at", () => {
-    // A hook entry whose target is not in the package is the issue-#55 defect
-    // class: a documented invocation that dies with ERR_MODULE_NOT_FOUND.
-    expect(buildSrc).toMatch(/copyFileRequired\(\s*\n?\s*path\.join\(root, "hooks", "dist", "update-check\.js"\)/);
+  it("SHIPS the binary that entry points at", () => {
+    expect(fs.existsSync(path.join(codexRoot, "hooks", "dist", "update-check.js"))).toBe(true);
   });
 
-  it("keeps the existing UserPromptSubmit bridge (additive, not a swap)", () => {
-    expect(buildSrc).toMatch(/UserPromptSubmit:\s*\[/);
-    expect(buildSrc).toContain("CODEX_HOOK_COMMAND");
+  it("REGRESSION: version resolves from the package's OWN manifest", () => {
+    // The blocker. The Codex package carries .codex-plugin/plugin.json and NOT
+    // .claude-plugin/plugin.json; reading only the latter returned null, so
+    // computeSignal saw no installed version and reported up-to-date forever.
+    expect(fs.existsSync(path.join(codexRoot, ".codex-plugin", "plugin.json"))).toBe(true);
+    expect(fs.existsSync(path.join(codexRoot, ".claude-plugin", "plugin.json"))).toBe(false);
+    expect(readInstalledVersion(codexRoot)).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("end to end: a stale RENDERED package produces a Codex-shaped signal", () => {
+    const installed = readInstalledVersion(codexRoot);
+    expect(installed).not.toBeNull();
+    const state = { channel: "stable", version: installed, ref: "main", commit: null } as never;
+    const cache = {
+      schema_version: "guild.update_check_cache.v1",
+      checked_at: "2026-07-26T00:00:00Z",
+      remote: { latest_tag: "99.0.0", latest_sha: null },
+    } as never;
+    const s = computeSignal({ state, cache, hostKind: "wrapper", hostId: "codex-cli" } as never) as {
+      update_available: boolean;
+      command: string | null;
+    };
+    expect(s.update_available).toBe(true);
+    expect(s.command).toBe("guild-run update");
   });
 });

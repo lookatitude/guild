@@ -123,7 +123,16 @@ function main(): void {
   // right command. Absent the flag we stay on the Claude default, which is what
   // hooks/hooks.json has always meant.
   const hostArg = process.argv.indexOf("--host");
-  const hostId = hostArg !== -1 ? process.argv[hostArg + 1] : "claude-code-cli";
+  let hostId = "claude-code-cli";
+  if (hostArg !== -1) {
+    const raw = process.argv[hostArg + 1];
+    // A trailing `--host`, or `--host --refresh`, must NOT collapse to
+    // undefined: computeSignal treats an undefined hostId as permission to use
+    // the coarse hostKind fallback, which would name the agents-file installer
+    // command on a host we cannot identify. Keep it a defined-but-unknown
+    // string so the AC-7 row lookup fails and the command comes back null.
+    hostId = raw === undefined || raw.startsWith("-") || raw === "" ? "unknown-host" : raw;
+  }
   const caps = updateCapsForHost(hostId);
   // AC-7 honesty: an unknown id yields caps === null, computeSignal then emits
   // command: null, and renderSignalLine degrades rather than naming a wrong one.
@@ -146,18 +155,29 @@ function main(): void {
   const line = renderSignalLine(signal);
   if (!line) return;
 
+  // AUTO MODE IS GATED ON auto_capable, not merely on having a command.
+  // Codex declares `auto_capable: false` — its command (`guild-run update`)
+  // refuses without an install receipt, which a host-native `codex plugin add`
+  // never writes. Running it anyway and then marking the target staged would
+  // report success for an update that silently failed. A host that cannot
+  // auto-apply degrades to notify-only, which is the honest signal.
+  if (mode === "auto" && caps?.auto_capable !== true) {
+    process.stdout.write(
+      `${line}\n[guild-update] auto mode: ${hostId} cannot auto-apply — run the command above.\n`
+    );
+    return;
+  }
+
   if (mode === "auto") {
-    const target = signal.available ?? "";
+    // Stage per host: the marker keyed on target alone meant Claude staging
+    // version X made every other host report "already staged" for X.
+    const target = `${hostId}@${signal.available ?? ""}`;
     if (!alreadyStaged(target)) {
       // Headless staged update (OQ-2 resolved: non-TTY-safe CLI; takes effect
       // next session). The command comes from the AC-7 capability row, NOT a
       // hardcoded Claude chain — auto-mode on a non-Claude host used to run
       // `claude …`, which is simply the wrong binary. A host with no declared
       // apply command stages nothing and falls through to notify-only.
-      if (!caps?.command) {
-        process.stdout.write(`${line}\n`);
-        return;
-      }
       spawnDetached("/bin/sh", ["-c", caps.command]);
       markStaged(target);
       process.stdout.write(
