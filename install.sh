@@ -220,7 +220,27 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
   RECEIPTS_GLOB="${GUILD_RECEIPTS_DIR:-$HOME/.guild/receipts}"
   if [ ! -d "$RECEIPTS_GLOB" ] || [ -z "$(ls "$RECEIPTS_GLOB"/*.json 2>/dev/null)" ]; then
     printf 'guild-install: --update found no install receipts under %s\n' "$RECEIPTS_GLOB" >&2
-    printf '  Receipts are written by installs from this version onward; run a normal install once first.\n' >&2
+    # A bare "no receipts" refusal is useless to the common case: Guild IS
+    # installed, just by the HOST's own plugin manager, which never writes a
+    # Guild receipt. Detect those and name that host's real update command
+    # rather than sending the user back to a fresh install (xhrd-wi-05 / G5).
+    _found_native=0
+    if [ -d "${CODEX_HOME:-$HOME/.codex}/plugins/cache/guild" ]; then
+      _found_native=1
+      printf '\n  Detected a HOST-NATIVE Codex install (%s/plugins/cache/guild).\n' "${CODEX_HOME:-$HOME/.codex}" >&2
+      printf '  install.sh did not create it, so there is no receipt to update from. Use Codex:\n' >&2
+      printf '      codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2
+      printf '  (a local/rendered marketplace cannot be refreshed — re-run install.sh instead)\n' >&2
+    fi
+    if [ -d "$HOME/.claude/plugins" ] && ls "$HOME/.claude/plugins" 2>/dev/null | grep -qi guild; then
+      _found_native=1
+      printf '\n  Detected a HOST-NATIVE Claude Code install. Use Claude:\n' >&2
+      printf '      claude plugin marketplace update guild && claude plugin update guild@guild\n' >&2
+    fi
+    if [ "$_found_native" -eq 0 ]; then
+      printf '  No host-native Guild install detected either.\n' >&2
+      printf '  Receipts are written by installs from this version onward; run a normal install once first.\n' >&2
+    fi
     exit 1
   fi
   for rf in "$RECEIPTS_GLOB"/*.json; do
@@ -471,16 +491,32 @@ RECEIPTS_DIR="${GUILD_RECEIPTS_DIR:-$HOME/.guild/receipts}"
 SOURCE_COMMIT=""
 
 plugin_version_from() {
-  # $1 = dir containing .claude-plugin/plugin.json
-  sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*$/\1/p' \
-    "$1/.claude-plugin/plugin.json" 2>/dev/null | head -1
+  # $1 = a package root. Probes each host's OWN manifest in turn: a Codex
+  # package carries .codex-plugin/plugin.json and no .claude-plugin/, so
+  # reading only the latter recorded the CLAUDE version — or "unknown" — in
+  # every non-Claude receipt (xhrd-wi-05 / G5).
+  for _mf in ".claude-plugin/plugin.json" ".codex-plugin/plugin.json"; do
+    _v="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*$/\1/p' \
+      "$1/$_mf" 2>/dev/null | head -1)"
+    if [ -n "$_v" ]; then
+      printf '%s' "$_v"
+      return 0
+    fi
+  done
+  return 0
 }
 
 write_receipt() {
   # $1 = host id, $2 = optional package dir to drop a copy into
   [ "$DRY_RUN" -eq 1 ] && return 0
   host_id="$1"; pkg_dir="${2:-}"
-  version="$(plugin_version_from "$SCRIPT_DIR")"
+  # Prefer the host's OWN package, then the checkout, then the Claude render.
+  # Recording a version from a tree the host did not install is what made every
+  # non-Claude receipt claim Claude's version.
+  version=""
+  [ -n "$pkg_dir" ] && version="$(plugin_version_from "$pkg_dir")"
+  [ -z "$version" ] && version="$(plugin_version_from "$SCRIPT_DIR")"
+  [ -z "$version" ] && [ -n "$RENDERED_DIST" ] && version="$(plugin_version_from "$RENDERED_DIST/$host_id" 2>/dev/null)"
   [ -z "$version" ] && [ -n "$RENDERED_DIST" ] && version="$(plugin_version_from "$RENDERED_DIST/claude-code" 2>/dev/null)"
   installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   receipt=$(printf '{\n  "schema_version": "guild.install_receipt.v1",\n  "host": "%s",\n  "channel": "%s",\n  "ref": "%s",\n  "commit": %s,\n  "version": "%s",\n  "installed_at": "%s"\n}\n' \
