@@ -574,11 +574,13 @@ export const NEUTRAL_RECEIPT_REF_SCHEMA = "guild.receipt_ref.v1";
  * The canonical receipt reference is `…:<journal>#<seq>@<commitment>`.
  *
  * Round 3 accepted `guild.receipt_ref.v1:forged-journal#3`: canonical SHAPE, and
- * a reference to nothing. Shape can be typed by anyone, so the reference now
- * carries a COMMITMENT — a digest over the authority's identity tuple, the
- * journal, the sequence, and the exact outcome the receipt is supposed to record
- * (see `neutralEvidenceCommitment`). A shaped label with no commitment, or with a
- * commitment over anything other than what it claims, is not a reference.
+ * a reference to nothing. Shape can be typed by anyone, so the reference carries
+ * a COMMITMENT. Round 4 then let the CLAIMANT derive that commitment from its own
+ * result, which is a second way of typing it out of thin air — so the commitment
+ * must now be the one the journal entry at that sequence already carries (see
+ * `neutralJournalEntryCommitment` and `neutralReceiptReference`). A shaped label
+ * with no commitment, or with a commitment that is not the entry's, is not a
+ * reference.
  */
 const NEUTRAL_RECEIPT_REF_PATTERN = new RegExp(
   "^guild\\.receipt_ref\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})#(0|[1-9][0-9]*)@(nec1:[0-9a-f]{16})$"
@@ -638,6 +640,17 @@ const NEUTRAL_PACKAGE_HASH_PATTERN = new RegExp("^sha256:[0-9a-f]{64}$");
 const NEUTRAL_ADAPTER_VERSION_PATTERN = new RegExp(
   "^guild\\.host_adapter\\.v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
 );
+
+/**
+ * The host-adapter contract MAJOR this core implements.
+ *
+ * Same argument as `NEUTRAL_RECOGNIZED_RUNTIME_MAJOR`, and the same round-4 hole:
+ * `guild.host_adapter.v999.999.999` is syntactically an adapter version and
+ * semantically an adapter contract this core has never seen. Pattern-matching is
+ * not recognition, so the major is pinned and advancing it is a deliberate core
+ * change rather than a caller's assertion.
+ */
+export const NEUTRAL_RECOGNIZED_ADAPTER_MAJOR = 1;
 const NEUTRAL_RELEASE_ID_PATTERN = new RegExp("^rel-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-z]{1,16}$");
 const NEUTRAL_SEMVER_PATTERN = new RegExp(
   "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
@@ -711,9 +724,81 @@ export interface NeutralConformanceAuthority {
   readonly receipt_journal_id: string;
   /** The contiguous sequence range the verifier observed in that journal. */
   readonly receipt_sequence_range: { readonly first: number; readonly last: number };
+  /**
+   * The journal ENTRIES the verifier observed — ordered, contiguous, and
+   * covering the whole declared range with no gaps (MH-02-R4-B02).
+   *
+   * This is the field round 4 did not have, and its absence was the entire
+   * finding. An authority that names a journal without carrying it lets the
+   * decision do the only thing it can with one set of facts: RECOMPUTE the
+   * commitments from the claimant's own package and check they agree with
+   * themselves. Carrying the entries inverts that — the commitments arrive from
+   * the journal and the package is checked AGAINST them.
+   */
+  readonly observed_entries: readonly NeutralReceiptJournalEntry[];
+  /**
+   * Independent attestations over the journal ROOT. A quorum of distinct
+   * recognized attestors is required, and none of them may be the claimant.
+   */
+  readonly attestations: readonly NeutralJournalAttestation[];
+}
+
+/**
+ * One durable journal entry, as the verifier observed it being written.
+ *
+ * `entry_commitment` is the journal's OWN record of what it wrote. The decision
+ * compares the package's receipt reference against this value; it does not
+ * derive this value from the package. `previous_commitment` chains each entry to
+ * the one before it, so an entry cannot be inserted, removed, re-ordered, or
+ * edited without breaking every commitment after it.
+ */
+export interface NeutralReceiptJournalEntry {
+  readonly sequence: number;
+  readonly scenario_id: string;
+  readonly outcome_type: NeutralOutcomeType;
+  readonly disposition: NeutralDisposition;
+  readonly reason_code: string | null;
+  readonly entry_commitment: string;
+  readonly previous_commitment: string;
+}
+
+/** An independent attestation that a journal root was observed. */
+export interface NeutralJournalAttestation {
+  /** One of `NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS`. */
+  readonly attestor_id: string;
+  /** The commitment of the LAST observed entry — the chain root. */
+  readonly attested_journal_root: string;
+  readonly attested_entry_count: number;
+  /** `guild.journal_attestation.v1:<attestor>@<digest>`. */
+  readonly attestation_ref: string;
 }
 
 export const NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA = "guild.conformance_authority.v1";
+export const NEUTRAL_ATTESTATION_REF_SCHEMA = "guild.journal_attestation.v1";
+
+/**
+ * The parties whose attestation the core recognizes, and the claimant vocabulary
+ * they must be distinct from.
+ *
+ * MH-03 owns host discovery and MH-09 owns release attestation; this is the
+ * closed CLAIM vocabulary, for the same reason every other vocabulary in this
+ * core is closed. Round 4's authority named no party at all, so "independent"
+ * was a word in a doc comment rather than a checked property.
+ */
+export const NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS: readonly string[] = neutralFreeze([
+  "guild.release-attestor",
+  "guild.host-conformance-witness",
+  "guild.distribution-notary",
+]);
+
+/** How many DISTINCT recognized attestors must observe the same journal root. */
+export const NEUTRAL_MINIMUM_ATTESTOR_QUORUM = 2;
+
+const NEUTRAL_ATTESTATION_REF_PATTERN = new RegExp(
+  "^guild\\.journal_attestation\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})@(nec1:[0-9a-f]{16})$"
+);
+const NEUTRAL_COMMITMENT_PATTERN = new RegExp("^nec1:[0-9a-f]{16}$");
+const NEUTRAL_CLAIMANT_ID_PATTERN = new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{2,}$");
 
 /** One ordered, typed, source-bound, receipt-committed scenario result. */
 export interface NeutralScenarioResult {
@@ -740,6 +825,15 @@ export interface NeutralConformanceEvidence {
   readonly activated_runtime: NeutralEvidenceIdentity;
   /** Ordered: `results[i]` MUST correspond to `required_scenario_ids[i]`. */
   readonly results: readonly NeutralScenarioResult[];
+  /**
+   * WHO is asking to be promoted (MH-02-R4-B02).
+   *
+   * Round 4's package was anonymous, so "the claimant does not author the
+   * authority" could not be checked — it was a property of the intended usage,
+   * not of the inputs. Naming the claimant makes separation of duties a
+   * mechanical comparison against the attestor set.
+   */
+  readonly claimant_id: string;
 }
 
 /** Every field of the identity tuple, in canonical order. All are compared. */
@@ -811,7 +905,8 @@ export function unrecognizedNeutralIdentityFields(
   };
   if (!NEUTRAL_SOURCE_COMMIT_PATTERN.test(identity.source_commit)) note("source_commit");
   if (!NEUTRAL_PACKAGE_HASH_PATTERN.test(identity.package_hash)) note("package_hash");
-  if (!NEUTRAL_ADAPTER_VERSION_PATTERN.test(identity.adapter_version)) note("adapter_version");
+  const adapter = NEUTRAL_ADAPTER_VERSION_PATTERN.exec(identity.adapter_version ?? "");
+  if (adapter === null || adapter[1] !== `${NEUTRAL_RECOGNIZED_ADAPTER_MAJOR}`) note("adapter_version");
   if (NEUTRAL_RECOGNIZED_PLATFORMS.indexOf(identity.platform) === -1) note("platform");
   if (!NEUTRAL_RELEASE_ID_PATTERN.test(identity.release_id)) note("release_id");
   if (identity.scenario_suite_id !== NEUTRAL_SCENARIO_SUITE_ID) note("scenario_suite_id");
@@ -839,48 +934,55 @@ export function unrecognizedNeutralHostFields(
 // The source/receipt commitment
 // ---------------------------------------------------------------------------
 
-/** What a single receipt reference is committed to. */
-export interface NeutralReceiptCommitmentInput {
-  readonly stable_id: string;
-  readonly outcome_type: NeutralOutcomeType;
-  readonly disposition: NeutralDisposition;
-  readonly reason_code: string | null;
-  readonly sequence: number;
+/**
+ * Build the canonical receipt reference for one JOURNAL ENTRY.
+ *
+ * WHY THIS TAKES AN ENTRY AND NOT A RESULT (MH-02-R4-B02)
+ *   Round 4's helper took the claimant's own result and DERIVED a commitment
+ *   from it, which is precisely the mechanism the reviewer defeated: the same
+ *   party authored both sides of the comparison, so the comparison held for a
+ *   wholly invented release. An honest producer does not mint a commitment — it
+ *   CITES the one the journal already wrote. This helper therefore reads
+ *   `entry.entry_commitment` rather than computing anything, and a reference
+ *   built any other way is refused by `evaluateNeutralConformanceDecision`.
+ *
+ * WHAT THE COMMITMENT IS NOT — the honest limit, stated where the code is
+ *   `neutralJournalEntryCommitment` is a deterministic UNKEYED digest built with
+ *   `neutralFingerprint`. It is NOT a cryptographic MAC and carries no secret,
+ *   because the core is import-closed and `crypto` is a forbidden edge. It makes
+ *   the journal tamper-EVIDENT — no entry can be inserted, removed, re-ordered,
+ *   re-scoped to another release, or edited without breaking the chain and the
+ *   attested root — but it cannot resist a party that fabricates the whole
+ *   journal and names its attestors. Closing THAT residue needs a signed durable
+ *   journal, which is MH-06's to build and is carried as an open risk and a
+ *   followup rather than quietly claimed here.
+ */
+export function neutralReceiptReference(
+  authority: NeutralConformanceAuthority,
+  entry: NeutralReceiptJournalEntry
+): string {
+  return `${NEUTRAL_RECEIPT_REF_SCHEMA}:${authority.receipt_journal_id}#${entry.sequence}@${entry.entry_commitment}`;
 }
 
+// ---------------------------------------------------------------------------
+// The durable journal chain (MH-02-R4-B02)
+// ---------------------------------------------------------------------------
+
 /**
- * The commitment that binds a receipt reference to its source.
+ * The anchor the observed journal must chain from.
  *
- * WHAT IT IS
- *   A deterministic digest over the AUTHORITY's complete identity tuple, the
- *   authority's journal id, the sequence, and the exact outcome the receipt
- *   claims to record. Change the release, the source commit, the package, the
- *   host, the platform, the scenario, the sequence, the outcome type, the
- *   disposition, or the reason code, and the commitment changes — so a receipt
- *   reference cannot be transplanted between releases, scenarios, sequence
- *   positions, or verdicts, and cannot be typed out of thin air the way
- *   `guild.receipt_ref.v1:forged-journal#3` was.
- *
- * WHAT IT IS NOT — the honest limit
- *   It is not a cryptographic MAC. The core is import-closed (`crypto` is a
- *   forbidden edge), so this is `neutralFingerprint`, and it carries no secret.
- *   It therefore proves BINDING to an authoritative input, not unforgeability
- *   against a party that already holds that authority. Closing that residue
- *   needs a signed durable journal, which is MH-06's to build and is recorded as
- *   a blocking followup rather than quietly claimed here.
+ * It is derived from the authority's identity, journal id, and the FIRST
+ * observed sequence, so a chain cannot be lifted out of one release, journal, or
+ * window and re-presented under another. It is deterministic and public, which
+ * is the same honest limit `neutralReceiptReference` documents: it makes the
+ * chain tamper-EVIDENT, not unforgeable.
  */
-export function neutralEvidenceCommitment(
-  authority: NeutralConformanceAuthority,
-  result: NeutralReceiptCommitmentInput
-): string {
+export function neutralJournalGenesis(authority: NeutralConformanceAuthority): string {
   const canonical: Record<string, unknown> = {
     schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+    anchor: "journal_genesis",
     journal: authority.receipt_journal_id,
-    sequence: result.sequence,
-    scenario_id: result.stable_id,
-    outcome_type: result.outcome_type,
-    disposition: result.disposition,
-    reason_code: result.reason_code ?? null,
+    first_sequence: authority.receipt_sequence_range?.first ?? null,
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
     canonical[field] = (authority.identity as unknown as Record<string, unknown>)[field] ?? null;
@@ -888,12 +990,92 @@ export function neutralEvidenceCommitment(
   return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
 }
 
-/** Build the canonical committed receipt reference for one result. */
-export function neutralReceiptReference(
+/**
+ * The commitment a journal entry must carry, given the entry BEFORE it.
+ *
+ * Because `previous` is an input, editing any entry changes every commitment
+ * after it. That is what turns a list of five numbers into a spine: the claimant
+ * cannot swap one scenario's recorded outcome without re-deriving the tail and
+ * the root, and the root is what the attestors signed off on.
+ */
+export function neutralJournalEntryCommitment(
   authority: NeutralConformanceAuthority,
-  result: NeutralReceiptCommitmentInput
+  previous: string,
+  entry: NeutralReceiptJournalEntry
 ): string {
-  return `${NEUTRAL_RECEIPT_REF_SCHEMA}:${authority.receipt_journal_id}#${result.sequence}@${neutralEvidenceCommitment(authority, result)}`;
+  const canonical: Record<string, unknown> = {
+    schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+    anchor: "journal_entry",
+    journal: authority.receipt_journal_id,
+    previous,
+    sequence: entry.sequence,
+    scenario_id: entry.scenario_id,
+    outcome_type: entry.outcome_type,
+    disposition: entry.disposition,
+    reason_code: entry.reason_code ?? null,
+  };
+  for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
+    canonical[field] = (authority.identity as unknown as Record<string, unknown>)[field] ?? null;
+  }
+  return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
+}
+
+/** The digest an attestation over a journal root must carry. */
+export function neutralAttestationDigest(
+  authority: NeutralConformanceAuthority,
+  attestation: NeutralJournalAttestation
+): string {
+  const canonical: Record<string, unknown> = {
+    schema: NEUTRAL_ATTESTATION_REF_SCHEMA,
+    attestor: attestation.attestor_id,
+    journal: authority.receipt_journal_id,
+    root: attestation.attested_journal_root,
+    entry_count: attestation.attested_entry_count,
+    first_sequence: authority.receipt_sequence_range?.first ?? null,
+    last_sequence: authority.receipt_sequence_range?.last ?? null,
+  };
+  for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
+    canonical[field] = (authority.identity as unknown as Record<string, unknown>)[field] ?? null;
+  }
+  return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
+}
+
+/** Build the canonical attestation reference. */
+export function neutralAttestationReference(
+  authority: NeutralConformanceAuthority,
+  attestation: NeutralJournalAttestation
+): string {
+  return `${NEUTRAL_ATTESTATION_REF_SCHEMA}:${attestation.attestor_id}@${neutralAttestationDigest(authority, attestation)}`;
+}
+
+function isCommitmentShaped(value: unknown): boolean {
+  return typeof value === "string" && NEUTRAL_COMMITMENT_PATTERN.test(value);
+}
+
+function entryWellFormed(entry: NeutralReceiptJournalEntry | undefined): boolean {
+  if (entry === undefined || entry === null || typeof entry !== "object") return false;
+  if (typeof entry.sequence !== "number" || !Number.isInteger(entry.sequence)) return false;
+  if (typeof entry.scenario_id !== "string" || entry.scenario_id.length === 0) return false;
+  if (!isNeutralOutcomeType(entry.outcome_type)) return false;
+  if (!isNeutralDisposition(entry.disposition)) return false;
+  if (entry.reason_code !== null && typeof entry.reason_code !== "string") return false;
+  return isCommitmentShaped(entry.entry_commitment) && isCommitmentShaped(entry.previous_commitment);
+}
+
+function attestationWellFormed(attestation: NeutralJournalAttestation | undefined): boolean {
+  if (attestation === undefined || attestation === null || typeof attestation !== "object") return false;
+  if (typeof attestation.attestor_id !== "string") return false;
+  if (!isCommitmentShaped(attestation.attested_journal_root)) return false;
+  if (
+    typeof attestation.attested_entry_count !== "number" ||
+    !Number.isInteger(attestation.attested_entry_count)
+  ) {
+    return false;
+  }
+  return (
+    typeof attestation.attestation_ref === "string" &&
+    NEUTRAL_ATTESTATION_REF_PATTERN.test(attestation.attestation_ref)
+  );
 }
 
 function authorityWellFormed(authority: NeutralConformanceAuthority | undefined): boolean {
@@ -910,7 +1092,15 @@ function authorityWellFormed(authority: NeutralConformanceAuthority | undefined)
   if (range === undefined || range === null || typeof range !== "object") return false;
   if (typeof range.first !== "number" || typeof range.last !== "number") return false;
   if (!Number.isInteger(range.first) || !Number.isInteger(range.last)) return false;
-  return range.first >= 0 && range.last >= range.first;
+  if (range.first < 0 || range.last < range.first) return false;
+  // An authority WITHOUT its journal is the round-4 shape, and it is refused at
+  // the door rather than silently treated as an authority that observed nothing.
+  const entries = authority.observed_entries;
+  if (!Array.isArray(entries) || entries.length === 0) return false;
+  if (!entries.every((entry) => entryWellFormed(entry))) return false;
+  const attestations = authority.attestations;
+  if (!Array.isArray(attestations) || attestations.length === 0) return false;
+  return attestations.every((attestation) => attestationWellFormed(attestation));
 }
 
 function refuseConformance(
@@ -930,6 +1120,9 @@ function refuseConformance(
     | "scenario_source_identity_unrecognized"
     | "scenario_host_identity_unrecognized"
     | "scenario_receipt_binding_unverified"
+    | "scenario_journal_chain_unverified"
+    | "scenario_journal_attestation_insufficient"
+    | "scenario_claimant_not_independent"
     | "scenario_evidence_stale",
   assertions: readonly string[],
   facts: Readonly<Record<string, unknown>>
@@ -961,7 +1154,11 @@ function refuseConformance(
  * Every gate below exists because its absence was demonstrably exploitable:
  *
  *    0. an AUTHORITATIVE input must be supplied and well-formed (MH-02-R3-B02:
- *       a bundle checked only against itself proves only self-consistency)
+ *       a bundle checked only against itself proves only self-consistency), and
+ *       it must CARRY the journal it names (MH-02-R4-B02): entries covering the
+ *       declared range contiguously, a verifying commitment chain to one root, a
+ *       quorum of distinct recognized attestors over that root, and a named
+ *       claimant that is none of them
  *    1. the suite id + version must be the pinned pair         (no silent drift)
  *    2. the required tuple must EQUAL the core tuple, in order (no narrowing,
  *                                                              no re-ordering)
@@ -980,10 +1177,13 @@ function refuseConformance(
  *                                                              (no source-less bundle)
  *   11. the bundle's identity and EVERY result's identity must equal the
  *       AUTHORITY's identity, field by field                   (no self-certification)
- *   12. every receipt reference must be COMMITTED to that authority: its journal,
- *       a sequence inside the observed range, strictly increasing in tuple order,
- *       and a digest that recomputes over the authority's identity plus this
- *       result's outcome                                       (no shaped labels)
+ *   12. every receipt reference must RESOLVE to a journal entry: its journal, a
+ *       sequence inside the observed range, strictly increasing in tuple order,
+ *       a commitment equal to that ENTRY's own transported commitment, and an
+ *       outcome that does not contradict what the entry recorded
+ *                                                              (no shaped labels,
+ *                                                               no self-derived
+ *                                                               commitments)
  *   13. every result's freshness verdict must be `fresh`       (no stale evidence)
  *   14. each disposition must match the scenario's expectation (the original check)
  *
@@ -1082,6 +1282,169 @@ export function evaluateNeutralConformanceDecision(
         unrecognized_runtime_versions: [
           { scope: "authority", runtime_version: authority.identity.runtime_version ?? null },
         ],
+      }
+    );
+  }
+
+  // 0b — the observed journal must COVER the declared range, contiguously and in
+  // order, and its chain must verify. A range with no entries in it is a claim
+  // about a journal, not a journal.
+  const entries = authority.observed_entries;
+  const range = authority.receipt_sequence_range;
+  const expectedEntryCount = range.last - range.first + 1;
+  const coverageFaults: Array<Record<string, unknown>> = [];
+  if (entries.length !== expectedEntryCount) {
+    coverageFaults.push({
+      reason: "entry_count_does_not_cover_range",
+      expected_entry_count: expectedEntryCount,
+      observed_entry_count: entries.length,
+    });
+  }
+  for (let index = 0; index < entries.length; index += 1) {
+    const expectedSequence = range.first + index;
+    if (entries[index].sequence !== expectedSequence) {
+      coverageFaults.push({
+        reason: "sequence_gap_or_reorder",
+        position: index,
+        expected_sequence: expectedSequence,
+        observed_sequence: entries[index].sequence,
+      });
+    }
+  }
+  // 0c — chain integrity. Each entry commits to its predecessor, the first
+  // commits to the genesis anchor, and every commitment must be the one the
+  // chain produces. Edit any entry and every commitment after it changes.
+  let previousCommitment = neutralJournalGenesis(authority);
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (entry.previous_commitment !== previousCommitment) {
+      coverageFaults.push({
+        reason: "chain_link_broken",
+        position: index,
+        sequence: entry.sequence,
+        expected_previous_commitment: previousCommitment,
+        observed_previous_commitment: entry.previous_commitment,
+      });
+      break;
+    }
+    const expectedCommitment = neutralJournalEntryCommitment(authority, previousCommitment, entry);
+    if (entry.entry_commitment !== expectedCommitment) {
+      coverageFaults.push({
+        reason: "entry_commitment_mismatch",
+        position: index,
+        sequence: entry.sequence,
+        expected_entry_commitment: expectedCommitment,
+        observed_entry_commitment: entry.entry_commitment,
+      });
+      break;
+    }
+    previousCommitment = entry.entry_commitment;
+  }
+  if (coverageFaults.length > 0) {
+    return refuseConformance(
+      "scenario_journal_chain_unverified",
+      [
+        "an authority carries the journal entries it observed, contiguously covering the range it declares",
+        "each entry commits to its predecessor, so an entry cannot be inserted, removed, re-ordered, or edited in isolation",
+        "a named range with no verifiable entries in it is a claim about a journal, never a journal",
+      ],
+      {
+        ...baseFacts,
+        authority_journal_id: authority.receipt_journal_id,
+        authority_sequence_range: range,
+        journal_genesis: neutralJournalGenesis(authority),
+        journal_chain_faults: coverageFaults,
+      }
+    );
+  }
+  const journalRoot = previousCommitment;
+
+  // 0d — a QUORUM of DISTINCT recognized attestors over that root. Two objects
+  // agreeing is what round 4 accepted; this requires independently named parties
+  // whose attestation binds the root, the entry count, the range, and the exact
+  // identity, so an attestation cannot be moved between journals or releases.
+  const attestationFaults: Array<Record<string, unknown>> = [];
+  const acceptedAttestors: string[] = [];
+  for (const attestation of authority.attestations) {
+    if (NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS.indexOf(attestation.attestor_id) === -1) {
+      attestationFaults.push({ attestor_id: attestation.attestor_id, reason: "attestor_unrecognized" });
+      continue;
+    }
+    if (acceptedAttestors.indexOf(attestation.attestor_id) !== -1) {
+      attestationFaults.push({ attestor_id: attestation.attestor_id, reason: "duplicate_attestor" });
+      continue;
+    }
+    if (attestation.attested_journal_root !== journalRoot) {
+      attestationFaults.push({
+        attestor_id: attestation.attestor_id,
+        reason: "attested_root_mismatch",
+        expected_journal_root: journalRoot,
+        attested_journal_root: attestation.attested_journal_root,
+      });
+      continue;
+    }
+    if (attestation.attested_entry_count !== entries.length) {
+      attestationFaults.push({
+        attestor_id: attestation.attestor_id,
+        reason: "attested_entry_count_mismatch",
+        expected_entry_count: entries.length,
+        attested_entry_count: attestation.attested_entry_count,
+      });
+      continue;
+    }
+    const expectedRef = neutralAttestationReference(authority, attestation);
+    if (attestation.attestation_ref !== expectedRef) {
+      attestationFaults.push({
+        attestor_id: attestation.attestor_id,
+        reason: "attestation_reference_unbound",
+        expected_attestation_ref: expectedRef,
+        submitted_attestation_ref: attestation.attestation_ref,
+      });
+      continue;
+    }
+    acceptedAttestors.push(attestation.attestor_id);
+  }
+  if (acceptedAttestors.length < NEUTRAL_MINIMUM_ATTESTOR_QUORUM) {
+    return refuseConformance(
+      "scenario_journal_attestation_insufficient",
+      [
+        `a journal root is admitted only on a quorum of ${NEUTRAL_MINIMUM_ATTESTOR_QUORUM} distinct recognized attestors`,
+        "an attestation binds one attestor to one root, entry count, range, and identity, so it cannot be moved between journals or releases",
+        "an unrecognized, duplicated, or unbound attestation counts for nothing",
+      ],
+      {
+        ...baseFacts,
+        required_attestor_quorum: NEUTRAL_MINIMUM_ATTESTOR_QUORUM,
+        recognized_journal_attestors: [...NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS],
+        journal_root: journalRoot,
+        accepted_attestors: acceptedAttestors,
+        attestation_faults: attestationFaults,
+      }
+    );
+  }
+
+  // 0e — SEPARATION OF DUTIES. The claimant must name itself and must not be one
+  // of the parties attesting the journal it is being judged against.
+  const claimantId = evidence?.claimant_id;
+  const claimantNamed =
+    typeof claimantId === "string" && NEUTRAL_CLAIMANT_ID_PATTERN.test(claimantId);
+  const claimantIsAttestor =
+    claimantNamed &&
+    (authority.attestations.some((attestation) => attestation.attestor_id === claimantId) ||
+      NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS.indexOf(claimantId) !== -1);
+  if (!claimantNamed || claimantIsAttestor) {
+    return refuseConformance(
+      "scenario_claimant_not_independent",
+      [
+        "the party asking to be promoted must name itself",
+        "the claimant may not be one of the attestors of the journal it is judged against",
+        "an anonymous claim cannot be checked for independence at all",
+      ],
+      {
+        ...baseFacts,
+        submitted_claimant_id: claimantId ?? null,
+        attesting_parties: authority.attestations.map((attestation) => attestation.attestor_id),
+        claimant_is_attestor: claimantIsAttestor,
       }
     );
   }
@@ -1476,19 +1839,50 @@ export function evaluateNeutralConformanceDecision(
       continue;
     }
     previousSequence = sequence;
-    const expected = neutralEvidenceCommitment(authority, {
-      stable_id: result.stable_id,
-      outcome_type: result.outcome_type,
-      disposition: result.disposition,
-      reason_code: result.reason_code ?? null,
-      sequence,
-    });
-    if (commitment !== expected) {
+
+    // THE INVERSION (MH-02-R4-B02). Round 4 recomputed the expected commitment
+    // from the CLAIMANT's own result and compared it to the claimant's own
+    // reference — two derivations of one set of facts, which is why a fully
+    // invented package agreed with itself and promoted. The commitment is now
+    // TRANSPORTED: it is read off the journal entry at that sequence, and the
+    // claimant's result must match what the journal RECORDED.
+    const entry = entries.find((candidate) => candidate.sequence === sequence);
+    if (entry === undefined) {
+      unbound.push({ stable_id: result.stable_id, reason: "no_journal_entry_at_sequence", sequence });
+      continue;
+    }
+    if (commitment !== entry.entry_commitment) {
       unbound.push({
         stable_id: result.stable_id,
-        reason: "commitment_mismatch",
+        reason: "commitment_is_not_the_journal_entry_commitment",
         submitted_commitment: commitment,
-        expected_commitment: expected,
+        journal_entry_commitment: entry.entry_commitment,
+      });
+      continue;
+    }
+    const recorded: Array<Record<string, unknown>> = [];
+    if (entry.scenario_id !== result.stable_id) {
+      recorded.push({ field: "scenario_id", journal: entry.scenario_id, claimed: result.stable_id });
+    }
+    if (entry.outcome_type !== result.outcome_type) {
+      recorded.push({ field: "outcome_type", journal: entry.outcome_type, claimed: result.outcome_type });
+    }
+    if (entry.disposition !== result.disposition) {
+      recorded.push({ field: "disposition", journal: entry.disposition, claimed: result.disposition });
+    }
+    if ((entry.reason_code ?? null) !== (result.reason_code ?? null)) {
+      recorded.push({
+        field: "reason_code",
+        journal: entry.reason_code ?? null,
+        claimed: result.reason_code ?? null,
+      });
+    }
+    if (recorded.length > 0) {
+      unbound.push({
+        stable_id: result.stable_id,
+        reason: "claimed_result_contradicts_the_journal_entry",
+        sequence,
+        contradictions: recorded,
       });
     }
   }
@@ -1496,7 +1890,8 @@ export function evaluateNeutralConformanceDecision(
     return refuseConformance(
       "scenario_receipt_binding_unverified",
       [
-        "a receipt reference is bound to one journal, one observed sequence, and one exact outcome",
+        "a receipt reference resolves to an entry the journal actually carries, and cites that entry's own commitment",
+        "the journal's record of the outcome is what counts; a claimed result that contradicts its entry is refused",
         "a reference that merely has the canonical shape addresses nothing",
         "receipt sequences increase with the required tuple, so a receipt cannot precede the result it records",
       ],
@@ -1504,6 +1899,7 @@ export function evaluateNeutralConformanceDecision(
         ...baseFacts,
         authority_journal_id: authority.receipt_journal_id,
         authority_sequence_range: authority.receipt_sequence_range,
+        journal_root: journalRoot,
         unbound_receipt_references: unbound,
       }
     );
@@ -1550,13 +1946,20 @@ export function evaluateNeutralConformanceDecision(
       "constructed adapter smoke cannot satisfy lifecycle conformance",
       "every required scenario passed or explicitly refused under fresh, receipt-bound evidence",
       "every identity field the frozen support_claim rule names is present, recognized, and equal to the authority's",
-      "every receipt reference is committed to that authority's identity, journal, sequence, and outcome",
+      "the observed journal covers the declared range contiguously and its commitment chain verifies to a single root",
+      "that root carries a quorum of distinct recognized attestations bound to this exact identity and range",
+      "every receipt reference cites the journal entry's OWN commitment, and no claimed result contradicts its entry",
+      "the claimant named itself and is none of the attesting parties",
     ],
     facts: {
       ...baseFacts,
       activated_runtime: evidence.activated_runtime,
       authority_identity: authority.identity,
       authority_journal_id: authority.receipt_journal_id,
+      claimant_id: evidence.claimant_id,
+      journal_root: journalRoot,
+      journal_entry_count: entries.length,
+      attesting_parties: acceptedAttestors,
       evaluated_scenarios: results.map((result) => ({
         stable_id: result.stable_id,
         disposition: result.disposition,

@@ -292,6 +292,33 @@ describe("neutral runtime contract vocabularies", () => {
     // Shape and BINDING stay separate: round 3 had only the first.
     expect(NEUTRAL_REASON_CODES).toContain("scenario_receipt_reference_missing");
   });
+
+  it("declares one distinct reason code per round-4 fail-closed invariant", () => {
+    for (const code of [
+      // MH-02-R4-B01 — recognizing a call SHAPE is not recognizing a capability.
+      // Where a capability ENTERS and where it is later USED are different
+      // findings: the first names the mechanism, the second names the alias, and
+      // collapsing them would hide which hop of a chain to fix.
+      "boundary_capability_reach",
+      "boundary_capability_alias",
+      // MH-02-R4-B02 — an authority that NAMES a journal does not carry one. Each
+      // code names exactly which half of "independently authoritative" was absent:
+      // the durable record itself, the parties who observed it, or the separation
+      // between those parties and the one asking to be promoted.
+      "scenario_journal_chain_unverified",
+      "scenario_journal_attestation_insufficient",
+      "scenario_claimant_not_independent",
+    ]) {
+      expect(NEUTRAL_REASON_CODES).toContain(code as never);
+      expect(isNeutralReasonCode(code)).toBe(true);
+    }
+    // A reach and an indirect callee stay different answers: round 4 had only the
+    // second, and that is precisely why an aliased computed loader passed.
+    expect(NEUTRAL_REASON_CODES).toContain("boundary_indirect_callee");
+    // "the journal does not verify" and "a receipt does not resolve into it" stay
+    // separate: one is about the authority, the other about the claim.
+    expect(NEUTRAL_REASON_CODES).toContain("scenario_receipt_binding_unverified");
+  });
 });
 
 // ---------------------------------------------------------------------------

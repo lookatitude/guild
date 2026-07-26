@@ -235,13 +235,25 @@ export const NEUTRAL_REASON_CODES = [
   // source-bound conformance evidence (MH-02-R3-B02): a self-consistent bundle
   // of caller-authored labels is not evidence of anything. Promotion requires an
   // AUTHORITATIVE input the claimant does not author, identities the core
-  // RECOGNIZES rather than merely parses, and receipt references cryptographically
-  // committed to that authority instead of merely shaped like references.
+  // RECOGNIZES rather than merely parses, and receipt references BOUND by a
+  // commitment to that authority instead of merely shaped like references. The
+  // commitment is a deterministic UNKEYED digest, NOT a cryptographic MAC — see
+  // `neutralReceiptReference`, which states that limit where the code is.
   "scenario_evidence_authority_missing",
   "scenario_identity_binding_mismatch",
   "scenario_source_identity_unrecognized",
   "scenario_host_identity_unrecognized",
   "scenario_receipt_binding_unverified",
+  // journal-bound conformance evidence (MH-02-R4-B02): round 4's authority
+  // carried an identity, a journal NAME, and a numeric range — no entries. So the
+  // decision recomputed every commitment from the claimant's own package and two
+  // caller-authored objects agreeing promoted `conformant=true`. Promotion now
+  // requires a chain-linked, gap-free journal whose per-entry commitments are
+  // TRANSPORTED and compared against the package, a quorum of distinct recognized
+  // attestors over its root, and a claimant that is none of them.
+  "scenario_journal_chain_unverified",
+  "scenario_journal_attestation_insufficient",
+  "scenario_claimant_not_independent",
   // core boundary
   "boundary_forbidden_edge",
   "boundary_unclassified_edge",
@@ -257,6 +269,16 @@ export const NEUTRAL_REASON_CODES = [
   // reach code the closure argument never covered.
   "boundary_indirect_callee",
   "boundary_ambient_capability",
+  // capability PROVENANCE (MH-02-R4-B01): recognizing a call SHAPE is not
+  // recognizing a capability. Round 4 rejected `x["k"](…)` only when the `]` was
+  // immediately followed by the call parenthesis, so binding the same computed
+  // value to a local first — `const load = module["require"].bind(module)` — and
+  // calling the local passed with zero findings. Two codes close that: a REACH is
+  // the point where a capability enters the file (a computed access whose base is
+  // not a clean local or pure intrinsic, or a walk up the prototype chain), and an
+  // ALIAS is any later use of a value that flowed from one.
+  "boundary_capability_reach",
+  "boundary_capability_alias",
 ] as const;
 export type NeutralReasonCode = (typeof NEUTRAL_REASON_CODES)[number];
 

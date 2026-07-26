@@ -896,9 +896,9 @@ const NEUTRAL_LANGUAGE_WORDS: readonly string[] = neutralFreeze([
   "import", "export", "from", "as", "default", "const", "let", "var", "function",
   "class", "extends", "implements", "return", "if", "else", "for", "while", "do",
   "switch", "case", "break", "continue", "new", "delete", "typeof", "instanceof",
-  "in", "of", "void", "null", "true", "false", "this", "super", "throw", "try",
+  "in", "of", "void", "null", "true", "false", "throw", "try",
   "catch", "finally", "yield", "await", "async", "static", "public", "private",
-  "protected", "readonly", "abstract", "declare", "namespace", "enum", "module",
+  "protected", "readonly", "abstract", "declare", "namespace", "enum",
   "get", "set", "with", "debugger", "label",
   // type-level vocabulary (erased at runtime)
   "type", "interface", "keyof", "infer", "is", "asserts", "satisfies", "unique",
@@ -924,13 +924,32 @@ function isNumericToken(token: NeutralToken): boolean {
 }
 
 /**
- * `module` deserves a note: it is in the language-word list because TypeScript
- * uses `module` as a declaration keyword (`declare module "x"`), so the bare
- * token cannot be treated as an ambient reference without false-positiving on
- * type declarations. That is exactly why `module["require"](...)` is caught by
- * the INDIRECT-CALLEE rule instead — a computed-member callee is unresolvable
- * whatever its base is named, so the base never needs to be recognised.
+ * `module`, `this`, and `super` are NOT language words (MH-02-R4-B01).
+ *
+ * Round 4 put `module` in the list above, reasoning that TypeScript uses it as a
+ * declaration keyword (`declare module "x"`) and that `module["require"](…)`
+ * would be caught by the indirect-callee rule anyway. Both halves were wrong in
+ * the same direction. The indirect-callee rule only fires when `]` is IMMEDIATELY
+ * followed by the call parenthesis, so `module["require"].bind(module)` bound to
+ * a local and then called reported zero findings — and exempting the identifier
+ * meant the base of that computed access was never examined either.
+ *
+ * They are ordinary identifiers here. A core member that references any of them
+ * as a VALUE is reaching for the CommonJS record, the call-site receiver, or the
+ * prototype parent — three capabilities, none declared and none imported. The one
+ * legitimate keyword use, the TypeScript declaration head, is exempted narrowly
+ * by `isTypeDeclarationHead` rather than by blanket-listing the word.
  */
+function isTypeDeclarationHead(tokens: readonly NeutralToken[], index: number): boolean {
+  const token = tokens[index];
+  if (token === undefined || token.kind !== "ident" || token.value !== "module") return false;
+  const previous = tokens[index - 1];
+  if (previous !== undefined && previous.kind === "ident" && previous.value === "declare") return true;
+  const next = tokens[index + 1];
+  // `module "specifier" {` — the ambient-module declaration head. A VALUE use is
+  // always followed by `.`, `[`, `(`, or an operator, never by a string literal.
+  return next !== undefined && next.kind === "string";
+}
 
 /** Punctuation positions after which a `(` opens a group, not a call. */
 const NEUTRAL_VALUE_START_PUNCT = "=,([:;{}|&?>!+-*/%<~^";
@@ -1165,67 +1184,457 @@ export interface NeutralAmbientCapability {
   readonly usage: string;
 }
 
+/**
+ * The point at which a capability ENTERS the file: a computed member access
+ * whose base is not a clean local or a pure intrinsic, or a step up the
+ * prototype chain. `form` names the mechanism, `detail` shows the tokens.
+ */
+export interface NeutralCapabilityReach {
+  readonly form: string;
+  readonly detail: string;
+}
+
+/** A later use of a value that FLOWED from a reach. */
+export interface NeutralCapabilityAlias {
+  readonly name: string;
+  readonly usage: string;
+  readonly origin: string;
+}
+
 function describeCallee(tokens: readonly NeutralToken[], openIndex: number): string {
   const from = openIndex - 6 < 0 ? 0 : openIndex - 6;
   return describeTokens(tokens.slice(from, openIndex + 1));
 }
 
 /**
- * Callee closure + ambient-reference closure over one source file.
+ * Properties whose VALUE is a capability regardless of the object it is read
+ * from (MH-02-R4-B01).
  *
- * INDIRECT CALLEES are calls whose callee is a computed member access, another
- * call's result, or a literal — `module["require"](…)`, `eval("require")(…)`,
- * `[]["constructor"]["constructor"](…)`, `(0, eval)(…)`. The callee's DESTINATION
- * is decided at runtime, so the scan cannot prove it stays inside the core, and
- * must not pretend the call is absent.
- *
- * A method call on an expression result (`tokens.map(fn).join(" ")`) is NOT
- * indirect: the callee is a NAMED property, and the expression it hangs off is
- * separately checked by these same rules. That distinction is what keeps
- * ordinary chained code readable while `x[k](…)` still fails.
- *
- * AMBIENT REFERENCES are identifiers used as a value that the file neither
- * declares nor imports and that are not pure intrinsics.
+ * `({}).constructor.constructor` is the `Function` constructor — an evaluator —
+ * and it is reached with no computed access, no ambient identifier, and no
+ * indirect callee. A direct Node control returns a callable `fs.readFileSync`
+ * through it. Every object literal, array literal, error, and pure intrinsic in
+ * the allowlist carries the same chain, so the chain itself is the boundary, not
+ * the object it is entered from.
  */
-export function analyzeNeutralCapabilityUse(source: string): {
-  readonly indirect: NeutralIndirectCallee[];
-  readonly ambient: NeutralAmbientCapability[];
-} {
-  const tokens = tokenizeNeutralSource(source);
-  const bound = collectNeutralBoundNames(tokens);
-  const indirect: NeutralIndirectCallee[] = [];
-  const ambient: NeutralAmbientCapability[] = [];
-  const seenIndirect: string[] = [];
-  const seenAmbient: string[] = [];
+export const NEUTRAL_PROTOTYPE_CHAIN_PROPERTIES: readonly string[] = neutralFreeze([
+  "constructor",
+  "prototype",
+  "__proto__",
+]);
 
-  const addIndirect = (form: string, detail: string): void => {
-    const key = `${form}|${detail}`;
-    if (seenIndirect.indexOf(key) !== -1) return;
-    seenIndirect.push(key);
-    indirect.push({ form, detail });
-  };
+/**
+ * Intrinsic methods that hand back a prototype, a property descriptor, or a
+ * re-bound function — the same escape as the properties above, spelled as a
+ * call. `Object.getPrototypeOf(Object.getPrototypeOf(async function(){}))` walks
+ * to the `AsyncFunction` prototype, whose `constructor` evaluates code.
+ *
+ * `bind`, `call`, and `apply` are here because they detach a function from its
+ * reference and re-invoke it with a chosen receiver, which is exactly how the
+ * round-4 bypass carried `module["require"]` past the call-shape check. None of
+ * the five core members uses any of these names.
+ */
+export const NEUTRAL_REFLECTION_METHOD_NAMES: readonly string[] = neutralFreeze([
+  "getPrototypeOf",
+  "setPrototypeOf",
+  "getOwnPropertyDescriptor",
+  "getOwnPropertyDescriptors",
+  "getOwnPropertyNames",
+  "getOwnPropertySymbols",
+  "defineProperty",
+  "bind",
+  "call",
+  "apply",
+]);
 
+/** How a base expression resolved. Only `local` and `intrinsic` are clean. */
+type NeutralBaseRoot =
+  | { readonly kind: "local"; readonly name: string }
+  | { readonly kind: "intrinsic"; readonly name: string }
+  | { readonly kind: "type_position" }
+  | { readonly kind: "unresolvable"; readonly detail: string };
+
+function matchingOpenIndex(tokens: readonly NeutralToken[], closeIndex: number): number {
+  let depth = 0;
+  for (let j = closeIndex; j >= 0; j -= 1) {
+    const delta = bracketDelta(tokens[j]);
+    if (delta < 0) depth += 1;
+    else if (delta > 0) {
+      depth -= 1;
+      if (depth === 0) return j;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Is the `[` at `openIndex` a MEMBER ACCESS rather than an array literal, a
+ * destructuring pattern, an index signature, or an array TYPE suffix?
+ *
+ * A member access is a `[` that follows a value: an identifier that is not a
+ * keyword, a string literal, or a closing `]`/`)`. Everything else — `const [a]`,
+ * `return [1]`, `{ [k: string]: T }` — follows a keyword or an opener. The
+ * empty-bracket guard is what keeps the array TYPE suffix in `NeutralToken[]`
+ * from being read as an access with no key.
+ */
+function isMemberAccessBracket(tokens: readonly NeutralToken[], openIndex: number): boolean {
+  if (isPunct(tokens[openIndex + 1], "]")) return false;
+  const previous = tokens[openIndex - 1];
+  if (previous === undefined) return false;
+  if (previous.kind === "string") return true;
+  if (previous.kind === "punct") {
+    if (previous.value === "]" || previous.value === ")") return true;
+    // `x?.[k]` reaches here as `?` `.` `[`.
+    return previous.value === "." && isPunct(tokens[openIndex - 2], "?");
+  }
+  return !isNeutralLanguageWord(previous.value);
+}
+
+/** The index of the last token of the base expression for a `[` or `.` at `at`. */
+function baseEndIndex(tokens: readonly NeutralToken[], at: number): number {
+  if (isPunct(tokens[at - 1], ".") && isPunct(tokens[at - 2], "?")) return at - 3;
+  return at - 1;
+}
+
+/**
+ * Reduce a base expression to the ROOT it hangs off, walking back through member
+ * chains, computed accesses, calls, and parenthesised groups.
+ *
+ * This is the analysis round 4 did not have. Round 4 asked only "is the token
+ * immediately before this call parenthesis a `]`?", which is a question about
+ * SYNTAX. The question that matters is "where did this value come from?", and
+ * answering it requires following the expression back to a name — then deciding
+ * whether that name is one the file declared, a pure intrinsic, or something
+ * else entirely.
+ *
+ * Anything the walk cannot reduce to a clean name is `unresolvable`, which fails
+ * closed. That is deliberate: a base the scan cannot name is a base whose
+ * capability it cannot bound.
+ */
+function resolveBaseRoot(
+  tokens: readonly NeutralToken[],
+  endIndex: number,
+  classify: (name: string) => NeutralBaseRoot
+): NeutralBaseRoot {
+  if (endIndex < 0) return { kind: "unresolvable", detail: "no base expression" };
+  const token = tokens[endIndex];
+  if (token === undefined) return { kind: "unresolvable", detail: "no base expression" };
+
+  if (token.kind === "string") {
+    return { kind: "unresolvable", detail: "string literal base" };
+  }
+
+  if (token.kind === "ident") {
+    if (isNumericToken(token)) return { kind: "unresolvable", detail: "numeric literal base" };
+    // A member chain: step back over `.`/`?.` to whatever the property hangs off.
+    if (isPunct(tokens[endIndex - 1], ".")) {
+      const objectEnd = isPunct(tokens[endIndex - 2], "?") ? endIndex - 3 : endIndex - 2;
+      return resolveBaseRoot(tokens, objectEnd, classify);
+    }
+    if (isNeutralLanguageWord(token.value)) {
+      return { kind: "unresolvable", detail: `keyword base ${token.value}` };
+    }
+    return classify(token.value);
+  }
+
+  if (token.value === "]") {
+    const open = matchingOpenIndex(tokens, endIndex);
+    if (open <= 0) return { kind: "unresolvable", detail: "unbalanced bracket base" };
+    if (isMemberAccessBracket(tokens, open)) {
+      return resolveBaseRoot(tokens, baseEndIndex(tokens, open), classify);
+    }
+    return { kind: "unresolvable", detail: "array literal base" };
+  }
+
+  if (token.value === ")") {
+    const open = matchingOpenIndex(tokens, endIndex);
+    if (open <= 0) return { kind: "unresolvable", detail: "unbalanced parenthesis base" };
+    const before = tokens[open - 1];
+    // A CALL: the value is whatever the callee returns, so the callee's root is
+    // the root. A local function can only return what the same closed set built.
+    if (
+      before !== undefined &&
+      before.kind === "ident" &&
+      !isNumericToken(before) &&
+      NEUTRAL_NON_CALLEE_WORDS.indexOf(before.value) === -1 &&
+      !isNeutralLanguageWord(before.value)
+    ) {
+      return resolveBaseRoot(tokens, open - 1, classify);
+    }
+    if (before !== undefined && before.kind === "punct" && (before.value === ")" || before.value === "]")) {
+      return { kind: "unresolvable", detail: "call on an unresolvable callee" };
+    }
+    // A GROUP. `(typeof X)[number]` is a type query, erased at runtime. Anything
+    // else is read from its first token: `(a as unknown as R)` roots at `a`,
+    // while `([] as any)`, `({} as any)`, `("" as any)` and `(new E() as any)`
+    // root at a literal or a construction and stay unresolvable.
+    const first = tokens[open + 1];
+    if (first === undefined) return { kind: "unresolvable", detail: "empty group base" };
+    if (first.kind === "ident" && first.value === "typeof") return { kind: "type_position" };
+    if (first.kind === "ident" && first.value === "new") {
+      return { kind: "unresolvable", detail: "constructed-value base" };
+    }
+    if (first.kind === "ident" && !isNumericToken(first) && !isNeutralLanguageWord(first.value)) {
+      return classify(first.value);
+    }
+    return { kind: "unresolvable", detail: "literal or computed group base" };
+  }
+
+  return { kind: "unresolvable", detail: `base token ${token.value}` };
+}
+
+/** How a name is being used at one token position, for reporting. */
+function usageAt(tokens: readonly NeutralToken[], index: number): string {
+  const next = tokens[index + 1];
+  if (next === undefined || next.kind !== "punct") return "reference";
+  if (next.value === "(") return "call";
+  if (next.value === ".") return "member";
+  if (next.value === "[") return "computed_member";
+  if (next.value === "?" && (isPunct(tokens[index + 2], ".") || isPunct(tokens[index + 2], "("))) {
+    return "optional_member";
+  }
+  return "reference";
+}
+
+/** One position where a capability enters or is carried. */
+interface NeutralCapabilityOrigin {
+  readonly index: number;
+  readonly kind: "reach" | "ambient" | "indirect";
+  readonly form: string;
+  readonly detail: string;
+  readonly name: string;
+  readonly usage: string;
+}
+
+/** Is the `=` at `index` an ASSIGNMENT rather than `==`, `=>`, or `<=`? */
+function isAssignmentEquals(tokens: readonly NeutralToken[], index: number): boolean {
+  const token = tokens[index];
+  if (token === undefined || token.kind !== "punct" || token.value !== "=") return false;
+  if (isPunct(tokens[index + 1], "=") || isPunct(tokens[index + 1], ">")) return false;
+  const previous = tokens[index - 1];
+  if (previous !== undefined && previous.kind === "punct") {
+    return "=!<>+-*/%&|^".indexOf(previous.value) === -1;
+  }
+  return true;
+}
+
+/** The first assignment `=` at bracket depth 0, or -1 before the statement ends. */
+function findAssignmentEquals(tokens: readonly NeutralToken[], start: number): number {
+  let depth = 0;
+  for (let j = start; j < tokens.length; j += 1) {
+    const delta = bracketDelta(tokens[j]);
+    if (delta < 0 && depth === 0) return -1;
+    depth += delta;
+    if (depth !== 0) continue;
+    if (isPunct(tokens[j], ";")) return -1;
+    if (isAssignmentEquals(tokens, j)) return j;
+  }
+  return -1;
+}
+
+/** Where the statement beginning at `start` ends (exclusive). */
+function statementEnd(tokens: readonly NeutralToken[], start: number): number {
+  let depth = 0;
+  for (let j = start; j < tokens.length; j += 1) {
+    const delta = bracketDelta(tokens[j]);
+    if (delta < 0 && depth === 0) return j;
+    depth += delta;
+    if (depth === 0 && isPunct(tokens[j], ";")) return j;
+  }
+  return tokens.length;
+}
+
+/**
+ * The `{` that opens a function BODY, skipping type parameters, the parameter
+ * list, and a return-type annotation that is itself an object type
+ * (`function f(): { a: number } | undefined { … }` — the first `{` after the
+ * parameters belongs to the annotation, not the body).
+ */
+function findFunctionBodyOpen(tokens: readonly NeutralToken[], start: number): number {
+  let j = start;
+  while (j < tokens.length) {
+    if (isPunct(tokens[j], ";")) return -1;
+    if (isPunct(tokens[j], "(")) {
+      const close = matchingCloseIndex(tokens, j);
+      if (close === -1) return -1;
+      j = close + 1;
+      break;
+    }
+    j += 1;
+  }
+  while (j < tokens.length) {
+    if (isPunct(tokens[j], ";")) return -1;
+    if (isPunct(tokens[j], "{")) {
+      const close = matchingCloseIndex(tokens, j);
+      if (close === -1) return -1;
+      const after = tokens[close + 1];
+      const annotation =
+        after !== undefined &&
+        after.kind === "punct" &&
+        (after.value === "{" || after.value === "|" || after.value === "&");
+      if (!annotation) return j;
+      j = close + 1;
+      continue;
+    }
+    j += 1;
+  }
+  return -1;
+}
+
+/** A name and the token range whose value flows into it. */
+interface NeutralBindingInitializer {
+  readonly names: readonly string[];
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * Every place a value FLOWS INTO a name: declarations (including destructuring
+ * patterns), plain assignments, and function bodies (whose return value is only
+ * as clean as the body that produced it).
+ */
+function collectBindingInitializers(tokens: readonly NeutralToken[]): NeutralBindingInitializer[] {
+  const out: NeutralBindingInitializer[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token.kind !== "ident") continue;
+
+    if (token.value === "const" || token.value === "let" || token.value === "var") {
+      const names: string[] = [];
+      collectDeclaratorNames(tokens, i, names);
+      const equals = findAssignmentEquals(tokens, i + 1);
+      if (equals !== -1 && names.length > 0) {
+        out.push({ names, from: equals + 1, to: statementEnd(tokens, equals + 1) });
+      }
+      continue;
+    }
+
+    if (token.value === "function") {
+      const name = tokens[i + 1];
+      if (name !== undefined && name.kind === "ident" && !isNeutralLanguageWord(name.value)) {
+        const open = findFunctionBodyOpen(tokens, i + 2);
+        const close = open === -1 ? -1 : matchingCloseIndex(tokens, open);
+        if (open !== -1 && close !== -1) out.push({ names: [name.value], from: open + 1, to: close });
+      }
+      continue;
+    }
+
+    if (isNeutralLanguageWord(token.value) || isNumericToken(token)) continue;
+    if (isPunct(tokens[i - 1], ".")) continue;
+    if (!isAssignmentEquals(tokens, i + 1)) continue;
+    out.push({ names: [token.value], from: i + 2, to: statementEnd(tokens, i + 2) });
+  }
+  return out;
+}
+
+/** Does `[from, to)` reference any name already known to be capability-derived? */
+function rangeReferencesDerived(
+  tokens: readonly NeutralToken[],
+  from: number,
+  to: number,
+  derived: readonly string[]
+): string | undefined {
+  for (let j = from; j < to && j < tokens.length; j += 1) {
+    const token = tokens[j];
+    if (token.kind !== "ident") continue;
+    if (isPunct(tokens[j - 1], ".")) continue;
+    if (isPunct(tokens[j + 1], ":")) continue;
+    if (derived.indexOf(token.value) !== -1) return token.value;
+  }
+  return undefined;
+}
+
+/**
+ * Every position where a capability ENTERS the file, recomputed against the
+ * current derived set (which is why it takes `classify` rather than reading a
+ * fixed binding list).
+ */
+function capabilityOrigins(
+  tokens: readonly NeutralToken[],
+  bound: readonly string[],
+  classify: (name: string) => NeutralBaseRoot
+): NeutralCapabilityOrigin[] {
+  const origins: NeutralCapabilityOrigin[] = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
 
-    // ---- indirect callees -------------------------------------------------
+    // ---- indirect callees: the callee itself has no nameable destination ----
     if (token.kind === "punct" && token.value === "(" && !isParameterList(tokens, i)) {
       // `x?.(…)` reaches here as `?` `.` `(`, so step back over it.
       const optional = isPunct(tokens[i - 1], ".") && isPunct(tokens[i - 2], "?");
       const previous = optional ? tokens[i - 3] : tokens[i - 1];
       if (previous !== undefined) {
-        if (previous.kind === "punct" && previous.value === "]") {
-          addIndirect("computed_member_call", describeCallee(tokens, i));
-        } else if (previous.kind === "punct" && previous.value === ")") {
-          addIndirect("call_result_call", describeCallee(tokens, i));
-        } else if (previous.kind === "string") {
-          addIndirect("literal_call", describeCallee(tokens, i));
+        const form =
+          previous.kind === "punct" && previous.value === "]"
+            ? "computed_member_call"
+            : previous.kind === "punct" && previous.value === ")"
+              ? "call_result_call"
+              : previous.kind === "string"
+                ? "literal_call"
+                : "";
+        if (form.length > 0) {
+          origins.push({
+            index: i,
+            kind: "indirect",
+            form,
+            detail: describeCallee(tokens, i),
+            name: form,
+            usage: "call",
+          });
         }
       }
     }
 
-    // ---- ambient references ----------------------------------------------
+    // ---- computed-member reach: WHERE DID THE BASE COME FROM? ---------------
+    if (token.kind === "punct" && token.value === "[" && isMemberAccessBracket(tokens, i)) {
+      const root = resolveBaseRoot(tokens, baseEndIndex(tokens, i), classify);
+      if (root.kind === "unresolvable") {
+        origins.push({
+          index: i,
+          kind: "reach",
+          form: "computed_member_reach",
+          detail: `${describeCallee(tokens, i)} — ${root.detail}`,
+          name: root.detail,
+          usage: "computed_member",
+        });
+      }
+    }
+
     if (token.kind !== "ident") continue;
+
+    // ---- prototype-chain reach ---------------------------------------------
+    if (
+      isPunct(tokens[i - 1], ".") &&
+      NEUTRAL_PROTOTYPE_CHAIN_PROPERTIES.indexOf(token.value) !== -1
+    ) {
+      origins.push({
+        index: i,
+        kind: "reach",
+        form: "prototype_chain_reach",
+        detail: describeCallee(tokens, i),
+        name: token.value,
+        usage: "member",
+      });
+      continue;
+    }
+
+    // ---- reflection-call reach ---------------------------------------------
+    if (
+      NEUTRAL_REFLECTION_METHOD_NAMES.indexOf(token.value) !== -1 &&
+      isPunct(tokens[i + 1], "(")
+    ) {
+      origins.push({
+        index: i,
+        kind: "reach",
+        form: "reflection_call_reach",
+        detail: describeCallee(tokens, i + 1),
+        name: token.value,
+        usage: "call",
+      });
+      continue;
+    }
+
+    // ---- ambient references -------------------------------------------------
     if (isPunct(tokens[i - 1], ".")) continue; // a property name, not a reference
     // `key:` (object literal / label) and `key?:` (optional member) are names,
     // not references.
@@ -1233,27 +1642,163 @@ export function analyzeNeutralCapabilityUse(source: string): {
     if (isPunct(tokens[i + 1], "?") && isPunct(tokens[i + 2], ":")) continue;
     if (isNumericToken(token)) continue;
     if (isNeutralLanguageWord(token.value)) continue;
+    if (isTypeDeclarationHead(tokens, i)) continue;
     if (NEUTRAL_PURE_INTRINSIC_ROOTS.indexOf(token.value) !== -1) continue;
     if (bound.indexOf(token.value) !== -1) continue;
+    origins.push({
+      index: i,
+      kind: "ambient",
+      form: "ambient_reference",
+      detail: token.value,
+      name: token.value,
+      usage: usageAt(tokens, i),
+    });
+  }
+  return origins;
+}
 
-    const next = tokens[i + 1];
-    const usage =
-      next === undefined
-        ? "reference"
-        : next.kind === "punct" && next.value === "("
-          ? "call"
-          : next.kind === "punct" && next.value === "."
-            ? "member"
-            : next.kind === "punct" && next.value === "["
-              ? "computed_member"
-              : "reference";
-    const key = `${token.value}|${usage}`;
-    if (seenAmbient.indexOf(key) !== -1) continue;
-    seenAmbient.push(key);
-    ambient.push({ name: token.value, usage });
+/**
+ * Callee closure, ambient-reference closure, capability REACH, and capability
+ * PROVENANCE over one source file.
+ *
+ * INDIRECT CALLEES are calls whose callee is a computed member access, another
+ * call's result, or a literal — `eval("require")(…)`, `(0, eval)(…)`. The
+ * callee's DESTINATION is decided at runtime, so the scan cannot prove it stays
+ * inside the core, and must not pretend the call is absent.
+ *
+ * AMBIENT REFERENCES are identifiers used as a value that the file neither
+ * declares nor imports and that are not pure intrinsics.
+ *
+ * REACHES are the point at which a capability ENTERS (MH-02-R4-B01). Round 4 had
+ * only the two rules above, and both are about the shape of a CALL. That left an
+ * exact gap the reviewer walked through twice:
+ *
+ *     const load = module["require"].bind(module);   // no call-shape violation
+ *     const io = load("fs");                         // callee is a bound local
+ *     io.readFileSync;                               // live Node I/O
+ *
+ * Nothing there is an indirect callee, and `module` was exempted as a language
+ * word. So the question this analysis asks is not "does this call LOOK direct?"
+ * but "where did this value COME FROM?" — and two answers are reaches:
+ *
+ *   computed_member_reach   a computed access whose base does not reduce to a
+ *                           clean local or a pure intrinsic: `module["require"]`,
+ *                           `([] as any)["constructor"]`, `globalThis[k]`
+ *   prototype_chain_reach   a step up the prototype chain: `.constructor`,
+ *   reflection_call_reach   `.prototype`, `.__proto__`, `Object.getPrototypeOf`,
+ *                           `bind`/`call`/`apply`. `({}).constructor.constructor`
+ *                           IS the `Function` evaluator and is reached with no
+ *                           computed access and no ambient name at all — a direct
+ *                           Node control returns callable `fs.readFileSync`
+ *                           through it.
+ *
+ * PROVENANCE is what makes the reach rules bite through aliases rather than only
+ * at the origin. A binding whose initializer contains any origin — a reach, an
+ * ambient reference, an indirect callee, or a reference to an already-derived
+ * name — is itself capability-derived, computed to a FIXPOINT so that
+ * `a = reach; b = a; c = b` derives all three. Derived bindings are then removed
+ * from the clean-base set, which is the load-bearing part: `const t = <derived>;
+ * t[k]` is a reach precisely BECAUSE the flow was followed, even though `t` is
+ * locally declared. Calling, dereferencing, or indexing a derived value is
+ * reported as an ALIAS.
+ *
+ * A method call on an expression result (`tokens.map(fn).join(" ")`) is still NOT
+ * indirect and still not a reach: the callee is a NAMED property and the
+ * expression it hangs off resolves to a clean local. That distinction is what
+ * keeps ordinary chained code, numeric indexing, and record lookup by a local key
+ * clean while `x["constructor"]` and its aliases fail.
+ *
+ * HONEST LIMIT — unchanged in kind from round 4, narrower in extent. This is a
+ * lexical provenance analysis, not a type-checked dataflow proof. It is sound for
+ * the mechanisms above because each is syntactically visible at the point the
+ * capability enters. Constructs the binding collector does not model — classes,
+ * object-literal methods, accessors — are not silently permitted: their bases
+ * resolve to no collected binding and therefore FAIL. The five current core
+ * members use none of them.
+ */
+export function analyzeNeutralCapabilityUse(source: string): {
+  readonly indirect: NeutralIndirectCallee[];
+  readonly ambient: NeutralAmbientCapability[];
+  readonly reaches: NeutralCapabilityReach[];
+  readonly aliases: NeutralCapabilityAlias[];
+} {
+  const tokens = tokenizeNeutralSource(source);
+  const bound = collectNeutralBoundNames(tokens);
+  const initializers = collectBindingInitializers(tokens);
+  const derived: string[] = [];
+
+  const classify = (name: string): NeutralBaseRoot => {
+    if (derived.indexOf(name) !== -1) {
+      return { kind: "unresolvable", detail: `capability-derived binding ${name}` };
+    }
+    if (bound.indexOf(name) !== -1) return { kind: "local", name };
+    if (NEUTRAL_PURE_INTRINSIC_ROOTS.indexOf(name) !== -1) return { kind: "intrinsic", name };
+    return { kind: "unresolvable", detail: `ambient binding ${name}` };
+  };
+
+  // Fixpoint: every pass re-derives the origins against the CURRENT derived set,
+  // so a base that became derived on the previous pass turns its own accesses
+  // into reaches on this one. Bounded by the number of bindings.
+  const originOf: string[] = [];
+  let origins = capabilityOrigins(tokens, bound, classify);
+  for (let pass = 0; pass <= initializers.length; pass += 1) {
+    let changed = false;
+    for (const initializer of initializers) {
+      const carried = origins.find(
+        (origin) => origin.index >= initializer.from && origin.index < initializer.to
+      );
+      const alias = rangeReferencesDerived(tokens, initializer.from, initializer.to, derived);
+      if (carried === undefined && alias === undefined) continue;
+      const reason =
+        carried !== undefined ? `${carried.form}: ${carried.detail}` : `alias of ${alias ?? ""}`;
+      for (const name of initializer.names) {
+        if (derived.indexOf(name) !== -1) continue;
+        derived.push(name);
+        originOf.push(reason);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+    origins = capabilityOrigins(tokens, bound, classify);
   }
 
-  return { indirect, ambient };
+  const indirect: NeutralIndirectCallee[] = [];
+  const ambient: NeutralAmbientCapability[] = [];
+  const reaches: NeutralCapabilityReach[] = [];
+  const seen: string[] = [];
+  for (const origin of origins) {
+    const key = `${origin.kind}|${origin.form}|${origin.detail}|${origin.usage}`;
+    if (seen.indexOf(key) !== -1) continue;
+    seen.push(key);
+    if (origin.kind === "indirect") {
+      indirect.push({ form: origin.form, detail: origin.detail });
+    } else if (origin.kind === "ambient") {
+      ambient.push({ name: origin.name, usage: origin.usage });
+    } else {
+      reaches.push({ form: origin.form, detail: origin.detail });
+    }
+  }
+
+  // Aliases: any USE of a derived value. The declaration site itself is a bare
+  // reference and is not reported — the reach that made it derived already is.
+  const aliases: NeutralCapabilityAlias[] = [];
+  const seenAlias: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token.kind !== "ident") continue;
+    if (isPunct(tokens[i - 1], ".")) continue;
+    if (isPunct(tokens[i + 1], ":")) continue;
+    const at = derived.indexOf(token.value);
+    if (at === -1) continue;
+    const usage = usageAt(tokens, i);
+    if (usage === "reference") continue;
+    const key = `${token.value}|${usage}`;
+    if (seenAlias.indexOf(key) !== -1) continue;
+    seenAlias.push(key);
+    aliases.push({ name: token.value, usage, origin: originOf[at] ?? "capability-derived" });
+  }
+
+  return { indirect, ambient, reaches, aliases };
 }
 
 // ---------------------------------------------------------------------------
@@ -1301,6 +1846,21 @@ export interface NeutralCoreAmbientCapability {
   readonly usage: string;
 }
 
+/** A point where a capability ENTERS a core member (MH-02-R4-B01). */
+export interface NeutralCoreCapabilityReach {
+  readonly importer: string;
+  readonly form: string;
+  readonly detail: string;
+}
+
+/** A use of a value that FLOWED from a reach (MH-02-R4-B01). */
+export interface NeutralCoreCapabilityAlias {
+  readonly importer: string;
+  readonly name: string;
+  readonly usage: string;
+  readonly origin: string;
+}
+
 function isIntraCoreSpecifier(specifier: string): boolean {
   if (specifier.charAt(0) !== ".") return false;
   const tail = specifier.replace(/^\.\//, "");
@@ -1312,8 +1872,8 @@ function isIntraCoreSpecifier(specifier: string): boolean {
 /**
  * Verdict on the core's import AND capability closure. Reason-code priority is
  *
- *   membership → forbidden → unresolved → ambient → indirect → ambiguous
- *              → unclassified
+ *   membership → forbidden → unresolved → ambient → reach → indirect → alias
+ *              → ambiguous → unclassified
  *
  * A membership disagreement comes first because the scan was then not looking at
  * the declared core at all, so reporting edge findings from it would mislead. A
@@ -1331,6 +1891,10 @@ function isIntraCoreSpecifier(specifier: string): boolean {
  *                 and that is not a pure intrinsic (`eval`, `process`, `Date`)
  *   indirect      a call whose callee is a computed member access, another call's
  *                 result, or a literal (`module["require"](…)`, `eval("…")(…)`)
+ *   reach         a computed access whose base the scan cannot name, or a step up
+ *                 the prototype chain (`.constructor`, `Object.getPrototypeOf`)
+ *   alias         a use of a value that FLOWED from a reach, however many
+ *                 bindings it passed through (MH-02-R4-B01)
  *   ambiguous     a `/` the lexer cannot classify without a parser where the
  *                 discarded reading would have swallowed an import/require, an
  *                 identifier written with a Unicode escape, or a backslash the
@@ -1357,6 +1921,8 @@ export function evaluateNeutralCoreBoundary(
   const ambiguous: NeutralCoreSourceAmbiguity[] = [];
   const indirectCallees: NeutralCoreIndirectCallee[] = [];
   const ambientCapabilities: NeutralCoreAmbientCapability[] = [];
+  const capabilityReaches: NeutralCoreCapabilityReach[] = [];
+  const capabilityAliases: NeutralCoreCapabilityAlias[] = [];
 
   for (const file of files) {
     for (const ambiguity of tokenizeNeutralSourceWithDiagnostics(file.source).ambiguities) {
@@ -1375,6 +1941,17 @@ export function evaluateNeutralCoreBoundary(
         importer: file.path,
         name: reference.name,
         usage: reference.usage,
+      });
+    }
+    for (const reach of capability.reaches) {
+      capabilityReaches.push({ importer: file.path, form: reach.form, detail: reach.detail });
+    }
+    for (const alias of capability.aliases) {
+      capabilityAliases.push({
+        importer: file.path,
+        name: alias.name,
+        usage: alias.usage,
+        origin: alias.origin,
       });
     }
     for (const edge of extractNeutralImportEdges(file.source)) {
@@ -1421,7 +1998,11 @@ export function evaluateNeutralCoreBoundary(
     source_ambiguities: ambiguous,
     indirect_callees: indirectCallees,
     ambient_capabilities: ambientCapabilities,
+    capability_reaches: capabilityReaches,
+    capability_aliases: capabilityAliases,
     pure_intrinsic_roots: [...NEUTRAL_PURE_INTRINSIC_ROOTS],
+    prototype_chain_properties: [...NEUTRAL_PROTOTYPE_CHAIN_PROPERTIES],
+    reflection_method_names: [...NEUTRAL_REFLECTION_METHOD_NAMES],
   };
 
   if (missingMembers.length > 0 || undeclaredFiles.length > 0) {
@@ -1478,6 +2059,21 @@ export function evaluateNeutralCoreBoundary(
     });
   }
 
+  if (capabilityReaches.length > 0) {
+    return neutralOutcome({
+      type: "guild.boundary_outcome.v1",
+      disposition: "failed",
+      reason_code: "boundary_capability_reach",
+      assertions: [
+        "a computed member access must hang off a base the scan can name as a local binding or a pure intrinsic",
+        "the prototype chain is a capability: constructor, prototype, and __proto__ reach the Function evaluator from any object",
+        "getPrototypeOf, getOwnPropertyDescriptor, bind, call, and apply hand back a prototype, a descriptor, or a re-bound function",
+        "a capability the scan cannot name is a capability it cannot bound",
+      ],
+      facts,
+    });
+  }
+
   if (indirectCallees.length > 0) {
     return neutralOutcome({
       type: "guild.boundary_outcome.v1",
@@ -1487,6 +2083,20 @@ export function evaluateNeutralCoreBoundary(
         "every call must have a callee the scan can reduce to a named destination",
         "a computed-member, call-result, or literal callee is decided at runtime and cannot be proven to stay inside the core",
         "an unresolvable callee is closure unproven, never closure proven",
+      ],
+      facts,
+    });
+  }
+
+  if (capabilityAliases.length > 0) {
+    return neutralOutcome({
+      type: "guild.boundary_outcome.v1",
+      disposition: "failed",
+      reason_code: "boundary_capability_alias",
+      assertions: [
+        "a value that flowed from a capability reach stays a capability however many bindings it passes through",
+        "binding a computed loader or an evaluator to a local name before calling it is not a different act",
+        "provenance is followed to a fixpoint through declaration, destructuring, assignment, and local-function return",
       ],
       facts,
     });
@@ -1529,6 +2139,8 @@ export function evaluateNeutralCoreBoundary(
       "no lexical ambiguity could have hidden an edge",
       "every callee reduced to a declared, imported, or pure-intrinsic root",
       "no ambient binding is reached, so no host handle, clock, or evaluator is available",
+      "every computed member access hangs off a base the scan named, and no prototype chain is walked",
+      "no binding carries capability provenance, so no alias of a reach exists to call",
       "the core is closed under import AND capability, so no transitive escape exists",
     ],
     facts,
