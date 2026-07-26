@@ -189,9 +189,15 @@ Release workflow (operator-driven, when `next` is ready). A release adds only
 **two commits** on top of `next` — a version bump and a changelog — so the cut
 stays small and, *provided the release PR is merged with a merge commit*, the
 sync-back is a fast-forward rather than a delta copy:
-1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump
-   `plugin.json` + `marketplace.json` (+ regenerate `guild.inventory.json` via
-   `npm run build:inventory` — deterministic, keeps the zero-epoch `generated_at`);
+1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump the
+   version in **`.claude-plugin/plugin.json` ONLY** — the single canonical
+   version field — then propagate it with
+   `cd scripts && npm run sync:claude-install && npm run build:inventory`
+   (regenerates `marketplace.json` from `plugin.json` and refreshes
+   `guild.inventory.json`; both deterministic, keeping the zero-epoch
+   `generated_at`). **Do not hand-edit `marketplace.json`** — it is generated,
+   and CI (`check:claude-install`) fails any hand edit that disagrees with the
+   canonical field;
    (b) the changelog section + notes seed via
    `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (then `--notes`
    for the PR body); polish both. **No live-surface guard pin re-ratification is
