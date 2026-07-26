@@ -168,10 +168,12 @@ describe("REGRESSION: the receipt path install.sh actually uses", () => {
     expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(true);
   });
 
-  // EXECUTE the selector — round-4 found the previous mtime chain succeeded
-  // with GARBAGE under GNU stat (`-f` = filesystem status, `%m` = mount point),
-  // so a source-regex assertion could never have caught it. These drive the
-  // real function under both stat semantics.
+  // EXECUTE the selector — round-4/5 found the previous BSD-first mtime chain
+  // misbehaves under GNU stat: there `-f` is filesystem-status MODE and "%m" a
+  // FILE operand, so the call pollutes the captured value with status garbage
+  // (nonzero exit, stdout kept by `$(A || B)`). A source-regex assertion could
+  // never have caught any of that. These drive the real function under both
+  // stat semantics.
   describe("codex_cache_plugin_dir picks the just-installed version", () => {
     const fnSel = extractFn("codex_cache_plugin_dir");
     let cache: string;
@@ -208,7 +210,7 @@ describe("REGRESSION: the receipt path install.sh actually uses", () => {
         [
           "#!/bin/bash",
           'if [ "$1" = "-c" ] && [ "$2" = "%Y" ]; then exec perl -e \'print +(stat($ARGV[0]))[9]\' "$3"; fi',
-          'if [ "$1" = "-f" ]; then echo "  Inodes: Total: 999999 Free: 424242"; exit 1; fi',
+          'if [ "$1" = "-f" ]; then printf "  File: \\"%s\\"\\n  ID: 0 Namelen: 255 Type: apfs\\n  Inodes: Total: 999999 Free: 424242\\n" "$3"; exit 1; fi',
           "exit 1",
           "",
         ].join("\n"),
@@ -224,7 +226,7 @@ describe("REGRESSION: the receipt path install.sh actually uses", () => {
       expect(path.basename(sh(`${fnSel}\ncodex_cache_plugin_dir ${cache}`))).toBe("2.2.0");
     });
 
-    it("GNU-semantics stat: still newest — the BSD-first chain sorted by mount point here", () => {
+    it("GNU-semantics stat: still newest — the BSD-first chain polluted its captured value here", () => {
       const out = execFileSync("bash", ["-c", `${fnSel}\ncodex_cache_plugin_dir ${cache}`], {
         encoding: "utf8",
         env: { ...process.env, PATH: `${gnubin}:${process.env.PATH ?? ""}` },
