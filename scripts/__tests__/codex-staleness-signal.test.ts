@@ -56,12 +56,15 @@ function signalFor(hostId: string) {
 }
 
 describe("the signal names the CORRECT command per host", () => {
-  it("Codex gets its own command, NOT Claude's", () => {
+  it("Codex gets the reinstall command — never Claude's pair, never guild-run (option A)", () => {
     const s = signalFor("codex-cli");
     expect(s.update_available).toBe(true);
-    expect(s.command).toBe("guild-run update");
-    // The specific regression: a Codex user must never be told to run `claude …`.
+    // Operator decision: codex-cli is reinstall_command. install.sh --update
+    // re-renders receipted installs and detect+advises native ones; a
+    // guild-run self-update of the manager-owned cache is incoherent.
+    expect(s.command).toMatch(/install\.sh \| bash -s -- --update$/);
     expect(s.command).not.toMatch(/^claude /);
+    expect(s.command).not.toMatch(/guild-run/);
   });
 
   it("Claude still gets the full two-command pair", () => {
@@ -85,7 +88,7 @@ describe("the signal names the CORRECT command per host", () => {
 
   it("renders the reported scenario end to end for Codex", () => {
     expect(renderSignalLine(signalFor("codex-cli") as never)).toBe(
-      "Guild update available on stable: 2.2.0 → 2.3.2 — run: guild-run update"
+      "Guild update available on stable: 2.2.0 → 2.3.2 — run: curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
     );
   });
 });
@@ -188,7 +191,7 @@ describe("the RENDERED Codex package (not the source text)", () => {
       command: string | null;
     };
     expect(s.update_available).toBe(true);
-    expect(s.command).toBe("guild-run update");
+    expect(s.command).toMatch(/install\.sh \| bash -s -- --update$/);
   });
 });
 
@@ -236,7 +239,7 @@ describe("update-check mints a package-local receipt for host-native installs", 
 
   it("mints host/version/channel from the package itself, and still emits the signal", () => {
     const out = runHook();
-    expect(out).toContain("2.3.2 → 9.9.9 — run: guild-run update");
+    expect(out).toContain("2.3.2 → 9.9.9 — run: curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update");
     const r = JSON.parse(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")) as Record<
       string,
       unknown

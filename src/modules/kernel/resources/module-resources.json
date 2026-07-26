@@ -22,7 +22,7 @@
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "8dc4aecc5e88157887641db857f336587dd4d8527f1ed512220873407bbefdd9"
+      "sha256": "0501771cd1aed6b8d2f4c9b04da432681003a7fc0c4a2048c7a9a3397803d25d"
     },
     {
       "category": "hooks",

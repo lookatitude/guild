@@ -244,7 +244,11 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
       # header match misclassified those as unreadable.
       # sed -E: `\?` is a GNU extension BSD sed does not support, so a BRE
       # version of this matched NOTHING on macOS. -E is portable across both.
-      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*marketplaces[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*\][[:space:]]*$/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      # Header: optional quotes around EITHER dotted part ("marketplaces" and/or
+      # guild, single or double), whitespace around the dot, and only
+      # whitespace/comment after the bracket. Value: single- or double-quoted.
+      # All shapes below were fed to the real Codex parser and accepted.
+      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*\][[:space:]]*(#.*)?$/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
       case "$_cx_src" in
         git)
           printf '      codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2
@@ -282,12 +286,22 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
           const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
           const here = process.argv[2] || "";
           const p = (r && r.plugins) || {};
+          const norm = (x) => (typeof x === "string" ? x.replace(/\/+$/, "") : x);
           const valid = (e) =>
             e && typeof e === "object" &&
             (typeof e.version === "string" || typeof e.installPath === "string") &&
-            (e.scope === "user" || (e.scope === "project" && e.projectPath === here));
+            // v2 entries carry scope; registry v1 entries carry none and were
+            // user-level by construction — requiring scope MISSED them (a
+            // false negative on real installs). Trailing slashes on either
+            // side of the project-path comparison are not a difference.
+            (e.scope === undefined ||
+              e.scope === "user" ||
+              (e.scope === "project" && norm(e.projectPath) === norm(here)));
           const hit = Object.keys(p).some(
-            (k) => /^guild@/.test(k) && Array.isArray(p[k]) && p[k].some(valid)
+            (k) =>
+              /^guild@/.test(k) &&
+              // v2: an array of install entries. v1: ONE object per plugin.
+              (Array.isArray(p[k]) ? p[k].some(valid) : valid(p[k]))
           );
           process.exit(hit ? 0 : 1);
         } catch { process.exit(1); }

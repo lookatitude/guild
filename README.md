@@ -147,12 +147,17 @@ Applying updates per host — the full 16-host registry:
 # claude-code-cli (marketplace-managed):
 claude plugin marketplace update guild && claude plugin update guild@guild
 
-# Wrapper-package hosts — codex-cli, pi-cli, antigravity-cli, cursor,
-# github-copilot, opencode, rovo-dev (installer-managed; needs the receipt):
+# Wrapper-package hosts — pi-cli, antigravity-cli, cursor, github-copilot,
+# opencode, rovo-dev (installer-managed; needs the receipt):
 guild-run update
 
-# File-surface hosts — agents-file, kiro, qoder, trae (snapshot copies;
-# guild-run update refuses these by design and names this instead):
+# codex-cli — Codex OWNS its installed plugin cache, so Guild never swaps it
+# (guild-run update refuses and names this instead). Receipted installs
+# re-render; host-native installs are detected and told the precise codex
+# command for their registered source type:
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
+
+# File-surface hosts — agents-file, kiro, qoder, trae (snapshot copies):
 curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
 # …then re-copy the refreshed dist/agents tree into the project.
 
@@ -168,9 +173,10 @@ Each install writes a `guild.install_receipt.v1` (host, channel, ref, commit)
 under `~/.guild/receipts/` — that receipt is what `--update` and `guild-run
 update` re-render from, keeping every host on the channel it was installed
 from. A **host-native** install (e.g. a hand-run `codex plugin add`) writes no
-machine receipt: `--update` will detect it and name that host's real command,
-and the session-start update check mints a package-local receipt so
-`guild-run update` works from the next session on.
+machine receipt: `--update` will detect it and name that host's real command.
+The session-start update check mints a package-local receipt for
+IDENTIFICATION — its channel field is an assumed default, marked as such, and
+nothing ever clones from it.
 
 Installing manually into Codex CLI uses Codex's plugin manager:
 

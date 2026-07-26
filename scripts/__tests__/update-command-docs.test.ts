@@ -54,7 +54,9 @@ describe("README documents the registry's own update commands", () => {
     const ids = Object.keys(rows);
     expect(ids).toHaveLength(16); // a 17th host must update this section too
     for (const id of ids) {
-      expect(section).toContain(id);
+      // Word-boundary, not substring: "codex-cli" must not be satisfied by an
+      // unrelated mention, and "cursor" must not match inside another word.
+      expect(section).toMatch(new RegExp(`(^|[^A-Za-z0-9-])${id}([^A-Za-z0-9-]|$)`));
     }
   });
 
@@ -76,9 +78,16 @@ describe("README documents the registry's own update commands", () => {
         expect(section.indexOf(id)).toBeGreaterThan(-1);
         expect(section.indexOf(id)).toBeLessThan(section.indexOf(UPDATE_COMMANDS.self_update));
       }
+      if (apply === "self_update") {
+        // Round-1 gate: this branch was MISSING, so all seven wrapper hosts
+        // could sit in the wrong group without failing. A wrapper host must
+        // appear after the Claude command and before the reinstall block.
+        expect(section.indexOf(id)).toBeGreaterThan(section.indexOf(UPDATE_COMMANDS.marketplace_cli));
+        expect(section.indexOf(id)).toBeLessThan(section.indexOf(UPDATE_COMMANDS.reinstall_command));
+      }
       if (apply === "reinstall_command") {
-        // File-surface hosts appear in the reinstall grouping, after the
-        // wrapper block.
+        // Reinstall-class hosts (file surfaces AND codex-cli after option A)
+        // appear after the wrapper block.
         expect(section.indexOf(id)).toBeGreaterThan(section.indexOf(UPDATE_COMMANDS.self_update));
       }
     }

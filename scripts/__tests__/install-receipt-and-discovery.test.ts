@@ -382,6 +382,29 @@ describe("host-native discovery on --update with no receipts", () => {
     expect(runUpdate()).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
   });
 
+  it("DOES count a registry-V1 OBJECT entry (no scope field, no array) — round-1 false negative", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(
+      path.join(reg, "installed_plugins.json"),
+      JSON.stringify({ version: 1, plugins: { "guild@guild": { installPath: "/x/guild", isLocal: false } } })
+    );
+    expect(runUpdate()).toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
+  it("DOES count a project-scoped entry whose path differs only by a trailing slash", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(
+      path.join(reg, "installed_plugins.json"),
+      JSON.stringify({
+        version: 2,
+        plugins: { "guild@guild": [{ scope: "project", projectPath: process.cwd() + "/", version: "2.3.2" }] },
+      })
+    );
+    expect(runUpdate()).toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
   it("DOES count a user-scoped entry with a version", () => {
     const reg = path.join(home, ".claude", "plugins");
     fs.mkdirSync(reg, { recursive: true });
@@ -411,6 +434,9 @@ describe("host-native discovery on --update with no receipts", () => {
       expect(probe("[marketplaces.'guild']\nsource_type = \"local\"\n")).toBe("local");
       expect(probe('[ marketplaces . guild ]\nsource_type = "git"\n')).toBe("git");
       expect(probe('[marketplaces.guild].junk\nsource_type = "local"\n')).toBe("");
+      // Round-1 gate: three MORE Codex-accepted forms were misclassified.
+      expect(probe("[marketplaces.guild] # my note\nsource_type = 'git'\n")).toBe("git");
+      expect(probe('["marketplaces"."guild"]\nsource_type = "local"\n')).toBe("local");
       expect(probe('[marketplaces.guilded]\nsource_type = "git"\n')).toBe("");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

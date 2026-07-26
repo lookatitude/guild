@@ -177,6 +177,13 @@ function main(): void {
               version: state.version,
               installed_at: new Date().toISOString(),
               minted_by: "update-check-session-start",
+              // Honesty markers: a native install's channel is UNKNOWABLE from
+              // inside the package, so channel/ref above are the stable/main
+              // DEFAULT, not a fact. Nothing may clone from them: codex-cli's
+              // capability row is reinstall_command (never self_update), so the
+              // minted receipt is identification-only.
+              managed_by: "host-native",
+              channel_confidence: "assumed-default",
             },
             null,
             2
