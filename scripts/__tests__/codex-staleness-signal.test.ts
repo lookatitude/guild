@@ -96,36 +96,33 @@ describe("the signal names the CORRECT command per host", () => {
 // most: this rail's first version injected a synthetic state carrying
 // version "2.2.0", so it could not have caught that a real Codex package
 // resolved to null and the signal never fired at all.
-function rootIsWritable(): boolean {
-  try {
-    fs.accessSync(path.join(PLUGIN_ROOT, "guild.inventory.json"), fs.constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const describeRender = rootIsWritable() ? describe : describe.skip;
-
-describeRender("the RENDERED Codex package (not the source text)", () => {
+describe("the RENDERED Codex package (not the source text)", () => {
   let out: string;
   let codexRoot: string;
 
   // The renderer writes guild.inventory.json back into --root (loadInventory's
-  // documented side effect), so this block needs a WRITABLE root. It snapshots
-  // and restores that file, and skips entirely on a read-only checkout rather
-  // than failing EPERM — CI checkouts are writable, so coverage is not lost
-  // where it matters. `describe.skip` is deliberate over a silent pass: a
-  // skipped test reports as skipped, not as green.
+  // documented side effect), so this block needs a WRITABLE root: it snapshots
+  // and restores that file around the render.
+  //
+  // It HARD-FAILS rather than skipping when the root is read-only. An earlier
+  // revision used describe.skip; a mode-0444 checkout then reported
+  // "5 passed, 4 skipped", suite PASS, exit 0 — silently deleting the only
+  // proof that the version-resolution blocker is fixed, with nothing in CI
+  // rejecting skips. A test that cannot run must say so loudly.
   const inventoryPath = path.join(PLUGIN_ROOT, "guild.inventory.json");
   let inventoryBefore: Buffer | null = null;
 
   beforeAll(() => {
     try {
-      inventoryBefore = fs.readFileSync(inventoryPath);
+      fs.accessSync(inventoryPath, fs.constants.W_OK);
     } catch {
-      inventoryBefore = null;
+      throw new Error(
+        `${inventoryPath} is not writable, so the renderer cannot run and the ` +
+          "version-resolution regression cannot be proven. This block must not be " +
+          "skipped — make the checkout writable and re-run."
+      );
     }
+    inventoryBefore = fs.readFileSync(inventoryPath);
     out = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex-render-"));
     execFileSync(
       "npx",
@@ -139,13 +136,9 @@ describeRender("the RENDERED Codex package (not the source text)", () => {
     if (out) fs.rmSync(out, { recursive: true, force: true });
     // Restore byte-for-byte: the render is a side effect of the test, not a
     // change to the repository under test.
-    if (inventoryBefore !== null) {
-      try {
-        fs.writeFileSync(inventoryPath, inventoryBefore);
-      } catch {
-        // read-only root: nothing was written, so nothing to restore
-      }
-    }
+    // A failed restore leaves the checkout mutated; that must fail the run
+    // rather than pass green with a modified inventory.
+    if (inventoryBefore !== null) fs.writeFileSync(inventoryPath, inventoryBefore);
   });
 
   it("wires SessionStart at --host codex-cli in the EMITTED manifest", () => {

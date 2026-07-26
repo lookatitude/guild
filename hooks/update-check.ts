@@ -162,9 +162,13 @@ function main(): void {
   // report success for an update that silently failed. A host that cannot
   // auto-apply degrades to notify-only, which is the honest signal.
   if (mode === "auto" && caps?.auto_capable !== true) {
-    process.stdout.write(
-      `${line}\n[guild-update] auto mode: ${hostId} cannot auto-apply — run the command above.\n`
-    );
+    // Only point at "the command above" when the signal actually carries one:
+    // a fail-closed unknown host has command: null, so that instruction would
+    // reference something that was never printed.
+    const followUp = signal.command
+      ? "run the command above."
+      : "and no update command is known for this host — see the Guild docs.";
+    process.stdout.write(`${line}\n[guild-update] auto mode: ${hostId} cannot auto-apply — ${followUp}\n`);
     return;
   }
 

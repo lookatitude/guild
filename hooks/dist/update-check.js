@@ -5596,11 +5596,10 @@ function main() {
   const line = renderSignalLine(signal);
   if (!line) return;
   if (mode === "auto" && caps?.auto_capable !== true) {
-    process.stdout.write(
-      `${line}
-[guild-update] auto mode: ${hostId} cannot auto-apply \u2014 run the command above.
-`
-    );
+    const followUp = signal.command ? "run the command above." : "and no update command is known for this host \u2014 see the Guild docs.";
+    process.stdout.write(`${line}
+[guild-update] auto mode: ${hostId} cannot auto-apply \u2014 ${followUp}
+`);
     return;
   }
   if (mode === "auto") {
