@@ -640,22 +640,36 @@ const JOURNAL_MODULE = path.join(
   "receipt-journal",
 );
 
-/** A child that performs ONE append in its own OS process and prints the outcome. */
+/**
+ * A child that performs ONE append in its own OS process and prints the outcome.
+ *
+ * `spelling` picks how this child NAMES the one journal every child shares, and
+ * `lock` optionally sets a caller-supplied `JournalPaths.lock`. Both exist so a
+ * race can prove that neither an alternate spelling nor a caller-chosen lock can
+ * partition serialisation (MH-06-R3-B1).
+ */
 function writeAppendChild(root: string): string {
   const file = path.join(root, "append-child.ts");
   fs.writeFileSync(
     file,
     `import * as path from "node:path";
 import { appendReceipt, makeReceiptInput } from ${JSON.stringify(JOURNAL_MODULE)};
-const [root, eventId, opId, startAt] = process.argv.slice(2);
-const paths = {
-  journal: path.join(root, "receipts", "journal.jsonl"),
+const [root, eventId, opId, startAt, spelling, lock] = process.argv.slice(2);
+const journal = (() => {
+  if (spelling === "dotdot") return path.join(root, "receipts", "..", "receipts", ".", "journal.jsonl");
+  if (spelling === "symlink") return path.join(root, "link", "journal.jsonl");
+  if (spelling === "relative") { process.chdir(root); return path.join("receipts", "journal.jsonl"); }
+  return path.join(root, "receipts", "journal.jsonl");
+})();
+const paths: Record<string, string> = {
+  journal,
   checkpoint: path.join(root, "receipts", "checkpoint.json"),
 };
+if (lock && lock !== "-") paths.lock = lock;
 const out = (() => {
   const target = Number(startAt);
   while (Date.now() < target) { /* spin to the shared barrier */ }
-  return appendReceipt(paths, makeReceiptInput({
+  return appendReceipt(paths as never, makeReceiptInput({
     run_id: "run-mh-06",
     operation_id: opId,
     correlation_id: "corr-" + opId,
@@ -693,14 +707,29 @@ interface ChildOutcome {
 }
 
 /** Spawn `n` real processes that all append at the same wall-clock instant. */
-async function raceAppends(root: string, n: number): Promise<ChildOutcome[]> {
+async function raceAppends(
+  root: string,
+  n: number,
+  opts: { spelling?: (i: number) => string; lock?: (i: number) => string } = {},
+): Promise<ChildOutcome[]> {
   const child = writeAppendChild(root);
   fs.mkdirSync(path.join(root, "receipts"), { recursive: true });
+  const link = path.join(root, "link");
+  if (!fs.existsSync(link)) fs.symlinkSync(path.join(root, "receipts"), link);
   const startAt = Date.now() + 4000;
   return Promise.all(
     Array.from({ length: n }, (_, i) =>
       new Promise<ChildOutcome>((resolve, reject) => {
-        const proc = spawn(TSX, [child, root, `evt-${i}`, `op-${i}`, String(startAt)], {
+        const args = [
+          child,
+          root,
+          `evt-${i}`,
+          `op-${i}`,
+          String(startAt),
+          opts.spelling?.(i) ?? "plain",
+          opts.lock?.(i) ?? "-",
+        ];
+        const proc = spawn(TSX, args, {
           stdio: ["ignore", "pipe", "pipe"],
         });
         let out = "";
@@ -902,13 +931,20 @@ describe("MH-06-R2-B1 — concurrent appends are linearizable across processes",
     expect(fs.existsSync(journalLockPath(p))).toBe(false);
   });
 
-  it("derives the lock path from the journal, and honours an explicit override", () => {
+  it("derives the lock path from the journal, with no override to derive it from", () => {
     expect(journalLockPath({ journal: "/x/journal.jsonl", checkpoint: "/x/cp.json" })).toBe(
       "/x/journal.jsonl.lock",
     );
+    // Round 2 accepted a caller-supplied `lock` and returned it verbatim. Round 3
+    // proved that partitions serialisation, so the field is GONE from the type —
+    // and a runtime object still carrying one is inert, not honoured.
     expect(
-      journalLockPath({ journal: "/x/journal.jsonl", checkpoint: "/x/cp.json", lock: "/y/other.lock" }),
-    ).toBe("/y/other.lock");
+      journalLockPath({
+        journal: "/x/journal.jsonl",
+        checkpoint: "/x/cp.json",
+        lock: "/y/other.lock",
+      } as unknown as Parameters<typeof journalLockPath>[0]),
+    ).toBe("/x/journal.jsonl.lock");
   });
 
   it("fails closed when the checkpoint write lands DIFFERENT content", () => {
@@ -941,6 +977,138 @@ describe("MH-06-R2-B1 — concurrent appends are linearizable across processes",
     expect(out.durable).toBe(false);
     expect(out.failure?.code).toBe("checkpoint_write_unverified");
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R3-B1 — one journal, exactly ONE lock identity
+//
+// Round 2 put the whole append transaction under `<journal>.lock`, and round 3
+// showed that is only a lock if every writer computes the same one. `JournalPaths`
+// let each caller pass its own `lock`, so twelve processes alternating two legal
+// overrides for ONE journal produced a duplicated sequence 10, integrity
+// `order_violation`, eleven records beside a checkpoint counting nine — with nine
+// callers already told `disposition: "succeeded", durable: true`.
+//
+// The identity is therefore DERIVED from the canonical journal path and cannot be
+// supplied. A journal has one lock because it has one canonical name.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R3-B1 — the journal lock identity is derived, never chosen", () => {
+  /** Every legal way to name one journal, including a caller-picked lock. */
+  function spellings(root: string): Array<[string, Record<string, string>]> {
+    const p = paths(root);
+    return [
+      ["`..` and `.` segments", { journal: path.join(root, "receipts", "..", "receipts", ".", "journal.jsonl"), checkpoint: p.checkpoint }],
+      ["a symlinked directory", { journal: path.join(root, "link", "journal.jsonl"), checkpoint: p.checkpoint }],
+      ["a doubled separator", { journal: `${path.dirname(p.journal)}//journal.jsonl`, checkpoint: p.checkpoint }],
+      ["a caller-picked lock", { journal: p.journal, checkpoint: p.checkpoint, lock: path.join(root, "elsewhere.lock") }],
+      ["a caller-picked lock outside the tree", { journal: p.journal, checkpoint: p.checkpoint, lock: "/tmp/whatever-i-like.lock" }],
+    ];
+  }
+
+  it("derives ONE lock path from every legal spelling of one journal", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.symlinkSync(path.join(root, "receipts"), path.join(root, "link"));
+
+    const canonical = journalLockPath(p);
+    // Labelled so a failure says WHICH spelling partitioned.
+    const derived = spellings(root).map(([label, variant]) => [
+      label,
+      journalLockPath(variant as unknown as Parameters<typeof journalLockPath>[0]),
+    ]);
+    expect(derived).toEqual(spellings(root).map(([label]) => [label, canonical]));
+    // …and a symlink to a journal that does not exist yet still names that journal.
+    const dangling = path.join(root, "receipts", "dangling.jsonl");
+    fs.symlinkSync(p.journal, dangling);
+    expect(journalLockPath({ journal: dangling, checkpoint: p.checkpoint })).toBe(canonical);
+  });
+
+  it("derives the SAME identity before and after the journal exists", () => {
+    // A lock identity that changed when the file appeared would partition the
+    // first writer from every later one — the defect, one level down.
+    const root = mkRoot();
+    const p = paths(root);
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    const before = journalLockPath(p);
+    expect(appendReceipt(p, input({ event_id: "e1" })).disposition).toBe("succeeded");
+    expect(journalLockPath(p)).toBe(before);
+    // …and that one identity is the journal's REAL path, not the caller's spelling.
+    expect(journalLockPath(p)).toBe(`${fs.realpathSync(p.journal)}.lock`);
+  });
+
+  it("resolves a relative journal path against the process cwd", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    const cwd = process.cwd();
+    try {
+      process.chdir(root);
+      expect(journalLockPath({ journal: path.join("receipts", "journal.jsonl"), checkpoint: p.checkpoint })).toBe(
+        journalLockPath(p),
+      );
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+
+  it("blocks an append when the lock is held under a DIFFERENT spelling", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.symlinkSync(path.join(root, "receipts"), path.join(root, "link"));
+    // Another writer took the lock naming the journal through the symlink.
+    fs.mkdirSync(journalLockPath({ journal: path.join(root, "link", "journal.jsonl"), checkpoint: p.checkpoint }));
+
+    const out = appendReceipt(p, input({ event_id: "e1" }), defaultJournalIo, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_lock_unavailable");
+    expect(fs.existsSync(p.journal)).toBe(false);
+  });
+
+  it("serialises 8 SEPARATE PROCESSES that each pick their own lock path", async () => {
+    const root = mkRoot();
+    const p = paths(root);
+    // Half the writers ask for the canonical lock, half for one of their own.
+    const outcomes = await raceAppends(root, 8, {
+      lock: (i) => (i % 2 === 0 ? path.join(root, "receipts", "journal.jsonl.lock") : path.join(root, "alt-writer.lock")),
+    });
+
+    const durable = outcomes.filter((o) => o.disposition === "succeeded" && o.durable);
+    expect(new Set(durable.map((o) => o.sequence)).size).toBe(durable.length);
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.integrity).toBe("intact");
+    expect(scan.duplicate_sequences).toEqual([]);
+    expect(scan.record_count).toBe(durable.length);
+    expect(scan.records.map((r) => r.sequence)).toEqual(
+      Array.from({ length: scan.record_count }, (_, i) => i + 1),
+    );
+    const cp = readCheckpoint(p.checkpoint);
+    expect(cp!.last_sequence).toBe(scan.last_sequence);
+    expect(cp!.record_count).toBe(scan.record_count);
+    expect(compareCheckpointToJournal(readCheckpointState(p.checkpoint), scan, "run-mh-06")).toEqual([]);
+  }, 60_000);
+
+  it("serialises 8 SEPARATE PROCESSES naming ONE journal four different ways", async () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const forms = ["plain", "dotdot", "symlink", "relative"];
+    const outcomes = await raceAppends(root, 8, { spelling: (i) => forms[i % forms.length] });
+
+    const durable = outcomes.filter((o) => o.disposition === "succeeded" && o.durable);
+    expect(new Set(durable.map((o) => o.sequence)).size).toBe(durable.length);
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.integrity).toBe("intact");
+    expect(scan.record_count).toBe(durable.length);
+    expect(scan.records.map((r) => r.sequence)).toEqual(
+      Array.from({ length: scan.record_count }, (_, i) => i + 1),
+    );
+    expect(compareCheckpointToJournal(readCheckpointState(p.checkpoint), scan, "run-mh-06")).toEqual([]);
+  }, 60_000);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

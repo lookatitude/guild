@@ -16,12 +16,16 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { spawnSync } from "child_process";
 import {
   appendReceipt,
   sealReceiptRecord,
   makeReceiptInput,
   readCheckpoint,
   readCheckpointState,
+  scanReceiptJournal,
+  compareCheckpointToJournal,
+  journalLockPath,
   defaultJournalIo,
   RECEIPT_CONTRACT_VERSION,
   type JournalIo,
@@ -1373,6 +1377,308 @@ describe("MH-06-R2-B3 — a checkpoint must actually describe the journal", () =
 // ─────────────────────────────────────────────────────────────────────────────
 // MH-06-R2-B5 — one causal identity is never two clean authoritative effects
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R3-B2 — a repair is only as good as the exclusion it was built under
+//
+// Round 2 gave the durable repair the same cross-process lock the append uses.
+// Round 3 showed the lock was taken TOO LATE: reconciliation scanned the journal,
+// computed `checkpoint_after`, THEN locked, wrote, and verified the persisted file
+// against its own pre-lock snapshot. In the reviewer's interleaving a separate
+// writer committed sequence 2 in exactly that window and repair still returned
+// `disposition: "succeeded", verified: true, residual_disagreements: [],
+// blocks_clean_close: false` — after overwriting the checkpoint with sequence 1.
+//
+// So the lock now comes FIRST (before the scan that defines the proposal), and the
+// verification re-scans the journal instead of trusting the snapshot.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R3-B2 — repair locks before it scans, and verifies against the current journal", () => {
+  const TSX = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
+  const JOURNAL_MODULE = path.join(__dirname, "..", "..", "src", "modules", "telemetry", "workflows", "receipt-journal");
+
+  /** A genuinely separate OS process that appends ONE record and exits. */
+  function landRecordFromAnotherProcess(root: string, seq: number): Record<string, unknown> {
+    const file = path.join(root, `writer-${seq}.ts`);
+    fs.writeFileSync(
+      file,
+      `import * as path from "node:path";
+import { appendReceipt, makeReceiptInput } from ${JSON.stringify(JOURNAL_MODULE)};
+const root = process.argv[2];
+const out = appendReceipt(
+  { journal: path.join(root, "receipts", "journal.jsonl"), checkpoint: path.join(root, "receipts", "checkpoint.json") },
+  makeReceiptInput({
+    run_id: "run-mh-06",
+    operation_id: "op-${seq}",
+    correlation_id: "corr-op-${seq}",
+    event_id: "e${seq}",
+    scenario_id: "MHRC-RCT-002",
+    event_name: "receipt.append",
+    outcome_type: "guild.receipt_outcome.v1",
+    disposition: "succeeded",
+    observation_state: "checked_clean",
+    input_hash: "sha256:aaa",
+    output_hash: "sha256:bbb",
+    terminal: false,
+    recorded_at: "2026-07-26T02:00:00.000Z",
+    observed_at: "2026-07-26T02:00:00.000Z",
+    versions: ${JSON.stringify(VERSIONS)},
+  }),
+);
+process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out.durable, sequence: out.sequence, failure: out.failure?.code ?? null }) + "\\n");
+`,
+      "utf8",
+    );
+    const res = spawnSync(TSX, [file, root], { encoding: "utf8" });
+    const line = (res.stdout ?? "").trim().split("\n").pop() ?? "";
+    if (!line.startsWith("{")) throw new Error(`interleaved writer produced no outcome: ${(res.stderr ?? "").slice(0, 400)}`);
+    return JSON.parse(line) as Record<string, unknown>;
+  }
+
+  /** One durable record beside a deliberately damaged checkpoint. */
+  function oneRecordDamagedCheckpoint() {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(appendReceipt(p, input({ event_id: "e1", operation_id: "op-1" })).disposition).toBe("succeeded");
+    fs.writeFileSync(p.checkpoint, "{ not a checkpoint", "utf8");
+    return { root, ...p };
+  }
+
+  function reconcileRepair(p: { journal: string; checkpoint: string }, over: Record<string, unknown> = {}) {
+    return reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      repair_checkpoint: true,
+      ...over,
+    });
+  }
+
+  it("takes the lock BEFORE the first journal read and releases it last", () => {
+    const p = oneRecordDamagedCheckpoint();
+    const calls: string[] = [];
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        calls.push("acquire");
+        return defaultJournalIo.acquireLock!(lockPath);
+      },
+      releaseLock(lockPath) {
+        calls.push("release");
+        defaultJournalIo.releaseLock!(lockPath);
+      },
+      readAll(target) {
+        calls.push(target === p.journal ? "scan" : "read-checkpoint");
+        return defaultJournalIo.readAll(target);
+      },
+      writeCheckpoint(cpPath, content) {
+        calls.push("write");
+        defaultJournalIo.writeCheckpoint(cpPath, content);
+      },
+    };
+
+    const out = reconcileRepair(p, { io });
+    expect(out.checkpoint_repair.verified).toBe(true);
+    // The scan that DEFINES the proposal is inside the lock, not before it.
+    expect(calls[0]).toBe("acquire");
+    expect(calls[calls.length - 1]).toBe("release");
+    expect(calls.filter((c) => c === "acquire")).toHaveLength(1);
+    expect(calls.filter((c) => c === "release")).toHaveLength(1);
+    expect(calls.indexOf("scan")).toBeGreaterThan(calls.indexOf("acquire"));
+    expect(calls.indexOf("write")).toBeGreaterThan(calls.indexOf("scan"));
+    // …and the journal is re-scanned AFTER the write to verify the result.
+    expect(calls.lastIndexOf("scan")).toBeGreaterThan(calls.indexOf("write"));
+  });
+
+  it("a read-only reconcile takes NO lock, so a wedged journal stays diagnosable", () => {
+    const p = oneRecordDamagedCheckpoint();
+    // A crashed writer's lock is still sitting there.
+    fs.mkdirSync(journalLockPath({ journal: p.journal, checkpoint: p.checkpoint }));
+    let locks = 0;
+    const io: JournalIo = { ...defaultJournalIo, acquireLock() { locks += 1; return false; } };
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      io,
+    });
+
+    expect(locks).toBe(0);
+    expect(out.checkpoint_before_state).toBe("malformed");
+    expect(out.checkpoint_disagreements.map((d) => d.code)).toEqual(["checkpoint_malformed"]);
+    expect(out.disposition).toBe("degraded");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("INCLUDES a writer that lands between the preflight read and the lock", () => {
+    const p = oneRecordDamagedCheckpoint();
+    let landed: Record<string, unknown> | null = null;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        // The reviewer's exact interleaving: sequence 2 commits from another
+        // process in the window before repair holds the lock.
+        if (landed === null) landed = landRecordFromAnotherProcess(p.root, 2);
+        return defaultJournalIo.acquireLock!(lockPath);
+      },
+    };
+
+    const out = reconcileRepair(p, { io });
+
+    expect(landed).toEqual({ disposition: "succeeded", durable: true, sequence: 2, failure: null });
+    // The scan under the lock SEES that record, so the producer's belief (1) no
+    // longer describes the merged view and the repair is refused outright.
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.persisted).toBe(false);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_not_permitted");
+    expect(out.disposition).not.toBe("succeeded");
+    expect(out.blocks_clean_close).toBe(true);
+    // …and nothing overwrote the durable boundary with the stale view.
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.record_count).toBe(2);
+    expect(compareCheckpointToJournal(readCheckpointState(p.checkpoint), scan, "run-mh-06")).toEqual([]);
+  }, 60_000);
+
+  it("EXCLUDES a writer that arrives once repair holds the lock, and still converges", () => {
+    const p = oneRecordDamagedCheckpoint();
+    let landed: Record<string, unknown> | null = null;
+    let reads = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(target) {
+        const content = defaultJournalIo.readAll(target);
+        // Fire after the FIRST journal read, which is now inside the lock.
+        if (target === p.journal && ++reads === 1) landed = landRecordFromAnotherProcess(p.root, 2);
+        return content;
+      },
+    };
+
+    const out = reconcileRepair(p, { io });
+
+    expect(landed).toEqual({
+      disposition: "failed",
+      durable: false,
+      sequence: null,
+      failure: "journal_lock_unavailable",
+    });
+    expect(out.checkpoint_repair.verified).toBe(true);
+    expect(out.checkpoint_repair.residual_disagreements).toEqual([]);
+    expect(out.disposition).toBe("succeeded");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+  }, 120_000);
+
+  it("fails closed when the journal moves under a lock that LIES about holding it", () => {
+    const p = oneRecordDamagedCheckpoint();
+    let landed: Record<string, unknown> | null = null;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      // A primitive that reports exclusive access it never took.
+      acquireLock() {
+        return true;
+      },
+      releaseLock() {
+        /* nothing was taken */
+      },
+      writeCheckpoint(cpPath, content) {
+        if (landed === null) landed = landRecordFromAnotherProcess(p.root, 2);
+        defaultJournalIo.writeCheckpoint(cpPath, content);
+      },
+    };
+
+    const out = reconcileRepair(p, { io });
+
+    // The write landed exactly what reconciliation computed…
+    expect(out.checkpoint_repair.persisted).toBe(true);
+    expect(landed).toMatchObject({ disposition: "succeeded", sequence: 2 });
+    // …and is still refused, because the CURRENT journal no longer matches it.
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_verify_failed");
+    // Sequence, count and named event all disagree. `updated_at` does NOT: both
+    // fixture records carry the same `recorded_at`, which is exactly why staleness
+    // must be checked on the identity of the record named, not on a timestamp
+    // alone.
+    expect(out.checkpoint_repair.residual_disagreements.map((d) => d.code)).toEqual([
+      "checkpoint_sequence_mismatch",
+      "checkpoint_count_mismatch",
+      "checkpoint_event_mismatch",
+    ]);
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+  }, 60_000);
+
+  it("reports the lock failure AHEAD of any refusal derived from an unfrozen snapshot", () => {
+    // A journal with unresolved gaps AND a held lock. Round 2's order reported
+    // `repair_not_permitted` from a snapshot it could not freeze; without
+    // exclusive access there is no trustworthy snapshot to judge at all.
+    const root = mkRoot();
+    const p = paths(root);
+    writeJournal(p, [sealed(1, { event_id: "e1", operation_id: "op-1" }), sealed(4, { event_id: "e4", operation_id: "op-4" })]);
+    fs.mkdirSync(journalLockPath(p));
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 4, record_count: 4 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      repair_checkpoint: true,
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_unavailable");
+    // The read-only verdict is still produced, and still honest.
+    expect(out.unresolved_sequences).toEqual([2, 3]);
+    expect(out.disposition).toBe("degraded");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("fails closed when the lock primitive itself raises an IO fault", () => {
+    const p = oneRecordDamagedCheckpoint();
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock() {
+        throw new Error("EROFS: cannot create lock");
+      },
+    };
+    const out = reconcileRepair(p, { io });
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_failed");
+    expect(readCheckpointState(p.checkpoint).state).toBe("malformed");
+  });
+
+  it("releases the lock after a repair, so the next writer is not wedged", () => {
+    const p = oneRecordDamagedCheckpoint();
+    expect(reconcileRepair(p).checkpoint_repair.verified).toBe(true);
+    expect(fs.existsSync(journalLockPath({ journal: p.journal, checkpoint: p.checkpoint }))).toBe(false);
+    const next = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), defaultJournalIo, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+    expect(next.disposition).toBe("succeeded");
+    expect(next.sequence).toBe(2);
+  });
+
+  it("releases the lock even when the repair write throws", () => {
+    const p = oneRecordDamagedCheckpoint();
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      writeCheckpoint() {
+        throw new Error("EROFS: read-only file system");
+      },
+    };
+    const out = reconcileRepair(p, { io });
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_write_failed");
+    expect(fs.existsSync(journalLockPath({ journal: p.journal, checkpoint: p.checkpoint }))).toBe(false);
+  });
+});
 
 describe("MH-06-R2-B5 — duplicate event ids fail reconciliation", () => {
   it("refuses the reviewer's two-record journal reusing one event id", () => {

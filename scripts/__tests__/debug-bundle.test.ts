@@ -28,6 +28,7 @@ import {
   buildDebugBundle,
   DEBUG_BUNDLE_SECTION_KINDS,
   type DebugLinkInput,
+  type DebugSectionKind,
   type EvidenceResolver,
 } from "../../src/modules/telemetry/workflows/debug-bundle";
 
@@ -134,12 +135,24 @@ function fullLinkSet(): DebugLinkInput[] {
 /**
  * The closed vocabularies a bundle resolves against. Scenario ids are the frozen
  * conformance suite's W1/MH-06 `stable_id`s; rule ids are the boundary rules and
- * invariants a `not_applicable` declaration may cite. Passing them explicitly is
- * the point: with no registry NOTHING resolves, which is the fail-closed default.
+ * invariants a `not_applicable` declaration may cite; `evidence_types` is the
+ * per-section machine-envelope vocabulary — the type each section's evidence is
+ * allowed to name. Passing them explicitly is the point: with no registry NOTHING
+ * resolves, which is the fail-closed default.
  */
+const EVIDENCE_TYPES: Record<DebugSectionKind, string[]> = {
+  capability_snapshot: ["guild.capability_snapshot.v1"],
+  normalized_event: ["guild.normalized_event.v1"],
+  policy_decision: ["guild.policy_decision.v1"],
+  transport_attempt: ["guild.transport_attempt.v1"],
+  artifact: ["guild.artifact.v1"],
+  conformance: ["guild.conformance.v1"],
+};
+
 const REGISTRY = {
   scenarios: ["MHRC-RCT-001", "MHRC-RCT-002", "MHRC-RCT-003", "MHRC-RCT-004", "MHRC-RCT-005"],
   rules: ["BR-07", "BR-10", "CI-05"],
+  evidence_types: EVIDENCE_TYPES,
 };
 
 function build(root: string, links: DebugLinkInput[], over: Record<string, unknown> = {}) {
@@ -1156,5 +1169,184 @@ describe("MH-06-R2-B3 — bundle completeness requires a checkpoint that agrees"
     expect(bundle.receipt_journal.checkpoint_state).toBe("present");
     expect(bundle.receipt_journal.checkpoint_disagreements).toEqual([]);
     expect(bundle.complete).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R3-B3 — an envelope TYPE must resolve, not merely exist
+//
+// Round 2 closed "any JSON object is evidence" by demanding a type tag plus
+// payload. Round 3 showed the tag itself is producer-controlled: six objects
+// tagged `TOTALLY.FABRICATED.ENVELOPE.v999` carrying a payload key, hashed
+// correctly, resolved independently, citing a REAL scenario over a clean
+// checkpointed receipt, were all accepted — six `checked_clean` sections, empty
+// `rejected_links`, `complete: true`.
+//
+// So the type resolves against a closed vocabulary the producer does not own,
+// per section, and an absent vocabulary resolves NOTHING.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R3-B3 — evidence types resolve against a closed per-section vocabulary", () => {
+  /** Six links whose payloads all name `tag` (null ⇒ no tag at all). */
+  function taggedLinks(tagFor: (kind: DebugSectionKind) => string | null) {
+    const store: Record<string, { bytes: Buffer }> = {};
+    const links = DEBUG_BUNDLE_SECTION_KINDS.map((kind) => {
+      const tag = tagFor(kind);
+      const bytes = Buffer.from(
+        JSON.stringify(tag === null ? { kind, run_id: "run-mh-06" } : { schema_version: tag, kind, run_id: "run-mh-06" }),
+        "utf8",
+      );
+      store[refFor(kind)] = { bytes };
+      return { kind, ref: refFor(kind), media_type: "application/json", hash: sha256(bytes), bound_by: BINDING };
+    });
+    return { links, resolver: mapResolver(store) };
+  }
+
+  function bundleWith(
+    tagFor: (kind: DebugSectionKind) => string | null,
+    registry: unknown = REGISTRY,
+  ) {
+    const root = mkRoot();
+    const p = seedJournal(root);
+    const { links, resolver } = taggedLinks(tagFor);
+    return buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links,
+      registry: registry as never,
+      evidence: resolver,
+    });
+  }
+
+  it("refuses the reviewer's six TOTALLY.FABRICATED.ENVELOPE.v999 envelopes", () => {
+    const bundle = bundleWith(() => "TOTALLY.FABRICATED.ENVELOPE.v999");
+
+    // Everything else about these links is impeccable: real sha256 over the real
+    // resolved bytes, a real scenario the receipt agrees with, a clean receipt,
+    // and a checkpoint that describes the journal exactly.
+    expect(bundle.receipt_journal.checkpoint_disagreements).toEqual([]);
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_type_unknown"));
+    expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+    expect(bundle.complete).toBe(false);
+    for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+      expect(bundle.sections[kind].observation_state).toBe("not_observed");
+      expect(bundle.sections[kind].links).toEqual([]);
+    }
+  });
+
+  it("resolves NOTHING when the registry declares no evidence types at all", () => {
+    const bundle = bundleWith((k) => `guild.${k}.v1`, {
+      scenarios: REGISTRY.scenarios,
+      rules: REGISTRY.rules,
+    });
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_type_unknown"));
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("resolves NOTHING when a section's declared vocabulary is empty", () => {
+    const bundle = bundleWith((k) => `guild.${k}.v1`, {
+      ...REGISTRY,
+      evidence_types: Object.fromEntries(DEBUG_BUNDLE_SECTION_KINDS.map((k) => [k, []])),
+    });
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_type_unknown"));
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("refuses a section whose vocabulary is declared while its own is not", () => {
+    // `artifact` is left undeclared; the other five resolve. An absent key must
+    // not read as "anything goes for this one".
+    const partial = { ...EVIDENCE_TYPES } as Partial<Record<DebugSectionKind, string[]>>;
+    delete partial.artifact;
+    const bundle = bundleWith((k) => `guild.${k}.v1`, { ...REGISTRY, evidence_types: partial });
+
+    expect(bundle.rejected_links).toEqual([
+      { kind: "artifact", ref: refFor("artifact"), reason: "evidence_type_unknown" },
+    ]);
+    expect(bundle.unlinked_kinds).toEqual(["artifact"]);
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("refuses a real envelope type that belongs to ANOTHER section", () => {
+    // `guild.policy_decision.v1` is a declared, resolvable type — just not for
+    // the capability snapshot. Mislinked evidence is not evidence.
+    const bundle = bundleWith((k) => (k === "capability_snapshot" ? "guild.policy_decision.v1" : `guild.${k}.v1`));
+
+    expect(bundle.rejected_links).toEqual([
+      { kind: "capability_snapshot", ref: refFor("capability_snapshot"), reason: "evidence_type_unknown" },
+    ]);
+    expect(bundle.sections.capability_snapshot.observation_state).toBe("not_observed");
+    expect(bundle.sections.policy_decision.observation_state).toBe("checked_clean");
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("keeps the round-2 reason for an UNTYPED payload — the ladder did not move", () => {
+    // No tag at all is still `evidence_not_typed_envelope`; naming an unknown type
+    // is `evidence_type_unknown`. Two different defects, two different reasons.
+    const untyped = bundleWith(() => null);
+    expect(untyped.rejected_links.map((r) => r.reason)).toEqual(
+      Array(6).fill("evidence_not_typed_envelope"),
+    );
+  });
+
+  it("resolves a legacy `type` tag exactly as it resolves `schema_version`", () => {
+    const store: Record<string, { bytes: Buffer }> = {};
+    const links = DEBUG_BUNDLE_SECTION_KINDS.map((kind) => {
+      const bytes = Buffer.from(JSON.stringify({ type: `guild.${kind}.v1`, kind }), "utf8");
+      store[refFor(kind)] = { bytes };
+      return { kind, ref: refFor(kind), media_type: "application/json", hash: sha256(bytes), bound_by: BINDING };
+    });
+    const p = seedJournal(mkRoot());
+    const bundle = buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links,
+      registry: REGISTRY,
+      evidence: mapResolver(store),
+    });
+    expect(bundle.rejected_links).toEqual([]);
+    expect(bundle.complete).toBe(true);
+  });
+
+  it("requires EVERY JSON-lines line to name a type that resolves", () => {
+    const jsonl = Buffer.from(
+      '{"schema_version":"guild.normalized_event.v1","a":1}\n' +
+        '{"schema_version":"TOTALLY.FABRICATED.ENVELOPE.v999","a":2}\n',
+      "utf8",
+    );
+    const bundle = build(
+      mkRoot(),
+      [
+        ...fullLinkSet().filter((l) => l.kind !== "normalized_event"),
+        {
+          kind: "normalized_event",
+          ref: "guild://evidence/events.jsonl",
+          media_type: "application/x-ndjson",
+          hash: sha256(jsonl),
+          bound_by: BINDING,
+        },
+      ],
+      { evidence: mapResolver({ ...EVIDENCE_STORE, "guild://evidence/events.jsonl": { bytes: jsonl } }) },
+    );
+
+    expect(bundle.rejected_links).toEqual([
+      { kind: "normalized_event", ref: "guild://evidence/events.jsonl", reason: "evidence_type_unknown" },
+    ]);
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("accepts the SAME six links once every type resolves for its own section", () => {
+    // The discriminating half: the gate rejects fabricated types, not evidence.
+    const bundle = bundleWith((k) => `guild.${k}.v1`);
+    expect(bundle.rejected_links).toEqual([]);
+    expect(bundle.complete).toBe(true);
+    for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+      expect(bundle.sections[kind].observation_state).toBe("checked_clean");
+    }
   });
 });

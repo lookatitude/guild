@@ -26,10 +26,11 @@
  * Any disagreement is enumerated in `checkpoint_disagreements` and blocks a
  * clean close. Reconciliation is READ-ONLY by default: it computes
  * `checkpoint_after` as a PROPOSAL and does not write it. Persisting that
- * proposal is an explicit, opt-in mutation (`repair_checkpoint: true`) that is
- * permitted only when nothing else is wrong, is verified by re-reading the file,
- * and is reported in `checkpoint_repair`. An unpersisted proposal is NEVER
- * reported as completed recovery.
+ * proposal is an explicit, opt-in mutation (`repair_checkpoint: true`) that runs
+ * under the canonical journal lock from its FIRST read to its last, is permitted
+ * only when nothing else is wrong, is verified by re-reading the file AND
+ * re-scanning the journal, and is reported in `checkpoint_repair`. An unpersisted
+ * proposal is NEVER reported as completed recovery.
  *
  * DISPOSITION LADDER (closed vocabulary, most severe wins):
  *   failed     — a conflict, an INVALID recovery, a structurally incoherent
@@ -62,6 +63,7 @@ import {
   type CheckpointAgreementCode,
   type CheckpointReadState,
   type JournalIo,
+  type LockFailure,
   type JournalIntegrity,
   type ObservationState,
   type ReceiptCheckpointV1,
@@ -476,9 +478,54 @@ function vetRecoveries(
  * Reconcile the durable journal against the producer's checkpoint.
  *
  * Read-only unless `repair_checkpoint` is set; see `checkpoint_repair`.
+ *
+ * LOCK ORDER (MH-06-R3-B2). When a durable repair is requested, the canonical
+ * journal lock is taken BEFORE the scan that defines the repair proposal, and
+ * held until the proposal has been written and verified. Round 3 found the
+ * opposite order: reconciliation scanned, computed `checkpoint_after`, THEN took
+ * the lock, and then verified the persisted file against its own pre-lock
+ * snapshot. A writer that committed sequence 2 in that window was invisible —
+ * repair overwrote the checkpoint with sequence 1 and returned
+ * `verified: true, residual_disagreements: [], blocks_clean_close: false`. A
+ * repair whose evidence predates its exclusive access is not evidence.
+ *
+ * A read-only reconciliation takes NO lock, deliberately: it is the diagnosis
+ * path, and a journal wedged by a crashed writer's stale lock must still be
+ * diagnosable. Racing a live writer can therefore make a read-only verdict
+ * report a disagreement that resolves itself — a false alarm that fails CLOSED
+ * (`degraded`, blocks close), never a false clean.
  */
 export function reconcileReceiptJournal(opts: ReconcileOptions): ReconciliationOutcomeV1 {
   const io = opts.io ?? defaultJournalIo;
+  if (opts.repair_checkpoint !== true) return reconcileWithin(opts, io, null);
+
+  const lockPath = journalLockPath({ journal: opts.journalPath, checkpoint: opts.checkpointPath });
+  const lockFailure = acquireJournalLock(lockPath, io, {
+    lock_max_attempts: opts.lock_max_attempts,
+    lock_wait_ms: opts.lock_wait_ms,
+  });
+  // Without exclusive access there is no trustworthy snapshot to repair FROM, so
+  // the repair fails closed — but the read-only verdict is still produced and
+  // still honest about what it saw.
+  if (lockFailure) return reconcileWithin(opts, io, lockFailure);
+  try {
+    return reconcileWithin(opts, io, null);
+  } finally {
+    // A typed failure must never leak the lock and wedge every later writer.
+    releaseJournalLock(lockPath, io);
+  }
+}
+
+/**
+ * The verdict itself. Every read below happens under whatever exclusion the
+ * caller established: with `repair_checkpoint`, that is the canonical journal
+ * lock; without it, none — and then nothing here writes.
+ */
+function reconcileWithin(
+  opts: ReconcileOptions,
+  io: JournalIo,
+  lockFailure: LockFailure | null,
+): ReconciliationOutcomeV1 {
   const scan = scanReceiptJournal(opts.journalPath, io);
   const checkpointRead = readCheckpointState(opts.checkpointPath, io);
   const checkpoint_before = checkpointRead.checkpoint;
@@ -663,7 +710,15 @@ export function reconcileReceiptJournal(opts: ReconcileOptions): ReconciliationO
     failure: null,
   };
 
-  if (checkpoint_repair.requested) {
+  if (checkpoint_repair.requested && lockFailure) {
+    // No exclusive access ⇒ no repair, and no claim about what the journal holds.
+    // Reported ahead of every other refusal reason on purpose: a "not permitted"
+    // verdict derived from a snapshot we could not freeze would be a guess.
+    checkpoint_repair.failure = {
+      code: lockFailure.code === "journal_lock_unavailable" ? "repair_lock_unavailable" : "repair_lock_failed",
+      message: lockFailure.message,
+    };
+  } else if (checkpoint_repair.requested) {
     // Repair may correct exactly ONE thing: an on-disk checkpoint that does not
     // describe the durable journal. It must never paper over damage, and it must
     // never write a checkpoint claiming records that are not in the journal —
@@ -699,52 +754,40 @@ export function reconcileReceiptJournal(opts: ReconcileOptions): ReconciliationO
         message: `checkpoint repair refused: ${blockers.join("; ")}`,
       };
     } else {
-      // The repair MUTATES durable state, so it takes the same cross-process
-      // lock the append transaction uses. Writing a checkpoint derived from a
-      // scan taken outside the lock would race a live writer.
-      const lockPath = journalLockPath({ journal: opts.journalPath, checkpoint: opts.checkpointPath });
-      const lockFailure = acquireJournalLock(lockPath, io, {
-        lock_max_attempts: opts.lock_max_attempts,
-        lock_wait_ms: opts.lock_wait_ms,
-      });
-      if (lockFailure) {
+      checkpoint_repair.attempted = true;
+      try {
+        io.writeCheckpoint(opts.checkpointPath, `${JSON.stringify(checkpoint_after, null, 2)}\n`);
+        checkpoint_repair.persisted = true;
+      } catch (err) {
         checkpoint_repair.failure = {
-          code: lockFailure.code === "journal_lock_unavailable" ? "repair_lock_unavailable" : "repair_lock_failed",
-          message: lockFailure.message,
+          code: "repair_write_failed",
+          message: err instanceof Error ? err.message : String(err),
         };
-      } else {
-        try {
-          checkpoint_repair.attempted = true;
-          try {
-            io.writeCheckpoint(opts.checkpointPath, `${JSON.stringify(checkpoint_after, null, 2)}\n`);
-            checkpoint_repair.persisted = true;
-          } catch (err) {
-            checkpoint_repair.failure = {
-              code: "repair_write_failed",
-              message: err instanceof Error ? err.message : String(err),
-            };
-          }
-          if (checkpoint_repair.persisted) {
-            // Prove it twice: the file must re-read as the checkpoint we wrote,
-            // AND the re-read file must leave NO disagreement standing. Matching
-            // our own proposal is not enough — the proposal is only evidence.
-            const reread = readCheckpointState(opts.checkpointPath, io);
-            const identical = reread.checkpoint !== null && checkpointsIdentical(reread.checkpoint, checkpoint_after);
-            checkpoint_repair.residual_disagreements = compareCheckpointToJournal(reread, scan, opts.run_id);
-            checkpoint_repair.verified = identical && checkpoint_repair.residual_disagreements.length === 0;
-            if (!checkpoint_repair.verified) {
-              checkpoint_repair.failure = {
-                code: "repair_verify_failed",
-                message: identical
-                  ? `checkpoint was written but still disagrees with the journal: ${checkpoint_repair.residual_disagreements
-                      .map((d) => d.code)
-                      .join(", ")}`
-                  : "checkpoint on disk does not match the reconciled checkpoint after write",
-              };
-            }
-          }
-        } finally {
-          releaseJournalLock(lockPath, io);
+      }
+      if (checkpoint_repair.persisted) {
+        // Prove it twice: the file must re-read as the checkpoint we wrote, AND
+        // it must leave NO disagreement standing against the journal as it is
+        // NOW — re-scanned, not the snapshot the proposal was built from.
+        //
+        // Re-scanning under the lock we already hold looks redundant, and that is
+        // the point: it is the assertion that the lock did its job. If anything
+        // moved the journal anyway (a lock primitive that lies, a writer that
+        // never took the lock), the written checkpoint no longer describes it and
+        // this fails closed instead of reporting a verified clean repair.
+        const currentScan = scanReceiptJournal(opts.journalPath, io);
+        const reread = readCheckpointState(opts.checkpointPath, io);
+        const identical = reread.checkpoint !== null && checkpointsIdentical(reread.checkpoint, checkpoint_after);
+        checkpoint_repair.residual_disagreements = compareCheckpointToJournal(reread, currentScan, opts.run_id);
+        checkpoint_repair.verified = identical && checkpoint_repair.residual_disagreements.length === 0;
+        if (!checkpoint_repair.verified) {
+          checkpoint_repair.failure = {
+            code: "repair_verify_failed",
+            message: identical
+              ? `checkpoint was written but still disagrees with the journal: ${checkpoint_repair.residual_disagreements
+                  .map((d) => d.code)
+                  .join(", ")}`
+              : "checkpoint on disk does not match the reconciled checkpoint after write",
+          };
         }
       }
     }

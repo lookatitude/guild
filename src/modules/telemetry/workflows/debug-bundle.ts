@@ -27,9 +27,17 @@
  *      says "typed records and strict JSON envelopes are machine truth", and a
  *      two-byte `{}` is neither: it is well-formed, correctly hashed,
  *      independently resolvable — and says nothing. Six of them satisfied every
- *      section of a "complete" bundle in round 2 (MH-06-R2-B4).
+ *      section of a "complete" bundle in round 2 (MH-06-R2-B4);
+ *   8. the type that envelope names RESOLVES against the closed vocabulary for
+ *      THIS section. "Names a type" is not "names a real type": six objects
+ *      tagged `TOTALLY.FABRICATED.ENVELOPE.v999` carry a payload, hash correctly,
+ *      resolve independently, and cite a real scenario over a clean checkpointed
+ *      receipt — and satisfied every section of a `complete: true` bundle in
+ *      round 3 (MH-06-R3-B3). A producer that invents a schema tag can satisfy
+ *      any test it writes itself; only a vocabulary it does not control can
+ *      refuse it. Absent vocabulary resolves NOTHING.
  *
- * SCENARIOS AND RULES RESOLVE, THEY DO NOT MERELY MATCH.
+ * SCENARIOS, RULES AND EVIDENCE TYPES RESOLVE, THEY DO NOT MERELY MATCH.
  *   A link's `scenario_id` must resolve to a scenario the caller declared (the
  *   frozen conformance suite's `stable_id` set); agreeing with the receipt is
  *   not enough, because a producer that invents `TOTALLY-FABRICATED` stamps it
@@ -144,39 +152,57 @@ function isStructured(value: unknown): boolean {
  * at least one field of actual payload beyond that tag. `{}` passes JSON.parse
  * and fails here, which is the whole point: an empty object is syntactically
  * perfect evidence of nothing.
+ *
+ * Returns the type it names, so the caller can then ask whether that type is a
+ * type this bundle actually recognises — the tag itself is producer-controlled
+ * and proves nothing on its own.
  */
-function isTypedEnvelope(value: unknown): boolean {
-  if (!isStructured(value) || Array.isArray(value)) return false;
+function envelopeTypeTag(value: unknown): string | null {
+  if (!isStructured(value) || Array.isArray(value)) return null;
   const obj = value as Record<string, unknown>;
   const tag = obj.schema_version ?? obj.type;
-  if (typeof tag !== "string" || tag.trim().length === 0) return false;
-  return Object.keys(obj).some((k) => k !== "schema_version" && k !== "type");
+  if (typeof tag !== "string" || tag.trim().length === 0) return null;
+  if (!Object.keys(obj).some((k) => k !== "schema_version" && k !== "type")) return null;
+  return tag.trim();
 }
 
-/** Does every value the payload carries qualify as a typed envelope? */
-function carriesTypedEnvelopes(bytes: Buffer, mediaType: string): boolean {
+/**
+ * Every distinct type the payload names, or `null` when ANY value in it is not a
+ * typed envelope. For JSON-lines that is per line: one untyped line makes the
+ * whole object inadmissible, because the bundle links the object, not the lines.
+ */
+function envelopeTypeTags(bytes: Buffer, mediaType: string): string[] | null {
   let text: string;
   try {
     text = bytes.toString("utf8");
   } catch {
-    return false;
+    return null;
   }
+  const values: unknown[] = [];
   if (JSON_LINES_MEDIA_TYPES.has(normalizeMediaType(mediaType))) {
     const lines = text.split("\n").filter((l) => l.trim().length > 0);
-    if (lines.length === 0) return false;
-    return lines.every((line) => {
+    if (lines.length === 0) return null;
+    for (const line of lines) {
       try {
-        return isTypedEnvelope(JSON.parse(line));
+        values.push(JSON.parse(line));
       } catch {
-        return false;
+        return null;
       }
-    });
+    }
+  } else {
+    try {
+      values.push(JSON.parse(text));
+    } catch {
+      return null;
+    }
   }
-  try {
-    return isTypedEnvelope(JSON.parse(text));
-  } catch {
-    return false;
+  const tags: string[] = [];
+  for (const value of values) {
+    const tag = envelopeTypeTag(value);
+    if (tag === null) return null;
+    if (!tags.includes(tag)) tags.push(tag);
   }
+  return tags;
 }
 
 /**
@@ -285,7 +311,8 @@ export type LinkRejectionReason =
   | "media_type_mismatch"
   | "evidence_hash_mismatch"
   | "evidence_not_machine_parsable"
-  | "evidence_not_typed_envelope";
+  | "evidence_not_typed_envelope"
+  | "evidence_type_unknown";
 
 export interface RejectedLink {
   kind: string;
@@ -304,16 +331,31 @@ export interface RejectedNotApplicable {
 
 /**
  * The closed vocabularies a bundle resolves against — the frozen conformance
- * suite's scenario `stable_id`s and the boundary-rule / invariant ids a
- * `not_applicable` declaration may cite.
+ * suite's scenario `stable_id`s, the boundary-rule / invariant ids a
+ * `not_applicable` declaration may cite, and the machine-envelope types each
+ * section will accept as evidence.
  *
  * Supplied by the caller because this module owns the receipt boundary, not the
  * contract document (BR-06: a stable public API must not reach into a generated
- * mirror). Omitting it does not disable the check — it makes NOTHING resolve.
+ * mirror). Omitting any of them does not disable the corresponding check — it
+ * makes NOTHING resolve for it.
  */
 export interface DebugBundleRegistry {
   scenarios: readonly string[];
   rules: readonly string[];
+  /**
+   * Per-section closed vocabulary of machine-envelope types, keyed by section
+   * kind: the `schema_version` (or legacy `type`) values THIS section's evidence
+   * may name.
+   *
+   * Per-section rather than one flat list because the sections are different
+   * evidence, not one bag: a capability snapshot under `capability_snapshot` and
+   * a policy decision under `policy_decision` are both real records, and each in
+   * the other's section is a mislinked bundle. A kind with no declared types, or
+   * an absent map, resolves nothing — every link into that section is refused
+   * `evidence_type_unknown`, which is the fail-closed direction (BR-07).
+   */
+  evidence_types?: Partial<Record<DebugSectionKind, readonly string[]>>;
 }
 
 export interface DebugSection {
@@ -397,6 +439,11 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
 
   const knownScenarios = new Set(opts.registry?.scenarios ?? []);
   const knownRules = new Set(opts.registry?.rules ?? []);
+  // Built for EVERY section kind up front, so an undeclared section is an empty
+  // vocabulary (resolves nothing) rather than an absent lookup (resolves anything).
+  const knownEvidenceTypes = new Map<DebugSectionKind, Set<string>>(
+    DEBUG_BUNDLE_SECTION_KINDS.map((kind) => [kind, new Set(opts.registry?.evidence_types?.[kind] ?? [])]),
+  );
 
   // A not_applicable declaration is the ONLY way to close a section without
   // evidence, so it is held to the same standard as evidence: real kind, real
@@ -507,8 +554,17 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
       continue;
     }
     // 7. BR-10 — a strict JSON envelope is a TYPED record, not any JSON object.
-    if (!carriesTypedEnvelopes(resolved.bytes, link.media_type)) {
+    const declaredTypes = envelopeTypeTags(resolved.bytes, link.media_type);
+    if (declaredTypes === null) {
       reject("evidence_not_typed_envelope");
+      continue;
+    }
+    // 8. …and the type it names must RESOLVE for THIS section. A tag the producer
+    // invented satisfies any self-consistent check; only a vocabulary the
+    // producer does not control can refuse `TOTALLY.FABRICATED.ENVELOPE.v999`.
+    const sectionTypes = knownEvidenceTypes.get(link.kind)!;
+    if (sectionTypes.size === 0 || declaredTypes.some((t) => !sectionTypes.has(t))) {
+      reject("evidence_type_unknown");
       continue;
     }
 

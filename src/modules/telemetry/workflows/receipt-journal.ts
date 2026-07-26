@@ -52,6 +52,13 @@
  *   returns `journal_lock_unavailable`; it never proceeds optimistically. The
  *   lock is released in a `finally`, so a typed failure never leaks it.
  *
+ *   A lock only excludes writers that agree on its identity, so the identity is
+ *   DERIVED, never chosen: `journalLockPath` canonicalizes the journal path and
+ *   appends `.lock`. There is no caller-supplied override — a public API that let
+ *   each caller pick its own lock path would let two writers hold "the" lock for
+ *   one journal at the same time and both report durable success, which is the
+ *   exact defect the lock exists to prevent.
+ *
  *   Durability is then PROVEN, not assumed: after the append the journal is
  *   re-scanned for the exact sealed record, and after the checkpoint write the
  *   checkpoint file is re-read and compared field by field. A write that lands
@@ -491,13 +498,88 @@ export const defaultJournalIo: JournalIo = {
 export interface JournalPaths {
   journal: string;
   checkpoint: string;
-  /** Cross-process lock path. Defaults to `<journal>.lock`. */
-  lock?: string;
 }
 
-/** Where the append/repair transaction serialises. */
+/**
+ * Bounded so a symlink cycle cannot spin. No real journal path is 32 links deep,
+ * and one that is has a defect of its own — it gets a deterministic answer here,
+ * never a hang.
+ */
+const CANONICAL_PATH_MAX_LINK_HOPS = 32;
+
+function realpathOrNull(target: string): string | null {
+  try {
+    // `.native` resolves symlinks AND returns the on-disk spelling, so a
+    // case-variant name on a case-insensitive volume lands on one identity.
+    return (fs.realpathSync.native ?? fs.realpathSync)(target);
+  } catch {
+    return null;
+  }
+}
+
+function readlinkOrNull(target: string): string | null {
+  try {
+    return fs.readlinkSync(target);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The single canonical name of a journal — the identity everything about that
+ * journal is keyed to.
+ *
+ * One file can be named many ways: relative or absolute, with `.` / `..` / `//`
+ * segments, through a symlinked directory, through a symlink to the file itself,
+ * or (on a case-insensitive volume) with different case. Every one of those must
+ * produce the SAME identity, or two writers holding "the" lock for one journal is
+ * a legal state.
+ *
+ * The derivation is: resolve to absolute, then `realpath` the longest existing
+ * prefix and re-attach the segments that do not exist yet. A dangling symlink is
+ * followed by hand, because a symlink to a not-yet-created journal still names
+ * that journal. The unresolved segments are plain names, so creating them later
+ * cannot change the answer — the derivation is stable over time, which matters:
+ * a lock identity that changed the moment the journal was created would partition
+ * the first writer from every later one.
+ *
+ * Never throws and reads no clock; an unresolvable path degrades to
+ * `path.resolve`, which is still deterministic.
+ */
+export function canonicalJournalPath(journalPath: string): string {
+  let current = path.resolve(journalPath);
+  for (let hop = 0; hop < CANONICAL_PATH_MAX_LINK_HOPS; hop += 1) {
+    const real = realpathOrNull(current);
+    if (real !== null) return real;
+
+    const link = readlinkOrNull(current);
+    if (link !== null) {
+      // A dangling symlink: resolve its target relative to the link's directory.
+      const next = path.resolve(path.dirname(current), link);
+      if (next === current) return current; // self-referential link
+      current = next;
+      continue;
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) return current; // reached the root
+    return path.join(canonicalJournalPath(parent), path.basename(current));
+  }
+  return current;
+}
+
+/**
+ * Where the append/repair transaction serialises — DERIVED from the journal, never
+ * supplied by the caller.
+ *
+ * `JournalPaths` deliberately carries no `lock` field. Round 3 found that a
+ * caller-selected lock path partitions serialisation: twelve processes alternating
+ * two legal overrides for one journal duplicated a sequence, left the journal
+ * `order_violation`, and returned nine `durable: true` successes. A journal has
+ * exactly one lock because it has exactly one canonical name.
+ */
 export function journalLockPath(paths: JournalPaths): string {
-  return paths.lock ?? `${paths.journal}.lock`;
+  return `${canonicalJournalPath(paths.journal)}.lock`;
 }
 
 /** How long a writer waits for a contended journal before failing closed. */
