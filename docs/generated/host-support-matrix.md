@@ -1,6 +1,6 @@
 # Generated Host Support Matrix
 
-Generated: 2026-07-26T19:55:33.407Z
+Generated: 2026-07-26T19:58:25.308Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 
@@ -47,7 +47,7 @@ This file is generated from host-adapter outputs and review-progress schema vali
 - capability: verified - registry and adapter capability row resolved
 - command_surface: degraded - Codex plugin renders command descriptors but has no Claude-style slash markdown files
 - permission_decision: verified - Codex permission mode maps through CLI approval/sandbox flags where available
-- preflight: degraded - Codex CLI has no native Guild hooks; preflight is wrapper/instruction-file based
+- preflight: degraded - Codex fires SessionStart + UserPromptSubmit natively via codex-hooks.json; the remaining Claude hook events degrade to wrapper/instruction-file
 - model_params: degraded - Codex CLI maps model plus effort/reasoning, but cannot enforce unsupported model param key(s): thinking, verbosity
 - memory: degraded - Codex CLI uses filesystem/BM25 Guild memory until native MCP memory is available
 - dispatch: verified - Codex CLI dispatch uses codex exec with wrapper bootstrap when needed
