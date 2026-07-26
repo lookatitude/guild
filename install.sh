@@ -239,7 +239,12 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
       # refuses to upgrade a local source ("not configured as a Git
       # marketplace"), so advising `marketplace upgrade` for a local install
       # would simply fail for the user it targets.
-      _cx_src="$(sed -n '/^\[marketplaces\.guild\]/,/^\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*"\([^"]*\)".*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      # Accept every table header Codex itself accepts: [marketplaces.guild],
+      # [marketplaces."guild"], and surrounding whitespace. An exact-string
+      # header match misclassified those as unreadable.
+      # sed -E: `\?` is a GNU extension BSD sed does not support, so a BRE
+      # version of this matched NOTHING on macOS. -E is portable across both.
+      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*marketplaces\."?guild"?[[:space:]]*\]/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
       case "$_cx_src" in
         git)
           printf '      codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2
@@ -593,11 +598,15 @@ install_codex_cli() {
   run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
   run codex plugin add "$PLUGIN_SPEC"
   installed_any=1
-  # The runtime plugin root is plugins/guild INSIDE the marketplace — that is
-  # where .codex-plugin/plugin.json lives and where a package-local receipt is
-  # resolvable. Passing the marketplace ROOT made the version probe miss (so the
-  # receipt recorded Claude's version) and dropped the receipt copy where Codex
-  # would never look (xhrd-wi-05 / G5).
+  # plugins/guild is the marketplace's PLUGIN SOURCE dir — where
+  # .codex-plugin/plugin.json lives. Passing the marketplace ROOT made the
+  # version probe miss, so the receipt recorded Claude's version (xhrd-wi-05).
+  #
+  # NOT the runtime root: `codex plugin add` copies the payload into
+  # ~/.codex/plugins/cache/<mkt>/<plugin>/<version>/ BEFORE this runs, so the
+  # package-local copy written here does NOT reach the installed cache that
+  # guild-run/self-update actually read. Getting a receipt into the installed
+  # cache is still OPEN in this work item.
   CODEX_PLUGIN_ROOT_DIR="$CODEX_MARKETPLACE_PATH/plugins/guild"
   write_receipt codex-cli "$CODEX_PLUGIN_ROOT_DIR"
   say ""
