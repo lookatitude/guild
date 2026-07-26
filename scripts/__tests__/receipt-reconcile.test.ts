@@ -21,6 +21,7 @@ import {
   sealReceiptRecord,
   makeReceiptInput,
   readCheckpoint,
+  readCheckpointState,
   defaultJournalIo,
   RECEIPT_CONTRACT_VERSION,
   type JournalIo,
@@ -201,9 +202,14 @@ describe("MHRC-RCT-004 — reconciliation detects and classifies sequence gaps",
     });
 
     expect(out.checkpoint_before).toEqual(before);
+    expect(out.checkpoint_before_state).toBe("present");
     expect(out.checkpoint_after).not.toBeNull();
     expect(out.checkpoint_after!.last_sequence).toBe(1);
-    expect(out.checkpoint_after!.updated_at).toBe("2026-07-26T03:00:00.000Z");
+    // A checkpoint's `updated_at` is the `recorded_at` of the record it NAMES —
+    // that is what appendReceipt writes, and it is the clock-free staleness
+    // test. Stamping the proposal with `reconciled_at` instead would make every
+    // repaired checkpoint fail its own agreement test the moment it landed.
+    expect(out.checkpoint_after!.updated_at).toBe("2026-07-26T02:00:00.000Z");
     expect(out.gaps).toEqual([{ from: 2, to: 3, recovered: false, observation_state: "not_observed" }]);
   });
 
@@ -777,11 +783,13 @@ describe("checkpoint agreement and the durable repair boundary", () => {
     expect(out.checkpoint_disagreements).toEqual([
       { code: "checkpoint_missing", expected: 1, actual: null },
     ]);
+    expect(out.checkpoint_before_state).toBe("absent");
     expect(out.checkpoint_repair).toEqual({
       requested: false,
       attempted: false,
       persisted: false,
       verified: false,
+      residual_disagreements: [],
       failure: null,
     });
     expect(out.disposition).toBe("degraded");
@@ -799,6 +807,8 @@ describe("checkpoint agreement and the durable repair boundary", () => {
       attempted: true,
       persisted: true,
       verified: true,
+      // Verified means NOTHING still disagrees, re-derived from the re-read file.
+      residual_disagreements: [],
       failure: null,
     });
     // Proven by re-reading the file, not by the write call returning.
@@ -981,5 +991,459 @@ describe("checkpoint agreement and the durable repair boundary", () => {
     ]);
     expect(out.disposition).toBe("degraded");
     expect(out.blocks_clean_close).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B2 — recovery vetting is SEQUENCE-order deterministic
+//
+// Round 2 vetted recoveries in caller array order against the frame accepted so
+// far. For a journal holding {1,4} and the hash-valid set {2 caused by e1,
+// 3 caused by e2}, `[e2,e3]` recovered both with no rejection while `[e3,e2]`
+// rejected e3 as `unknown_causation` — the same evidence, two verdicts.
+// MHRC-RCT-004 requires recovered entries to preserve original identity and
+// ORDER, which is a property of the sequence, not of the caller's array.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R2-B2 — recovery verdicts do not depend on caller array order", () => {
+  /** Journal holds sequences 1 and 4; 2 and 3 are the declared gap. */
+  function gapJournal() {
+    const p = paths(mkRoot());
+    writeJournal(p, [
+      sealed(1, { event_id: "e1", operation_id: "op-1" }),
+      sealed(4, { event_id: "e4", operation_id: "op-4", causation_id: "e3" }),
+    ]);
+    return p;
+  }
+
+  function reconcileWith(recovered: ReceiptRecordV1[]) {
+    const p = gapJournal();
+    return reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 4, record_count: 4 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      recovered,
+    });
+  }
+
+  /** The order-sensitive slice of the verdict, as a comparable value. */
+  function verdict(out: ReturnType<typeof reconcileReceiptJournal>) {
+    return {
+      disposition: out.disposition,
+      recovered_sequences: out.recovered_sequences,
+      unresolved_sequences: out.unresolved_sequences,
+      rejected_recoveries: out.rejected_recoveries,
+      gaps: out.gaps,
+      reconciled_order: out.reconciled_order,
+      merged_integrity: out.merged_integrity,
+      merged_observation_state: out.merged_observation_state,
+      blocks_clean_close: out.blocks_clean_close,
+      checkpoint_after: out.checkpoint_after,
+      authoritative_effect_count: out.authoritative_effect_count,
+    };
+  }
+
+  function permutations<T>(items: T[]): T[][] {
+    if (items.length <= 1) return [items];
+    const out: T[][] = [];
+    items.forEach((item, i) => {
+      for (const rest of permutations([...items.slice(0, i), ...items.slice(i + 1)])) {
+        out.push([item, ...rest]);
+      }
+    });
+    return out;
+  }
+
+  const e2 = sealed(2, { event_id: "e2", operation_id: "op-2", causation_id: "e1" });
+  const e3 = sealed(3, { event_id: "e3", operation_id: "op-3", causation_id: "e2" });
+
+  it("gives the reviewer's exact [e2,e3] and [e3,e2] probes the SAME verdict", () => {
+    const forward = reconcileWith([e2, e3]);
+    const reverse = reconcileWith([e3, e2]);
+
+    expect(verdict(reverse)).toEqual(verdict(forward));
+    // …and that shared verdict admits both, because both are genuinely valid.
+    expect(forward.rejected_recoveries).toEqual([]);
+    expect(forward.recovered_sequences).toEqual([2, 3]);
+    expect(forward.reconciled_order.map((r) => r.sequence)).toEqual([1, 2, 3, 4]);
+    // The gap is closed, but a side-channel recovery is never a clean close:
+    // the records are still not durable in the journal.
+    expect(forward.disposition).toBe("degraded");
+    expect(forward.blocks_clean_close).toBe(true);
+  });
+
+  it("gives ALL SIX permutations of a three-record chain a byte-identical verdict", () => {
+    const e2b = sealed(2, { event_id: "e2", operation_id: "op-2", causation_id: "e1" });
+    const e3b = sealed(3, { event_id: "e3", operation_id: "op-3", causation_id: "e2" });
+    const p = paths(mkRoot());
+    writeJournal(p, [
+      sealed(1, { event_id: "e1", operation_id: "op-1" }),
+      sealed(5, { event_id: "e5", operation_id: "op-5" }),
+    ]);
+    const e4b = sealed(4, { event_id: "e4", operation_id: "op-4", causation_id: "e3" });
+
+    const verdicts = permutations([e2b, e3b, e4b]).map((order) =>
+      JSON.stringify(
+        verdict(
+          reconcileReceiptJournal({
+            journalPath: p.journal,
+            checkpointPath: p.checkpoint,
+            run_id: "run-mh-06",
+            producerCheckpoint: { last_sequence: 5, record_count: 5 },
+            reconciled_at: "2026-07-26T03:00:00.000Z",
+            recovered: order,
+          }),
+        ),
+      ),
+    );
+
+    expect(verdicts).toHaveLength(6);
+    expect(new Set(verdicts).size).toBe(1);
+    expect(JSON.parse(verdicts[0]).recovered_sequences).toEqual([2, 3, 4]);
+  });
+
+  it("drops a chain whose ROOT cause is unknown, in every order, not just one", () => {
+    // e2's cause is not in the journal and not offered, so e2 is inadmissible —
+    // and e3 depends on e2, so it must fall with it via the fixpoint.
+    const orphan = sealed(2, { event_id: "e2", operation_id: "op-2", causation_id: "never-happened" });
+    const dependent = sealed(3, { event_id: "e3", operation_id: "op-3", causation_id: "e2" });
+
+    for (const order of [
+      [orphan, dependent],
+      [dependent, orphan],
+    ]) {
+      const out = reconcileWith(order);
+      expect(out.rejected_recoveries).toEqual([
+        { sequence: 2, event_id: "e2", reason: "unknown_causation" },
+        { sequence: 3, event_id: "e3", reason: "unknown_causation" },
+      ]);
+      expect(out.recovered_sequences).toEqual([]);
+      expect(out.unresolved_sequences).toEqual([2, 3]);
+      expect(out.disposition).toBe("failed");
+      expect(out.blocks_clean_close).toBe(true);
+    }
+  });
+
+  it("resolves a sequence collision the same way whichever copy is offered first", () => {
+    const a = sealed(2, { event_id: "e2a", operation_id: "op-2a" });
+    const b = sealed(2, { event_id: "e2b", operation_id: "op-2b" });
+
+    const first = reconcileWith([a, b]);
+    const second = reconcileWith([b, a]);
+
+    expect(verdict(second)).toEqual(verdict(first));
+    // The total order is (sequence, event_id, record_hash), so "e2a" always wins.
+    expect(first.rejected_recoveries).toEqual([
+      { sequence: 2, event_id: "e2b", reason: "duplicate_sequence" },
+    ]);
+    expect(first.disposition).toBe("failed");
+  });
+
+  it("reports the DEEPEST defect when a recovery is both unclean and causally broken", () => {
+    // Uncleanliness only degrades; a broken causal link hard-fails. A record
+    // carrying both must be reported with the causal reason, in every order —
+    // deterministic ordering must not quietly downgrade a hard failure.
+    const both = sealed(2, {
+      event_id: "e2",
+      operation_id: "op-2",
+      causation_id: "never-happened",
+      observation_state: "observation_failed",
+      disposition: "failed",
+    });
+    const uncleanOnly = sealed(3, {
+      event_id: "e3",
+      operation_id: "op-3",
+      causation_id: "e1",
+      observation_state: "observation_failed",
+      disposition: "failed",
+    });
+
+    const out = reconcileWith([uncleanOnly, both]);
+    expect(out.rejected_recoveries).toEqual([
+      { sequence: 2, event_id: "e2", reason: "unknown_causation" },
+      { sequence: 3, event_id: "e3", reason: "unclean_observation" },
+    ]);
+    // The causal defect makes the whole reconciliation fail, not merely degrade.
+    expect(out.disposition).toBe("failed");
+    expect(reconcileWith([both, uncleanOnly]).rejected_recoveries).toEqual(out.rejected_recoveries);
+  });
+
+  it("drops a dependent whose only cause is an UNCLEAN recovery, in every order", () => {
+    // The unclean record never enters the merged view, so its dependent really
+    // has no cause there — admitting it would be the round-1 defect again.
+    const uncleanCause = sealed(2, {
+      event_id: "e2",
+      operation_id: "op-2",
+      causation_id: "e1",
+      observation_state: "observation_failed",
+      disposition: "failed",
+    });
+    const dependent = sealed(3, { event_id: "e3", operation_id: "op-3", causation_id: "e2" });
+
+    for (const order of [
+      [uncleanCause, dependent],
+      [dependent, uncleanCause],
+    ]) {
+      const out = reconcileWith(order);
+      expect(out.rejected_recoveries).toEqual([
+        { sequence: 2, event_id: "e2", reason: "unclean_observation" },
+        { sequence: 3, event_id: "e3", reason: "unknown_causation" },
+      ]);
+      expect(out.recovered_sequences).toEqual([]);
+      expect(out.disposition).toBe("failed");
+      expect(out.blocks_clean_close).toBe(true);
+    }
+  });
+
+  it("reports rejections in deterministic sequence order, not arrival order", () => {
+    const foreignHigh = sealed(3, { event_id: "z-late", operation_id: "op-3", run_id: "OTHER" });
+    const foreignLow = sealed(2, { event_id: "a-early", operation_id: "op-2", run_id: "OTHER" });
+
+    expect(reconcileWith([foreignHigh, foreignLow]).rejected_recoveries).toEqual([
+      { sequence: 2, event_id: "a-early", reason: "foreign_run" },
+      { sequence: 3, event_id: "z-late", reason: "foreign_run" },
+    ]);
+    expect(reconcileWith([foreignLow, foreignHigh]).rejected_recoveries).toEqual([
+      { sequence: 2, event_id: "a-early", reason: "foreign_run" },
+      { sequence: 3, event_id: "z-late", reason: "foreign_run" },
+    ]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B3 — stale, forged, malformed, or absent checkpoints fail closed
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R2-B3 — a checkpoint must actually describe the journal", () => {
+  function oneRecordJournal() {
+    const p = paths(mkRoot());
+    writeJournal(p, [sealed(1, { event_id: "e1", operation_id: "op-1" })]);
+    return p;
+  }
+  function reconcile(p: { journal: string; checkpoint: string }, over: Record<string, unknown> = {}) {
+    return reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      ...over,
+    });
+  }
+
+  it("refuses to reconcile cleanly over the reviewer's stale, forged checkpoint", () => {
+    const p = oneRecordJournal();
+    // run / sequence / count / event all AGREE. Only the timestamp and the
+    // contract version are forged — and round 2 checked neither.
+    fs.writeFileSync(
+      p.checkpoint,
+      JSON.stringify(
+        {
+          schema_version: "guild.receipt_checkpoint.v1",
+          run_id: "run-mh-06",
+          last_sequence: 1,
+          last_event_id: "e1",
+          record_count: 1,
+          updated_at: "1900-01-01T00:00:00.000Z",
+          contract_version: "forged.contract.v999",
+        },
+        null,
+        2,
+      ) + "\n",
+      "utf8",
+    );
+
+    const out = reconcile(p);
+    expect(out.checkpoint_disagreements.map((d) => d.code)).toEqual([
+      "checkpoint_contract_mismatch",
+      "checkpoint_timestamp_mismatch",
+    ]);
+    expect(out.disposition).toBe("degraded");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("treats a malformed checkpoint as damage, distinguishable from absence", () => {
+    const p = oneRecordJournal();
+    fs.writeFileSync(p.checkpoint, "{ not json at all", "utf8");
+
+    const out = reconcile(p);
+    expect(out.checkpoint_before_state).toBe("malformed");
+    expect(out.checkpoint_before).toBeNull();
+    expect(out.checkpoint_disagreements.map((d) => d.code)).toEqual(["checkpoint_malformed"]);
+    expect(out.disposition).toBe("degraded");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("a verified repair RESOLVES the exact disagreement — proven by reconciling again", () => {
+    const p = oneRecordJournal();
+    fs.rmSync(p.checkpoint, { force: true });
+
+    const repaired = reconcile(p, { repair_checkpoint: true });
+    expect(repaired.checkpoint_repair.verified).toBe(true);
+    expect(repaired.checkpoint_repair.residual_disagreements).toEqual([]);
+    expect(repaired.disposition).toBe("succeeded");
+
+    // The convergence test: reconciling the repaired state finds NOTHING wrong.
+    // A proposal stamped with `reconciled_at` would fail here forever.
+    const again = reconcile(p, { reconciled_at: "2026-07-26T09:00:00.000Z" });
+    expect(again.checkpoint_before_state).toBe("present");
+    expect(again.checkpoint_disagreements).toEqual([]);
+    expect(again.disposition).toBe("succeeded");
+    expect(again.blocks_clean_close).toBe(false);
+  });
+
+  it("repairs a malformed checkpoint, and only then closes cleanly", () => {
+    const p = oneRecordJournal();
+    fs.writeFileSync(p.checkpoint, "", "utf8");
+
+    expect(reconcile(p).blocks_clean_close).toBe(true);
+    const repaired = reconcile(p, { repair_checkpoint: true });
+    expect(repaired.checkpoint_repair.verified).toBe(true);
+    expect(repaired.blocks_clean_close).toBe(false);
+    expect(readCheckpointState(p.checkpoint).state).toBe("present");
+  });
+
+  it("REFUSES to stamp this run's id over another run's durable journal", () => {
+    const p = paths(mkRoot());
+    writeJournal(p, [sealed(1, { event_id: "e1", operation_id: "op-1", run_id: "OTHER-RUN" })]);
+
+    const out = reconcile(p, { repair_checkpoint: true });
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_not_permitted");
+    expect(out.checkpoint_repair.failure?.message).toContain("OTHER-RUN");
+    expect(out.checkpoint_disagreements.map((d) => d.code)).toContain("merged_run_identity_mismatch");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("a repair whose write lands a STILL-DISAGREEING checkpoint fails closed", () => {
+    const p = oneRecordJournal();
+    fs.rmSync(p.checkpoint, { force: true });
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      writeCheckpoint(cpPath) {
+        // Valid shape, wrong content: it does not describe the journal.
+        defaultJournalIo.writeCheckpoint(
+          cpPath,
+          JSON.stringify(
+            {
+              schema_version: "guild.receipt_checkpoint.v1",
+              run_id: "run-mh-06",
+              last_sequence: 7,
+              last_event_id: "e7",
+              record_count: 7,
+              updated_at: "2026-07-26T02:00:00.000Z",
+              contract_version: RECEIPT_CONTRACT_VERSION,
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+      },
+    };
+
+    const out = reconcile(p, { repair_checkpoint: true, io });
+    expect(out.checkpoint_repair.persisted).toBe(true);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_verify_failed");
+    expect(out.checkpoint_repair.residual_disagreements.map((d) => d.code)).toEqual([
+      "checkpoint_sequence_mismatch",
+      "checkpoint_count_mismatch",
+      "checkpoint_event_mismatch",
+    ]);
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("refuses a durable repair it cannot serialise against a live writer", () => {
+    const p = oneRecordJournal();
+    fs.rmSync(p.checkpoint, { force: true });
+    fs.mkdirSync(`${p.journal}.lock`);
+
+    const out = reconcile(p, { repair_checkpoint: true, lock_max_attempts: 2, lock_wait_ms: 1 });
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_unavailable");
+    expect(readCheckpointState(p.checkpoint).state).toBe("absent");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B5 — one causal identity is never two clean authoritative effects
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R2-B5 — duplicate event ids fail reconciliation", () => {
+  it("refuses the reviewer's two-record journal reusing one event id", () => {
+    const p = paths(mkRoot());
+    writeJournal(p, [
+      sealed(1, { event_id: "event-shared", operation_id: "op-A", input_hash: "sha256:one" }),
+      sealed(2, { event_id: "event-shared", operation_id: "op-B", input_hash: "sha256:two" }),
+    ]);
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 2, record_count: 2 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+    });
+
+    expect(out.event_identity_conflicts).toEqual([
+      { event_id: "event-shared", sequences: [1, 2], operation_ids: ["op-A", "op-B"] },
+    ]);
+    expect(out.checkpoint_disagreements.map((d) => d.code)).toContain("merged_event_identity_conflict");
+    expect(out.merged_integrity).toBe("lineage_violation");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+    // The raw operation count is still 2, which is exactly why it must not be
+    // read as two CLEAN effects — the verdict, not the count, carries the truth.
+    expect(out.authoritative_effect_count).toBe(2);
+  });
+
+  it("keeps genuine duplicate DELIVERY (same operation, same payload) idempotent", () => {
+    // MHRC-RCT-005's shape is unchanged: one operation, one payload, two event
+    // ids. That is a duplicate, not an identity conflict.
+    const p = paths(mkRoot());
+    writeJournal(p, [
+      sealed(1, { event_id: "e1", operation_id: "op-1" }),
+      sealed(2, { event_id: "e1-redelivered", operation_id: "op-1" }),
+    ]);
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 2, record_count: 2 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+    });
+
+    expect(out.event_identity_conflicts).toEqual([]);
+    expect(out.duplicates).toHaveLength(1);
+    expect(out.duplicates[0].effects_applied).toBe(1);
+    expect(out.disposition).toBe("succeeded");
+  });
+
+  it("refuses a recovery that would introduce the conflict from a side channel", () => {
+    const p = paths(mkRoot());
+    writeJournal(p, [
+      sealed(1, { event_id: "e1", operation_id: "op-1" }),
+      sealed(3, { event_id: "e3", operation_id: "op-3" }),
+    ]);
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 3, record_count: 3 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      recovered: [sealed(2, { event_id: "e1", operation_id: "op-2" })],
+    });
+
+    expect(out.rejected_recoveries).toEqual([{ sequence: 2, event_id: "e1", reason: "duplicate_event_id" }]);
+    expect(out.event_identity_conflicts).toEqual([]);
+    expect(out.disposition).toBe("failed");
+    expect(out.unresolved_sequences).toEqual([2]);
   });
 });

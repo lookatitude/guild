@@ -131,6 +131,17 @@ function fullLinkSet(): DebugLinkInput[] {
   }));
 }
 
+/**
+ * The closed vocabularies a bundle resolves against. Scenario ids are the frozen
+ * conformance suite's W1/MH-06 `stable_id`s; rule ids are the boundary rules and
+ * invariants a `not_applicable` declaration may cite. Passing them explicitly is
+ * the point: with no registry NOTHING resolves, which is the fail-closed default.
+ */
+const REGISTRY = {
+  scenarios: ["MHRC-RCT-001", "MHRC-RCT-002", "MHRC-RCT-003", "MHRC-RCT-004", "MHRC-RCT-005"],
+  rules: ["BR-07", "BR-10", "CI-05"],
+};
+
 function build(root: string, links: DebugLinkInput[], over: Record<string, unknown> = {}) {
   const p = seedJournal(root);
   return buildDebugBundle({
@@ -140,6 +151,7 @@ function build(root: string, links: DebugLinkInput[], over: Record<string, unkno
     journalPath: p.journal,
     checkpointPath: p.checkpoint,
     links,
+    registry: REGISTRY,
     evidence: RESOLVER,
     ...over,
   });
@@ -256,13 +268,17 @@ describe("MH-06 acceptance 4 — debug bundle links every evidence kind", () => 
   it("honours an explicit not_applicable declaration without claiming cleanliness", () => {
     const links = fullLinkSet().filter((l) => l.kind !== "transport_attempt");
     const bundle = build(mkRoot(), links, {
-      not_applicable: [{ kind: "transport_attempt", rule: "host has no execution transport" }],
+      not_applicable: [
+        { kind: "transport_attempt", rule_id: "BR-07", rule: "host has no execution transport" },
+      ],
     });
 
     expect(bundle.sections.transport_attempt.observation_state).toBe("not_applicable");
     expect(bundle.sections.transport_attempt.not_applicable_rule).toBe(
       "host has no execution transport",
     );
+    expect(bundle.sections.transport_attempt.not_applicable_rule_id).toBe("BR-07");
+    expect(bundle.rejected_not_applicable).toEqual([]);
     expect(bundle.unlinked_kinds).toEqual([]);
     expect(bundle.complete).toBe(true);
   });
@@ -373,6 +389,7 @@ describe("MH-06 acceptance 4 — debug bundle links every evidence kind", () => 
       journalPath: p.journal,
       checkpointPath: p.checkpoint,
       links,
+      registry: REGISTRY,
     });
 
     expect(bundle.receipt_journal.blocks_clean_close).toBe(true);
@@ -531,7 +548,13 @@ describe("machine-evidence binding is validated, not asserted", () => {
   });
 
   it("accepts a JSON-lines evidence object when every line is a machine record", () => {
-    const jsonl = Buffer.from('{"a":1}\n{"a":2}\n', "utf8");
+    // Each LINE must itself be a typed envelope. The round-2 fixture used bare
+    // `{"a":1}` objects — structurally valid JSON that names no type, which is
+    // exactly what MH-06-R2-B4 says must not underwrite a section.
+    const jsonl = Buffer.from(
+      '{"schema_version":"guild.normalized_event.v1","a":1}\n{"schema_version":"guild.normalized_event.v1","a":2}\n',
+      "utf8",
+    );
     const bundle = build(
       mkRoot(),
       withReplaced("normalized_event", {
@@ -658,6 +681,7 @@ describe("machine-evidence binding is validated, not asserted", () => {
       journalPath: p.journal,
       checkpointPath: p.checkpoint,
       links,
+      registry: REGISTRY,
     });
 
     expect(bundle.rejected_links).toEqual([]);
@@ -672,6 +696,7 @@ describe("machine-evidence binding is validated, not asserted", () => {
       journalPath: p.journal,
       checkpointPath: p.checkpoint,
       links,
+      registry: REGISTRY,
     });
     expect(after.rejected_links.map((r) => r.reason)).toEqual(["evidence_hash_mismatch"]);
     expect(after.complete).toBe(false);
@@ -723,6 +748,7 @@ describe("BR-07 — failed lineage blocks completion", () => {
       journalPath: p.journal,
       checkpointPath: p.checkpoint,
       links: fullLinkSet(),
+      registry: REGISTRY,
       evidence: RESOLVER,
     });
 
@@ -760,6 +786,7 @@ describe("BR-07 — failed lineage blocks completion", () => {
       journalPath: p.journal,
       checkpointPath: p.checkpoint,
       links: fullLinkSet(),
+      registry: REGISTRY,
       evidence: RESOLVER,
     });
 
@@ -771,5 +798,363 @@ describe("BR-07 — failed lineage blocks completion", () => {
       expect(bundle.sections[kind].observation_state).toBe("not_observed");
     }
     expect(bundle.complete).toBe(false); // …but the lineage is not clean
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B4 — evidence must be TYPED, scenarios must RESOLVE, and a
+// not_applicable declaration must be rule-bound and non-empty
+//
+// Round 2 accepted six independently resolved, correctly hashed two-byte `{}`
+// objects as a complete bundle; accepted `scenario_id: "TOTALLY-FABRICATED"`
+// because it merely matched the receipt (which carried the same invention); and
+// closed all six sections with `not_applicable` declarations whose rule was the
+// empty string.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R2-B4 — partial or fabricated evidence is never a complete bundle", () => {
+  /** Seed a journal whose single receipt is recorded under `scenario`. */
+  function seedScenarioJournal(root: string, scenario: string | null) {
+    const p = {
+      journal: path.join(root, "receipts", "journal.jsonl"),
+      checkpoint: path.join(root, "receipts", "checkpoint.json"),
+    };
+    appendReceipt(
+      p,
+      makeReceiptInput({
+        run_id: "run-mh-06",
+        operation_id: "op-1",
+        correlation_id: "corr-1",
+        event_id: "evt-1",
+        scenario_id: scenario,
+        event_name: "receipt.append",
+        outcome_type: "guild.receipt_outcome.v1",
+        disposition: "succeeded",
+        observation_state: "checked_clean",
+        input_hash: "sha256:aaa",
+        output_hash: "sha256:bbb",
+        terminal: false,
+        recorded_at: "2026-07-26T02:00:00.000Z",
+        observed_at: "2026-07-26T02:00:00.000Z",
+        versions: VERSIONS,
+      }),
+    );
+    return p;
+  }
+
+  /** Bundle over evidence bytes chosen per kind, with a chosen scenario. */
+  function bundleOver(opts: {
+    bytesFor?: (kind: string) => Buffer;
+    scenario?: string;
+    registry?: unknown;
+    notApplicable?: unknown;
+    links?: boolean;
+  }) {
+    const root = mkRoot();
+    const scenario = opts.scenario ?? "MHRC-RCT-001";
+    const p = seedScenarioJournal(root, scenario);
+    const bytesFor = opts.bytesFor ?? evidenceFor;
+    const store: Record<string, { bytes: Buffer }> = {};
+    const links =
+      opts.links === false
+        ? []
+        : DEBUG_BUNDLE_SECTION_KINDS.map((kind) => {
+            const bytes = bytesFor(kind);
+            store[refFor(kind)] = { bytes };
+            return {
+              kind,
+              ref: refFor(kind),
+              media_type: "application/json",
+              hash: sha256(bytes),
+              bound_by: { ...BINDING, scenario_id: scenario },
+            };
+          });
+
+    return buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links,
+      not_applicable: opts.notApplicable as never,
+      registry: (opts.registry === undefined ? REGISTRY : opts.registry) as never,
+      evidence: mapResolver(store),
+    });
+  }
+
+  it("refuses six correctly hashed, resolvable, parsable — but UNTYPED — `{}` objects", () => {
+    const bundle = bundleOver({ bytesFor: () => Buffer.from("{}", "utf8") });
+
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(
+      Array(6).fill("evidence_not_typed_envelope"),
+    );
+    expect(bundle.complete).toBe(false);
+    expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+  });
+
+  it("refuses an envelope that names a type but carries no payload", () => {
+    const bundle = bundleOver({
+      bytesFor: () => Buffer.from('{"schema_version":"guild.thing.v1"}', "utf8"),
+    });
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(
+      Array(6).fill("evidence_not_typed_envelope"),
+    );
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("refuses a payload that carries fields but names no type", () => {
+    const bundle = bundleOver({ bytesFor: (k) => Buffer.from(JSON.stringify({ kind: k }), "utf8") });
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(
+      Array(6).fill("evidence_not_typed_envelope"),
+    );
+  });
+
+  it("refuses a JSON ARRAY — a strict envelope is an object, not a list", () => {
+    const bundle = bundleOver({
+      bytesFor: () => Buffer.from('[{"schema_version":"guild.thing.v1","a":1}]', "utf8"),
+    });
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(
+      Array(6).fill("evidence_not_typed_envelope"),
+    );
+  });
+
+  it("accepts the same six objects once they name their type and carry payload", () => {
+    const bundle = bundleOver({});
+    expect(bundle.rejected_links).toEqual([]);
+    expect(bundle.complete).toBe(true);
+  });
+
+  it("refuses a scenario id that resolves to nothing, even though the receipt agrees", () => {
+    const bundle = bundleOver({ scenario: "TOTALLY-FABRICATED" });
+
+    // The link and the receipt agree perfectly — the producer stamped the same
+    // invention on both sides. Agreement is not resolution.
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("scenario_unknown"));
+    expect(bundle.complete).toBe(false);
+    expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+  });
+
+  it("resolves NOTHING when the registry key is OMITTED — the default is fail-closed", () => {
+    const root = mkRoot();
+    const p = seedScenarioJournal(root, "MHRC-RCT-001");
+    // No `registry` key at all: a caller that never declares its vocabularies
+    // must not accidentally get an open one.
+    const bundle = buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links: fullLinkSet(),
+      not_applicable: [{ kind: "artifact", rule_id: "BR-07", rule: "declared, but nothing resolves" }],
+      evidence: RESOLVER,
+    });
+
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("scenario_unknown"));
+    expect(bundle.rejected_not_applicable).toEqual([
+      { kind: "artifact", rule_id: "BR-07", reason: "unknown_rule" },
+    ]);
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("resolves NOTHING when the registry is supplied but EMPTY", () => {
+    const bundle = bundleOver({ registry: { scenarios: [], rules: [] } });
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("scenario_unknown"));
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("closes NOTHING with six not_applicable declarations whose rule is empty", () => {
+    const bundle = bundleOver({
+      links: false,
+      notApplicable: DEBUG_BUNDLE_SECTION_KINDS.map((kind) => ({ kind, rule_id: "BR-07", rule: "" })),
+    });
+
+    expect(bundle.rejected_not_applicable.map((r) => r.reason)).toEqual(Array(6).fill("empty_rule"));
+    expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+    expect(bundle.complete).toBe(false);
+    for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+      expect(bundle.sections[kind].observation_state).toBe("not_observed");
+      expect(bundle.sections[kind].not_applicable_rule).toBeNull();
+    }
+  });
+
+  it("treats a whitespace-only rule as empty", () => {
+    const bundle = bundleOver({
+      links: false,
+      notApplicable: [{ kind: "artifact", rule_id: "BR-07", rule: "   \n\t " }],
+    });
+    expect(bundle.rejected_not_applicable).toEqual([
+      { kind: "artifact", rule_id: "BR-07", reason: "empty_rule" },
+    ]);
+    expect(bundle.unlinked_kinds).toContain("artifact");
+  });
+
+  it("refuses a not_applicable declaration citing a rule that does not resolve", () => {
+    const bundle = bundleOver({
+      links: false,
+      notApplicable: [{ kind: "artifact", rule_id: "BR-99", rule: "we decided it does not apply" }],
+    });
+    expect(bundle.rejected_not_applicable).toEqual([
+      { kind: "artifact", rule_id: "BR-99", reason: "unknown_rule" },
+    ]);
+    expect(bundle.sections.artifact.observation_state).toBe("not_observed");
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("accepts a rule-bound, non-empty declaration and records what it cited", () => {
+    const links = fullLinkSet().filter((l) => l.kind !== "transport_attempt");
+    const bundle = build(mkRoot(), links, {
+      not_applicable: [
+        { kind: "transport_attempt", rule_id: "BR-07", rule: "this host declares no execution transport" },
+      ],
+    });
+    expect(bundle.rejected_not_applicable).toEqual([]);
+    expect(bundle.sections.transport_attempt.not_applicable_rule_id).toBe("BR-07");
+    expect(bundle.sections.transport_attempt.observation_state).toBe("not_applicable");
+    expect(bundle.complete).toBe(true);
+  });
+
+  it("refuses a not_applicable declaration for a kind outside the vocabulary", () => {
+    const bundle = build(mkRoot(), fullLinkSet(), {
+      not_applicable: [{ kind: "vibes", rule_id: "BR-07", rule: "not a real section" }],
+    });
+    expect(bundle.rejected_not_applicable).toEqual([
+      { kind: "vibes", rule_id: "BR-07", reason: "unknown_kind" },
+    ]);
+  });
+
+  it("requires every JSON-lines LINE to be a typed envelope", () => {
+    const jsonl = Buffer.from('{"schema_version":"guild.normalized_event.v1","a":1}\n{"a":2}\n', "utf8");
+    const bundle = build(
+      mkRoot(),
+      [
+        ...fullLinkSet().filter((l) => l.kind !== "normalized_event"),
+        {
+          kind: "normalized_event",
+          ref: "guild://evidence/events.jsonl",
+          media_type: "application/x-ndjson",
+          hash: sha256(jsonl),
+          bound_by: BINDING,
+        },
+      ],
+      { evidence: mapResolver({ ...EVIDENCE_STORE, "guild://evidence/events.jsonl": { bytes: jsonl } }) },
+    );
+
+    expect(bundle.rejected_links).toEqual([
+      {
+        kind: "normalized_event",
+        ref: "guild://evidence/events.jsonl",
+        reason: "evidence_not_typed_envelope",
+      },
+    ]);
+    expect(bundle.complete).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B3 — a bundle that cannot say where the durable boundary is
+// is not complete evidence
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R2-B3 — bundle completeness requires a checkpoint that agrees", () => {
+  it("is INCOMPLETE when the checkpoint is deleted beside an intact journal", () => {
+    // The reviewer's exact probe: six real, content-hashed machine links over a
+    // one-record intact journal, with the checkpoint removed.
+    const root = mkRoot();
+    const p = seedJournal(root);
+    fs.rmSync(p.checkpoint, { force: true });
+
+    const bundle = buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links: fullLinkSet(),
+      registry: REGISTRY,
+      evidence: RESOLVER,
+    });
+
+    expect(bundle.rejected_links).toEqual([]); // every link is genuinely fine…
+    expect(bundle.receipt_journal.checkpoint).toBeNull();
+    expect(bundle.receipt_journal.checkpoint_state).toBe("absent");
+    expect(bundle.receipt_journal.checkpoint_disagreements.map((d) => d.code)).toEqual([
+      "checkpoint_missing",
+    ]);
+    expect(bundle.complete).toBe(false); // …but the durable boundary is unknown
+    for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+      expect(bundle.sections[kind].observation_state).toBe("not_observed");
+    }
+  });
+
+  it("is INCOMPLETE when the checkpoint is malformed", () => {
+    const root = mkRoot();
+    const p = seedJournal(root);
+    fs.writeFileSync(p.checkpoint, "{ half a checkpoint", "utf8");
+
+    const bundle = buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links: fullLinkSet(),
+      registry: REGISTRY,
+      evidence: RESOLVER,
+    });
+
+    expect(bundle.receipt_journal.checkpoint_state).toBe("malformed");
+    expect(bundle.receipt_journal.checkpoint_disagreements.map((d) => d.code)).toEqual([
+      "checkpoint_malformed",
+    ]);
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("is INCOMPLETE when the checkpoint is stale, and names why", () => {
+    const root = mkRoot();
+    const p = seedJournal(root);
+    fs.writeFileSync(
+      p.checkpoint,
+      JSON.stringify(
+        {
+          schema_version: "guild.receipt_checkpoint.v1",
+          run_id: "run-mh-06",
+          last_sequence: 1,
+          last_event_id: "evt-1",
+          record_count: 1,
+          updated_at: "1900-01-01T00:00:00.000Z",
+          contract_version: "forged.contract.v999",
+        },
+        null,
+        2,
+      ) + "\n",
+      "utf8",
+    );
+
+    const bundle = buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links: fullLinkSet(),
+      registry: REGISTRY,
+      evidence: RESOLVER,
+    });
+
+    expect(bundle.receipt_journal.checkpoint_state).toBe("present");
+    expect(bundle.receipt_journal.checkpoint_disagreements.map((d) => d.code)).toEqual([
+      "checkpoint_contract_mismatch",
+      "checkpoint_timestamp_mismatch",
+    ]);
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("is complete only when the checkpoint the append wrote is still the one on disk", () => {
+    const bundle = build(mkRoot(), fullLinkSet());
+    expect(bundle.receipt_journal.checkpoint_state).toBe("present");
+    expect(bundle.receipt_journal.checkpoint_disagreements).toEqual([]);
+    expect(bundle.complete).toBe(true);
   });
 });

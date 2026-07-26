@@ -21,10 +21,16 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { spawn } from "child_process";
 import {
   appendReceipt,
   scanReceiptJournal,
   readCheckpoint,
+  readCheckpointState,
+  isValidCheckpointShape,
+  compareCheckpointToJournal,
+  analyzeReceiptRecords,
+  journalLockPath,
   defaultJournalIo,
   makeReceiptInput,
   sealReceiptRecord,
@@ -606,5 +612,538 @@ describe("MHRC-RCT-003 — observation loss is explicit", () => {
     const out = appendReceipt(p, input({ event_id: "e1", disposition: "kinda_ok" as never }));
     expect(out.disposition).toBe("failed");
     expect(out.failure?.code).toBe("invalid_record");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B1 — concurrent appends are LINEARIZABLE across PROCESSES
+//
+// Round 2 assigned `scan.last_sequence + 1` with no lock. A synchronized
+// 16-process probe produced seven outcomes reporting `disposition: "succeeded"`
+// and `durable: true` over only three unique sequences, beside a checkpoint that
+// described none of them. MHRC-RCT-001's input pattern is literally
+// `sequential_and_concurrent_operations` and its required outcome is that
+// sequence values are unique and strictly increasing, so this is contract, not
+// hardening — and it cannot be closed by an in-process mutex, because the
+// competing writers are separate OS processes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TSX = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
+const JOURNAL_MODULE = path.join(
+  __dirname,
+  "..",
+  "..",
+  "src",
+  "modules",
+  "telemetry",
+  "workflows",
+  "receipt-journal",
+);
+
+/** A child that performs ONE append in its own OS process and prints the outcome. */
+function writeAppendChild(root: string): string {
+  const file = path.join(root, "append-child.ts");
+  fs.writeFileSync(
+    file,
+    `import * as path from "node:path";
+import { appendReceipt, makeReceiptInput } from ${JSON.stringify(JOURNAL_MODULE)};
+const [root, eventId, opId, startAt] = process.argv.slice(2);
+const paths = {
+  journal: path.join(root, "receipts", "journal.jsonl"),
+  checkpoint: path.join(root, "receipts", "checkpoint.json"),
+};
+const out = (() => {
+  const target = Number(startAt);
+  while (Date.now() < target) { /* spin to the shared barrier */ }
+  return appendReceipt(paths, makeReceiptInput({
+    run_id: "run-mh-06",
+    operation_id: opId,
+    correlation_id: "corr-" + opId,
+    event_id: eventId,
+    scenario_id: "MHRC-RCT-001",
+    event_name: "receipt.append",
+    outcome_type: "guild.receipt_outcome.v1",
+    disposition: "succeeded",
+    observation_state: "checked_clean",
+    input_hash: "sha256:aaa",
+    output_hash: "sha256:bbb",
+    terminal: false,
+    recorded_at: "2026-07-26T02:00:00.000Z",
+    observed_at: "2026-07-26T02:00:00.000Z",
+    versions: ${JSON.stringify(VERSIONS)},
+  }));
+})();
+process.stdout.write(JSON.stringify({
+  disposition: out.disposition,
+  durable: out.durable,
+  sequence: out.sequence,
+  failure: out.failure ? out.failure.code : null,
+}) + "\\n");
+`,
+    "utf8",
+  );
+  return file;
+}
+
+interface ChildOutcome {
+  disposition: string;
+  durable: boolean;
+  sequence: number | null;
+  failure: string | null;
+}
+
+/** Spawn `n` real processes that all append at the same wall-clock instant. */
+async function raceAppends(root: string, n: number): Promise<ChildOutcome[]> {
+  const child = writeAppendChild(root);
+  fs.mkdirSync(path.join(root, "receipts"), { recursive: true });
+  const startAt = Date.now() + 4000;
+  return Promise.all(
+    Array.from({ length: n }, (_, i) =>
+      new Promise<ChildOutcome>((resolve, reject) => {
+        const proc = spawn(TSX, [child, root, `evt-${i}`, `op-${i}`, String(startAt)], {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        let out = "";
+        let err = "";
+        proc.stdout.on("data", (d) => (out += String(d)));
+        proc.stderr.on("data", (d) => (err += String(d)));
+        proc.on("close", () => {
+          const line = out.trim().split("\n").pop() ?? "";
+          if (!line.startsWith("{")) {
+            reject(new Error(`append child ${i} produced no outcome: ${err.slice(0, 400)}`));
+            return;
+          }
+          resolve(JSON.parse(line) as ChildOutcome);
+        });
+      }),
+    ),
+  );
+}
+
+describe("MH-06-R2-B1 — concurrent appends are linearizable across processes", () => {
+  it("never lets two SEPARATE PROCESSES claim durable success for one sequence", async () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const outcomes = await raceAppends(root, 8);
+
+    const durable = outcomes.filter((o) => o.disposition === "succeeded" && o.durable);
+    const sequences = durable.map((o) => o.sequence);
+
+    // Every reported durable success is a DISTINCT sequence…
+    expect(new Set(sequences).size).toBe(durable.length);
+    // …and the journal holds exactly those records, in a strictly increasing run.
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.integrity).toBe("intact");
+    expect(scan.duplicate_sequences).toEqual([]);
+    expect(scan.regressing_sequences).toEqual([]);
+    expect(scan.record_count).toBe(durable.length);
+    expect(scan.records.map((r) => r.sequence)).toEqual(
+      Array.from({ length: scan.record_count }, (_, i) => i + 1),
+    );
+    // …and the checkpoint describes the journal, not some earlier writer's view.
+    const cp = readCheckpoint(p.checkpoint);
+    expect(cp).not.toBeNull();
+    expect(cp!.record_count).toBe(scan.record_count);
+    expect(cp!.last_sequence).toBe(scan.last_sequence);
+    // Whatever did NOT succeed must be an explicit typed failure, never silence.
+    for (const o of outcomes.filter((x) => !(x.disposition === "succeeded" && x.durable))) {
+      expect(o.durable).toBe(false);
+      expect(o.sequence).toBeNull();
+      expect(o.failure).not.toBeNull();
+    }
+  }, 60_000);
+
+  it("every one of 8 concurrent processes succeeds when the lock wait is generous", async () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const outcomes = await raceAppends(root, 8);
+
+    expect(outcomes.every((o) => o.disposition === "succeeded" && o.durable)).toBe(true);
+    expect([...outcomes.map((o) => o.sequence)].sort((a, b) => (a as number) - (b as number))).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(8);
+  }, 60_000);
+
+  it("fails closed — never optimistically — when the lock cannot be taken", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    // Another writer already holds it.
+    fs.mkdirSync(path.dirname(journalLockPath(p)), { recursive: true });
+    fs.mkdirSync(journalLockPath(p));
+
+    const out = appendReceipt(p, input({ event_id: "e1" }), defaultJournalIo, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.sequence).toBeNull();
+    expect(out.failure?.code).toBe("journal_lock_unavailable");
+    expect(out.blocks_dependent_completion).toBe(true);
+    expect(fs.existsSync(p.journal)).toBe(false);
+  });
+
+  it("fails closed when the lock itself raises an IO fault", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock() {
+        throw new Error("EROFS: cannot create lock");
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e1" }), io);
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_lock_failed");
+    expect(fs.existsSync(p.journal)).toBe(false);
+  });
+
+  it("releases the lock after a typed failure instead of wedging every later writer", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    // An append that fails deep inside the guarded transaction…
+    const bad = appendReceipt(p, input({ event_id: "e1", causation_id: "nope" }));
+    expect(bad.failure?.code).toBe("unknown_causation");
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+
+    // …must not stop the next writer.
+    const good = appendReceipt(p, input({ event_id: "e2" }), defaultJournalIo, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+    expect(good.disposition).toBe("succeeded");
+    expect(good.sequence).toBe(1);
+  });
+
+  it("releases the lock even when the IO seam throws", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      appendLine() {
+        throw new Error("EIO");
+      },
+    };
+    expect(appendReceipt(p, input({ event_id: "e1" }), io).failure?.code).toBe("journal_append_failed");
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+
+  it("refuses a torn-tail repair it cannot serialise against a live writer", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1" }));
+    fs.mkdirSync(journalLockPath(p));
+
+    const repair = repairTornTail(p.journal, defaultJournalIo, { lock_max_attempts: 2, lock_wait_ms: 1 });
+    expect(repair.disposition).toBe("failed");
+    expect(repair.failure?.code).toBe("journal_lock_unavailable");
+    expect(repair.removed_bytes).toBe(0);
+  });
+
+  it("fails closed when the journal line does not actually land", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      appendLine() {
+        /* silently drops the write and returns as if it worked */
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e1" }), io);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_append_unverified");
+    expect(readCheckpoint(p.checkpoint)).toBeNull();
+  });
+
+  it("takes the lock exactly once and releases it, around the WHOLE transaction", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const calls: string[] = [];
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        calls.push(`acquire:${path.basename(lockPath)}`);
+        return defaultJournalIo.acquireLock!(lockPath);
+      },
+      releaseLock(lockPath) {
+        calls.push(`release:${path.basename(lockPath)}`);
+        defaultJournalIo.releaseLock!(lockPath);
+      },
+      readAll(journalPath) {
+        // Every read that decides the sequence must happen INSIDE the lock.
+        if (journalPath === p.journal) calls.push("scan");
+        return defaultJournalIo.readAll(journalPath);
+      },
+      appendLine(journalPath, text) {
+        calls.push("append");
+        defaultJournalIo.appendLine(journalPath, text);
+      },
+      writeCheckpoint(cpPath, content) {
+        calls.push("checkpoint");
+        defaultJournalIo.writeCheckpoint(cpPath, content);
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e1" }), io);
+    expect(out.disposition).toBe("succeeded");
+
+    expect(calls[0]).toBe("acquire:journal.jsonl.lock");
+    expect(calls[calls.length - 1]).toBe("release:journal.jsonl.lock");
+    expect(calls.filter((c) => c.startsWith("acquire:"))).toHaveLength(1);
+    expect(calls.filter((c) => c.startsWith("release:"))).toHaveLength(1);
+    // The planning scan, the append, the verification scan and the checkpoint
+    // all sit strictly between them.
+    for (const step of ["scan", "append", "checkpoint"]) expect(calls).toContain(step);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+
+  it("derives the lock path from the journal, and honours an explicit override", () => {
+    expect(journalLockPath({ journal: "/x/journal.jsonl", checkpoint: "/x/cp.json" })).toBe(
+      "/x/journal.jsonl.lock",
+    );
+    expect(
+      journalLockPath({ journal: "/x/journal.jsonl", checkpoint: "/x/cp.json", lock: "/y/other.lock" }),
+    ).toBe("/y/other.lock");
+  });
+
+  it("fails closed when the checkpoint write lands DIFFERENT content", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      writeCheckpoint(cpPath) {
+        defaultJournalIo.writeCheckpoint(
+          cpPath,
+          `${JSON.stringify(
+            {
+              schema_version: "guild.receipt_checkpoint.v1",
+              run_id: "run-mh-06",
+              last_sequence: 99,
+              last_event_id: "not-ours",
+              record_count: 99,
+              updated_at: "2026-07-26T02:00:00.000Z",
+              contract_version: RECEIPT_CONTRACT_VERSION,
+            },
+            null,
+            2,
+          )}\n`,
+        );
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e1" }), io);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("checkpoint_write_unverified");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B5 — one event id names exactly ONE causal node
+//
+// Round 2 kept the FIRST sequence for a repeated event id and said nothing, so a
+// two-record journal reusing `event-shared` under two operations scanned as
+// `intact` with `blocks_clean_close: false`. Event ids are the causal graph's
+// node names; reusing one makes every `causation_id` pointing at it ambiguous.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R2-B5 — a reused event id is an identity violation", () => {
+  function reusedIdJournal(root: string) {
+    const p = paths(root);
+    const recs = [
+      sealReceiptRecord({
+        ...input({ event_id: "event-shared", operation_id: "op-A", input_hash: "sha256:one" }),
+        sequence: 1,
+      }),
+      sealReceiptRecord({
+        ...input({ event_id: "event-shared", operation_id: "op-B", input_hash: "sha256:two" }),
+        sequence: 2,
+      }),
+    ];
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.writeFileSync(p.journal, recs.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
+    return p;
+  }
+
+  it("never reads a journal reusing one event id across two operations as intact", () => {
+    const scan = scanReceiptJournal(reusedIdJournal(mkRoot()).journal);
+
+    expect(scan.records).toHaveLength(2); // both records verify individually…
+    expect(scan.duplicate_event_ids).toEqual(["event-shared"]);
+    expect(scan.integrity).toBe("lineage_violation"); // …but the identity graph does not
+    expect(scan.observation_state).not.toBe("checked_clean");
+    expect(scan.blocks_clean_close).toBe(true);
+  });
+
+  it("reports the reuse from the shared analysis primitive, not just the scanner", () => {
+    const recs = [
+      sealReceiptRecord({ ...input({ event_id: "dup", operation_id: "op-A" }), sequence: 1 }),
+      sealReceiptRecord({ ...input({ event_id: "dup", operation_id: "op-B" }), sequence: 2 }),
+      sealReceiptRecord({ ...input({ event_id: "solo", operation_id: "op-C" }), sequence: 3 }),
+    ];
+    const analysis = analyzeReceiptRecords(recs);
+
+    expect(analysis.duplicate_event_ids).toEqual(["dup"]);
+    expect(analysis.structural_integrity).toBe("lineage_violation");
+    // Reported ONCE per reused id, however many times it repeats.
+    expect(
+      analyzeReceiptRecords([...recs, sealReceiptRecord({ ...input({ event_id: "dup", operation_id: "op-D" }), sequence: 4 })])
+        .duplicate_event_ids,
+    ).toEqual(["dup"]);
+  });
+
+  it("a journal with all-distinct event ids reports none", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1", operation_id: "op-1" }));
+    appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }));
+
+    const scan = scanReceiptJournal(p.journal);
+    expect(scan.duplicate_event_ids).toEqual([]);
+    expect(scan.integrity).toBe("intact");
+  });
+
+  it("refuses to APPEND a reused event id, so the defect cannot be created here", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "event-shared", operation_id: "op-A" }));
+    const dup = appendReceipt(p, input({ event_id: "event-shared", operation_id: "op-B" }));
+
+    expect(dup.disposition).toBe("refused");
+    expect(dup.failure?.code).toBe("duplicate_event_id");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R2-B3 — a checkpoint is validated on its CONTENT, not its tag
+//
+// Round 2's `readCheckpoint` accepted anything carrying the right
+// `schema_version`, so a checkpoint with `updated_at: 1900-01-01` and
+// `contract_version: forged.contract.v999` was read as authoritative and
+// produced zero disagreements.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R2-B3 — checkpoint validity and agreement", () => {
+  function put(p: { checkpoint: string }, cp: Record<string, unknown>): void {
+    fs.mkdirSync(path.dirname(p.checkpoint), { recursive: true });
+    fs.writeFileSync(p.checkpoint, JSON.stringify(cp, null, 2) + "\n", "utf8");
+  }
+  function goodCheckpoint(over: Record<string, unknown> = {}) {
+    return {
+      schema_version: "guild.receipt_checkpoint.v1",
+      run_id: "run-mh-06",
+      last_sequence: 1,
+      last_event_id: "e1",
+      record_count: 1,
+      updated_at: "2026-07-26T02:00:00.000Z",
+      contract_version: RECEIPT_CONTRACT_VERSION,
+      ...over,
+    };
+  }
+
+  it("distinguishes absent from malformed — damage is not absence", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(readCheckpointState(p.checkpoint)).toEqual({ state: "absent", checkpoint: null });
+
+    fs.mkdirSync(path.dirname(p.checkpoint), { recursive: true });
+    fs.writeFileSync(p.checkpoint, "{ not json", "utf8");
+    expect(readCheckpointState(p.checkpoint).state).toBe("malformed");
+
+    fs.writeFileSync(p.checkpoint, "", "utf8");
+    expect(readCheckpointState(p.checkpoint).state).toBe("malformed");
+
+    put(p, goodCheckpoint());
+    expect(readCheckpointState(p.checkpoint).state).toBe("present");
+  });
+
+  it("rejects a checkpoint that carries the right tag but the wrong shape", () => {
+    expect(isValidCheckpointShape(goodCheckpoint())).toBe(true);
+    expect(isValidCheckpointShape(goodCheckpoint({ last_sequence: "1" }))).toBe(false);
+    expect(isValidCheckpointShape(goodCheckpoint({ record_count: -1 }))).toBe(false);
+    expect(isValidCheckpointShape(goodCheckpoint({ run_id: "" }))).toBe(false);
+    expect(isValidCheckpointShape(goodCheckpoint({ updated_at: "" }))).toBe(false);
+    expect(isValidCheckpointShape(goodCheckpoint({ contract_version: "" }))).toBe(false);
+    const { record_count, ...missingCount } = goodCheckpoint();
+    void record_count;
+    expect(isValidCheckpointShape(missingCount)).toBe(false);
+    // null last_event_id is legitimate for an empty journal.
+    expect(isValidCheckpointShape(goodCheckpoint({ last_event_id: null }))).toBe(true);
+  });
+
+  it("names a stale timestamp and a forged contract version as disagreements", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1" }));
+    // Every field the round-2 probe kept in agreement…
+    put(
+      p,
+      goodCheckpoint({ updated_at: "1900-01-01T00:00:00.000Z", contract_version: "forged.contract.v999" }),
+    );
+
+    const codes = compareCheckpointToJournal(
+      readCheckpointState(p.checkpoint),
+      scanReceiptJournal(p.journal),
+      "run-mh-06",
+    ).map((d) => d.code);
+
+    // …and the two it forged are now named. `updated_at` is checked against the
+    // recorded_at of the record the checkpoint NAMES, so staleness is detectable
+    // with no clock at all.
+    expect(codes).toEqual(["checkpoint_contract_mismatch", "checkpoint_timestamp_mismatch"]);
+  });
+
+  it("agrees with the checkpoint a real append writes", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1", operation_id: "op-1" }));
+    appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }));
+
+    expect(
+      compareCheckpointToJournal(
+        readCheckpointState(p.checkpoint),
+        scanReceiptJournal(p.journal),
+        "run-mh-06",
+      ),
+    ).toEqual([]);
+  });
+
+  it("names an absent checkpoint beside a non-empty journal, and stays silent over an empty one", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1" }));
+    fs.rmSync(p.checkpoint, { force: true });
+    expect(
+      compareCheckpointToJournal(readCheckpointState(p.checkpoint), scanReceiptJournal(p.journal), "run-mh-06"),
+    ).toEqual([{ code: "checkpoint_missing", expected: 1, actual: null }]);
+
+    const empty = paths(mkRoot());
+    expect(
+      compareCheckpointToJournal(
+        readCheckpointState(empty.checkpoint),
+        scanReceiptJournal(empty.journal),
+        "run-mh-06",
+      ),
+    ).toEqual([]);
+  });
+
+  it("a malformed checkpoint is a single explicit disagreement, never a clean read", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    appendReceipt(p, input({ event_id: "e1" }));
+    fs.writeFileSync(p.checkpoint, '{"schema_version":"guild.receipt_checkpoint.v1"}', "utf8");
+
+    expect(readCheckpoint(p.checkpoint)).toBeNull();
+    expect(
+      compareCheckpointToJournal(readCheckpointState(p.checkpoint), scanReceiptJournal(p.journal), "run-mh-06").map(
+        (d) => d.code,
+      ),
+    ).toEqual(["checkpoint_malformed"]);
   });
 });

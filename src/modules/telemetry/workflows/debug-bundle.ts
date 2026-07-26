@@ -22,12 +22,29 @@
  *   6. the referenced machine object actually RESOLVES, its bytes hash to the
  *      declared content hash, and those bytes really parse as the declared
  *      machine format — a Markdown payload mislabeled `application/json` under
- *      a `.json` suffix is rejected on its CONTENT, not on its name.
+ *      a `.json` suffix is rejected on its CONTENT, not on its name;
+ *   7. those parsed bytes are a TYPED envelope, not merely valid JSON. BR-10
+ *      says "typed records and strict JSON envelopes are machine truth", and a
+ *      two-byte `{}` is neither: it is well-formed, correctly hashed,
+ *      independently resolvable — and says nothing. Six of them satisfied every
+ *      section of a "complete" bundle in round 2 (MH-06-R2-B4).
+ *
+ * SCENARIOS AND RULES RESOLVE, THEY DO NOT MERELY MATCH.
+ *   A link's `scenario_id` must resolve to a scenario the caller declared (the
+ *   frozen conformance suite's `stable_id` set); agreeing with the receipt is
+ *   not enough, because a producer that invents `TOTALLY-FABRICATED` stamps it
+ *   on BOTH sides. Likewise a `not_applicable` declaration must cite a declared
+ *   boundary rule or invariant AND carry a non-empty rationale. With no registry
+ *   supplied, NOTHING resolves and every such link or declaration is refused —
+ *   fail closed, never fail open.
  *
  * BR-07 also governs the bundle verdict: a bundle over a journal that blocks a
- * clean close can never be `complete`, and no section over such a journal reads
- * `checked_clean`. The ONLY way to close a section without evidence is an
- * explicit `not_applicable` rule, recorded with the bundle.
+ * clean close can never be `complete`, and neither can a bundle whose receipt
+ * checkpoint is absent, malformed, or disagrees with the journal — a debug
+ * bundle that cannot say where the durable boundary is is not complete evidence.
+ * No section over such a journal reads `checked_clean`. The ONLY way to close a
+ * section without evidence is an explicit, rule-bound `not_applicable`
+ * declaration, recorded with the bundle.
  *
  * DETERMINISM: the bundle carries no clock reads and no resolver-supplied
  * paths, so identical inputs serialize byte-identically. Refs are logical
@@ -40,9 +57,12 @@ import * as fs from "node:fs";
 import * as crypto from "node:crypto";
 import {
   scanReceiptJournal,
-  readCheckpoint,
+  readCheckpointState,
+  compareCheckpointToJournal,
   defaultJournalIo,
   RECEIPT_CONTRACT_VERSION,
+  type CheckpointAgreement,
+  type CheckpointReadState,
   type JournalIo,
   type JournalIntegrity,
   type ObservationState,
@@ -114,6 +134,49 @@ function sha256(bytes: Buffer): string {
 /** A machine record is a structured envelope — a bare scalar is not one. */
 function isStructured(value: unknown): boolean {
   return typeof value === "object" && value !== null;
+}
+
+/**
+ * BR-10's "typed records and strict JSON envelopes" test, applied to CONTENT.
+ *
+ * A typed envelope is a JSON object (not an array, not a scalar) that names its
+ * own type via a non-empty `schema_version` — or a legacy `type` — AND carries
+ * at least one field of actual payload beyond that tag. `{}` passes JSON.parse
+ * and fails here, which is the whole point: an empty object is syntactically
+ * perfect evidence of nothing.
+ */
+function isTypedEnvelope(value: unknown): boolean {
+  if (!isStructured(value) || Array.isArray(value)) return false;
+  const obj = value as Record<string, unknown>;
+  const tag = obj.schema_version ?? obj.type;
+  if (typeof tag !== "string" || tag.trim().length === 0) return false;
+  return Object.keys(obj).some((k) => k !== "schema_version" && k !== "type");
+}
+
+/** Does every value the payload carries qualify as a typed envelope? */
+function carriesTypedEnvelopes(bytes: Buffer, mediaType: string): boolean {
+  let text: string;
+  try {
+    text = bytes.toString("utf8");
+  } catch {
+    return false;
+  }
+  if (JSON_LINES_MEDIA_TYPES.has(normalizeMediaType(mediaType))) {
+    const lines = text.split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return false;
+    return lines.every((line) => {
+      try {
+        return isTypedEnvelope(JSON.parse(line));
+      } catch {
+        return false;
+      }
+    });
+  }
+  try {
+    return isTypedEnvelope(JSON.parse(text));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -216,11 +279,13 @@ export type LinkRejectionReason =
   | "foreign_run_binding"
   | "unbound_operation"
   | "scenario_mismatch"
+  | "scenario_unknown"
   | "unclean_receipt"
   | "evidence_unresolved"
   | "media_type_mismatch"
   | "evidence_hash_mismatch"
-  | "evidence_not_machine_parsable";
+  | "evidence_not_machine_parsable"
+  | "evidence_not_typed_envelope";
 
 export interface RejectedLink {
   kind: string;
@@ -228,10 +293,35 @@ export interface RejectedLink {
   reason: LinkRejectionReason;
 }
 
+/** Why a `not_applicable` declaration could not close its section. */
+export type NotApplicableRejectionReason = "unknown_kind" | "empty_rule" | "unknown_rule";
+
+export interface RejectedNotApplicable {
+  kind: string;
+  rule_id: string;
+  reason: NotApplicableRejectionReason;
+}
+
+/**
+ * The closed vocabularies a bundle resolves against — the frozen conformance
+ * suite's scenario `stable_id`s and the boundary-rule / invariant ids a
+ * `not_applicable` declaration may cite.
+ *
+ * Supplied by the caller because this module owns the receipt boundary, not the
+ * contract document (BR-06: a stable public API must not reach into a generated
+ * mirror). Omitting it does not disable the check — it makes NOTHING resolve.
+ */
+export interface DebugBundleRegistry {
+  scenarios: readonly string[];
+  rules: readonly string[];
+}
+
 export interface DebugSection {
   links: DebugLink[];
   observation_state: ObservationState;
   not_applicable_rule: string | null;
+  /** The declared rule id the `not_applicable_rule` is bound to. */
+  not_applicable_rule_id: string | null;
 }
 
 export interface DebugBundleV1 {
@@ -247,16 +337,26 @@ export interface DebugBundleV1 {
     record_count: number;
     blocks_clean_close: boolean;
     checkpoint: ReceiptCheckpointV1 | null;
+    /** Absent, malformed, or present — malformed is damage, not absence. */
+    checkpoint_state: CheckpointReadState;
+    /** How the checkpoint fails to describe the journal, if it does. */
+    checkpoint_disagreements: CheckpointAgreement[];
   };
   sections: Record<DebugSectionKind, DebugSection>;
   complete: boolean;
   unlinked_kinds: DebugSectionKind[];
   rejected_links: RejectedLink[];
+  rejected_not_applicable: RejectedNotApplicable[];
 }
 
 export interface NotApplicableDeclaration {
   kind: DebugSectionKind;
-  /** The explicit typed rule that makes the observation inapplicable. */
+  /**
+   * The declared boundary rule or invariant that makes the observation
+   * inapplicable — it must resolve against `registry.rules`.
+   */
+  rule_id: string;
+  /** Non-empty rationale. A blank string closes nothing. */
   rule: string;
 }
 
@@ -268,6 +368,8 @@ export interface BuildDebugBundleOptions {
   checkpointPath: string;
   links: DebugLinkInput[];
   not_applicable?: NotApplicableDeclaration[];
+  /** Closed scenario/rule vocabularies. Omitted ⇒ nothing resolves. */
+  registry?: DebugBundleRegistry;
   io?: JournalIo;
   /** Where refs resolve to bytes. Defaults to the filesystem resolver. */
   evidence?: EvidenceResolver;
@@ -287,11 +389,36 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
   const io = opts.io ?? defaultJournalIo;
   const evidence = opts.evidence ?? filesystemEvidenceResolver;
   const scan = scanReceiptJournal(opts.journalPath, io);
-  const checkpoint = readCheckpoint(opts.checkpointPath);
+  const checkpointRead = readCheckpointState(opts.checkpointPath, io);
+  const checkpoint = checkpointRead.checkpoint;
+  // The SAME agreement test reconciliation applies. A bundle that cannot say
+  // where the durable boundary is has not linked the receipt journal (CI-05).
+  const checkpoint_disagreements = compareCheckpointToJournal(checkpointRead, scan, opts.run_id);
 
-  const notApplicable = new Map<DebugSectionKind, string>();
+  const knownScenarios = new Set(opts.registry?.scenarios ?? []);
+  const knownRules = new Set(opts.registry?.rules ?? []);
+
+  // A not_applicable declaration is the ONLY way to close a section without
+  // evidence, so it is held to the same standard as evidence: real kind, real
+  // rule id, real rationale. An empty rule closed six sections in round 2.
+  const notApplicable = new Map<DebugSectionKind, { rule: string; rule_id: string }>();
+  const rejected_not_applicable: RejectedNotApplicable[] = [];
   for (const d of opts.not_applicable ?? []) {
-    if ((DEBUG_BUNDLE_SECTION_KINDS as readonly string[]).includes(d.kind)) notApplicable.set(d.kind, d.rule);
+    const rule_id = typeof d?.rule_id === "string" ? d.rule_id : "";
+    const rule = typeof d?.rule === "string" ? d.rule : "";
+    if (!(DEBUG_BUNDLE_SECTION_KINDS as readonly string[]).includes(d?.kind)) {
+      rejected_not_applicable.push({ kind: String(d?.kind), rule_id, reason: "unknown_kind" });
+      continue;
+    }
+    if (rule.trim().length === 0) {
+      rejected_not_applicable.push({ kind: d.kind, rule_id, reason: "empty_rule" });
+      continue;
+    }
+    if (!knownRules.has(rule_id)) {
+      rejected_not_applicable.push({ kind: d.kind, rule_id, reason: "unknown_rule" });
+      continue;
+    }
+    notApplicable.set(d.kind, { rule, rule_id });
   }
 
   const accepted = new Map<DebugSectionKind, DebugLink[]>();
@@ -350,6 +477,12 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
       reject("scenario_mismatch");
       continue;
     }
+    // …and that scenario must RESOLVE. Agreeing with the receipt proves nothing
+    // when the producer stamped the same invented id on both sides.
+    if (!knownScenarios.has(link.bound_by.scenario_id)) {
+      reject("scenario_unknown");
+      continue;
+    }
     // 5. BR-07 — a failed or unobserved receipt cannot underwrite evidence.
     if (receipt.disposition !== "succeeded" || receipt.observation_state !== "checked_clean") {
       reject("unclean_receipt");
@@ -373,6 +506,11 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
       reject("evidence_not_machine_parsable");
       continue;
     }
+    // 7. BR-10 — a strict JSON envelope is a TYPED record, not any JSON object.
+    if (!carriesTypedEnvelopes(resolved.bytes, link.media_type)) {
+      reject("evidence_not_typed_envelope");
+      continue;
+    }
 
     accepted.get(link.kind)!.push({
       ...link,
@@ -386,18 +524,27 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
   const sections = {} as Record<DebugSectionKind, DebugSection>;
   const unlinked_kinds: DebugSectionKind[] = [];
 
+  // A checkpoint that is absent, damaged, or disagreeing means the bundle cannot
+  // state where the durable boundary is — no section may read clean over it.
+  const durableBoundaryUnknown = checkpointRead.state !== "present" || checkpoint_disagreements.length > 0;
+
   for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
     const links = accepted.get(kind)!;
-    const rule = notApplicable.get(kind) ?? null;
+    const na = notApplicable.get(kind) ?? null;
 
     let observation_state: ObservationState;
-    if (rule !== null) observation_state = "not_applicable";
+    if (na !== null) observation_state = "not_applicable";
     else if (links.length === 0) observation_state = "not_observed";
     // A section cannot claim cleanliness on top of a journal that blocks close.
-    else observation_state = scan.blocks_clean_close ? "not_observed" : "checked_clean";
+    else observation_state = scan.blocks_clean_close || durableBoundaryUnknown ? "not_observed" : "checked_clean";
 
-    if (links.length === 0 && rule === null) unlinked_kinds.push(kind);
-    sections[kind] = { links, observation_state, not_applicable_rule: rule };
+    if (links.length === 0 && na === null) unlinked_kinds.push(kind);
+    sections[kind] = {
+      links,
+      observation_state,
+      not_applicable_rule: na?.rule ?? null,
+      not_applicable_rule_id: na?.rule_id ?? null,
+    };
   }
 
   return {
@@ -413,11 +560,16 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
       record_count: scan.record_count,
       blocks_clean_close: scan.blocks_clean_close,
       checkpoint,
+      checkpoint_state: checkpointRead.state,
+      checkpoint_disagreements,
     },
     sections,
-    // A bundle over a journal that blocks a clean close is never complete.
-    complete: unlinked_kinds.length === 0 && !scan.blocks_clean_close,
+    // A bundle is complete only when every section is closed by evidence or a
+    // rule-bound declaration, the journal does not block a clean close, and the
+    // durable boundary is actually known.
+    complete: unlinked_kinds.length === 0 && !scan.blocks_clean_close && !durableBoundaryUnknown,
     unlinked_kinds,
     rejected_links,
+    rejected_not_applicable,
   };
 }
