@@ -208,6 +208,27 @@ which the close gate already permits, but only if it is stated, not assumed.
 The upgrade-propagation row above is a second such gate: it is a required
 G4/G5 acceptance test with a concrete trigger, not an open curiosity.
 
+## Why the remote switch applies to Codex only (xhrd-wi-03 / G3)
+
+G1 established that `codex-cli`, `pi-cli`, and `antigravity-cli` all accept a
+remote source and were all wired to a local path. G3 switched **only Codex**.
+The reason is an asymmetry G1 did not surface:
+
+| Host | Remote source accepted | Can it consume THIS repo? |
+|---|---|---|
+| `codex-cli` | `owner/repo` or a git URL, `--ref <branch\|tag>` | **Yes** — the repo root already carries `.claude-plugin/marketplace.json`, which Codex reads. Verified installing 2.3.2 from both `lookatitude/guild --ref main` and the full `https://…/guild.git --ref next`. |
+| `pi-cli` | `npm:` · `git:` · `https://` · `ssh://` | **No** — a pi package is identified by a root `pi-manifest.json`, which exists only in the *rendered* `dist/pi`, never at the repo root. |
+| `antigravity-cli` | `plugin@marketplace`, plus `link <mp> <target>` | **No** — same shape problem: `antigravity-manifest.json` is rendered-only, and no agy marketplace publishes Guild. |
+
+So Codex needed a *registration* change; pi and antigravity would need a
+*published artifact* (an npm package, a dedicated branch, or a rendered-tree
+repo) before their remote support is reachable. That is a larger change than G3
+scoped, and is deliberately NOT adopted here — recorded rather than silently
+skipped, per the goal's "adopt, or record why not".
+
+Both remain class C. The gap is real but is a publishing question, not a
+registration one.
+
 ## Secondary findings
 
 - **`install.sh` cannot render a beta package from a checkout.** When

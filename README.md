@@ -159,7 +159,28 @@ under `~/.guild/receipts/` — that receipt is what `--update` and `guild-run
 update` re-render from, keeping every host on the channel it was installed
 from.
 
-Installing manually into Codex CLI uses Codex's plugin manager:
+Installing manually into Codex CLI uses Codex's plugin manager. **Register the
+repo as a git marketplace** — this repo is a working Codex marketplace as-is, so
+the install tracks the channel ref and stays updatable:
+
+```bash
+codex plugin marketplace remove guild || true          # a ref cannot be re-pointed in place
+codex plugin marketplace add lookatitude/guild --ref main   # --ref next for beta
+codex plugin add guild@guild
+```
+
+Update it later with:
+
+```bash
+codex plugin marketplace upgrade && codex plugin add guild@guild
+```
+
+**Do not register a rendered `dist/codex-marketplace` directory** unless you are
+developing Guild itself. `codex plugin marketplace upgrade` refuses a local
+source (`marketplace 'guild' is not configured as a Git marketplace`), so such
+an install is frozen at the moment it was rendered and can only be moved by
+removing and re-adding it. For a local dev install, `install.sh` run from a
+checkout registers the rendered tree deliberately and says so:
 
 ```bash
 npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
