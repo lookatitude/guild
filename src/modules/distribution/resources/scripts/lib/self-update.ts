@@ -54,9 +54,24 @@ const defaultDeps: SelfUpdateDeps = {
   now: () => new Date(),
 };
 
-/** dist tree name per host id (mirrors install.sh's RENDERED_DIST paths). */
+/**
+ * dist path (relative to the render's dist root) of the tree that matches the
+ * INSTALLED package root the receipt lives in — i.e. what install.sh handed
+ * write_receipt, NOT merely the host's top-level dist entry.
+ *
+ * codex-cli is the one host where those differ: the render emits a marketplace
+ * ROOT (dist/codex-marketplace with .agents/plugins/marketplace.json + the
+ * plugin payload nested at plugins/guild/), while the installed root —
+ * Codex's plugin cache dir, or the source fallback — has the PAYLOAD shape
+ * (.codex-plugin/plugin.json at top level). Returning the marketplace root
+ * here made the staged swap copy plugins/guild/... INTO the installed root,
+ * burying .codex-plugin/plugin.json and bin/guild-run one level too deep and
+ * corrupting the install on the first real update. This was latent while
+ * Codex installs carried no receipt (runSelfUpdate refused early); the
+ * xhrd-wi-05 receipt fix armed the path, so the source must be the payload.
+ */
 export function distDirForHost(hostId: string): string {
-  if (hostId === "codex-cli") return "codex-marketplace";
+  if (hostId === "codex-cli") return path.join("codex-marketplace", "plugins", "guild");
   if (hostId === "pi-cli") return "pi";
   if (hostId === "antigravity-cli") return "antigravity";
   if (hostId === "agents-file" || hostId === "kiro" || hostId === "qoder" || hostId === "trae") {
