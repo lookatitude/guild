@@ -27,14 +27,29 @@ import * as path from "node:path";
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 const INSTALL_SH = path.join(PLUGIN_ROOT, "install.sh");
 
-/** Extract one shell function from install.sh so it can be driven directly. */
+/**
+ * Extract one shell function from install.sh so it can be EXECUTED.
+ *
+ * Brace-aware: an earlier version stopped at the first standalone `}`, which
+ * silently truncates any function containing a nested block. It now tracks
+ * depth from the opening brace and returns the whole body.
+ */
 function extractFn(name: string): string {
   const src = fs.readFileSync(INSTALL_SH, "utf8");
   const start = src.indexOf(`${name}() {`);
   if (start === -1) throw new Error(`install.sh no longer defines ${name}()`);
-  const end = src.indexOf("\n}\n", start);
-  if (end === -1) throw new Error(`could not find the end of ${name}()`);
-  return src.slice(start, end + 3);
+  const lines = src.slice(start).split("\n");
+  const out: string[] = [];
+  let depth = 0;
+  for (const line of lines) {
+    out.push(line);
+    if (/\{\s*$/.test(line)) depth++;
+    if (/^\}/.test(line)) {
+      depth--;
+      if (depth <= 0) break;
+    }
+  }
+  return out.join("\n");
 }
 
 function sh(script: string): string {
@@ -108,11 +123,57 @@ describe("REGRESSION: the receipt path install.sh actually uses", () => {
     expect(sh(`${fn}\nplugin_version_from ${path.join(mkt, "plugins", "guild")}`)).toBe("2.3.2");
   });
 
-  it("install_codex_cli passes the plugins/guild root, not the marketplace root", () => {
-    // Pin the call site itself: a future edit that reverts to the marketplace
-    // root would silently reintroduce the Claude-version receipt.
+  // EXECUTE write_receipt — do not regex the source. The whole defect class
+  // this lane exists for is "the code reads right and does nothing", and a
+  // source-text assertion cannot tell those apart.
+  it("REGRESSION: write_receipt records the CODEX version, not the checkout's Claude version", () => {
+    const fnW = extractFn("write_receipt");
+    const checkout = path.join(tmp, "checkout");
+    writeManifest(path.join(checkout, ".claude-plugin"), "1.1.1-CLAUDE");
+    const pkg = path.join(tmp, "installed-cache", "guild", "9.9.9-CODEX");
+    writeManifest(path.join(pkg, ".codex-plugin"), "9.9.9-CODEX");
+    const receipts = path.join(tmp, "receipts-out");
+
+    // Drive it exactly as install.sh does: pkg_dir supplied, SCRIPT_DIR being
+    // the checkout, RENDERED_DIST unset.
+    sh(
+      [
+        "set -u",
+        `RECEIPTS_DIR=${receipts}`,
+        `SCRIPT_DIR=${checkout}`,
+        'RENDERED_DIST=""',
+        "DRY_RUN=0",
+        'CHANNEL="stable"',
+        'SOURCE_REF="main"',
+        'SOURCE_COMMIT=""',
+        fn,
+        fnW,
+        `write_receipt codex-cli ${pkg}`,
+      ].join("\n")
+    );
+
+    const machine = JSON.parse(fs.readFileSync(path.join(receipts, "codex-cli.json"), "utf8")) as {
+      version: string;
+      host: string;
+    };
+    expect(machine.host).toBe("codex-cli");
+    // The exact regression. Verified against the origin/next baseline, where
+    // this same drive produces "1.1.1-CLAUDE" — NOT against an intermediate
+    // commit of this lane, which already carried half the fix and made the
+    // comparison vacuous.
+    expect(machine.version).toBe("9.9.9-CODEX");
+
+    // …and the package-local copy must land IN the supplied package root, which
+    // for a real install is the cache dir guild-run/self-update read.
+    expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(true);
+  });
+
+  it("install_codex_cli resolves the INSTALLED CACHE dir, not just the marketplace source", () => {
     const src = fs.readFileSync(INSTALL_SH, "utf8");
-    expect(src).toMatch(/CODEX_PLUGIN_ROOT_DIR="\$CODEX_MARKETPLACE_PATH\/plugins\/guild"/);
+    // The cache is populated by `codex plugin add` before write_receipt runs;
+    // the marketplace source is only the fallback.
+    expect(src).toMatch(/plugins\/cache\/guild/);
+    expect(src).toMatch(/\[ -z "\$CODEX_PLUGIN_ROOT_DIR" \] && CODEX_PLUGIN_ROOT_DIR="\$CODEX_MARKETPLACE_PATH\/plugins\/guild"/);
     expect(src).toMatch(/write_receipt codex-cli "\$CODEX_PLUGIN_ROOT_DIR"/);
   });
 });
@@ -182,6 +243,33 @@ describe("host-native discovery on --update with no receipts", () => {
       JSON.stringify({ version: 2, plugins: { "guild@guild": [{ scope: "user", version: "2.3.2" }] } })
     );
     expect(runUpdate()).toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
+  it("does NOT false-positive on an EMPTY plugin array", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(
+      path.join(reg, "installed_plugins.json"),
+      JSON.stringify({ version: 2, plugins: { "guild@guild": [] } })
+    );
+    expect(runUpdate()).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
+  it("does NOT false-positive on the string appearing in unrelated metadata", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(
+      path.join(reg, "installed_plugins.json"),
+      JSON.stringify({ version: 2, plugins: {}, notes: 'saw "guild@guild" once' })
+    );
+    expect(runUpdate()).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
+  });
+
+  it("does NOT treat MALFORMED json containing the string as an install", () => {
+    const reg = path.join(home, ".claude", "plugins");
+    fs.mkdirSync(reg, { recursive: true });
+    fs.writeFileSync(path.join(reg, "installed_plugins.json"), '{ "plugins": { "guild@guild": [ {} ');
+    expect(runUpdate()).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
   });
 
   it("does NOT false-positive on a marketplace-only directory", () => {

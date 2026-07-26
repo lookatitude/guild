@@ -265,7 +265,25 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
     # missed real installs and false-positived on a marketplace-only entry;
     # installed_plugins.json is keyed by "<plugin>@<marketplace>".
     _cl_reg="$HOME/.claude/plugins/installed_plugins.json"
-    if [ -f "$_cl_reg" ] && grep -q '"guild@' "$_cl_reg" 2>/dev/null; then
+    # Parse it. A `grep '"guild@'` false-positived on an EMPTY plugin array, on
+    # the string appearing in unrelated metadata, and on malformed JSON — none
+    # of which is an installed plugin. Require a guild@* key whose install list
+    # is a non-empty array. Malformed JSON exits non-zero and counts as absent.
+    _cl_installed=0
+    if [ -f "$_cl_reg" ] && command -v node >/dev/null 2>&1; then
+      node -e '
+        const fs = require("fs");
+        try {
+          const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const p = (r && r.plugins) || {};
+          const hit = Object.keys(p).some(
+            (k) => /^guild@/.test(k) && Array.isArray(p[k]) && p[k].length > 0
+          );
+          process.exit(hit ? 0 : 1);
+        } catch { process.exit(1); }
+      ' "$_cl_reg" 2>/dev/null && _cl_installed=1
+    fi
+    if [ "$_cl_installed" -eq 1 ]; then
       _found_native=1
       printf '\n  Detected a HOST-NATIVE Claude Code install (%s). Use Claude:\n' "$_cl_reg" >&2
       printf '      claude plugin marketplace update guild && claude plugin update %s\n' "$PLUGIN_SPEC" >&2
@@ -598,16 +616,19 @@ install_codex_cli() {
   run codex plugin marketplace add "$CODEX_MARKETPLACE_PATH"
   run codex plugin add "$PLUGIN_SPEC"
   installed_any=1
-  # plugins/guild is the marketplace's PLUGIN SOURCE dir — where
-  # .codex-plugin/plugin.json lives. Passing the marketplace ROOT made the
-  # version probe miss, so the receipt recorded Claude's version (xhrd-wi-05).
-  #
-  # NOT the runtime root: `codex plugin add` copies the payload into
-  # ~/.codex/plugins/cache/<mkt>/<plugin>/<version>/ BEFORE this runs, so the
-  # package-local copy written here does NOT reach the installed cache that
-  # guild-run/self-update actually read. Getting a receipt into the installed
-  # cache is still OPEN in this work item.
-  CODEX_PLUGIN_ROOT_DIR="$CODEX_MARKETPLACE_PATH/plugins/guild"
+  # Prefer the INSTALLED CACHE dir that `codex plugin add` just populated:
+  # ~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/. That is the root
+  # guild-run/self-update resolve a receipt against (self-update.ts readReceipt
+  # reads its own package root), AND it carries .codex-plugin/plugin.json so the
+  # version probe resolves the CODEX version rather than the checkout's Claude
+  # one. Writing only into the marketplace SOURCE dir left the installed cache
+  # with no receipt at all, so `guild-run update` refused (xhrd-wi-05 / G5).
+  CODEX_PLUGIN_ROOT_DIR="$(find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/guild" \
+    -maxdepth 4 -type d -path '*/guild/*' -exec test -f '{}/.codex-plugin/plugin.json' ';' -print 2>/dev/null | head -1 || true)"
+  # Fall back to the marketplace source dir when the cache is not resolvable
+  # (dry-run, or a Codex layout we do not recognise) — a correct machine receipt
+  # is still better than none.
+  [ -z "$CODEX_PLUGIN_ROOT_DIR" ] && CODEX_PLUGIN_ROOT_DIR="$CODEX_MARKETPLACE_PATH/plugins/guild"
   write_receipt codex-cli "$CODEX_PLUGIN_ROOT_DIR"
   say ""
   say "Guild installed into Codex CLI."
