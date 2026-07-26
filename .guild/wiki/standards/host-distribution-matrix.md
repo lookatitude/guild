@@ -208,6 +208,81 @@ which the close gate already permits, but only if it is stated, not assumed.
 The upgrade-propagation row above is a second such gate: it is a required
 G4/G5 acceptance test with a concrete trigger, not an open curiosity.
 
+## The remote switch is BLOCKED on payload parity (xhrd-wi-03 / G3)
+
+G1 concluded "Codex needs no publish infrastructure — only the registration is
+wrong." **G3 attempted the switch and that conclusion is REFUTED.**
+
+`codex plugin marketplace add lookatitude/guild --ref <branch>` succeeds and
+resolves the right version — but the repo-root marketplace entry is
+`"source": "./"`, so Codex installs **the repository root**, which is not the
+Codex package. Measured on a real install (isolated `CODEX_HOME`, `--ref next`):
+
+| Artifact the rendered package provides | Present in a remote install? |
+|---|---|
+| `.codex-plugin/plugin.json` | **✗ missing** |
+| `.agents/skills/guild/` | **✗ missing** |
+| `hooks/codex-hooks.json` | **✗ missing** |
+| `hooks/codex-guild-prompt-bridge.js` | **✗ missing** |
+| `bin/guild-run` | **✗ missing** |
+| `.claude-plugin/plugin.json`, `skills/`, `agents/`, `commands/` | ✓ (Claude-shaped) |
+
+The prompt bridge is not optional — Codex has no Claude slash-command format,
+which is the whole reason it is rendered. So the remote switch trades **frozen
+but functional** for **current but missing the adapter layer**: a net
+regression. The registration change was reverted.
+
+⇒ **The operator fix earlier in this page carries the same defect.** Removing a
+working local registration in favour of `--ref main` yields a *newer, more
+broken* install. Do not run it until payload parity exists.
+
+### The mechanism that makes G3 solvable (measured)
+
+Codex reads **`.agents/plugins/marketplace.json` in preference to
+`.claude-plugin/marketplace.json`**, and its plugin `source` may be a
+**subdirectory**. Verified with a fixture carrying both manifests pointing at
+different payloads — the `.agents/plugins` subdirectory entry won:
+
+```console
+$ codex plugin marketplace add <fixture>   # both manifests present
+$ codex plugin add prec@prec
+Installed plugin root: …/plugins/cache/prec/prec/1.0.0-SUBDIR   # the subdir, not "./"
+```
+
+That resolves the hard part: Guild can point Codex at a rendered Codex tree
+**without disturbing `.claude-plugin/marketplace.json`**, which Claude needs at
+`source: "./"`. No build-artifact branch and no separate published package are
+required.
+
+**The remaining decision is architectural, not technical.** Codex clones the
+repo and uses only the named subdirectory, so that subdirectory must be
+*committed* — i.e. the rendered Codex package becomes a tracked artifact. That
+cuts against the standing "`dist/` is generated, never committed" rule
+(`xhrd-def-nongoal-2`). Two mitigations already exist: the SC-2 equivalence gate
+and the module-resource drift gates (xhrd-wi-02) would keep a committed tree
+honest, exactly as they do for `.claude-plugin/*`.
+
+⇒ G3 is **unblocked technically and pending a decision** on committing a
+rendered payload (repo size vs. a working remote install). It is NOT the
+open-ended publishing problem the previous revision assumed.
+
+**Lesson.** G1 verified that a remote install produced *a version*. It never
+verified *what was installed*. "It installs" and "it installs the right thing"
+are different claims and need different probes.
+
+### pi and antigravity — the earlier rationale was also wrong
+
+An earlier draft claimed neither could consume this repo because
+`pi-manifest.json` / `antigravity-manifest.json` are rendered-only. Refuted:
+pi identifies a package by `package.json#pi` or conventional directories
+(`skills/`, `extensions/`), not `pi-manifest.json`, and a probe **successfully
+installed** `git:github.com/lookatitude/guild@main`. Antigravity's required
+marker is a root `plugin.json`, not `antigravity-manifest.json`.
+
+So their remote support may well be reachable — but, exactly as with Codex,
+*installing* is not the same as *installing a working payload*. Functional
+parity is unmeasured for both. Treat them as OPEN, not as ruled out.
+
 ## Secondary findings
 
 - **`install.sh` cannot render a beta package from a checkout.** When
