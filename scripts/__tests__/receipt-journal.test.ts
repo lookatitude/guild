@@ -33,6 +33,7 @@ import {
   journalLockPath,
   canonicalJournalPath,
   resolveJournalIdentity,
+  acquireJournalAuthority,
   JournalIdentityError,
   defaultJournalIo,
   makeReceiptInput,
@@ -1593,5 +1594,337 @@ describe("MH-06-R2-B3 — checkpoint validity and agreement", () => {
         (d) => d.code,
       ),
     ).toEqual(["checkpoint_malformed"]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R5-B1 — authority is RETAINED through the mutation, not just checked
+//
+// Round 4 bound the lock to the physical journal and round 5 re-derived that
+// identity once the lock was held. Round 5's review then showed a check is not
+// authority: everything after it still ran through a MUTABLE PATHNAME.
+//
+//   - a hard link added after the under-lock check gave one inode two names, and
+//     the other name's lock was already held — yet the append still landed
+//     sequence 2 and replaced the checkpoint before the post-transaction check
+//     noticed `nlink=2` and returned `failed`;
+//   - renaming the canonical PARENT carried the acquired lock away with it, and a
+//     replacement parent (with its own pre-held lock) then received the append,
+//     the checkpoint and the torn-tail truncation — after which the `finally`
+//     removed the REPLACEMENT writer's lock by pathname and stranded the lock
+//     this caller actually holds.
+//
+// So the requirement is behavioural and it is about ORDER: a link-count change,
+// a parent replacement or a competing lock must fail the operation BEFORE the
+// append, the checkpoint or the truncation — and the release must never delete a
+// lock this caller does not hold.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R5-B1 — mutation authority is retained from acquisition to release", () => {
+  /** One durable record, so the journal is a real file with a real inode. */
+  function seeded() {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(appendReceipt(p, input({ event_id: "seed", operation_id: "op-seed" })).disposition).toBe("succeeded");
+    return { root, ...p };
+  }
+
+  const TORN = '{"schema_version":"guild.receipt_record.v1","seq';
+
+  /** Fire `inject` exactly once, on the first read of the journal itself. */
+  function onFirstJournalRead(inject: () => void): { io: JournalIo; fired: () => boolean } {
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(target) {
+        // Read BEFORE injecting, so the caller still sees the pre-race bytes —
+        // exactly what a writer that already read the file would hold.
+        const content = defaultJournalIo.readAll(target);
+        if (!fired && path.basename(target) === "journal.jsonl") {
+          fired = true;
+          inject();
+        }
+        return content;
+      },
+    };
+    return { io, fired: () => fired };
+  }
+
+  /** Give the physical journal a SECOND name whose own lock is already held. */
+  function aliasWithHeldLock(p: { journal: string }) {
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    const aliasLock = `${alias}.lock`;
+    return {
+      alias,
+      aliasLock,
+      inject: () => {
+        fs.linkSync(p.journal, alias);
+        fs.mkdirSync(aliasLock);
+      },
+    };
+  }
+
+  /**
+   * Rename the canonical parent out from under the lock — the acquired lock
+   * directory travels WITH it — and install a replacement parent holding a copy
+   * of the journal, a copy of the checkpoint, and a lock a different writer
+   * already holds.
+   */
+  function replaceCanonicalParent(p: { journal: string; checkpoint: string }) {
+    const parent = path.dirname(fs.realpathSync(p.journal));
+    const moved = `${parent}-moved`;
+    const journalBytes = fs.readFileSync(p.journal);
+    const checkpointBytes = fs.existsSync(p.checkpoint) ? fs.readFileSync(p.checkpoint) : null;
+
+    fs.renameSync(parent, moved);
+    fs.mkdirSync(parent, { recursive: true });
+    fs.writeFileSync(path.join(parent, path.basename(p.journal)), journalBytes);
+    if (checkpointBytes) fs.writeFileSync(path.join(parent, path.basename(p.checkpoint)), checkpointBytes);
+    const replacementLock = `${path.join(parent, path.basename(p.journal))}.lock`;
+    fs.mkdirSync(replacementLock);
+    return {
+      moved,
+      replacementLock,
+      strandedLock: `${path.join(moved, path.basename(p.journal))}.lock`,
+    };
+  }
+
+  it("refuses the append when a hard link appears AFTER the under-lock check", () => {
+    const p = seeded();
+    const { alias, aliasLock, inject } = aliasWithHeldLock(p);
+    const { io, fired } = onFirstJournalRead(inject);
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(fired()).toBe(true);
+    expect(fs.statSync(p.journal).nlink).toBe(2); // the race really happened
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.sequence).toBeNull();
+    expect(out.failure?.code).toBe("journal_identity_ambiguous");
+
+    // THE POINT: the mutation never happened. Round 5 appended sequence 2 and
+    // replaced the checkpoint with `last_sequence: 2` before failing the claim.
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.record_count).toBe(1);
+    // The other name's writer still holds its lock…
+    expect(fs.existsSync(aliasLock)).toBe(true);
+    // The alias is a SECOND canonical name for one inode — the whole defect.
+    expect(canonicalJournalPath(alias)).toBe(fs.realpathSync(alias));
+    expect(canonicalJournalPath(alias)).not.toBe(canonicalJournalPath(p.journal));
+    expect(fs.statSync(alias).ino).toBe(fs.statSync(p.journal).ino);
+    // …and this caller's own lock — still the one it acquired — was released.
+    expect(fs.existsSync(`${fs.realpathSync(p.journal)}.lock`)).toBe(false);
+  });
+
+  it("refuses a torn-tail repair when a hard link appears AFTER the under-lock check", () => {
+    const p = seeded();
+    fs.appendFileSync(p.journal, TORN, "utf8");
+    const bytesBefore = fs.readFileSync(p.journal, "utf8");
+    const { aliasLock, inject } = aliasWithHeldLock(p);
+    const { io, fired } = onFirstJournalRead(inject);
+
+    const repair = repairTornTail(p.journal, io, { lock_max_attempts: 2, lock_wait_ms: 1 });
+
+    expect(fired()).toBe(true);
+    expect(repair.disposition).toBe("failed");
+    expect(repair.failure?.code).toBe("journal_identity_ambiguous");
+    expect(repair.removed_bytes).toBe(0);
+    // A truncation under a partitioned exclusion domain did NOT happen.
+    expect(fs.readFileSync(p.journal, "utf8")).toBe(bytesBefore);
+    expect(fs.existsSync(aliasLock)).toBe(true);
+  });
+
+  it("refuses the append when the canonical PARENT is replaced after the check", () => {
+    const p = seeded();
+    let swap: ReturnType<typeof replaceCanonicalParent> | null = null;
+    const { io, fired } = onFirstJournalRead(() => {
+      swap = replaceCanonicalParent(p);
+    });
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+    const moved = swap as unknown as ReturnType<typeof replaceCanonicalParent>;
+
+    expect(fired()).toBe(true);
+    expect(moved).not.toBeNull();
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+
+    // Nothing was written into the replacement this writer never locked.
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    // The replacement's own writer still holds its lock — round 5's `finally`
+    // deleted it by pathname.
+    expect(fs.existsSync(moved.replacementLock)).toBe(true);
+    // The lock this caller really holds went with the renamed parent. It cannot
+    // be removed by name any more, so it is LEFT rather than a stranger's lock
+    // being deleted in its place: fail closed, never delete somebody else's.
+    expect(fs.existsSync(moved.strandedLock)).toBe(true);
+  });
+
+  it("refuses a torn-tail repair when the canonical PARENT is replaced after the check", () => {
+    const p = seeded();
+    fs.appendFileSync(p.journal, TORN, "utf8");
+    const bytesBefore = fs.readFileSync(p.journal, "utf8");
+    let swap: ReturnType<typeof replaceCanonicalParent> | null = null;
+    const { io, fired } = onFirstJournalRead(() => {
+      swap = replaceCanonicalParent(p);
+    });
+
+    const repair = repairTornTail(p.journal, io, { lock_max_attempts: 2, lock_wait_ms: 1 });
+    const moved = swap as unknown as ReturnType<typeof replaceCanonicalParent>;
+
+    expect(fired()).toBe(true);
+    expect(repair.disposition).toBe("failed");
+    expect(repair.failure?.code).toBe("journal_identity_unstable");
+    expect(repair.removed_bytes).toBe(0);
+    // Round 5 truncated the replacement and returned `succeeded`.
+    expect(fs.readFileSync(p.journal, "utf8")).toBe(bytesBefore);
+    expect(scanReceiptJournal(p.journal).integrity).toBe("truncated_tail");
+    expect(fs.existsSync(moved.replacementLock)).toBe(true);
+    expect(fs.existsSync(moved.strandedLock)).toBe(true);
+  });
+
+  it("refuses when a hard link appears between the append and the checkpoint", () => {
+    // The window one step further in: authority is re-proved before EVERY
+    // mutation, so the checkpoint cannot be replaced under a partitioned domain
+    // even when the record itself was already appended under a sound one.
+    const p = seeded();
+    const { aliasLock, inject } = aliasWithHeldLock(p);
+    let linked = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      appendLine(target, text) {
+        defaultJournalIo.appendLine(target, text);
+        if (!linked) {
+          linked = true;
+          inject();
+        }
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(linked).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_ambiguous");
+    // The record IS on disk — it was appended under sound authority, and this is
+    // the same shape as the round-1 `checkpoint_write_failed` sentinel: a durable
+    // line with no durable CLAIM. What must not happen is the checkpoint moving.
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(fs.existsSync(aliasLock)).toBe(true);
+  });
+
+  it("still appends, checkpoints and releases when authority is RETAINED", () => {
+    // The discriminator. Without this, "refuse everything" would pass every
+    // assertion above and pin nothing.
+    const p = seeded();
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }));
+
+    expect(out.disposition).toBe("succeeded");
+    expect(out.durable).toBe(true);
+    expect(out.sequence).toBe(2);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+
+    // …and a torn tail is still repaired, by byte length, through the same path.
+    fs.appendFileSync(p.journal, TORN, "utf8");
+    const repair = repairTornTail(p.journal);
+    expect(repair.disposition).toBe("succeeded");
+    expect(repair.removed_bytes).toBe(Buffer.byteLength(TORN, "utf8"));
+    expect(scanReceiptJournal(p.journal).integrity).toBe("intact");
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+
+  it("pins the physical journal by descriptor, and refuses one with a second name", () => {
+    // The primitive itself, directly: authority is a HANDLE on an inode plus the
+    // lock beside it, not a re-reading of a name.
+    const p = seeded();
+    const acquired = acquireJournalAuthority(p.journal, defaultJournalIo, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+    expect(acquired.ok).toBe(true);
+    try {
+      const handle = acquired.authority!.handle;
+      expect(handle).not.toBeNull();
+      expect(handle!.inode).toBe(fs.statSync(p.journal).ino);
+      expect(handle!.device).toBe(fs.statSync(p.journal).dev);
+      expect(acquired.authority!.verify("in a control")).toBeNull();
+      // Pinning is about identity, not permission: a read-only pin still holds
+      // the file, and the WRITE falls back to the pathname so it fails with its
+      // own errno instead of being misreported as a name that moved.
+      expect(handle!.writable).toBe(false);
+      defaultJournalIo.appendLine(canonicalJournalPath(p.journal), "not-a-record\n", handle);
+      expect(fs.readFileSync(p.journal, "utf8").endsWith("not-a-record\n")).toBe(true);
+      // A second name added under the handle is caught by the handle itself.
+      fs.linkSync(p.journal, path.join(path.dirname(p.journal), "alias.jsonl"));
+      expect(acquired.authority!.verify("in a control")?.code).toBe("journal_identity_ambiguous");
+    } finally {
+      acquired.authority!.release();
+    }
+    expect(fs.existsSync(`${fs.realpathSync(p.journal)}.lock`)).toBe(false);
+
+    // …and the refusal is made BEFORE any lock is taken when the journal already
+    // has two names when authority is requested.
+    let locks = 0;
+    const counting: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        locks += 1;
+        return defaultJournalIo.acquireLock!(lockPath);
+      },
+    };
+    const refused = acquireJournalAuthority(p.journal, counting, { lock_max_attempts: 2, lock_wait_ms: 1 });
+    expect(refused.ok).toBe(false);
+    expect(refused.failure?.code).toBe("journal_identity_ambiguous");
+    expect(locks).toBe(0);
+  });
+
+  it("never removes a lock directory that is not the one it acquired", () => {
+    // Release is identity-bound too: a lock replaced under us belongs to whoever
+    // created it, and deleting it would hand two writers the same journal.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let replaced = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(target) {
+        const content = defaultJournalIo.readAll(target);
+        if (!replaced && path.basename(target) === "journal.jsonl") {
+          replaced = true;
+          // Our lock is swapped for a different directory at the same name.
+          fs.rmdirSync(lock);
+          fs.mkdirSync(lock);
+        }
+        return content;
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(replaced).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    // The directory now at that name is somebody else's exclusion, not ours.
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmdirSync(lock);
   });
 });

@@ -71,6 +71,21 @@
  *   than the caller's mutable spelling. Where a stable identity cannot be
  *   established, the operation fails closed BEFORE the append — it never guesses.
  *
+ *   CHECKING AN IDENTITY IS NOT THE SAME AS HOLDING ONE (MH-06-R5-B1). Round 5
+ *   re-derived the identity under the lock and then did everything else through a
+ *   MUTABLE PATHNAME, so a link added after that check let the append and the
+ *   checkpoint land while a second name's lock was held, and a renamed canonical
+ *   parent carried the acquired lock away while the append, the checkpoint and the
+ *   truncation went into a replacement directory whose own lock somebody else
+ *   held — after which the release deleted THAT writer's lock by name. Authority
+ *   is therefore RETAINED, not revisited: `acquireJournalAuthority` pins the
+ *   physical journal with an open descriptor for the whole transaction, records
+ *   the identity of the lock directory it actually created and of the directory
+ *   holding both, and re-proves all of it before EVERY mutation and before the
+ *   durable claim. The release is identity-bound too: a lock that is no longer the
+ *   one this caller acquired is LEFT ALONE, because deleting a stranger's lock
+ *   hands two writers one journal.
+ *
  *   Durability is then PROVEN, not assumed: after the append the journal is
  *   re-scanned for the exact sealed record, and after the checkpoint write the
  *   checkpoint file is re-read and compared field by field. A write that lands
@@ -438,15 +453,49 @@ export function compareCheckpointToJournal(
 // IO seam — real fs by default, injectable so faults are testable
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * A retained OS handle on ONE physical journal — the mechanical form of write
+ * authority.
+ *
+ * A pathname can be repointed, replaced or given a second name at any moment; a
+ * descriptor cannot. Everything the guarded transaction reads and writes goes
+ * through this handle when the default IO seam is in use, so a rename of the
+ * canonical parent redirects nothing, and the pinned `device`/`inode` make the
+ * redirection DETECTABLE rather than merely unlikely.
+ */
+export interface JournalHandle {
+  /** The canonical path this handle was opened through. */
+  readonly path: string;
+  /** The open descriptor pinning the physical file. */
+  readonly fd: number;
+  readonly device: number;
+  readonly inode: number;
+  /**
+   * Whether this descriptor may be WRITTEN through. Pinning must never require
+   * write permission — a journal this caller cannot write is still a journal
+   * whose identity has to be held — so a read-only pin falls back to the path
+   * for the write itself and the operation fails with its OWN errno rather than
+   * being misreported as a moving name.
+   */
+  readonly writable: boolean;
+}
+
 export interface JournalIo {
-  /** Append EXACTLY `text` and make it durable (fsync). Throws on failure. */
-  appendLine(journalPath: string, text: string): void;
+  /**
+   * Append EXACTLY `text` and make it durable (fsync). Throws on failure.
+   *
+   * `bound` is the retained handle for this journal when the caller holds one.
+   * It is OPTIONAL and trailing so every existing two-parameter fake keeps
+   * type-checking and keeps being called; a seam that ignores it simply writes
+   * through the pathname, exactly as before.
+   */
+  appendLine(journalPath: string, text: string, bound?: JournalHandle | null): void;
   /** Full journal contents, or null when the file does not exist. */
-  readAll(journalPath: string): string | null;
+  readAll(journalPath: string, bound?: JournalHandle | null): string | null;
   /** Atomically replace the checkpoint file. Throws on failure. */
   writeCheckpoint(checkpointPath: string, content: string): void;
   /** Shrink the journal to `size` bytes. Throws on failure. */
-  truncate(journalPath: string, size: number): void;
+  truncate(journalPath: string, size: number, bound?: JournalHandle | null): void;
   /**
    * ATOMICALLY take the cross-process lock. `true` when this caller now holds
    * it, `false` when another holder has it. Throws only on a real IO fault
@@ -460,8 +509,38 @@ export interface JournalIo {
   releaseLock?(lockPath: string): void;
 }
 
+/** Write every byte of `text`, looping over a short write. */
+function writeAllSync(fd: number, text: string): void {
+  const buf = Buffer.from(text, "utf8");
+  let written = 0;
+  while (written < buf.length) {
+    written += fs.writeSync(fd, buf, written, buf.length - written);
+  }
+}
+
+/** Read the whole file behind a descriptor, from absolute offset 0. */
+function readAllSync(fd: number): string {
+  const size = fs.fstatSync(fd).size;
+  if (size === 0) return "";
+  const buf = Buffer.allocUnsafe(size);
+  let read = 0;
+  while (read < size) {
+    const n = fs.readSync(fd, buf, read, size - read, read);
+    if (n <= 0) break;
+    read += n;
+  }
+  return buf.subarray(0, read).toString("utf8");
+}
+
 export const defaultJournalIo: JournalIo = {
-  appendLine(journalPath, text) {
+  appendLine(journalPath, text, bound) {
+    // A retained handle is opened O_APPEND, so this write lands at the end of the
+    // PHYSICAL file the lock names — a rename of the parent cannot redirect it.
+    if (bound && bound.writable) {
+      writeAllSync(bound.fd, text);
+      fs.fsyncSync(bound.fd);
+      return;
+    }
     fs.mkdirSync(path.dirname(journalPath), { recursive: true });
     const fd = fs.openSync(journalPath, "a");
     try {
@@ -471,7 +550,14 @@ export const defaultJournalIo: JournalIo = {
       fs.closeSync(fd);
     }
   },
-  readAll(journalPath) {
+  readAll(journalPath, bound) {
+    if (bound) {
+      try {
+        return readAllSync(bound.fd);
+      } catch {
+        return null;
+      }
+    }
     try {
       return fs.readFileSync(journalPath, "utf8");
     } catch {
@@ -481,7 +567,11 @@ export const defaultJournalIo: JournalIo = {
   writeCheckpoint(checkpointPath, content) {
     atomicWrite(checkpointPath, content);
   },
-  truncate(journalPath, size) {
+  truncate(journalPath, size, bound) {
+    if (bound && bound.writable) {
+      fs.ftruncateSync(bound.fd, size);
+      return;
+    }
     fs.truncateSync(journalPath, size);
   },
   // `mkdir` is the portable atomic test-and-set: it either creates the
@@ -840,6 +930,331 @@ export function releaseJournalLock(lockPath: string, io: JournalIo = defaultJour
   } catch {
     /* releasing must never mask the outcome of the guarded transaction */
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retained authority — the exclusion domain HELD, not merely checked
+// ─────────────────────────────────────────────────────────────────────────────
+
+function statOrNull(target: string): fs.Stats | null {
+  try {
+    return fs.statSync(target);
+  } catch {
+    return null;
+  }
+}
+
+function fstatOrNull(fd: number): fs.Stats | null {
+  try {
+    return fs.fstatSync(fd);
+  } catch {
+    return null;
+  }
+}
+
+function closeQuietly(fd: number): void {
+  try {
+    fs.closeSync(fd);
+  } catch {
+    /* a descriptor that cannot be closed is already unusable */
+  }
+}
+
+/** What the transaction is going to do to the journal it pins. */
+export type JournalAccess = "append" | "truncate" | "read";
+
+/**
+ * `a+` is mandatory for the append path: O_APPEND makes every write land at the
+ * end of the PHYSICAL file, so two writers can never overwrite each other's
+ * bytes even if the advisory lock is broken by hand.
+ */
+const JOURNAL_ACCESS_FLAGS: Record<JournalAccess, string> = {
+  append: "a+",
+  truncate: "r+",
+  read: "r",
+};
+
+export type JournalAuthorityFailureCode = JournalIdentityFailureCode | LockFailureCode;
+
+export interface JournalAuthorityFailure {
+  code: JournalAuthorityFailureCode;
+  message: string;
+}
+
+/**
+ * Exclusive, physically bound authority over one journal, held from acquisition
+ * to release.
+ *
+ * Round 5 established the identity under the lock and then performed every
+ * mutation through the caller's pathname, which is a name somebody else can
+ * repoint. This object is the answer: it PINS the journal with a descriptor,
+ * remembers the identity of the lock directory it actually created and of the
+ * directory holding both, and offers one predicate — `verify` — that must be
+ * re-proved before every mutation and before any durable or clean-close claim.
+ */
+export interface RetainedJournalAuthority {
+  /** The physical journal and the lock derived from it. */
+  readonly identity: JournalIdentity;
+  /** The pinned descriptor, or null while the journal does not exist yet. */
+  readonly handle: JournalHandle | null;
+  /**
+   * An IO seam whose journal reads and writes carry the retained handle. A fake
+   * that ignores the extra argument behaves exactly as it did before.
+   */
+  bind(io: JournalIo): JournalIo;
+  /**
+   * Re-prove the binding. Returns the typed loss, or null while authority is
+   * still held. `stage` names the mutation the caller was about to perform, so a
+   * failure says WHICH boundary refused.
+   */
+  verify(stage: string): JournalIdentityFailure | null;
+  /**
+   * Pin a journal that the first append has just created, then `verify`. A
+   * journal that still does not exist is not an error — the append seam may be a
+   * fake — and the append verification catches that on its own.
+   */
+  adopt(stage: string): JournalIdentityFailure | null;
+  /** Close the handle, and release the lock ONLY if it is still the one held. */
+  release(): void;
+}
+
+export type JournalAuthorityResult =
+  | { ok: true; authority: RetainedJournalAuthority; identity: JournalIdentity; failure: null }
+  | { ok: false; authority: null; identity: JournalIdentity | null; failure: JournalAuthorityFailure };
+
+/**
+ * Resolve the physical journal, take its lock, and PIN both for the duration of
+ * the transaction. Never throws.
+ *
+ * The order matters and is the whole point: identity is resolved before the lock
+ * (a lock is only exclusive over a resource it names uniquely), the lock is taken,
+ * and only then is the physical file opened and the exclusion domain recorded —
+ * so everything the caller does afterwards is measured against what it actually
+ * holds rather than against what a pathname currently means.
+ *
+ * On failure the lock is released before returning, so a refusal never wedges the
+ * journal for the next writer.
+ */
+export function acquireJournalAuthority(
+  journalPath: string,
+  io: JournalIo = defaultJournalIo,
+  lockOptions: JournalLockOptions = {},
+  access: JournalAccess = "read",
+): JournalAuthorityResult {
+  const resolved = resolveJournalIdentity(journalPath);
+  if (!resolved.ok) return { ok: false, authority: null, identity: null, failure: resolved.failure };
+  const identity = resolved.identity;
+
+  const lockFailure = acquireJournalLock(identity.lock, io, lockOptions);
+  if (lockFailure) return { ok: false, authority: null, identity, failure: lockFailure };
+
+  // The exclusion domain, as it is RIGHT NOW: the lock directory this caller just
+  // created, and the directory holding both it and the journal. A lock primitive
+  // that is not a real directory (an injected seam) leaves these null, and the
+  // corresponding checks are skipped rather than guessed.
+  const lockStat = lstatOrNull(identity.lock);
+  const lockDevice = lockStat !== null && lockStat.isDirectory() ? lockStat.dev : null;
+  const lockInode = lockStat !== null && lockStat.isDirectory() ? lockStat.ino : null;
+  const parentStat = statOrNull(path.dirname(identity.path));
+  const parentDevice = parentStat !== null ? parentStat.dev : null;
+  const parentInode = parentStat !== null ? parentStat.ino : null;
+
+  let handle: JournalHandle | null = null;
+
+  const unstable = (message: string): JournalIdentityFailure => ({ code: "journal_identity_unstable", message });
+  const ambiguous = (message: string): JournalIdentityFailure => ({ code: "journal_identity_ambiguous", message });
+
+  /** Pin the physical journal, if it exists yet. */
+  const pin = (): JournalIdentityFailure | null => {
+    const present = lstatOrNull(identity.path);
+    if (present === null) return null; // the first writer creates it; nothing to pin
+    if (present.isSymbolicLink() || !present.isFile()) {
+      return unstable(`canonical journal name "${identity.path}" no longer names a regular file`);
+    }
+    let fd: number | null = null;
+    let writable = false;
+    try {
+      fd = fs.openSync(identity.path, JOURNAL_ACCESS_FLAGS[access]);
+      writable = access !== "read";
+    } catch {
+      fd = null;
+    }
+    if (fd === null) {
+      // Pinning is about IDENTITY, not permission. A journal this caller may not
+      // write is still pinned read-only, so the write fails with its own errno
+      // (`journal_append_failed` / `repair_failed`) instead of being reported as
+      // an unstable name.
+      try {
+        fd = fs.openSync(identity.path, "r");
+        writable = false;
+      } catch (err) {
+        return unstable(
+          `the journal at "${identity.path}" could not be opened for ${access}: ` +
+            `${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    const st = fstatOrNull(fd);
+    if (st === null || st.dev !== present.dev || st.ino !== present.ino) {
+      closeQuietly(fd);
+      return unstable(`the journal at "${identity.path}" was replaced while it was being opened`);
+    }
+    if (st.nlink > 1) {
+      closeQuietly(fd);
+      return ambiguous(
+        `journal at "${identity.path}" is one physical file with ${st.nlink} names (hard links) — ` +
+          "a path-keyed lock cannot serialise writers that name it differently, so this operation is refused",
+      );
+    }
+    handle = { path: identity.path, fd, device: st.dev, inode: st.ino, writable };
+    return null;
+  };
+
+  const verify = (stage: string): JournalIdentityFailure | null => {
+    // 1. The descriptor still names the file it pinned, and that file still has
+    //    exactly ONE name. This is the link-count race, caught by the handle
+    //    itself rather than by re-reading a pathname.
+    if (handle !== null) {
+      const st = fstatOrNull(handle.fd);
+      if (st === null) {
+        return unstable(`the retained handle on "${identity.path}" can no longer be inspected ${stage}`);
+      }
+      if (st.dev !== handle.device || st.ino !== handle.inode) {
+        return unstable(`the retained handle on "${identity.path}" no longer names the locked file ${stage}`);
+      }
+      if (st.nlink > 1) {
+        return ambiguous(
+          `the journal this writer holds gained a second name (${st.nlink} hard links) ${stage} — ` +
+            "a path-keyed lock cannot serialise writers that name it differently, so this operation is refused " +
+            "(remove the extra link, or give each producer its own journal)",
+        );
+      }
+      if (st.nlink < 1) {
+        return unstable(`the journal this writer holds was unlinked ${stage} — its canonical name is gone`);
+      }
+    }
+
+    // 2. The canonical name still resolves to the file the handle pins.
+    const named = lstatOrNull(identity.path);
+    if (handle !== null) {
+      if (named === null) return unstable(`canonical journal name "${identity.path}" disappeared ${stage}`);
+      if (named.isSymbolicLink() || !named.isFile()) {
+        return unstable(`canonical journal name "${identity.path}" no longer names a regular file ${stage}`);
+      }
+      if (named.dev !== handle.device || named.ino !== handle.inode) {
+        return unstable(
+          `canonical journal name "${identity.path}" now names a different physical file ${stage} ` +
+            `(device/inode ${handle.device}/${handle.inode} → ${named.dev}/${named.ino})`,
+        );
+      }
+    } else if (named !== null) {
+      if (named.isSymbolicLink() || !named.isFile()) {
+        return unstable(`canonical journal name "${identity.path}" no longer names a regular file ${stage}`);
+      }
+      if (named.nlink > 1) {
+        return ambiguous(
+          `the journal at "${identity.path}" has ${named.nlink} names ${stage} — ` +
+            "a path-keyed lock cannot serialise writers that name it differently, so this operation is refused",
+        );
+      }
+    }
+
+    // 3. The directory holding the journal AND its lock is the same directory.
+    //    A renamed canonical parent carries the acquired lock away with it, which
+    //    is invisible to any test that only looks at the journal.
+    if (parentInode !== null && parentDevice !== null) {
+      const parentNow = statOrNull(path.dirname(identity.path));
+      if (parentNow === null || parentNow.dev !== parentDevice || parentNow.ino !== parentInode) {
+        return unstable(
+          `the directory holding "${identity.path}" and its lock was replaced ${stage} — ` +
+            "this writer's exclusion moved with the old directory and no longer covers this path",
+        );
+      }
+    }
+
+    // 4. The lock at the canonical name is still the exact directory acquired.
+    if (lockInode !== null && lockDevice !== null) {
+      const lockNow = lstatOrNull(identity.lock);
+      if (lockNow === null || !lockNow.isDirectory() || lockNow.dev !== lockDevice || lockNow.ino !== lockInode) {
+        return unstable(
+          `the lock this writer acquired is no longer the lock at "${identity.lock}" ${stage} — ` +
+            "another holder now owns that exclusion, so this operation is refused",
+        );
+      }
+    }
+
+    // 5. The caller's own spelling still means this journal. A repointed parent
+    //    symlink changes nothing physical, but it does mean the caller is asking
+    //    about a different destination than the one being written.
+    const current = resolveJournalIdentity(journalPath);
+    if (!current.ok) return current.failure;
+    const drift = journalIdentityDrift(identity, current.identity);
+    if (drift) return unstable(`${drift} (${stage})`);
+
+    return null;
+  };
+
+  const release = (): void => {
+    if (handle !== null) {
+      closeQuietly(handle.fd);
+      handle = null;
+    }
+    if (lockInode === null || lockDevice === null) {
+      // Not a directory this module can identify — an injected lock seam. Release
+      // it exactly as every earlier round did.
+      releaseJournalLock(identity.lock, io);
+      return;
+    }
+    const lockNow = lstatOrNull(identity.lock);
+    if (lockNow !== null && lockNow.isDirectory() && lockNow.dev === lockDevice && lockNow.ino === lockInode) {
+      releaseJournalLock(identity.lock, io);
+      return;
+    }
+    // The directory at that name is SOMEBODY ELSE'S exclusion — round 5 deleted it
+    // and stranded its own. Leaking a lock wedges this journal until an operator
+    // clears it; deleting a stranger's hands two writers one journal. Leak.
+  };
+
+  const failClosed = (failure: JournalIdentityFailure): JournalAuthorityResult => {
+    release();
+    return { ok: false, authority: null, identity, failure };
+  };
+
+  const pinned = pin();
+  if (pinned) return failClosed(pinned);
+
+  // The caller's path may mean something else now than it did before the wait, and
+  // the file may have been replaced while this writer queued for the lock.
+  const held = verify("when the lock was taken");
+  if (held) return failClosed(held);
+
+  const authority: RetainedJournalAuthority = {
+    identity,
+    get handle() {
+      return handle;
+    },
+    bind(target: JournalIo): JournalIo {
+      // `handle` is read at CALL time, not bind time: `adopt` can install one
+      // half-way through the transaction, and every later read must use it.
+      const forPath = (p: string): JournalHandle | null => (p === identity.path ? handle : null);
+      return {
+        ...target,
+        readAll: (p: string) => target.readAll(p, forPath(p)),
+        appendLine: (p: string, text: string) => target.appendLine(p, text, forPath(p)),
+        truncate: (p: string, size: number) => target.truncate(p, size, forPath(p)),
+      };
+    },
+    verify,
+    adopt(stage: string): JournalIdentityFailure | null {
+      if (handle === null) {
+        const opened = pin();
+        if (opened) return opened;
+      }
+      return verify(stage);
+    },
+    release,
+  };
+  return { ok: true, authority, identity, failure: null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1255,15 +1670,17 @@ function failed(
  * break that while both reporting success, so the lock is part of the contract,
  * not an optimisation.
  *
- * IDENTITY IS ESTABLISHED BEFORE EXCLUSION, AND RE-ESTABLISHED THREE TIMES
- * (MH-06-R4-B1). A lock is only exclusive over a resource it names uniquely, so
- * the physical journal is resolved before any lock is taken; the identity is
- * re-derived once the lock is HELD, because the caller's path may have been
- * repointed while this writer waited; the guarded transaction reads and writes
- * the canonical path the lock names rather than the caller's mutable spelling;
- * and the identity is checked once more before any durable claim. A journal with
- * more than one name, or a name that moved, fails closed with a typed reason and
- * no record is reported durable.
+ * IDENTITY IS ESTABLISHED BEFORE EXCLUSION, AND THEN RETAINED (MH-06-R4-B1,
+ * MH-06-R5-B1). A lock is only exclusive over a resource it names uniquely, so
+ * the physical journal is resolved before any lock is taken; the lock is taken;
+ * and the journal is then PINNED with an open descriptor that the whole
+ * transaction reads and writes through. Re-deriving the identity under the lock
+ * was not enough on its own — round 5 did exactly that and still appended,
+ * checkpointed and truncated through a pathname whose physical authority had
+ * changed underneath it. So the retained authority is re-proved before the
+ * append, before the checkpoint replacement and before the durable claim, and a
+ * link-count change, a replaced parent or a replaced lock fails the operation
+ * BEFORE the mutation rather than after it.
  */
 export function appendReceipt(
   paths: JournalPaths,
@@ -1274,50 +1691,34 @@ export function appendReceipt(
   const invalid = validateInput(input);
   if (invalid) return failed(input, "invalid_record", invalid);
 
-  const authorised = resolveJournalIdentity(paths.journal);
-  if (!authorised.ok) return failed(input, authorised.failure.code, authorised.failure.message);
-  const locked = authorised.identity;
-
-  const lockFailure = acquireJournalLock(locked.lock, io, lockOptions);
-  if (lockFailure) return failed(input, lockFailure.code, lockFailure.message);
+  const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append");
+  if (!acquired.ok) return failed(input, acquired.failure.code, acquired.failure.message);
+  const authority = acquired.authority;
   try {
-    // The caller's path may mean something else now than it did a moment ago —
-    // a swapped parent symlink is enough. Refuse rather than write into a
-    // destination whose own lock is held by somebody else.
-    const underLock = resolveJournalIdentity(paths.journal);
-    if (!underLock.ok) return failed(input, underLock.failure.code, underLock.failure.message);
-    const drift = journalIdentityDrift(locked, underLock.identity);
-    if (drift) return failed(input, "journal_identity_unstable", drift);
-
-    // Write authority is bound to the identity we hold: every read and the append
-    // itself go through the canonical path, so a swap AFTER this point cannot
-    // redirect the bytes either.
-    const outcome = appendLocked({ journal: locked.path, checkpoint: paths.checkpoint }, input, io);
-    if (outcome.disposition !== "succeeded") return outcome;
-
-    // Last gate before the durable claim: the caller's journal must STILL be the
-    // one this transaction was authorised over.
-    const afterWrite = resolveJournalIdentity(paths.journal);
-    if (!afterWrite.ok) return failed(input, afterWrite.failure.code, afterWrite.failure.message);
-    const lateDrift = journalIdentityDrift(locked, afterWrite.identity);
-    if (lateDrift) return failed(input, "journal_identity_unstable", lateDrift);
-    return outcome;
+    // Write authority is bound to the physical journal we hold, so a swap AFTER
+    // this point cannot redirect the bytes and cannot escape detection either.
+    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority);
   } finally {
-    // A typed failure must never leak the lock and wedge every later writer.
-    releaseJournalLock(locked.lock, io);
+    // A typed failure must never leak the lock and wedge every later writer —
+    // and must never delete a lock this caller does not hold.
+    authority.release();
   }
 }
 
 /**
- * The guarded transaction. Every read here is inside the lock, so the sequence
- * this assigns cannot be assigned by anyone else.
+ * The guarded transaction. Every read here is inside the lock and through the
+ * retained handle, so the sequence this assigns cannot be assigned by anyone
+ * else, and every mutation is preceded by a fresh proof that the exclusion
+ * domain is still the one this writer acquired.
  */
 function appendLocked(
   paths: JournalPaths,
   input: ReceiptAppendInput,
   io: JournalIo,
+  authority: RetainedJournalAuthority,
 ): ReceiptAppendOutcome {
-  const scan = scanReceiptJournal(paths.journal, io);
+  const bound = authority.bind(io);
+  const scan = scanReceiptJournal(paths.journal, bound);
 
   // Refuse to append onto a tail we cannot safely extend. Appending after a
   // torn (newline-less) line would concatenate into it and destroy both
@@ -1370,17 +1771,28 @@ function appendLocked(
 
   const record = sealReceiptRecord({ ...input, sequence: scan.last_sequence + 1 });
 
+  // AUTHORITY GATE — nothing is mutated until the exclusion domain is re-proved.
+  // Round 5's link-count and parent-replacement races both land in this window,
+  // and both must fail the operation HERE, before the append, not after it.
+  const beforeAppend = authority.verify("before the append");
+  if (beforeAppend) return failed(input, beforeAppend.code, beforeAppend.message);
+
   try {
-    io.appendLine(paths.journal, `${JSON.stringify(record)}\n`);
+    bound.appendLine(paths.journal, `${JSON.stringify(record)}\n`);
   } catch (err) {
     return failed(input, "journal_append_failed", err instanceof Error ? err.message : String(err));
   }
+
+  // The first append CREATES the journal, so this is where a not-yet-existing
+  // journal becomes a pinned one — and where the pin is re-proved either way.
+  const afterAppend = authority.adopt("after the append");
+  if (afterAppend) return failed(input, afterAppend.code, afterAppend.message);
 
   // PROVE the line is durable rather than trusting the write call: re-scan and
   // demand this exact sealed record, at this exact sequence, in an intact
   // journal. A write that landed nothing, landed twice, or raced someone else
   // into the same sequence is caught here instead of being reported as success.
-  const after = scanReceiptJournal(paths.journal, io);
+  const after = scanReceiptJournal(paths.journal, bound);
   const landed = after.records.find((r) => r.sequence === record.sequence && r.event_id === record.event_id);
   if (!landed || landed.record_hash !== record.record_hash) {
     return failed(
@@ -1408,6 +1820,11 @@ function appendLocked(
     contract_version: RECEIPT_CONTRACT_VERSION,
   };
 
+  // AUTHORITY GATE — the checkpoint is the durability claim made visible, so it
+  // must not be replaced under an exclusion domain this writer no longer holds.
+  const beforeCheckpoint = authority.verify("before the checkpoint replacement");
+  if (beforeCheckpoint) return failed(input, beforeCheckpoint.code, beforeCheckpoint.message);
+
   try {
     io.writeCheckpoint(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}\n`);
   } catch (err) {
@@ -1426,6 +1843,11 @@ function appendLocked(
       `checkpoint on disk reads "${persisted.state}" and does not match the checkpoint written for sequence ${record.sequence}`,
     );
   }
+
+  // AUTHORITY GATE — last one, and the one BR-07 turns on: a durable claim is
+  // only honest if the authority that produced it was held the whole way.
+  const beforeClaim = authority.verify("before the durable claim");
+  if (beforeClaim) return failed(input, beforeClaim.code, beforeClaim.message);
 
   const blocked =
     input.observation_state === "not_observed" || input.observation_state === "observation_failed";
@@ -1478,10 +1900,13 @@ export type TornTailRepairFailureCode =
  * Callers must run this consciously; `appendReceipt` will not self-heal.
  *
  * It mutates the journal, so it takes the SAME cross-process lock the append
- * transaction uses, over the SAME physical identity: truncating under a
- * concurrent writer would delete a record that writer just made durable and
- * reported as success, and truncating a file this caller does not hold the lock
- * for is the same defect through a different name (MH-06-R4-B1).
+ * transaction uses, over the SAME physical identity, and holds that identity by
+ * DESCRIPTOR for the whole repair: truncating under a concurrent writer would
+ * delete a record that writer just made durable and reported as success, and
+ * truncating a file this caller does not hold the lock for is the same defect
+ * through a different name (MH-06-R4-B1). Round 5 truncated a replacement journal
+ * in a replacement directory and reported `succeeded`, so the authority is
+ * re-proved immediately before the truncation as well (MH-06-R5-B1).
  */
 export function repairTornTail(
   journalPath: string,
@@ -1500,26 +1925,23 @@ export function repairTornTail(
     };
   };
 
-  const authorised = resolveJournalIdentity(journalPath);
-  if (!authorised.ok) return refused(authorised.failure.code, authorised.failure.message, journalPath);
-  const locked = authorised.identity;
-
-  const lockFailure = acquireJournalLock(locked.lock, io, lockOptions);
-  if (lockFailure) return refused(lockFailure.code, lockFailure.message, locked.path);
+  const acquired = acquireJournalAuthority(journalPath, io, lockOptions, "truncate");
+  if (!acquired.ok) {
+    return refused(acquired.failure.code, acquired.failure.message, acquired.identity?.path ?? journalPath);
+  }
+  const authority = acquired.authority;
   try {
-    const underLock = resolveJournalIdentity(journalPath);
-    if (!underLock.ok) return refused(underLock.failure.code, underLock.failure.message, locked.path);
-    const drift = journalIdentityDrift(locked, underLock.identity);
-    if (drift) return refused("journal_identity_unstable", drift, locked.path);
-    // Truncation is bound to the identity the lock names, never to the spelling.
-    return repairTornTailLocked(locked.path, io);
+    // Truncation is bound to the pinned file, never to the spelling.
+    return repairTornTailLocked(authority, io);
   } finally {
-    releaseJournalLock(locked.lock, io);
+    authority.release();
   }
 }
 
-function repairTornTailLocked(journalPath: string, io: JournalIo): TornTailRepairOutcome {
-  const before = scanReceiptJournal(journalPath, io);
+function repairTornTailLocked(authority: RetainedJournalAuthority, io: JournalIo): TornTailRepairOutcome {
+  const journalPath = authority.identity.path;
+  const bound = authority.bind(io);
+  const before = scanReceiptJournal(journalPath, bound);
 
   if (before.integrity !== "truncated_tail") {
     return {
@@ -1535,7 +1957,7 @@ function repairTornTailLocked(journalPath: string, io: JournalIo): TornTailRepai
     };
   }
 
-  const raw = io.readAll(journalPath) ?? "";
+  const raw = bound.readAll(journalPath) ?? "";
   // `truncate(2)` takes a BYTE length, but lastIndexOf returns a UTF-16 CHARACTER
   // index. Converting is mandatory: a journal holding any non-ASCII field (a
   // run_id, operation_id, or scenario_id with a non-Latin character) would
@@ -1543,8 +1965,23 @@ function repairTornTailLocked(journalPath: string, io: JournalIo): TornTailRepai
   const keepChars = raw.lastIndexOf("\n") + 1; // 0 when there is no complete line at all
   const totalBytes = Buffer.byteLength(raw, "utf8");
   const keep = Buffer.byteLength(raw.slice(0, keepChars), "utf8");
+
+  // AUTHORITY GATE — a truncation is destructive and irreversible, so it happens
+  // only while the exclusion domain acquired for it is provably still held.
+  const beforeTruncate = authority.verify("before the truncation");
+  if (beforeTruncate) {
+    return {
+      schema_version: "guild.receipt_repair_outcome.v1",
+      disposition: "failed",
+      integrity_before: before.integrity,
+      integrity_after: before.integrity,
+      removed_bytes: 0,
+      failure: { code: beforeTruncate.code, message: beforeTruncate.message },
+    };
+  }
+
   try {
-    io.truncate(journalPath, keep);
+    bound.truncate(journalPath, keep);
   } catch (err) {
     return {
       schema_version: "guild.receipt_repair_outcome.v1",
@@ -1556,11 +1993,25 @@ function repairTornTailLocked(journalPath: string, io: JournalIo): TornTailRepai
     };
   }
 
+  // …and only a repair that STILL holds it may report that it succeeded. The
+  // bytes really did go, so they are reported as removed either way.
+  const afterTruncate = authority.verify("before the repair is reported successful");
+  if (afterTruncate) {
+    return {
+      schema_version: "guild.receipt_repair_outcome.v1",
+      disposition: "failed",
+      integrity_before: before.integrity,
+      integrity_after: scanReceiptJournal(journalPath, bound).integrity,
+      removed_bytes: totalBytes - keep,
+      failure: { code: afterTruncate.code, message: afterTruncate.message },
+    };
+  }
+
   return {
     schema_version: "guild.receipt_repair_outcome.v1",
     disposition: "succeeded",
     integrity_before: before.integrity,
-    integrity_after: scanReceiptJournal(journalPath, io).integrity,
+    integrity_after: scanReceiptJournal(journalPath, bound).integrity,
     removed_bytes: totalBytes - keep,
     failure: null,
   };

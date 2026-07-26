@@ -1973,3 +1973,226 @@ describe("MH-06-R2-B5 — duplicate event ids fail reconciliation", () => {
     expect(out.unresolved_sequences).toEqual([2]);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R5-B2 — a repair that LOSES canonical authority is not a clean repair
+//
+// Round 4 made an explicitly DENIED repair blocking. Round 5's review then found
+// the other half: a repair that successfully acquired the canonical lock and
+// then lost that authority never became a denial at all. A hard link added after
+// the sole under-lock identity check, and a canonical-parent replacement that
+// carried the acquired lock away, both produced
+// `attempted: true, persisted: true, verified: true, disposition: "succeeded",
+// blocks_clean_close: false, residual_disagreements: []` — while a competing lock
+// in the replacement location was still held, and the `finally` deleted THAT
+// writer's lock.
+//
+// Verifying that the journal and the checkpoint agree at the replacement path is
+// not proof of retained exclusion. Authority must be re-proved before the
+// checkpoint is written and again before `verified` may be set.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R5-B2 — checkpoint repair cannot report clean after losing authority", () => {
+  /** One durable record beside a checkpoint damaged enough to REQUIRE repair. */
+  function damaged() {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(appendReceipt(p, input({ event_id: "e1", operation_id: "op-1" })).disposition).toBe("succeeded");
+    fs.writeFileSync(p.checkpoint, "{ not a checkpoint", "utf8");
+    return { root, ...p };
+  }
+
+  function repair(p: { journal: string; checkpoint: string }, over: Record<string, unknown> = {}) {
+    return reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      repair_checkpoint: true,
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+      ...over,
+    });
+  }
+
+  /** Fire `inject` exactly once, on the first read of the journal itself. */
+  function onFirstJournalRead(inject: () => void): { io: JournalIo; fired: () => boolean } {
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(target) {
+        const content = defaultJournalIo.readAll(target);
+        if (!fired && path.basename(target) === "journal.jsonl") {
+          fired = true;
+          inject();
+        }
+        return content;
+      },
+    };
+    return { io, fired: () => fired };
+  }
+
+  /** Rename the canonical parent away (the acquired lock goes with it) and
+   * install a replacement holding a copy of everything plus its own held lock. */
+  function replaceCanonicalParent(p: { journal: string; checkpoint: string }) {
+    const parent = path.dirname(fs.realpathSync(p.journal));
+    const moved = `${parent}-moved`;
+    const journalBytes = fs.readFileSync(p.journal);
+    const checkpointBytes = fs.existsSync(p.checkpoint) ? fs.readFileSync(p.checkpoint) : null;
+
+    fs.renameSync(parent, moved);
+    fs.mkdirSync(parent, { recursive: true });
+    fs.writeFileSync(path.join(parent, path.basename(p.journal)), journalBytes);
+    if (checkpointBytes) fs.writeFileSync(path.join(parent, path.basename(p.checkpoint)), checkpointBytes);
+    const replacementLock = `${path.join(parent, path.basename(p.journal))}.lock`;
+    fs.mkdirSync(replacementLock);
+    return { moved, replacementLock, strandedLock: `${path.join(moved, path.basename(p.journal))}.lock` };
+  }
+
+  it("refuses when a hard link appears AFTER the under-lock identity check", () => {
+    const p = damaged();
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    const aliasLock = `${alias}.lock`;
+    const { io, fired } = onFirstJournalRead(() => {
+      fs.linkSync(p.journal, alias);
+      fs.mkdirSync(aliasLock);
+    });
+
+    const out = repair(p, { io });
+
+    expect(fired()).toBe(true);
+    expect(fs.statSync(p.journal).nlink).toBe(2);
+    expect(out.checkpoint_repair.requested).toBe(true);
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.persisted).toBe(false);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_identity_ambiguous");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+    // The checkpoint was never written under a partitioned exclusion domain…
+    expect(readCheckpointState(p.checkpoint).state).toBe("malformed");
+    // …and the other name's writer still holds its lock.
+    expect(fs.existsSync(aliasLock)).toBe(true);
+    expect(fs.existsSync(`${fs.realpathSync(p.journal)}.lock`)).toBe(false);
+  });
+
+  it("refuses when the canonical PARENT is replaced after the identity check", () => {
+    const p = damaged();
+    let swap: ReturnType<typeof replaceCanonicalParent> | null = null;
+    const { io, fired } = onFirstJournalRead(() => {
+      swap = replaceCanonicalParent(p);
+    });
+
+    const out = repair(p, { io });
+    const moved = swap as unknown as ReturnType<typeof replaceCanonicalParent>;
+
+    expect(fired()).toBe(true);
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.persisted).toBe(false);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_identity_unstable");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+    // The replacement's checkpoint is untouched, and its writer keeps its lock.
+    expect(readCheckpointState(p.checkpoint).state).toBe("malformed");
+    expect(fs.existsSync(moved.replacementLock)).toBe(true);
+    // The lock this caller acquired travelled with the renamed parent; it is
+    // left there rather than a stranger's lock being deleted in its place.
+    expect(fs.existsSync(moved.strandedLock)).toBe(true);
+  });
+
+  it("refuses when the lock directory itself is replaced under the repair", () => {
+    const p = damaged();
+    const lock = journalLockPath({ journal: p.journal, checkpoint: p.checkpoint });
+    const { io, fired } = onFirstJournalRead(() => {
+      fs.rmdirSync(lock);
+      fs.mkdirSync(lock); // same name, a different writer's exclusion
+    });
+
+    const out = repair(p, { io });
+
+    expect(fired()).toBe(true);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_identity_unstable");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+    expect(readCheckpointState(p.checkpoint).state).toBe("malformed");
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmdirSync(lock);
+  });
+
+  it("still converges and reports clean when authority is RETAINED", () => {
+    // The discriminator: without it, "never repair" would satisfy every
+    // assertion above.
+    const p = damaged();
+    const out = repair(p);
+
+    expect(out.checkpoint_repair.attempted).toBe(true);
+    expect(out.checkpoint_repair.persisted).toBe(true);
+    expect(out.checkpoint_repair.verified).toBe(true);
+    expect(out.checkpoint_repair.residual_disagreements).toEqual([]);
+    expect(out.disposition).toBe("succeeded");
+    expect(out.blocks_clean_close).toBe(false);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(fs.existsSync(journalLockPath({ journal: p.journal, checkpoint: p.checkpoint }))).toBe(false);
+  });
+
+  it("keeps `repair_not_permitted` distinct from a loss of authority", () => {
+    // A repair that HOLDS its authority the whole way and is refused on its own
+    // enumerated blockers still degrades, and still says exactly that. Collapsing
+    // the two would turn the new rule into "reconciliation never succeeds".
+    const root = mkRoot();
+    const p = paths(root);
+    writeJournal(p, [
+      sealed(1, { event_id: "e1", operation_id: "op-1" }),
+      sealed(4, { event_id: "e4", operation_id: "op-4" }),
+    ]);
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 4, record_count: 4 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      repair_checkpoint: true,
+    });
+
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_not_permitted");
+    expect(out.unresolved_sequences).toEqual([2, 3]);
+    expect(out.disposition).toBe("degraded");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("leaves a READ-ONLY reconcile of a multi-named journal diagnosable", () => {
+    // Reads make no durable claim, so they still take no lock and apply no
+    // identity gate — a hard-linked or wedged journal must stay diagnosable.
+    const p = damaged();
+    fs.linkSync(p.journal, path.join(path.dirname(p.journal), "alias.jsonl"));
+    let locks = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        locks += 1;
+        return defaultJournalIo.acquireLock!(lockPath);
+      },
+    };
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      io,
+    });
+
+    expect(locks).toBe(0);
+    expect(out.checkpoint_repair.requested).toBe(false);
+    expect(out.journal_integrity).toBe("intact");
+    expect(out.checkpoint_before_state).toBe("malformed");
+    expect(out.checkpoint_disagreements.map((d) => d.code)).toEqual(["checkpoint_malformed"]);
+    expect(out.disposition).toBe("degraded");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+});

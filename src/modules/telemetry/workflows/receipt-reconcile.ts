@@ -63,10 +63,7 @@ import {
   compareCheckpointToJournal,
   checkpointsIdentical,
   highestSequenceRecord,
-  acquireJournalLock,
-  releaseJournalLock,
-  resolveJournalIdentity,
-  journalIdentityDrift,
+  acquireJournalAuthority,
   verifyReceiptRecord,
   isValidReceiptRecordShape,
   analyzeReceiptRecords,
@@ -75,12 +72,14 @@ import {
   type CheckpointAgreement,
   type CheckpointAgreementCode,
   type CheckpointReadState,
+  type JournalAuthorityFailure,
   type JournalIdentityFailure,
   type JournalIo,
   type JournalIntegrity,
   type ObservationState,
   type ReceiptCheckpointV1,
   type ReceiptRecordV1,
+  type RetainedJournalAuthority,
 } from "./receipt-journal";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -524,51 +523,48 @@ function vetRecoveries(
  * report a disagreement that resolves itself — a false alarm that fails CLOSED
  * (`degraded`, blocks close), never a false clean.
  *
- * IDENTITY, THEN EXCLUSION (MH-06-R4-B1). A repair is a mutation, so it resolves
- * the PHYSICAL journal before it locks anything, re-derives that identity once
- * the lock is held, and scans the canonical path the lock names rather than the
- * caller's spelling. A journal with more than one name, or a name that moved
- * under the lock, is denied the repair with a typed reason.
+ * IDENTITY, THEN EXCLUSION, THEN RETENTION (MH-06-R4-B1, MH-06-R5-B2). A repair
+ * is a mutation, so it resolves the PHYSICAL journal before it locks anything,
+ * pins that journal with an open descriptor for the whole repair, and scans the
+ * canonical path the lock names rather than the caller's spelling. Round 5 stopped
+ * there, and a repair that ACQUIRED the canonical lock and then lost it — to a
+ * hard link, or to a renamed canonical parent that carried the lock away — still
+ * reported `verified: true`, `succeeded` and `blocks_clean_close: false` while a
+ * competing lock in the replacement location was held. Losing authority after
+ * acquisition is now exactly as blocking as never getting it: the retained
+ * authority is re-proved before the checkpoint is written and again before
+ * `verified` may be set, and a loss becomes `repair_identity_ambiguous` /
+ * `repair_identity_unstable` — both of which are denials of exclusive access.
  */
 export function reconcileReceiptJournal(opts: ReconcileOptions): ReconciliationOutcomeV1 {
   const io = opts.io ?? defaultJournalIo;
-  if (opts.repair_checkpoint !== true) return reconcileWithin(opts, io, null, opts.journalPath);
+  if (opts.repair_checkpoint !== true) return reconcileWithin(opts, io, null, opts.journalPath, null);
 
-  const authorised = resolveJournalIdentity(opts.journalPath);
-  if (!authorised.ok) return reconcileWithin(opts, io, identityDenial(authorised.failure), opts.journalPath);
-  const locked = authorised.identity;
-
-  const lockFailure = acquireJournalLock(locked.lock, io, {
-    lock_max_attempts: opts.lock_max_attempts,
-    lock_wait_ms: opts.lock_wait_ms,
-  });
+  const acquired = acquireJournalAuthority(
+    opts.journalPath,
+    io,
+    { lock_max_attempts: opts.lock_max_attempts, lock_wait_ms: opts.lock_wait_ms },
+    "read",
+  );
   // Without exclusive access there is no trustworthy snapshot to repair FROM, so
   // the repair fails closed — but the read-only verdict is still produced and
   // still honest about what it saw.
-  if (lockFailure) {
+  if (!acquired.ok) {
     return reconcileWithin(
       opts,
       io,
-      {
-        code: lockFailure.code === "journal_lock_unavailable" ? "repair_lock_unavailable" : "repair_lock_failed",
-        message: lockFailure.message,
-      },
-      locked.path,
+      accessDenial(acquired.failure),
+      acquired.identity?.path ?? opts.journalPath,
+      null,
     );
   }
+  const authority = acquired.authority;
   try {
-    // The caller's path may mean something else now than it did before the wait.
-    const underLock = resolveJournalIdentity(opts.journalPath);
-    if (!underLock.ok) return reconcileWithin(opts, io, identityDenial(underLock.failure), locked.path);
-    // The SAME drift test the append path applies — shared, never re-derived.
-    const drift = journalIdentityDrift(locked, underLock.identity);
-    if (drift) {
-      return reconcileWithin(opts, io, { code: "repair_identity_unstable", message: drift }, locked.path);
-    }
-    return reconcileWithin(opts, io, null, locked.path);
+    return reconcileWithin(opts, io, null, authority.identity.path, authority);
   } finally {
-    // A typed failure must never leak the lock and wedge every later writer.
-    releaseJournalLock(locked.lock, io);
+    // A typed failure must never leak the lock and wedge every later writer — and
+    // must never delete a lock belonging to whoever replaced this one.
+    authority.release();
   }
 }
 
@@ -587,6 +583,17 @@ function identityDenial(failure: JournalIdentityFailure): RepairAccessDenial {
 }
 
 /**
+ * Carry ANY refusal of exclusive access — identity or lock — into the repair's
+ * vocabulary. One mapping, so a new way of losing access cannot quietly land
+ * outside `REPAIR_ACCESS_DENIALS` and be promoted to a verified clean repair.
+ */
+function accessDenial(failure: JournalAuthorityFailure): RepairAccessDenial {
+  if (failure.code === "journal_lock_unavailable") return { code: "repair_lock_unavailable", message: failure.message };
+  if (failure.code === "journal_lock_failed") return { code: "repair_lock_failed", message: failure.message };
+  return identityDenial({ code: failure.code, message: failure.message });
+}
+
+/**
  * The verdict itself. Every read below happens under whatever exclusion the
  * caller established: with `repair_checkpoint`, that is the canonical journal
  * lock over `journalPath` (the canonical name, not the caller's spelling);
@@ -597,8 +604,14 @@ function reconcileWithin(
   io: JournalIo,
   denial: RepairAccessDenial | null,
   journalPath: string,
+  authority: RetainedJournalAuthority | null,
 ): ReconciliationOutcomeV1 {
-  const scan = scanReceiptJournal(journalPath, io);
+  // Every journal read goes through the retained handle when a repair holds one,
+  // so a replaced parent cannot silently substitute a different physical journal
+  // for the one this verdict is about. A read-only reconcile holds nothing and
+  // reads by path, deliberately: it makes no durable claim.
+  const journalIo = authority !== null ? authority.bind(io) : io;
+  const scan = scanReceiptJournal(journalPath, journalIo);
   const checkpointRead = readCheckpointState(opts.checkpointPath, io);
   const checkpoint_before = checkpointRead.checkpoint;
 
@@ -782,11 +795,21 @@ function reconcileWithin(
     failure: null,
   };
 
-  if (checkpoint_repair.requested && denial) {
+  // AUTHORITY GATE — a repair that acquired exclusive access and then LOST it
+  // never froze the snapshot either, so it is the same denial (MH-06-R5-B2).
+  // Evaluated before the blockers for exactly the reason the lock denial is:
+  // a "not permitted" verdict derived from an unfrozen snapshot is a guess.
+  const lostAuthority =
+    checkpoint_repair.requested && !denial && authority !== null
+      ? authority.verify("before the checkpoint repair")
+      : null;
+
+  if (checkpoint_repair.requested && (denial || lostAuthority)) {
     // No exclusive access ⇒ no repair, and no claim about what the journal holds.
     // Reported ahead of every other refusal reason on purpose: a "not permitted"
     // verdict derived from a snapshot we could not freeze would be a guess.
-    checkpoint_repair.failure = { code: denial.code, message: denial.message };
+    const refusal = denial ?? identityDenial(lostAuthority!);
+    checkpoint_repair.failure = { code: refusal.code, message: refusal.message };
   } else if (checkpoint_repair.requested) {
     // Repair may correct exactly ONE thing: an on-disk checkpoint that does not
     // describe the durable journal. It must never paper over damage, and it must
@@ -817,11 +840,20 @@ function reconcileWithin(
       blockers.push("producer checkpoint does not describe the merged view");
     }
 
+    // AUTHORITY GATE — re-proved IMMEDIATELY before the mutation, not merely
+    // before the decision to attempt one. The gate above establishes precedence
+    // over `repair_not_permitted`; this one closes the window between them.
+    const stillHeldToWrite = blockers.length === 0 && authority !== null
+      ? authority.verify("before the repair write")
+      : null;
+
     if (blockers.length > 0) {
       checkpoint_repair.failure = {
         code: "repair_not_permitted",
         message: `checkpoint repair refused: ${blockers.join("; ")}`,
       };
+    } else if (stillHeldToWrite) {
+      checkpoint_repair.failure = identityDenial(stillHeldToWrite);
     } else {
       checkpoint_repair.attempted = true;
       try {
@@ -834,29 +866,39 @@ function reconcileWithin(
         };
       }
       if (checkpoint_repair.persisted) {
-        // Prove it twice: the file must re-read as the checkpoint we wrote, AND
+        // Prove it three ways: the file must re-read as the checkpoint we wrote,
         // it must leave NO disagreement standing against the journal as it is
-        // NOW — re-scanned, not the snapshot the proposal was built from.
+        // NOW — re-scanned, not the snapshot the proposal was built from — and
+        // the exclusion this repair was granted must STILL be held.
         //
         // Re-scanning under the lock we already hold looks redundant, and that is
         // the point: it is the assertion that the lock did its job. If anything
         // moved the journal anyway (a lock primitive that lies, a writer that
         // never took the lock), the written checkpoint no longer describes it and
         // this fails closed instead of reporting a verified clean repair.
-        const currentScan = scanReceiptJournal(journalPath, io);
+        //
+        // Internal agreement is not authority, though: round 5 proved journal and
+        // checkpoint can agree PERFECTLY at a replacement path this caller never
+        // locked. So the retained authority is the third condition, not a fourth
+        // opinion about the same bytes.
+        const currentScan = scanReceiptJournal(journalPath, journalIo);
         const reread = readCheckpointState(opts.checkpointPath, io);
         const identical = reread.checkpoint !== null && checkpointsIdentical(reread.checkpoint, checkpoint_after);
         checkpoint_repair.residual_disagreements = compareCheckpointToJournal(reread, currentScan, opts.run_id);
-        checkpoint_repair.verified = identical && checkpoint_repair.residual_disagreements.length === 0;
+        const stillHeld = authority !== null ? authority.verify("before the repair is reported verified") : null;
+        checkpoint_repair.verified =
+          identical && checkpoint_repair.residual_disagreements.length === 0 && stillHeld === null;
         if (!checkpoint_repair.verified) {
-          checkpoint_repair.failure = {
-            code: "repair_verify_failed",
-            message: identical
-              ? `checkpoint was written but still disagrees with the journal: ${checkpoint_repair.residual_disagreements
-                  .map((d) => d.code)
-                  .join(", ")}`
-              : "checkpoint on disk does not match the reconciled checkpoint after write",
-          };
+          checkpoint_repair.failure = stillHeld
+            ? identityDenial(stillHeld)
+            : {
+                code: "repair_verify_failed",
+                message: identical
+                  ? `checkpoint was written but still disagrees with the journal: ${checkpoint_repair.residual_disagreements
+                      .map((d) => d.code)
+                      .join(", ")}`
+                  : "checkpoint on disk does not match the reconciled checkpoint after write",
+              };
         }
       }
     }
