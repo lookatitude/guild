@@ -65,9 +65,11 @@ import {
   isNeutralLifecyclePhase,
   isNeutralReasonCode,
   mapLegacyNeutralEventName,
+  neutralCanonicalDigest,
   neutralCanonicalJson,
   neutralFingerprint,
   neutralOutcome,
+  neutralSha256Hex,
 } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
 
 import {
@@ -614,6 +616,98 @@ describe("neutralCanonicalJson / neutralFingerprint", () => {
 
   it("normalizes undefined-valued keys away so absent and undefined agree", () => {
     expect(neutralCanonicalJson({ a: 1, b: undefined })).toBe(neutralCanonicalJson({ a: 1 }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MH-02-R5-B01 — a real digest, computed rather than imported
+//
+// The conformance decision's trust root verifies signatures, and a signature is
+// only as strong as the digest it commits to. `neutralFingerprint` is a 64-bit
+// FNV-1a: correct for comparing two values the core produced, useless when an
+// adversary picks the input. `neutralSha256Hex` is FIPS 180-4 SHA-256 written
+// out natively — no import, so core closure is untouched — and these vectors are
+// what stop a transcription slip in the round constants from shipping as a
+// working hash.
+// ---------------------------------------------------------------------------
+
+describe("MH-02-R5-B01 neutralSha256Hex", () => {
+  it("matches the published SHA-256 vectors", () => {
+    expect(neutralSha256Hex("")).toBe(
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+    expect(neutralSha256Hex("abc")).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+    expect(neutralSha256Hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")).toBe(
+      "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+    );
+    expect(
+      neutralSha256Hex(
+        "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+      )
+    ).toBe("cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1");
+    // The one-million-'a' vector: 15625 compression blocks, so a schedule or
+    // state-carry bug that survives a one-block input cannot survive this.
+    expect(neutralSha256Hex("a".repeat(1000000))).toBe(
+      "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+    );
+  });
+
+  it("pads correctly at every block boundary", () => {
+    // 55/56 and 63/64 are where the length field forces an extra block. A wrong
+    // padding branch is invisible on short inputs and wrong on exactly these.
+    expect(neutralSha256Hex("a".repeat(55))).toBe(
+      "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"
+    );
+    expect(neutralSha256Hex("a".repeat(56))).toBe(
+      "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a"
+    );
+    expect(neutralSha256Hex("a".repeat(63))).toBe(
+      "7d3e74a05d7db15bce4ad9ec0658ea98e3f06eeecf16b4c6fff2da457ddc2f34"
+    );
+    expect(neutralSha256Hex("a".repeat(64))).toBe(
+      "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb"
+    );
+    expect(neutralSha256Hex("a".repeat(65))).toBe(
+      "635361c48bb9eab14198e76ea8ab7f1a41685d6ad62aa9146d301d4f17eb0ae0"
+    );
+  });
+
+  it("hashes the UTF-8 encoding, including non-ASCII and surrogate pairs", () => {
+    // Two-byte, and a four-byte astral character carried as a surrogate pair.
+    expect(neutralSha256Hex("é")).toBe(
+      "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c"
+    );
+    expect(neutralSha256Hex("𝄞")).toBe(
+      "e419efd3d6046adf7662b0daadab65047e8014a523316d7ccc8710de694aa9b6"
+    );
+  });
+
+  it("is a fixed-width lowercase hex digest that separates near-identical inputs", () => {
+    expect(neutralSha256Hex("x")).toMatch(/^[0-9a-f]{64}$/);
+    expect(neutralSha256Hex("a")).not.toBe(neutralSha256Hex("b"));
+    expect(neutralSha256Hex("ab")).not.toBe(neutralSha256Hex("ba"));
+    expect(neutralSha256Hex("a")).toBe(neutralSha256Hex("a"));
+  });
+
+  it("digests the CANONICAL form, so key order cannot change the commitment", () => {
+    expect(neutralCanonicalDigest({ b: 1, a: 2 })).toBe(neutralCanonicalDigest({ a: 2, b: 1 }));
+    expect(neutralCanonicalDigest({ a: 1 })).not.toBe(neutralCanonicalDigest({ a: 2 }));
+    expect(neutralCanonicalDigest({ a: 1 })).toBe(neutralSha256Hex('{"a":1}'));
+    expect(neutralCanonicalDigest({ a: 1 })).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("is strictly stronger than the fingerprint it does NOT replace", () => {
+    // Both remain exported: the fingerprint stays the right tool for equality
+    // between values the core produced, and it is NOT collision-resistant. The
+    // separation is the point — the digest is what an adversary-chosen input is
+    // committed with.
+    expect(neutralFingerprint({ a: 1 })).toMatch(/^nfp1:[0-9a-f]{16}$/);
+    expect(neutralCanonicalDigest({ a: 1 }).length).toBe(64);
+    expect(neutralCanonicalDigest({ a: 1 }).length).toBeGreaterThan(
+      neutralFingerprint({ a: 1 }).length
+    );
   });
 });
 

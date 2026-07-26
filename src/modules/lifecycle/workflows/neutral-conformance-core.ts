@@ -40,9 +40,11 @@ import {
   isNeutralReasonCode,
   isNeutralScenarioCategory,
   isNeutralSupportStatus,
+  neutralCanonicalDigest,
   neutralFingerprint,
   neutralFreeze,
   neutralOutcome,
+  neutralSha256Hex,
 } from "./neutral-runtime-contracts";
 import type {
   NeutralDisposition,
@@ -762,7 +764,15 @@ export interface NeutralReceiptJournalEntry {
   readonly previous_commitment: string;
 }
 
-/** An independent attestation that a journal root was observed. */
+/**
+ * An independent attestation that a journal root was observed.
+ *
+ * MH-02-R5-B01: rounds 3 and 4 made this record carry more FIELDS; every one of
+ * them was still a value the claimant could type. `attestation_signature` is the
+ * first field on it that a claimant cannot produce, because verifying it needs
+ * only the public key this core pins and producing it needs the private key this
+ * core does not have and this repository does not contain.
+ */
 export interface NeutralJournalAttestation {
   /** One of `NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS`. */
   readonly attestor_id: string;
@@ -771,10 +781,131 @@ export interface NeutralJournalAttestation {
   readonly attested_entry_count: number;
   /** `guild.journal_attestation.v1:<attestor>@<digest>`. */
   readonly attestation_ref: string;
+  /**
+   * `nas1:<challenge>:<response>` — the attestor's signature over
+   * `neutralAttestationDigest`, verified against `NEUTRAL_ATTESTOR_TRUST_ROOT`.
+   */
+  readonly attestation_signature: string;
 }
 
 export const NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA = "guild.conformance_authority.v1";
 export const NEUTRAL_ATTESTATION_REF_SCHEMA = "guild.journal_attestation.v1";
+
+// ---------------------------------------------------------------------------
+// The trust root (MH-02-R5-B01)
+// ---------------------------------------------------------------------------
+
+/**
+ * THE FINDING, and why every previous answer to it was the wrong shape.
+ *
+ * Round 5 required the authority to CARRY a chain-linked journal, a quorum of
+ * two distinct recognized attestors over its root, and a claimant that was
+ * neither of them — and the reviewer defeated all of it in one move, because
+ * every value being compared was a deterministic function of PUBLIC inputs. The
+ * attestation reference was `neutralAttestationReference(authority, attestation)`
+ * evaluated by the caller; the attestor identities were two labels chosen from a
+ * published list; the chain was a fingerprint the claimant could recompute. A
+ * party holding every input could therefore assemble a bundle that satisfied
+ * every gate, which round 5 shipped as a PASSING test named "documents the
+ * residue". Documenting a promotion path does not close it.
+ *
+ * WHAT ACTUALLY CLOSES IT
+ *   For a decision to be unsatisfiable by the claimant, it must depend on
+ *   something the claimant cannot compute from public data — and the only such
+ *   thing is a secret it does not hold. So the core pins the VERIFICATION half of
+ *   each recognized attestor's key material, and an attestation is admitted only
+ *   if it carries a signature that verifies under it. Verification is hashing and
+ *   small-integer arithmetic: no import, no I/O, no clock, no host handle, so the
+ *   import closure MH-02 acceptance 3 asserts is unchanged (see
+ *   `neutralSha256Hex`, which makes the same argument for the digest).
+ *
+ *   The roots below were generated once, off-repository. The private seeds behind
+ *   them were never written to disk at all — they existed in one process, signed
+ *   the fixtures the focused suite carries, and are gone. Every value here is
+ *   public by construction. That is what makes those fixtures honest: they are
+ *   signatures somebody holding the seeds produced, replayed as data, and nobody
+ *   reading this source can re-mint one for a different bundle.
+ *
+ * WHAT THIS IS NOT
+ *   It is not a claim that these are the PRODUCTION attestor roots. MH-09 owns
+ *   real release attestation and must replace this table with roots whose seeds
+ *   its attestors actually hold and keep; because the seeds behind these were
+ *   discarded, this table can verify the fixtures below and can never issue
+ *   anything new — which is the right property for a core that only DECIDES, and
+ *   the wrong one for a shipping trust root. Rotating or adding an entry is a
+ *   deliberate core change, exactly as advancing
+ *   `NEUTRAL_RECOGNIZED_RUNTIME_MAJOR` is. What MH-02 owes, and now discharges, is
+ *   that the DECISION is anchored to a trust root the claimant does not supply and
+ *   mechanically verifies the evidence it relies on.
+ */
+export interface NeutralAttestorVerificationKey {
+  readonly attestor_id: string;
+  /**
+   * The Merkle root over this attestor's one-time verification keys — 64 lowercase
+   * hex characters. This single value is the whole of what the core trusts.
+   */
+  readonly verification_root: string;
+}
+
+/**
+ * THE SCHEME, and why it is this one.
+ *
+ * `guild.journal_attestation.v1` signatures are WOTS+ one-time signatures under a
+ * Merkle authentication path: the construction RFC 8391 standardizes as XMSS,
+ * with position/step hash tweaks in place of bitmasks. Verification is
+ * `neutralSha256Hex` and small-integer arithmetic — nothing else.
+ *
+ * A discrete-log or RSA scheme would need multi-precision arithmetic. This
+ * repository ships no `tsconfig.json`, so its TypeScript is type-checked below
+ * ES2020, where BigInt literals are a compile error; and `BigInt` is deliberately
+ * absent from `NEUTRAL_PURE_INTRINSIC_ROOTS`, so reaching for it would be an
+ * ambient capability by this core's own boundary rule. Widening either to fit the
+ * signature scheme would be the tail wagging the dog. A hash-based scheme needs
+ * neither: it is built from the digest the core already computes, so it stays
+ * inside the toolchain and inside the boundary as they are.
+ *
+ * WHAT IS TRUSTED, EXACTLY
+ *   One 32-byte root per attestor, below. From it the core can VERIFY any of the
+ *   2^`NEUTRAL_ATTESTATION_TREE_HEIGHT` one-time keys beneath it, and can PRODUCE
+ *   none of them. The private seeds were generated off-repository, were never
+ *   written into it, and are not recoverable from anything here.
+ *
+ * THE ONE OBLIGATION THIS PUTS ON THE SIGNER
+ *   A WOTS+ key is one-time. An attestor that signs two different messages under
+ *   the same `key_index` leaks enough chain values to let a third message be
+ *   forged. That is inherent to hash-based signatures and is a property of the
+ *   SIGNER's state, which a stateless decision cannot check — MH-09 owns it, and
+ *   it is recorded as an open risk rather than implied away.
+ */
+export const NEUTRAL_ATTESTATION_SCHEME = "guild.wots_merkle.v1";
+
+/** Winternitz chain length: one chain per hex digit of the signed digest. */
+export const NEUTRAL_ATTESTATION_CHAIN_LENGTH = 16;
+
+/** 64 message chains for a 256-bit digest, plus 3 for the checksum. */
+export const NEUTRAL_ATTESTATION_MESSAGE_CHAINS = 64;
+export const NEUTRAL_ATTESTATION_CHECKSUM_CHAINS = 3;
+export const NEUTRAL_ATTESTATION_CHAINS =
+  NEUTRAL_ATTESTATION_MESSAGE_CHAINS + NEUTRAL_ATTESTATION_CHECKSUM_CHAINS;
+
+/** Merkle height: 2^4 one-time keys per attestor. */
+export const NEUTRAL_ATTESTATION_TREE_HEIGHT = 4;
+
+/** The pinned verification roots. Recognition IS the presence of a root here. */
+export const NEUTRAL_ATTESTOR_TRUST_ROOT: readonly NeutralAttestorVerificationKey[] = neutralFreeze([
+  {
+    attestor_id: "guild.release-attestor",
+    verification_root: "2cd0a7a8986e79ec2cb25b5752d5a85a80d10c4d133d6590b91417bf976f3539",
+  },
+  {
+    attestor_id: "guild.host-conformance-witness",
+    verification_root: "584d8e28a2a5c109a2b892b627a3154fef9da46efc45eb79d042611bf09d09ef",
+  },
+  {
+    attestor_id: "guild.distribution-notary",
+    verification_root: "4dd9eb1f20a5194d38c6ac9cf308dac017ceebac0e85bcd7fbfa26fc43945f37",
+  },
+]);
 
 /**
  * The parties whose attestation the core recognizes, and the claimant vocabulary
@@ -782,20 +913,27 @@ export const NEUTRAL_ATTESTATION_REF_SCHEMA = "guild.journal_attestation.v1";
  *
  * MH-03 owns host discovery and MH-09 owns release attestation; this is the
  * closed CLAIM vocabulary, for the same reason every other vocabulary in this
- * core is closed. Round 4's authority named no party at all, so "independent"
- * was a word in a doc comment rather than a checked property.
+ * core is closed. It is DERIVED from the trust root rather than written out
+ * beside it, so "recognized attestor" cannot drift away from "attestor this core
+ * can actually verify" — round 5's list was a set of labels with nothing behind
+ * them, which is precisely why naming two of them was enough to promote.
  */
-export const NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS: readonly string[] = neutralFreeze([
-  "guild.release-attestor",
-  "guild.host-conformance-witness",
-  "guild.distribution-notary",
-]);
+export const NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS: readonly string[] = neutralFreeze(
+  NEUTRAL_ATTESTOR_TRUST_ROOT.map((key) => key.attestor_id)
+);
 
 /** How many DISTINCT recognized attestors must observe the same journal root. */
 export const NEUTRAL_MINIMUM_ATTESTOR_QUORUM = 2;
 
+/** Domain separator. Binds every hash below to this scheme and version. */
+export const NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN = "guild.journal_attestation.v1/wots_merkle/1";
+
 const NEUTRAL_ATTESTATION_REF_PATTERN = new RegExp(
-  "^guild\\.journal_attestation\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})@(nec1:[0-9a-f]{16})$"
+  "^guild\\.journal_attestation\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})@(nad1:[0-9a-f]{64})$"
+);
+/** `nws1:<key index>:<67 chain values>:<4 authentication-path nodes>`. */
+const NEUTRAL_ATTESTATION_SIGNATURE_PATTERN = new RegExp(
+  `^nws1:([0-9a-f]{2}):([0-9a-f]{${NEUTRAL_ATTESTATION_CHAINS * 64}}):([0-9a-f]{${NEUTRAL_ATTESTATION_TREE_HEIGHT * 64}})$`
 );
 const NEUTRAL_COMMITMENT_PATTERN = new RegExp("^nec1:[0-9a-f]{16}$");
 const NEUTRAL_CLAIMANT_ID_PATTERN = new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{2,}$");
@@ -1020,7 +1158,21 @@ export function neutralJournalEntryCommitment(
   return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
 }
 
-/** The digest an attestation over a journal root must carry. */
+/**
+ * The digest an attestation over a journal root must carry — and the exact
+ * message the attestor signs.
+ *
+ * It binds the attestor, the journal, the chain root, the entry count, the
+ * observed range, and every field of the identity, so a signature cannot be
+ * lifted onto another journal, another window of the same journal, another
+ * release, or another attestor's name.
+ *
+ * MH-02-R5-B01 changed the digest from a 64-bit `neutralFingerprint` to SHA-256.
+ * A fingerprint is the right tool for comparing two values the core itself
+ * produced; it is the wrong tool for a value an ADVERSARY chooses, because
+ * finding a second preimage for a 64-bit FNV-1a is cheap, and a signature is
+ * only as strong as the digest it commits to.
+ */
 export function neutralAttestationDigest(
   authority: NeutralConformanceAuthority,
   attestation: NeutralJournalAttestation
@@ -1037,7 +1189,7 @@ export function neutralAttestationDigest(
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
     canonical[field] = (authority.identity as unknown as Record<string, unknown>)[field] ?? null;
   }
-  return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
+  return `nad1:${neutralCanonicalDigest(canonical)}`;
 }
 
 /** Build the canonical attestation reference. */
@@ -1046,6 +1198,159 @@ export function neutralAttestationReference(
   attestation: NeutralJournalAttestation
 ): string {
   return `${NEUTRAL_ATTESTATION_REF_SCHEMA}:${attestation.attestor_id}@${neutralAttestationDigest(authority, attestation)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Signature verification against the pinned trust root (MH-02-R5-B01)
+// ---------------------------------------------------------------------------
+
+/** The pinned verification root for one attestor, or `null` if it has none. */
+export function neutralAttestorVerificationKey(attestorId: unknown): string | null {
+  const pinned = NEUTRAL_ATTESTOR_TRUST_ROOT.find((key) => key.attestor_id === attestorId);
+  return pinned === undefined ? null : pinned.verification_root;
+}
+
+const NEUTRAL_HEX_ALPHABET = "0123456789abcdef";
+const NEUTRAL_SHA256_HEX_PATTERN = new RegExp("^[0-9a-f]{64}$");
+
+/**
+ * One step along a Winternitz chain.
+ *
+ * The chain position and the step are hashed in, so a value revealed for chain
+ * `i` at step `t` is useless at any other position — the tweak that WOTS+ gets
+ * from bitmasks, obtained here from domain separation instead.
+ */
+function chainStep(value: string, chain: number, step: number): string {
+  return neutralSha256Hex(
+    `${NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN}|F|${chain}|${step}|${value}`
+  );
+}
+
+/** Walk a chain forward from `step` to the end, yielding the chain's tip. */
+function chainTo(value: string, chain: number, step: number): string {
+  let current = value;
+  for (let at = step; at < NEUTRAL_ATTESTATION_CHAIN_LENGTH - 1; at += 1) {
+    current = chainStep(current, chain, at);
+  }
+  return current;
+}
+
+/**
+ * The Winternitz code word: one 4-bit symbol per hex digit of the message,
+ * followed by a base-16 checksum of the complements.
+ *
+ * The checksum is what stops the trivial forgery: without it, an attacker can
+ * advance any revealed chain value forward and sign any message whose symbols are
+ * all larger. Advancing a message symbol always DECREASES the checksum, and the
+ * checksum symbols would then have to be walked backwards, which is the preimage
+ * problem.
+ */
+function codeWord(message: string): number[] | null {
+  if (message.length !== NEUTRAL_ATTESTATION_MESSAGE_CHAINS) return null;
+  const symbols: number[] = [];
+  let checksum = 0;
+  for (let index = 0; index < message.length; index += 1) {
+    const symbol = NEUTRAL_HEX_ALPHABET.indexOf(message.charAt(index));
+    if (symbol === -1) return null;
+    symbols.push(symbol);
+    checksum += NEUTRAL_ATTESTATION_CHAIN_LENGTH - 1 - symbol;
+  }
+  for (let index = NEUTRAL_ATTESTATION_CHECKSUM_CHAINS - 1; index >= 0; index -= 1) {
+    const shift = Math.pow(NEUTRAL_ATTESTATION_CHAIN_LENGTH, index);
+    symbols.push(Math.floor(checksum / shift) % NEUTRAL_ATTESTATION_CHAIN_LENGTH);
+  }
+  return symbols;
+}
+
+/** Split fixed-width hex into `count` 64-character words. */
+function hexWords(value: string, count: number): string[] {
+  const words: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    words.push(value.slice(index * 64, index * 64 + 64));
+  }
+  return words;
+}
+
+/**
+ * Verify a WOTS+ signature under a Merkle authentication path (MH-02-R5-B01).
+ *
+ * The signature reveals, for each symbol of the code word, the chain value at
+ * exactly that position. Verification walks each chain the rest of the way to its
+ * tip, hashes the 67 tips into the one-time public key, folds that leaf up the
+ * authentication path, and requires the result to equal the root this core PINS.
+ *
+ * Forging one needs a preimage of SHA-256 — every value the claimant would have
+ * to produce is a hash preimage of something it can only see the image of. That
+ * is the asymmetry: recognizing a valid signature needs only the pinned root,
+ * producing one needs the private seeds, and no bundle a single party assembles
+ * contains them.
+ *
+ * Every failure mode is a `false`, never a throw: unparseable, wrong length, out
+ * of range, or simply wrong is an unverified signature, and unverified is refused.
+ */
+export function neutralVerifyAttestationSignature(
+  verificationRoot: unknown,
+  digest: unknown,
+  signature: unknown
+): boolean {
+  if (typeof verificationRoot !== "string") return false;
+  if (!NEUTRAL_SHA256_HEX_PATTERN.test(verificationRoot)) return false;
+  if (typeof digest !== "string" || typeof signature !== "string") return false;
+  const parsed = NEUTRAL_ATTESTATION_SIGNATURE_PATTERN.exec(signature);
+  if (parsed === null) return false;
+  const keyIndex = parseInt(parsed[1], 16);
+  const chains = hexWords(parsed[2], NEUTRAL_ATTESTATION_CHAINS);
+  const authPath = hexWords(parsed[3], NEUTRAL_ATTESTATION_TREE_HEIGHT);
+  if (!Number.isInteger(keyIndex) || keyIndex < 0) return false;
+  if (keyIndex >= Math.pow(2, NEUTRAL_ATTESTATION_TREE_HEIGHT)) return false;
+
+  // The signed message binds the attested digest to the root it will be checked
+  // against and to the one-time key it was signed with, so a signature cannot be
+  // re-presented for another attestor, another key index, or another digest.
+  const symbols = codeWord(
+    neutralSha256Hex(
+      `${NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN}|M|${verificationRoot}|${keyIndex}|${digest}`
+    )
+  );
+  if (symbols === null || symbols.length !== NEUTRAL_ATTESTATION_CHAINS) return false;
+
+  const tips: string[] = [];
+  for (let index = 0; index < NEUTRAL_ATTESTATION_CHAINS; index += 1) {
+    tips.push(chainTo(chains[index], index, symbols[index]));
+  }
+  const oneTimeKey = neutralSha256Hex(
+    `${NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN}|PK|${tips.join("|")}`
+  );
+  let node = neutralSha256Hex(
+    `${NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN}|LEAF|${keyIndex}|${oneTimeKey}`
+  );
+  for (let level = 0; level < NEUTRAL_ATTESTATION_TREE_HEIGHT; level += 1) {
+    const sibling = authPath[level];
+    const onTheLeft = Math.floor(keyIndex / Math.pow(2, level)) % 2 === 0;
+    const left = onTheLeft ? node : sibling;
+    const right = onTheLeft ? sibling : node;
+    node = neutralSha256Hex(`${NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN}|NODE|${level}|${left}|${right}`);
+  }
+  return node === verificationRoot;
+}
+
+/**
+ * Is this attestation one a recognized attestor actually issued for this exact
+ * authority? The digest is rebuilt from the AUTHORITY, never read off the
+ * attestation, so a signature over a different journal, range, or identity
+ * verifies against nothing.
+ */
+export function neutralAttestationVerifies(
+  authority: NeutralConformanceAuthority,
+  attestation: NeutralJournalAttestation
+): boolean {
+  const publicKey = neutralAttestorVerificationKey(attestation?.attestor_id);
+  if (publicKey === null) return false;
+  return neutralVerifyAttestationSignature(
+    publicKey,
+    neutralAttestationDigest(authority, attestation),
+    attestation?.attestation_signature
+  );
 }
 
 function isCommitmentShaped(value: unknown): boolean {
@@ -1069,6 +1374,12 @@ function attestationWellFormed(attestation: NeutralJournalAttestation | undefine
   if (
     typeof attestation.attested_entry_count !== "number" ||
     !Number.isInteger(attestation.attested_entry_count)
+  ) {
+    return false;
+  }
+  if (
+    typeof attestation.attestation_signature !== "string" ||
+    !NEUTRAL_ATTESTATION_SIGNATURE_PATTERN.test(attestation.attestation_signature)
   ) {
     return false;
   }
@@ -1122,6 +1433,7 @@ function refuseConformance(
     | "scenario_receipt_binding_unverified"
     | "scenario_journal_chain_unverified"
     | "scenario_journal_attestation_insufficient"
+    | "scenario_attestation_signature_unverified"
     | "scenario_claimant_not_independent"
     | "scenario_evidence_stale",
   assertions: readonly string[],
@@ -1186,6 +1498,14 @@ function refuseConformance(
  *                                                               commitments)
  *   13. every result's freshness verdict must be `fresh`       (no stale evidence)
  *   14. each disposition must match the scenario's expectation (the original check)
+ *   15. a quorum of the accepted attestations must carry SIGNATURES that verify
+ *       under the verification keys this core PINS                (MH-02-R5-B01:
+ *                                                              no bundle a single
+ *                                                              party can author)
+ *
+ * Gates 1-14 all compare claimant-supplied values with each other. Gate 15 is the
+ * only one whose input the claimant cannot produce, and it is therefore the one
+ * that makes the whole sequence mean something.
  *
  * An expected REFUSAL that actually refused is still a pass — explicitly
  * refusing is the correct behaviour for the refusal scenarios, and it is what
@@ -1938,6 +2258,63 @@ export function evaluateNeutralConformanceDecision(
     });
   }
 
+  // 15 — THE TRUST ROOT (MH-02-R5-B01). Everything above this line compares
+  // values the claimant supplied against other values the claimant supplied. Each
+  // such gate is worth having — a bundle that fails one is malformed — but no
+  // number of them can be unsatisfiable by a party that supplies all of them,
+  // which is exactly what round 5 conceded in a passing test. This gate is
+  // different in kind: the quorum must carry SIGNATURES that verify under keys
+  // pinned in this core, over a digest rebuilt here from the authority. A
+  // claimant can choose every other input on this page and still cannot produce
+  // one, because producing one needs a private exponent that is not in this
+  // repository and is not derivable from anything in it.
+  //
+  // It runs last because it is the only expensive check and because a specific
+  // structural diagnosis is more useful than "unverified" when a bundle is simply
+  // malformed. Running last does not make it optional: promotion is returned
+  // below this block and nowhere else.
+  const signatureFaults: Array<Record<string, unknown>> = [];
+  const verifiedAttestors: string[] = [];
+  for (const attestation of authority.attestations) {
+    if (acceptedAttestors.indexOf(attestation.attestor_id) === -1) continue;
+    // DISTINCT parties, counted once each. Structural acceptance already rejects
+    // a second attestation from the same attestor, but it does so by dropping the
+    // duplicate from `acceptedAttestors` rather than from the list, so counting
+    // list entries here would let one real attestor's signature, repeated, stand
+    // in for the quorum it is supposed to be half of.
+    if (verifiedAttestors.indexOf(attestation.attestor_id) !== -1) continue;
+    if (neutralAttestationVerifies(authority, attestation)) {
+      verifiedAttestors.push(attestation.attestor_id);
+      continue;
+    }
+    signatureFaults.push({
+      attestor_id: attestation.attestor_id,
+      reason: "attestation_signature_did_not_verify",
+      signed_digest: neutralAttestationDigest(authority, attestation),
+    });
+  }
+  if (verifiedAttestors.length < NEUTRAL_MINIMUM_ATTESTOR_QUORUM) {
+    return refuseConformance(
+      "scenario_attestation_signature_unverified",
+      [
+        `promotion requires ${NEUTRAL_MINIMUM_ATTESTOR_QUORUM} attestations that VERIFY under the keys this core pins`,
+        "the verification keys are core-pinned, so the trust root is not an input the claimant supplies",
+        "a structurally perfect attestation that no recognized attestor signed is not evidence of anything",
+        "a signature is bound to one attestor, journal, root, entry count, range, and identity, so it cannot be replayed onto another bundle",
+      ],
+      {
+        ...baseFacts,
+        attestation_scheme: NEUTRAL_ATTESTATION_SCHEME,
+        required_attestor_quorum: NEUTRAL_MINIMUM_ATTESTOR_QUORUM,
+        trust_root_attestors: [...NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS],
+        journal_root: journalRoot,
+        structurally_accepted_attestors: acceptedAttestors,
+        verified_attestors: verifiedAttestors,
+        signature_faults: signatureFaults,
+      }
+    );
+  }
+
   return neutralOutcome({
     type: "guild.support_transition_outcome.v1",
     disposition: "succeeded",
@@ -1948,6 +2325,8 @@ export function evaluateNeutralConformanceDecision(
       "every identity field the frozen support_claim rule names is present, recognized, and equal to the authority's",
       "the observed journal covers the declared range contiguously and its commitment chain verifies to a single root",
       "that root carries a quorum of distinct recognized attestations bound to this exact identity and range",
+      "each attestation in that quorum carries a signature that VERIFIES under a verification key pinned in this core",
+      "the trust root is pinned by the core, so no input the claimant supplies can stand in for it",
       "every receipt reference cites the journal entry's OWN commitment, and no claimed result contradicts its entry",
       "the claimant named itself and is none of the attesting parties",
     ],
@@ -1960,6 +2339,8 @@ export function evaluateNeutralConformanceDecision(
       journal_root: journalRoot,
       journal_entry_count: entries.length,
       attesting_parties: acceptedAttestors,
+      verified_attestors: verifiedAttestors,
+      attestation_scheme: NEUTRAL_ATTESTATION_SCHEME,
       evaluated_scenarios: results.map((result) => ({
         stable_id: result.stable_id,
         disposition: result.disposition,
