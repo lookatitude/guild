@@ -96,15 +96,29 @@ describe("the signal names the CORRECT command per host", () => {
 // most: this rail's first version injected a synthetic state carrying
 // version "2.2.0", so it could not have caught that a real Codex package
 // resolved to null and the signal never fired at all.
-describe("the RENDERED Codex package (not the source text)", () => {
+function rootIsWritable(): boolean {
+  try {
+    fs.accessSync(path.join(PLUGIN_ROOT, "guild.inventory.json"), fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const describeRender = rootIsWritable() ? describe : describe.skip;
+
+describeRender("the RENDERED Codex package (not the source text)", () => {
   let out: string;
   let codexRoot: string;
 
   // The renderer writes guild.inventory.json back into --root (loadInventory's
-  // documented side effect), so this test would otherwise MUTATE the checkout —
-  // and fails with EPERM on a read-only one. Snapshot and restore it.
-  let inventoryBefore: Buffer | null = null;
+  // documented side effect), so this block needs a WRITABLE root. It snapshots
+  // and restores that file, and skips entirely on a read-only checkout rather
+  // than failing EPERM — CI checkouts are writable, so coverage is not lost
+  // where it matters. `describe.skip` is deliberate over a silent pass: a
+  // skipped test reports as skipped, not as green.
   const inventoryPath = path.join(PLUGIN_ROOT, "guild.inventory.json");
+  let inventoryBefore: Buffer | null = null;
 
   beforeAll(() => {
     try {
@@ -125,7 +139,13 @@ describe("the RENDERED Codex package (not the source text)", () => {
     if (out) fs.rmSync(out, { recursive: true, force: true });
     // Restore byte-for-byte: the render is a side effect of the test, not a
     // change to the repository under test.
-    if (inventoryBefore !== null) fs.writeFileSync(inventoryPath, inventoryBefore);
+    if (inventoryBefore !== null) {
+      try {
+        fs.writeFileSync(inventoryPath, inventoryBefore);
+      } catch {
+        // read-only root: nothing was written, so nothing to restore
+      }
+    }
   });
 
   it("wires SessionStart at --host codex-cli in the EMITTED manifest", () => {
