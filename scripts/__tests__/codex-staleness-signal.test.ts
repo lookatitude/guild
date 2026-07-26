@@ -100,7 +100,18 @@ describe("the RENDERED Codex package (not the source text)", () => {
   let out: string;
   let codexRoot: string;
 
+  // The renderer writes guild.inventory.json back into --root (loadInventory's
+  // documented side effect), so this test would otherwise MUTATE the checkout —
+  // and fails with EPERM on a read-only one. Snapshot and restore it.
+  let inventoryBefore: Buffer | null = null;
+  const inventoryPath = path.join(PLUGIN_ROOT, "guild.inventory.json");
+
   beforeAll(() => {
+    try {
+      inventoryBefore = fs.readFileSync(inventoryPath);
+    } catch {
+      inventoryBefore = null;
+    }
     out = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex-render-"));
     execFileSync(
       "npx",
@@ -112,6 +123,9 @@ describe("the RENDERED Codex package (not the source text)", () => {
 
   afterAll(() => {
     if (out) fs.rmSync(out, { recursive: true, force: true });
+    // Restore byte-for-byte: the render is a side effect of the test, not a
+    // change to the repository under test.
+    if (inventoryBefore !== null) fs.writeFileSync(inventoryPath, inventoryBefore);
   });
 
   it("wires SessionStart at --host codex-cli in the EMITTED manifest", () => {

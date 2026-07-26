@@ -5426,7 +5426,7 @@ function readInstalledVersion(pluginRoot, fsi = fs) {
   for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
     try {
       const manifest = JSON.parse(fsi.readFileSync(path.join(pluginRoot, dir, file), "utf8"));
-      if (typeof manifest.version === "string") return manifest.version;
+      if (typeof manifest.version === "string" && manifest.version.length > 0) return manifest.version;
     } catch {
     }
   }

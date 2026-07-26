@@ -286,7 +286,9 @@ export function readInstalledVersion(pluginRoot: string, fsi: typeof fs = fs): s
       const manifest = JSON.parse(fsi.readFileSync(path.join(pluginRoot, dir, file), "utf8")) as {
         version?: string;
       };
-      if (typeof manifest.version === "string") return manifest.version;
+      // Truthy, not merely present: an empty string must fall through to the
+      // next candidate rather than masquerade as a resolved version.
+      if (typeof manifest.version === "string" && manifest.version.length > 0) return manifest.version;
     } catch {
       // try the next candidate — an absent manifest is not an error here
     }
