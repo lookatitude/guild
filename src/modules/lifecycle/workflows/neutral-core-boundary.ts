@@ -171,6 +171,53 @@ function isIdentPart(ch: string): boolean {
   return isIdentStart(ch) || (ch >= "0" && ch <= "9");
 }
 
+function isHexDigit(ch: string): boolean {
+  return (ch >= "0" && ch <= "9") || (ch >= "a" && ch <= "f") || (ch >= "A" && ch <= "F");
+}
+
+/**
+ * Read ONE `\uXXXX` or `\u{X..}` identifier escape at `start` (which must be the
+ * backslash) and return the character it denotes.
+ *
+ * WHY THE LEXER MUST DECODE THESE (MH-02-R3-B01)
+ *   ECMAScript identifiers may be written with Unicode escapes, and the escaped
+ *   spelling is the SAME identifier: `require("fs")` binds and calls the
+ *   very same `require`, and a direct Node control proves it returns a callable
+ *   `fs.readFileSync`. The round-3 lexer had no case for `\`, so that source
+ *   tokenized as ident(`requ`), punct(`\`), ident(`u0069re`) — no `require` token
+ *   ever formed, zero edges were extracted, and the verdict was `succeeded`.
+ *
+ *   Decoding is therefore not a nicety: an exact-token recognizer that reads a
+ *   different token stream than the engine does is not a recognizer at all. An
+ *   escape that does NOT decode is reported rather than guessed, because a
+ *   backslash the lexer cannot explain is precisely the position where the two
+ *   readings could diverge again.
+ */
+function readIdentifierEscape(
+  source: string,
+  start: number
+): { readonly char: string; readonly end: number } | undefined {
+  if (source.charAt(start) !== "\\" || source.charAt(start + 1) !== "u") return undefined;
+  if (source.charAt(start + 2) === "{") {
+    let j = start + 3;
+    let hex = "";
+    while (j < source.length && isHexDigit(source.charAt(j))) {
+      hex += source.charAt(j);
+      j += 1;
+    }
+    if (hex.length === 0 || source.charAt(j) !== "}") return undefined;
+    const code = parseInt(hex, 16);
+    if (!Number.isFinite(code) || code > 0x10ffff) return undefined;
+    return { char: String.fromCodePoint(code), end: j + 1 };
+  }
+  const hex = source.slice(start + 2, start + 6);
+  if (hex.length < 4) return undefined;
+  for (let k = 0; k < 4; k += 1) {
+    if (!isHexDigit(hex.charAt(k))) return undefined;
+  }
+  return { char: String.fromCharCode(parseInt(hex, 16)), end: start + 6 };
+}
+
 function isSpace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\r" || ch === "\n" || ch === "\f" || ch === "\v";
 }
@@ -235,16 +282,35 @@ function readSlashAs(
 }
 
 /**
- * A lexical position where the regex-vs-division reading is undecidable AND the
- * two readings disagree about the dependency graph, because the text a regex
- * reading would have swallowed mentions `import` or `require`.
+ * The kinds of lexical position where what the scan reads could differ from what
+ * an engine executes.
  *
- * Only that conjunction is reported. Ordinary arithmetic after a call or a block
- * is ambiguous too, but both readings agree there is no edge, so it is silent.
+ *   regex_or_division    a `/` whose reading is undecidable without a parser AND
+ *                        whose discarded reading spans `import`/`require`
+ *   escaped_identifier   an identifier written with a Unicode escape. It DOES
+ *                        decode (so the edge below is still seen), but escaping
+ *                        an identifier in a core member has no legitimate use and
+ *                        exists only to defeat a token recognizer, so the file is
+ *                        reported rather than quietly accepted
+ *   undecodable_escape   a backslash the lexer cannot explain at all, i.e. the
+ *                        exact position where the two readings could diverge again
+ */
+export type NeutralSourceAmbiguityKind =
+  | "regex_or_division"
+  | "escaped_identifier"
+  | "undecodable_escape";
+
+/**
+ * A lexical position where the reading is undecidable AND the readings disagree
+ * about the dependency graph.
+ *
+ * Only that conjunction is reported for `regex_or_division`. Ordinary arithmetic
+ * after a call or a block is ambiguous too, but both readings agree there is no
+ * edge, so it is silent.
  */
 export interface NeutralSourceAmbiguity {
-  readonly kind: "regex_or_division";
-  /** The text a regex reading would have consumed, trimmed for reporting. */
+  readonly kind: NeutralSourceAmbiguityKind;
+  /** The text the discarded reading would have consumed, trimmed for reporting. */
   readonly hidden_text: string;
 }
 
@@ -403,11 +469,46 @@ export function tokenizeNeutralSourceWithDiagnostics(source: string): {
       continue;
     }
 
-    if (isIdentStart(ch)) {
+    // Identifier, possibly written with Unicode escapes. Decoding is what makes
+    // the token stream the one the engine sees (MH-02-R3-B01).
+    if (isIdentStart(ch) || (ch === "\\" && readIdentifierEscape(source, i) !== undefined)) {
       let j = i;
-      while (j < source.length && isIdentPart(source.charAt(j))) j += 1;
-      tokens.push({ kind: "ident", value: source.slice(i, j) });
+      let value = "";
+      let escaped = false;
+      while (j < source.length) {
+        const c = source.charAt(j);
+        if (c === "\\") {
+          const decoded = readIdentifierEscape(source, j);
+          if (decoded === undefined) break;
+          value += decoded.char;
+          escaped = true;
+          j = decoded.end;
+          continue;
+        }
+        if (!isIdentPart(c)) break;
+        value += c;
+        j += 1;
+      }
+      if (escaped) {
+        ambiguities.push({
+          kind: "escaped_identifier",
+          hidden_text: `${source.slice(i, j)} decodes to ${value}`,
+        });
+      }
+      tokens.push({ kind: "ident", value });
       i = j;
+      continue;
+    }
+
+    // A backslash that is NOT a decodable identifier escape. The lexer cannot say
+    // what an engine would do here, so it says so instead of dropping it.
+    if (ch === "\\") {
+      ambiguities.push({
+        kind: "undecodable_escape",
+        hidden_text: source.slice(i, Math.min(i + 12, source.length)),
+      });
+      tokens.push({ kind: "punct", value: ch });
+      i += 1;
       continue;
     }
 
@@ -687,6 +788,475 @@ export function extractNeutralImportSpecifiers(source: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Capability closure (MH-02-R3-B01)
+// ---------------------------------------------------------------------------
+
+/**
+ * WHY MODULE EDGES ARE NOT ENOUGH
+ *
+ * Rounds 1–3 hardened the recognizer that finds `import`/`require` TOKENS. Round
+ * 3 then defeated it four ways WITHOUT writing either token, and every one of
+ * them executes:
+ *
+ *     module["require"]("fs")                 the name lives in a STRING token
+ *     eval("require")("fs")                   ditto, then the result is called
+ *     Function("return require")()("fs")      ditto, via the evaluator intrinsic
+ *     require("fs")                      the token never lexed at all
+ *
+ * A direct Node control confirms `module["require"]("fs")`, `eval("require")("fs")`,
+ * the escaped identifier, and `Function("return globalThis.process.binding")()("fs")`
+ * all hand back real Node I/O.
+ *
+ * Chasing those four spellings would be whack-a-mole: `globalThis["require"]`,
+ * `process.binding`, `Reflect.get(module, "require")`, `new Function(...)`,
+ * `(0, eval)(...)`, and `[]["constructor"]["constructor"](...)` are all further
+ * spellings of the same two mechanisms. So the closure argument is widened from
+ * MODULE closure to CAPABILITY closure, which subsumes it:
+ *
+ *   THE INVARIANT
+ *     A core member may only CALL what it declares itself, imports from another
+ *     declared core member, or draws from a fixed allowlist of pure ECMAScript
+ *     intrinsics that can yield neither I/O nor code evaluation. Any callee the
+ *     scan cannot reduce to such a named root, and any reference to an ambient
+ *     binding the core neither declares nor imports, fails closed.
+ *
+ *   WHY IT IS SOUND RATHER THAN A LONGER DENYLIST
+ *     Reaching Node I/O or an external package requires OBTAINING a capability
+ *     and then CALLING it. Every call site is checked, and the check is an
+ *     ALLOWLIST, so a spelling nobody anticipated fails by default instead of
+ *     passing by default. `eval`, `Function`, `module`, `require`, `process`,
+ *     `global`, `globalThis`, `Reflect`, `console`, `Date`, and the timers are
+ *     not on the allowlist — not because they are enumerated as forbidden, but
+ *     because nothing is permitted that is not enumerated as pure.
+ *
+ *   WHY A LOCAL FUNCTION NEED NOT BE FOLLOWED
+ *     `helper().m("fs")` is allowed to the extent that `helper` is itself a
+ *     declared name, because whatever `helper` returns had to be built from the
+ *     same closed set of literals, imports, and pure intrinsics. The recursion
+ *     bottoms out: to smuggle a capability into `helper`, the file must contain
+ *     an ambient reference or an indirect callee somewhere, and both fail here.
+ *
+ *   HONEST LIMIT
+ *     This is a lexical analysis, not a type-checked dataflow proof. It is sound
+ *     for the mechanisms above because both of them are syntactically visible at
+ *     the call site. Constructs the binding collector does not model — classes,
+ *     object-literal methods, accessors — are not silently permitted: their
+ *     callees resolve to no collected binding and therefore FAIL, which is the
+ *     right direction for an analyzer that has not been taught a construct. The
+ *     five current core members use none of them. Repo-wide graph enforcement
+ *     (MHRC-MOD-001..004) remains W4/MH-07's job; this stays the MH-02 core's
+ *     scoped self-check.
+ */
+
+/**
+ * Roots a core member may reference without declaring or importing them: pure
+ * ECMAScript intrinsics that hold no host handle, perform no I/O, read no clock,
+ * and evaluate no code.
+ *
+ * The exclusions are the point. `Function` and `eval` evaluate code. `Date` and
+ * `performance` read a clock. `console`, `process`, `Buffer`, and the timers are
+ * host surface. `module`, `exports`, `require`, `global`, and `globalThis` are
+ * the CommonJS/ambient escape hatches. `Reflect` and `Proxy` reach any property
+ * of any object by computed name, including a loader. None of them is listed, so
+ * all of them fail — as would any future intrinsic nobody has thought of yet.
+ */
+export const NEUTRAL_PURE_INTRINSIC_ROOTS: readonly string[] = neutralFreeze([
+  "Object",
+  "Array",
+  "String",
+  "Number",
+  "Boolean",
+  "Math",
+  "JSON",
+  "RegExp",
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "Map",
+  "Set",
+  "Symbol",
+  "isNaN",
+  "isFinite",
+  "parseInt",
+  "parseFloat",
+  "NaN",
+  "Infinity",
+  "undefined",
+]);
+
+/**
+ * Tokens this lexer emits as identifiers that are not value references at all:
+ * ECMAScript/TypeScript keywords, and the type-level names TypeScript erases.
+ * A type annotation cannot obtain a capability, because it does not exist at
+ * runtime — so allowlisting the type vocabulary costs nothing.
+ */
+const NEUTRAL_LANGUAGE_WORDS: readonly string[] = neutralFreeze([
+  // statement + expression keywords
+  "import", "export", "from", "as", "default", "const", "let", "var", "function",
+  "class", "extends", "implements", "return", "if", "else", "for", "while", "do",
+  "switch", "case", "break", "continue", "new", "delete", "typeof", "instanceof",
+  "in", "of", "void", "null", "true", "false", "this", "super", "throw", "try",
+  "catch", "finally", "yield", "await", "async", "static", "public", "private",
+  "protected", "readonly", "abstract", "declare", "namespace", "enum", "module",
+  "get", "set", "with", "debugger", "label",
+  // type-level vocabulary (erased at runtime)
+  "type", "interface", "keyof", "infer", "is", "asserts", "satisfies", "unique",
+  "out", "override", "accessor", "using", "string", "number", "boolean",
+  "unknown", "any", "never", "object", "symbol", "bigint",
+  "Record", "Readonly", "Partial", "Required", "Pick", "Omit", "Exclude",
+  "Extract", "ReturnType", "Parameters", "NonNullable", "Awaited",
+]);
+
+function isNeutralLanguageWord(name: string): boolean {
+  return NEUTRAL_LANGUAGE_WORDS.indexOf(name) !== -1;
+}
+
+/**
+ * The lexer emits a numeric literal as the value-like `ident` token `0` (so that
+ * `10 / 2` reads as division rather than a regex start). A real identifier can
+ * never begin with a digit, so that is an unambiguous marker — and a number is
+ * not a reference to anything.
+ */
+function isNumericToken(token: NeutralToken): boolean {
+  const first = token.value.charAt(0);
+  return first >= "0" && first <= "9";
+}
+
+/**
+ * `module` deserves a note: it is in the language-word list because TypeScript
+ * uses `module` as a declaration keyword (`declare module "x"`), so the bare
+ * token cannot be treated as an ambient reference without false-positiving on
+ * type declarations. That is exactly why `module["require"](...)` is caught by
+ * the INDIRECT-CALLEE rule instead — a computed-member callee is unresolvable
+ * whatever its base is named, so the base never needs to be recognised.
+ */
+
+/** Punctuation positions after which a `(` opens a group, not a call. */
+const NEUTRAL_VALUE_START_PUNCT = "=,([:;{}|&?>!+-*/%<~^";
+
+/** Keywords that may be followed by `(` without that `(` being a call. */
+const NEUTRAL_NON_CALLEE_WORDS: readonly string[] = [
+  "if", "while", "for", "switch", "catch", "do", "with", "return", "typeof",
+  "instanceof", "in", "of", "void", "delete", "new", "yield", "await", "case",
+  "else", "throw", "function", "import", "export", "as", "satisfies",
+];
+
+function matchingCloseIndex(tokens: readonly NeutralToken[], openIndex: number): number {
+  let depth = 0;
+  for (let j = openIndex; j < tokens.length; j += 1) {
+    const delta = bracketDelta(tokens[j]);
+    if (delta > 0) depth += 1;
+    else if (delta < 0) {
+      depth -= 1;
+      if (depth === 0) return j;
+    }
+  }
+  return -1;
+}
+
+function isPunct(token: NeutralToken | undefined, value: string): boolean {
+  return token !== undefined && token.kind === "punct" && token.value === value;
+}
+
+/**
+ * Does the `(` at `openIndex` introduce a PARAMETER list rather than a call or a
+ * grouping? Parameters are bindings, so getting this wrong in the permissive
+ * direction would let an ambient name masquerade as a local one — which is why
+ * control-flow parentheses (`if (x)`, `for (…)`) are excluded explicitly rather
+ * than by hoping their shape differs.
+ */
+function isParameterList(tokens: readonly NeutralToken[], openIndex: number): boolean {
+  const close = matchingCloseIndex(tokens, openIndex);
+  if (close === -1) return false;
+  const previous = tokens[openIndex - 1];
+  const beforePrevious = tokens[openIndex - 2];
+
+  // `function (…)` and `function name(…)`
+  if (previous !== undefined && previous.kind === "ident" && previous.value === "function") return true;
+  if (
+    previous !== undefined &&
+    previous.kind === "ident" &&
+    beforePrevious !== undefined &&
+    beforePrevious.kind === "ident" &&
+    beforePrevious.value === "function"
+  ) {
+    return true;
+  }
+
+  // An arrow (or a return-type-annotated arrow) parameter list may only appear
+  // where a value may begin, which is what keeps `if (cond) {` out.
+  const atValueStart =
+    previous === undefined ||
+    (previous.kind === "punct" && NEUTRAL_VALUE_START_PUNCT.indexOf(previous.value) !== -1);
+  if (!atValueStart) return false;
+  const arrow = isPunct(tokens[close + 1], "=") && isPunct(tokens[close + 2], ">");
+  const annotated = isPunct(tokens[close + 1], ":");
+  return arrow || annotated;
+}
+
+function pushUnique(list: string[], value: string): void {
+  if (value.length > 0 && list.indexOf(value) === -1) list.push(value);
+}
+
+function collectParameterNames(
+  tokens: readonly NeutralToken[],
+  openIndex: number,
+  close: number,
+  into: string[]
+): void {
+  let expectBinding = true;
+  for (let j = openIndex + 1; j < close; j += 1) {
+    const token = tokens[j];
+    if (token.kind === "punct") {
+      if (token.value === ",") expectBinding = true;
+      else if (token.value === ":" || token.value === "=" || token.value === ".") expectBinding = false;
+      continue;
+    }
+    if (token.kind === "string") {
+      expectBinding = false;
+      continue;
+    }
+    if (expectBinding && !isNeutralLanguageWord(token.value)) {
+      pushUnique(into, token.value);
+      expectBinding = false;
+    }
+  }
+}
+
+/** Type parameters (`<T, U extends V>`) are bindings too, and erase at runtime. */
+function collectTypeParameterNames(
+  tokens: readonly NeutralToken[],
+  openIndex: number,
+  into: string[]
+): void {
+  let depth = 0;
+  let expectBinding = true;
+  for (let j = openIndex; j < tokens.length; j += 1) {
+    const token = tokens[j];
+    if (token.kind === "punct") {
+      if (token.value === "<") depth += 1;
+      else if (token.value === ">") {
+        depth -= 1;
+        if (depth === 0) return;
+      } else if (token.value === "," && depth === 1) expectBinding = true;
+      else if (token.value === "(" || token.value === "{" || token.value === ";") return;
+      continue;
+    }
+    if (token.kind !== "ident") continue;
+    if (expectBinding && !isNeutralLanguageWord(token.value)) {
+      pushUnique(into, token.value);
+      expectBinding = false;
+    }
+  }
+}
+
+function collectImportBindings(
+  tokens: readonly NeutralToken[],
+  importIndex: number,
+  into: string[]
+): void {
+  for (let j = importIndex + 1; j < tokens.length; j += 1) {
+    const token = tokens[j];
+    if (token.kind === "string") return;
+    if (token.kind === "punct" && (token.value === ";" || token.value === "(")) return;
+    if (token.kind !== "ident") continue;
+    if (token.value === "from") return;
+    if (!isNeutralLanguageWord(token.value)) pushUnique(into, token.value);
+  }
+}
+
+function collectDeclaratorNames(
+  tokens: readonly NeutralToken[],
+  keywordIndex: number,
+  into: string[]
+): void {
+  let depth = 0;
+  let annotating = false;
+  for (let j = keywordIndex + 1; j < tokens.length; j += 1) {
+    const token = tokens[j];
+    const delta = bracketDelta(token);
+    if (delta < 0 && depth === 0) return; // closed out of the enclosing group
+    if (token.kind === "punct") {
+      if (depth === 0 && (token.value === ";" || token.value === "=")) return;
+      if (depth === 0 && token.value === ":") annotating = true;
+      if (depth === 0 && token.value === ",") annotating = false;
+      depth += delta;
+      continue;
+    }
+    if (token.kind === "string") continue;
+    // A `for (… of|in …)` head ends the binding list.
+    if (token.value === "of" || token.value === "in") return;
+    if (!annotating && !isNeutralLanguageWord(token.value)) pushUnique(into, token.value);
+  }
+}
+
+/**
+ * Every name a source file binds locally: imports, declarations, destructuring
+ * patterns, parameters, type parameters, and catch bindings.
+ *
+ * Collection is deliberately keyword-anchored. A bare USE such as
+ * `module["require"]` contributes nothing, so a capability name can never enter
+ * this set merely by appearing in the file.
+ */
+export function collectNeutralBoundNames(tokens: readonly NeutralToken[]): string[] {
+  const bound: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+
+    if (token.kind === "punct") {
+      if (token.value === "(" && isParameterList(tokens, i)) {
+        collectParameterNames(tokens, i, matchingCloseIndex(tokens, i), bound);
+      }
+      continue;
+    }
+    if (token.kind !== "ident") continue;
+
+    // `x => …`: a single parameter without parentheses.
+    if (
+      isPunct(tokens[i + 1], "=") &&
+      isPunct(tokens[i + 2], ">") &&
+      !isNeutralLanguageWord(token.value)
+    ) {
+      pushUnique(bound, token.value);
+    }
+
+    if (token.value === "import") {
+      collectImportBindings(tokens, i, bound);
+      continue;
+    }
+    if (
+      token.value === "function" ||
+      token.value === "class" ||
+      token.value === "interface" ||
+      token.value === "type" ||
+      token.value === "enum" ||
+      token.value === "namespace"
+    ) {
+      const name = tokens[i + 1];
+      if (name !== undefined && name.kind === "ident") {
+        pushUnique(bound, name.value);
+        if (isPunct(tokens[i + 2], "<")) collectTypeParameterNames(tokens, i + 2, bound);
+      }
+      continue;
+    }
+    if (token.value === "catch" && isPunct(tokens[i + 1], "(")) {
+      const binding = tokens[i + 2];
+      if (binding !== undefined && binding.kind === "ident") pushUnique(bound, binding.value);
+      continue;
+    }
+    if (token.value === "const" || token.value === "let" || token.value === "var") {
+      collectDeclaratorNames(tokens, i, bound);
+      continue;
+    }
+  }
+  return bound;
+}
+
+/** A call whose callee the scan cannot reduce to a named destination. */
+export interface NeutralIndirectCallee {
+  readonly form: string;
+  readonly detail: string;
+}
+
+/** A reference to a binding the file neither declares nor imports. */
+export interface NeutralAmbientCapability {
+  readonly name: string;
+  readonly usage: string;
+}
+
+function describeCallee(tokens: readonly NeutralToken[], openIndex: number): string {
+  const from = openIndex - 6 < 0 ? 0 : openIndex - 6;
+  return describeTokens(tokens.slice(from, openIndex + 1));
+}
+
+/**
+ * Callee closure + ambient-reference closure over one source file.
+ *
+ * INDIRECT CALLEES are calls whose callee is a computed member access, another
+ * call's result, or a literal — `module["require"](…)`, `eval("require")(…)`,
+ * `[]["constructor"]["constructor"](…)`, `(0, eval)(…)`. The callee's DESTINATION
+ * is decided at runtime, so the scan cannot prove it stays inside the core, and
+ * must not pretend the call is absent.
+ *
+ * A method call on an expression result (`tokens.map(fn).join(" ")`) is NOT
+ * indirect: the callee is a NAMED property, and the expression it hangs off is
+ * separately checked by these same rules. That distinction is what keeps
+ * ordinary chained code readable while `x[k](…)` still fails.
+ *
+ * AMBIENT REFERENCES are identifiers used as a value that the file neither
+ * declares nor imports and that are not pure intrinsics.
+ */
+export function analyzeNeutralCapabilityUse(source: string): {
+  readonly indirect: NeutralIndirectCallee[];
+  readonly ambient: NeutralAmbientCapability[];
+} {
+  const tokens = tokenizeNeutralSource(source);
+  const bound = collectNeutralBoundNames(tokens);
+  const indirect: NeutralIndirectCallee[] = [];
+  const ambient: NeutralAmbientCapability[] = [];
+  const seenIndirect: string[] = [];
+  const seenAmbient: string[] = [];
+
+  const addIndirect = (form: string, detail: string): void => {
+    const key = `${form}|${detail}`;
+    if (seenIndirect.indexOf(key) !== -1) return;
+    seenIndirect.push(key);
+    indirect.push({ form, detail });
+  };
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+
+    // ---- indirect callees -------------------------------------------------
+    if (token.kind === "punct" && token.value === "(" && !isParameterList(tokens, i)) {
+      // `x?.(…)` reaches here as `?` `.` `(`, so step back over it.
+      const optional = isPunct(tokens[i - 1], ".") && isPunct(tokens[i - 2], "?");
+      const previous = optional ? tokens[i - 3] : tokens[i - 1];
+      if (previous !== undefined) {
+        if (previous.kind === "punct" && previous.value === "]") {
+          addIndirect("computed_member_call", describeCallee(tokens, i));
+        } else if (previous.kind === "punct" && previous.value === ")") {
+          addIndirect("call_result_call", describeCallee(tokens, i));
+        } else if (previous.kind === "string") {
+          addIndirect("literal_call", describeCallee(tokens, i));
+        }
+      }
+    }
+
+    // ---- ambient references ----------------------------------------------
+    if (token.kind !== "ident") continue;
+    if (isPunct(tokens[i - 1], ".")) continue; // a property name, not a reference
+    // `key:` (object literal / label) and `key?:` (optional member) are names,
+    // not references.
+    if (isPunct(tokens[i + 1], ":")) continue;
+    if (isPunct(tokens[i + 1], "?") && isPunct(tokens[i + 2], ":")) continue;
+    if (isNumericToken(token)) continue;
+    if (isNeutralLanguageWord(token.value)) continue;
+    if (NEUTRAL_PURE_INTRINSIC_ROOTS.indexOf(token.value) !== -1) continue;
+    if (bound.indexOf(token.value) !== -1) continue;
+
+    const next = tokens[i + 1];
+    const usage =
+      next === undefined
+        ? "reference"
+        : next.kind === "punct" && next.value === "("
+          ? "call"
+          : next.kind === "punct" && next.value === "."
+            ? "member"
+            : next.kind === "punct" && next.value === "["
+              ? "computed_member"
+              : "reference";
+    const key = `${token.value}|${usage}`;
+    if (seenAmbient.indexOf(key) !== -1) continue;
+    seenAmbient.push(key);
+    ambient.push({ name: token.value, usage });
+  }
+
+  return { indirect, ambient };
+}
+
+// ---------------------------------------------------------------------------
 // Verdict
 // ---------------------------------------------------------------------------
 
@@ -717,6 +1287,20 @@ export interface NeutralCoreSourceAmbiguity {
   readonly hidden_text: string;
 }
 
+/** A call in a core member whose callee has no scan-resolvable destination. */
+export interface NeutralCoreIndirectCallee {
+  readonly importer: string;
+  readonly form: string;
+  readonly detail: string;
+}
+
+/** An ambient binding a core member reaches without declaring or importing it. */
+export interface NeutralCoreAmbientCapability {
+  readonly importer: string;
+  readonly name: string;
+  readonly usage: string;
+}
+
 function isIntraCoreSpecifier(specifier: string): boolean {
   if (specifier.charAt(0) !== ".") return false;
   const tail = specifier.replace(/^\.\//, "");
@@ -726,22 +1310,31 @@ function isIntraCoreSpecifier(specifier: string): boolean {
 }
 
 /**
- * Verdict on the core's import closure. Reason-code priority is
+ * Verdict on the core's import AND capability closure. Reason-code priority is
  *
- *   membership → forbidden → unresolved → ambiguous → unclassified
+ *   membership → forbidden → unresolved → ambient → indirect → ambiguous
+ *              → unclassified
  *
  * A membership disagreement comes first because the scan was then not looking at
  * the declared core at all, so reporting edge findings from it would mislead. A
  * PROVEN breach (`forbidden`) outranks an UNPROVABLE one, so the most actionable
- * named boundary is what a reader sees when both are present.
+ * named boundary is what a reader sees when both are present. Among the
+ * unprovable ones, naming the ambient binding (`eval`, `process`, `globalThis`)
+ * is more actionable than naming the call shape, so it is reported first.
  *
- * Every one of the five is a FAILURE. Three of them exist because the round-2
+ * Every one of the seven is a FAILURE. Five of them exist because an earlier
  * scan answered "succeeded" in cases where it had simply not looked:
  *
  *   unresolved    an edge whose destination is computed at runtime
  *                 (`require(name)`, `import(\`${m}\`)`, `require?.()` unread)
- *   ambiguous     a `/` the lexer cannot classify without a parser, where the
- *                 discarded reading would have swallowed an import/require
+ *   ambient       a reference to a binding the core neither declares nor imports
+ *                 and that is not a pure intrinsic (`eval`, `process`, `Date`)
+ *   indirect      a call whose callee is a computed member access, another call's
+ *                 result, or a literal (`module["require"](…)`, `eval("…")(…)`)
+ *   ambiguous     a `/` the lexer cannot classify without a parser where the
+ *                 discarded reading would have swallowed an import/require, an
+ *                 identifier written with a Unicode escape, or a backslash the
+ *                 lexer cannot explain
  *   unclassified  a destination outside the core that matches no named boundary
  *                 (MHRC-MOD-001: "unclassified destinations fail the verdict")
  *
@@ -762,6 +1355,8 @@ export function evaluateNeutralCoreBoundary(
   const intraCore: NeutralCoreBoundaryEdge[] = [];
   const unresolved: NeutralCoreUnresolvedEdge[] = [];
   const ambiguous: NeutralCoreSourceAmbiguity[] = [];
+  const indirectCallees: NeutralCoreIndirectCallee[] = [];
+  const ambientCapabilities: NeutralCoreAmbientCapability[] = [];
 
   for (const file of files) {
     for (const ambiguity of tokenizeNeutralSourceWithDiagnostics(file.source).ambiguities) {
@@ -769,6 +1364,17 @@ export function evaluateNeutralCoreBoundary(
         importer: file.path,
         kind: ambiguity.kind,
         hidden_text: ambiguity.hidden_text,
+      });
+    }
+    const capability = analyzeNeutralCapabilityUse(file.source);
+    for (const callee of capability.indirect) {
+      indirectCallees.push({ importer: file.path, form: callee.form, detail: callee.detail });
+    }
+    for (const reference of capability.ambient) {
+      ambientCapabilities.push({
+        importer: file.path,
+        name: reference.name,
+        usage: reference.usage,
       });
     }
     for (const edge of extractNeutralImportEdges(file.source)) {
@@ -813,6 +1419,9 @@ export function evaluateNeutralCoreBoundary(
     unclassified_edges: unclassified,
     unresolved_edges: unresolved,
     source_ambiguities: ambiguous,
+    indirect_callees: indirectCallees,
+    ambient_capabilities: ambientCapabilities,
+    pure_intrinsic_roots: [...NEUTRAL_PURE_INTRINSIC_ROOTS],
   };
 
   if (missingMembers.length > 0 || undeclaredFiles.length > 0) {
@@ -855,6 +1464,34 @@ export function evaluateNeutralCoreBoundary(
     });
   }
 
+  if (ambientCapabilities.length > 0) {
+    return neutralOutcome({
+      type: "guild.boundary_outcome.v1",
+      disposition: "failed",
+      reason_code: "boundary_ambient_capability",
+      assertions: [
+        "a core member may reference only what it declares, imports, or draws from the pure-intrinsic allowlist",
+        "an ambient binding is a capability the closure argument never covered",
+        "the allowlist is closed, so an unanticipated intrinsic fails rather than passes",
+      ],
+      facts,
+    });
+  }
+
+  if (indirectCallees.length > 0) {
+    return neutralOutcome({
+      type: "guild.boundary_outcome.v1",
+      disposition: "failed",
+      reason_code: "boundary_indirect_callee",
+      assertions: [
+        "every call must have a callee the scan can reduce to a named destination",
+        "a computed-member, call-result, or literal callee is decided at runtime and cannot be proven to stay inside the core",
+        "an unresolvable callee is closure unproven, never closure proven",
+      ],
+      facts,
+    });
+  }
+
   if (ambiguous.length > 0) {
     return neutralOutcome({
       type: "guild.boundary_outcome.v1",
@@ -863,6 +1500,7 @@ export function evaluateNeutralCoreBoundary(
       assertions: [
         "the source must lex unambiguously wherever the reading could hide an edge",
         "a regex-versus-division ambiguity spanning an import or require is not resolved by guess",
+        "an escaped identifier decodes, and is still reported: escaping a name in a core member exists only to defeat a recognizer",
       ],
       facts,
     });
@@ -889,7 +1527,9 @@ export function evaluateNeutralCoreBoundary(
       "dynamic and re-export edges are included",
       "every edge resolved to a declared core member",
       "no lexical ambiguity could have hidden an edge",
-      "the core is closed under import, so no transitive escape exists",
+      "every callee reduced to a declared, imported, or pure-intrinsic root",
+      "no ambient binding is reached, so no host handle, clock, or evaluator is available",
+      "the core is closed under import AND capability, so no transitive escape exists",
     ],
     facts,
   });

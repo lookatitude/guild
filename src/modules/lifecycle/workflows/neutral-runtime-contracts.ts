@@ -232,6 +232,16 @@ export const NEUTRAL_REASON_CODES = [
   "scenario_receipt_reference_ambiguous",
   "scenario_contract_version_unrecognized",
   "scenario_runtime_version_unrecognized",
+  // source-bound conformance evidence (MH-02-R3-B02): a self-consistent bundle
+  // of caller-authored labels is not evidence of anything. Promotion requires an
+  // AUTHORITATIVE input the claimant does not author, identities the core
+  // RECOGNIZES rather than merely parses, and receipt references cryptographically
+  // committed to that authority instead of merely shaped like references.
+  "scenario_evidence_authority_missing",
+  "scenario_identity_binding_mismatch",
+  "scenario_source_identity_unrecognized",
+  "scenario_host_identity_unrecognized",
+  "scenario_receipt_binding_unverified",
   // core boundary
   "boundary_forbidden_edge",
   "boundary_unclassified_edge",
@@ -241,6 +251,12 @@ export const NEUTRAL_REASON_CODES = [
   // could hide an edge, are both "closure unproven" — never "closure proven".
   "boundary_unresolved_edge",
   "boundary_ambiguous_source",
+  // capability closure (MH-02-R3-B01): module edges are not the only way out of
+  // the core. A call the scan cannot reduce to a named destination, and a
+  // reference to an ambient binding the core neither declares nor imports, each
+  // reach code the closure argument never covered.
+  "boundary_indirect_callee",
+  "boundary_ambient_capability",
 ] as const;
 export type NeutralReasonCode = (typeof NEUTRAL_REASON_CODES)[number];
 

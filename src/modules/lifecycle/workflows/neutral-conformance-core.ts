@@ -40,6 +40,7 @@ import {
   isNeutralReasonCode,
   isNeutralScenarioCategory,
   isNeutralSupportStatus,
+  neutralFingerprint,
   neutralFreeze,
   neutralOutcome,
 } from "./neutral-runtime-contracts";
@@ -568,8 +569,19 @@ export const NEUTRAL_REQUIRED_CORE_SCENARIO_IDS: readonly string[] = neutralFree
  * marker, a journal id, and a canonical sequence number.
  */
 export const NEUTRAL_RECEIPT_REF_SCHEMA = "guild.receipt_ref.v1";
+
+/**
+ * The canonical receipt reference is `…:<journal>#<seq>@<commitment>`.
+ *
+ * Round 3 accepted `guild.receipt_ref.v1:forged-journal#3`: canonical SHAPE, and
+ * a reference to nothing. Shape can be typed by anyone, so the reference now
+ * carries a COMMITMENT — a digest over the authority's identity tuple, the
+ * journal, the sequence, and the exact outcome the receipt is supposed to record
+ * (see `neutralEvidenceCommitment`). A shaped label with no commitment, or with a
+ * commitment over anything other than what it claims, is not a reference.
+ */
 const NEUTRAL_RECEIPT_REF_PATTERN = new RegExp(
-  "^guild\\.receipt_ref\\.v1:[A-Za-z0-9][A-Za-z0-9._-]{2,}#(0|[1-9][0-9]*)$"
+  "^guild\\.receipt_ref\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})#(0|[1-9][0-9]*)@(nec1:[0-9a-f]{16})$"
 );
 
 /**
@@ -585,32 +597,137 @@ const NEUTRAL_RUNTIME_VERSION_PATTERN = new RegExp(
   "^guild-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
 );
 
+/**
+ * The runtime MAJOR this core implements.
+ *
+ * MH-02-R3-B02: pattern-matching is not recognition. Round 3 accepted
+ * `guild-999.999.999` because it was syntactically a runtime identity — a
+ * release that does not exist, from a major this core knows nothing about.
+ * "Recognized" has to mean the core knows the identity, so the major is pinned
+ * exactly as `NEUTRAL_CONTRACT_VERSION` is: advancing it is a deliberate core
+ * change, never a caller's assertion.
+ */
+export const NEUTRAL_RECOGNIZED_RUNTIME_MAJOR = 2;
+
+/** Platforms a conformance claim may name (`E-VERSION` requires `platform`). */
+export const NEUTRAL_RECOGNIZED_PLATFORMS: readonly string[] = neutralFreeze([
+  "darwin-arm64",
+  "darwin-x64",
+  "linux-arm64",
+  "linux-x64",
+  "win32-x64",
+]);
+
+/**
+ * Host identities a conformance claim may name.
+ *
+ * MH-03 owns host DISCOVERY; this list is the closed CLAIM vocabulary, which is
+ * a core concern for the same reason every other vocabulary here is: round 3
+ * promoted `conformant=true` for `invented-host`. A host the core cannot name
+ * cannot be the exact host the frozen `support_claim` rule binds to.
+ */
+export const NEUTRAL_RECOGNIZED_HOST_IDS: readonly string[] = neutralFreeze([
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity",
+]);
+
+const NEUTRAL_SOURCE_COMMIT_PATTERN = new RegExp("^[0-9a-f]{40}$");
+const NEUTRAL_PACKAGE_HASH_PATTERN = new RegExp("^sha256:[0-9a-f]{64}$");
+const NEUTRAL_ADAPTER_VERSION_PATTERN = new RegExp(
+  "^guild\\.host_adapter\\.v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+);
+const NEUTRAL_RELEASE_ID_PATTERN = new RegExp("^rel-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-z]{1,16}$");
+const NEUTRAL_SEMVER_PATTERN = new RegExp(
+  "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+);
+const NEUTRAL_JOURNAL_ID_PATTERN = new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{2,}$");
+
 /** Evidence freshness. `unknown` is not a soft `fresh`. */
 export const NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS = ["fresh", "stale", "unknown"] as const;
 export type NeutralEvidenceFreshnessVerdict = (typeof NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS)[number];
 
 /**
- * The exact activated runtime a conformance claim is bound to. CI-06 requires a
- * claim to bind conformance to exact release AND runtime identities, so every
- * field is mandatory and every field is compared.
+ * The COMPLETE identity a conformance claim is bound to (MH-02-R3-B02).
+ *
+ * The frozen contract's `support_claim` rule is explicit: "a host is conformant
+ * only for the exact SOURCE, PACKAGE, RUNTIME, ADAPTER, HOST, PLATFORM,
+ * CONTRACT, and SCENARIO-SUITE versions named by its evidence bundle", and the
+ * `E-VERSION` profile requires `source_commit`, `package_hash`, `runtime_version`,
+ * `adapter_version`, `host_version`, `contract_version`, `scenario_suite_version`,
+ * and `platform` as bindings.
+ *
+ * Round 3's five-field record could not EXPRESS most of that, so a bundle that
+ * named no source, package, adapter, or platform at all was still structurally
+ * complete and still promoted. Every field the contract names is therefore
+ * present here, mandatory, recognized, and compared.
  */
-export interface NeutralRuntimeBinding {
+export interface NeutralEvidenceIdentity {
+  /** The exact immutable source revision the evidence was produced from. */
+  readonly source_commit: string;
+  /** The exact rendered package the runtime was activated from. */
+  readonly package_hash: string;
+  readonly runtime_version: string;
+  readonly adapter_version: string;
   readonly host_id: string;
   readonly host_version: string;
-  readonly runtime_version: string;
-  readonly release_id: string;
+  readonly platform: string;
   readonly contract_version: number;
+  readonly scenario_suite_id: string;
+  readonly scenario_suite_version: string;
+  readonly release_id: string;
 }
 
-/** One ordered, typed, receipt-bound scenario result. */
+/**
+ * Retained name for the identity tuple. Round 3's `NeutralRuntimeBinding` named
+ * five runtime labels; the same slot now carries the whole frozen identity, so
+ * the alias exists to say plainly that the OLD shape is no longer sufficient
+ * rather than to keep it working.
+ */
+export type NeutralRuntimeBinding = NeutralEvidenceIdentity;
+
+/**
+ * The AUTHORITATIVE input a promotion decision is verified against.
+ *
+ * WHY A SECOND INPUT AT ALL (MH-02-R3-B02)
+ *   Round 3's decision read exactly one argument: the claimant's own bundle. A
+ *   bundle that agrees with itself proves only that its author was consistent,
+ *   which is why an entirely invented, internally coherent package promoted
+ *   `conformant=true`. Evidence has to be checked against something the claimant
+ *   does not author, so the identity the verifier itself observed — the activated
+ *   release, and the durable journal it watched being written — is supplied
+ *   separately and is what the bundle must match.
+ *
+ *   Ownership is unchanged: MH-09 owns release-bound distribution evidence and
+ *   MH-06 owns the durable journal. This core still only DECIDES; it never
+ *   gathers, and it performs no I/O to obtain either.
+ */
+export interface NeutralConformanceAuthority {
+  readonly schema_version: typeof NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA;
+  /** The identity the verifier independently observed for the activated runtime. */
+  readonly identity: NeutralEvidenceIdentity;
+  /** The durable journal the verifier observed (MH-06 owns it). */
+  readonly receipt_journal_id: string;
+  /** The contiguous sequence range the verifier observed in that journal. */
+  readonly receipt_sequence_range: { readonly first: number; readonly last: number };
+}
+
+export const NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA = "guild.conformance_authority.v1";
+
+/** One ordered, typed, source-bound, receipt-committed scenario result. */
 export interface NeutralScenarioResult {
   readonly stable_id: string;
   readonly outcome_type: NeutralOutcomeType;
   readonly disposition: NeutralDisposition;
   readonly reason_code: string | null;
-  /** A reference into the durable receipt journal (MH-06 owns the journal). */
+  /**
+   * `guild.receipt_ref.v1:<journal>#<sequence>@<commitment>` — a committed
+   * address into the durable receipt journal (MH-06 owns the journal).
+   */
   readonly receipt_ref: string;
-  readonly runtime_binding: NeutralRuntimeBinding;
+  /** The complete identity this single result was produced under. */
+  readonly evidence_identity: NeutralEvidenceIdentity;
   readonly evidence_freshness: NeutralEvidenceFreshnessVerdict;
 }
 
@@ -619,36 +736,181 @@ export interface NeutralConformanceEvidence {
   readonly suite_id: string;
   readonly suite_version: string;
   readonly required_scenario_ids: readonly string[];
-  readonly activated_runtime: NeutralRuntimeBinding;
+  /** The identity the CLAIMANT asserts for the activated runtime. */
+  readonly activated_runtime: NeutralEvidenceIdentity;
   /** Ordered: `results[i]` MUST correspond to `required_scenario_ids[i]`. */
   readonly results: readonly NeutralScenarioResult[];
 }
 
-const RUNTIME_BINDING_FIELDS: readonly string[] = [
+/** Every field of the identity tuple, in canonical order. All are compared. */
+export const NEUTRAL_EVIDENCE_IDENTITY_FIELDS: readonly string[] = neutralFreeze([
+  "source_commit",
+  "package_hash",
+  "runtime_version",
+  "adapter_version",
   "host_id",
   "host_version",
-  "runtime_version",
-  "release_id",
+  "platform",
   "contract_version",
-];
+  "scenario_suite_id",
+  "scenario_suite_version",
+  "release_id",
+]);
 
-function runtimeBindingComplete(binding: NeutralRuntimeBinding | undefined): boolean {
-  if (binding === undefined || binding === null) return false;
-  if (typeof binding.contract_version !== "number") return false;
-  for (const field of RUNTIME_BINDING_FIELDS) {
+function identityComplete(identity: NeutralEvidenceIdentity | undefined): boolean {
+  if (identity === undefined || identity === null || typeof identity !== "object") return false;
+  if (typeof identity.contract_version !== "number") return false;
+  for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
     if (field === "contract_version") continue;
-    const value = (binding as unknown as Record<string, unknown>)[field];
+    const value = (identity as unknown as Record<string, unknown>)[field];
     if (typeof value !== "string" || value.length === 0) return false;
   }
   return true;
 }
 
-function sameRuntimeBinding(a: NeutralRuntimeBinding, b: NeutralRuntimeBinding): boolean {
-  return RUNTIME_BINDING_FIELDS.every(
+function sameIdentity(a: NeutralEvidenceIdentity, b: NeutralEvidenceIdentity): boolean {
+  return NEUTRAL_EVIDENCE_IDENTITY_FIELDS.every(
     (field) =>
       (a as unknown as Record<string, unknown>)[field] ===
       (b as unknown as Record<string, unknown>)[field]
   );
+}
+
+function differingIdentityFields(
+  a: NeutralEvidenceIdentity,
+  b: NeutralEvidenceIdentity
+): readonly string[] {
+  return NEUTRAL_EVIDENCE_IDENTITY_FIELDS.filter(
+    (field) =>
+      (a as unknown as Record<string, unknown>)[field] !==
+      (b as unknown as Record<string, unknown>)[field]
+  );
+}
+
+/** Is this runtime version one the core RECOGNIZES, not merely one it can parse? */
+export function isNeutralRecognizedRuntimeVersion(value: unknown): boolean {
+  if (typeof value !== "string" || !NEUTRAL_RUNTIME_VERSION_PATTERN.test(value)) return false;
+  const major = NEUTRAL_RUNTIME_VERSION_PATTERN.exec(value);
+  return major !== null && major[1] === `${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}`;
+}
+
+/**
+ * Which identity fields name something the core does not recognize.
+ *
+ * `source_commit` and `package_hash` must be object-identifier FORMS rather than
+ * labels: a 40-hex revision and a `sha256:` digest each denote one immutable
+ * artifact, whereas `invented-release` denotes whatever its author wants. That is
+ * the difference between naming evidence and asserting it.
+ */
+export function unrecognizedNeutralIdentityFields(
+  identity: NeutralEvidenceIdentity
+): Array<{ field: string; value: unknown }> {
+  const offenders: Array<{ field: string; value: unknown }> = [];
+  const note = (field: string): void => {
+    offenders.push({ field, value: (identity as unknown as Record<string, unknown>)[field] ?? null });
+  };
+  if (!NEUTRAL_SOURCE_COMMIT_PATTERN.test(identity.source_commit)) note("source_commit");
+  if (!NEUTRAL_PACKAGE_HASH_PATTERN.test(identity.package_hash)) note("package_hash");
+  if (!NEUTRAL_ADAPTER_VERSION_PATTERN.test(identity.adapter_version)) note("adapter_version");
+  if (NEUTRAL_RECOGNIZED_PLATFORMS.indexOf(identity.platform) === -1) note("platform");
+  if (!NEUTRAL_RELEASE_ID_PATTERN.test(identity.release_id)) note("release_id");
+  if (identity.scenario_suite_id !== NEUTRAL_SCENARIO_SUITE_ID) note("scenario_suite_id");
+  if (identity.scenario_suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION) {
+    note("scenario_suite_version");
+  }
+  return offenders;
+}
+
+/** Which HOST identity fields the core does not recognize. */
+export function unrecognizedNeutralHostFields(
+  identity: NeutralEvidenceIdentity
+): Array<{ field: string; value: unknown }> {
+  const offenders: Array<{ field: string; value: unknown }> = [];
+  if (NEUTRAL_RECOGNIZED_HOST_IDS.indexOf(identity.host_id) === -1) {
+    offenders.push({ field: "host_id", value: identity.host_id ?? null });
+  }
+  if (!NEUTRAL_SEMVER_PATTERN.test(identity.host_version)) {
+    offenders.push({ field: "host_version", value: identity.host_version ?? null });
+  }
+  return offenders;
+}
+
+// ---------------------------------------------------------------------------
+// The source/receipt commitment
+// ---------------------------------------------------------------------------
+
+/** What a single receipt reference is committed to. */
+export interface NeutralReceiptCommitmentInput {
+  readonly stable_id: string;
+  readonly outcome_type: NeutralOutcomeType;
+  readonly disposition: NeutralDisposition;
+  readonly reason_code: string | null;
+  readonly sequence: number;
+}
+
+/**
+ * The commitment that binds a receipt reference to its source.
+ *
+ * WHAT IT IS
+ *   A deterministic digest over the AUTHORITY's complete identity tuple, the
+ *   authority's journal id, the sequence, and the exact outcome the receipt
+ *   claims to record. Change the release, the source commit, the package, the
+ *   host, the platform, the scenario, the sequence, the outcome type, the
+ *   disposition, or the reason code, and the commitment changes — so a receipt
+ *   reference cannot be transplanted between releases, scenarios, sequence
+ *   positions, or verdicts, and cannot be typed out of thin air the way
+ *   `guild.receipt_ref.v1:forged-journal#3` was.
+ *
+ * WHAT IT IS NOT — the honest limit
+ *   It is not a cryptographic MAC. The core is import-closed (`crypto` is a
+ *   forbidden edge), so this is `neutralFingerprint`, and it carries no secret.
+ *   It therefore proves BINDING to an authoritative input, not unforgeability
+ *   against a party that already holds that authority. Closing that residue
+ *   needs a signed durable journal, which is MH-06's to build and is recorded as
+ *   a blocking followup rather than quietly claimed here.
+ */
+export function neutralEvidenceCommitment(
+  authority: NeutralConformanceAuthority,
+  result: NeutralReceiptCommitmentInput
+): string {
+  const canonical: Record<string, unknown> = {
+    schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+    journal: authority.receipt_journal_id,
+    sequence: result.sequence,
+    scenario_id: result.stable_id,
+    outcome_type: result.outcome_type,
+    disposition: result.disposition,
+    reason_code: result.reason_code ?? null,
+  };
+  for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
+    canonical[field] = (authority.identity as unknown as Record<string, unknown>)[field] ?? null;
+  }
+  return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
+}
+
+/** Build the canonical committed receipt reference for one result. */
+export function neutralReceiptReference(
+  authority: NeutralConformanceAuthority,
+  result: NeutralReceiptCommitmentInput
+): string {
+  return `${NEUTRAL_RECEIPT_REF_SCHEMA}:${authority.receipt_journal_id}#${result.sequence}@${neutralEvidenceCommitment(authority, result)}`;
+}
+
+function authorityWellFormed(authority: NeutralConformanceAuthority | undefined): boolean {
+  if (authority === undefined || authority === null || typeof authority !== "object") return false;
+  if (authority.schema_version !== NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA) return false;
+  if (!identityComplete(authority.identity)) return false;
+  if (
+    typeof authority.receipt_journal_id !== "string" ||
+    !NEUTRAL_JOURNAL_ID_PATTERN.test(authority.receipt_journal_id)
+  ) {
+    return false;
+  }
+  const range = authority.receipt_sequence_range;
+  if (range === undefined || range === null || typeof range !== "object") return false;
+  if (typeof range.first !== "number" || typeof range.last !== "number") return false;
+  if (!Number.isInteger(range.first) || !Number.isInteger(range.last)) return false;
+  return range.first >= 0 && range.last >= range.first;
 }
 
 function refuseConformance(
@@ -663,6 +925,11 @@ function refuseConformance(
     | "scenario_contract_version_unrecognized"
     | "scenario_runtime_version_unrecognized"
     | "scenario_runtime_binding_mismatch"
+    | "scenario_evidence_authority_missing"
+    | "scenario_identity_binding_mismatch"
+    | "scenario_source_identity_unrecognized"
+    | "scenario_host_identity_unrecognized"
+    | "scenario_receipt_binding_unverified"
     | "scenario_evidence_stale",
   assertions: readonly string[],
   facts: Readonly<Record<string, unknown>>
@@ -679,14 +946,22 @@ function refuseConformance(
 /**
  * Decide whether `conformant` may be promoted (MH-02-R1-B04, MH-02-R2-B03).
  *
- * There is deliberately NO scenario-set parameter. Round 2 kept one — defaulted
- * to the core's set, so it looked harmless — and it was the whole hole: a caller
- * passing a one-scenario array got a one-scenario "required set", ran that one
- * scenario, and promoted `conformant`. A suite the claimant chooses is not a
- * suite. The pinned tuple is read from the core constant and nothing else.
+ * There is still deliberately NO scenario-set parameter. Round 2 kept one —
+ * defaulted to the core's set, so it looked harmless — and it was the whole hole:
+ * a caller passing a one-scenario array got a one-scenario "required set", ran
+ * that one scenario, and promoted `conformant`. A suite the claimant chooses is
+ * not a suite. The pinned tuple is read from the core constant and nothing else.
+ *
+ * The SECOND parameter is not a scenario set and cannot be used as one. It is the
+ * AUTHORITY (`guild.conformance_authority.v1`) — the identity the verifier itself
+ * observed, plus the durable journal it watched. Anything that is not a
+ * well-formed authority is refused outright, so smuggling a scenario array into
+ * that slot fails closed instead of narrowing the suite.
  *
  * Every gate below exists because its absence was demonstrably exploitable:
  *
+ *    0. an AUTHORITATIVE input must be supplied and well-formed (MH-02-R3-B02:
+ *       a bundle checked only against itself proves only self-consistency)
  *    1. the suite id + version must be the pinned pair         (no silent drift)
  *    2. the required tuple must EQUAL the core tuple, in order (no narrowing,
  *                                                              no re-ordering)
@@ -698,18 +973,27 @@ function refuseConformance(
  *                                                              closed types)
  *    7. each receipt reference must be well-formed AND distinct(no "bogus")
  *    8. the contract version must be the one this core implements
- *    9. the runtime version must be a recognized identity
- *   10. each result must bind the EXACT activated runtime      (no cross-release
- *                                                              reuse)
- *   11. every result's freshness verdict must be `fresh`       (no stale evidence)
- *   12. each disposition must match the scenario's expectation (the original check)
+ *    9. the runtime version must be a RECOGNIZED identity, not merely a parseable
+ *       one                                                    (no guild-999.999.999)
+ *   10. every identity field the frozen contract names must be present and
+ *       recognized — source, package, adapter, platform, host, suite
+ *                                                              (no source-less bundle)
+ *   11. the bundle's identity and EVERY result's identity must equal the
+ *       AUTHORITY's identity, field by field                   (no self-certification)
+ *   12. every receipt reference must be COMMITTED to that authority: its journal,
+ *       a sequence inside the observed range, strictly increasing in tuple order,
+ *       and a digest that recomputes over the authority's identity plus this
+ *       result's outcome                                       (no shaped labels)
+ *   13. every result's freshness verdict must be `fresh`       (no stale evidence)
+ *   14. each disposition must match the scenario's expectation (the original check)
  *
  * An expected REFUSAL that actually refused is still a pass — explicitly
  * refusing is the correct behaviour for the refusal scenarios, and it is what
  * "passed or explicitly refused every required scenario" means.
  */
 export function evaluateNeutralConformanceDecision(
-  evidence: NeutralConformanceEvidence
+  evidence: NeutralConformanceEvidence,
+  authority: NeutralConformanceAuthority
 ): NeutralOutcome {
   const scenarios: readonly NeutralScenarioDefinition[] = NEUTRAL_CORE_SCENARIOS;
   const required = evidence?.required_scenario_ids ?? [];
@@ -724,6 +1008,83 @@ export function evaluateNeutralConformanceDecision(
     required_count: required.length,
     result_count: results.length,
   };
+
+  // 0 — the authoritative input. Without it there is nothing to verify AGAINST,
+  // and round 3 proved that verifying a bundle against itself promotes forgery.
+  if (!authorityWellFormed(authority)) {
+    return refuseConformance(
+      "scenario_evidence_authority_missing",
+      [
+        "a promotion decision is verified against an authoritative input the claimant does not author",
+        "a bundle that agrees only with itself proves consistency, never conformance",
+        `an authority declares ${NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA}, one complete identity, one journal id, and one observed sequence range`,
+      ],
+      { ...baseFacts, submitted_authority_schema: (authority as { schema_version?: unknown })?.schema_version ?? null }
+    );
+  }
+  // The authority itself must name identities the core RECOGNIZES. An authority
+  // is an independent input, not an exemption from the closed vocabularies.
+  const authorityUnrecognized = unrecognizedNeutralIdentityFields(authority.identity);
+  if (authorityUnrecognized.length > 0) {
+    return refuseConformance(
+      "scenario_source_identity_unrecognized",
+      [
+        "the authoritative identity must name a source revision, package digest, adapter, platform, and suite the core recognizes",
+        "a label the core cannot recognize cannot be the exact identity the frozen support_claim rule binds to",
+      ],
+      { ...baseFacts, scope: "authority", unrecognized_identity_fields: authorityUnrecognized }
+    );
+  }
+  const authorityHostUnrecognized = unrecognizedNeutralHostFields(authority.identity);
+  if (authorityHostUnrecognized.length > 0) {
+    return refuseConformance(
+      "scenario_host_identity_unrecognized",
+      [
+        "a conformance claim names a host identity the core recognizes and a real host version",
+        "an unrecognized host cannot be the exact host the claim is bound to",
+      ],
+      {
+        ...baseFacts,
+        scope: "authority",
+        recognized_host_ids: [...NEUTRAL_RECOGNIZED_HOST_IDS],
+        unrecognized_host_fields: authorityHostUnrecognized,
+      }
+    );
+  }
+  if (authority.identity.contract_version !== NEUTRAL_CONTRACT_VERSION) {
+    return refuseConformance(
+      "scenario_contract_version_unrecognized",
+      [
+        `a conformance claim binds to contract version ${NEUTRAL_CONTRACT_VERSION}, the one this core implements`,
+        "a consumer pinned to a different contract major refuses rather than downgrades",
+      ],
+      {
+        ...baseFacts,
+        scope: "authority",
+        recognized_contract_version: NEUTRAL_CONTRACT_VERSION,
+        unrecognized_contract_versions: [
+          { scope: "authority", contract_version: authority.identity.contract_version ?? null },
+        ],
+      }
+    );
+  }
+  if (!isNeutralRecognizedRuntimeVersion(authority.identity.runtime_version)) {
+    return refuseConformance(
+      "scenario_runtime_version_unrecognized",
+      [
+        "a conformance claim names a runtime identity the core recognizes",
+        `the core recognizes runtime major ${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}; a parseable version from an unknown major is not recognized`,
+      ],
+      {
+        ...baseFacts,
+        scope: "authority",
+        recognized_runtime_major: NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+        unrecognized_runtime_versions: [
+          { scope: "authority", runtime_version: authority.identity.runtime_version ?? null },
+        ],
+      }
+    );
+  }
 
   // 1 — suite identity
   if (
@@ -912,19 +1273,17 @@ export function evaluateNeutralConformanceDecision(
     );
   }
 
-  // 8/9 — the contract and runtime versions must be ones this core recognizes.
-  // `support_claim` binds conformance to EXACT versions; a version the core
-  // cannot recognize cannot be the exact one.
+  // 8 — the contract version on the bundle and on every result
   const activatedContractVersion = evidence.activated_runtime?.contract_version;
   const contractOffenders = [
     ...(activatedContractVersion === NEUTRAL_CONTRACT_VERSION
       ? []
       : [{ scope: "activated_runtime", contract_version: activatedContractVersion ?? null }]),
     ...results
-      .filter((result) => result.runtime_binding?.contract_version !== NEUTRAL_CONTRACT_VERSION)
+      .filter((result) => result.evidence_identity?.contract_version !== NEUTRAL_CONTRACT_VERSION)
       .map((result) => ({
         scope: result.stable_id,
-        contract_version: result.runtime_binding?.contract_version ?? null,
+        contract_version: result.evidence_identity?.contract_version ?? null,
       })),
   ];
   if (contractOffenders.length > 0) {
@@ -941,8 +1300,11 @@ export function evaluateNeutralConformanceDecision(
       }
     );
   }
+
+  // 9 — the runtime version must be RECOGNIZED, not merely parseable. Round 3
+  // accepted `guild-999.999.999` because it matched the shape.
   const runtimeOffenders = [
-    ...(NEUTRAL_RUNTIME_VERSION_PATTERN.test(evidence.activated_runtime?.runtime_version ?? "")
+    ...(isNeutralRecognizedRuntimeVersion(evidence.activated_runtime?.runtime_version)
       ? []
       : [
           {
@@ -951,10 +1313,10 @@ export function evaluateNeutralConformanceDecision(
           },
         ]),
     ...results
-      .filter((result) => !NEUTRAL_RUNTIME_VERSION_PATTERN.test(result.runtime_binding?.runtime_version ?? ""))
+      .filter((result) => !isNeutralRecognizedRuntimeVersion(result.evidence_identity?.runtime_version))
       .map((result) => ({
         scope: result.stable_id,
-        runtime_version: result.runtime_binding?.runtime_version ?? null,
+        runtime_version: result.evidence_identity?.runtime_version ?? null,
       })),
   ];
   if (runtimeOffenders.length > 0) {
@@ -962,42 +1324,192 @@ export function evaluateNeutralConformanceDecision(
       "scenario_runtime_version_unrecognized",
       [
         "a conformance claim names a runtime identity the core recognizes",
-        "an unrecognized runtime version cannot be the exact activated runtime",
+        `the core recognizes runtime major ${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}; a parseable version from an unknown major is not recognized`,
       ],
-      { ...baseFacts, unrecognized_runtime_versions: runtimeOffenders }
+      {
+        ...baseFacts,
+        recognized_runtime_major: NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+        unrecognized_runtime_versions: runtimeOffenders,
+      }
     );
   }
 
-  // 10 — exact activated-runtime binding
-  if (!runtimeBindingComplete(evidence.activated_runtime)) {
+  // 10 — the complete frozen identity, present and recognized, everywhere. Round
+  // 3's bundle carried no source, package, adapter, or platform at all.
+  const incomplete = [
+    ...(identityComplete(evidence.activated_runtime) ? [] : ["activated_runtime"]),
+    ...results
+      .filter((result) => !identityComplete(result.evidence_identity))
+      .map((result) => result.stable_id),
+  ];
+  if (incomplete.length > 0) {
     return refuseConformance(
       "scenario_runtime_binding_mismatch",
       [
-        "a conformance claim names the exact activated runtime",
-        "an incomplete runtime binding cannot be compared",
+        "a conformance claim names the exact source, package, runtime, adapter, host, platform, contract, and scenario-suite identity",
+        "an incomplete identity cannot be compared, and an absent field is never a satisfied one",
       ],
-      { ...baseFacts, activated_runtime: evidence.activated_runtime ?? null }
+      {
+        ...baseFacts,
+        required_identity_fields: [...NEUTRAL_EVIDENCE_IDENTITY_FIELDS],
+        incomplete_identities: incomplete,
+        activated_runtime: evidence.activated_runtime ?? null,
+      }
+    );
+  }
+  const unrecognizedIdentity = [
+    ...unrecognizedNeutralIdentityFields(evidence.activated_runtime).map((entry) => ({
+      scope: "activated_runtime",
+      ...entry,
+    })),
+    ...results.flatMap((result) =>
+      unrecognizedNeutralIdentityFields(result.evidence_identity).map((entry) => ({
+        scope: result.stable_id,
+        ...entry,
+      }))
+    ),
+  ];
+  if (unrecognizedIdentity.length > 0) {
+    return refuseConformance(
+      "scenario_source_identity_unrecognized",
+      [
+        "source and package identities must name one immutable artifact, not a label",
+        "adapter, platform, and scenario-suite identities must be ones the core recognizes",
+      ],
+      { ...baseFacts, unrecognized_identity_fields: unrecognizedIdentity }
+    );
+  }
+  const unrecognizedHost = [
+    ...unrecognizedNeutralHostFields(evidence.activated_runtime).map((entry) => ({
+      scope: "activated_runtime",
+      ...entry,
+    })),
+    ...results.flatMap((result) =>
+      unrecognizedNeutralHostFields(result.evidence_identity).map((entry) => ({
+        scope: result.stable_id,
+        ...entry,
+      }))
+    ),
+  ];
+  if (unrecognizedHost.length > 0) {
+    return refuseConformance(
+      "scenario_host_identity_unrecognized",
+      [
+        "a conformance claim names a host identity the core recognizes and a real host version",
+        "an unrecognized host cannot be the exact host the claim is bound to",
+      ],
+      {
+        ...baseFacts,
+        recognized_host_ids: [...NEUTRAL_RECOGNIZED_HOST_IDS],
+        unrecognized_host_fields: unrecognizedHost,
+      }
+    );
+  }
+
+  // 11 — the claimant's identity must EQUAL the authority's, and so must every
+  // result's. This is the step round 3 had no way to take: with one input there
+  // was nothing to compare against.
+  const bundleDrift = differingIdentityFields(evidence.activated_runtime, authority.identity);
+  if (bundleDrift.length > 0) {
+    return refuseConformance(
+      "scenario_identity_binding_mismatch",
+      [
+        "the claimed activated identity must equal the identity the verifier observed",
+        "a self-asserted identity is not evidence of the release it names",
+      ],
+      {
+        ...baseFacts,
+        authority_identity: authority.identity,
+        claimed_identity: evidence.activated_runtime,
+        differing_identity_fields: [...bundleDrift],
+      }
     );
   }
   const misbound = results
-    .filter(
-      (result) =>
-        !runtimeBindingComplete(result.runtime_binding) ||
-        !sameRuntimeBinding(result.runtime_binding, evidence.activated_runtime)
-    )
-    .map((result) => ({ stable_id: result.stable_id, runtime_binding: result.runtime_binding ?? null }));
+    .filter((result) => !sameIdentity(result.evidence_identity, authority.identity))
+    .map((result) => ({
+      stable_id: result.stable_id,
+      differing_identity_fields: [
+        ...differingIdentityFields(result.evidence_identity, authority.identity),
+      ],
+    }));
   if (misbound.length > 0) {
     return refuseConformance(
-      "scenario_runtime_binding_mismatch",
+      "scenario_identity_binding_mismatch",
       [
-        "every result must have been produced by the exact activated runtime",
-        "evidence from another release or runtime cannot be reused",
+        "every result must have been produced under the exact authoritative identity",
+        "evidence from another source revision, package, release, or runtime cannot be reused",
       ],
-      { ...baseFacts, activated_runtime: evidence.activated_runtime, misbound_results: misbound }
+      { ...baseFacts, authority_identity: authority.identity, misbound_results: misbound }
     );
   }
 
-  // 11 — explicit freshness verdict
+  // 12 — the receipt references must be COMMITTED to that authority. Shape was
+  // already checked at step 7; this is the binding round 3 never had.
+  const unbound: Array<Record<string, unknown>> = [];
+  let previousSequence = -1;
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index];
+    const parsed = NEUTRAL_RECEIPT_REF_PATTERN.exec(result.receipt_ref);
+    if (parsed === null) {
+      unbound.push({ stable_id: result.stable_id, reason: "unparseable_reference" });
+      continue;
+    }
+    const journal = parsed[1];
+    const sequence = parseInt(parsed[2], 10);
+    const commitment = parsed[3];
+    if (journal !== authority.receipt_journal_id) {
+      unbound.push({ stable_id: result.stable_id, reason: "foreign_journal", journal });
+      continue;
+    }
+    if (
+      sequence < authority.receipt_sequence_range.first ||
+      sequence > authority.receipt_sequence_range.last
+    ) {
+      unbound.push({ stable_id: result.stable_id, reason: "sequence_outside_observed_range", sequence });
+      continue;
+    }
+    // The journal is an ORDERED spine, so a later scenario cannot cite an earlier
+    // entry: that would be a receipt written before the result it records.
+    if (sequence <= previousSequence) {
+      unbound.push({ stable_id: result.stable_id, reason: "sequence_not_increasing", sequence });
+      continue;
+    }
+    previousSequence = sequence;
+    const expected = neutralEvidenceCommitment(authority, {
+      stable_id: result.stable_id,
+      outcome_type: result.outcome_type,
+      disposition: result.disposition,
+      reason_code: result.reason_code ?? null,
+      sequence,
+    });
+    if (commitment !== expected) {
+      unbound.push({
+        stable_id: result.stable_id,
+        reason: "commitment_mismatch",
+        submitted_commitment: commitment,
+        expected_commitment: expected,
+      });
+    }
+  }
+  if (unbound.length > 0) {
+    return refuseConformance(
+      "scenario_receipt_binding_unverified",
+      [
+        "a receipt reference is bound to one journal, one observed sequence, and one exact outcome",
+        "a reference that merely has the canonical shape addresses nothing",
+        "receipt sequences increase with the required tuple, so a receipt cannot precede the result it records",
+      ],
+      {
+        ...baseFacts,
+        authority_journal_id: authority.receipt_journal_id,
+        authority_sequence_range: authority.receipt_sequence_range,
+        unbound_receipt_references: unbound,
+      }
+    );
+  }
+
+  // 13 — explicit freshness verdict
   const notFresh = results
     .filter((result) => result.evidence_freshness !== "fresh")
     .map((result) => ({ stable_id: result.stable_id, evidence_freshness: result.evidence_freshness ?? null }));
@@ -1012,7 +1524,7 @@ export function evaluateNeutralConformanceDecision(
     );
   }
 
-  // 12 — disposition matches the scenario's expectation
+  // 14 — disposition matches the scenario's expectation
   const mismatched = results
     .map((result) => {
       const definition = scenarios.find((scenario) => scenario.stable_id === result.stable_id);
@@ -1037,10 +1549,14 @@ export function evaluateNeutralConformanceDecision(
       "conformant may be promoted only for the exact evidence-bound version tuple",
       "constructed adapter smoke cannot satisfy lifecycle conformance",
       "every required scenario passed or explicitly refused under fresh, receipt-bound evidence",
+      "every identity field the frozen support_claim rule names is present, recognized, and equal to the authority's",
+      "every receipt reference is committed to that authority's identity, journal, sequence, and outcome",
     ],
     facts: {
       ...baseFacts,
       activated_runtime: evidence.activated_runtime,
+      authority_identity: authority.identity,
+      authority_journal_id: authority.receipt_journal_id,
       evaluated_scenarios: results.map((result) => ({
         stable_id: result.stable_id,
         disposition: result.disposition,

@@ -266,6 +266,32 @@ describe("neutral runtime contract vocabularies", () => {
     expect(NEUTRAL_REASON_CODES).toContain("boundary_unclassified_edge");
     expect(isNeutralReasonCode("invented_reason")).toBe(false);
   });
+
+  it("declares one distinct reason code per round-3 fail-closed invariant", () => {
+    for (const code of [
+      // MH-02-R3-B01 — module edges were never the only way out of the core. A
+      // call the scan cannot name and an ambient binding the core never declared
+      // are different findings and stay different answers.
+      "boundary_indirect_callee",
+      "boundary_ambient_capability",
+      // MH-02-R3-B02 — a bundle checked only against itself proves nothing. Each
+      // code names exactly which part of the source binding was absent or forged.
+      "scenario_evidence_authority_missing",
+      "scenario_identity_binding_mismatch",
+      "scenario_source_identity_unrecognized",
+      "scenario_host_identity_unrecognized",
+      "scenario_receipt_binding_unverified",
+    ]) {
+      expect(NEUTRAL_REASON_CODES).toContain(code as never);
+      expect(isNeutralReasonCode(code)).toBe(true);
+    }
+    // "the identity is unrecognized" and "the identity is recognized but is not
+    // the authority's" are different answers, and collapsing them would hide the
+    // difference between a fabricated release and a reused one.
+    expect(NEUTRAL_REASON_CODES).toContain("scenario_runtime_binding_mismatch");
+    // Shape and BINDING stay separate: round 3 had only the first.
+    expect(NEUTRAL_REASON_CODES).toContain("scenario_receipt_reference_missing");
+  });
 });
 
 // ---------------------------------------------------------------------------

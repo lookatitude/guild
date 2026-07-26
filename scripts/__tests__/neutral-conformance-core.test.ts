@@ -26,15 +26,23 @@ import * as path from "path";
 import {
   NEUTRAL_CORE_MEMBERS,
   NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS,
+  NEUTRAL_PURE_INTRINSIC_ROOTS,
+  analyzeNeutralCapabilityUse,
   evaluateNeutralCoreBoundary,
   extractNeutralImportSpecifiers,
+  tokenizeNeutralSource,
 } from "../../src/modules/lifecycle/workflows/neutral-core-boundary";
 
 import {
+  NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
   NEUTRAL_CORE_SCENARIOS,
   NEUTRAL_CORE_WAVE_OWNER,
+  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
   NEUTRAL_EVIDENCE_PROFILES,
   NEUTRAL_RECEIPT_REF_SCHEMA,
+  NEUTRAL_RECOGNIZED_HOST_IDS,
+  NEUTRAL_RECOGNIZED_PLATFORMS,
+  NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
   NEUTRAL_REQUIRED_CORE_SCENARIO_IDS,
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
@@ -43,12 +51,15 @@ import {
   applyNeutralSupportTransition,
   deriveNeutralSupportClaim,
   evaluateNeutralConformanceDecision,
+  neutralEvidenceCommitment,
+  neutralReceiptReference,
   validateNeutralScenarioRegistry,
 } from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
 import type {
+  NeutralConformanceAuthority,
   NeutralConformanceEvidence,
   NeutralEvidenceFreshnessVerdict,
-  NeutralRuntimeBinding,
+  NeutralEvidenceIdentity,
   NeutralScenarioResult,
   NeutralSupportRecord,
 } from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
@@ -329,11 +340,16 @@ describe("MH-02 acceptance 3 — core import closure", () => {
     it("stays SILENT on an ambiguous slash that could not have hidden an edge", () => {
       // Ordinary arithmetic after a call or a block is ambiguous too, but both
       // readings agree there is no edge, so failing there would be noise.
+      //
+      // Every name below is DECLARED. Under capability closure (MH-02-R3-B01) a
+      // free identifier is itself a finding, so a fixture that leaned on
+      // undeclared `f`/`a`/`w` would fail for that reason and prove nothing about
+      // the slash.
       for (const source of [
-        "const r = f(a) / 2;",
-        "const q = compute() / total() / 3;",
-        "function g() {} const z = w / 4;",
-        "const n = counter++ / limit;",
+        "function f(v: number): number { return v; } const a = 1; const r = f(a) / 2;",
+        "function compute(): number { return 1; } function total(): number { return 2; } const q = compute() / total() / 3;",
+        "function g() {} const w = 8; const z = w / 4;",
+        "let counter = 4; const limit = 2; const n = counter++ / limit;",
       ]) {
         const verdict = verdictFor(source);
         expect([source, verdict.disposition]).toEqual([source, "succeeded"]);
@@ -353,8 +369,8 @@ describe("MH-02 acceptance 3 — core import closure", () => {
           'import a from "./neutral-runtime-contracts";',
           'export * from "./neutral-gate-policy";',
           'const c = await import("./neutral-conformance-core");',
-          'const d = require("./neutral-core-boundary");',
-          "const e = require(`./neutral-runtime-contracts`);",
+          'const d = await import("./neutral-core-boundary");',
+          "const e = await import(`./neutral-runtime-contracts`);",
         ].join("\n")
       );
       expect(verdict.disposition).toBe("succeeded");
@@ -363,10 +379,245 @@ describe("MH-02 acceptance 3 — core import closure", () => {
       expect(verdict.facts.source_ambiguities).toEqual([]);
     });
 
+    /**
+     * `require` is CommonJS ambient capability, and a capability that resolves to
+     * a core member today resolves to `fs` tomorrow. The core reaches its
+     * siblings through static ESM imports, so a bare `require` fails even when
+     * its literal argument is intra-core (MH-02-R3-B01).
+     */
+    it("refuses an intra-core require, because require itself is the capability", () => {
+      const verdict = verdictFor('const d2 = require("./neutral-core-boundary");');
+      expect(verdict.disposition).toBe("failed");
+      expect(verdict.reason_code).toBe("boundary_ambient_capability");
+      expect(verdict.facts.ambient_capabilities).toEqual([
+        { importer: NEUTRAL_CORE_MEMBERS[0], name: "require", usage: "call" },
+      ]);
+    });
+
     it("counts unresolved edges in edge_count so the fact set stays honest", () => {
       const verdict = verdictFor('const m = "fs"; require(m);');
       expect(verdict.facts.edge_count).toBe(1);
       expect((verdict.facts.unresolved_edges as Array<{ form: string }>)[0].form).toBe("require()");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // MH-02-R3-B01 — capability closure, because module edges were never the only
+  // way out of the core
+  //
+  // Rounds 1-3 hardened the recognizer that finds `import`/`require` TOKENS.
+  // Round 3 then defeated it four ways without writing either token, and each
+  // one executes: the name can live in a STRING (`module["require"]("fs")`), be
+  // produced by the evaluator (`eval("require")("fs")`,
+  // `Function("return require")()("fs")`), or be spelled with a Unicode escape so
+  // the token never lexes at all. A direct Node control confirms three of the
+  // four hand back a callable `fs.readFileSync`, and the fourth hands back
+  // `process.binding("fs")`.
+  //
+  // The fix is not four more literals. It is the invariant that subsumes them: a
+  // core member may only CALL what it declares, imports from a core member, or
+  // draws from a closed pure-intrinsic allowlist, and any callee the scan cannot
+  // reduce to such a root fails closed.
+  // -------------------------------------------------------------------------
+
+  describe("MH-02-R3-B01 computed, evaluated, and escaped capability access fails closed", () => {
+    /**
+     * Inject one valid statement into ONE real member and re-run the FULL
+     * five-member verdict. Full membership matters: a partial file set yields
+     * `boundary_membership_mismatch`, which the round-3 code produces too, so a
+     * membership artefact would make every probe below vacuous.
+     */
+    function verdictFor(snippet: string) {
+      const files = readCoreFiles();
+      files[0] = { path: files[0].path, source: `${files[0].source}\n${snippet}\n` };
+      return evaluateNeutralCoreBoundary(files);
+    }
+
+    /** The reviewer's four round-3 probes, in the exact forms reported. */
+    it.each([
+      ["computed CommonJS access", 'const a = module["require"]("fs");', "boundary_indirect_callee"],
+      ["evaluator-derived require", 'const b = eval("require")("fs");', "boundary_ambient_capability"],
+      [
+        "Function-derived require",
+        'const c = Function("return require")()("fs");',
+        "boundary_ambient_capability",
+      ],
+      ["identifier-escaped require", 'const d = requ\\u0069re("fs");', "boundary_forbidden_edge"],
+    ])("refuses %s", (_label, snippet, reason) => {
+      const verdict = verdictFor(snippet);
+      expect([_label, verdict.disposition]).toEqual([_label, "failed"]);
+      expect([_label, verdict.reason_code]).toEqual([_label, reason]);
+      expect(verdict.facts.may_promote_conformant).toBeUndefined();
+    });
+
+    /**
+     * Neighbouring spellings of the SAME two mechanisms. None of them is
+     * enumerated anywhere in the implementation: they fail because the allowlist
+     * is closed, which is the difference between an invariant and a denylist.
+     */
+    it.each([
+      ["globalThis computed access", 'const e = globalThis["require"]("fs");'],
+      ["process.binding", 'const f = process.binding("fs");'],
+      ["global.process.binding", 'const g = global.process.binding("fs");'],
+      ["new Function evaluator", 'const h = new Function("return require")()("fs");'],
+      ["indirect eval through a comma expression", 'const i2 = (0, eval)("require")("fs");'],
+      [
+        "prototype-chain evaluator",
+        'const j = []["constructor"]["constructor"]("return require")()("fs");',
+      ],
+      ["evaluator aliased through a local", 'const k = eval; const k2 = k("require")("fs");'],
+      ["escaped module identifier", 'const l = m\\u006Fdule["require"]("fs");'],
+      ["escaped evaluator identifier", 'const m2 = ev\\u0061l("require")("fs");'],
+      ["braced unicode escape", 'const n = requ\\u{69}re("fs");'],
+      ["import.meta.require", 'const o = import.meta.require("fs");'],
+      ["createRequire through a computed key", 'const p = module["createRequire"]("x")("fs");'],
+      ["Reflect.get on the module record", 'const q = Reflect.get(module, "require")("fs");'],
+      ["computed key on a local alias", 'const r = globalThis; const r2 = r["require"]("fs");'],
+      ["clock read", "const s = Date.now();"],
+      ["console io", 'const t = console.log("x");'],
+      ["timer string evaluation", 'const u = setTimeout("x", 0);'],
+      ["WebAssembly compilation", "const v = WebAssembly.compile(bytes);"],
+      ["optional call on a computed member", 'const w2 = module["require"]?.("fs");'],
+      ["Buffer allocation", "const x3 = Buffer.alloc(1);"],
+    ])("refuses a %s that no denylist enumerates", (_label, snippet) => {
+      const verdict = verdictFor(snippet);
+      expect([_label, verdict.disposition]).toEqual([_label, "failed"]);
+      expect([_label, verdict.reason_code]).not.toEqual([_label, null]);
+    });
+
+    it("names the ambient binding it caught, so the failure is actionable", () => {
+      const verdict = verdictFor('const y2 = eval("require")("fs");');
+      expect(verdict.reason_code).toBe("boundary_ambient_capability");
+      expect(verdict.facts.ambient_capabilities).toEqual([
+        { importer: NEUTRAL_CORE_MEMBERS[0], name: "eval", usage: "call" },
+      ]);
+    });
+
+    it("names the indirect call shape it caught", () => {
+      const verdict = verdictFor('const z3 = module["require"]("fs");');
+      expect(verdict.reason_code).toBe("boundary_indirect_callee");
+      expect(
+        (verdict.facts.indirect_callees as Array<{ importer: string; form: string }>)[0]
+      ).toMatchObject({ importer: NEUTRAL_CORE_MEMBERS[0], form: "computed_member_call" });
+    });
+
+    /**
+     * The escape DECODES — which is what makes the edge visible again — and the
+     * obfuscation is ALSO recorded, so a core member cannot use an escaped
+     * identifier even when it decodes to something innocuous.
+     */
+    it("decodes a Unicode identifier escape to the identifier it denotes", () => {
+      expect(tokenizeNeutralSource('requ\\u0069re("fs")')[0]).toEqual({
+        kind: "ident",
+        value: "require",
+      });
+      expect(tokenizeNeutralSource('requ\\u{69}re("x")')[0].value).toBe("require");
+      expect(extractNeutralImportSpecifiers('requ\\u0069re("fs")')).toEqual(["fs"]);
+    });
+
+    it("reports an escaped identifier even when it decodes to a harmless name", () => {
+      const verdict = verdictFor("const har\\u006Dless = 1;");
+      expect(verdict.disposition).toBe("failed");
+      expect(verdict.reason_code).toBe("boundary_ambiguous_source");
+      expect(
+        (verdict.facts.source_ambiguities as Array<{ kind: string }>).some(
+          (entry) => entry.kind === "escaped_identifier"
+        )
+      ).toBe(true);
+    });
+
+    it("reports a backslash it cannot explain rather than dropping it", () => {
+      const verdict = verdictFor("const bad = 1; \\ ");
+      expect(verdict.disposition).toBe("failed");
+      expect(
+        (verdict.facts.source_ambiguities as Array<{ kind: string }>).some(
+          (entry) => entry.kind === "undecodable_escape"
+        )
+      ).toBe(true);
+    });
+
+    /**
+     * NON-VACUITY. Every refusal above is worthless if the sentinel refuses
+     * everything, so the ordinary shapes the real core is written in must stay
+     * clean — including the false-positive resistance rounds 1-2 established.
+     */
+    it.each([
+      ["commented-out require", '// require("fs")'],
+      ["block-commented import", '/* import fs from "fs"; */'],
+      ["import word inside a template literal", 'const c3 = `import fs from "fs"`;'],
+      ["require word inside a string", 'const c4 = "require(\\"fs\\")";'],
+      ["regex literal containing a require call", 'const c5 = /require\\("fs"\\)/;'],
+      ["plain division", "const c6 = 10 / 2; const c7 = c6 / 3;"],
+      ["intra-core relative import", 'import { neutralFreeze as nf2 } from "./neutral-runtime-contracts";'],
+      [
+        "pure intrinsic calls",
+        'const c8 = JSON.stringify(Object.keys({}).sort()); const c9 = new RegExp("^a$").test("a"); const c10 = Array.isArray([]) && Number.isFinite(1) && String(1).length > 0 && Math.max(1, 2) === 2 && new Set<string>().size === 0 && new Map<string, string>().size === 0;',
+      ],
+      ["local computed index access", "const c11 = [1, 2, 3]; const c12 = c11[c11.length - 1];"],
+      [
+        "chained method calls on an expression result",
+        'const c13 = [1, 2].map((v) => v + 1).filter((v) => v > 1).join(",");',
+      ],
+      ["declared function called through a local", "function lf(v: number): number { return v + 1; } const c14 = lf(1);"],
+      ["destructured local then used", "const pair = { a: 1, b: 2 }; const { a: c15, b: c16 } = pair; const c17 = c15 + c16;"],
+      ["catch binding", "function cf(): string { try { return \"x\"; } catch (err) { return String(err); } }"],
+      ["generic helper", "function gid<T>(v: T): T { return v; } const c18 = gid(1);"],
+      ["thrown error with a template message", "function tf(v: string): never { throw new Error(`bad ${v}`); }"],
+    ])("stays succeeded for %s", (_label, snippet) => {
+      const verdict = verdictFor(snippet);
+      expect([_label, verdict.disposition]).toEqual([_label, "succeeded"]);
+      expect([_label, verdict.reason_code]).toEqual([_label, null]);
+    });
+
+    it("finds zero ambient references and zero indirect callees in every real core member", () => {
+      for (const file of readCoreFiles()) {
+        const analysis = analyzeNeutralCapabilityUse(file.source);
+        expect([file.path, analysis.ambient]).toEqual([file.path, []]);
+        expect([file.path, analysis.indirect]).toEqual([file.path, []]);
+      }
+    });
+
+    /**
+     * The allowlist is the whole mechanism, so what it OMITS is load-bearing.
+     * Every name below can reach I/O, a clock, or the evaluator, and none of them
+     * may ever be added.
+     */
+    it("omits every capability root from the pure-intrinsic allowlist", () => {
+      for (const capability of [
+        "eval",
+        "Function",
+        "require",
+        "process",
+        "global",
+        "globalThis",
+        "console",
+        "Date",
+        "Reflect",
+        "Proxy",
+        "Buffer",
+        "WebAssembly",
+        "setTimeout",
+        "setInterval",
+        "queueMicrotask",
+        "fetch",
+        "performance",
+        "structuredClone",
+      ]) {
+        expect(NEUTRAL_PURE_INTRINSIC_ROOTS).not.toContain(capability);
+      }
+      // …and still contains the pure ones the core actually needs, or the real
+      // core could not pass its own check.
+      for (const pure of ["Object", "Array", "JSON", "RegExp", "Error", "Number", "String"]) {
+        expect(NEUTRAL_PURE_INTRINSIC_ROOTS).toContain(pure);
+      }
+    });
+
+    it("treats a bound parameter as bound while still refusing a computed callee on it", () => {
+      // `m` IS a local binding, so the ambient rule correctly says nothing. The
+      // indirect-callee rule is the backstop that still refuses the call.
+      const verdict = verdictFor('const bf = (m: Record<string, (s: string) => unknown>) => m["require"]("fs");');
+      expect(verdict.disposition).toBe("failed");
+      expect(verdict.reason_code).toBe("boundary_indirect_callee");
     });
   });
 
@@ -709,71 +960,153 @@ describe("neutral support claim", () => {
 describe("neutral conformance decision", () => {
   const required = NEUTRAL_CORE_SCENARIOS.map((s) => s.stable_id);
 
-  const ACTIVATED_RUNTIME: NeutralRuntimeBinding = {
+  /**
+   * The COMPLETE identity the frozen `support_claim` rule requires: exact source,
+   * package, runtime, adapter, host, platform, contract, and scenario-suite.
+   *
+   * MH-02-R3-B02: round 3's five-label record could not express most of this, so a
+   * bundle naming no source, package, adapter, or platform at all was still
+   * "complete" and still promoted `conformant=true`.
+   */
+  const BASE_IDENTITY: NeutralEvidenceIdentity = {
+    source_commit: "b871c8d973bd8258c25ce5e87a89f68f2e63a516",
+    package_hash: `sha256:${"0123456789abcdef".repeat(4)}`,
+    runtime_version: "guild-2.2.0",
+    adapter_version: "guild.host_adapter.v1.0.0",
     host_id: "claude-code-cli",
     host_version: "2.2.0",
-    runtime_version: "guild-2.2.0",
-    release_id: "rel-2026-07-26-a",
+    platform: "darwin-arm64",
     contract_version: 1,
+    scenario_suite_id: NEUTRAL_SCENARIO_SUITE_ID,
+    scenario_suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
+    release_id: "rel-2026-07-26-a",
   };
 
-  /** A complete, ordered, receipt-bound, fresh, exactly-bound evidence package. */
-  function evidence(
+  /**
+   * The AUTHORITATIVE input — what the verifier itself observed. It is
+   * deliberately assembled here rather than exported as a canned constant by the
+   * core: a shipped ready-made authority would itself be a promotion path.
+   */
+  function authorityFor(
+    identity: NeutralEvidenceIdentity = BASE_IDENTITY,
+    patch: Partial<NeutralConformanceAuthority> = {}
+  ): NeutralConformanceAuthority {
+    return {
+      schema_version: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+      identity,
+      receipt_journal_id: "jrn-run-1",
+      receipt_sequence_range: { first: 1, last: 5 },
+      ...patch,
+    };
+  }
+
+  const AUTHORITY = authorityFor();
+
+  /** Sentinel: leave it in place and the helper commits the reference honestly. */
+  const RECOMPUTE = "<recompute>";
+
+  function expectedReason(stableId: string, disposition: string): string | null {
+    if (disposition === "succeeded") return null;
+    return stableId === "MHRC-UNS-002" ? "policy_denied" : "gate_unsatisfied";
+  }
+
+  /**
+   * Build the ordered results for one authority.
+   *
+   * `perResult` is applied BEFORE the receipt reference is committed, so patching
+   * a disposition, an outcome type, or a reason code produces an HONESTLY
+   * committed receipt for that patched outcome — which is what a real failing run
+   * looks like, and what keeps the semantic gates (wrong type, wrong disposition)
+   * reachable instead of every patch collapsing into a binding failure. A test
+   * that attacks the reference itself sets `receipt_ref` explicitly.
+   */
+  function resultsFor(
+    authority: NeutralConformanceAuthority,
+    perResult: (result: NeutralScenarioResult, index: number) => NeutralScenarioResult = (r) => r
+  ): NeutralScenarioResult[] {
+    return NEUTRAL_CORE_SCENARIOS.map((scenario, index) => {
+      const sequence = authority.receipt_sequence_range.first + index;
+      const disposition = scenario.expected_typed_outcome.disposition;
+      const patched = perResult(
+        {
+          stable_id: scenario.stable_id,
+          outcome_type: scenario.expected_typed_outcome.type,
+          disposition,
+          reason_code: expectedReason(scenario.stable_id, disposition),
+          receipt_ref: RECOMPUTE,
+          evidence_identity: authority.identity,
+          evidence_freshness: "fresh",
+        },
+        index
+      );
+      if (patched.receipt_ref !== RECOMPUTE) return patched;
+      return {
+        ...patched,
+        receipt_ref: neutralReceiptReference(authority, {
+          stable_id: patched.stable_id,
+          outcome_type: patched.outcome_type,
+          disposition: patched.disposition,
+          reason_code: patched.reason_code,
+          sequence,
+        }),
+      };
+    });
+  }
+
+  function evidenceFor(
+    authority: NeutralConformanceAuthority,
     patch: Partial<NeutralConformanceEvidence> = {},
-    perResult: (
-      result: NeutralScenarioResult,
-      index: number
-    ) => NeutralScenarioResult = (r) => r
+    perResult: (result: NeutralScenarioResult, index: number) => NeutralScenarioResult = (r) => r
   ): NeutralConformanceEvidence {
     return {
       suite_id: NEUTRAL_SCENARIO_SUITE_ID,
       suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
       required_scenario_ids: [...required],
-      activated_runtime: ACTIVATED_RUNTIME,
-      results: NEUTRAL_CORE_SCENARIOS.map((scenario, index) =>
-        perResult(
-          {
-            stable_id: scenario.stable_id,
-            outcome_type: scenario.expected_typed_outcome.type,
-            disposition: scenario.expected_typed_outcome.disposition,
-            reason_code:
-              scenario.expected_typed_outcome.disposition === "succeeded"
-                ? null
-                : scenario.stable_id === "MHRC-UNS-002"
-                  ? "policy_denied"
-                  : "gate_unsatisfied",
-            // The canonical receipt-reference form: a schema marker, a journal
-            // id, and a per-scenario sequence. MH-02-R2-B03 established that
-            // "any non-empty string" was not a reference at all.
-            receipt_ref: `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#${index + 1}`,
-            runtime_binding: ACTIVATED_RUNTIME,
-            evidence_freshness: "fresh",
-          },
-          index
-        )
-      ),
+      activated_runtime: authority.identity,
+      results: resultsFor(authority, perResult),
       ...patch,
     };
   }
 
+  /** A complete, ordered, source-bound, receipt-committed, fresh package. */
+  function evidence(
+    patch: Partial<NeutralConformanceEvidence> = {},
+    perResult: (result: NeutralScenarioResult, index: number) => NeutralScenarioResult = (r) => r
+  ): NeutralConformanceEvidence {
+    return evidenceFor(AUTHORITY, patch, perResult);
+  }
+
+  function decide(
+    pkg: NeutralConformanceEvidence,
+    authority: NeutralConformanceAuthority = AUTHORITY
+  ) {
+    return evaluateNeutralConformanceDecision(pkg, authority);
+  }
+
   it("promotes only when every required scenario matched its expected disposition", () => {
-    const outcome = evaluateNeutralConformanceDecision(evidence());
+    const outcome = decide(evidence());
     expect(outcome.type).toBe("guild.support_transition_outcome.v1");
     expect(outcome.disposition).toBe("succeeded");
     expect(outcome.facts.may_promote_conformant).toBe(true);
-    expect(outcome.facts.activated_runtime).toEqual(ACTIVATED_RUNTIME);
+    expect(outcome.facts.activated_runtime).toEqual(BASE_IDENTITY);
+    expect(outcome.facts.authority_identity).toEqual(BASE_IDENTITY);
   });
 
   it("counts an expected refusal as a pass (explicit refusal satisfies the scenario)", () => {
     const pkg = evidence();
     expect(pkg.results.find((r) => r.stable_id === "MHRC-LIF-002")?.disposition).toBe("refused");
-    expect(evaluateNeutralConformanceDecision(pkg).disposition).toBe("succeeded");
+    expect(decide(pkg).disposition).toBe("succeeded");
   });
 
   it("fails promotion when a required scenario produced the wrong disposition", () => {
-    const outcome = evaluateNeutralConformanceDecision(
+    // An HONESTLY receipted failure: the receipt records `failed`, and promotion
+    // is still refused. Nothing here is forged, so the refusal is about the
+    // scenario outcome rather than about evidence integrity.
+    const outcome = decide(
       evidence({}, (r) =>
-        r.stable_id === "MHRC-LIF-001" ? { ...r, disposition: "failed", reason_code: "gate_unsatisfied" } : r
+        r.stable_id === "MHRC-LIF-001"
+          ? { ...r, disposition: "failed", reason_code: "gate_unsatisfied" }
+          : r
       )
     );
     expect(outcome.disposition).toBe("failed");
@@ -782,8 +1115,8 @@ describe("neutral conformance decision", () => {
   });
 
   it("is deterministic across repeated evaluation", () => {
-    const a = evaluateNeutralConformanceDecision(evidence());
-    const b = evaluateNeutralConformanceDecision(evidence());
+    const a = decide(evidence());
+    const b = decide(evidence());
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
   });
 
@@ -793,29 +1126,22 @@ describe("neutral conformance decision", () => {
 
   /** The reviewer's exact probe #1: zero scenarios. */
   it("refuses an entirely empty evidence package", () => {
-    const outcome = evaluateNeutralConformanceDecision(
-      {} as unknown as NeutralConformanceEvidence
-    );
+    const outcome = decide({} as unknown as NeutralConformanceEvidence);
     expect(outcome.disposition).toBe("refused");
     expect(outcome.reason_code).toBe("scenario_suite_version_mismatch");
     expect(outcome.facts.may_promote_conformant).toBe(false);
   });
 
   it("refuses an empty required scenario set even with the right suite tuple", () => {
-    const outcome = evaluateNeutralConformanceDecision(
-      evidence({ required_scenario_ids: [], results: [] })
-    );
+    const outcome = decide(evidence({ required_scenario_ids: [], results: [] }));
     expect(outcome.disposition).toBe("refused");
     expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
   });
 
   it("refuses a caller-narrowed required set that omits a core scenario", () => {
     const narrowed = required.slice(0, 2);
-    const outcome = evaluateNeutralConformanceDecision(
-      evidence({
-        required_scenario_ids: narrowed,
-        results: evidence().results.slice(0, 2),
-      })
+    const outcome = decide(
+      evidence({ required_scenario_ids: narrowed, results: evidence().results.slice(0, 2) })
     );
     expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
     expect(outcome.facts.omitted_required_scenarios).toEqual(required.slice(2));
@@ -827,23 +1153,23 @@ describe("neutral conformance decision", () => {
       suite_id: NEUTRAL_SCENARIO_SUITE_ID,
       suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
       required_scenario_ids: [...required],
-      activated_runtime: ACTIVATED_RUNTIME,
+      activated_runtime: BASE_IDENTITY,
       results: NEUTRAL_CORE_SCENARIOS.map((s) => ({
         stable_id: s.stable_id,
         disposition: s.expected_typed_outcome.disposition,
       })),
     } as unknown as NeutralConformanceEvidence;
-    const outcome = evaluateNeutralConformanceDecision(bare);
+    const outcome = decide(bare);
     expect(outcome.disposition).toBe("refused");
     expect(outcome.reason_code).toBe("scenario_evidence_incomplete");
     expect(outcome.facts.may_promote_conformant).toBe(false);
   });
 
   it("refuses a suite id or version that is not the pinned tuple", () => {
-    expect(evaluateNeutralConformanceDecision(evidence({ suite_version: "9.9.9" })).reason_code).toBe(
+    expect(decide(evidence({ suite_version: "9.9.9" })).reason_code).toBe(
       "scenario_suite_version_mismatch"
     );
-    expect(evaluateNeutralConformanceDecision(evidence({ suite_id: "other.suite" })).reason_code).toBe(
+    expect(decide(evidence({ suite_id: "other.suite" })).reason_code).toBe(
       "scenario_suite_version_mismatch"
     );
   });
@@ -851,12 +1177,12 @@ describe("neutral conformance decision", () => {
   it("refuses results that are not ordered against the required set", () => {
     const pkg = evidence();
     const shuffled = [pkg.results[1], pkg.results[0], ...pkg.results.slice(2)];
-    const outcome = evaluateNeutralConformanceDecision(evidence({ results: shuffled }));
+    const outcome = decide(evidence({ results: shuffled }));
     expect(outcome.reason_code).toBe("scenario_results_unordered");
   });
 
   it("refuses a result with no receipt reference", () => {
-    const outcome = evaluateNeutralConformanceDecision(
+    const outcome = decide(
       evidence({}, (r) => (r.stable_id === "MHRC-LIF-003" ? { ...r, receipt_ref: "" } : r))
     );
     expect(outcome.reason_code).toBe("scenario_receipt_reference_missing");
@@ -869,47 +1195,55 @@ describe("neutral conformance decision", () => {
 
   it("refuses a succeeded result that carries a reason code, and a refusal that omits one", () => {
     expect(
-      evaluateNeutralConformanceDecision(
+      decide(
         evidence({}, (r) =>
           r.disposition === "succeeded" ? { ...r, reason_code: "gate_unsatisfied" } : r
         )
       ).reason_code
     ).toBe("scenario_evidence_incomplete");
     expect(
-      evaluateNeutralConformanceDecision(
-        evidence({}, (r) => (r.disposition === "refused" ? { ...r, reason_code: null } : r))
-      ).reason_code
+      decide(evidence({}, (r) => (r.disposition === "refused" ? { ...r, reason_code: null } : r)))
+        .reason_code
     ).toBe("scenario_evidence_incomplete");
   });
 
+  /**
+   * Every axis of the frozen identity tuple is compared, using values that are
+   * individually RECOGNIZED and merely different. That separates "the core does
+   * not know this label" from "this evidence came from somewhere else" — the
+   * second is what cross-release reuse actually looks like.
+   */
   it.each([
-    ["host_id", "other-host"],
+    ["source_commit", "e9dd73fcffea95ab33277a60d113262aac3379f2"],
+    ["package_hash", `sha256:${"fedcba9876543210".repeat(4)}`],
+    ["runtime_version", "guild-2.9.9"],
+    ["adapter_version", "guild.host_adapter.v1.0.1"],
+    ["host_id", "codex-cli"],
     ["host_version", "9.9.9"],
-    ["runtime_version", "guild-0.0.1"],
-    ["release_id", "rel-other"],
-  ])("refuses evidence produced by a different %s than the activated runtime", (field, value) => {
-    const outcome = evaluateNeutralConformanceDecision(
+    ["platform", "linux-x64"],
+    ["release_id", "rel-2026-07-26-b"],
+  ])("refuses evidence produced under a different %s than the authority observed", (field, value) => {
+    const outcome = decide(
       evidence({}, (r) =>
         r.stable_id === "MHRC-LIF-001"
-          ? { ...r, runtime_binding: { ...ACTIVATED_RUNTIME, [field]: value } }
+          ? { ...r, evidence_identity: { ...BASE_IDENTITY, [field]: value } }
           : r
       )
     );
-    expect(outcome.reason_code).toBe("scenario_runtime_binding_mismatch");
-    expect(outcome.facts.misbound_results).toHaveLength(1);
+    expect([field, outcome.reason_code]).toEqual([field, "scenario_identity_binding_mismatch"]);
+    expect(outcome.facts.misbound_results).toEqual([
+      { stable_id: "MHRC-LIF-001", differing_identity_fields: [field] },
+    ]);
   });
 
-  it("refuses an incomplete activated-runtime binding", () => {
-    const outcome = evaluateNeutralConformanceDecision(
-      evidence({
-        activated_runtime: { ...ACTIVATED_RUNTIME, release_id: "" },
-      })
-    );
+  it("refuses an incomplete activated-runtime identity", () => {
+    const outcome = decide(evidence({ activated_runtime: { ...BASE_IDENTITY, release_id: "" } }));
     expect(outcome.reason_code).toBe("scenario_runtime_binding_mismatch");
+    expect(outcome.facts.incomplete_identities).toEqual(["activated_runtime"]);
   });
 
   it.each(["stale", "unknown"])("refuses %s evidence freshness", (verdict) => {
-    const outcome = evaluateNeutralConformanceDecision(
+    const outcome = decide(
       evidence({}, (r) =>
         r.stable_id === "MHRC-UNS-002"
           ? { ...r, evidence_freshness: verdict as NeutralEvidenceFreshnessVerdict }
@@ -924,9 +1258,7 @@ describe("neutral conformance decision", () => {
   });
 
   it("refuses when a required scenario has no result at all", () => {
-    const outcome = evaluateNeutralConformanceDecision(
-      evidence({ results: evidence().results.slice(0, 4) })
-    );
+    const outcome = decide(evidence({ results: evidence().results.slice(0, 4) }));
     expect(outcome.disposition).toBe("refused");
     expect(outcome.reason_code).toBe("scenario_evidence_incomplete");
   });
@@ -950,11 +1282,11 @@ describe("neutral conformance decision", () => {
     /** The reviewer's exact probe: a suite of one, chosen by the claimant. */
     it("refuses a caller-selected one-scenario suite", () => {
       const only = NEUTRAL_CORE_SCENARIOS[0];
-      const outcome = evaluateNeutralConformanceDecision({
+      const outcome = decide({
         suite_id: NEUTRAL_SCENARIO_SUITE_ID,
         suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
         required_scenario_ids: [only.stable_id],
-        activated_runtime: ACTIVATED_RUNTIME,
+        activated_runtime: BASE_IDENTITY,
         results: [evidence().results[0]],
       });
       expect(outcome.disposition).toBe("refused");
@@ -964,26 +1296,36 @@ describe("neutral conformance decision", () => {
     });
 
     /**
-     * The structural half of the same finding: there is no scenario parameter
-     * left to pass. A caller handing one over cannot change the verdict.
+     * The structural half of the same finding. The second parameter is NOT a
+     * scenario set and cannot be pressed into service as one: it is the
+     * authority, and anything that is not a well-formed authority is refused
+     * outright rather than narrowing the suite.
      */
-    it("takes no scenario-set parameter at all", () => {
-      expect(evaluateNeutralConformanceDecision).toHaveLength(1);
-      const smuggled = (
+    it("has no scenario-set parameter, and its second parameter refuses a smuggled suite", () => {
+      expect(evaluateNeutralConformanceDecision).toHaveLength(2);
+      const smuggled = evaluateNeutralConformanceDecision(
+        evidence(),
+        [NEUTRAL_CORE_SCENARIOS[0]] as unknown as NeutralConformanceAuthority
+      );
+      expect(smuggled.disposition).toBe("refused");
+      expect(smuggled.reason_code).toBe("scenario_evidence_authority_missing");
+      expect(smuggled.facts.may_promote_conformant).toBe(false);
+      // A third argument has nowhere to go and cannot change the verdict.
+      const extra = (
         evaluateNeutralConformanceDecision as unknown as (
           e: NeutralConformanceEvidence,
+          a: NeutralConformanceAuthority,
           s?: unknown
         ) => ReturnType<typeof evaluateNeutralConformanceDecision>
-      )(evidence(), [NEUTRAL_CORE_SCENARIOS[0]]);
-      // The smuggled one-scenario suite is ignored; the core tuple still rules.
-      expect(smuggled.disposition).toBe("succeeded");
-      expect(smuggled.facts.may_promote_conformant).toBe(true);
+      )(evidence(), AUTHORITY, [NEUTRAL_CORE_SCENARIOS[0]]);
+      expect(extra.disposition).toBe("succeeded");
+      expect(extra.facts.may_promote_conformant).toBe(true);
     });
 
     it("refuses a required tuple that is the right SET in the wrong ORDER", () => {
       const reversedIds = [...required].reverse();
       const reversedResults = [...evidence().results].reverse();
-      const outcome = evaluateNeutralConformanceDecision(
+      const outcome = decide(
         evidence({ required_scenario_ids: reversedIds, results: reversedResults })
       );
       expect(outcome.disposition).toBe("refused");
@@ -992,13 +1334,10 @@ describe("neutral conformance decision", () => {
     });
 
     it("refuses a caller-INFLATED required tuple that still contains the core set", () => {
-      const outcome = evaluateNeutralConformanceDecision(
+      const outcome = decide(
         evidence({
           required_scenario_ids: [...required, "MHRC-RCT-001"],
-          results: [
-            ...evidence().results,
-            { ...evidence().results[0], stable_id: "MHRC-RCT-001" },
-          ],
+          results: [...evidence().results, { ...evidence().results[0], stable_id: "MHRC-RCT-001" }],
         })
       );
       expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
@@ -1007,7 +1346,7 @@ describe("neutral conformance decision", () => {
 
     /** A closed-but-wrong outcome type is evidence of a different experiment. */
     it("fails a result whose outcome TYPE is not the scenario's expected type", () => {
-      const outcome = evaluateNeutralConformanceDecision(
+      const outcome = decide(
         evidence({}, (r) => ({ ...r, outcome_type: "guild.migration_outcome.v1" }))
       );
       expect(outcome.disposition).toBe("failed");
@@ -1022,14 +1361,9 @@ describe("neutral conformance decision", () => {
     });
 
     it("keeps MHRC-UNS-002's policy outcome type distinct from the lifecycle ones", () => {
-      // The scenario that legitimately expects guild.policy_outcome.v1 must not
-      // be satisfiable by a lifecycle outcome, or the type check would be
-      // uniform rather than per-scenario.
-      const outcome = evaluateNeutralConformanceDecision(
+      const outcome = decide(
         evidence({}, (r) =>
-          r.stable_id === "MHRC-UNS-002"
-            ? { ...r, outcome_type: "guild.lifecycle_outcome.v1" }
-            : r
+          r.stable_id === "MHRC-UNS-002" ? { ...r, outcome_type: "guild.lifecycle_outcome.v1" } : r
         )
       );
       expect(outcome.reason_code).toBe("scenario_result_mismatch");
@@ -1037,10 +1371,8 @@ describe("neutral conformance decision", () => {
     });
 
     it("refuses an invented reason code on a non-succeeded result", () => {
-      const outcome = evaluateNeutralConformanceDecision(
-        evidence({}, (r) =>
-          r.disposition === "succeeded" ? r : { ...r, reason_code: "invented_reason" }
-        )
+      const outcome = decide(
+        evidence({}, (r) => (r.disposition === "succeeded" ? r : { ...r, reason_code: "invented_reason" }))
       );
       expect(outcome.disposition).toBe("refused");
       expect(outcome.reason_code).toBe("scenario_reason_code_unrecognized");
@@ -1057,20 +1389,22 @@ describe("neutral conformance decision", () => {
       ["a missing sequence", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1`],
       ["a non-numeric sequence", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#later`],
       ["a non-canonical sequence", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#007`],
-      ["a foreign schema", "other.receipt_ref.v1:jrn-run-1#1"],
+      ["a foreign schema", "other.receipt_ref.v1:jrn-run-1#1@nec1:0123456789abcdef"],
+      // The exact round-3 forgery shape: canonical, distinct, and committed to
+      // nothing at all.
+      ["an uncommitted canonical reference", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#1`],
+      ["a malformed commitment", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#1@nec1:zzzz`],
+      ["a foreign commitment scheme", `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#1@sha256:00`],
     ])("refuses %s as a receipt reference", (_label, ref) => {
-      const outcome = evaluateNeutralConformanceDecision(
-        evidence({}, (r) => ({ ...r, receipt_ref: ref }))
-      );
-      expect(outcome.disposition).toBe("refused");
-      expect(outcome.reason_code).toBe("scenario_receipt_reference_missing");
+      const outcome = decide(evidence({}, (r) => ({ ...r, receipt_ref: ref })));
+      expect([_label, outcome.disposition]).toEqual([_label, "refused"]);
+      expect([_label, outcome.reason_code]).toEqual([_label, "scenario_receipt_reference_missing"]);
       expect(outcome.facts.may_promote_conformant).toBe(false);
     });
 
     it("refuses one receipt entry cited by two scenarios", () => {
-      const outcome = evaluateNeutralConformanceDecision(
-        evidence({}, (r) => ({ ...r, receipt_ref: `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#7` }))
-      );
+      const shared = evidence().results[0].receipt_ref;
+      const outcome = decide(evidence({}, (r) => ({ ...r, receipt_ref: shared })));
       expect(outcome.disposition).toBe("refused");
       expect(outcome.reason_code).toBe("scenario_receipt_reference_ambiguous");
       expect(outcome.facts.duplicate_receipt_references).toHaveLength(4);
@@ -1081,20 +1415,28 @@ describe("neutral conformance decision", () => {
       ["a zero", 0],
       ["a string", "1" as unknown as number],
     ])("refuses %s as the contract version", (_label, version) => {
-      const bad = { ...ACTIVATED_RUNTIME, contract_version: version as number };
-      const outcome = evaluateNeutralConformanceDecision(
-        evidence({ activated_runtime: bad }, (r) => ({ ...r, runtime_binding: bad }))
+      // Patched on the CLAIM with an honest authority, so the bundle-scope gate
+      // is what bites; the authority-scope gate is exercised separately below.
+      const outcome = decide(
+        evidence({ activated_runtime: { ...BASE_IDENTITY, contract_version: version as number } })
       );
       expect(outcome.disposition).toBe("refused");
       expect(outcome.reason_code).toBe("scenario_contract_version_unrecognized");
       expect(outcome.facts.recognized_contract_version).toBe(1);
     });
 
+    it("refuses an AUTHORITY whose own contract version the core does not implement", () => {
+      const authority = authorityFor({ ...BASE_IDENTITY, contract_version: 999 });
+      const outcome = evaluateNeutralConformanceDecision(evidenceFor(authority), authority);
+      expect(outcome.reason_code).toBe("scenario_contract_version_unrecognized");
+      expect(outcome.facts.scope).toBe("authority");
+    });
+
     it("refuses a contract version that drifts on ONE result only", () => {
-      const outcome = evaluateNeutralConformanceDecision(
+      const outcome = decide(
         evidence({}, (r) =>
           r.stable_id === "MHRC-LIF-004"
-            ? { ...r, runtime_binding: { ...ACTIVATED_RUNTIME, contract_version: 2 } }
+            ? { ...r, evidence_identity: { ...BASE_IDENTITY, contract_version: 2 } }
             : r
         )
       );
@@ -1109,20 +1451,31 @@ describe("neutral conformance decision", () => {
       ["a bare semver", "2.2.0"],
       ["a foreign product", "codex-2.2.0"],
       ["an empty string", ""],
+      // MH-02-R3-B02's exact probe: syntactically a runtime identity, from a major
+      // this core knows nothing about. Shape is not recognition.
+      ["a parseable version from an unknown major", "guild-999.999.999"],
     ])("refuses %s as a runtime version", (_label, version) => {
-      const bad = { ...ACTIVATED_RUNTIME, runtime_version: version };
-      const outcome = evaluateNeutralConformanceDecision(
-        evidence({ activated_runtime: bad }, (r) => ({ ...r, runtime_binding: bad }))
+      const outcome = decide(
+        evidence({ activated_runtime: { ...BASE_IDENTITY, runtime_version: version } })
       );
-      expect(outcome.disposition).toBe("refused");
+      expect([_label, outcome.disposition]).toEqual([_label, "refused"]);
+      expect([_label, outcome.reason_code]).toEqual([
+        _label,
+        "scenario_runtime_version_unrecognized",
+      ]);
+      expect(outcome.facts.recognized_runtime_major).toBe(NEUTRAL_RECOGNIZED_RUNTIME_MAJOR);
+    });
+
+    it("refuses an AUTHORITY that itself names an unrecognized runtime major", () => {
+      const authority = authorityFor({ ...BASE_IDENTITY, runtime_version: "guild-999.999.999" });
+      const outcome = evaluateNeutralConformanceDecision(evidenceFor(authority), authority);
       expect(outcome.reason_code).toBe("scenario_runtime_version_unrecognized");
+      expect(outcome.facts.scope).toBe("authority");
     });
 
     it("accepts a recognized runtime identity with a pre-release tail", () => {
-      const ok = { ...ACTIVATED_RUNTIME, runtime_version: "guild-2.3.0-beta.1" };
-      const outcome = evaluateNeutralConformanceDecision(
-        evidence({ activated_runtime: ok }, (r) => ({ ...r, runtime_binding: ok }))
-      );
+      const authority = authorityFor({ ...BASE_IDENTITY, runtime_version: "guild-2.3.0-beta.1" });
+      const outcome = evaluateNeutralConformanceDecision(evidenceFor(authority), authority);
       expect(outcome.disposition).toBe("succeeded");
       expect(outcome.facts.may_promote_conformant).toBe(true);
     });
@@ -1132,11 +1485,366 @@ describe("neutral conformance decision", () => {
      * If every package refused, the gate would prove nothing either.
      */
     it("still promotes a complete, ordered, receipt-bound, exactly-versioned package", () => {
-      const outcome = evaluateNeutralConformanceDecision(evidence());
+      const outcome = decide(evidence());
       expect(outcome.disposition).toBe("succeeded");
       expect(outcome.reason_code).toBeNull();
       expect(outcome.facts.may_promote_conformant).toBe(true);
       expect(outcome.facts.evaluated_scenarios).toHaveLength(5);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // MH-02-R3-B02 — promotion is bound to an AUTHORITY and to source identity,
+  // not to labels the claimant typed
+  //
+  // Round 3's decision read exactly ONE argument: the claimant's own bundle. A
+  // complete five-scenario package with the exact ordered tuple, expected closed
+  // outcome types and reason codes, distinct canonical-LOOKING receipt refs,
+  // contract version 1, and `fresh` verdicts promoted `conformant=true` on a
+  // binding that was entirely invented — host `invented-host`, host version
+  // `not-a-version`, runtime `guild-999.999.999`, release `invented-release` —
+  // and that named no source, package, adapter, or platform at all.
+  //
+  // Two things changed. The bundle is now compared against an AUTHORITATIVE input
+  // the claimant does not author, and every identity the frozen `support_claim`
+  // rule names must be present and RECOGNIZED rather than merely parseable. Every
+  // receipt reference is committed to that authority.
+  // -------------------------------------------------------------------------
+
+  describe("MH-02-R3-B02 promotion requires source-bound, authority-verified evidence", () => {
+    /** The reviewer's forged binding, field for field. */
+    const FORGED_LABELS = {
+      host_id: "invented-host",
+      host_version: "not-a-version",
+      runtime_version: "guild-999.999.999",
+      release_id: "invented-release",
+      contract_version: 1,
+    };
+
+    /** The reviewer's exact round-3 package: self-consistent, source-less, forged. */
+    function forgedPackage(): NeutralConformanceEvidence {
+      return {
+        suite_id: NEUTRAL_SCENARIO_SUITE_ID,
+        suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
+        required_scenario_ids: [...required],
+        activated_runtime: FORGED_LABELS as unknown as NeutralEvidenceIdentity,
+        results: NEUTRAL_CORE_SCENARIOS.map((scenario, index) => ({
+          stable_id: scenario.stable_id,
+          outcome_type: scenario.expected_typed_outcome.type,
+          disposition: scenario.expected_typed_outcome.disposition,
+          reason_code: expectedReason(
+            scenario.stable_id,
+            scenario.expected_typed_outcome.disposition
+          ),
+          receipt_ref: `${NEUTRAL_RECEIPT_REF_SCHEMA}:forged-journal#${index + 1}`,
+          evidence_identity: FORGED_LABELS as unknown as NeutralEvidenceIdentity,
+          evidence_freshness: "fresh" as NeutralEvidenceFreshnessVerdict,
+        })),
+      };
+    }
+
+    it("refuses the reviewer's complete forged bundle against an honest authority", () => {
+      const outcome = decide(forgedPackage());
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.facts.may_promote_conformant).toBe(false);
+    });
+
+    it("refuses the forged bundle even when the AUTHORITY is forged to agree with it", () => {
+      // Self-consistency across two invented inputs is still self-consistency.
+      const outcome = evaluateNeutralConformanceDecision(forgedPackage(), {
+        schema_version: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+        identity: FORGED_LABELS as unknown as NeutralEvidenceIdentity,
+        receipt_journal_id: "forged-journal",
+        receipt_sequence_range: { first: 1, last: 5 },
+      });
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.facts.may_promote_conformant).toBe(false);
+    });
+
+    it.each([
+      ["no authority at all", undefined],
+      ["a null authority", null],
+      ["an authority with no schema version", { identity: BASE_IDENTITY }],
+      [
+        "an authority with a foreign schema version",
+        { ...AUTHORITY, schema_version: "guild.conformance_authority.v2" },
+      ],
+      ["an authority with an incomplete identity", { ...AUTHORITY, identity: { host_id: "claude-code-cli" } }],
+      ["an authority with no journal", { ...AUTHORITY, receipt_journal_id: "" }],
+      ["an authority with an inverted range", { ...AUTHORITY, receipt_sequence_range: { first: 9, last: 1 } }],
+      ["an authority with a non-integer range", { ...AUTHORITY, receipt_sequence_range: { first: 1.5, last: 5 } }],
+    ])("refuses %s", (_label, authority) => {
+      const outcome = evaluateNeutralConformanceDecision(
+        evidence(),
+        authority as unknown as NeutralConformanceAuthority
+      );
+      expect([_label, outcome.disposition]).toEqual([_label, "refused"]);
+      expect([_label, outcome.reason_code]).toEqual([
+        _label,
+        "scenario_evidence_authority_missing",
+      ]);
+    });
+
+    /**
+     * Each forged label ISOLATED, with everything else honest and every receipt
+     * honestly committed. Without this, the shape gate would fire first and the
+     * recognition gates would never be proven to bite at all.
+     */
+    it.each([
+      ["an unrecognized host id", "host_id", "invented-host", "scenario_host_identity_unrecognized"],
+      ["a non-version host version", "host_version", "not-a-version", "scenario_host_identity_unrecognized"],
+      [
+        "an unrecognized runtime major",
+        "runtime_version",
+        "guild-999.999.999",
+        "scenario_runtime_version_unrecognized",
+      ],
+      ["an invented release id", "release_id", "invented-release", "scenario_source_identity_unrecognized"],
+      ["a source label that is not a revision", "source_commit", "invented-source", "scenario_source_identity_unrecognized"],
+      ["a package label that is not a digest", "package_hash", "invented-package", "scenario_source_identity_unrecognized"],
+      ["an unrecognized adapter version", "adapter_version", "1.0.0", "scenario_source_identity_unrecognized"],
+      ["an unrecognized platform", "platform", "invented-platform", "scenario_source_identity_unrecognized"],
+      ["a drifted suite id", "scenario_suite_id", "other.suite.v1", "scenario_source_identity_unrecognized"],
+      ["a drifted suite version", "scenario_suite_version", "9.9.9", "scenario_source_identity_unrecognized"],
+    ])("refuses %s even with everything else honest", (_label, field, value, reason) => {
+      const identity = { ...BASE_IDENTITY, [field]: value } as NeutralEvidenceIdentity;
+      const authority = authorityFor(identity);
+      const outcome = evaluateNeutralConformanceDecision(evidenceFor(authority), authority);
+      expect([_label, outcome.disposition]).toEqual([_label, "refused"]);
+      expect([_label, outcome.reason_code]).toEqual([_label, reason]);
+      expect(outcome.facts.may_promote_conformant).toBe(false);
+    });
+
+    /**
+     * EVERY field of the frozen identity tuple is load-bearing: omit any one and
+     * the bundle cannot promote. `runtime_version` is caught one gate earlier by
+     * the recognition check (an absent version is not a recognized one), which is
+     * a stricter answer to the same question, not a looser one.
+     */
+    it.each(NEUTRAL_EVIDENCE_IDENTITY_FIELDS.filter((f) => f !== "contract_version"))(
+      "refuses a bundle that omits the required identity field %s",
+      (field) => {
+        const identity = { ...BASE_IDENTITY } as Record<string, unknown>;
+        delete identity[field];
+        const outcome = decide(
+          evidence({ activated_runtime: identity as unknown as NeutralEvidenceIdentity })
+        );
+        expect([field, outcome.disposition]).toEqual([field, "refused"]);
+        expect([field, outcome.facts.may_promote_conformant]).toEqual([field, false]);
+        const expected =
+          field === "runtime_version"
+            ? "scenario_runtime_version_unrecognized"
+            : "scenario_runtime_binding_mismatch";
+        expect([field, outcome.reason_code]).toEqual([field, expected]);
+        if (expected === "scenario_runtime_binding_mismatch") {
+          expect(outcome.facts.required_identity_fields).toEqual([
+            ...NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
+          ]);
+          expect(outcome.facts.incomplete_identities).toEqual(["activated_runtime"]);
+        }
+      }
+    );
+
+    it("refuses a claimed identity that disagrees with the authority's", () => {
+      // Everything recognized, everything internally consistent — and produced
+      // under a different source revision than the verifier observed.
+      const claimed = {
+        ...BASE_IDENTITY,
+        source_commit: "e9dd73fcffea95ab33277a60d113262aac3379f2",
+      };
+      const outcome = decide(evidence({ activated_runtime: claimed }));
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_identity_binding_mismatch");
+      expect(outcome.facts.differing_identity_fields).toEqual(["source_commit"]);
+    });
+
+    // ---- the receipt commitment ------------------------------------------
+
+    it("binds a receipt reference to the authority's identity, journal, sequence, and outcome", () => {
+      const input = {
+        stable_id: "MHRC-LIF-001",
+        outcome_type: "guild.lifecycle_outcome.v1" as const,
+        disposition: "succeeded" as const,
+        reason_code: null,
+        sequence: 1,
+      };
+      const commitment = neutralEvidenceCommitment(AUTHORITY, input);
+      expect(commitment).toMatch(/^nec1:[0-9a-f]{16}$/);
+      expect(neutralReceiptReference(AUTHORITY, input)).toBe(
+        `${NEUTRAL_RECEIPT_REF_SCHEMA}:jrn-run-1#1@${commitment}`
+      );
+      // Deterministic: the same inputs always commit to the same digest.
+      expect(neutralEvidenceCommitment(AUTHORITY, input)).toBe(commitment);
+      // …and every axis of the binding changes it.
+      for (const other of [
+        neutralEvidenceCommitment(authorityFor({ ...BASE_IDENTITY, source_commit: "e9dd73fcffea95ab33277a60d113262aac3379f2" }), input),
+        neutralEvidenceCommitment(authorityFor(BASE_IDENTITY, { receipt_journal_id: "jrn-run-2" }), input),
+        neutralEvidenceCommitment(AUTHORITY, { ...input, sequence: 2 }),
+        neutralEvidenceCommitment(AUTHORITY, { ...input, stable_id: "MHRC-LIF-003" }),
+        neutralEvidenceCommitment(AUTHORITY, { ...input, disposition: "refused", reason_code: "gate_unsatisfied" }),
+        neutralEvidenceCommitment(AUTHORITY, { ...input, outcome_type: "guild.policy_outcome.v1" }),
+      ]) {
+        expect(other).not.toBe(commitment);
+      }
+    });
+
+    it.each([
+      [
+        "a reference into a journal the verifier never observed",
+        (r: NeutralScenarioResult, i: number) => ({
+          ...r,
+          receipt_ref: neutralReceiptReference(
+            authorityFor(BASE_IDENTITY, { receipt_journal_id: "other-journal" }),
+            {
+              stable_id: r.stable_id,
+              outcome_type: r.outcome_type,
+              disposition: r.disposition,
+              reason_code: r.reason_code,
+              sequence: i + 1,
+            }
+          ),
+        }),
+        "foreign_journal",
+      ],
+      [
+        "a sequence outside the observed range",
+        (r: NeutralScenarioResult, i: number) =>
+          r.stable_id === "MHRC-LIF-001"
+            ? {
+                ...r,
+                receipt_ref: neutralReceiptReference(AUTHORITY, {
+                  stable_id: r.stable_id,
+                  outcome_type: r.outcome_type,
+                  disposition: r.disposition,
+                  reason_code: r.reason_code,
+                  sequence: 99,
+                }),
+              }
+            : r,
+        "sequence_outside_observed_range",
+      ],
+      [
+        "a commitment transplanted from another scenario",
+        (r: NeutralScenarioResult, i: number) =>
+          r.stable_id === "MHRC-LIF-003"
+            ? {
+                ...r,
+                receipt_ref: neutralReceiptReference(AUTHORITY, {
+                  stable_id: "MHRC-LIF-004",
+                  outcome_type: r.outcome_type,
+                  disposition: r.disposition,
+                  reason_code: r.reason_code,
+                  sequence: i + 1,
+                }),
+              }
+            : r,
+        "commitment_mismatch",
+      ],
+      [
+        "a commitment computed for a different verdict",
+        (r: NeutralScenarioResult, i: number) =>
+          r.stable_id === "MHRC-LIF-001"
+            ? {
+                ...r,
+                receipt_ref: neutralReceiptReference(AUTHORITY, {
+                  stable_id: r.stable_id,
+                  outcome_type: r.outcome_type,
+                  disposition: "refused",
+                  reason_code: "gate_unsatisfied",
+                  sequence: i + 1,
+                }),
+              }
+            : r,
+        "commitment_mismatch",
+      ],
+    ])("refuses %s", (_label, patch, reason) => {
+      const outcome = decide(evidence({}, patch as never));
+      expect([_label, outcome.disposition]).toEqual([_label, "refused"]);
+      expect([_label, outcome.reason_code]).toEqual([
+        _label,
+        "scenario_receipt_binding_unverified",
+      ]);
+      expect(
+        (outcome.facts.unbound_receipt_references as Array<{ reason: string }>).some(
+          (entry) => entry.reason === reason
+        )
+      ).toBe(true);
+    });
+
+    it("refuses receipts whose sequences do not increase with the required tuple", () => {
+      // The journal is an ordered spine: a receipt cannot precede the result it
+      // records, so scenario N may not cite an earlier entry than scenario N-1.
+      const authority = authorityFor(BASE_IDENTITY);
+      const descending = resultsFor(authority, (r, i) => ({
+        ...r,
+        receipt_ref: neutralReceiptReference(authority, {
+          stable_id: r.stable_id,
+          outcome_type: r.outcome_type,
+          disposition: r.disposition,
+          reason_code: r.reason_code,
+          sequence: 5 - i,
+        }),
+      }));
+      const outcome = decide(evidence({ results: descending }));
+      expect(outcome.reason_code).toBe("scenario_receipt_binding_unverified");
+      expect(
+        (outcome.facts.unbound_receipt_references as Array<{ reason: string }>).some(
+          (entry) => entry.reason === "sequence_not_increasing"
+        )
+      ).toBe(true);
+    });
+
+    // ---- the recognized vocabularies are closed --------------------------
+
+    it("pins the vocabularies recognition depends on", () => {
+      expect(NEUTRAL_RECOGNIZED_RUNTIME_MAJOR).toBe(2);
+      expect(NEUTRAL_RECOGNIZED_HOST_IDS).toContain("claude-code-cli");
+      expect(NEUTRAL_RECOGNIZED_HOST_IDS).not.toContain("invented-host");
+      expect(NEUTRAL_RECOGNIZED_PLATFORMS).toContain("darwin-arm64");
+      expect(NEUTRAL_RECOGNIZED_PLATFORMS).not.toContain("invented-platform");
+      expect(NEUTRAL_EVIDENCE_IDENTITY_FIELDS).toEqual([
+        "source_commit",
+        "package_hash",
+        "runtime_version",
+        "adapter_version",
+        "host_id",
+        "host_version",
+        "platform",
+        "contract_version",
+        "scenario_suite_id",
+        "scenario_suite_version",
+        "release_id",
+      ]);
+    });
+
+    /**
+     * The frozen contract names eight identities in its `support_claim` rule. Each
+     * one has to be REACHABLE by the identity tuple, or the rule is unenforceable
+     * no matter how many gates run.
+     */
+    it("carries every identity the frozen support_claim rule names", () => {
+      const fields = NEUTRAL_EVIDENCE_IDENTITY_FIELDS.join(" ");
+      for (const named of [
+        "source", // source_commit
+        "package", // package_hash
+        "runtime", // runtime_version
+        "adapter", // adapter_version
+        "host", // host_id + host_version
+        "platform", // platform
+        "contract", // contract_version
+        "scenario_suite", // scenario_suite_id + scenario_suite_version
+      ]) {
+        expect(fields).toContain(named);
+      }
+    });
+
+    /** NON-VACUITY for this whole block. */
+    it("still promotes an honest, fully source-bound, authority-verified package", () => {
+      const outcome = decide(evidence());
+      expect(outcome.disposition).toBe("succeeded");
+      expect(outcome.reason_code).toBeNull();
+      expect(outcome.facts.may_promote_conformant).toBe(true);
+      expect(outcome.facts.authority_journal_id).toBe("jrn-run-1");
     });
   });
 });
