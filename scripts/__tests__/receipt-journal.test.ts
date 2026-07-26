@@ -31,6 +31,9 @@ import {
   compareCheckpointToJournal,
   analyzeReceiptRecords,
   journalLockPath,
+  canonicalJournalPath,
+  resolveJournalIdentity,
+  JournalIdentityError,
   defaultJournalIo,
   makeReceiptInput,
   sealReceiptRecord,
@@ -892,6 +895,10 @@ describe("MH-06-R2-B1 — concurrent appends are linearizable across processes",
   it("takes the lock exactly once and releases it, around the WHOLE transaction", () => {
     const root = mkRoot();
     const p = paths(root);
+    // Round 4: the guarded transaction reads and writes the CANONICAL journal the
+    // lock names, never the caller's spelling — so that is what must reach the IO
+    // seam. Keying this fake on `p.journal` would silently stop firing.
+    const canonical = canonicalJournalPath(p.journal);
     const calls: string[] = [];
     const io: JournalIo = {
       ...defaultJournalIo,
@@ -905,11 +912,12 @@ describe("MH-06-R2-B1 — concurrent appends are linearizable across processes",
       },
       readAll(journalPath) {
         // Every read that decides the sequence must happen INSIDE the lock.
-        if (journalPath === p.journal) calls.push("scan");
+        if (journalPath === canonical) calls.push("scan");
+        else if (journalPath !== p.checkpoint) calls.push(`stray-read:${journalPath}`);
         return defaultJournalIo.readAll(journalPath);
       },
       appendLine(journalPath, text) {
-        calls.push("append");
+        calls.push(journalPath === canonical ? "append" : `stray-append:${journalPath}`);
         defaultJournalIo.appendLine(journalPath, text);
       },
       writeCheckpoint(cpPath, content) {
@@ -928,6 +936,8 @@ describe("MH-06-R2-B1 — concurrent appends are linearizable across processes",
     // The planning scan, the append, the verification scan and the checkpoint
     // all sit strictly between them.
     for (const step of ["scan", "append", "checkpoint"]) expect(calls).toContain(step);
+    // …and NOTHING reached the journal under any other name.
+    expect(calls.filter((c) => c.startsWith("stray-"))).toEqual([]);
     expect(fs.existsSync(journalLockPath(p))).toBe(false);
   });
 
@@ -1109,6 +1119,276 @@ describe("MH-06-R3-B1 — the journal lock identity is derived, never chosen", (
     );
     expect(compareCheckpointToJournal(readCheckpointState(p.checkpoint), scan, "run-mh-06")).toEqual([]);
   }, 60_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R4-B1 — one PHYSICAL journal, one lock identity
+//
+// Round 3 made the lock identity DERIVED instead of caller-chosen, and round 4
+// showed that canonicalizing a NAME is still not identifying a FILE. Two hard
+// links to one inode are two canonical names, so `journalLockPath` returned
+// `journal-a.jsonl.lock` and `journal-b.jsonl.lock` for one physical journal and
+// BOTH were acquired at once. And a symlinked parent repointed inside
+// `acquireLock` let an append that had derived directory A's lock write through
+// the caller's alias into directory B — returning `succeeded / durable / 1` while
+// B's own canonical lock was held by somebody else.
+//
+// The identity is therefore bound to the FILE, not the name: `resolveJournalIdentity`
+// refuses a journal with more than one name outright, is re-derived under the lock
+// and again before any durable claim, and the guarded transaction reads and writes
+// the canonical path the lock names.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R4-B1 — the lock identity is bound to the physical journal", () => {
+  /** One durable record, so the journal exists as a real file to alias. */
+  function seeded() {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(appendReceipt(p, input({ event_id: "seed", operation_id: "op-seed" })).disposition).toBe("succeeded");
+    return { root, ...p };
+  }
+
+  it("refuses to name a lock for a journal that has more than one name", () => {
+    const p = seeded();
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    fs.linkSync(p.journal, alias);
+    // Same device, same inode, two names — the fixture the reviewer built.
+    expect(fs.statSync(p.journal).ino).toBe(fs.statSync(alias).ino);
+    expect(fs.statSync(p.journal).dev).toBe(fs.statSync(alias).dev);
+
+    for (const name of [p.journal, alias]) {
+      const resolved = resolveJournalIdentity(name);
+      expect(resolved.ok).toBe(false);
+      expect(resolved.failure?.code).toBe("journal_identity_ambiguous");
+      // …and the derivation API refuses rather than returning a lock that
+      // excludes nobody. Round 4 got two acquirable paths out of exactly this.
+      expect(() => journalLockPath({ journal: name, checkpoint: p.checkpoint })).toThrow(JournalIdentityError);
+      try {
+        journalLockPath({ journal: name, checkpoint: p.checkpoint });
+      } catch (err) {
+        expect((err as JournalIdentityError).code).toBe("journal_identity_ambiguous");
+      }
+    }
+  });
+
+  it("fails an append through EITHER hard link, before anything durable is claimed", () => {
+    const p = seeded();
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    fs.linkSync(p.journal, alias);
+    const bytesBefore = fs.readFileSync(p.journal, "utf8");
+
+    for (const name of [p.journal, alias]) {
+      const out = appendReceipt({ journal: name, checkpoint: p.checkpoint }, input({ event_id: "e-alias" }));
+      expect(out.disposition).toBe("failed");
+      expect(out.durable).toBe(false);
+      expect(out.sequence).toBeNull();
+      expect(out.failure?.code).toBe("journal_identity_ambiguous");
+      expect(out.blocks_dependent_completion).toBe(true);
+    }
+    // Nothing was written, and no lock was left behind for either name.
+    expect(fs.readFileSync(p.journal, "utf8")).toBe(bytesBefore);
+    expect(fs.existsSync(`${p.journal}.lock`)).toBe(false);
+    expect(fs.existsSync(`${alias}.lock`)).toBe(false);
+  });
+
+  it("recovers the moment the extra name is removed", () => {
+    // The refusal is a property of the journal, not a latch on the module.
+    const p = seeded();
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    fs.linkSync(p.journal, alias);
+    expect(appendReceipt(p, input({ event_id: "e2" })).failure?.code).toBe("journal_identity_ambiguous");
+    fs.unlinkSync(alias);
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }));
+    expect(out.disposition).toBe("succeeded");
+    expect(out.sequence).toBe(2);
+  });
+
+  it("refuses a torn-tail repair on a multi-named journal too", () => {
+    const p = seeded();
+    fs.appendFileSync(p.journal, '{"schema_version":"guild.receipt_record.v1","seq', "utf8");
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    fs.linkSync(p.journal, alias);
+    const bytesBefore = fs.readFileSync(p.journal, "utf8");
+
+    const repair = repairTornTail(p.journal);
+    expect(repair.disposition).toBe("failed");
+    expect(repair.failure?.code).toBe("journal_identity_ambiguous");
+    expect(repair.removed_bytes).toBe(0);
+    // A truncation this caller was not authorised for did NOT happen.
+    expect(fs.readFileSync(p.journal, "utf8")).toBe(bytesBefore);
+  });
+
+  it("refuses when a parent is swapped DURING lock acquisition", () => {
+    const root = mkRoot();
+    const dirA = path.join(root, "A");
+    const dirB = path.join(root, "B");
+    fs.mkdirSync(dirA, { recursive: true });
+    fs.mkdirSync(dirB, { recursive: true });
+    const alias = path.join(root, "alias");
+    fs.symlinkSync(dirA, alias);
+    // B's canonical journal lock is already held by another writer.
+    fs.mkdirSync(journalLockPath({ journal: path.join(dirB, "journal.jsonl"), checkpoint: path.join(dirB, "cp.json") }));
+
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        // The reviewer's exact interleaving: the alias is repointed at B after
+        // this writer derived A's lock and before it holds anything.
+        if (fs.readlinkSync(alias) === dirA) {
+          fs.unlinkSync(alias);
+          fs.symlinkSync(dirB, alias);
+        }
+        return defaultJournalIo.acquireLock!(lockPath);
+      },
+    };
+
+    const out = appendReceipt(
+      { journal: path.join(alias, "journal.jsonl"), checkpoint: path.join(alias, "cp.json") },
+      input({ event_id: "e-swap" }),
+      io,
+      { lock_max_attempts: 2, lock_wait_ms: 1 },
+    );
+
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.sequence).toBeNull();
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+    // …and B — whose lock this writer never held — is untouched.
+    expect(fs.existsSync(path.join(dirB, "journal.jsonl"))).toBe(false);
+  });
+
+  it("never lands a record in a destination the swap moved it to", () => {
+    const root = mkRoot();
+    const dirA = path.join(root, "A");
+    const dirB = path.join(root, "B");
+    fs.mkdirSync(dirA, { recursive: true });
+    fs.mkdirSync(dirB, { recursive: true });
+    const alias = path.join(root, "alias");
+    fs.symlinkSync(dirA, alias);
+    fs.mkdirSync(journalLockPath({ journal: path.join(dirB, "journal.jsonl"), checkpoint: path.join(dirB, "cp.json") }));
+
+    let swapped = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(target) {
+        const content = defaultJournalIo.readAll(target);
+        // Fire once this writer already HOLDS A's lock and is scanning.
+        if (!swapped && path.basename(target) === "journal.jsonl") {
+          swapped = true;
+          fs.unlinkSync(alias);
+          fs.symlinkSync(dirB, alias);
+        }
+        return content;
+      },
+    };
+
+    const out = appendReceipt(
+      { journal: path.join(alias, "journal.jsonl"), checkpoint: path.join(alias, "cp.json") },
+      input({ event_id: "e-swap2" }),
+      io,
+      { lock_max_attempts: 2, lock_wait_ms: 1 },
+    );
+
+    expect(swapped).toBe(true);
+    // The write is bound to the identity the lock names, so B stays empty…
+    expect(scanReceiptJournal(path.join(dirB, "journal.jsonl")).record_count).toBe(0);
+    // …and no durable claim is made for a path that no longer means what it did.
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+  });
+
+  it("refuses when the physical journal is REPLACED under the lock", () => {
+    const p = seeded();
+    let swapped = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(target) {
+        const content = defaultJournalIo.readAll(target);
+        if (!swapped && path.basename(target) === "journal.jsonl") {
+          swapped = true;
+          // Same name, different inode — the file we were authorised over is gone.
+          const replacement = path.join(path.dirname(p.journal), "replacement.jsonl");
+          fs.writeFileSync(replacement, content ?? "", "utf8");
+          fs.renameSync(replacement, p.journal);
+        }
+        return content;
+      },
+    };
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io);
+    expect(swapped).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+  });
+
+  it("still resolves ONE honest identity for every legal spelling, before and after creation", () => {
+    // The refusals above must not have cost the round-3 property: a journal named
+    // many legal ways is still exactly one journal.
+    const root = mkRoot();
+    const p = paths(root);
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.symlinkSync(path.join(root, "receipts"), path.join(root, "link"));
+
+    const before = resolveJournalIdentity(p.journal);
+    expect(before.ok).toBe(true);
+    expect(before.identity).toEqual({
+      path: canonicalJournalPath(p.journal),
+      lock: `${canonicalJournalPath(p.journal)}.lock`,
+      device: null,
+      inode: null,
+      links: null,
+    });
+
+    expect(appendReceipt(p, input({ event_id: "e1" })).disposition).toBe("succeeded");
+
+    const after = resolveJournalIdentity(p.journal);
+    expect(after.ok).toBe(true);
+    // The name did not move when the file appeared…
+    expect(after.identity!.path).toBe(before.identity!.path);
+    expect(after.identity!.lock).toBe(before.identity!.lock);
+    // …and it now carries the REAL file's identity, with exactly one name.
+    const st = fs.statSync(fs.realpathSync(p.journal));
+    expect(after.identity!.device).toBe(st.dev);
+    expect(after.identity!.inode).toBe(st.ino);
+    expect(after.identity!.links).toBe(1);
+
+    // Every legal spelling lands on that one identity.
+    for (const spelling of [
+      path.join(root, "receipts", "..", "receipts", ".", "journal.jsonl"),
+      path.join(root, "link", "journal.jsonl"),
+      `${path.dirname(p.journal)}//journal.jsonl`,
+    ]) {
+      expect(resolveJournalIdentity(spelling).identity).toEqual(after.identity);
+    }
+  });
+
+  it("keeps the guarded transaction on the canonical journal, not the caller's spelling", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.symlinkSync(path.join(root, "receipts"), path.join(root, "link"));
+    const viaLink = { journal: path.join(root, "link", "journal.jsonl"), checkpoint: p.checkpoint };
+    const canonical = canonicalJournalPath(p.journal);
+
+    const touched: string[] = [];
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(target) {
+        if (target !== p.checkpoint) touched.push(target);
+        return defaultJournalIo.readAll(target);
+      },
+      appendLine(target, text) {
+        touched.push(target);
+        defaultJournalIo.appendLine(target, text);
+      },
+    };
+
+    expect(appendReceipt(viaLink, input({ event_id: "e1" }), io).disposition).toBe("succeeded");
+    expect(touched.length).toBeGreaterThan(0);
+    // Not one read or write reached the journal through the symlinked spelling.
+    expect([...new Set(touched)]).toEqual([canonical]);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

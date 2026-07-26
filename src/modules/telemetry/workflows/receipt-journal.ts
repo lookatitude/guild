@@ -59,6 +59,18 @@
  *   one journal at the same time and both report durable success, which is the
  *   exact defect the lock exists to prevent.
  *
+ *   Canonicalizing a NAME is not the same as identifying a FILE, and round 4
+ *   proved the gap is exploitable both ways. Two hard links to one inode are two
+ *   canonical names, so a name-keyed lock partitions them; and a symlinked parent
+ *   swapped between lock derivation and the write sends the append to a
+ *   destination whose own lock somebody else holds. Both are closed by
+ *   `resolveJournalIdentity`, which binds the lock AND the write to the physical
+ *   file: it refuses a journal that has more than one name at all, it re-derives
+ *   under the lock and again before any durable claim, and every read and write of
+ *   the guarded transaction goes through the canonical path the lock names rather
+ *   than the caller's mutable spelling. Where a stable identity cannot be
+ *   established, the operation fails closed BEFORE the append — it never guesses.
+ *
  *   Durability is then PROVEN, not assumed: after the append the journal is
  *   re-scanned for the exact sealed record, and after the checkpoint write the
  *   checkpoint file is re-read and compared field by field. A write that lands
@@ -569,6 +581,170 @@ export function canonicalJournalPath(journalPath: string): string {
 }
 
 /**
+ * Why a journal has no single lock identity.
+ *
+ * `journal_identity_ambiguous` — the physical file has MORE THAN ONE name (hard
+ * links). Every name canonicalizes to itself, so a path-keyed lock gives each one
+ * its own exclusion and neither excludes the other. No portable primitive keys a
+ * lock to `(device, inode)`: a lock beside the canonical path partitions the
+ * moment the links live in different directories, and a machine-global lock root
+ * stops working the moment the journal lives on a shared volume. There is no
+ * correct single answer, so the honest one is to refuse — before any durable
+ * claim — rather than to invent one.
+ *
+ * `journal_identity_unstable` — the canonical name does not hold still, or does
+ * not name a lockable regular file: a parent symlink was repointed, a symlink
+ * appeared at the canonical name, or the physical file behind it was replaced.
+ * Binding write authority to something that moves is how an append lands in a
+ * journal whose own lock is held by somebody else.
+ */
+export type JournalIdentityFailureCode = "journal_identity_ambiguous" | "journal_identity_unstable";
+
+export interface JournalIdentityFailure {
+  code: JournalIdentityFailureCode;
+  message: string;
+}
+
+/**
+ * The physical journal an operation is authorised over: one canonical name, one
+ * lock derived from it, and the filesystem identity of the file behind it.
+ *
+ * `device`/`inode` are null when the journal does not exist yet — that is a legal
+ * state (the first writer creates it), and the canonical name is stable across
+ * creation because its unresolved tail is a plain name under a fully resolved
+ * parent. `links` is the hard-link count that made the identity admissible.
+ */
+export interface JournalIdentity {
+  path: string;
+  lock: string;
+  device: number | null;
+  inode: number | null;
+  links: number | null;
+}
+
+export type JournalIdentityResult =
+  | { ok: true; identity: JournalIdentity; failure: null }
+  | { ok: false; identity: null; failure: JournalIdentityFailure };
+
+/** Thrown by `journalLockPath` when a journal has no single lock identity. */
+export class JournalIdentityError extends Error {
+  readonly code: JournalIdentityFailureCode;
+  constructor(failure: JournalIdentityFailure) {
+    super(failure.message);
+    this.name = "JournalIdentityError";
+    this.code = failure.code;
+  }
+}
+
+function lstatOrNull(target: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(target);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the PHYSICAL journal an operation may lock and write, or say exactly
+ * why it cannot be resolved. Never throws, reads no clock.
+ *
+ * Three things are established, in this order:
+ *
+ *   1. the canonical name is a FIXED POINT — canonicalizing it again lands on
+ *      itself. A name that resolves further on the second pass is a name that
+ *      moved between the two derivations, and locking it would be locking a
+ *      guess;
+ *   2. the canonical name is not a symlink and is a regular file (or does not
+ *      exist yet) — a symlink at the canonical name is another indirection that
+ *      can be repointed after the lock is taken;
+ *   3. the physical file has exactly ONE name. `nlink > 1` is refused, because a
+ *      path-keyed advisory lock cannot serialise two names for one inode and
+ *      pretending otherwise is what let two writers both report durable success.
+ *
+ * `appendReceipt`, `repairTornTail` and a durable reconciliation repair all call
+ * this BEFORE taking the lock and again UNDER it; the append calls it once more
+ * before it reports success.
+ */
+export function resolveJournalIdentity(journalPath: string): JournalIdentityResult {
+  const refuse = (code: JournalIdentityFailureCode, message: string): JournalIdentityResult => ({
+    ok: false,
+    identity: null,
+    failure: { code, message },
+  });
+
+  const canonical = canonicalJournalPath(journalPath);
+  if (canonicalJournalPath(canonical) !== canonical) {
+    return refuse(
+      "journal_identity_unstable",
+      `journal path "${journalPath}" canonicalizes to "${canonical}", which itself resolves further — ` +
+        "the name is moving and cannot be bound to a lock",
+    );
+  }
+
+  const stat = lstatOrNull(canonical);
+  if (stat === null) {
+    // Not created yet. The unresolved tail is a plain name under a fully resolved
+    // parent, so the identity a writer computes now is the identity every later
+    // writer computes — creating the file cannot change the answer.
+    return { ok: true, identity: { path: canonical, lock: `${canonical}.lock`, device: null, inode: null, links: null }, failure: null };
+  }
+  if (stat.isSymbolicLink()) {
+    return refuse(
+      "journal_identity_unstable",
+      `a symlink appeared at the canonical journal name "${canonical}" after it was resolved`,
+    );
+  }
+  if (!stat.isFile()) {
+    return refuse(
+      "journal_identity_unstable",
+      `canonical journal name "${canonical}" does not name a regular file`,
+    );
+  }
+  if (stat.nlink > 1) {
+    return refuse(
+      "journal_identity_ambiguous",
+      `journal at "${canonical}" is one physical file with ${stat.nlink} names (hard links) — ` +
+        "a path-keyed lock cannot serialise writers that name it differently, so this operation is refused " +
+        "(remove the extra link, or give each producer its own journal)",
+    );
+  }
+  return {
+    ok: true,
+    identity: { path: canonical, lock: `${canonical}.lock`, device: stat.dev, inode: stat.ino, links: stat.nlink },
+    failure: null,
+  };
+}
+
+/**
+ * Compare the identity a lock was taken over against the identity the caller's
+ * path resolves to NOW. Returns the drift, or null when they are the same file.
+ *
+ * A null `inode` on the LOCKED side means the journal did not exist when the lock
+ * was taken, so any file that has since appeared at that canonical name appeared
+ * under our exclusion and is ours. The reverse — a locked inode that is now gone
+ * or different — means the file we were authorised over was replaced.
+ *
+ * Exported so the append path and the reconciliation repair path apply the SAME
+ * test. Two copies of this rule would drift apart, and the one that drifted would
+ * be the one holding a lock over the wrong file.
+ */
+export function journalIdentityDrift(locked: JournalIdentity, current: JournalIdentity): string | null {
+  if (current.path !== locked.path) {
+    return (
+      `the journal path now resolves to "${current.path}" while the lock is held on "${locked.path}" — ` +
+      "refusing to write to a destination this writer does not hold"
+    );
+  }
+  if (locked.inode !== null && (current.inode !== locked.inode || current.device !== locked.device)) {
+    return (
+      `the journal at "${locked.path}" was replaced under the lock ` +
+      `(device/inode ${locked.device}/${locked.inode} → ${current.device}/${current.inode})`
+    );
+  }
+  return null;
+}
+
+/**
  * Where the append/repair transaction serialises — DERIVED from the journal, never
  * supplied by the caller.
  *
@@ -577,9 +753,18 @@ export function canonicalJournalPath(journalPath: string): string {
  * two legal overrides for one journal duplicated a sequence, left the journal
  * `order_violation`, and returned nine `durable: true` successes. A journal has
  * exactly one lock because it has exactly one canonical name.
+ *
+ * THROWS `JournalIdentityError` when the journal has no single lock identity.
+ * Round 4 called this function on two hard links to one inode and got two lock
+ * paths back, then held both at once. A function that cannot give a correct answer
+ * must not give a wrong one, so this one refuses instead of returning a lock that
+ * excludes nobody. Workflow paths use the non-throwing `resolveJournalIdentity`
+ * and turn the same refusal into a typed failure.
  */
 export function journalLockPath(paths: JournalPaths): string {
-  return `${canonicalJournalPath(paths.journal)}.lock`;
+  const resolved = resolveJournalIdentity(paths.journal);
+  if (!resolved.ok) throw new JournalIdentityError(resolved.failure);
+  return resolved.identity.lock;
 }
 
 /** How long a writer waits for a contended journal before failing closed. */
@@ -996,7 +1181,9 @@ export type AppendFailureCode =
   | "correlation_lineage_split"
   | "foreign_run_id"
   | "journal_lock_unavailable"
-  | "journal_lock_failed";
+  | "journal_lock_failed"
+  | "journal_identity_ambiguous"
+  | "journal_identity_unstable";
 
 export interface ReceiptAppendOutcome {
   schema_version: "guild.receipt_outcome.v1";
@@ -1067,6 +1254,16 @@ function failed(
  * sequence values are unique and strictly increasing. Two unguarded processes
  * break that while both reporting success, so the lock is part of the contract,
  * not an optimisation.
+ *
+ * IDENTITY IS ESTABLISHED BEFORE EXCLUSION, AND RE-ESTABLISHED THREE TIMES
+ * (MH-06-R4-B1). A lock is only exclusive over a resource it names uniquely, so
+ * the physical journal is resolved before any lock is taken; the identity is
+ * re-derived once the lock is HELD, because the caller's path may have been
+ * repointed while this writer waited; the guarded transaction reads and writes
+ * the canonical path the lock names rather than the caller's mutable spelling;
+ * and the identity is checked once more before any durable claim. A journal with
+ * more than one name, or a name that moved, fails closed with a typed reason and
+ * no record is reported durable.
  */
 export function appendReceipt(
   paths: JournalPaths,
@@ -1077,14 +1274,37 @@ export function appendReceipt(
   const invalid = validateInput(input);
   if (invalid) return failed(input, "invalid_record", invalid);
 
-  const lockPath = journalLockPath(paths);
-  const lockFailure = acquireJournalLock(lockPath, io, lockOptions);
+  const authorised = resolveJournalIdentity(paths.journal);
+  if (!authorised.ok) return failed(input, authorised.failure.code, authorised.failure.message);
+  const locked = authorised.identity;
+
+  const lockFailure = acquireJournalLock(locked.lock, io, lockOptions);
   if (lockFailure) return failed(input, lockFailure.code, lockFailure.message);
   try {
-    return appendLocked(paths, input, io);
+    // The caller's path may mean something else now than it did a moment ago —
+    // a swapped parent symlink is enough. Refuse rather than write into a
+    // destination whose own lock is held by somebody else.
+    const underLock = resolveJournalIdentity(paths.journal);
+    if (!underLock.ok) return failed(input, underLock.failure.code, underLock.failure.message);
+    const drift = journalIdentityDrift(locked, underLock.identity);
+    if (drift) return failed(input, "journal_identity_unstable", drift);
+
+    // Write authority is bound to the identity we hold: every read and the append
+    // itself go through the canonical path, so a swap AFTER this point cannot
+    // redirect the bytes either.
+    const outcome = appendLocked({ journal: locked.path, checkpoint: paths.checkpoint }, input, io);
+    if (outcome.disposition !== "succeeded") return outcome;
+
+    // Last gate before the durable claim: the caller's journal must STILL be the
+    // one this transaction was authorised over.
+    const afterWrite = resolveJournalIdentity(paths.journal);
+    if (!afterWrite.ok) return failed(input, afterWrite.failure.code, afterWrite.failure.message);
+    const lateDrift = journalIdentityDrift(locked, afterWrite.identity);
+    if (lateDrift) return failed(input, "journal_identity_unstable", lateDrift);
+    return outcome;
   } finally {
     // A typed failure must never leak the lock and wedge every later writer.
-    releaseJournalLock(lockPath, io);
+    releaseJournalLock(locked.lock, io);
   }
 }
 
@@ -1236,11 +1456,15 @@ export interface TornTailRepairOutcome {
   integrity_before: JournalIntegrity;
   integrity_after: JournalIntegrity;
   removed_bytes: number;
-  failure: {
-    code: "repair_failed" | "not_repairable" | "journal_lock_unavailable" | "journal_lock_failed";
-    message: string;
-  } | null;
+  failure: { code: TornTailRepairFailureCode; message: string } | null;
 }
+
+export type TornTailRepairFailureCode =
+  | "repair_failed"
+  | "not_repairable"
+  | "journal_lock_unavailable"
+  | "journal_lock_failed"
+  | JournalIdentityFailureCode;
 
 /**
  * Drop a torn (newline-less) trailing partial line so the journal can be
@@ -1254,31 +1478,43 @@ export interface TornTailRepairOutcome {
  * Callers must run this consciously; `appendReceipt` will not self-heal.
  *
  * It mutates the journal, so it takes the SAME cross-process lock the append
- * transaction uses: truncating under a concurrent writer would delete a record
- * that writer just made durable and reported as success.
+ * transaction uses, over the SAME physical identity: truncating under a
+ * concurrent writer would delete a record that writer just made durable and
+ * reported as success, and truncating a file this caller does not hold the lock
+ * for is the same defect through a different name (MH-06-R4-B1).
  */
 export function repairTornTail(
   journalPath: string,
   io: JournalIo = defaultJournalIo,
   lockOptions: JournalLockOptions = {},
 ): TornTailRepairOutcome {
-  const lockPath = journalLockPath({ journal: journalPath, checkpoint: "" });
-  const lockFailure = acquireJournalLock(lockPath, io, lockOptions);
-  if (lockFailure) {
-    const integrity = scanReceiptJournal(journalPath, io).integrity;
+  const refused = (code: TornTailRepairFailureCode, message: string, target: string): TornTailRepairOutcome => {
+    const integrity = scanReceiptJournal(target, io).integrity;
     return {
       schema_version: "guild.receipt_repair_outcome.v1",
       disposition: "failed",
       integrity_before: integrity,
       integrity_after: integrity,
       removed_bytes: 0,
-      failure: { code: lockFailure.code, message: lockFailure.message },
+      failure: { code, message },
     };
-  }
+  };
+
+  const authorised = resolveJournalIdentity(journalPath);
+  if (!authorised.ok) return refused(authorised.failure.code, authorised.failure.message, journalPath);
+  const locked = authorised.identity;
+
+  const lockFailure = acquireJournalLock(locked.lock, io, lockOptions);
+  if (lockFailure) return refused(lockFailure.code, lockFailure.message, locked.path);
   try {
-    return repairTornTailLocked(journalPath, io);
+    const underLock = resolveJournalIdentity(journalPath);
+    if (!underLock.ok) return refused(underLock.failure.code, underLock.failure.message, locked.path);
+    const drift = journalIdentityDrift(locked, underLock.identity);
+    if (drift) return refused("journal_identity_unstable", drift, locked.path);
+    // Truncation is bound to the identity the lock names, never to the spelling.
+    return repairTornTailLocked(locked.path, io);
   } finally {
-    releaseJournalLock(lockPath, io);
+    releaseJournalLock(locked.lock, io);
   }
 }
 

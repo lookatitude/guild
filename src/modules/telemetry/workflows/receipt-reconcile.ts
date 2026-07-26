@@ -34,10 +34,22 @@
  *
  * DISPOSITION LADDER (closed vocabulary, most severe wins):
  *   failed     — a conflict, an INVALID recovery, a structurally incoherent
- *                merged view, or a repair that was attempted and did not verify.
+ *                merged view, or a REQUESTED repair that did not verify — whether
+ *                it was attempted and failed, or was denied exclusive access and
+ *                never ran at all.
  *   degraded   — gaps (even fully recovered ones), tail damage, unclean
  *                observation, or an unrepaired checkpoint/producer disagreement.
  *   succeeded  — all three agreements hold and duplicates deduped cleanly.
+ *
+ * A REQUESTED REPAIR THAT CANNOT LOCK IS BLOCKING (MH-06-R4-B2). Round 4 found a
+ * repair whose canonical-lock acquisition failed still returning
+ * `disposition: "succeeded", blocks_clean_close: false, checkpoint_disagreements: []`
+ * beside `checkpoint_repair.failure.code: "repair_lock_unavailable"`, because the
+ * failure test read `attempted && !verified` and an unattempted repair is not
+ * attempted. Two things are wrong with that outcome and only one of them is the
+ * snapshot: the caller asked for a durable mutation and did not get it. Denied
+ * exclusive access therefore fails closed exactly as `appendReceipt` already does
+ * for `journal_lock_unavailable`.
  *
  * BR-07 is absolute here: an unrecoverable gap stays `not_observed` and blocks
  * a clean close. Reconciliation NEVER upgrades absence into success.
@@ -53,7 +65,8 @@ import {
   highestSequenceRecord,
   acquireJournalLock,
   releaseJournalLock,
-  journalLockPath,
+  resolveJournalIdentity,
+  journalIdentityDrift,
   verifyReceiptRecord,
   isValidReceiptRecordShape,
   analyzeReceiptRecords,
@@ -62,8 +75,8 @@ import {
   type CheckpointAgreement,
   type CheckpointAgreementCode,
   type CheckpointReadState,
+  type JournalIdentityFailure,
   type JournalIo,
-  type LockFailure,
   type JournalIntegrity,
   type ObservationState,
   type ReceiptCheckpointV1,
@@ -177,12 +190,28 @@ export interface EventIdentityConflict {
   operation_ids: string[];
 }
 
+/**
+ * The last four are DENIALS OF EXCLUSIVE ACCESS: the repair never ran, so no
+ * reading taken beside it was ever frozen. They are blocking for that reason
+ * alone (MH-06-R4-B2), unlike `repair_not_permitted`, which is a decision made
+ * WITH exclusive access, from named blockers that drive the verdict themselves.
+ */
 export type CheckpointRepairFailureCode =
   | "repair_not_permitted"
   | "repair_write_failed"
   | "repair_verify_failed"
   | "repair_lock_unavailable"
-  | "repair_lock_failed";
+  | "repair_lock_failed"
+  | "repair_identity_ambiguous"
+  | "repair_identity_unstable";
+
+/** Every way a requested repair can be denied exclusive access to the journal. */
+const REPAIR_ACCESS_DENIALS: ReadonlySet<CheckpointRepairFailureCode> = new Set([
+  "repair_lock_unavailable",
+  "repair_lock_failed",
+  "repair_identity_ambiguous",
+  "repair_identity_unstable",
+]);
 
 /**
  * The explicit mutation boundary. `verified` is the ONLY field that may be read
@@ -494,39 +523,82 @@ function vetRecoveries(
  * diagnosable. Racing a live writer can therefore make a read-only verdict
  * report a disagreement that resolves itself — a false alarm that fails CLOSED
  * (`degraded`, blocks close), never a false clean.
+ *
+ * IDENTITY, THEN EXCLUSION (MH-06-R4-B1). A repair is a mutation, so it resolves
+ * the PHYSICAL journal before it locks anything, re-derives that identity once
+ * the lock is held, and scans the canonical path the lock names rather than the
+ * caller's spelling. A journal with more than one name, or a name that moved
+ * under the lock, is denied the repair with a typed reason.
  */
 export function reconcileReceiptJournal(opts: ReconcileOptions): ReconciliationOutcomeV1 {
   const io = opts.io ?? defaultJournalIo;
-  if (opts.repair_checkpoint !== true) return reconcileWithin(opts, io, null);
+  if (opts.repair_checkpoint !== true) return reconcileWithin(opts, io, null, opts.journalPath);
 
-  const lockPath = journalLockPath({ journal: opts.journalPath, checkpoint: opts.checkpointPath });
-  const lockFailure = acquireJournalLock(lockPath, io, {
+  const authorised = resolveJournalIdentity(opts.journalPath);
+  if (!authorised.ok) return reconcileWithin(opts, io, identityDenial(authorised.failure), opts.journalPath);
+  const locked = authorised.identity;
+
+  const lockFailure = acquireJournalLock(locked.lock, io, {
     lock_max_attempts: opts.lock_max_attempts,
     lock_wait_ms: opts.lock_wait_ms,
   });
   // Without exclusive access there is no trustworthy snapshot to repair FROM, so
   // the repair fails closed — but the read-only verdict is still produced and
   // still honest about what it saw.
-  if (lockFailure) return reconcileWithin(opts, io, lockFailure);
+  if (lockFailure) {
+    return reconcileWithin(
+      opts,
+      io,
+      {
+        code: lockFailure.code === "journal_lock_unavailable" ? "repair_lock_unavailable" : "repair_lock_failed",
+        message: lockFailure.message,
+      },
+      locked.path,
+    );
+  }
   try {
-    return reconcileWithin(opts, io, null);
+    // The caller's path may mean something else now than it did before the wait.
+    const underLock = resolveJournalIdentity(opts.journalPath);
+    if (!underLock.ok) return reconcileWithin(opts, io, identityDenial(underLock.failure), locked.path);
+    // The SAME drift test the append path applies — shared, never re-derived.
+    const drift = journalIdentityDrift(locked, underLock.identity);
+    if (drift) {
+      return reconcileWithin(opts, io, { code: "repair_identity_unstable", message: drift }, locked.path);
+    }
+    return reconcileWithin(opts, io, null, locked.path);
   } finally {
     // A typed failure must never leak the lock and wedge every later writer.
-    releaseJournalLock(lockPath, io);
+    releaseJournalLock(locked.lock, io);
   }
+}
+
+/** A requested repair that was denied exclusive access, and why. */
+interface RepairAccessDenial {
+  code: CheckpointRepairFailureCode;
+  message: string;
+}
+
+/** Carry a journal-identity refusal into the repair's own failure vocabulary. */
+function identityDenial(failure: JournalIdentityFailure): RepairAccessDenial {
+  return {
+    code: failure.code === "journal_identity_ambiguous" ? "repair_identity_ambiguous" : "repair_identity_unstable",
+    message: failure.message,
+  };
 }
 
 /**
  * The verdict itself. Every read below happens under whatever exclusion the
  * caller established: with `repair_checkpoint`, that is the canonical journal
- * lock; without it, none — and then nothing here writes.
+ * lock over `journalPath` (the canonical name, not the caller's spelling);
+ * without it, none — and then nothing here writes.
  */
 function reconcileWithin(
   opts: ReconcileOptions,
   io: JournalIo,
-  lockFailure: LockFailure | null,
+  denial: RepairAccessDenial | null,
+  journalPath: string,
 ): ReconciliationOutcomeV1 {
-  const scan = scanReceiptJournal(opts.journalPath, io);
+  const scan = scanReceiptJournal(journalPath, io);
   const checkpointRead = readCheckpointState(opts.checkpointPath, io);
   const checkpoint_before = checkpointRead.checkpoint;
 
@@ -710,14 +782,11 @@ function reconcileWithin(
     failure: null,
   };
 
-  if (checkpoint_repair.requested && lockFailure) {
+  if (checkpoint_repair.requested && denial) {
     // No exclusive access ⇒ no repair, and no claim about what the journal holds.
     // Reported ahead of every other refusal reason on purpose: a "not permitted"
     // verdict derived from a snapshot we could not freeze would be a guess.
-    checkpoint_repair.failure = {
-      code: lockFailure.code === "journal_lock_unavailable" ? "repair_lock_unavailable" : "repair_lock_failed",
-      message: lockFailure.message,
-    };
+    checkpoint_repair.failure = { code: denial.code, message: denial.message };
   } else if (checkpoint_repair.requested) {
     // Repair may correct exactly ONE thing: an on-disk checkpoint that does not
     // describe the durable journal. It must never paper over damage, and it must
@@ -774,7 +843,7 @@ function reconcileWithin(
         // moved the journal anyway (a lock primitive that lies, a writer that
         // never took the lock), the written checkpoint no longer describes it and
         // this fails closed instead of reporting a verified clean repair.
-        const currentScan = scanReceiptJournal(opts.journalPath, io);
+        const currentScan = scanReceiptJournal(journalPath, io);
         const reread = readCheckpointState(opts.checkpointPath, io);
         const identical = reread.checkpoint !== null && checkpointsIdentical(reread.checkpoint, checkpoint_after);
         checkpoint_repair.residual_disagreements = compareCheckpointToJournal(reread, currentScan, opts.run_id);
@@ -793,8 +862,25 @@ function reconcileWithin(
     }
   }
 
-  // An attempted repair that did not verify is a durable failure, not a nit.
-  const repairFailed = checkpoint_repair.attempted && !checkpoint_repair.verified;
+  // A REQUESTED repair that was denied exclusive access never ran at all, so the
+  // durable mutation the caller asked for did not happen AND nothing held the
+  // journal still while this verdict was computed (MH-06-R4-B2). Round 4 found
+  // the narrower reading below — `attempted && !verified` — let exactly that
+  // outcome be promoted to `succeeded` with `blocks_clean_close: false` whenever
+  // the unlocked snapshot happened to agree with its checkpoint. It is the same
+  // fail-closed rule `appendReceipt` already applies to `journal_lock_unavailable`.
+  //
+  // `repair_not_permitted` is deliberately NOT in this set: that decision is made
+  // WITH the lock held, from blockers that are enumerated and drive the verdict on
+  // their own.
+  const repairAccessDenied =
+    checkpoint_repair.requested &&
+    checkpoint_repair.failure !== null &&
+    REPAIR_ACCESS_DENIALS.has(checkpoint_repair.failure.code);
+
+  // A requested repair that did not verify — whether it was attempted and failed,
+  // or was never allowed to start — is a durable failure, not a nit.
+  const repairFailed = (checkpoint_repair.attempted || repairAccessDenied) && !checkpoint_repair.verified;
   // Only a VERIFIED repair may clear the disagreements it was permitted to fix.
   const checkpointUnresolved = checkpoint_disagreements.length > 0 && !checkpoint_repair.verified;
 

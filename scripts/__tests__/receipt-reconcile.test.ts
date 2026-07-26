@@ -26,6 +26,7 @@ import {
   scanReceiptJournal,
   compareCheckpointToJournal,
   journalLockPath,
+  canonicalJournalPath,
   defaultJournalIo,
   RECEIPT_CONTRACT_VERSION,
   type JournalIo,
@@ -1470,7 +1471,10 @@ process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out
         defaultJournalIo.releaseLock!(lockPath);
       },
       readAll(target) {
-        calls.push(target === p.journal ? "scan" : "read-checkpoint");
+        // Round 4: a repair scans the CANONICAL journal the lock names, so that
+        // is the read this fake must recognise — a fake keyed on the caller's
+        // spelling would stop firing and quietly stop testing anything.
+        calls.push(target === canonicalJournalPath(p.journal) ? "scan" : "read-checkpoint");
         return defaultJournalIo.readAll(target);
       },
       writeCheckpoint(cpPath, content) {
@@ -1553,8 +1557,11 @@ process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out
       ...defaultJournalIo,
       readAll(target) {
         const content = defaultJournalIo.readAll(target);
-        // Fire after the FIRST journal read, which is now inside the lock.
-        if (target === p.journal && ++reads === 1) landed = landRecordFromAnotherProcess(p.root, 2);
+        // Fire after the FIRST journal read, which is now inside the lock — and
+        // which reaches the seam as the canonical journal, not p.journal.
+        if (target === canonicalJournalPath(p.journal) && ++reads === 1) {
+          landed = landRecordFromAnotherProcess(p.root, 2);
+        }
         return content;
       },
     };
@@ -1636,7 +1643,12 @@ process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out
     expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_unavailable");
     // The read-only verdict is still produced, and still honest.
     expect(out.unresolved_sequences).toEqual([2, 3]);
-    expect(out.disposition).toBe("degraded");
+    // Round 3 pinned `degraded` here, derived from the gaps alone. Round 4 found
+    // that reading let a lock-denied repair over a CLEAN journal reach
+    // `succeeded`, so the denial itself is now the failure: the caller asked for
+    // a durable mutation and did not get one. The ordering this test exists for —
+    // the lock failure ahead of `repair_not_permitted` — is unchanged.
+    expect(out.disposition).toBe("failed");
     expect(out.blocks_clean_close).toBe(true);
   });
 
@@ -1676,6 +1688,214 @@ process.stdout.write(JSON.stringify({ disposition: out.disposition, durable: out
     };
     const out = reconcileRepair(p, { io });
     expect(out.checkpoint_repair.failure?.code).toBe("repair_write_failed");
+    expect(fs.existsSync(journalLockPath({ journal: p.journal, checkpoint: p.checkpoint }))).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R4-B2 — a requested repair that cannot lock is a BLOCKING outcome
+//
+// Round 3 put the repair under the canonical journal lock and reported
+// `repair_lock_unavailable` ahead of every snapshot-derived refusal. Round 4
+// found the verdict never listened: `repairFailed` was `attempted && !verified`,
+// and a repair denied the lock is never attempted. So a clean journal beside an
+// agreeing checkpoint returned `disposition: "succeeded"`,
+// `blocks_clean_close: false`, `checkpoint_disagreements: []` — the exact clean
+// shape the packet forbids — while also reporting `repair_lock_unavailable`.
+//
+// Two things are wrong with that and only one of them is the unfrozen snapshot:
+// the caller asked for a durable mutation and did not get it. Denied exclusive
+// access now fails closed exactly as `appendReceipt` already does for
+// `journal_lock_unavailable`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R4-B2 — a lock-denied repair can never report clean success", () => {
+  const DENY: JournalIo = { ...defaultJournalIo, acquireLock: () => false };
+  const FAULT: JournalIo = {
+    ...defaultJournalIo,
+    acquireLock() {
+      throw new Error("EROFS: cannot create lock");
+    },
+  };
+
+  /** One durable record beside the checkpoint a healthy writer left. */
+  function clean() {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(appendReceipt(p, input({ event_id: "e1", operation_id: "op-1" })).disposition).toBe("succeeded");
+    return { root, ...p };
+  }
+
+  function repair(p: { journal: string; checkpoint: string }, over: Record<string, unknown> = {}) {
+    return reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      repair_checkpoint: true,
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+      ...over,
+    });
+  }
+
+  it("refuses the reviewer's exact probe: clean journal, clean checkpoint, no lock", () => {
+    const p = clean();
+    const out = repair(p, { io: DENY });
+
+    // Everything the reviewer observed about the repair is unchanged…
+    expect(out.checkpoint_repair.requested).toBe(true);
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.persisted).toBe(false);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_unavailable");
+    // …and the outcome is no longer the clean shape it forbids.
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("treats a lock IO fault the same way", () => {
+    const p = clean();
+    const out = repair(p, { io: FAULT });
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_failed");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("blocks against a REAL competing lock holder through the default IO seam", () => {
+    // No injected seam at all: another writer's lock directory is simply there.
+    const p = clean();
+    const lock = journalLockPath({ journal: p.journal, checkpoint: p.checkpoint });
+    fs.mkdirSync(lock, { recursive: true });
+    const out = repair(p);
+    fs.rmdirSync(lock);
+
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_lock_unavailable");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("blocks whatever the unlocked snapshot happens to look like", () => {
+    // Clean, malformed-checkpoint, absent, and torn-tail journals all reach the
+    // same verdict, because the verdict is about the DENIAL, not the snapshot.
+    const cases: Array<[string, { journal: string; checkpoint: string }, Record<string, unknown>]> = [];
+
+    cases.push(["clean", clean(), {}]);
+
+    const dirty = clean();
+    fs.writeFileSync(dirty.checkpoint, "{ not a checkpoint", "utf8");
+    cases.push(["malformed checkpoint", dirty, {}]);
+
+    const torn = clean();
+    fs.appendFileSync(torn.journal, '{"schema_version":"guild.receipt_record.v1","seq', "utf8");
+    cases.push(["torn tail", torn, {}]);
+
+    const absent = paths(mkRoot());
+    cases.push(["absent journal", absent, { producerCheckpoint: { last_sequence: 0, record_count: 0 } }]);
+
+    for (const [label, p, over] of cases) {
+      const out = repair(p, { io: DENY, ...over });
+      expect(`${label}: ${out.checkpoint_repair.failure?.code}`).toBe(`${label}: repair_lock_unavailable`);
+      expect(`${label}: ${out.disposition}`).toBe(`${label}: failed`);
+      expect(`${label}: ${out.blocks_clean_close}`).toBe(`${label}: true`);
+      expect(`${label}: ${out.checkpoint_repair.attempted}`).toBe(`${label}: false`);
+    }
+  });
+
+  it("refuses a repair on a journal with more than one name, before it locks", () => {
+    const p = clean();
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    fs.linkSync(p.journal, alias);
+    let locks = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        locks += 1;
+        return defaultJournalIo.acquireLock!(lockPath);
+      },
+    };
+
+    const out = repair(p, { io });
+    expect(locks).toBe(0);
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_identity_ambiguous");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("still lets a repair that DOES take the lock converge and report clean", () => {
+    // The discriminator. If this went blocking too, the rule above would just be
+    // "reconciliation never succeeds", which pins nothing.
+    const p = clean();
+    fs.writeFileSync(p.checkpoint, "{ not a checkpoint", "utf8");
+    const out = repair(p);
+
+    expect(out.checkpoint_repair.attempted).toBe(true);
+    expect(out.checkpoint_repair.verified).toBe(true);
+    expect(out.checkpoint_repair.residual_disagreements).toEqual([]);
+    expect(out.disposition).toBe("succeeded");
+    expect(out.blocks_clean_close).toBe(false);
+  });
+
+  it("leaves a READ-ONLY reconcile of the same journal clean, and lock-free", () => {
+    // The repair flag is what makes the denial blocking. Diagnosis must stay
+    // available on a journal wedged by a crashed writer's stale lock.
+    const p = clean();
+    fs.mkdirSync(journalLockPath({ journal: p.journal, checkpoint: p.checkpoint }), { recursive: true });
+    let locks = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock() {
+        locks += 1;
+        return false;
+      },
+    };
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      io,
+    });
+
+    expect(locks).toBe(0);
+    expect(out.checkpoint_repair.requested).toBe(false);
+    expect(out.checkpoint_repair.failure).toBeNull();
+    expect(out.disposition).toBe("succeeded");
+    expect(out.blocks_clean_close).toBe(false);
+  });
+
+  it("keeps `repair_not_permitted` driven by its OWN blockers, not by the denial rule", () => {
+    // A permitted-but-refused repair holds the lock, enumerates real blockers and
+    // degrades on them. Widening the denial rule to cover it would erase that
+    // distinction; this pins that it did not happen.
+    const root = mkRoot();
+    const p = paths(root);
+    writeJournal(p, [sealed(1, { event_id: "e1", operation_id: "op-1" }), sealed(4, { event_id: "e4", operation_id: "op-4" })]);
+
+    const out = reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 4, record_count: 4 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      repair_checkpoint: true,
+    });
+
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_not_permitted");
+    expect(out.unresolved_sequences).toEqual([2, 3]);
+    expect(out.disposition).toBe("degraded");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("releases the lock after a denial-free repair, so the next writer is not wedged", () => {
+    const p = clean();
+    fs.writeFileSync(p.checkpoint, "{ not a checkpoint", "utf8");
+    expect(repair(p).checkpoint_repair.verified).toBe(true);
     expect(fs.existsSync(journalLockPath({ journal: p.journal, checkpoint: p.checkpoint }))).toBe(false);
   });
 });
