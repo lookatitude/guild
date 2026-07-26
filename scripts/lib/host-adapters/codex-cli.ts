@@ -126,7 +126,7 @@ export function createCodexCliAdapter(entry: HostRegistryEntry = ENTRY): HostAda
           native_hooks: false,
           bootstrap_file: "AGENTS.md",
           commands: ["codex --version", "codex login status"],
-          degradation: "no SessionStart/UserPromptSubmit hook surface",
+          degradation: "SessionStart + UserPromptSubmit fire natively via codex-hooks.json (verified live, wi-04); the remaining Claude hook events have no Codex surface",
         },
         resolveRung("session", HOST_ID)
       );

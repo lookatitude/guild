@@ -403,10 +403,16 @@ export const CODEX_CAPABILITIES: GuildHostCapabilitiesV1 = {
   skills: { native_skills: false, skill_dir: null }, // Verified (per-host-packaging).
   agents: { native_agents: false, agent_format: null }, // Verified (per-host-packaging flags agents unsupported).
   hooks: {
-    // Verified-by-design: Codex hook taxonomy differs from Claude; no native
-    // Claude-equivalent hooks. All degrade through the HookEmitter (ADR Surface 3).
-    session_start: false,
-    user_prompt_submit: false,
+    // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+    // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+    // Claude-shaped hooks manifest and fires both events the generated
+    // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+    // bridge since the package existed, and SessionStart now carries the
+    // update-check signal, LIVE-VERIFIED in a real codex session (the model
+    // quoted the injected line verbatim). Remaining events stay false until
+    // individually verified.
+    session_start: true,
+    user_prompt_submit: true,
     pre_tool_use: false,
     post_tool_use: false,
     stop: false,

@@ -426,7 +426,7 @@ describe("host-native discovery on --update with no receipts", () => {
       .split("\n")
       .filter((l) => l.includes('_cx_src="$(sed'))
       .map((l) => l.trim());
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-toml-"));
     const probe = (toml: string): string => {
       const f = path.join(dir, "config.toml");
@@ -446,6 +446,8 @@ describe("host-native discovery on --update with no receipts", () => {
       // Round-2 gate: two MORE Codex-accepted spellings.
       expect(probe('marketplaces.guild.source_type = "git"\nmarketplaces.guild.source = "x"\n')).toBe("git");
       expect(probe('[marketplaces]\nguild = { source_type = "local", source = "/x" }\nother = { source_type = "git" }\n')).toBe("local");
+      // Round-3 gate: the natural COMBINATION — dotted key = inline table.
+      expect(probe('marketplaces.guild = { source_type = "local", source = "/x" }\n')).toBe("local");
       expect(probe('[marketplaces.guilded]\nsource_type = "git"\n')).toBe("");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

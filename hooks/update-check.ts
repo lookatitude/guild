@@ -209,10 +209,11 @@ function main(): void {
   if (!line) return;
 
   // AUTO MODE IS GATED ON auto_capable, not merely on having a command.
-  // Codex declares `auto_capable: false` — its command (`guild-run update`)
-  // refuses without an install receipt, which a host-native `codex plugin add`
-  // never writes. Running it anyway and then marking the target staged would
-  // report success for an update that silently failed. A host that cannot
+  // Every non-Claude host declares `auto_capable: false`: their commands
+  // either need machine state a native install lacks (a receipt) or hand
+  // control to the HOST's own manager (codex, option A: install.sh --update).
+  // Spawning such a command headlessly and then marking the target staged
+  // would report success for an update that never applied. A host that cannot
   // auto-apply degrades to notify-only, which is the honest signal.
   if (mode === "auto" && caps?.auto_capable !== true) {
     // Only point at "the command above" when the signal actually carries one:

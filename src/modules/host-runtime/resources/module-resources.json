@@ -106,7 +106,7 @@
       "id": "lib/host-adapters/codex-cli",
       "source_path": "scripts/lib/host-adapters/codex-cli.ts",
       "resource_path": "resources/scripts/lib/host-adapters/codex-cli.ts",
-      "sha256": "15d766bbd55caa016a5eeae234c195389dee0d11d09b25162360f59fd2ab423f"
+      "sha256": "e3462d5d9161258413d6262ae921e5ae164b35999efeb247113f5cfe206987ec"
     },
     {
       "category": "scripts",
