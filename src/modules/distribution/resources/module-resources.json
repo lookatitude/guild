@@ -8,7 +8,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "250337dedfc7011708cc16fc1fd9f3d5ae53aa5df9f6ebd17bacd2d8213057ab"
+      "sha256": "fa97e5d75046b098aaf15b433c8a05f8cc8475bf3be30029e8ab0cb4a06a1057"
     },
     {
       "category": "scripts",
@@ -155,7 +155,7 @@
       "id": "lib/update-check",
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
-      "sha256": "7806ece8e9e04c9319ac98160a8d66ac2ce6bf04e222cf08117caf153f32e358"
+      "sha256": "341fd133d15f130300587f72bffb9d386f9f01beafd123c048a2563606784e52"
     },
     {
       "category": "scripts",

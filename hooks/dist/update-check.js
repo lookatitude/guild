@@ -5418,15 +5418,19 @@ function resolveInstallState(pluginRoot, opts = {}) {
   }
   return { channel: "stable", version, commit: null, source: "default" };
 }
+var PLUGIN_MANIFEST_CANDIDATES = [
+  [".claude-plugin", "plugin.json"],
+  [".codex-plugin", "plugin.json"]
+];
 function readInstalledVersion(pluginRoot, fsi = fs) {
-  try {
-    const manifest = JSON.parse(
-      fsi.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")
-    );
-    return typeof manifest.version === "string" ? manifest.version : null;
-  } catch {
-    return null;
+  for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
+    try {
+      const manifest = JSON.parse(fsi.readFileSync(path.join(pluginRoot, dir, file), "utf8"));
+      if (typeof manifest.version === "string" && manifest.version.length > 0) return manifest.version;
+    } catch {
+    }
   }
+  return null;
 }
 function cachePath(homedir3 = os.homedir()) {
   return path.join(homedir3, ".guild", "update-check.json");
@@ -5573,6 +5577,14 @@ function main() {
   if (!pluginRoot) return;
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;
+  const hostArg = process.argv.indexOf("--host");
+  let hostId = "claude-code-cli";
+  if (hostArg !== -1) {
+    const raw = process.argv[hostArg + 1];
+    hostId = raw === void 0 || raw.startsWith("-") || raw === "" ? "unknown-host" : raw;
+  }
+  const caps = updateCapsForHost(hostId);
+  const hostKind = caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
   const state = resolveInstallState(pluginRoot);
   if (state.channel === "dev") return;
   const cacheFile = cachePath();
@@ -5580,16 +5592,20 @@ function main() {
   if (!cacheIsFresh(cache, cadenceHours, /* @__PURE__ */ new Date())) {
     spawnDetached(process.execPath, [__filename, "--refresh"]);
   }
-  const signal = computeSignal({ state, cache, hostKind: "claude", hostId: "claude-code-cli" });
+  const signal = computeSignal({ state, cache, hostKind, hostId });
   const line = renderSignalLine(signal);
   if (!line) return;
+  if (mode === "auto" && caps?.auto_capable !== true) {
+    const followUp = signal.command ? "run the command above." : "and no update command is known for this host \u2014 see the Guild docs.";
+    process.stdout.write(`${line}
+[guild-update] auto mode: ${hostId} cannot auto-apply \u2014 ${followUp}
+`);
+    return;
+  }
   if (mode === "auto") {
-    const target = signal.available ?? "";
+    const target = `${hostId}@${signal.available ?? ""}`;
     if (!alreadyStaged(target)) {
-      spawnDetached("/bin/sh", [
-        "-c",
-        "claude plugin marketplace update guild && claude plugin update guild@guild"
-      ]);
+      spawnDetached("/bin/sh", ["-c", caps.command]);
       markStaged(target);
       process.stdout.write(
         `${line}

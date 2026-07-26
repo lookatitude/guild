@@ -109,12 +109,34 @@ function writeLauncher(dest: string, host: string): void {
 }
 
 const CODEX_HOOK_COMMAND = 'node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/codex-guild-prompt-bridge.js"';
+// Codex supports SessionStart natively (verified against a live ~/.codex/hooks.json,
+// which registers PermissionRequest, PostCompact, PostToolUse, PreCompact,
+// PreToolUse, SessionStart, Stop, SubagentStart, SubagentStop, UserPromptSubmit).
+// Guild simply never wired it, so Codex users got no staleness signal at all
+// while Claude has had one since hooks.json:16 (xhrd-wi-04 / G4).
+//
+// `--host codex-cli` is explicit rather than detected: the per-host package
+// names its own host, so the AC-7 capability row supplies Codex's real update
+// command WITHOUT needing an install receipt — which matters because a
+// host-native `codex plugin add` never writes one.
+const CODEX_UPDATE_CHECK_COMMAND =
+  'node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/dist/update-check.js" --host codex-cli';
 
 function writeCodexHookBridge(root: string, dest: string): void {
   writeFileEnsured(
     path.join(dest, "hooks", "codex-hooks.json"),
     stableJson({
       hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: CODEX_UPDATE_CHECK_COMMAND,
+              },
+            ],
+          },
+        ],
         UserPromptSubmit: [
           {
             hooks: [
@@ -127,6 +149,14 @@ function writeCodexHookBridge(root: string, dest: string): void {
         ],
       },
     })
+  );
+  // The signal is useless without its binary: the Codex package previously
+  // shipped only the prompt bridge, so a SessionStart entry alone would point
+  // at a file that is not there (the issue-#55 defect class).
+  copyFileRequired(
+    path.join(root, "hooks", "dist", "update-check.js"),
+    path.join(dest, "hooks", "dist", "update-check.js"),
+    "hooks/dist/update-check.js"
   );
   copyFileEnsured(
     path.join(root, "scripts", "codex-guild-prompt-bridge.ts"),
