@@ -145,6 +145,30 @@ function isStructured(value: unknown): boolean {
 }
 
 /**
+ * Why a payload names no single type — the two DIFFERENT defects behind an
+ * inadmissible envelope.
+ *
+ * `untyped` is round 2's ladder rung: no tag at all, or an empty one.
+ * `tag_conflict` is MH-06-R6-B4: BOTH `schema_version` and the legacy `type` are
+ * present as strings and their trimmed values DIFFER — which includes a named
+ * type opposite a blank one, in either direction. Collapsing the second into the
+ * first would report "this evidence names no type" about a payload that names
+ * two.
+ */
+type EnvelopeTagFailure = "untyped" | "tag_conflict";
+
+/** `tag`/`tags` is null exactly when `reason` is not, and never both. */
+interface EnvelopeTagResult {
+  tag: string | null;
+  reason: EnvelopeTagFailure | null;
+}
+
+interface EnvelopeTagsResult {
+  tags: string[] | null;
+  reason: EnvelopeTagFailure | null;
+}
+
+/**
  * BR-10's "typed records and strict JSON envelopes" test, applied to CONTENT.
  *
  * A typed envelope is a JSON object (not an array, not a scalar) that names its
@@ -153,56 +177,114 @@ function isStructured(value: unknown): boolean {
  * and fails here, which is the whole point: an empty object is syntactically
  * perfect evidence of nothing.
  *
+ * TWO TAGS ARE NOT ONE IDENTITY (MH-06-R6-B4). Round 6 selected
+ * `schema_version ?? type`, which reads the legacy tag only when the modern one
+ * is absent — so a payload declaring `guild.artifact.v1` in one field and
+ * `guild.conformance.v1` in the other resolved cleanly as whichever the
+ * coalescing happened to reach, and six such links produced a COMPLETE bundle.
+ * A record that names itself twice, differently, has told the boundary that its
+ * own identity is unknown; the rule is symmetric and content-only, so agreeing
+ * tags (after trimming) and single tags keep resolving exactly as before.
+ *
+ * PRESENCE IS THE CLAIM, NOT NON-EMPTINESS. A record carrying BOTH tag
+ * properties has made two statements about its own identity, and a blank one is
+ * a statement that disagrees with a named one just as loudly as a different name
+ * does: `{schema_version: "guild.artifact.v1", type: "   "}` and its mirror
+ * `{schema_version: "   ", type: "guild.artifact.v1"}` each name two things at
+ * once, and reading the blank side as "nothing to disagree with" let one of them
+ * type the record alone. So the comparison is between OWN PROPERTIES — absence
+ * (a genuine single-tag envelope) is what keeps resolving, not blankness. Both
+ * present and both trimming to empty is not a disagreement: they say the same
+ * nothing, and the round-2 untyped rung already refuses that with the reason
+ * that actually describes it.
+ *
+ * AND AN UNREADABLE SECOND CLAIM IS STILL A SECOND CLAIM. When one of two
+ * present tags is not a string, this boundary cannot compare them — so it cannot
+ * say the record names ONE type, and the fail-closed answer is untyped, in BOTH
+ * directions. `{schema_version: 42, type: "guild.artifact.v1"}` always read that
+ * way, because `??` reached the number; its mirror
+ * `{schema_version: "guild.artifact.v1", type: 42}` did not, because `??` reached
+ * the readable side and typed the record from it alone. Identical ambiguity,
+ * opposite verdicts — the asymmetry was in the selection expression, not in the
+ * evidence. It is refused as `untyped` rather than as a conflict on purpose: two
+ * values that cannot both be read have not been shown to DIFFER.
+ *
  * Returns the type it names, so the caller can then ask whether that type is a
  * type this bundle actually recognises — the tag itself is producer-controlled
  * and proves nothing on its own.
  */
-function envelopeTypeTag(value: unknown): string | null {
-  if (!isStructured(value) || Array.isArray(value)) return null;
+function envelopeTypeTag(value: unknown): EnvelopeTagResult {
+  const untyped: EnvelopeTagResult = { tag: null, reason: "untyped" };
+  if (!isStructured(value) || Array.isArray(value)) return untyped;
   const obj = value as Record<string, unknown>;
+
+  // BOTH TAG PROPERTIES PRESENT IS TWO CLAIMS, tested BEFORE selection — because
+  // selection is exactly what hid the second one. The test is over PROPERTY
+  // PRESENCE, so an absent tag (a genuine single-tag envelope) is distinguished
+  // from a present blank one, which is a second claim and disagrees.
+  const hasModern = Object.prototype.hasOwnProperty.call(obj, "schema_version");
+  const hasLegacy = Object.prototype.hasOwnProperty.call(obj, "type");
+  if (hasModern && hasLegacy) {
+    // Unreadable before contradictory: a present non-string tag names nothing
+    // this boundary can compare, so the record has not been shown to name ONE
+    // type — untyped, symmetrically, whichever side is readable.
+    if (typeof obj.schema_version !== "string" || typeof obj.type !== "string") return untyped;
+    // Two readable claims that disagree — including a name opposite a blank, in
+    // either direction. Two blanks say the same nothing and fall through to the
+    // untyped rung below, which is the reason that actually describes them.
+    if (obj.schema_version.trim() !== obj.type.trim()) return { tag: null, reason: "tag_conflict" };
+  }
+
+  // SELECTION ITSELF IS UNCHANGED from round 6, deliberately: `schema_version`
+  // wins whenever it is PRESENT — even present and empty, which still reads
+  // untyped — and a lone unreadable tag still lands on the same rung it always
+  // did. What the gate above changed is which payloads REACH it, never what it
+  // does with them: the fix owes this boundary refusals, not a quietly widened
+  // acceptance, so nothing that was refused before is accepted now.
   const tag = obj.schema_version ?? obj.type;
-  if (typeof tag !== "string" || tag.trim().length === 0) return null;
-  if (!Object.keys(obj).some((k) => k !== "schema_version" && k !== "type")) return null;
-  return tag.trim();
+  if (typeof tag !== "string" || tag.trim().length === 0) return untyped;
+  if (!Object.keys(obj).some((k) => k !== "schema_version" && k !== "type")) return untyped;
+  return { tag: tag.trim(), reason: null };
 }
 
 /**
- * Every distinct type the payload names, or `null` when ANY value in it is not a
- * typed envelope. For JSON-lines that is per line: one untyped line makes the
+ * Every distinct type the payload names, or the reason it names none. For
+ * JSON-lines that is per line: one untyped OR self-contradicting line makes the
  * whole object inadmissible, because the bundle links the object, not the lines.
  */
-function envelopeTypeTags(bytes: Buffer, mediaType: string): string[] | null {
+function envelopeTypeTags(bytes: Buffer, mediaType: string): EnvelopeTagsResult {
+  const untyped: EnvelopeTagsResult = { tags: null, reason: "untyped" };
   let text: string;
   try {
     text = bytes.toString("utf8");
   } catch {
-    return null;
+    return untyped;
   }
   const values: unknown[] = [];
   if (JSON_LINES_MEDIA_TYPES.has(normalizeMediaType(mediaType))) {
     const lines = text.split("\n").filter((l) => l.trim().length > 0);
-    if (lines.length === 0) return null;
+    if (lines.length === 0) return untyped;
     for (const line of lines) {
       try {
         values.push(JSON.parse(line));
       } catch {
-        return null;
+        return untyped;
       }
     }
   } else {
     try {
       values.push(JSON.parse(text));
     } catch {
-      return null;
+      return untyped;
     }
   }
   const tags: string[] = [];
   for (const value of values) {
-    const tag = envelopeTypeTag(value);
-    if (tag === null) return null;
-    if (!tags.includes(tag)) tags.push(tag);
+    const named = envelopeTypeTag(value);
+    if (named.tag === null) return { tags: null, reason: named.reason };
+    if (!tags.includes(named.tag)) tags.push(named.tag);
   }
-  return tags;
+  return { tags, reason: null };
 }
 
 /**
@@ -312,6 +394,14 @@ export type LinkRejectionReason =
   | "evidence_hash_mismatch"
   | "evidence_not_machine_parsable"
   | "evidence_not_typed_envelope"
+  /**
+   * The payload named itself TWICE, differently: `schema_version` and the legacy
+   * `type` are both present and disagree (MH-06-R6-B4). Distinct from
+   * `evidence_not_typed_envelope` on purpose — "names no type" and "names two
+   * types" are different defects, and a bundle that reported the second as the
+   * first would be describing the evidence wrongly in its own machine output.
+   */
+  | "evidence_type_tag_conflict"
   | "evidence_type_unknown";
 
 export interface RejectedLink {
@@ -553,17 +643,18 @@ export function buildDebugBundle(opts: BuildDebugBundleOptions): DebugBundleV1 {
       reject("evidence_not_machine_parsable");
       continue;
     }
-    // 7. BR-10 — a strict JSON envelope is a TYPED record, not any JSON object.
+    // 7. BR-10 — a strict JSON envelope is a TYPED record, not any JSON object,
+    // and not a record that names itself two different things at once.
     const declaredTypes = envelopeTypeTags(resolved.bytes, link.media_type);
-    if (declaredTypes === null) {
-      reject("evidence_not_typed_envelope");
+    if (declaredTypes.tags === null) {
+      reject(declaredTypes.reason === "tag_conflict" ? "evidence_type_tag_conflict" : "evidence_not_typed_envelope");
       continue;
     }
     // 8. …and the type it names must RESOLVE for THIS section. A tag the producer
     // invented satisfies any self-consistent check; only a vocabulary the
     // producer does not control can refuse `TOTALLY.FABRICATED.ENVELOPE.v999`.
     const sectionTypes = knownEvidenceTypes.get(link.kind)!;
-    if (sectionTypes.size === 0 || declaredTypes.some((t) => !sectionTypes.has(t))) {
+    if (sectionTypes.size === 0 || declaredTypes.tags.some((t) => !sectionTypes.has(t))) {
       reject("evidence_type_unknown");
       continue;
     }

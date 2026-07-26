@@ -1350,3 +1350,300 @@ describe("MH-06-R3-B3 — evidence types resolve against a closed per-section vo
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R6-B4 — two tags naming two different types are not one identity
+//
+// `envelopeTypeTag` selected `schema_version ?? type` and never compared a
+// simultaneously present legacy `type`. Round 6's review supplied contradictory
+// tags on all six sections and obtained `accepted_links: 6`, `rejected_links: 0`
+// and `complete: true` — a bundle presenting mutually inconsistent typed-evidence
+// identity as complete machine truth.
+//
+// The rule is symmetric and content-only: two tags that AGREE (after trimming)
+// are one identity, one tag PRESENT alone is one identity, and two tags that
+// DISAGREE are no identity at all.
+//
+// PRESENCE, NOT NON-EMPTINESS, is what makes a property a claim. The first pass
+// at this fix compared only two NON-EMPTY strings, so a present-but-blank tag was
+// read as "nothing to conflict WITH" and the record was typed by whichever side
+// happened to be named — even though BOTH properties were present and their
+// trimmed values differed. Absence is what leaves a single identity; blankness is
+// a second claim that disagrees.
+//
+// AND AN UNREADABLE CLAIM IS STILL A CLAIM. When one of two present tags is not a
+// string there is nothing to compare, so the record has not been shown to name
+// ONE type: it is refused as untyped — not as a conflict — in BOTH directions.
+// `{schema_version: 42, type: "…v1"}` always was; its mirror
+// `{schema_version: "…v1", type: 42}` was typed by the readable side alone.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R6-B4 — contradictory schema_version / legacy type tags are refused", () => {
+  /** Six otherwise impeccable links whose payloads carry `tagsFor(kind)`. */
+  function taggedBundle(tagsFor: (kind: DebugSectionKind) => Record<string, unknown>) {
+    const store: Record<string, { bytes: Buffer }> = {};
+    const links: DebugLinkInput[] = DEBUG_BUNDLE_SECTION_KINDS.map((kind) => {
+      const bytes = Buffer.from(JSON.stringify({ ...tagsFor(kind), kind, run_id: "run-mh-06" }), "utf8");
+      store[refFor(kind)] = { bytes };
+      return { kind, ref: refFor(kind), media_type: "application/json", hash: sha256(bytes), bound_by: BINDING };
+    });
+    const p = seedJournal(mkRoot());
+    return buildDebugBundle({
+      run_id: "run-mh-06",
+      generated_at: "2026-07-26T04:00:00.000Z",
+      versions: VERSIONS,
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      links,
+      registry: REGISTRY,
+      evidence: mapResolver(store),
+    });
+  }
+
+  it("refuses six envelopes whose schema_version and legacy type disagree", () => {
+    const bundle = taggedBundle((kind) => ({
+      schema_version: `guild.${kind}.v1`,
+      // Both tags resolve for this section on their own. Only their DISAGREEMENT
+      // is the defect, which is exactly why a `??` could not see it.
+      type: kind === "capability_snapshot" ? "guild.policy_decision.v1" : `guild.${kind}.v2`,
+    }));
+
+    expect(bundle.receipt_journal.checkpoint_disagreements).toEqual([]);
+    expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_type_tag_conflict"));
+    expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+    expect(bundle.complete).toBe(false);
+    for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+      expect(bundle.sections[kind].observation_state).toBe("not_observed");
+      expect(bundle.sections[kind].links).toEqual([]);
+    }
+  });
+
+  it("refuses exactly the contradictory link and accepts the other five", () => {
+    const bundle = taggedBundle((kind) =>
+      kind === "artifact"
+        ? { schema_version: "guild.artifact.v1", type: "guild.conformance.v1" }
+        : { schema_version: `guild.${kind}.v1` },
+    );
+
+    expect(bundle.rejected_links).toEqual([
+      { kind: "artifact", ref: refFor("artifact"), reason: "evidence_type_tag_conflict" },
+    ]);
+    expect(bundle.unlinked_kinds).toEqual(["artifact"]);
+    expect(bundle.sections.artifact.observation_state).toBe("not_observed");
+    expect(bundle.sections.conformance.observation_state).toBe("checked_clean");
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("accepts MATCHING dual tags — the compatibility half of the rule", () => {
+    const bundle = taggedBundle((kind) => ({
+      schema_version: `guild.${kind}.v1`,
+      type: `guild.${kind}.v1`,
+    }));
+
+    expect(bundle.rejected_links).toEqual([]);
+    expect(bundle.complete).toBe(true);
+    for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+      expect(bundle.sections[kind].observation_state).toBe("checked_clean");
+    }
+  });
+
+  it("compares the TRIMMED values, so surrounding whitespace is not a conflict", () => {
+    const bundle = taggedBundle((kind) => ({
+      schema_version: `  guild.${kind}.v1 `,
+      type: `guild.${kind}.v1\n`,
+    }));
+
+    expect(bundle.rejected_links).toEqual([]);
+    expect(bundle.complete).toBe(true);
+  });
+
+  it("keeps a lone legacy `type` and a lone `schema_version` resolving as before", () => {
+    expect(taggedBundle((kind) => ({ type: `guild.${kind}.v1` })).rejected_links).toEqual([]);
+    expect(taggedBundle((kind) => ({ schema_version: `guild.${kind}.v1` })).complete).toBe(true);
+  });
+
+  it("refuses a NAMED schema_version beside a PRESENT BLANK legacy type", () => {
+    // Both properties are present and their trimmed values differ, so the record
+    // has made two statements about its own identity — and one of them is that it
+    // has no name. That is not one identity, and it is not "nothing to conflict
+    // with"; it is exactly the case the earlier non-empty comparison let through.
+    for (const blank of ["", "   ", "\n\t"]) {
+      const bundle = taggedBundle((kind) => ({ schema_version: `guild.${kind}.v1`, type: blank }));
+
+      expect(bundle.receipt_journal.checkpoint_disagreements).toEqual([]);
+      expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_type_tag_conflict"));
+      expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+      expect(bundle.complete).toBe(false);
+      for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+        expect(bundle.sections[kind].observation_state).toBe("not_observed");
+      }
+    }
+  });
+
+  it("refuses the MIRROR — a present blank schema_version beside a named legacy type", () => {
+    // Symmetry is the whole claim: the rule is about the two PROPERTIES, not
+    // about which of them the selection expression happens to prefer. A blank
+    // `schema_version` used to shadow the legacy tag and report the record as
+    // merely untyped, which describes a payload that names two things as one
+    // that names none.
+    for (const blank of ["", "   ", "\n\t"]) {
+      const bundle = taggedBundle((kind) => ({ schema_version: blank, type: `guild.${kind}.v1` }));
+
+      expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_type_tag_conflict"));
+      expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+      expect(bundle.complete).toBe(false);
+    }
+  });
+
+  it("distinguishes an ABSENT tag from a PRESENT BLANK one", () => {
+    // The distinction the whole correction rests on, asserted in one place and in
+    // both directions. Absent ⇒ one property, one identity, accepted exactly as
+    // before. Present-and-blank ⇒ a second claim that disagrees.
+    expect(taggedBundle((kind) => ({ schema_version: `guild.${kind}.v1` })).rejected_links).toEqual([]);
+    expect(
+      taggedBundle((kind) => ({ schema_version: `guild.${kind}.v1`, type: "" })).rejected_links.map((r) => r.reason),
+    ).toEqual(Array(6).fill("evidence_type_tag_conflict"));
+
+    expect(taggedBundle((kind) => ({ type: `guild.${kind}.v1` })).rejected_links).toEqual([]);
+    expect(
+      taggedBundle((kind) => ({ schema_version: "", type: `guild.${kind}.v1` })).rejected_links.map((r) => r.reason),
+    ).toEqual(Array(6).fill("evidence_type_tag_conflict"));
+
+    // …and the distinction is REALLY property presence, not a JavaScript
+    // undefined: the two payloads differ in the serialized bytes the boundary
+    // parses by exactly the empty `type` member.
+    const absent = JSON.stringify({ schema_version: "guild.artifact.v1", kind: "artifact" });
+    const blank = JSON.stringify({ schema_version: "guild.artifact.v1", type: "", kind: "artifact" });
+    expect(absent).toBe('{"schema_version":"guild.artifact.v1","kind":"artifact"}');
+    expect(blank).toBe('{"schema_version":"guild.artifact.v1","type":"","kind":"artifact"}');
+  });
+
+  it("reads two PRESENT BLANK tags as untyped, not as a conflict", () => {
+    // Both present, both trimming to empty: they do not DIFFER — they say the
+    // same nothing. The round-2 rung already refuses that, with the reason that
+    // actually describes it, and reporting a conflict here would describe the
+    // evidence wrongly in the bundle's own machine output.
+    for (const [sv, ty] of [
+      ["", ""],
+      ["  ", ""],
+      ["", "\n"],
+      ["  ", "\t "],
+    ]) {
+      const bundle = taggedBundle(() => ({ schema_version: sv, type: ty }));
+
+      expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_not_typed_envelope"));
+      expect(bundle.complete).toBe(false);
+    }
+  });
+
+  it("leaves a PRESENT NON-STRING tag on the fail-closed untyped rung", () => {
+    // A number, an object, a JSON null: none of them names a type this boundary
+    // can read, so none becomes a conflict and none is converted into a newly
+    // accepted tag — the round-2 rung refuses them all, with its own reason.
+    expect(
+      taggedBundle((kind) => ({ schema_version: 42, type: `guild.${kind}.v1` })).rejected_links.map((r) => r.reason),
+    ).toEqual(Array(6).fill("evidence_not_typed_envelope"));
+    expect(
+      taggedBundle((kind) => ({ schema_version: { v: `guild.${kind}.v1` }, type: `guild.${kind}.v1` })).rejected_links.map(
+        (r) => r.reason,
+      ),
+    ).toEqual(Array(6).fill("evidence_not_typed_envelope"));
+
+    // A LONE unreadable tag lands on exactly the rung it always did: the presence
+    // gate owes this boundary refusals for two present tags, it does not move the
+    // single-tag rung.
+    expect(taggedBundle(() => ({ schema_version: 42 })).rejected_links.map((r) => r.reason)).toEqual(
+      Array(6).fill("evidence_not_typed_envelope"),
+    );
+    expect(taggedBundle(() => ({ type: 42 })).rejected_links.map((r) => r.reason)).toEqual(
+      Array(6).fill("evidence_not_typed_envelope"),
+    );
+  });
+
+  it("refuses an UNREADABLE tag beside a VALID one in BOTH directions", () => {
+    // The asymmetry an earlier pass at this correction left behind, pinned shut.
+    // `??` reached the number in `{schema_version: 42, type: "…v1"}` and refused
+    // the record as untyped; in the mirror `{schema_version: "…v1", type: 42}` it
+    // reached the readable side and typed the record from it ALONE — the same
+    // ambiguous pair of claims, accepted one way round and refused the other. The
+    // asymmetry was in the selection expression, never in the evidence.
+    const unreadablePairs: Array<(kind: DebugSectionKind) => Record<string, unknown>> = [
+      (kind) => ({ schema_version: `guild.${kind}.v1`, type: 42 }),
+      (kind) => ({ schema_version: 42, type: `guild.${kind}.v1` }),
+      (kind) => ({ schema_version: `guild.${kind}.v1`, type: null }),
+      (kind) => ({ schema_version: null, type: `guild.${kind}.v1` }),
+    ];
+
+    for (const tagsFor of unreadablePairs) {
+      const bundle = taggedBundle(tagsFor);
+
+      // UNTYPED, not a tag conflict: two values that cannot both be READ have not
+      // been shown to DIFFER, and the bundle's own machine output should not say
+      // they did.
+      expect(bundle.rejected_links.map((r) => r.reason)).toEqual(Array(6).fill("evidence_not_typed_envelope"));
+      expect(bundle.unlinked_kinds).toEqual([...DEBUG_BUNDLE_SECTION_KINDS]);
+      expect(bundle.complete).toBe(false);
+      for (const kind of DEBUG_BUNDLE_SECTION_KINDS) {
+        expect(bundle.sections[kind].observation_state).toBe("not_observed");
+        expect(bundle.sections[kind].links).toEqual([]);
+      }
+    }
+  });
+
+  it("lets ONE contradictory JSON-lines line poison the whole linked object", () => {
+    const jsonl = Buffer.from(
+      '{"schema_version":"guild.normalized_event.v1","a":1}\n' +
+        '{"schema_version":"guild.normalized_event.v1","type":"guild.policy_decision.v1","a":2}\n',
+      "utf8",
+    );
+    const bundle = build(
+      mkRoot(),
+      [
+        ...fullLinkSet().filter((l) => l.kind !== "normalized_event"),
+        {
+          kind: "normalized_event",
+          ref: "guild://evidence/events.jsonl",
+          media_type: "application/x-ndjson",
+          hash: sha256(jsonl),
+          bound_by: BINDING,
+        },
+      ],
+      { evidence: mapResolver({ ...EVIDENCE_STORE, "guild://evidence/events.jsonl": { bytes: jsonl } }) },
+    );
+
+    expect(bundle.rejected_links).toEqual([
+      { kind: "normalized_event", ref: "guild://evidence/events.jsonl", reason: "evidence_type_tag_conflict" },
+    ]);
+    expect(bundle.complete).toBe(false);
+  });
+
+  it("poisons the object on a BLANK-tag line too — presence carries through JSON lines", () => {
+    // The per-line rule inherits the presence comparison unchanged: a line whose
+    // second tag property is present and blank names two things, so the object
+    // the bundle actually links is inadmissible.
+    const jsonl = Buffer.from(
+      '{"schema_version":"guild.normalized_event.v1","a":1}\n' +
+        '{"schema_version":"guild.normalized_event.v1","type":"  ","a":2}\n',
+      "utf8",
+    );
+    const bundle = build(
+      mkRoot(),
+      [
+        ...fullLinkSet().filter((l) => l.kind !== "normalized_event"),
+        {
+          kind: "normalized_event",
+          ref: "guild://evidence/events.jsonl",
+          media_type: "application/x-ndjson",
+          hash: sha256(jsonl),
+          bound_by: BINDING,
+        },
+      ],
+      { evidence: mapResolver({ ...EVIDENCE_STORE, "guild://evidence/events.jsonl": { bytes: jsonl } }) },
+    );
+
+    expect(bundle.rejected_links).toEqual([
+      { kind: "normalized_event", ref: "guild://evidence/events.jsonl", reason: "evidence_type_tag_conflict" },
+    ]);
+    expect(bundle.complete).toBe(false);
+  });
+});

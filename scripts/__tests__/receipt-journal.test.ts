@@ -1928,3 +1928,400 @@ describe("MH-06-R5-B1 — mutation authority is retained from acquisition to rel
     fs.rmdirSync(lock);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R6-B1 / MH-06-R6-B2 — the lock object is identified BY the acquisition,
+// and every mutation gate sits in the same frame as its syscall
+//
+// Round 6 kept authority as a set of stat comparisons taken AFTER the acquiring
+// call returned, and re-proved them one function call before each mutation. The
+// round-6 review occupied both intervals:
+//
+//   - B1: the lock directory was replaced between `acquireJournalLock` returning
+//     and the `lstat` that sampled it. The replacement became this caller's
+//     recorded identity, every later check agreed with it, the append landed, and
+//     the release deleted the REPLACEMENT holder's lock;
+//   - B2: a competing hard link was introduced after `verify("before the append")`
+//     and before the append syscall. The claim failed — after the journal had
+//     already gained the second record.
+//
+// So the requirement is mechanical, not diligent: the identity must come OUT of
+// the acquisition, and the last proof before a mutation must be inside the call
+// frame that performs it. A refusal that arrives after the bytes changed is not
+// a refusal.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R6-B1/B2 — acquisition yields the identity, and the gate is in the syscall frame", () => {
+  /** One durable record, so the journal is a real file with a real inode. */
+  function seeded() {
+    const root = mkRoot();
+    const p = paths(root);
+    expect(appendReceipt(p, input({ event_id: "seed", operation_id: "op-seed" })).disposition).toBe("succeeded");
+    return { root, ...p };
+  }
+
+  const TORN = '{"schema_version":"guild.receipt_record.v1","seq';
+
+  /** Give the physical journal a SECOND name whose own lock is already held. */
+  function aliasWithHeldLock(p: { journal: string }) {
+    const alias = path.join(path.dirname(p.journal), "alias.jsonl");
+    const aliasLock = `${alias}.lock`;
+    return {
+      alias,
+      aliasLock,
+      inject: () => {
+        fs.linkSync(p.journal, alias);
+        fs.mkdirSync(aliasLock);
+      },
+    };
+  }
+
+  /**
+   * Replace the lock object in the EXACT window the review used: after the
+   * acquiring primitive returned, before the caller could look at what it got.
+   * The seam wrapper is the only code that can occupy that interval, which is
+   * precisely why the identity has to be produced by the primitive itself.
+   */
+  function swapLockDuringAcquisition(): { io: JournalIo; swapped: () => boolean } {
+    let swapped = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        const got = defaultJournalIo.acquireLock!(lockPath);
+        if (got && !swapped) {
+          swapped = true;
+          fs.rmSync(lockPath, { recursive: true, force: true });
+          fs.mkdirSync(lockPath);
+        }
+        return got;
+      },
+    };
+    return { io, swapped: () => swapped };
+  }
+
+  it("never adopts a lock object substituted after its own acquisition", () => {
+    const p = seeded();
+    const lock = journalLockPath(p);
+    const { io, swapped } = swapLockDuringAcquisition();
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(swapped()).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+    // THE POINT: nothing was mutated under an exclusion this caller never held.
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    // …and the replacement holder's lock is still THEIRS. Round 6 deleted it.
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("refuses authority outright when its own lock object is replaced mid-acquisition", () => {
+    // The primitive, directly: `acquireJournalAuthority` must not hand back an
+    // authority whose lock is a directory somebody else created.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    const { io, swapped } = swapLockDuringAcquisition();
+    const replacementInode = (() => {
+      const acquired = acquireJournalAuthority(p.journal, io, { lock_max_attempts: 2, lock_wait_ms: 1 }, "append");
+      expect(swapped()).toBe(true);
+      expect(acquired.ok).toBe(false);
+      expect(acquired.failure?.code).toBe("journal_identity_unstable");
+      return fs.statSync(lock).ino;
+    })();
+
+    // The lock at that name was never this caller's, so it is left intact.
+    expect(fs.existsSync(lock)).toBe(true);
+    expect(fs.statSync(lock).ino).toBe(replacementInode);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("refuses BEFORE the append syscall when a link appears after the final check", () => {
+    const p = seeded();
+    const { aliasLock, inject } = aliasWithHeldLock(p);
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      // The seam wrapper occupies the whole interval between the caller's last
+      // gate and the write itself — the exact interleaving of MH-06-R6-B2.
+      appendLine(...args: Parameters<JournalIo["appendLine"]>) {
+        if (!fired) {
+          fired = true;
+          inject();
+        }
+        defaultJournalIo.appendLine(...args);
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(fired).toBe(true);
+    expect(fs.statSync(p.journal).nlink).toBe(2); // the race really happened
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_ambiguous");
+    // THE POINT: the journal never gained the second record. Round 6 returned
+    // this same typed failure with `journal_records: 2` already on disk.
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(fs.existsSync(aliasLock)).toBe(true);
+  });
+
+  it("refuses BEFORE the append syscall when the canonical parent is replaced after the final check", () => {
+    const p = seeded();
+    let fired = false;
+    let replacementLock = "";
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      appendLine(...args: Parameters<JournalIo["appendLine"]>) {
+        if (!fired) {
+          fired = true;
+          const parent = path.dirname(fs.realpathSync(p.journal));
+          const bytes = fs.readFileSync(p.journal);
+          fs.renameSync(parent, `${parent}-moved`);
+          fs.mkdirSync(parent, { recursive: true });
+          fs.writeFileSync(path.join(parent, path.basename(p.journal)), bytes);
+          replacementLock = `${path.join(parent, path.basename(p.journal))}.lock`;
+          fs.mkdirSync(replacementLock);
+        }
+        defaultJournalIo.appendLine(...args);
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(fired).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+    // Nothing landed in the replacement this writer never locked…
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    // …and the replacement holder's lock survives.
+    expect(fs.existsSync(replacementLock)).toBe(true);
+  });
+
+  it("refuses BEFORE the checkpoint write when the domain detaches after the final check", () => {
+    const p = seeded();
+    const { aliasLock, inject } = aliasWithHeldLock(p);
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      writeCheckpoint(...args: Parameters<JournalIo["writeCheckpoint"]>) {
+        if (!fired) {
+          fired = true;
+          inject();
+        }
+        defaultJournalIo.writeCheckpoint(...args);
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(fired).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_ambiguous");
+    // The record was appended under a sound domain — the round-1 shape of a
+    // durable line with no durable CLAIM — but the checkpoint did NOT move.
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.record_count).toBe(1);
+    expect(fs.existsSync(aliasLock)).toBe(true);
+  });
+
+  it("refuses BEFORE the truncation syscall when a link appears after the final check", () => {
+    const p = seeded();
+    fs.appendFileSync(p.journal, TORN, "utf8");
+    const bytesBefore = fs.readFileSync(p.journal, "utf8");
+    const { aliasLock, inject } = aliasWithHeldLock(p);
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      truncate(...args: Parameters<JournalIo["truncate"]>) {
+        if (!fired) {
+          fired = true;
+          inject();
+        }
+        defaultJournalIo.truncate(...args);
+      },
+    };
+
+    const repair = repairTornTail(p.journal, io, { lock_max_attempts: 2, lock_wait_ms: 1 });
+
+    expect(fired).toBe(true);
+    expect(repair.disposition).toBe("failed");
+    expect(repair.failure?.code).toBe("journal_identity_ambiguous");
+    expect(repair.removed_bytes).toBe(0);
+    // THE POINT: the destructive syscall never ran.
+    expect(fs.readFileSync(p.journal, "utf8")).toBe(bytesBefore);
+    expect(scanReceiptJournal(p.journal).integrity).toBe("truncated_tail");
+    expect(fs.existsSync(aliasLock)).toBe(true);
+  });
+
+  it("still appends, checkpoints and truncates when the domain is held THROUGH the syscall", () => {
+    // The discriminator for both gates: a guard that refused everything would
+    // pass every assertion above and pin nothing.
+    const p = seeded();
+    let appends = 0;
+    let checkpoints = 0;
+    let truncations = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      appendLine(...args: Parameters<JournalIo["appendLine"]>) {
+        appends += 1;
+        defaultJournalIo.appendLine(...args);
+      },
+      writeCheckpoint(...args: Parameters<JournalIo["writeCheckpoint"]>) {
+        checkpoints += 1;
+        defaultJournalIo.writeCheckpoint(...args);
+      },
+      truncate(...args: Parameters<JournalIo["truncate"]>) {
+        truncations += 1;
+        defaultJournalIo.truncate(...args);
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io);
+    expect(out.disposition).toBe("succeeded");
+    expect(out.durable).toBe(true);
+    expect(out.sequence).toBe(2);
+    expect(appends).toBe(1);
+    expect(checkpoints).toBe(1);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
+
+    fs.appendFileSync(p.journal, TORN, "utf8");
+    const repair = repairTornTail(p.journal, io);
+    expect(repair.disposition).toBe("succeeded");
+    expect(repair.removed_bytes).toBe(Buffer.byteLength(TORN, "utf8"));
+    expect(truncations).toBe(1);
+    expect(scanReceiptJournal(p.journal).integrity).toBe("intact");
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R6-B3 — the append's checkpoint parent is part of the exclusion domain
+//
+// `appendReceipt` replaces the checkpoint too. When the caller puts it outside
+// the journal's own directory, the journal-parent pin says nothing about it, so
+// the domain has to name it explicitly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R6-B3 — an append holds the checkpoint's parent when it lives elsewhere", () => {
+  function splitPaths(root: string) {
+    const p = {
+      journal: path.join(root, "receipts", "journal.jsonl"),
+      checkpoint: path.join(root, "state", "checkpoint.json"),
+    };
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.mkdirSync(path.dirname(p.checkpoint), { recursive: true });
+    return p;
+  }
+
+  it("refuses when the FOREIGN checkpoint parent is replaced under the transaction", () => {
+    const p = splitPaths(mkRoot());
+    expect(appendReceipt(p, input({ event_id: "seed", operation_id: "op-seed" })).disposition).toBe("succeeded");
+
+    let fired = false;
+    let replacement = "";
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(...args: Parameters<JournalIo["readAll"]>) {
+        const content = defaultJournalIo.readAll(...args);
+        if (!fired && path.basename(args[0]) === "journal.jsonl") {
+          fired = true;
+          replacement = fs.realpathSync(path.dirname(p.checkpoint));
+          fs.renameSync(replacement, `${replacement}-moved`);
+          fs.mkdirSync(replacement, { recursive: true });
+        }
+        return content;
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(fired).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+    // Nothing was mutated on either side of the split layout.
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(fs.readdirSync(replacement)).toEqual([]);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+
+  it("refuses when the checkpoint's parent SYMLINK is repointed at an untouched directory", () => {
+    // The neighbouring bypass: no physical directory is replaced at all. `<root>/a`
+    // and `<root>/b` both exist and neither is modified — only the NAME between
+    // the caller and the destination moves, so a device/inode pin alone sees
+    // nothing. `atomicWrite` renames into `dirname(checkpointPath)`, so that is
+    // the directory this transaction was granted and the only one it may use.
+    const root = mkRoot();
+    const p = {
+      journal: path.join(root, "receipts", "journal.jsonl"),
+      checkpoint: path.join(root, "link", "checkpoint.json"),
+    };
+    fs.mkdirSync(path.join(root, "receipts"), { recursive: true });
+    fs.mkdirSync(path.join(root, "a"), { recursive: true });
+    fs.mkdirSync(path.join(root, "b"), { recursive: true });
+    fs.symlinkSync(path.join(root, "a"), path.join(root, "link"));
+    expect(appendReceipt(p, input({ event_id: "seed", operation_id: "op-seed" })).disposition).toBe("succeeded");
+
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(...args: Parameters<JournalIo["readAll"]>) {
+        const content = defaultJournalIo.readAll(...args);
+        if (!fired && path.basename(args[0]) === "journal.jsonl") {
+          fired = true;
+          fs.unlinkSync(path.join(root, "link"));
+          fs.symlinkSync(path.join(root, "b"), path.join(root, "link"));
+        }
+        return content;
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(fired).toBe(true);
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_identity_unstable");
+    // Nothing was written into the directory this writer was never granted…
+    expect(fs.readdirSync(path.join(root, "b"))).toEqual([]);
+    // …and the one it WAS granted still holds only the seed's checkpoint.
+    expect(fs.readdirSync(path.join(root, "a"))).toEqual(["checkpoint.json"]);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+  });
+
+  it("still appends and checkpoints across a split layout that is held throughout", () => {
+    const p = splitPaths(mkRoot());
+    expect(appendReceipt(p, input({ event_id: "seed", operation_id: "op-seed" })).disposition).toBe("succeeded");
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }));
+
+    expect(out.disposition).toBe("succeeded");
+    expect(out.durable).toBe(true);
+    expect(out.sequence).toBe(2);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+});

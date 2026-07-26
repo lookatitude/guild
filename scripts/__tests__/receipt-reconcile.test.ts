@@ -2196,3 +2196,187 @@ describe("MH-06-R5-B2 — checkpoint repair cannot report clean after losing aut
     expect(out.blocks_clean_close).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R6-B3 — the checkpoint this repair mutates is held, wherever it lives
+//
+// Round 6 pinned `dirname(identity.path)` — the JOURNAL's parent — and wrote the
+// checkpoint by pathname. Round 6's review replaced a checkpoint parent that sits
+// somewhere else entirely, left every journal-side check satisfiable, and got
+// `attempted: true`, `persisted: true`, `verified: true`, `succeeded` and
+// `blocks_clean_close: false` for a checkpoint written into a directory the
+// repair never held.
+//
+// A repair is a mutation of the checkpoint FILE, so the exclusion domain has to
+// cover the checkpoint's own parent whenever that differs from the journal's —
+// before the write, and again before `verified` may be set.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R6-B3 — a checkpoint outside the journal's directory is held too", () => {
+  /** Journal and checkpoint in DIFFERENT directories — the uncovered layout. */
+  function splitPaths(root: string) {
+    const p = {
+      journal: path.join(root, "receipts", "journal.jsonl"),
+      checkpoint: path.join(root, "state", "checkpoint.json"),
+    };
+    fs.mkdirSync(path.dirname(p.journal), { recursive: true });
+    fs.mkdirSync(path.dirname(p.checkpoint), { recursive: true });
+    return p;
+  }
+
+  /** One durable record and NO checkpoint — a disagreement a repair may fix. */
+  function repairable() {
+    const p = splitPaths(mkRoot());
+    writeJournal(p, [sealed(1, { event_id: "e1", operation_id: "op-1" })]);
+    fs.rmSync(p.checkpoint, { force: true });
+    return p;
+  }
+
+  /** Swap the checkpoint's own parent for a different directory object. */
+  function replaceCheckpointParent(p: { checkpoint: string }) {
+    const parent = fs.realpathSync(path.dirname(p.checkpoint));
+    const moved = `${parent}-moved`;
+    fs.renameSync(parent, moved);
+    fs.mkdirSync(parent, { recursive: true });
+    return { parent, moved };
+  }
+
+  function repair(p: { journal: string; checkpoint: string }, over: Record<string, unknown> = {}) {
+    return reconcileReceiptJournal({
+      journalPath: p.journal,
+      checkpointPath: p.checkpoint,
+      run_id: "run-mh-06",
+      producerCheckpoint: { last_sequence: 1, record_count: 1 },
+      reconciled_at: "2026-07-26T03:00:00.000Z",
+      repair_checkpoint: true,
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+      ...over,
+    });
+  }
+
+  it("refuses a requested repair when the FOREIGN checkpoint parent is replaced before the write", () => {
+    const p = repairable();
+    let swap: { parent: string; moved: string } | null = null;
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(...args: Parameters<JournalIo["readAll"]>) {
+        const content = defaultJournalIo.readAll(...args);
+        if (!fired && path.basename(args[0]) === "journal.jsonl") {
+          fired = true;
+          swap = replaceCheckpointParent(p);
+        }
+        return content;
+      },
+    };
+
+    const out = repair(p, { io });
+    const swapped = swap as unknown as { parent: string; moved: string };
+
+    expect(fired).toBe(true);
+    expect(swapped).not.toBeNull();
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.persisted).toBe(false);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_identity_unstable");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+    // THE POINT: the replacement was not modified. Round 6 wrote the repaired
+    // checkpoint into it and called that a verified clean success.
+    expect(fs.readdirSync(swapped.parent)).toEqual([]);
+    expect(readCheckpointState(p.checkpoint).state).toBe("absent");
+  });
+
+  it("refuses to report VERIFIED when the FOREIGN checkpoint parent is replaced after the write", () => {
+    const p = repairable();
+    let swap: { parent: string; moved: string } | null = null;
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      writeCheckpoint(...args: Parameters<JournalIo["writeCheckpoint"]>) {
+        defaultJournalIo.writeCheckpoint(...args);
+        if (!fired) {
+          fired = true;
+          const written = fs.readFileSync(args[0]);
+          swap = replaceCheckpointParent(p);
+          // The replacement agrees with the journal PERFECTLY — internal
+          // agreement is exactly what round 5 proved is not authority.
+          fs.writeFileSync(p.checkpoint, written);
+        }
+      },
+    };
+
+    const out = repair(p, { io });
+
+    expect(fired).toBe(true);
+    expect(swap).not.toBeNull();
+    expect(out.checkpoint_repair.attempted).toBe(true);
+    expect(out.checkpoint_repair.persisted).toBe(true);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_identity_unstable");
+    expect(out.checkpoint_repair.residual_disagreements).toEqual([]);
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("still repairs, verifies and closes cleanly over a checkpoint that lives elsewhere", () => {
+    // The discriminator: covering a foreign parent must not mean refusing one.
+    const p = repairable();
+    const out = repair(p);
+
+    expect(out.checkpoint_repair.attempted).toBe(true);
+    expect(out.checkpoint_repair.persisted).toBe(true);
+    expect(out.checkpoint_repair.verified).toBe(true);
+    expect(out.checkpoint_repair.failure).toBeNull();
+    expect(out.checkpoint_repair.residual_disagreements).toEqual([]);
+    expect(out.disposition).toBe("succeeded");
+    expect(out.blocks_clean_close).toBe(false);
+    expect(readCheckpointState(p.checkpoint).state).toBe("present");
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+  });
+
+  it("keeps `repair_not_permitted` distinct when the foreign parent is held throughout", () => {
+    // The deliberate distinction, re-pinned in the split layout: a refusal made
+    // WITH authority is not a denial OF authority.
+    const p = splitPaths(mkRoot());
+    writeJournal(p, [sealed(1, { event_id: "e1", operation_id: "op-1", run_id: "OTHER-RUN" })]);
+
+    const out = repair(p);
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_not_permitted");
+    expect(out.checkpoint_repair.failure?.message).toContain("OTHER-RUN");
+    expect(out.blocks_clean_close).toBe(true);
+  });
+
+  it("still refuses when the JOURNAL parent moves and the checkpoint parent does not", () => {
+    // The neighbouring interleaving: covering the checkpoint's parent must not
+    // weaken the journal-side pin that round 5 established.
+    const p = repairable();
+    let fired = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      readAll(...args: Parameters<JournalIo["readAll"]>) {
+        const content = defaultJournalIo.readAll(...args);
+        if (!fired && path.basename(args[0]) === "journal.jsonl") {
+          fired = true;
+          const parent = fs.realpathSync(path.dirname(p.journal));
+          const bytes = fs.readFileSync(p.journal);
+          fs.renameSync(parent, `${parent}-moved`);
+          fs.mkdirSync(parent, { recursive: true });
+          fs.writeFileSync(p.journal, bytes);
+        }
+        return content;
+      },
+    };
+
+    const out = repair(p, { io });
+    expect(fired).toBe(true);
+    expect(out.checkpoint_repair.attempted).toBe(false);
+    expect(out.checkpoint_repair.verified).toBe(false);
+    expect(out.checkpoint_repair.failure?.code).toBe("repair_identity_unstable");
+    expect(out.disposition).toBe("failed");
+    expect(out.blocks_clean_close).toBe(true);
+    expect(readCheckpointState(p.checkpoint).state).toBe("absent");
+  });
+});

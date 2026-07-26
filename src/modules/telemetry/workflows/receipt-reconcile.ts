@@ -64,6 +64,7 @@ import {
   checkpointsIdentical,
   highestSequenceRecord,
   acquireJournalAuthority,
+  JournalAuthorityDetachedError,
   verifyReceiptRecord,
   isValidReceiptRecordShape,
   analyzeReceiptRecords,
@@ -535,6 +536,17 @@ function vetRecoveries(
  * authority is re-proved before the checkpoint is written and again before
  * `verified` may be set, and a loss becomes `repair_identity_ambiguous` /
  * `repair_identity_unstable` — both of which are denials of exclusive access.
+ *
+ * AND THE THING BEING REPAIRED IS THE CHECKPOINT (MH-06-R6-B3). Round 6 pinned
+ * the JOURNAL's parent and wrote the checkpoint by pathname, so a caller that
+ * keeps its checkpoint in another directory could have that directory replaced
+ * and still be told `attempted`, `persisted`, `verified`, `succeeded` and
+ * `blocks_clean_close: false` about a file written somewhere this repair never
+ * held. The checkpoint path is therefore named AT ACQUISITION, its own parent
+ * joins the exclusion domain when it differs from the journal's, and the write
+ * goes through the bound seam so the final proof happens in the frame that
+ * replaces the file (MH-06-R6-B2). A replacement before the write refuses without
+ * touching it; a replacement after the write refuses to call it verified.
  */
 export function reconcileReceiptJournal(opts: ReconcileOptions): ReconciliationOutcomeV1 {
   const io = opts.io ?? defaultJournalIo;
@@ -545,6 +557,9 @@ export function reconcileReceiptJournal(opts: ReconcileOptions): ReconciliationO
     io,
     { lock_max_attempts: opts.lock_max_attempts, lock_wait_ms: opts.lock_wait_ms },
     "read",
+    // The checkpoint this repair may MUTATE, named at acquisition so its own
+    // directory is part of the domain when it is not the journal's (MH-06-R6-B3).
+    opts.checkpointPath,
   );
   // Without exclusive access there is no trustworthy snapshot to repair FROM, so
   // the repair fails closed — but the read-only verdict is still produced and
@@ -857,13 +872,24 @@ function reconcileWithin(
     } else {
       checkpoint_repair.attempted = true;
       try {
-        io.writeCheckpoint(opts.checkpointPath, `${JSON.stringify(checkpoint_after, null, 2)}\n`);
+        // Through the BOUND seam, so the last proof of the domain — including the
+        // checkpoint's own parent — happens in the frame that replaces the file
+        // rather than one call earlier (MH-06-R6-B2 / MH-06-R6-B3).
+        journalIo.writeCheckpoint(opts.checkpointPath, `${JSON.stringify(checkpoint_after, null, 2)}\n`);
         checkpoint_repair.persisted = true;
       } catch (err) {
-        checkpoint_repair.failure = {
-          code: "repair_write_failed",
-          message: err instanceof Error ? err.message : String(err),
-        };
+        if (err instanceof JournalAuthorityDetachedError) {
+          // Refused BEFORE the mutation: nothing was written, so nothing was
+          // attempted either, and losing access is the same denial as never
+          // having it.
+          checkpoint_repair.attempted = false;
+          checkpoint_repair.failure = identityDenial(err.failure);
+        } else {
+          checkpoint_repair.failure = {
+            code: "repair_write_failed",
+            message: err instanceof Error ? err.message : String(err),
+          };
+        }
       }
       if (checkpoint_repair.persisted) {
         // Prove it three ways: the file must re-read as the checkpoint we wrote,

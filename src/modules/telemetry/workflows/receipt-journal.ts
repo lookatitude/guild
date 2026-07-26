@@ -86,6 +86,24 @@
  *   one this caller acquired is LEFT ALONE, because deleting a stranger's lock
  *   hands two writers one journal.
  *
+ *   RETENTION IS ONLY AS GOOD AS WHERE IT STARTS AND WHERE IT ENDS (MH-06-R6-B1,
+ *   MH-06-R6-B2, MH-06-R6-B3). Round 6 learned the lock's identity by `lstat`ing
+ *   the pathname AFTER the acquiring call returned, so a directory substituted in
+ *   that interval became this caller's own recorded identity — every later check
+ *   agreed with it, the append landed, and the release deleted the substitute
+ *   holder's exclusion. And it proved the domain one function call before each
+ *   mutation, which left the entire seam invocation sitting between the proof and
+ *   the syscall. Three things follow, and they are mechanical rather than diligent:
+ *
+ *     - the acquiring primitive NAMES what it created, with nothing in between,
+ *       and that grant is the only identity the transaction will ever hold;
+ *     - the LAST proof before a mutation happens inside the innermost seam, in the
+ *       same call frame as `write(2)` / `ftruncate(2)` / the checkpoint
+ *       replacement, and it refuses by throwing rather than by returning late;
+ *     - the exclusion domain names the CHECKPOINT'S own parent as well, because a
+ *       checkpoint is not required to live beside the journal and the journal's
+ *       parent says nothing about a directory somewhere else.
+ *
  *   Durability is then PROVEN, not assumed: after the append the journal is
  *   re-scanned for the exact sealed record, and after the checkpoint write the
  *   checkpoint file is re-read and compared field by field. A write that lands
@@ -478,6 +496,94 @@ export interface JournalHandle {
    * being misreported as a moving name.
    */
   readonly writable: boolean;
+  /**
+   * Re-prove the retained exclusion domain INSIDE the call frame that performs
+   * the mutation syscall, and THROW `JournalAuthorityDetachedError` when it is no
+   * longer held (MH-06-R6-B2).
+   *
+   * Round 6 proved the domain one function call before each mutation, which left
+   * the whole seam invocation — every wrapper, every scheduler slice, every
+   * competing process — sitting between the proof and the write. The review put a
+   * competing hard link in exactly that interval and the record still landed. A
+   * gate the caller performs cannot close a window the caller does not occupy, so
+   * the LAST proof belongs to the innermost implementation, immediately before
+   * `write(2)` / `ftruncate(2)` / the checkpoint replacement.
+   *
+   * OPTIONAL, so any handle literal built outside this module still satisfies the
+   * type and behaves exactly as it did before.
+   */
+  readonly guard?: ((stage: string) => void) | null;
+}
+
+/**
+ * A descriptor value that pins NOTHING: the journal did not exist when authority
+ * was acquired, so there is no inode to hold — but the mutation that is about to
+ * create it still has to pass the gate. A binding carrying this fd offers only
+ * `guard`, and every default seam falls back to the pathname for the IO itself.
+ */
+const UNPINNED_FD = -1;
+
+/** Raised by `JournalHandle.guard` when the domain detached before a mutation. */
+export class JournalAuthorityDetachedError extends Error {
+  readonly failure: JournalIdentityFailure;
+  constructor(failure: JournalIdentityFailure) {
+    super(failure.message);
+    this.name = "JournalAuthorityDetachedError";
+    this.failure = failure;
+  }
+}
+
+/**
+ * The exact lock object an acquisition created, identified BY that acquisition
+ * (MH-06-R6-B1).
+ *
+ * Round 6 took the lock and then `lstat`ed the pathname to learn what it had
+ * taken. The review replaced the directory in between, and the replacement became
+ * this caller's recorded identity: every later check agreed with it, the append
+ * landed, and the release deleted the replacement holder's exclusion. An identity
+ * sampled after the fact is not the identity of what was acquired — so the
+ * primitive that creates the object is the only thing allowed to name it, and it
+ * does so with no seam, no wrapper and no caller code in between.
+ */
+export interface JournalLockGrant {
+  /** The pathname the lock was created at. */
+  readonly path: string;
+  /** Device/inode of the directory this call created. */
+  readonly device: number;
+  readonly inode: number;
+  /**
+   * A retained descriptor on that same directory, so the object stays reachable
+   * as an OS reference rather than only as a name. `null` where a platform does
+   * not permit opening a directory; the device/inode comparison still applies.
+   */
+  readonly fd: number | null;
+}
+
+/**
+ * Grants published by `defaultJournalIo.acquireLock`, claimed by the acquisition
+ * that asked for them.
+ *
+ * A seam wrapper that calls the default primitive and then returns a bare
+ * `true` — discarding the grant — must not be able to erase the identity the
+ * default captured, because that is the very trick MH-06-R6-B1 turns on. The
+ * grant therefore also travels out of band, keyed by the lock path this process
+ * just created. It holds at most one entry per path, it is consumed by the claim,
+ * and it reads no clock, so nothing here is time- or order-dependent beyond the
+ * single acquisition it belongs to.
+ */
+const PUBLISHED_LOCK_GRANTS = new Map<string, JournalLockGrant>();
+
+function publishLockGrant(grant: JournalLockGrant): JournalLockGrant {
+  const stale = PUBLISHED_LOCK_GRANTS.get(grant.path);
+  if (stale && stale.fd !== null) closeQuietly(stale.fd);
+  PUBLISHED_LOCK_GRANTS.set(grant.path, grant);
+  return grant;
+}
+
+function claimLockGrant(lockPath: string): JournalLockGrant | null {
+  const grant = PUBLISHED_LOCK_GRANTS.get(lockPath) ?? null;
+  PUBLISHED_LOCK_GRANTS.delete(lockPath);
+  return grant;
 }
 
 export interface JournalIo {
@@ -492,19 +598,33 @@ export interface JournalIo {
   appendLine(journalPath: string, text: string, bound?: JournalHandle | null): void;
   /** Full journal contents, or null when the file does not exist. */
   readAll(journalPath: string, bound?: JournalHandle | null): string | null;
-  /** Atomically replace the checkpoint file. Throws on failure. */
-  writeCheckpoint(checkpointPath: string, content: string): void;
+  /**
+   * Atomically replace the checkpoint file. Throws on failure.
+   *
+   * `bound` is the retained authority for this transaction, carried in on the
+   * same OPTIONAL trailing convention the journal methods use — so every existing
+   * two-parameter fake keeps type-checking and keeps firing. The default seam
+   * uses it for one thing: the pre-mutation gate, immediately before the
+   * replacement (MH-06-R6-B2 / MH-06-R6-B3).
+   */
+  writeCheckpoint(checkpointPath: string, content: string, bound?: JournalHandle | null): void;
   /** Shrink the journal to `size` bytes. Throws on failure. */
   truncate(journalPath: string, size: number, bound?: JournalHandle | null): void;
   /**
-   * ATOMICALLY take the cross-process lock. `true` when this caller now holds
-   * it, `false` when another holder has it. Throws only on a real IO fault
-   * (which must fail the operation closed, not be read as "not held").
+   * ATOMICALLY take the cross-process lock. Truthy when this caller now holds it,
+   * `false` when another holder has it. Throws only on a real IO fault (which
+   * must fail the operation closed, not be read as "not held").
+   *
+   * The default primitive returns a `JournalLockGrant` — the identity of the
+   * object it just created — because an identity sampled after the call returns
+   * is the identity of whatever is there NOW, not of what was acquired
+   * (MH-06-R6-B1). A seam that returns a plain `boolean` still type-checks and
+   * still works; it simply supplies no identity of its own.
    *
    * Optional so existing `JournalIo` fakes keep type-checking; the default
    * implementation is used whenever a seam does not supply one.
    */
-  acquireLock?(lockPath: string): boolean;
+  acquireLock?(lockPath: string): boolean | JournalLockGrant;
   /** Release a lock this caller holds. Must not throw when it is already gone. */
   releaseLock?(lockPath: string): void;
 }
@@ -534,9 +654,13 @@ function readAllSync(fd: number): string {
 
 export const defaultJournalIo: JournalIo = {
   appendLine(journalPath, text, bound) {
+    // THE LAST PROOF, IN THE SYSCALL'S OWN FRAME (MH-06-R6-B2). Nothing — no seam
+    // wrapper, no competing process scheduled in between — can occupy the gap
+    // between this line and the write below.
+    bound?.guard?.("immediately before the append syscall");
     // A retained handle is opened O_APPEND, so this write lands at the end of the
     // PHYSICAL file the lock names — a rename of the parent cannot redirect it.
-    if (bound && bound.writable) {
+    if (bound && bound.writable && bound.fd >= 0) {
       writeAllSync(bound.fd, text);
       fs.fsyncSync(bound.fd);
       return;
@@ -551,7 +675,7 @@ export const defaultJournalIo: JournalIo = {
     }
   },
   readAll(journalPath, bound) {
-    if (bound) {
+    if (bound && bound.fd >= 0) {
       try {
         return readAllSync(bound.fd);
       } catch {
@@ -564,11 +688,17 @@ export const defaultJournalIo: JournalIo = {
       return null;
     }
   },
-  writeCheckpoint(checkpointPath, content) {
+  writeCheckpoint(checkpointPath, content, bound) {
+    // The checkpoint is the durability claim made visible, and it need not live
+    // beside the journal — so the domain that covers ITS parent is re-proved here,
+    // in the frame that replaces it (MH-06-R6-B2 / MH-06-R6-B3).
+    bound?.guard?.("immediately before the checkpoint replacement");
     atomicWrite(checkpointPath, content);
   },
   truncate(journalPath, size, bound) {
-    if (bound && bound.writable) {
+    // A truncation is destructive and irreversible; its gate is in this frame.
+    bound?.guard?.("immediately before the truncation syscall");
+    if (bound && bound.writable && bound.fd >= 0) {
       fs.ftruncateSync(bound.fd, size);
       return;
     }
@@ -582,11 +712,30 @@ export const defaultJournalIo: JournalIo = {
     fs.mkdirSync(path.dirname(lockPath), { recursive: true });
     try {
       fs.mkdirSync(lockPath);
-      return true;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
       throw err;
     }
+    // IDENTITY IS PART OF THE ACQUISITION (MH-06-R6-B1). The directory that
+    // exists at this instant exists BECAUSE the `mkdir` above created it, so it
+    // is named here — with nothing between — rather than looked up later by
+    // whoever wanted to know what was taken. The descriptor is retained too, so
+    // the object survives as an OS reference and not only as a name.
+    let fd: number | null = null;
+    try {
+      fd = fs.openSync(lockPath, "r");
+    } catch {
+      fd = null; // platforms that refuse to open a directory keep dev/inode only
+    }
+    const stat = fd !== null ? fstatOrNull(fd) : lstatOrNull(lockPath);
+    if (stat === null || !stat.isDirectory()) {
+      if (fd !== null) closeQuietly(fd);
+      throw new Error(
+        `journal lock at ${lockPath} could not be identified immediately after it was created — ` +
+          "refusing to hold an exclusion this writer cannot name",
+      );
+    }
+    return publishLockGrant({ path: lockPath, device: stat.dev, inode: stat.ino, fd });
   },
   releaseLock(lockPath) {
     try {
@@ -883,48 +1032,98 @@ export interface LockFailure {
   message: string;
 }
 
+/** What an acquisition attempt yielded: the object it created, or why it did not. */
+interface JournalLockAcquisition {
+  grant: JournalLockGrant | null;
+  failure: LockFailure | null;
+}
+
+/** Let go of a grant nobody retained, so a descriptor cannot outlive its use. */
+function discardLockGrant(grant: JournalLockGrant | null): void {
+  if (grant && grant.fd !== null) closeQuietly(grant.fd);
+}
+
+/**
+ * Take the journal lock, retrying a BOUNDED number of times, and RETURN THE
+ * IDENTITY OF WHAT WAS TAKEN.
+ *
+ * The identity is whatever the acquiring primitive produced — never a later
+ * observation of the pathname, which is the substitution MH-06-R6-B1 exploited.
+ * A seam that hands back the grant it created is believed first; a seam that
+ * discards it cannot erase what the default primitive captured, so the
+ * out-of-band publication is consulted next; and a seam that is not a real
+ * directory at all supplies no identity, which is recorded honestly as `null`
+ * rather than guessed.
+ */
+function acquireJournalLockHeld(
+  lockPath: string,
+  io: JournalIo,
+  options: JournalLockOptions,
+): JournalLockAcquisition {
+  const acquire = io.acquireLock ?? defaultJournalIo.acquireLock!;
+  const attempts = Math.max(1, options.lock_max_attempts ?? JOURNAL_LOCK_MAX_ATTEMPTS);
+  const wait = Math.max(0, options.lock_wait_ms ?? JOURNAL_LOCK_WAIT_MS);
+
+  for (let i = 0; i < attempts; i += 1) {
+    let got: boolean | JournalLockGrant;
+    try {
+      got = acquire(lockPath);
+    } catch (err) {
+      // A real IO fault on the lock itself is a durability failure, not a
+      // reason to proceed unguarded.
+      discardLockGrant(claimLockGrant(lockPath));
+      return {
+        grant: null,
+        failure: {
+          code: "journal_lock_failed",
+          message: `journal lock could not be evaluated at ${lockPath}: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      };
+    }
+    if (got) {
+      const returned = typeof got === "object" ? got : null;
+      const published = claimLockGrant(lockPath);
+      if (returned !== null && published !== null && published !== returned) discardLockGrant(published);
+      return { grant: returned ?? published, failure: null };
+    }
+    if (i < attempts - 1) sleepSync(wait);
+  }
+  return {
+    grant: null,
+    failure: {
+      code: "journal_lock_unavailable",
+      message:
+        `journal lock at ${lockPath} is held by another writer after ${attempts} attempts — ` +
+        "refusing to append without exclusive access (remove the lock only after confirming no writer is live)",
+    },
+  };
+}
+
 /**
  * Take the journal lock, retrying a BOUNDED number of times.
  *
  * Returns `null` when the lock is HELD by this caller, or the typed reason it
  * could not be taken. Never returns "probably fine": a caller that cannot prove
  * exclusive access must fail closed.
+ *
+ * This boolean-shaped entry point retains no identity, so it releases the grant's
+ * descriptor immediately; `acquireJournalAuthority` is the path that HOLDS one.
  */
 export function acquireJournalLock(
   lockPath: string,
   io: JournalIo = defaultJournalIo,
   options: JournalLockOptions = {},
 ): LockFailure | null {
-  const acquire = io.acquireLock ?? defaultJournalIo.acquireLock!;
-  const attempts = Math.max(1, options.lock_max_attempts ?? JOURNAL_LOCK_MAX_ATTEMPTS);
-  const wait = Math.max(0, options.lock_wait_ms ?? JOURNAL_LOCK_WAIT_MS);
-
-  for (let i = 0; i < attempts; i += 1) {
-    let got: boolean;
-    try {
-      got = acquire(lockPath);
-    } catch (err) {
-      // A real IO fault on the lock itself is a durability failure, not a
-      // reason to proceed unguarded.
-      return {
-        code: "journal_lock_failed",
-        message: `journal lock could not be evaluated at ${lockPath}: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-    if (got) return null;
-    if (i < attempts - 1) sleepSync(wait);
-  }
-  return {
-    code: "journal_lock_unavailable",
-    message:
-      `journal lock at ${lockPath} is held by another writer after ${attempts} attempts — ` +
-      "refusing to append without exclusive access (remove the lock only after confirming no writer is live)",
-  };
+  const held = acquireJournalLockHeld(lockPath, io, options);
+  discardLockGrant(held.grant);
+  return held.failure;
 }
 
 /** Release the journal lock. Never throws. */
 export function releaseJournalLock(lockPath: string, io: JournalIo = defaultJournalIo): void {
   const release = io.releaseLock ?? defaultJournalIo.releaseLock!;
+  // An unclaimed grant for this path describes a lock that is going away.
+  discardLockGrant(claimLockGrant(lockPath));
   try {
     release(lockPath);
   } catch {
@@ -988,9 +1187,17 @@ export interface JournalAuthorityFailure {
  * Round 5 established the identity under the lock and then performed every
  * mutation through the caller's pathname, which is a name somebody else can
  * repoint. This object is the answer: it PINS the journal with a descriptor,
- * remembers the identity of the lock directory it actually created and of the
- * directory holding both, and offers one predicate — `verify` — that must be
- * re-proved before every mutation and before any durable or clean-close claim.
+ * remembers the identity of the lock object the acquisition itself produced, of
+ * the directory holding both, and of the checkpoint's own parent when that is
+ * somewhere else, and offers one predicate — `verify` — that must be re-proved
+ * before every mutation and before any durable or clean-close claim.
+ *
+ * `verify` is ALSO carried into the IO seam by `bind`, as `JournalHandle.guard`,
+ * so the final proof runs in the frame that performs the syscall instead of one
+ * call earlier (MH-06-R6-B2). Both gates are kept on purpose: the caller's gate
+ * fixes the ORDER of refusals (identity denial outranks `repair_not_permitted`)
+ * and covers seams that ignore the binding, while the seam's gate closes the
+ * interval the caller cannot occupy.
  */
 export interface RetainedJournalAuthority {
   /** The physical journal and the lock derived from it. */
@@ -1027,39 +1234,71 @@ export type JournalAuthorityResult =
  * the transaction. Never throws.
  *
  * The order matters and is the whole point: identity is resolved before the lock
- * (a lock is only exclusive over a resource it names uniquely), the lock is taken,
- * and only then is the physical file opened and the exclusion domain recorded —
- * so everything the caller does afterwards is measured against what it actually
- * holds rather than against what a pathname currently means.
+ * (a lock is only exclusive over a resource it names uniquely), the lock is taken
+ * AND NAMES ITSELF as it is taken, and only then is the physical file opened and
+ * the rest of the exclusion domain recorded — so everything the caller does
+ * afterwards is measured against what it actually holds rather than against what
+ * a pathname currently means.
  *
- * On failure the lock is released before returning, so a refusal never wedges the
- * journal for the next writer.
+ * `checkpointPath` is optional because not every transaction writes one: an
+ * append and a durable repair do, a torn-tail repair does not. When it is given
+ * and its parent is not the journal's, that directory joins the domain
+ * (MH-06-R6-B3).
+ *
+ * On failure the lock is released before returning — unless the object at that
+ * name is no longer the one this call created, in which case it is left alone —
+ * so a refusal never wedges the journal for the next writer and never deletes a
+ * stranger's exclusion.
  */
 export function acquireJournalAuthority(
   journalPath: string,
   io: JournalIo = defaultJournalIo,
   lockOptions: JournalLockOptions = {},
   access: JournalAccess = "read",
+  checkpointPath: string | null = null,
 ): JournalAuthorityResult {
   const resolved = resolveJournalIdentity(journalPath);
   if (!resolved.ok) return { ok: false, authority: null, identity: null, failure: resolved.failure };
   const identity = resolved.identity;
 
-  const lockFailure = acquireJournalLock(identity.lock, io, lockOptions);
-  if (lockFailure) return { ok: false, authority: null, identity, failure: lockFailure };
+  const acquisition = acquireJournalLockHeld(identity.lock, io, lockOptions);
+  if (acquisition.failure) return { ok: false, authority: null, identity, failure: acquisition.failure };
 
-  // The exclusion domain, as it is RIGHT NOW: the lock directory this caller just
-  // created, and the directory holding both it and the journal. A lock primitive
-  // that is not a real directory (an injected seam) leaves these null, and the
-  // corresponding checks are skipped rather than guessed.
-  const lockStat = lstatOrNull(identity.lock);
-  const lockDevice = lockStat !== null && lockStat.isDirectory() ? lockStat.dev : null;
-  const lockInode = lockStat !== null && lockStat.isDirectory() ? lockStat.ino : null;
-  const parentStat = statOrNull(path.dirname(identity.path));
+  // The exclusion domain. The lock is the object the ACQUISITION named — round 6
+  // sampled the pathname afterwards and adopted whatever replacement was sitting
+  // there (MH-06-R6-B1). A lock primitive that is not a real directory (an
+  // injected seam) yields no grant, and the corresponding checks are skipped
+  // rather than guessed.
+  const grant = acquisition.grant;
+  const journalParent = path.dirname(identity.path);
+  const parentStat = statOrNull(journalParent);
   const parentDevice = parentStat !== null ? parentStat.dev : null;
   const parentInode = parentStat !== null ? parentStat.ino : null;
 
+  // THE CHECKPOINT'S OWN PARENT (MH-06-R6-B3). An append and a durable repair both
+  // replace a checkpoint FILE, and nothing requires it to sit beside the journal.
+  // Round 6 pinned only the journal's parent, so a caller that put its checkpoint
+  // elsewhere could have that directory replaced and still be told the repair was
+  // written, re-read and verified. When the checkpoint parent differs, it is held
+  // in its own right — by descriptor where the platform allows one, and by
+  // device/inode everywhere.
+  //
+  // The directory to hold is the one the WRITE lands in: `atomicWrite` creates a
+  // temp file in `dirname(checkpointPath)` and `rename(2)`s it onto the name, so
+  // it is the link's own directory that receives the bytes — a symlink AT the
+  // checkpoint name is replaced, never followed. Canonicalizing the whole path
+  // instead would pin a symlink TARGET's parent and hold the wrong directory.
+  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path.dirname(checkpointPath));
+  const checkpointCanonical =
+    checkpointParentPath === null || checkpointPath === null
+      ? null
+      : path.join(checkpointParentPath, path.basename(checkpointPath));
+  const checkpointParent =
+    checkpointParentPath === null || checkpointParentPath === journalParent ? null : checkpointParentPath;
+  let checkpointParentPin: { device: number; inode: number; fd: number | null } | null = null;
+
   let handle: JournalHandle | null = null;
+  let released = false;
 
   const unstable = (message: string): JournalIdentityFailure => ({ code: "journal_identity_unstable", message });
   const ambiguous = (message: string): JournalIdentityFailure => ({ code: "journal_identity_ambiguous", message });
@@ -1108,6 +1347,28 @@ export function acquireJournalAuthority(
     }
     handle = { path: identity.path, fd, device: st.dev, inode: st.ino, writable };
     return null;
+  };
+
+  /**
+   * Pin the checkpoint's own parent, once it exists. A directory that is not
+   * there yet is not an error — `atomicWrite` creates it — and the first `verify`
+   * that sees it adopts it, exactly as the journal's own pin is adopted after the
+   * first append creates the file.
+   */
+  const pinCheckpointParent = (): void => {
+    if (checkpointParent === null || checkpointParentPin !== null) return;
+    let fd: number | null = null;
+    try {
+      fd = fs.openSync(checkpointParent, "r");
+    } catch {
+      fd = null; // platforms that refuse to open a directory keep dev/inode only
+    }
+    const st = fd !== null ? fstatOrNull(fd) : statOrNull(checkpointParent);
+    if (st === null || !st.isDirectory()) {
+      if (fd !== null) closeQuietly(fd);
+      return;
+    }
+    checkpointParentPin = { device: st.dev, inode: st.ino, fd };
   };
 
   const verify = (stage: string): JournalIdentityFailure | null => {
@@ -1172,10 +1433,20 @@ export function acquireJournalAuthority(
       }
     }
 
-    // 4. The lock at the canonical name is still the exact directory acquired.
-    if (lockInode !== null && lockDevice !== null) {
+    // 4. The lock at the canonical name is still the EXACT object the acquisition
+    //    created — compared against the identity that acquisition produced, not
+    //    against a stat taken after it returned.
+    if (grant !== null) {
+      if (grant.fd !== null) {
+        const heldLock = fstatOrNull(grant.fd);
+        if (heldLock === null || heldLock.dev !== grant.device || heldLock.ino !== grant.inode) {
+          return unstable(
+            `the lock object this writer acquired at "${identity.lock}" can no longer be inspected ${stage}`,
+          );
+        }
+      }
       const lockNow = lstatOrNull(identity.lock);
-      if (lockNow === null || !lockNow.isDirectory() || lockNow.dev !== lockDevice || lockNow.ino !== lockInode) {
+      if (lockNow === null || !lockNow.isDirectory() || lockNow.dev !== grant.device || lockNow.ino !== grant.inode) {
         return unstable(
           `the lock this writer acquired is no longer the lock at "${identity.lock}" ${stage} — ` +
             "another holder now owns that exclusion, so this operation is refused",
@@ -1191,28 +1462,79 @@ export function acquireJournalAuthority(
     const drift = journalIdentityDrift(identity, current.identity);
     if (drift) return unstable(`${drift} (${stage})`);
 
+    // 6. The CHECKPOINT this transaction may replace. Its parent is pinned when
+    //    it is not the one step 3 already covers — nothing else in this domain
+    //    says anything about a directory somewhere else, and a repair that loses
+    //    it writes durable state where it holds nothing (MH-06-R6-B3). Its
+    //    canonical name is checked either way: a checkpoint reached through a
+    //    symlink can be repointed OUT of a covered directory without any physical
+    //    identity here changing at all.
+    if (checkpointPath !== null) {
+      pinCheckpointParent();
+      const pinned = checkpointParentPin;
+      if (checkpointParent !== null && pinned !== null) {
+        if (pinned.fd !== null) {
+          const heldDir = fstatOrNull(pinned.fd);
+          if (heldDir === null || heldDir.dev !== pinned.device || heldDir.ino !== pinned.inode) {
+            return unstable(
+              `the directory holding the checkpoint "${checkpointCanonical}" can no longer be inspected ${stage}`,
+            );
+          }
+        }
+        const parentNow = statOrNull(checkpointParent);
+        if (parentNow === null || parentNow.dev !== pinned.device || parentNow.ino !== pinned.inode) {
+          return unstable(
+            `the directory holding the checkpoint "${checkpointCanonical}" was replaced ${stage} — ` +
+              "this writer's exclusion does not cover the checkpoint it was about to write",
+          );
+        }
+      }
+      const parentNamedNow = canonicalJournalPath(path.dirname(checkpointPath));
+      if (parentNamedNow !== checkpointParentPath) {
+        return unstable(
+          `the checkpoint "${checkpointPath}" now resolves into "${parentNamedNow}" rather than ` +
+            `"${checkpointParentPath}" ${stage} — this writer holds the directory it was granted, not that one`,
+        );
+      }
+    }
+
     return null;
   };
 
   const release = (): void => {
+    // Idempotent: closing a descriptor twice can close a NUMBER the OS has since
+    // handed to somebody else's file, which is a data-loss bug wearing a cleanup
+    // costume. A second call is a no-op, not a second close.
+    if (released) return;
+    released = true;
     if (handle !== null) {
       closeQuietly(handle.fd);
       handle = null;
     }
-    if (lockInode === null || lockDevice === null) {
-      // Not a directory this module can identify — an injected lock seam. Release
-      // it exactly as every earlier round did.
+    const pinnedCheckpointParent = checkpointParentPin;
+    if (pinnedCheckpointParent !== null && pinnedCheckpointParent.fd !== null) {
+      closeQuietly(pinnedCheckpointParent.fd);
+      checkpointParentPin = { ...pinnedCheckpointParent, fd: null };
+    }
+    if (grant === null) {
+      // Not a lock object this module can identify — an injected seam. Release it
+      // exactly as every earlier round did.
       releaseJournalLock(identity.lock, io);
       return;
     }
     const lockNow = lstatOrNull(identity.lock);
-    if (lockNow !== null && lockNow.isDirectory() && lockNow.dev === lockDevice && lockNow.ino === lockInode) {
+    const stillOurs =
+      lockNow !== null && lockNow.isDirectory() && lockNow.dev === grant.device && lockNow.ino === grant.inode;
+    discardLockGrant(grant);
+    if (stillOurs) {
       releaseJournalLock(identity.lock, io);
       return;
     }
     // The directory at that name is SOMEBODY ELSE'S exclusion — round 5 deleted it
-    // and stranded its own. Leaking a lock wedges this journal until an operator
-    // clears it; deleting a stranger's hands two writers one journal. Leak.
+    // by pathname and stranded its own, and round 6 could not even tell the
+    // difference because it had adopted the replacement as its own identity.
+    // Leaking a lock wedges this journal until an operator clears it; deleting a
+    // stranger's hands two writers one journal. Leak.
   };
 
   const failClosed = (failure: JournalIdentityFailure): JournalAuthorityResult => {
@@ -1234,14 +1556,39 @@ export function acquireJournalAuthority(
       return handle;
     },
     bind(target: JournalIo): JournalIo {
+      /**
+       * The gate the innermost seam runs in its own frame. A refusal here is a
+       * refusal BEFORE the syscall, which is the only kind that counts: round 6
+       * proved the domain one call earlier and the review simply stood in the
+       * gap (MH-06-R6-B2).
+       */
+      const gate = (stage: string): void => {
+        const failure = verify(stage);
+        if (failure) throw new JournalAuthorityDetachedError(failure);
+      };
       // `handle` is read at CALL time, not bind time: `adopt` can install one
-      // half-way through the transaction, and every later read must use it.
-      const forPath = (p: string): JournalHandle | null => (p === identity.path ? handle : null);
+      // half-way through the transaction, and every later read must use it. When
+      // there is nothing to pin yet — the first append CREATES the journal — the
+      // binding still carries the gate, so that mutation is gated too.
+      const forPath = (p: string): JournalHandle | null => {
+        if (p !== identity.path) return null;
+        if (handle !== null) return { ...handle, guard: gate };
+        return { path: identity.path, fd: UNPINNED_FD, device: -1, inode: -1, writable: false, guard: gate };
+      };
+      const checkpointBinding: JournalHandle = {
+        path: checkpointCanonical ?? identity.path,
+        fd: UNPINNED_FD,
+        device: -1,
+        inode: -1,
+        writable: false,
+        guard: gate,
+      };
       return {
         ...target,
         readAll: (p: string) => target.readAll(p, forPath(p)),
         appendLine: (p: string, text: string) => target.appendLine(p, text, forPath(p)),
         truncate: (p: string, size: number) => target.truncate(p, size, forPath(p)),
+        writeCheckpoint: (p: string, content: string) => target.writeCheckpoint(p, content, checkpointBinding),
       };
     },
     verify,
@@ -1681,6 +2028,13 @@ function failed(
  * append, before the checkpoint replacement and before the durable claim, and a
  * link-count change, a replaced parent or a replaced lock fails the operation
  * BEFORE the mutation rather than after it.
+ *
+ * AND "BEFORE" MEANS BEFORE THE SYSCALL, NOT BEFORE THE SEAM CALL (MH-06-R6-B2).
+ * The default seam re-proves the same authority immediately before `write(2)` and
+ * immediately before the checkpoint replacement, and throws when it is gone — so
+ * a competitor that acts inside the seam invocation is refused with the journal
+ * still byte-identical, instead of being reported after the record landed. The
+ * checkpoint's own directory is part of that proof too (MH-06-R6-B3).
  */
 export function appendReceipt(
   paths: JournalPaths,
@@ -1691,7 +2045,9 @@ export function appendReceipt(
   const invalid = validateInput(input);
   if (invalid) return failed(input, "invalid_record", invalid);
 
-  const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append");
+  // The checkpoint is named at acquisition, so its own directory is part of the
+  // exclusion domain whenever it is not the journal's (MH-06-R6-B3).
+  const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append", paths.checkpoint);
   if (!acquired.ok) return failed(input, acquired.failure.code, acquired.failure.message);
   const authority = acquired.authority;
   try {
@@ -1780,6 +2136,12 @@ function appendLocked(
   try {
     bound.appendLine(paths.journal, `${JSON.stringify(record)}\n`);
   } catch (err) {
+    // A gate that fired INSIDE the seam refused before `write(2)` ran, so this is
+    // a refusal, not a fault: the journal is byte-identical to what the gate above
+    // planned against (MH-06-R6-B2).
+    if (err instanceof JournalAuthorityDetachedError) {
+      return failed(input, err.failure.code, err.failure.message);
+    }
     return failed(input, "journal_append_failed", err instanceof Error ? err.message : String(err));
   }
 
@@ -1826,8 +2188,14 @@ function appendLocked(
   if (beforeCheckpoint) return failed(input, beforeCheckpoint.code, beforeCheckpoint.message);
 
   try {
-    io.writeCheckpoint(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}\n`);
+    bound.writeCheckpoint(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}\n`);
   } catch (err) {
+    // A gate that fired inside the seam refused before the replacement, so the
+    // checkpoint on disk is untouched — a different fact from a write that tried
+    // and failed, and it keeps its own identity code.
+    if (err instanceof JournalAuthorityDetachedError) {
+      return failed(input, err.failure.code, err.failure.message);
+    }
     // The line is on disk but the checkpoint is not. Reconciliation resolves
     // the disagreement; this operation must NOT claim success.
     return failed(input, "checkpoint_write_failed", err instanceof Error ? err.message : String(err));
@@ -1906,7 +2274,10 @@ export type TornTailRepairFailureCode =
  * truncating a file this caller does not hold the lock for is the same defect
  * through a different name (MH-06-R4-B1). Round 5 truncated a replacement journal
  * in a replacement directory and reported `succeeded`, so the authority is
- * re-proved immediately before the truncation as well (MH-06-R5-B1).
+ * re-proved immediately before the truncation as well (MH-06-R5-B1) — and once
+ * more inside the seam, in `ftruncate`'s own frame, so a competitor cannot act in
+ * the interval between that proof and the syscall (MH-06-R6-B2). This path writes
+ * no checkpoint, so it names none at acquisition.
  */
 export function repairTornTail(
   journalPath: string,
@@ -1983,13 +2354,18 @@ function repairTornTailLocked(authority: RetainedJournalAuthority, io: JournalIo
   try {
     bound.truncate(journalPath, keep);
   } catch (err) {
+    // A gate that fired inside the seam refused before `ftruncate(2)`, so nothing
+    // was removed — `removed_bytes: 0` is a measurement here, not a default.
+    const detached = err instanceof JournalAuthorityDetachedError;
     return {
       schema_version: "guild.receipt_repair_outcome.v1",
       disposition: "failed",
       integrity_before: before.integrity,
       integrity_after: before.integrity,
       removed_bytes: 0,
-      failure: { code: "repair_failed", message: err instanceof Error ? err.message : String(err) },
+      failure: detached
+        ? { code: err.failure.code, message: err.failure.message }
+        : { code: "repair_failed", message: err instanceof Error ? err.message : String(err) },
     };
   }
 
