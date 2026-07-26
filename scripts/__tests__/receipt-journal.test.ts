@@ -2728,3 +2728,384 @@ describe("MH-06-R7-NB1 — a grantless acquisition fails closed and is never rel
     expect(fs.existsSync(journalLockPath(p))).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MH-06-R8-C1 — a published grant authorises ONE call, and dies with it
+//
+// Round 7 kept the discarding wrapper working by letting the default primitive
+// publish the identity it created OUT OF BAND, keyed by the lock path. Round 8's
+// review found the neighbour that opened: a wrapper is not obliged to tell the
+// truth about what it just did. A seam that calls `defaultJournalIo.acquireLock`,
+// REALLY creates the lock, and then returns `false` left the grant sitting in
+// that module-level map — the `false` branch retried and the exhaustion path
+// returned `journal_lock_unavailable` without ever draining it.
+//
+// The reviewer then made a wholly separate call whose `acquireLock` acquires
+// nothing and answers with a bare `true`. It claimed the abandoned publication,
+// satisfied every identity check with it (the object really did exist), appended
+// durably as sequence 2, replaced the checkpoint, and released — deleting a lock
+// the first caller had created and this one had never taken:
+//
+//   first_failure_code=journal_lock_unavailable, lock_exists_before_second=true,
+//   second_disposition=succeeded, second_durable=true, second_sequence=2,
+//   journal_records_after_second=2, released=true, lock_exists_after_second=false
+//
+// A grant is therefore CALL-SCOPED. The publication window opens immediately
+// before one `acquireLock` invocation and closes immediately after it, whatever
+// that invocation returned; a refusal — `false`, a throw, a contradiction, a
+// malformed claim — takes its publication with it, and a publication made while
+// no acquisition is in flight belongs to nobody. What sits at the lock's
+// pathname is left exactly where it is: this module still never deletes an
+// object it cannot recognise as its own.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MH-06-R8-C1 — a published lock grant authorises only the acquisition call that created it", () => {
+  function seedAt(p: { journal: string; checkpoint: string }, tag: string) {
+    expect(appendReceipt(p, input({ event_id: `seed-${tag}`, operation_id: `op-seed-${tag}` })).disposition).toBe(
+      "succeeded",
+    );
+    return p;
+  }
+
+  /** One durable record, so the journal is a real file with a real inode. */
+  function seeded() {
+    return seedAt(paths(mkRoot()), "one");
+  }
+
+  /** A seam that acquires NOTHING and claims the lock anyway. */
+  function grantlessSeam(): { io: JournalIo; calls: () => number; released: () => boolean } {
+    let calls = 0;
+    let released = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock() {
+        calls += 1;
+        return true; // no mkdir, no object, no identity — just the word "yes"
+      },
+      releaseLock(lockPath) {
+        released = true;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+      },
+    };
+    return { io, calls: () => calls, released: () => released };
+  }
+
+  it("refuses the reviewer's cross-call bypass: a false-returning wrapper seeds no later acquisition", () => {
+    const p = seeded();
+    const lock = journalLockPath(p);
+
+    // CALL ONE. The wrapper really takes the lock through the default primitive —
+    // the directory is created and the grant is published — and then says `false`.
+    let lied = false;
+    const liar: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        const real = defaultJournalIo.acquireLock!(lockPath);
+        if (!real) return false; // later attempts: EEXIST, ordinary contention
+        lied = true;
+        return false;
+      },
+    };
+    const first = appendReceipt(p, input({ event_id: "e-first", operation_id: "op-2" }), liar, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    // CALL TWO. Wholly separate, acquires nothing, and reports that it holds it.
+    const second = grantlessSeam();
+    const lockExistsBeforeSecond = fs.existsSync(lock);
+    const out = appendReceipt(p, input({ event_id: "e-second", operation_id: "op-3" }), second.io, {
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+    });
+
+    expect(lied).toBe(true);
+    expect(second.calls()).toBe(1);
+
+    // One assertion in the reviewer's own field names, so a regression prints the
+    // whole probe at once: on the attempt-8 bytes this reads
+    // unavailable/true/succeeded/true/2/null/2/true/false.
+    expect({
+      first_failure_code: first.failure?.code ?? null,
+      lock_exists_before_second: lockExistsBeforeSecond,
+      second_disposition: out.disposition,
+      second_durable: out.durable,
+      second_sequence: out.sequence,
+      second_failure_code: out.failure?.code ?? null,
+      journal_records_after_second: scanReceiptJournal(p.journal).record_count,
+      released: second.released(),
+      lock_exists_after_second: fs.existsSync(lock),
+    }).toEqual({
+      first_failure_code: "journal_lock_unavailable",
+      lock_exists_before_second: true,
+      second_disposition: "failed",
+      second_durable: false,
+      second_sequence: null,
+      second_failure_code: "journal_lock_failed",
+      journal_records_after_second: 1,
+      released: false,
+      lock_exists_after_second: true,
+    });
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("does not seed a later bare-true attempt inside the same acquisition loop", () => {
+    // The same lie, one retry apart instead of one call apart. A loop that hands
+    // attempt N's publication to attempt N+1 is the cross-call defect in miniature.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let calls = 0;
+    let released = false;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        calls += 1;
+        if (calls === 1) {
+          defaultJournalIo.acquireLock!(lockPath); // really taken, really published…
+          return false; // …and denied to the very caller that asked for it
+        }
+        return true; // the next attempt claims to hold what it never took
+      },
+      releaseLock(lockPath) {
+        released = true;
+        fs.rmSync(lockPath, { recursive: true, force: true });
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(calls).toBe(2);
+    expect(out.disposition).toBe("failed");
+    expect(out.durable).toBe(false);
+    expect(out.sequence).toBeNull();
+    expect(out.failure?.code).toBe("journal_lock_failed");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(1);
+    expect(released).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("cannot claim a publication made while no acquisition was in flight at all", () => {
+    // Nothing is acquiring here. A cleanup helper, a release seam, or a harness
+    // touching the primitive directly all land in this shape: the lock object is
+    // real, and it authorises precisely nobody.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    const stray = defaultJournalIo.acquireLock!(lock);
+    expect(typeof stray).toBe("object");
+
+    const seam = grantlessSeam();
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), seam.io, {
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+    });
+
+    expect(out.disposition).toBe("failed");
+    expect(out.failure?.code).toBe("journal_lock_failed");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(seam.released()).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+
+    if (typeof stray === "object" && stray.fd !== null) fs.closeSync(stray.fd);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("leaves nothing claimable behind when the release itself fails", () => {
+    // A release that throws leaves the lock on disk. That wreckage is a reason for
+    // the NEXT writer to fail closed, never a stock of authority it can draw on.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let releaseAttempted = false;
+    const failingRelease: JournalIo = {
+      ...defaultJournalIo,
+      releaseLock() {
+        releaseAttempted = true;
+        throw new Error("EBUSY: lock directory could not be removed");
+      },
+    };
+
+    const first = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), failingRelease, {
+      lock_max_attempts: 2,
+      lock_wait_ms: 1,
+    });
+
+    expect(first.disposition).toBe("succeeded");
+    expect(first.sequence).toBe(2);
+    expect(releaseAttempted).toBe(true);
+    expect(fs.existsSync(lock)).toBe(true);
+
+    const seam = grantlessSeam();
+    const second = appendReceipt(p, input({ event_id: "e3", operation_id: "op-3" }), seam.io, {
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+    });
+
+    expect(second.disposition).toBe("failed");
+    expect(second.failure?.code).toBe("journal_lock_failed");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(seam.released()).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  it("cannot claim a publication that belongs to a different journal's lock", () => {
+    // Two journals, two locks, one process. A grant published for B is not a grant
+    // for A, and it is not a grant for B's next writer either.
+    const root = mkRoot();
+    const a = seedAt(
+      { journal: path.join(root, "a", "journal.jsonl"), checkpoint: path.join(root, "a", "cp.json") },
+      "a",
+    );
+    const b = seedAt(
+      { journal: path.join(root, "b", "journal.jsonl"), checkpoint: path.join(root, "b", "cp.json") },
+      "b",
+    );
+    const lockA = journalLockPath(a);
+    const lockB = journalLockPath(b);
+
+    let crossed = false;
+    const crossing: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock() {
+        if (!crossed) {
+          crossed = true;
+          defaultJournalIo.acquireLock!(lockB); // asked about A, takes B
+        }
+        return true; // …and answers for A with a bare `true`
+      },
+    };
+    const outA = appendReceipt(a, input({ event_id: "e-a", operation_id: "op-a2" }), crossing, {
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+    });
+
+    const seam = grantlessSeam();
+    const outB = appendReceipt(b, input({ event_id: "e-b", operation_id: "op-b2" }), seam.io, {
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+    });
+
+    expect(crossed).toBe(true);
+    expect(outA.failure?.code).toBe("journal_lock_failed");
+    expect(outB.failure?.code).toBe("journal_lock_failed");
+    expect(scanReceiptJournal(a.journal).record_count).toBe(1);
+    expect(scanReceiptJournal(b.journal).record_count).toBe(1);
+    expect(seam.released()).toBe(false);
+    expect(fs.existsSync(lockA)).toBe(false); // never created — nothing to leak
+    expect(fs.existsSync(lockB)).toBe(true); // the seam's own doing, left alone
+    fs.rmSync(lockB, { recursive: true, force: true });
+  });
+
+  it("refuses an overlapping inner acquisition rather than lending it this call's grant", () => {
+    // Two acquisitions for ONE lock path in flight at once: the seam re-enters the
+    // append while its own acquisition is still open. The inner call took nothing,
+    // so it must hold nothing — and the outer call's own grant must survive it.
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let reentered = false;
+    let innerDisposition: string | null = null;
+    let innerFailure: string | null = null;
+
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        if (reentered) return true; // the INNER acquisition: overlapping and grantless
+        reentered = true;
+        const real = defaultJournalIo.acquireLock!(lockPath); // this call's own object
+        const nested = appendReceipt(p, input({ event_id: "e-inner", operation_id: "op-inner" }), io, {
+          lock_max_attempts: 1,
+          lock_wait_ms: 1,
+        });
+        innerDisposition = nested.disposition;
+        innerFailure = nested.failure?.code ?? null;
+        return real; // …reported honestly, exactly as the primitive named it
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e-outer", operation_id: "op-outer" }), io, {
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+    });
+
+    expect(reentered).toBe(true);
+    expect(innerDisposition).toBe("failed");
+    expect(innerFailure).toBe("journal_lock_failed");
+    // …and the call that really did acquire is unharmed by the one that did not.
+    expect(out.disposition).toBe("succeeded");
+    expect(out.sequence).toBe(2);
+    const after = scanReceiptJournal(p.journal);
+    expect(after.record_count).toBe(2);
+    expect(after.records.some((r) => r.event_id === "e-inner")).toBe(false);
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+
+  it("keeps a fault thrown after a real acquisition typed, unretried and unclaimable", () => {
+    const p = seeded();
+    const lock = journalLockPath(p);
+    let calls = 0;
+    const faulty: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        calls += 1;
+        defaultJournalIo.acquireLock!(lockPath); // the lock is really taken…
+        throw new Error("EIO: lock bookkeeping failed"); // …and the call still faults
+      },
+    };
+
+    const first = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), faulty, {
+      lock_max_attempts: 3,
+      lock_wait_ms: 1,
+    });
+
+    expect(calls).toBe(1); // a fault is not contention, so it is not retried
+    expect(first.failure?.code).toBe("journal_lock_failed");
+    expect(first.failure?.message).toContain("EIO");
+
+    const seam = grantlessSeam();
+    const second = appendReceipt(p, input({ event_id: "e3", operation_id: "op-3" }), seam.io, {
+      lock_max_attempts: 1,
+      lock_wait_ms: 1,
+    });
+
+    expect(second.failure?.code).toBe("journal_lock_failed");
+    expect(scanReceiptJournal(p.journal).record_count).toBe(1);
+    expect(seam.released()).toBe(false);
+    expect(fs.existsSync(lock)).toBe(true);
+    fs.rmSync(lock, { recursive: true, force: true });
+  });
+
+  // ── Control. Call-scoping must not cost the discarding wrapper its support,
+  //    including when the acquisition it wraps lands on a RETRY rather than first.
+
+  it("still appends when a later attempt in the same loop acquires and returns bare true", () => {
+    const p = seeded();
+    let calls = 0;
+    const io: JournalIo = {
+      ...defaultJournalIo,
+      acquireLock(lockPath) {
+        calls += 1;
+        if (calls === 1) return false; // ordinary contention: nothing published
+        return defaultJournalIo.acquireLock!(lockPath) ? true : false; // grant discarded
+      },
+    };
+
+    const out = appendReceipt(p, input({ event_id: "e2", operation_id: "op-2" }), io, {
+      lock_max_attempts: 3,
+      lock_wait_ms: 1,
+    });
+
+    expect(calls).toBe(2);
+    expect(out.disposition).toBe("succeeded");
+    expect(out.durable).toBe(true);
+    expect(out.sequence).toBe(2);
+    expect(scanReceiptJournal(p.journal).record_count).toBe(2);
+    expect(readCheckpoint(p.checkpoint)!.last_sequence).toBe(2);
+    expect(fs.existsSync(journalLockPath(p))).toBe(false);
+  });
+});

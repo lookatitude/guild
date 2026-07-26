@@ -560,29 +560,74 @@ export interface JournalLockGrant {
 }
 
 /**
- * Grants published by `defaultJournalIo.acquireLock`, claimed by the acquisition
- * that asked for them.
+ * The out-of-band channel on which `defaultJournalIo.acquireLock` names what it
+ * created, and the ONE acquisition invocation allowed to hear it.
  *
- * A seam wrapper that calls the default primitive and then returns a bare
- * `true` — discarding the grant — must not be able to erase the identity the
- * default captured, because that is the very trick MH-06-R6-B1 turns on. The
- * grant therefore also travels out of band, keyed by the lock path this process
- * just created. It holds at most one entry per path, it is consumed by the claim,
- * and it reads no clock, so nothing here is time- or order-dependent beyond the
- * single acquisition it belongs to.
+ * A seam wrapper that calls the default primitive and then returns a bare `true`
+ * — discarding the grant — must not be able to erase the identity the default
+ * captured, because that is the very trick MH-06-R6-B1 turns on. So the grant
+ * travels beside the return value as well as in it. Round 8 parked it in a
+ * module-level map keyed by the lock path, and A MAP OUTLIVES THE CALL THAT
+ * FILLED IT: a wrapper could genuinely acquire through the primitive and then
+ * answer `false`, leaving the grant behind for whoever asked next. Its own caller
+ * was told `journal_lock_unavailable` while a later bare-`true` acquisition
+ * claimed the abandoned identity, passed every lock check with it, appended
+ * durably as sequence 2, and released a lock it had never taken (MH-06-R8-C1).
+ *
+ * The channel is therefore a WINDOW, not a store. It opens immediately before one
+ * invocation of the acquiring primitive; it accepts a publication only from that
+ * invocation, and only for the lock path that invocation was asked about; and it
+ * closes the instant the invocation returns, however it returns. A grant nobody
+ * claimed inside its own window is discarded rather than inherited, because
+ * authority that outlives the call it was granted to is not authority — it is
+ * residue. Nothing here reads a clock or a counter, so the scoping is structural
+ * rather than time- or order-dependent.
  */
-const PUBLISHED_LOCK_GRANTS = new Map<string, JournalLockGrant>();
+interface LockPublicationFrame {
+  readonly lockPath: string;
+  /** The frame this one suspended, so a re-entrant acquisition nests cleanly. */
+  readonly outer: LockPublicationFrame | null;
+  grant: JournalLockGrant | null;
+  open: boolean;
+}
 
-function publishLockGrant(grant: JournalLockGrant): JournalLockGrant {
-  const stale = PUBLISHED_LOCK_GRANTS.get(grant.path);
-  if (stale && stale.fd !== null) closeQuietly(stale.fd);
-  PUBLISHED_LOCK_GRANTS.set(grant.path, grant);
+let ACTIVE_LOCK_PUBLICATION: LockPublicationFrame | null = null;
+
+/** Open the publication window for exactly one `acquireLock` invocation. */
+function openLockPublication(lockPath: string): LockPublicationFrame {
+  const frame: LockPublicationFrame = { lockPath, outer: ACTIVE_LOCK_PUBLICATION, grant: null, open: true };
+  ACTIVE_LOCK_PUBLICATION = frame;
+  return frame;
+}
+
+/**
+ * Close it and hand back whatever that one invocation published. Nothing can
+ * reach the grant afterwards, so an unclaimed one has exactly one owner: the
+ * caller of this function, which must claim it or discard it.
+ */
+function closeLockPublication(frame: LockPublicationFrame): JournalLockGrant | null {
+  frame.open = false;
+  ACTIVE_LOCK_PUBLICATION = frame.outer;
+  const grant = frame.grant;
+  frame.grant = null;
   return grant;
 }
 
-function claimLockGrant(lockPath: string): JournalLockGrant | null {
-  const grant = PUBLISHED_LOCK_GRANTS.get(lockPath) ?? null;
-  PUBLISHED_LOCK_GRANTS.delete(lockPath);
+/**
+ * Hand the identity of a just-created lock to the acquisition that asked for it,
+ * if one is asking. A publication with no open window for that path — a cleanup
+ * helper, a release seam, a direct call, an acquisition reaching over to a
+ * different journal's lock — names a real object, but it authorises nobody: its
+ * only owner is whoever received the return value.
+ */
+function publishLockGrant(grant: JournalLockGrant): JournalLockGrant {
+  const frame = ACTIVE_LOCK_PUBLICATION;
+  if (frame === null || !frame.open || frame.lockPath !== grant.path) return grant;
+  // One invocation that ran the primitive twice published twice; the earlier
+  // object is not what this call ends up holding, so its descriptor goes now.
+  const earlier = frame.grant;
+  if (earlier !== null && earlier.fd !== null && earlier.fd !== grant.fd) closeQuietly(earlier.fd);
+  frame.grant = grant;
   return grant;
 }
 
@@ -622,12 +667,13 @@ export interface JournalIo {
    *
    * A bare `true` still type-checks, and it still works for the wrapper that
    * calls the default primitive and throws the returned grant away, because that
-   * primitive ALSO published the identity out of band. What a bare `true` cannot
-   * do is stand alone. An acquisition that neither returns a grant nor leaves one
-   * published named no object, and the name it was given cannot be asked
-   * afterwards — the answer would be whatever is there now, which is exactly the
-   * substitution MH-06-R6-B1 turns on. Such an acquisition fails closed before
-   * any mutation, and the object at that name is left alone rather than deleted
+   * primitive ALSO published the identity out of band — to THIS call, for the
+   * duration of THIS call (MH-06-R8-C1). What a bare `true` cannot do is stand
+   * alone. An acquisition that neither returns a grant nor publishes one of its
+   * own named no object, and the name it was given cannot be asked afterwards —
+   * the answer would be whatever is there now, which is exactly the substitution
+   * MH-06-R6-B1 turns on. Such an acquisition fails closed before any mutation,
+   * and the object at that name is left alone rather than deleted
    * (MH-06-R7-NB1).
    *
    * Optional so existing `JournalIo` fakes keep type-checking; the default
@@ -1110,8 +1156,11 @@ function discardDuplicateGrant(candidate: JournalLockGrant | null, retained: Jou
  * The default primitive's out-of-band publication is authoritative when there is
  * one, because it was written inside the frame that ran the `mkdir` with no seam
  * in between; a wrapper may pass that same grant back, or discard it, but it may
- * not contradict it. A seam that never called the default primitive is believed
- * about the object it returns, since it IS the primitive.
+ * not contradict it — and it may not bequeath it. The publication belongs to the
+ * ONE invocation that produced it, so an attempt that ends in a refusal takes its
+ * grant with it instead of leaving it for the next attempt or the next call
+ * entirely (MH-06-R8-C1). A seam that never called the default primitive is
+ * believed about the object it returns, since it IS the primitive.
  *
  * An acquisition that reports success and produces neither is refused
  * (MH-06-R7-NB1). Round 7 recorded that case as an identity of `null` and let the
@@ -1128,21 +1177,25 @@ function acquireJournalLockHeld(
   const wait = Math.max(0, options.lock_wait_ms ?? JOURNAL_LOCK_WAIT_MS);
 
   for (let i = 0; i < attempts; i += 1) {
+    // ONE INVOCATION, ONE WINDOW (MH-06-R8-C1). The primitive may hand its grant
+    // out of band only to the call that ran it, and only until that call returns,
+    // so no attempt can inherit the identity another attempt was given.
+    const publication = openLockPublication(lockPath);
     let got: boolean | JournalLockGrant;
     try {
       got = acquire(lockPath);
     } catch (err) {
       // A real IO fault on the lock itself is a durability failure, not a
       // reason to proceed unguarded.
-      discardLockGrant(claimLockGrant(lockPath));
+      discardLockGrant(closeLockPublication(publication));
       return lockRefusal(
         "journal_lock_failed",
         `journal lock could not be evaluated at ${lockPath}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+    const published = closeLockPublication(publication);
     if (got) {
       const returned = asLockGrant(got, lockPath);
-      const published = claimLockGrant(lockPath);
       if (published !== null) {
         if (returned !== null && !sameLockObject(returned, published)) {
           // The seam called the default primitive and then named a DIFFERENT
@@ -1173,6 +1226,16 @@ function acquireJournalLockHeld(
           "rather than deleting an object it cannot recognise as its own",
       );
     }
+    // A REFUSED ACQUISITION AUTHORISES NOTHING (MH-06-R8-C1). Round 8's wrapper
+    // really did take the lock through the default primitive and then answered
+    // `false`: the grant stayed published, and the next bare-`true` acquisition —
+    // one retry later, or one whole call later — claimed it, mutated durably and
+    // released a lock it never took. So the publication dies here with the call
+    // that produced it. Only the DESCRIPTOR is let go: the object at that name is
+    // the seam's own doing and is left exactly where it is, because deleting a
+    // lock this writer cannot claim to hold is how two writers come to share one
+    // journal.
+    discardLockGrant(published);
     if (i < attempts - 1) sleepSync(wait);
   }
   return lockRefusal(
@@ -1208,8 +1271,9 @@ export function acquireJournalLock(
 /** Release the journal lock. Never throws. */
 export function releaseJournalLock(lockPath: string, io: JournalIo = defaultJournalIo): void {
   const release = io.releaseLock ?? defaultJournalIo.releaseLock!;
-  // An unclaimed grant for this path describes a lock that is going away.
-  discardLockGrant(claimLockGrant(lockPath));
+  // Nothing to drain here: a publication never outlives the acquisition call it
+  // was made to, so no grant for this path can be sitting around waiting to be
+  // inherited by — or cleaned up on behalf of — anybody else (MH-06-R8-C1).
   try {
     release(lockPath);
   } catch {
