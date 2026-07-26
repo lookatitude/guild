@@ -137,7 +137,44 @@ describe("check-channel-integrity", () => {
     });
   });
 
+  // SemVer §11.4.1 sets no precision ceiling. Number() collapses above 2^53,
+  // which would make two distinct versions compare EQUAL and let the gate pass.
+  describe("arbitrary-precision numeric ordering", () => {
+    it("orders numeric prerelease identifiers beyond 2^53", () => {
+      expect(
+        compareVersions(parseVersion("1.0.0-x.9007199254740992"), parseVersion("1.0.0-x.9007199254740993"))
+      ).toBeLessThan(0);
+    });
+
+    it("orders core versions beyond 2^53", () => {
+      expect(
+        compareVersions(parseVersion("9007199254740992.0.0"), parseVersion("9007199254740993.0.0"))
+      ).toBeLessThan(0);
+    });
+
+    it("still orders ordinary versions correctly", () => {
+      expect(compareVersions(parseVersion("2.10.0"), parseVersion("2.9.0"))).toBeGreaterThan(0);
+    });
+  });
+
   describe("parser strictness", () => {
+    it("rejects an empty prerelease identifier (§9)", () => {
+      expect(() => parseVersion("1.0.0-alpha..1")).toThrow(/unparseable version/);
+    });
+
+    it("rejects leading zeroes in a numeric prerelease identifier (§9)", () => {
+      expect(() => parseVersion("1.0.0-01")).toThrow(/unparseable version/);
+    });
+
+    it("rejects leading zeroes in a core identifier (§2)", () => {
+      expect(() => parseVersion("01.0.0")).toThrow(/unparseable version/);
+    });
+
+    it("still accepts a legitimate alphanumeric identifier with a leading zero", () => {
+      // "0a" is alphanumeric, not numeric, so the leading-zero ban does not apply.
+      expect(parseVersion("1.0.0-0a").prerelease).toEqual(["0a"]);
+    });
+
     it("REJECTS a trailing-garbage version instead of prefix-matching it", () => {
       // An unanchored /^v?(\d+)\.(\d+)\.(\d+)/ would read this as 2.3.2.
       expect(() => parseVersion("2.3.2junk")).toThrow(/unparseable version/);

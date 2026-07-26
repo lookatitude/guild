@@ -81,8 +81,10 @@ only release PRs (rule 8).
      release notes, PR into `main`. Merge → rule 7 tags + publishes.
    - **Sync-back:** immediately after the release merges, advance `next` to the
      release point (fast-forward when the release point is a **descendant of**
-     `next`; otherwise a sync-back PR merged with *Rebase and merge*) so the two
-     channels share it. `next` history never rewrites.
+     `next`; otherwise a sync-back PR carrying the release delta). `next` history
+     never rewrites. Note that only the fast-forward path leaves both channels on
+     the *exact* release commit — a delta-copy sync-back makes them agree on
+     content and version, not on SHA.
 
      **Mechanized (xhrd-wi-06).** This step is no longer prose-only:
      `.<HIGH_ENTROPY_REDACTED>-integrity.yml` runs
@@ -114,7 +116,8 @@ only release PRs (rule 8).
 
      If diverged, the fast-forward above is impossible; the remedy is a
      sync-back PR carrying the release delta (version bump, changelog section,
-     regenerated inventory) merged with *Rebase and merge*.
+     regenerated inventory). Its merge style no longer matters for ancestry —
+     that was already lost — so choose whatever keeps `next` readable.
 
      **The v2.3.2 case, and the trap it exposes.** `next` (`066a83c`, 18:35) and
      `main` (`127a868`, 20:34) diverged — 8 commits on `next`, 1 on `main`,
@@ -124,9 +127,15 @@ only release PRs (rule 8).
      the release PR destroys ancestry and makes the `--ff-only` sync-back in this
      rule structurally impossible every time.
 
-     ⇒ **Merge release PRs with a merge commit or rebase — never squash.** The
-     two-commit release shape (bump + changelog) exists precisely so that merge
-     stays linear and the sync-back is a fast-forward.
+     ⇒ **Merge release PRs with a MERGE COMMIT.** Squash *and* Rebase-and-merge
+     both rewrite SHAs, so either one leaves `next`'s commits as non-ancestors of
+     `main` and forces the delta-copy path every time. Only a merge commit keeps
+     the release point a descendant of `next`, which is what makes the
+     fast-forward in this rule possible. The two-commit release shape (bump +
+     changelog) exists to keep the release delta small and reviewable — note it
+     does NOT keep history linear once a merge commit is used, which is the
+     deliberate trade: one merge node on `main` in exchange for a `next` that can
+     fast-forward.
    - A **hotfix** is just a patch release: cut the next patch version's
      `release/vX.Y.Z` branch (e.g. `release/v2.1.1`) from `main`, apply the
      fix, PR into `main`, then sync-back into `next`.

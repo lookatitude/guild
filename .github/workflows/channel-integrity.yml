@@ -1,6 +1,6 @@
 name: channel-integrity
 
-# Mechanizes release-discipline rule 4 — the sync-back.
+# Mechanizes release-discipline rule 8's sync-back clause.
 # (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
 #
 # Branches ARE distribution channels: main = STABLE (default marketplace
@@ -12,7 +12,7 @@ name: channel-integrity
 # That failure is invisible to every other gate: per-PR checks all stay green
 # because nothing is wrong with any individual PR. It happened for real —
 # v2.3.2 merged to main on 2026-07-25 and the sync-back never landed, leaving
-# next at 2.3.1 with nothing reporting it. Rule 4 was prose; prose does not
+# next at 2.3.1 with nothing reporting it. Rule 8's sync-back clause was prose; prose does not
 # enforce process.
 #
 # WHY THESE TRIGGERS:

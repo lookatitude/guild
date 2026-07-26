@@ -40,10 +40,10 @@
  * cut while the debt is outstanding. Closing that gap means adding the check to
  * the release path itself — a followup, not this lane.
  *
- * NOT A MERGE-SHAPE CHECK. Rule 8 also asks that the sync-back land without a
- * looping merge commit (fast-forward, or a rebase-merge PR). That is a property
- * of HOW the fix is applied, not of the resulting state, and is left to review.
- * This gate answers exactly one question: is beta behind stable?
+ * NOT A MERGE-SHAPE CHECK. Rule 8 also constrains HOW the sync-back lands (a
+ * fast-forward when ancestry allows, otherwise a delta-copy PR). That is a
+ * property of the fix, not of the resulting state, and is left to review. This
+ * gate answers exactly one question: is beta behind stable?
  *
  * Usage:
  *   npx tsx scripts/check-channel-integrity.ts [--stable <ref>] [--beta <ref>] [--json]
@@ -58,6 +58,8 @@ import { execFileSync } from "node:child_process";
 export const MANIFEST_PATH = ".claude-plugin/plugin.json";
 
 export interface ParsedVersion {
+  /** Raw MAJOR/MINOR/PATCH digit strings — compared without a precision ceiling. */
+  core: [string, string, string];
   triple: [number, number, number];
   /** Dot-separated prerelease identifiers; empty ⇒ a full release. */
   prerelease: string[];
@@ -66,6 +68,7 @@ export interface ParsedVersion {
 export interface ChannelState {
   ref: string;
   version: string;
+  core: [string, string, string];
   triple: [number, number, number];
   prerelease: string[];
 }
@@ -84,13 +87,37 @@ export interface IntegrityResult {
  * silently accept "2.3.2junk" as 2.3.2. Build metadata (`+sha`) is accepted and
  * discarded — SemVer §10 says it carries no precedence.
  */
+const NUM_ID = "0|[1-9]\\d*";
+const PRE_ID = `(?:${NUM_ID}|\\d*[A-Za-z-][0-9A-Za-z-]*)`;
+const SEMVER_RE = new RegExp(
+  `^v?(${NUM_ID})\\.(${NUM_ID})\\.(${NUM_ID})` +
+    `(?:-(${PRE_ID}(?:\\.${PRE_ID})*))?` +
+    `(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`
+);
+
 export function parseVersion(version: string): ParsedVersion {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(version.trim());
+  const m = SEMVER_RE.exec(version.trim());
   if (!m) throw new Error(`unparseable version "${version}" (want MAJOR.MINOR.PATCH[-prerelease][+build])`);
   return {
+    core: [m[1], m[2], m[3]],
     triple: [Number(m[1]), Number(m[2]), Number(m[3])],
     prerelease: m[4] ? m[4].split(".") : [],
   };
+}
+
+/**
+ * Compare two digit strings numerically with NO precision ceiling.
+ *
+ * `Number()` silently collapses values above 2^53 — `9007199254740992` and
+ * `9007199254740993` compare EQUAL — which SemVer §11.4.1 forbids and which
+ * would let the gate false-pass. Length-then-lexical is exact for arbitrary
+ * precision and needs no BigInt.
+ */
+function cmpNumericString(a: string, b: string): number {
+  const x = a.replace(/^0+(?=\d)/, "");
+  const y = b.replace(/^0+(?=\d)/, "");
+  if (x.length !== y.length) return x.length - y.length;
+  return x < y ? -1 : x > y ? 1 : 0;
 }
 
 /** Back-compat shim — the triple alone, for callers that only need MAJOR.MINOR.PATCH. */
@@ -114,10 +141,15 @@ export function compareTriple(a: [number, number, number], b: [number, number, n
  *   - two prereleases: compare identifiers left to right; numeric identifiers
  *     compare numerically and rank BELOW alphanumeric ones; a longer identifier
  *     list wins when all preceding identifiers are equal.
+ *
+ * Numeric comparison goes through cmpNumericString(), NOT Number(), so values
+ * beyond 2^53 order correctly (§11.4.1 has no precision limit).
  */
 export function compareVersions(a: ParsedVersion, b: ParsedVersion): number {
-  const t = compareTriple(a.triple, b.triple);
-  if (t !== 0) return t;
+  for (let i = 0; i < 3; i++) {
+    const t = cmpNumericString(a.core[i], b.core[i]);
+    if (t !== 0) return t;
+  }
 
   const aPre = a.prerelease;
   const bPre = b.prerelease;
@@ -133,7 +165,7 @@ export function compareVersions(a: ParsedVersion, b: ParsedVersion): number {
     const xNum = /^\d+$/.test(x);
     const yNum = /^\d+$/.test(y);
     if (xNum && yNum) {
-      const d = Number(x) - Number(y);
+      const d = cmpNumericString(x, y);
       if (d !== 0) return d;
     } else if (xNum !== yNum) {
       return xNum ? -1 : 1; // numeric identifiers rank below alphanumeric
@@ -238,9 +270,11 @@ export function main(argv: string[] = process.argv.slice(2)): number {
         "  # 2a. ff-possible -> fast-forward:\n" +
         "  git checkout next && git merge --ff-only <release-tag>\n" +
         "  # 2b. diverged -> sync-back PR carrying the release delta (version bump + changelog\n" +
-        "  #      + regenerated inventory), merged with Rebase-and-merge.\n" +
-        "  # NOTE: SQUASH-merging the release PR into main destroys ancestry and forces 2b every\n" +
-        "  #       time. Merge release PRs with a merge commit or rebase, never squash.\n"
+        "  #      + regenerated inventory). Ancestry is already lost, so the merge style no\n" +
+        "  #      longer matters; the channels will agree on content + version, not on SHA.\n" +
+        "  # NOTE: only a MERGE COMMIT preserves ancestry. Squash AND rebase both rewrite\n" +
+        "  #       SHAs, so either forces 2b every time. Use a merge commit for release PRs\n" +
+        "  #       whenever you want the fast-forward sync-back in 2a to stay possible.\n"
     );
     return 2;
   }
