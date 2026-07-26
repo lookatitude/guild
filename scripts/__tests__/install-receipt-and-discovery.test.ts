@@ -168,11 +168,74 @@ describe("REGRESSION: the receipt path install.sh actually uses", () => {
     expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(true);
   });
 
+  // EXECUTE the selector — round-4 found the previous mtime chain succeeded
+  // with GARBAGE under GNU stat (`-f` = filesystem status, `%m` = mount point),
+  // so a source-regex assertion could never have caught it. These drive the
+  // real function under both stat semantics.
+  describe("codex_cache_plugin_dir picks the just-installed version", () => {
+    const fnSel = extractFn("codex_cache_plugin_dir");
+    let cache: string;
+    let gnubin: string;
+
+    beforeAll(() => {
+      cache = fs.mkdtempSync(path.join(os.tmpdir(), "guild-cxsel-"));
+      for (const v of ["2.10.0", "2.3.2", "2.2.0"]) {
+        writeManifest(path.join(cache, "plugins", "cache", "guild", "guild", v, ".codex-plugin"), v);
+      }
+      // Distinct mtimes a second apart minimum — stat has 1s granularity, and a
+      // sub-second fixture ties every mtime and proves nothing (learned the
+      // hard way in round 3's first fixture attempt).
+      const base = Date.UTC(2026, 0, 1) / 1000;
+      const dir = (v: string) => path.join(cache, "plugins", "cache", "guild", "guild", v);
+      fs.utimesSync(dir("2.10.0"), base, base);
+      fs.utimesSync(dir("2.3.2"), base + 100, base + 100);
+      fs.utimesSync(dir("2.2.0"), base + 200, base + 200); // just-installed
+
+      // A GNU-semantics stat shim: `-c %Y` works, `-f` SUCCEEDS with a mount
+      // point — the exact behavior that silently broke the BSD-first chain.
+      gnubin = fs.mkdtempSync(path.join(os.tmpdir(), "guild-gnustat-"));
+      fs.writeFileSync(
+        path.join(gnubin, "stat"),
+        '#!/bin/bash\nif [ "$1" = "-c" ] && [ "$2" = "%Y" ]; then exec /usr/bin/stat -f %m "$3"; fi\nif [ "$1" = "-f" ]; then echo "/"; exit 0; fi\nexit 1\n',
+        { mode: 0o755 }
+      );
+    });
+
+    afterAll(() => {
+      for (const d of [cache, gnubin]) if (d) fs.rmSync(d, { recursive: true, force: true });
+    });
+
+    it("native stat: newest mtime wins, not filesystem order", () => {
+      expect(path.basename(sh(`${fnSel}\ncodex_cache_plugin_dir ${cache}`))).toBe("2.2.0");
+    });
+
+    it("GNU-semantics stat: still newest — the BSD-first chain sorted by mount point here", () => {
+      const out = execFileSync("bash", ["-c", `${fnSel}\ncodex_cache_plugin_dir ${cache}`], {
+        encoding: "utf8",
+        env: { ...process.env, PATH: `${gnubin}:${process.env.PATH ?? ""}` },
+      }).trim();
+      expect(path.basename(out)).toBe("2.2.0");
+    });
+
+    it("tracks a change in which version is newest", () => {
+      const d = path.join(cache, "plugins", "cache", "guild", "guild", "2.3.2");
+      const t = Date.UTC(2026, 5, 1) / 1000;
+      fs.utimesSync(d, t, t);
+      expect(path.basename(sh(`${fnSel}\ncodex_cache_plugin_dir ${cache}`))).toBe("2.3.2");
+    });
+
+    it("empty/absent cache yields empty so the caller falls back", () => {
+      const none = fs.mkdtempSync(path.join(os.tmpdir(), "guild-nocache-"));
+      expect(sh(`${fnSel}\ncodex_cache_plugin_dir ${none}; echo "rc=$?"`)).toBe("rc=0");
+      fs.rmSync(none, { recursive: true, force: true });
+    });
+  });
+
   it("install_codex_cli resolves the INSTALLED CACHE dir, not just the marketplace source", () => {
     const src = fs.readFileSync(INSTALL_SH, "utf8");
     // The cache is populated by `codex plugin add` before write_receipt runs;
     // the marketplace source is only the fallback.
-    expect(src).toMatch(/plugins\/cache\/guild/);
+    expect(src).toMatch(/CODEX_PLUGIN_ROOT_DIR="\$\(codex_cache_plugin_dir "\$\{CODEX_HOME:-\$HOME\/\.codex\}"\)"/);
     expect(src).toMatch(/\[ -z "\$CODEX_PLUGIN_ROOT_DIR" \] && CODEX_PLUGIN_ROOT_DIR="\$CODEX_MARKETPLACE_PATH\/plugins\/guild"/);
     expect(src).toMatch(/write_receipt codex-cli "\$CODEX_PLUGIN_ROOT_DIR"/);
   });

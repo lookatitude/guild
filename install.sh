@@ -608,6 +608,27 @@ install_claude_code_cli() {
   say ""
 }
 
+# Resolve the just-installed Codex plugin dir inside the version cache:
+# the MOST RECENTLY MODIFIED version dir carrying .codex-plugin/plugin.json
+# (`codex plugin add` creates/touches the one it installs; `find | head -1`
+# is filesystem order and could pick a STALE version).
+#
+# mtime portability is ASYMMETRIC and the order below is load-bearing:
+# GNU `stat -c %Y` fails cleanly on BSD, but BSD-style `stat -f %m` on GNU
+# SUCCEEDS with garbage — there `-f` is filesystem status and `%m` the MOUNT
+# POINT — so a BSD-first chain never falls through on Linux and sorts by
+# mount point. GNU first, BSD second.
+codex_cache_plugin_dir() {
+  # $1 = codex home
+  find "$1/plugins/cache/guild" -maxdepth 4 -type d \
+    -exec test -f '{}/.codex-plugin/plugin.json' ';' -print 2>/dev/null \
+  | while IFS= read -r _d; do
+      _mt="$(stat -c %Y "$_d" 2>/dev/null || stat -f %m "$_d" 2>/dev/null || echo 0)"
+      printf '%s\t%s\n' "$_mt" "$_d"
+    done \
+  | sort -rn | head -1 | cut -f2- || true
+}
+
 install_codex_cli() {
   say "Codex CLI — $1"
   CODEX_MARKETPLACE_PATH="$(abs_path "$RENDERED_DIST/codex-marketplace")"
@@ -623,20 +644,7 @@ install_codex_cli() {
   # version probe resolves the CODEX version rather than the checkout's Claude
   # one. Writing only into the marketplace SOURCE dir left the installed cache
   # with no receipt at all, so `guild-run update` refused (xhrd-wi-05 / G5).
-  # Pick the MOST RECENTLY MODIFIED cached version dir: `codex plugin add` just
-  # created/touched the one it installed. `find | head -1` returns filesystem
-  # order, not newest — with 2.2.0 and 2.3.2 both cached it returned different
-  # answers on different layouts, so it could record a STALE version. stat is
-  # spelled differently on BSD and GNU; try both.
-  CODEX_PLUGIN_ROOT_DIR="$(
-    find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/guild" -maxdepth 4 -type d \
-      -exec test -f '{}/.codex-plugin/plugin.json' ';' -print 2>/dev/null \
-    | while IFS= read -r _d; do
-        _mt="$(stat -f %m "$_d" 2>/dev/null || stat -c %Y "$_d" 2>/dev/null || echo 0)"
-        printf '%s\t%s\n' "$_mt" "$_d"
-      done \
-    | sort -rn | head -1 | cut -f2- || true
-  )"
+  CODEX_PLUGIN_ROOT_DIR="$(codex_cache_plugin_dir "${CODEX_HOME:-$HOME/.codex}")"
   # Fall back to the marketplace source dir when the cache is not resolvable
   # (dry-run, or a Codex layout we do not recognise) — a correct machine receipt
   # is still better than none.

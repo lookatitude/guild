@@ -96,6 +96,15 @@ export function runSelfUpdate(opts: {
   force?: boolean;
   repo?: string;
   deps?: Partial<SelfUpdateDeps>;
+  /**
+   * Override the update-check cache file (default: cachePath() under the real
+   * home). Tests MUST pass this: under jest, `process.env` mutations do not
+   * reach the native environment `os.homedir()` reads, so HOME-based isolation
+   * silently fails and a test run overwrites the developer's real
+   * ~/.guild/update-check.json with fixture SHAs — which the update signal then
+   * trusts (it does not validate source_repo).
+   */
+  cacheFile?: string;
 }): number {
   const deps: SelfUpdateDeps = { ...defaultDeps, ...(opts.deps ?? {}) };
   const { log, run, fsi } = deps;
@@ -129,7 +138,7 @@ export function runSelfUpdate(opts: {
   }
 
   log(`host ${receipt.host}, channel ${receipt.channel} (ref ${receipt.ref}), installed ${receipt.commit?.slice(0, 7) ?? receipt.version}`);
-  const cache = refreshCache({ repo, now: deps.now() });
+  const cache = refreshCache({ repo, now: deps.now(), file: opts.cacheFile });
   if (!cache) {
     log("update check failed (offline / no git?) — nothing changed.");
     return 1;

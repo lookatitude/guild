@@ -63,6 +63,7 @@ describe("runSelfUpdate gating", () => {
     let networkTouched = false;
     const rc = runSelfUpdate({
       pkgRoot: pkg,
+      cacheFile: path.join(mkTmp("guild-cache-"), "update-check.json"),
       deps: { ...silent, run: () => void (networkTouched = true) },
     });
     expect(rc).toBe(1);
@@ -72,7 +73,7 @@ describe("runSelfUpdate gating", () => {
   it("refuses without a receipt, naming the recovery path", () => {
     const pkg = mkTmp("guild-noreceipt-");
     const lines: string[] = [];
-    const rc = runSelfUpdate({ pkgRoot: pkg, deps: { log: (l) => lines.push(l) } });
+    const rc = runSelfUpdate({ pkgRoot: pkg, cacheFile: path.join(mkTmp("guild-cache-"), "update-check.json"), deps: { log: (l) => lines.push(l) } });
     expect(rc).toBe(1);
     expect(lines.join("\n")).toContain(RECEIPT_BASENAME);
     expect(lines.join("\n")).toContain("install.sh");
@@ -82,6 +83,7 @@ describe("runSelfUpdate gating", () => {
     const pkg = pkgWithReceipt();
     const rc = runSelfUpdate({
       pkgRoot: pkg,
+      cacheFile: path.join(mkTmp("guild-cache-"), "update-check.json"),
       deps: {
         ...silent,
         run: () => {
@@ -135,6 +137,12 @@ describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () 
     cleanups.push(p);
     return p;
   };
+
+  // Cache isolation via the cacheFile seam, NOT via HOME: under jest,
+  // process.env mutations never reach the native environment os.homedir()
+  // reads (verified with an in-test probe: HOME showed the temp dir while
+  // os.homedir() still returned the real home), so env-based isolation
+  // silently fails while the tests stay green.
   afterAll(() => {
     for (const p of cleanups) fs.rmSync(p, { recursive: true, force: true });
   });
@@ -225,7 +233,12 @@ describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () 
     };
 
     const lines: string[] = [];
-    const rc = runSelfUpdate({ pkgRoot: pkg, repo, deps: { log: (l) => lines.push(l), run } });
+    const rc = runSelfUpdate({
+      pkgRoot: pkg,
+      repo,
+      cacheFile: track(path.join(mkTmp("guild-cache-"), "update-check.json")),
+      deps: { log: (l) => lines.push(l), run },
+    });
     expect(rc).toBe(0);
 
     // The swapped root must have the PAYLOAD shape: manifest at the top, new
@@ -275,6 +288,7 @@ describe("runSelfUpdate up-to-date with real local remote", () => {
     const lines: string[] = [];
     const rc = runSelfUpdate({
       pkgRoot: pkg,
+      cacheFile: path.join(mkTmp("guild-cache-"), "update-check.json"),
       repo,
       deps: { log: (l) => lines.push(l), run: () => {} },
     });
