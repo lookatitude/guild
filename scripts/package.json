@@ -4,6 +4,7 @@
   "scripts": {
     "test": "npx jest --testPathPattern=__tests__ --no-coverage --runInBand",
     "build:inventory": "npx tsx build-inventory.ts",
+    "check:inventory": "npx tsx build-inventory.ts --check",
     "build:hosts": "npx tsx build-host-packages.ts",
     "check:docs-architecture": "npx tsx check-docs-architecture.ts",
     "check:modules": "npx tsx check-module-ownership.ts",
