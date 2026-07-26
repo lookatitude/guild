@@ -23,19 +23,37 @@
  *   backend, benchmark, or website implementation") mechanically checkable
  *   instead of asserted.
  *
- * VOCABULARY AUTHORITY
+ * VOCABULARY AUTHORITY — the MH-02-R1-B05 reconciliation
  *   Every closed list below mirrors `guild.conformance_scenarios.v1`
- *   §closed_vocabularies (MH-01C). Note a KNOWN DIVERGENCE between the two W0
- *   artifacts: `guild.multi_host_runtime_boundary.v1`
- *   §normalized_event_contract.event_types spells the vocabulary
- *   `tool.pre` / `tool.post` / `session.resume` / `session.stop` /
- *   `task.transition`, while `guild.conformance_scenarios.v1`
- *   §closed_vocabularies.event_names spells it `tool.before` / `tool.after` /
- *   `run.resume` / `run.stop` / `task.dispatch` / `task.collect`. This core
- *   adopts the CONFORMANCE-SUITE spelling because scenario `action_event.name`
- *   is the machine-checkable surface MH-02 must satisfy. The divergence is
- *   recorded for the contract owner rather than silently reconciled; MH-03 must
- *   bind host-native events to THIS list.
+ *   §closed_vocabularies (MH-01C). The two W0 artifacts previously declared
+ *   CONTRADICTORY normalized event vocabularies. That contradiction is now
+ *   resolved NORMATIVELY in both frozen contract sources, and this file mirrors
+ *   the resolution as typed constants (see `NEUTRAL_NORMALIZED_EVENT_VOCABULARY`).
+ *
+ *   `guild.normalized_event.v2` — the 19-name vocabulary below — is NORMATIVE.
+ *   `guild.normalized_event.v1` — the 8-name list the boundary contract used to
+ *   carry (`session.resume` / `tool.pre` / `tool.post` / `task.transition` /
+ *   `session.stop` + three unchanged names) — is SUPERSEDED.
+ *
+ *   The selection is evidenced by SHIPPED producer/consumer behaviour, not by
+ *   preference:
+ *     1. `hooks/hooks.json` ships `TaskCreated` and `TaskCompleted` as two
+ *        DISTINCT hook events. v2's `task.dispatch` + `task.collect` normalizes
+ *        them losslessly; v1's single `task.transition` collapses two shipped
+ *        producers into one name and cannot be inverted.
+ *     2. Guild's shipped state model is run-centric (`.guild/runs/<run-id>/`,
+ *        `run_id` throughout the lifecycle surface), which v2's `run.resume` /
+ *        `run.stop` names correctly and v1's `session.*` does not.
+ *     3. Neither vocabulary has any shipped producer literal, so v1 holds no
+ *        incumbency claim; and v1 cannot express the `package.*`, `receipt.*`,
+ *        `runtime.verify`, or `migration.*` events the other 26 frozen scenarios
+ *        require.
+ *
+ *   Because v1 → v2 is a PARTIAL function (`task.transition` is ambiguous) the
+ *   compatibility semantics are machine-readable rather than guessed: see
+ *   `mapLegacyNeutralEventName`, which returns a typed decision per legacy name
+ *   instead of silently picking a replacement. MH-03 binds host-native events to
+ *   the v2 list.
  *
  * There is no usable CLI here — this is a pure library module. It is reached
  * through the lifecycle module's public entrypoint (`src/modules/lifecycle`).
@@ -181,12 +199,29 @@ export const NEUTRAL_REASON_CODES = [
   "authentication_failed",
   "policy_denied",
   "approval_required",
+  // admission (MH-02-R1-B01): the lifecycle path decides, it never trusts a verdict
+  "admission_context_missing",
+  "execution_failed",
+  // not-applicable rule binding (MH-02-R1-B02)
+  "not_applicable_rule_missing",
+  "not_applicable_rule_unknown",
+  "not_applicable_rule_mismatch",
+  // normalized-event vocabulary compatibility (MH-02-R1-B05)
+  "event_vocabulary_superseded",
+  "event_vocabulary_ambiguous",
   // support + conformance
   "support_precondition_unproven",
   "support_operation_failed",
   "scenario_evidence_incomplete",
   "scenario_result_mismatch",
   "scenario_registry_invalid",
+  // conformance evidence binding (MH-02-R1-B04)
+  "scenario_suite_version_mismatch",
+  "scenario_required_set_mismatch",
+  "scenario_results_unordered",
+  "scenario_receipt_reference_missing",
+  "scenario_runtime_binding_mismatch",
+  "scenario_evidence_stale",
   // core boundary
   "boundary_forbidden_edge",
   "boundary_unclassified_edge",
@@ -405,4 +440,200 @@ export function neutralOutcome(input: NeutralOutcomeInput): NeutralOutcome {
     },
     facts: { ...(input.facts ?? {}) },
   }) as NeutralOutcome;
+}
+
+// ---------------------------------------------------------------------------
+// Normalized-event vocabulary: normative version + machine-readable compatibility
+// (the MH-02-R1-B05 reconciliation)
+// ---------------------------------------------------------------------------
+
+/** How a superseded (v1) event name relates to the normative (v2) vocabulary. */
+export const NEUTRAL_EVENT_COMPATIBILITY_KINDS = [
+  "unchanged",
+  "renamed",
+  "ambiguous_split",
+] as const;
+export type NeutralEventCompatibilityKind = (typeof NEUTRAL_EVENT_COMPATIBILITY_KINDS)[number];
+
+export interface NeutralEventCompatibilityRule {
+  readonly from: string;
+  /** The single normative replacement, or `null` when no lossless one exists. */
+  readonly to: string | null;
+  readonly kind: NeutralEventCompatibilityKind;
+  /** Populated only for `ambiguous_split`: the candidates that cannot be chosen between. */
+  readonly candidates: readonly string[];
+}
+
+/**
+ * The v1 → v2 mapping, stated per legacy name. It is deliberately a PARTIAL
+ * function: `task.transition` has two normative images and therefore NO lossless
+ * mapping, which is recorded as `ambiguous_split` rather than resolved by guess.
+ */
+export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibilityRule[] = [
+  { from: "session.start", to: "session.start", kind: "unchanged", candidates: [] },
+  { from: "prompt.submit", to: "prompt.submit", kind: "unchanged", candidates: [] },
+  { from: "context.compact", to: "context.compact", kind: "unchanged", candidates: [] },
+  { from: "session.resume", to: "run.resume", kind: "renamed", candidates: [] },
+  { from: "tool.pre", to: "tool.before", kind: "renamed", candidates: [] },
+  { from: "tool.post", to: "tool.after", kind: "renamed", candidates: [] },
+  { from: "session.stop", to: "run.stop", kind: "renamed", candidates: [] },
+  {
+    from: "task.transition",
+    to: null,
+    kind: "ambiguous_split",
+    candidates: ["task.dispatch", "task.collect"],
+  },
+];
+
+/** The superseded 8-name list, exactly as `guild.normalized_event.v1` declared it. */
+export const NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = [
+  "session.start",
+  "session.resume",
+  "prompt.submit",
+  "tool.pre",
+  "tool.post",
+  "context.compact",
+  "task.transition",
+  "session.stop",
+] as const;
+
+/**
+ * v2 names with NO v1 preimage at all. A name reachable only as an ambiguous
+ * `candidate` (`task.dispatch`, `task.collect`) is deliberately NOT counted as
+ * introduced: it has a v1 preimage, just not an invertible one.
+ */
+export const NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2: readonly string[] = NEUTRAL_EVENT_NAMES.filter(
+  (name) =>
+    !NEUTRAL_EVENT_COMPATIBILITY_RULES.some(
+      (rule) => rule.to === name || rule.candidates.indexOf(name) !== -1
+    )
+);
+
+/**
+ * The shared normative block. This object is mirrored BYTE-FOR-BYTE by the
+ * `normalized_event_vocabulary` key in BOTH frozen W0 contract artifacts. It is
+ * declared natively here — the plugin never imports umbrella source — and the
+ * focused tests prove field equality against both artifacts read as data.
+ */
+export const NEUTRAL_NORMALIZED_EVENT_VOCABULARY = neutralFreeze({
+  block_id: "guild.normalized_event_vocabulary.v1",
+  normative_version: "guild.normalized_event.v2",
+  reconciles: "MH-02-R1-B05",
+  vocabulary_owner: "host-neutral-core",
+  native_mapping_owner: "host-adapters",
+  transport_fact_owner: "execution-transports",
+  consumer: "host-neutral-core",
+  normative_event_names: [...NEUTRAL_EVENT_NAMES],
+  superseded_versions: [
+    {
+      version: "guild.normalized_event.v1",
+      status: "superseded",
+      superseded_by: "guild.normalized_event.v2",
+      event_types: [...NEUTRAL_SUPERSEDED_EVENT_NAMES_V1],
+    },
+  ],
+  compatibility: {
+    policy: "explicit_typed_mapping",
+    mapping_totality: "partial",
+    superseded_disposition: "refused",
+    superseded_reason_code: "event_vocabulary_superseded",
+    ambiguous_disposition: "refused",
+    ambiguous_reason_code: "event_vocabulary_ambiguous",
+    unmapped_disposition: "refused",
+    unmapped_reason_code: "unknown_event",
+    rules: NEUTRAL_EVENT_COMPATIBILITY_RULES.map((rule) => ({
+      from: rule.from,
+      to: rule.to,
+      kind: rule.kind,
+      candidates: [...rule.candidates],
+    })),
+    introduced_in_v2: [...NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2],
+  },
+});
+
+/**
+ * Decide what a SUPERSEDED event name means under the normative vocabulary.
+ *
+ * Every answer is typed, and none of them is "quietly use the replacement". A
+ * name with a lossless image is refused WITH that image named, so an adapter is
+ * told exactly what to send; `task.transition` is refused as ambiguous with both
+ * candidates named, because choosing one would be the silent guess the frozen
+ * contract's rule 3 forbids.
+ */
+export function mapLegacyNeutralEventName(name: unknown): NeutralOutcome {
+  // The three `unchanged` names are members of BOTH versions. A name that is
+  // already normative is not legacy at all, so it resolves to itself and is
+  // accepted — checking this FIRST is what stops `session.start` from being
+  // reported as superseded merely because it also existed in v1.
+  if (isNeutralEventName(name)) {
+    return neutralOutcome({
+      type: "guild.version_compatibility_outcome.v1",
+      disposition: "succeeded",
+      assertions: ["the submitted name is already a normative event name"],
+      facts: {
+        submitted_event_name: name,
+        normative_version: "guild.normalized_event.v2",
+        normative_event_name: name,
+        candidates: [],
+        compatibility_kind: "unchanged",
+      },
+    });
+  }
+
+  const rule = NEUTRAL_EVENT_COMPATIBILITY_RULES.find((candidate) => candidate.from === name);
+
+  if (rule === undefined) {
+    return neutralOutcome({
+      type: "guild.version_compatibility_outcome.v1",
+      disposition: "refused",
+      reason_code: "unknown_event",
+      assertions: [
+        "the normalized event vocabulary is closed",
+        "the event is not silently skipped",
+      ],
+      facts: {
+        submitted_event_name: name ?? null,
+        normative_version: "guild.normalized_event.v2",
+        in_normative_vocabulary: isNeutralEventName(name),
+      },
+    });
+  }
+
+  if (rule.kind === "ambiguous_split") {
+    return neutralOutcome({
+      type: "guild.version_compatibility_outcome.v1",
+      disposition: "refused",
+      reason_code: "event_vocabulary_ambiguous",
+      assertions: [
+        "a superseded name with two normative images has no lossless mapping",
+        "the core refuses rather than choosing a replacement",
+      ],
+      facts: {
+        submitted_event_name: rule.from,
+        superseded_version: "guild.normalized_event.v1",
+        normative_version: "guild.normalized_event.v2",
+        normative_event_name: null,
+        candidates: [...rule.candidates],
+        compatibility_kind: rule.kind,
+      },
+    });
+  }
+
+  return neutralOutcome({
+    type: "guild.version_compatibility_outcome.v1",
+    disposition: "refused",
+    reason_code: "event_vocabulary_superseded",
+    assertions: [
+      "the submitted name belongs to a superseded vocabulary version",
+      "its single normative replacement is named, and no substitution is performed",
+    ],
+    facts: {
+      submitted_event_name: rule.from,
+      superseded_version: "guild.normalized_event.v1",
+      normative_version: "guild.normalized_event.v2",
+      normative_event_name: rule.to,
+      candidates: [],
+      compatibility_kind: rule.kind,
+    },
+  });
 }

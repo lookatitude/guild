@@ -34,6 +34,7 @@ import {
   NEUTRAL_CORE_SCENARIOS,
   NEUTRAL_CORE_WAVE_OWNER,
   NEUTRAL_EVIDENCE_PROFILES,
+  NEUTRAL_REQUIRED_CORE_SCENARIO_IDS,
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
   NEUTRAL_SUPPORT_TRANSITIONS,
@@ -43,7 +44,13 @@ import {
   evaluateNeutralConformanceDecision,
   validateNeutralScenarioRegistry,
 } from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type { NeutralSupportRecord } from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
+import type {
+  NeutralConformanceEvidence,
+  NeutralEvidenceFreshnessVerdict,
+  NeutralRuntimeBinding,
+  NeutralScenarioResult,
+  NeutralSupportRecord,
+} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
 
 import { NEUTRAL_LIFECYCLE_PHASES } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
 
@@ -150,6 +157,85 @@ describe("MH-02 acceptance 3 — core import closure", () => {
       ].join("\n")
     );
     expect(specifiers.sort()).toEqual(["./a", "./b", "./c", "./d", "./e", "./f"]);
+  });
+
+  // -------------------------------------------------------------------------
+  // MH-02-R1-B03 — the extractor is lexical, so indentation and comments cannot
+  // hide an edge and commented-out code cannot invent one.
+  // -------------------------------------------------------------------------
+
+  describe("MH-02-R1-B03 adversarial import syntax", () => {
+    /** Forms that MUST yield the specifier. Each was a bypass or is a near-miss. */
+    it.each([
+      ["leading-indented static", '  import * as fs from "fs";'],
+      ["tab-indented static", '\timport * as fs from "fs";'],
+      ["multiline static", 'import {\n  readFileSync,\n} from "fs";'],
+      ["comment-separated dynamic", 'import /* core */ ("fs")'],
+      ["newline-separated dynamic", 'import\n(\n"fs"\n)'],
+      ["comment-separated require", 'require /* c */ ("fs")'],
+      ["indented bare import", '    import "fs";'],
+      ["type-only indented", '  import type { Stats } from "fs";'],
+      ["re-export indented", '  export * from "fs";'],
+      ["named re-export", '  export { readFileSync } from "fs";'],
+      ["default+named", 'import fs, { readFileSync } from "fs";'],
+      ["single quotes", "  import fs from 'fs';"],
+      ["trailing line comment", 'import fs from "fs"; // the io builtin'],
+      ["block comment before statement", '/* header */ import fs from "fs";'],
+      ["require inside an expression", 'const x = { fs: require("fs") };'],
+      ["dynamic import in a ternary", 'const p = cond ? import("fs") : null;'],
+      ["node: prefixed", '  import * as fs from "node:fs";'],
+    ])("extracts the specifier from a %s form", (_label, source) => {
+      const specifiers = extractNeutralImportSpecifiers(source);
+      expect(specifiers.some((s) => s === "fs" || s === "node:fs")).toBe(true);
+    });
+
+    /** Forms that MUST NOT yield a specifier: they are comments or strings. */
+    it.each([
+      ["commented-out require", '// require("fs")'],
+      ["commented-out static import", '// import fs from "fs";'],
+      ["block-commented import", '/* import fs from "fs"; */'],
+      ["jsdoc mentioning an import", '/**\n * imports no host adapter\n * import fs from "fs"\n */'],
+      ["import word inside a string", 'const s = "import fs from \\"fs\\"";'],
+      ["require word inside a string", 'const s = "require(\\"fs\\")";'],
+      ["from word inside a string", 'const s = "from \\"fs\\"";'],
+      ["identifier merely prefixed with require", 'const requireish = requireX("fs");'],
+      ["regex literal containing a require call", 'const re = /require\\("fs"\\)/;'],
+      ["template literal containing an import", 'const t = `import fs from "fs"`;'],
+    ])("ignores a %s", (_label, source) => {
+      expect(extractNeutralImportSpecifiers(source)).toEqual([]);
+    });
+
+    it("does not misread division as a regex literal", () => {
+      expect(extractNeutralImportSpecifiers('const r = 10 / 2; const s = a / b;')).toEqual([]);
+    });
+
+    it("still sees an edge hidden inside a template interpolation", () => {
+      expect(extractNeutralImportSpecifiers('const t = `${require("fs")}`;')).toEqual(["fs"]);
+    });
+
+    it("gives a FORBIDDEN verdict for each previously-bypassing form", () => {
+      for (const source of [
+        '  import * as fs from "fs";',
+        'import /* core */ ("fs")',
+        'import {\n  readFileSync,\n} from "fs";',
+      ]) {
+        const files = NEUTRAL_CORE_MEMBERS.map((member, index) => ({
+          path: member,
+          source: index === 0 ? source : "",
+        }));
+        const verdict = evaluateNeutralCoreBoundary(files);
+        expect(verdict.disposition).toBe("failed");
+        expect(verdict.reason_code).toBe("boundary_forbidden_edge");
+      }
+    });
+
+    it("does NOT report a forbidden edge for a commented-out require", () => {
+      const files = NEUTRAL_CORE_MEMBERS.map((member, index) => ({
+        path: member,
+        source: index === 0 ? '// require("fs")' : "",
+      }));
+      expect(evaluateNeutralCoreBoundary(files).disposition).toBe("succeeded");
+    });
   });
 
   it("declares a forbidden matcher for every boundary class MH-02 acceptance 3 names", () => {
@@ -386,51 +472,223 @@ describe("neutral support claim", () => {
 describe("neutral conformance decision", () => {
   const required = NEUTRAL_CORE_SCENARIOS.map((s) => s.stable_id);
 
-  function allExpected() {
-    return NEUTRAL_CORE_SCENARIOS.reduce<Record<string, { disposition: string }>>(
-      (acc, scenario) => {
-        acc[scenario.stable_id] = { disposition: scenario.expected_typed_outcome.disposition };
-        return acc;
-      },
-      {}
-    );
+  const ACTIVATED_RUNTIME: NeutralRuntimeBinding = {
+    host_id: "claude-code-cli",
+    host_version: "2.2.0",
+    runtime_version: "guild-2.2.0",
+    release_id: "rel-2026-07-26-a",
+    contract_version: 1,
+  };
+
+  /** A complete, ordered, receipt-bound, fresh, exactly-bound evidence package. */
+  function evidence(
+    patch: Partial<NeutralConformanceEvidence> = {},
+    perResult: (
+      result: NeutralScenarioResult,
+      index: number
+    ) => NeutralScenarioResult = (r) => r
+  ): NeutralConformanceEvidence {
+    return {
+      suite_id: NEUTRAL_SCENARIO_SUITE_ID,
+      suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
+      required_scenario_ids: [...required],
+      activated_runtime: ACTIVATED_RUNTIME,
+      results: NEUTRAL_CORE_SCENARIOS.map((scenario, index) =>
+        perResult(
+          {
+            stable_id: scenario.stable_id,
+            outcome_type: scenario.expected_typed_outcome.type,
+            disposition: scenario.expected_typed_outcome.disposition,
+            reason_code:
+              scenario.expected_typed_outcome.disposition === "succeeded"
+                ? null
+                : scenario.stable_id === "MHRC-UNS-002"
+                  ? "policy_denied"
+                  : "gate_unsatisfied",
+            receipt_ref: `receipt:run-1#${scenario.stable_id}`,
+            runtime_binding: ACTIVATED_RUNTIME,
+            evidence_freshness: "fresh",
+          },
+          index
+        )
+      ),
+      ...patch,
+    };
   }
 
   it("promotes only when every required scenario matched its expected disposition", () => {
-    const outcome = evaluateNeutralConformanceDecision(allExpected(), required);
+    const outcome = evaluateNeutralConformanceDecision(evidence());
     expect(outcome.type).toBe("guild.support_transition_outcome.v1");
     expect(outcome.disposition).toBe("succeeded");
     expect(outcome.facts.may_promote_conformant).toBe(true);
+    expect(outcome.facts.activated_runtime).toEqual(ACTIVATED_RUNTIME);
   });
 
   it("counts an expected refusal as a pass (explicit refusal satisfies the scenario)", () => {
-    const results = allExpected();
-    expect(results["MHRC-LIF-002"].disposition).toBe("refused");
-    expect(evaluateNeutralConformanceDecision(results, required).disposition).toBe("succeeded");
-  });
-
-  it("refuses promotion when a required scenario result is absent", () => {
-    const results = allExpected();
-    delete results["MHRC-LIF-004"];
-    const outcome = evaluateNeutralConformanceDecision(results, required);
-    expect(outcome.disposition).toBe("refused");
-    expect(outcome.reason_code).toBe("scenario_evidence_incomplete");
-    expect(outcome.facts.missing_scenarios).toEqual(["MHRC-LIF-004"]);
-    expect(outcome.facts.may_promote_conformant).toBe(false);
+    const pkg = evidence();
+    expect(pkg.results.find((r) => r.stable_id === "MHRC-LIF-002")?.disposition).toBe("refused");
+    expect(evaluateNeutralConformanceDecision(pkg).disposition).toBe("succeeded");
   });
 
   it("fails promotion when a required scenario produced the wrong disposition", () => {
-    const results = allExpected();
-    results["MHRC-LIF-001"] = { disposition: "failed" };
-    const outcome = evaluateNeutralConformanceDecision(results, required);
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({}, (r) =>
+        r.stable_id === "MHRC-LIF-001" ? { ...r, disposition: "failed", reason_code: "gate_unsatisfied" } : r
+      )
+    );
     expect(outcome.disposition).toBe("failed");
     expect(outcome.reason_code).toBe("scenario_result_mismatch");
     expect(outcome.facts.may_promote_conformant).toBe(false);
   });
 
   it("is deterministic across repeated evaluation", () => {
-    const a = evaluateNeutralConformanceDecision(allExpected(), required);
-    const b = evaluateNeutralConformanceDecision(allExpected(), required);
+    const a = evaluateNeutralConformanceDecision(evidence());
+    const b = evaluateNeutralConformanceDecision(evidence());
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+
+  // -------------------------------------------------------------------------
+  // MH-02-R1-B04 — promotion cannot be obtained without release-bound evidence
+  // -------------------------------------------------------------------------
+
+  /** The reviewer's exact probe #1: zero scenarios. */
+  it("refuses an entirely empty evidence package", () => {
+    const outcome = evaluateNeutralConformanceDecision(
+      {} as unknown as NeutralConformanceEvidence
+    );
+    expect(outcome.disposition).toBe("refused");
+    expect(outcome.reason_code).toBe("scenario_suite_version_mismatch");
+    expect(outcome.facts.may_promote_conformant).toBe(false);
+  });
+
+  it("refuses an empty required scenario set even with the right suite tuple", () => {
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({ required_scenario_ids: [], results: [] })
+    );
+    expect(outcome.disposition).toBe("refused");
+    expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
+  });
+
+  it("refuses a caller-narrowed required set that omits a core scenario", () => {
+    const narrowed = required.slice(0, 2);
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({
+        required_scenario_ids: narrowed,
+        results: evidence().results.slice(0, 2),
+      })
+    );
+    expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
+    expect(outcome.facts.omitted_required_scenarios).toEqual(required.slice(2));
+  });
+
+  /** The reviewer's exact probe #2: five bare disposition strings. */
+  it("refuses bare disposition-only records that carry no typed outcome", () => {
+    const bare = {
+      suite_id: NEUTRAL_SCENARIO_SUITE_ID,
+      suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
+      required_scenario_ids: [...required],
+      activated_runtime: ACTIVATED_RUNTIME,
+      results: NEUTRAL_CORE_SCENARIOS.map((s) => ({
+        stable_id: s.stable_id,
+        disposition: s.expected_typed_outcome.disposition,
+      })),
+    } as unknown as NeutralConformanceEvidence;
+    const outcome = evaluateNeutralConformanceDecision(bare);
+    expect(outcome.disposition).toBe("refused");
+    expect(outcome.reason_code).toBe("scenario_evidence_incomplete");
+    expect(outcome.facts.may_promote_conformant).toBe(false);
+  });
+
+  it("refuses a suite id or version that is not the pinned tuple", () => {
+    expect(evaluateNeutralConformanceDecision(evidence({ suite_version: "9.9.9" })).reason_code).toBe(
+      "scenario_suite_version_mismatch"
+    );
+    expect(evaluateNeutralConformanceDecision(evidence({ suite_id: "other.suite" })).reason_code).toBe(
+      "scenario_suite_version_mismatch"
+    );
+  });
+
+  it("refuses results that are not ordered against the required set", () => {
+    const pkg = evidence();
+    const shuffled = [pkg.results[1], pkg.results[0], ...pkg.results.slice(2)];
+    const outcome = evaluateNeutralConformanceDecision(evidence({ results: shuffled }));
+    expect(outcome.reason_code).toBe("scenario_results_unordered");
+  });
+
+  it("refuses a result with no receipt reference", () => {
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({}, (r) => (r.stable_id === "MHRC-LIF-003" ? { ...r, receipt_ref: "" } : r))
+    );
+    expect(outcome.reason_code).toBe("scenario_receipt_reference_missing");
+    expect(outcome.facts.results_without_receipt_reference).toEqual(["MHRC-LIF-003"]);
+  });
+
+  it("refuses a succeeded result that carries a reason code, and a refusal that omits one", () => {
+    expect(
+      evaluateNeutralConformanceDecision(
+        evidence({}, (r) =>
+          r.disposition === "succeeded" ? { ...r, reason_code: "gate_unsatisfied" } : r
+        )
+      ).reason_code
+    ).toBe("scenario_evidence_incomplete");
+    expect(
+      evaluateNeutralConformanceDecision(
+        evidence({}, (r) => (r.disposition === "refused" ? { ...r, reason_code: null } : r))
+      ).reason_code
+    ).toBe("scenario_evidence_incomplete");
+  });
+
+  it.each([
+    ["host_id", "other-host"],
+    ["host_version", "9.9.9"],
+    ["runtime_version", "guild-0.0.1"],
+    ["release_id", "rel-other"],
+  ])("refuses evidence produced by a different %s than the activated runtime", (field, value) => {
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({}, (r) =>
+        r.stable_id === "MHRC-LIF-001"
+          ? { ...r, runtime_binding: { ...ACTIVATED_RUNTIME, [field]: value } }
+          : r
+      )
+    );
+    expect(outcome.reason_code).toBe("scenario_runtime_binding_mismatch");
+    expect(outcome.facts.misbound_results).toHaveLength(1);
+  });
+
+  it("refuses an incomplete activated-runtime binding", () => {
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({
+        activated_runtime: { ...ACTIVATED_RUNTIME, release_id: "" },
+      })
+    );
+    expect(outcome.reason_code).toBe("scenario_runtime_binding_mismatch");
+  });
+
+  it.each(["stale", "unknown"])("refuses %s evidence freshness", (verdict) => {
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({}, (r) =>
+        r.stable_id === "MHRC-UNS-002"
+          ? { ...r, evidence_freshness: verdict as NeutralEvidenceFreshnessVerdict }
+          : r
+      )
+    );
+    expect(outcome.disposition).toBe("refused");
+    expect(outcome.reason_code).toBe("scenario_evidence_stale");
+    expect(outcome.facts.non_fresh_results).toEqual([
+      { stable_id: "MHRC-UNS-002", evidence_freshness: verdict },
+    ]);
+  });
+
+  it("refuses when a required scenario has no result at all", () => {
+    const outcome = evaluateNeutralConformanceDecision(
+      evidence({ results: evidence().results.slice(0, 4) })
+    );
+    expect(outcome.disposition).toBe("refused");
+    expect(outcome.reason_code).toBe("scenario_evidence_incomplete");
+  });
+
+  it("declares the required set itself rather than accepting the caller's", () => {
+    expect(NEUTRAL_REQUIRED_CORE_SCENARIO_IDS).toEqual(required);
+    expect(NEUTRAL_REQUIRED_CORE_SCENARIO_IDS).toHaveLength(5);
   });
 });

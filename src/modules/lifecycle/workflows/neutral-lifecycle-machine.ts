@@ -53,6 +53,7 @@ import {
   isNeutralEventName,
   isNeutralLifecyclePhase,
   isNeutralObservationState,
+  mapLegacyNeutralEventName,
   neutralFingerprint,
   neutralFreeze,
   neutralOutcome,
@@ -65,6 +66,14 @@ import type {
   NeutralOutcome,
   NeutralReasonCode,
 } from "./neutral-runtime-contracts";
+import { evaluateNeutralAdmission, neutralCapabilitySnapshotHash } from "./neutral-gate-policy";
+import type {
+  NeutralAdmissionRequest,
+  NeutralCapabilitySnapshot,
+  NeutralGate,
+  NeutralOperationClass,
+  NeutralPolicy,
+} from "./neutral-gate-policy";
 
 // ---------------------------------------------------------------------------
 // State
@@ -75,6 +84,42 @@ export const NEUTRAL_RUN_STATUSES = ["open", "completed", "aborted"] as const;
 export type NeutralRunStatus = (typeof NEUTRAL_RUN_STATUSES)[number];
 
 export const NEUTRAL_TERMINAL_RUN_STATUSES: readonly NeutralRunStatus[] = ["completed", "aborted"];
+
+/**
+ * The run-bound admission inputs (MH-02-R1-B01).
+ *
+ * These live in STATE, not on the event, and that placement is the whole fix.
+ * When the caller supplied a `gate_condition` verdict on the event, the
+ * lifecycle path could record a satisfied gate for an operation that
+ * `evaluateNeutralAdmission` refused. Now the caller supplies only FACTS about
+ * its request; capability, authentication, policy, approval, and the gate
+ * verdict are all computed here from the run-bound snapshot, policy, and gate
+ * declarations, so the two paths cannot disagree — they are one path.
+ */
+export interface NeutralAdmissionContext {
+  readonly snapshot: NeutralCapabilitySnapshot;
+  readonly policy: NeutralPolicy;
+  readonly gates: readonly NeutralGate[];
+}
+
+/**
+ * A typed rule under which an observation is INAPPLICABLE. The frozen contract
+ * defines `not_applicable` as inapplicability under an explicit typed rule
+ * recorded with the operation, so an unruled `not_applicable` must fail closed
+ * (MH-02-R1-B02).
+ */
+export interface NeutralNotApplicableRule {
+  readonly rule_id: string;
+  readonly applies_to_observation: string;
+  readonly rationale: string;
+}
+
+/** What the ledger stores per observation: the state AND its rule binding. */
+export interface NeutralObservationRecord {
+  readonly state: NeutralObservationState;
+  /** Required exactly when `state === "not_applicable"`; null otherwise. */
+  readonly not_applicable_rule_id: string | null;
+}
 
 export interface NeutralLifecycleState {
   readonly schema_version: "guild.lifecycle_state.v1";
@@ -88,9 +133,12 @@ export interface NeutralLifecycleState {
   /** Monotonic non-decreasing checkpoint counter; advanced by compact/resume. */
   readonly checkpoint_sequence: number;
   readonly gate_outcomes: Readonly<Record<string, NeutralDisposition>>;
-  readonly observations: Readonly<Record<string, NeutralObservationState>>;
+  readonly observations: Readonly<Record<string, NeutralObservationRecord>>;
   readonly required_gate_ids: readonly string[];
   readonly required_observations: readonly string[];
+  /** Absent means `tool.before` fails closed rather than trusting the event. */
+  readonly admission_context: NeutralAdmissionContext | null;
+  readonly not_applicable_rules: readonly NeutralNotApplicableRule[];
 }
 
 export interface NeutralInitialLifecycleStateInput {
@@ -99,6 +147,8 @@ export interface NeutralInitialLifecycleStateInput {
   readonly phase: NeutralLifecyclePhase;
   readonly required_gate_ids?: readonly string[];
   readonly required_observations?: readonly string[];
+  readonly admission_context?: NeutralAdmissionContext;
+  readonly not_applicable_rules?: readonly NeutralNotApplicableRule[];
 }
 
 export function neutralInitialLifecycleState(
@@ -117,6 +167,13 @@ export function neutralInitialLifecycleState(
       `neutralInitialLifecycleState: unknown lifecycle phase ${JSON.stringify(input.phase)}`
     );
   }
+  for (const rule of input.not_applicable_rules ?? []) {
+    if (!rule.rule_id || !rule.applies_to_observation) {
+      throw new Error(
+        "neutralInitialLifecycleState: every not_applicable rule needs a rule_id and an applies_to_observation"
+      );
+    }
+  }
   return neutralFreeze({
     schema_version: "guild.lifecycle_state.v1",
     run_id: input.run_id,
@@ -129,6 +186,8 @@ export function neutralInitialLifecycleState(
     observations: {},
     required_gate_ids: [...(input.required_gate_ids ?? [])],
     required_observations: [...(input.required_observations ?? [])],
+    admission_context: input.admission_context ?? null,
+    not_applicable_rules: [...(input.not_applicable_rules ?? [])],
   }) as NeutralLifecycleState;
 }
 
@@ -176,9 +235,58 @@ export function neutralLifecycleSemanticView(
     applied_transitions: [...state.applied_transitions],
     checkpoint_sequence: state.checkpoint_sequence,
     gate_outcomes: { ...state.gate_outcomes },
-    observations: { ...state.observations },
+    observations: neutralObservationLedgerView(state),
     required_gate_ids: [...state.required_gate_ids],
     required_observations: [...state.required_observations],
+    admission_context: neutralAdmissionContextSemanticView(state.admission_context),
+    not_applicable_rules: state.not_applicable_rules.map((rule) => ({
+      rule_id: rule.rule_id,
+      applies_to_observation: rule.applies_to_observation,
+      rationale: rule.rationale,
+    })),
+  };
+}
+
+/** Stable, order-independent projection of the observation ledger. */
+function neutralObservationLedgerView(
+  state: NeutralLifecycleState
+): Readonly<Record<string, unknown>> {
+  const view: Record<string, unknown> = {};
+  for (const key of Object.keys(state.observations).sort()) {
+    const record = state.observations[key];
+    view[key] = {
+      state: record.state,
+      not_applicable_rule_id: record.not_applicable_rule_id,
+    };
+  }
+  return view;
+}
+
+/**
+ * The comparable projection of the admission context. `host_id`, `host_version`,
+ * and the adapter-carried `snapshot_hash` are EXCLUDED: two hosts running the
+ * same policy against the same capability facts must fingerprint identically, or
+ * MHRC-LIF-001's cross-host equivalence comparison would be defeated by host
+ * identity alone. What remains is the semantic capability hash plus the policy
+ * and gate declarations, which are exactly the inputs a decision depends on.
+ */
+export function neutralAdmissionContextSemanticView(
+  context: NeutralAdmissionContext | null
+): Readonly<Record<string, unknown>> | null {
+  if (context === null) return null;
+  return {
+    capability_facts_hash: neutralCapabilitySnapshotHash(context.snapshot),
+    policy_version: context.policy.policy_version,
+    denied_operations: [...context.policy.denied_operations].sort(),
+    approval_required_operations: [...context.policy.approval_required_operations].sort(),
+    gates: context.gates
+      .map((gate) => ({
+        gate_id: gate.gate_id,
+        phase: gate.phase,
+        operation_class: gate.operation_class,
+        required_conditions: [...gate.required_conditions],
+      }))
+      .sort((a, b) => (a.gate_id < b.gate_id ? -1 : a.gate_id > b.gate_id ? 1 : 0)),
   };
 }
 
@@ -316,42 +424,199 @@ function handlePromptSubmit(
   );
 }
 
+/**
+ * `tool.before` — ONE coherent typed admission decision (MH-02-R1-B01).
+ *
+ * The event no longer carries a verdict. It carries a REQUEST, and this handler
+ * asks `evaluateNeutralAdmission` — the same evaluator any other caller would
+ * use — what that request means against the run-bound snapshot, policy, and gate
+ * declaration. Whatever the evaluator says is what the lifecycle records, so
+ * capability absence, authentication failure, policy denial, missing approval,
+ * gate refusal, and success stay six distinct outcomes and cannot diverge from
+ * the core's own admission answer.
+ *
+ * A caller-supplied `gate_condition` is IGNORED entirely; supplying one is
+ * reported in the facts so a stale adapter is visible rather than silently
+ * tolerated.
+ */
 function handleToolBefore(
   state: NeutralLifecycleState,
   event: NeutralLifecycleEvent
 ): NeutralTransition {
+  const suppliedVerdict = event.input.gate_condition;
   const gateId = asString(event.input.gate_id);
-  const condition = event.input.gate_condition;
 
-  // An unnamed gate cannot be proven satisfied, so it is refused rather than
-  // waved through. A gate outcome is recorded ONLY on satisfaction: a refused
-  // gate must leave state byte-identical (MHRC-LIF-002), which also means it can
-  // never later be mistaken for a satisfied close gate (MHRC-LIF-004).
-  if (gateId === undefined || condition !== "satisfied") {
+  // Fail closed: with no run-bound admission context there is nothing to decide
+  // against, and trusting the event is exactly the defect being closed.
+  if (state.admission_context === null) {
+    return refuse(
+      state,
+      event,
+      "admission_context_missing",
+      {
+        gate_id: gateId ?? null,
+        supplied_gate_condition: suppliedVerdict ?? null,
+        caller_supplied_verdict_ignored: suppliedVerdict !== undefined,
+      },
+      [
+        "a lifecycle admission decision requires a run-bound capability snapshot, policy, and gate",
+        "a caller-supplied gate verdict is never trusted",
+        "no tool side effect occurs",
+      ]
+    );
+  }
+
+  const context = state.admission_context;
+  const gate = context.gates.find((candidate) => candidate.gate_id === gateId);
+  if (gateId === undefined || gate === undefined) {
     return refuse(
       state,
       event,
       "gate_unsatisfied",
       {
         gate_id: gateId ?? null,
-        gate_condition: condition ?? null,
-        operation_class: event.input.operation_class ?? null,
+        supplied_gate_condition: suppliedVerdict ?? null,
+        caller_supplied_verdict_ignored: suppliedVerdict !== undefined,
+        declared_gate_ids: context.gates.map((candidate) => candidate.gate_id),
       },
       [
+        "an undeclared gate cannot be proven satisfied",
         "both hosts preserve the prior state",
-        "both hosts return the same refusal reason code",
         "no tool side effect occurs",
       ]
     );
   }
 
+  const request: NeutralAdmissionRequest = {
+    operation_id: event.transition_id,
+    operation: asString(event.input.operation) ?? "",
+    required_capability: asString(event.input.required_capability) ?? "",
+    operation_class: (asString(event.input.operation_class) ?? gate.operation_class) as NeutralOperationClass,
+    satisfied_conditions: Array.isArray(event.input.satisfied_conditions)
+      ? (event.input.satisfied_conditions as readonly unknown[]).filter(
+          (value): value is string => typeof value === "string"
+        )
+      : [],
+    approval_supplied: event.input.approval_supplied === true,
+  };
+
+  const admission = evaluateNeutralAdmission({
+    request,
+    snapshot: context.snapshot,
+    policy: context.policy,
+    gate,
+  });
+
+  const sharedFacts = {
+    gate_id: gate.gate_id,
+    operation: request.operation,
+    operation_class: request.operation_class,
+    caller_supplied_verdict_ignored: suppliedVerdict !== undefined,
+    admission_outcome_type: admission.type,
+    admission_disposition: admission.disposition,
+    admission_reason_code: admission.reason_code,
+  };
+
+  if (admission.disposition !== "succeeded") {
+    // The admission answer IS the lifecycle answer. Its own outcome type is
+    // preserved (capability vs policy vs lifecycle), because collapsing an
+    // unsupported capability into a gate refusal is the very conflation
+    // MHRC-UNS-002 forbids. State is untouched.
+    return neutralFreeze({
+      state,
+      state_changed: false,
+      outcome: neutralOutcome({
+        type: admission.type,
+        disposition: admission.disposition,
+        reason_code: admission.reason_code,
+        assertions: [...admission.assertions],
+        binding: { ...admission.binding, ...bindingFor(state, event) },
+        facts: {
+          event_name: event.name,
+          side_effect: false,
+          ...admission.facts,
+          ...sharedFacts,
+        },
+      }),
+    }) as NeutralTransition;
+  }
+
   return advance(
     state,
     event,
-    { gate_outcomes: { ...state.gate_outcomes, [gateId]: "succeeded" } },
-    { gate_id: gateId, lifecycle_decision: "gate_satisfied" },
-    ["the gate produced a typed satisfied outcome"]
+    { gate_outcomes: { ...state.gate_outcomes, [gate.gate_id]: "succeeded" } },
+    { ...sharedFacts, lifecycle_decision: "gate_satisfied" },
+    [
+      "the gate produced a typed satisfied outcome",
+      "capability, authentication, policy, approval, and gate were all decided by the core",
+    ]
   );
+}
+
+/**
+ * `tool.after` — records EXECUTION outcome, kept distinct from admission.
+ *
+ * An operation that was admitted and then failed is neither a refusal nor a
+ * success. Recording the failure against the gate is what stops a failed
+ * execution from riding a previously-satisfied gate into a clean close.
+ */
+function handleToolAfter(
+  state: NeutralLifecycleState,
+  event: NeutralLifecycleEvent
+): NeutralTransition {
+  const gateId = asString(event.input.gate_id);
+  const status = asString(event.input.execution_status);
+
+  if (gateId === undefined || status === undefined) {
+    return unchanged(state, event, { no_op: true }, [
+      "no gate-bound execution result was supplied",
+    ]);
+  }
+
+  if (state.gate_outcomes[gateId] === undefined) {
+    return refuse(
+      state,
+      event,
+      "required_gate_outcome_missing",
+      { gate_id: gateId, execution_status: status },
+      ["an execution result cannot be recorded for a gate that was never admitted"]
+    );
+  }
+
+  if (status === "succeeded") {
+    return advance(
+      state,
+      event,
+      {},
+      { gate_id: gateId, execution_status: status, lifecycle_decision: "execution_succeeded" },
+      ["the admitted operation completed and the gate remains satisfied"]
+    );
+  }
+
+  return neutralFreeze({
+    state: neutralFreeze({
+      ...state,
+      gate_outcomes: { ...state.gate_outcomes, [gateId]: "failed" },
+      applied_transitions: [...state.applied_transitions, event.transition_id],
+    }) as NeutralLifecycleState,
+    state_changed: true,
+    outcome: neutralOutcome({
+      type: "guild.lifecycle_outcome.v1",
+      disposition: "failed",
+      reason_code: "execution_failed",
+      assertions: [
+        "an execution failure is distinct from a refusal and from a success",
+        "a failed execution downgrades its gate so it cannot back a clean close",
+      ],
+      binding: bindingFor(state, event),
+      facts: {
+        event_name: event.name,
+        gate_id: gateId,
+        execution_status: status,
+        lifecycle_decision: "execution_failed",
+      },
+    }),
+  }) as NeutralTransition;
 }
 
 function handleCheckpoint(
@@ -376,6 +641,23 @@ function handleCheckpoint(
   );
 }
 
+/**
+ * Resolve the typed rule that makes an observation inapplicable, or say exactly
+ * why it does not resolve (MH-02-R1-B02). Shared by the record path and the
+ * close path so the two cannot drift.
+ */
+function resolveNotApplicableRule(
+  state: NeutralLifecycleState,
+  observation: string,
+  ruleId: string | null
+): { readonly rule?: NeutralNotApplicableRule; readonly reason?: NeutralReasonCode } {
+  if (ruleId === null || ruleId.length === 0) return { reason: "not_applicable_rule_missing" };
+  const rule = state.not_applicable_rules.find((candidate) => candidate.rule_id === ruleId);
+  if (rule === undefined) return { reason: "not_applicable_rule_unknown" };
+  if (rule.applies_to_observation !== observation) return { reason: "not_applicable_rule_mismatch" };
+  return { rule };
+}
+
 function handleObservation(
   state: NeutralLifecycleState,
   event: NeutralLifecycleEvent
@@ -394,10 +676,80 @@ function handleObservation(
       ["the observation vocabulary is closed"]
     );
   }
+
+  const suppliedRuleId = asString(event.input.not_applicable_rule_id) ?? null;
+
+  if (observationState === "not_applicable") {
+    // `not_applicable` is the ONLY observation state that asserts a requirement
+    // does not apply. The frozen contract defines it as inapplicability under an
+    // explicit typed rule, so an unruled, unknown, or wrongly-bound rule is
+    // refused and nothing is recorded — arbitrary not_applicable fails closed.
+    const resolved = resolveNotApplicableRule(state, observation, suppliedRuleId);
+    if (resolved.reason !== undefined) {
+      return refuse(
+        state,
+        event,
+        resolved.reason,
+        {
+          observation,
+          observation_state: observationState,
+          supplied_not_applicable_rule_id: suppliedRuleId,
+          declared_rule_ids: state.not_applicable_rules.map((rule) => rule.rule_id),
+        },
+        [
+          "not_applicable asserts inapplicability under an explicit typed rule",
+          "an unsubstantiated not_applicable is refused, not recorded",
+        ]
+      );
+    }
+    return advance(
+      state,
+      event,
+      {
+        observations: {
+          ...state.observations,
+          [observation]: { state: observationState, not_applicable_rule_id: suppliedRuleId },
+        },
+      },
+      {
+        observation,
+        observation_state: observationState,
+        not_applicable_rule_id: suppliedRuleId,
+        not_applicable_rationale: resolved.rule?.rationale ?? null,
+        lifecycle_decision: "observation_recorded",
+      },
+      [
+        "the observation state is recorded as a lifecycle decision input",
+        "the typed inapplicability rule is recorded with the operation",
+      ]
+    );
+  }
+
+  // A rule id is meaningless for any other state; carrying one would let a later
+  // reader believe a rule justified something it did not.
+  if (suppliedRuleId !== null) {
+    return refuse(
+      state,
+      event,
+      "not_applicable_rule_mismatch",
+      {
+        observation,
+        observation_state: observationState,
+        supplied_not_applicable_rule_id: suppliedRuleId,
+      },
+      ["a not_applicable rule may only bind a not_applicable observation"]
+    );
+  }
+
   return advance(
     state,
     event,
-    { observations: { ...state.observations, [observation]: observationState } },
+    {
+      observations: {
+        ...state.observations,
+        [observation]: { state: observationState, not_applicable_rule_id: null },
+      },
+    },
     { observation, observation_state: observationState, lifecycle_decision: "observation_recorded" },
     ["the observation state is recorded as a lifecycle decision input"]
   );
@@ -451,7 +803,7 @@ function handleRunStop(
   }
 
   const failedObservations = state.required_observations.filter(
-    (id) => !isNeutralCleanObservation(state.observations[id])
+    (id) => !isNeutralCleanObservation(state.observations[id]?.state)
   );
   if (failedObservations.length > 0) {
     return refuse(
@@ -460,6 +812,36 @@ function handleRunStop(
       "required_observation_failed",
       { failed_observations: failedObservations, requested_terminal_state: "completed" },
       closeAssertions
+    );
+  }
+
+  // Re-validate every not_applicable binding at the close sentinel itself
+  // (MH-02-R1-B02). The record path already refuses an unruled assertion; this
+  // second check means a state assembled by any other route — a restored
+  // checkpoint, a hand-built fixture — still cannot close on an inapplicability
+  // that no declared rule supports.
+  const unruled: Array<{ observation: string; reason: NeutralReasonCode; rule_id: string | null }> = [];
+  for (const id of state.required_observations) {
+    const record = state.observations[id];
+    if (record === undefined || record.state !== "not_applicable") continue;
+    const resolved = resolveNotApplicableRule(state, id, record.not_applicable_rule_id);
+    if (resolved.reason !== undefined) {
+      unruled.push({ observation: id, reason: resolved.reason, rule_id: record.not_applicable_rule_id });
+    }
+  }
+  if (unruled.length > 0) {
+    return refuse(
+      state,
+      event,
+      unruled[0].reason,
+      {
+        unruled_not_applicable_observations: unruled,
+        requested_terminal_state: "completed",
+      },
+      [
+        ...closeAssertions,
+        "every not_applicable observation resolves to a declared typed rule bound to that observation",
+      ]
     );
   }
 
@@ -522,12 +904,25 @@ export function applyNeutralLifecycleEvent(
   }
 
   if (!isNeutralEventName(event.name)) {
+    // Not simply "unknown". A name from the SUPERSEDED v1 vocabulary gets the
+    // machine-readable compatibility answer — its normative replacement named,
+    // or both candidates named when no lossless one exists — so an adapter is
+    // told what to send instead of merely being rejected (MH-02-R1-B05).
+    const compatibility = mapLegacyNeutralEventName(event.name);
     return refuse(
       state,
       event,
-      "unknown_event",
-      { observed_event_name: event.name },
-      ["the normalized event vocabulary is closed", "the event is not silently skipped"]
+      compatibility.reason_code ?? "unknown_event",
+      {
+        observed_event_name: event.name,
+        ...compatibility.facts,
+        compatibility_outcome_type: compatibility.type,
+      },
+      [
+        "the normalized event vocabulary is closed",
+        "the event is not silently skipped",
+        ...compatibility.assertions,
+      ]
     );
   }
 
@@ -552,6 +947,8 @@ export function applyNeutralLifecycleEvent(
       return handlePromptSubmit(state, event);
     case "tool.before":
       return handleToolBefore(state, event);
+    case "tool.after":
+      return handleToolAfter(state, event);
     case "context.compact":
     case "run.resume":
       return handleCheckpoint(state, event);

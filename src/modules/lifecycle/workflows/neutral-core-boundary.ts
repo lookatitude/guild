@@ -134,28 +134,333 @@ export const NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS: readonly NeutralForbiddenBound
 // ---------------------------------------------------------------------------
 
 /**
- * Static `import`/`export ... from` forms are matched only at a LINE START.
- * That is what keeps prose safe: this core's own comments say things like
- * "imports no host adapter", and a floating `from "…"` inside a comment would
- * otherwise be mistaken for an edge. Real module-scope statements always begin
- * at column zero, so anchoring is both sufficient and precise. Dynamic
- * `import()` and `require()` are matched anywhere, since they legitimately
- * appear inside expressions.
+ * WHY A LEXER AND NOT A REGEX (MH-02-R1-B03)
+ *
+ * The previous extractor anchored static forms at column zero and allowed only
+ * whitespace between `import`/`require` and `(`. Three concrete bypasses
+ * followed, all of them valid TypeScript:
+ *
+ *     '  import * as fs from "fs";'    indented   → no specifier, verdict succeeded
+ *     'import /_ core _/ ("fs")'       commented  → no specifier, verdict succeeded
+ *     '// require("fs")'               commented-OUT → falsely reported forbidden
+ *
+ * A boundary sentinel that can be defeated by an indent proves nothing, so the
+ * scan below is lexical: the source is tokenized once, with comments and string
+ * bodies removed from the token stream, and edges are recognised over TOKENS.
+ * Indentation, line breaks, and interleaved comments then cannot matter — they
+ * are not tokens — and text inside a comment or a string can never be mistaken
+ * for a dependency edge, because it never becomes an `import` token.
+ *
+ * This is also what makes the file safe to scan ITSELF: the prose above contains
+ * the word `import` many times and the examples above contain whole import
+ * statements, and none of them is an edge, because all of them are comment text.
  */
-const STATIC_SPECIFIER_RE = /^(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm;
-const BARE_IMPORT_RE = /^import\s+["']([^"']+)["']/gm;
-const CALL_SPECIFIER_RE = /\b(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)/g;
 
-/** Every module specifier a source file references, de-duplicated, first-seen order. */
+type NeutralTokenKind = "ident" | "string" | "punct";
+
+interface NeutralToken {
+  readonly kind: NeutralTokenKind;
+  readonly value: string;
+}
+
+function isIdentStart(ch: string): boolean {
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_" || ch === "$";
+}
+
+function isIdentPart(ch: string): boolean {
+  return isIdentStart(ch) || (ch >= "0" && ch <= "9");
+}
+
+function isSpace(ch: string): boolean {
+  return ch === " " || ch === "\t" || ch === "\r" || ch === "\n" || ch === "\f" || ch === "\v";
+}
+
+/**
+ * Decide whether a `/` at this point starts a regex literal rather than a
+ * division. The standard lexical heuristic: a regex may begin only where a value
+ * may begin, i.e. NOT directly after something that ends a value. Getting this
+ * right matters because a regex literal can otherwise hide a whole call —
+ * a literal containing `require("fs")` must not be read as an edge.
+ */
+function regexMayStart(previous: NeutralToken | undefined): boolean {
+  if (previous === undefined) return true;
+  if (previous.kind === "string") return false;
+  if (previous.kind === "ident") {
+    // Keywords may be followed by a regex; value-like identifiers may not.
+    return (
+      previous.value === "return" ||
+      previous.value === "typeof" ||
+      previous.value === "instanceof" ||
+      previous.value === "in" ||
+      previous.value === "of" ||
+      previous.value === "new" ||
+      previous.value === "delete" ||
+      previous.value === "void" ||
+      previous.value === "case" ||
+      previous.value === "do" ||
+      previous.value === "else" ||
+      previous.value === "yield" ||
+      previous.value === "await"
+    );
+  }
+  return previous.value !== ")" && previous.value !== "]" && previous.value !== "}";
+}
+
+/**
+ * Tokenize enough TypeScript to find module specifiers exactly. Comments are
+ * dropped entirely; strings become a single `string` token carrying their
+ * decoded-enough body; everything else is an identifier, a number-ish run, or a
+ * single punctuation character. Template literals are treated as opaque strings
+ * except for their `${...}` holes, whose contents are tokenized normally so an
+ * edge cannot hide inside an interpolation.
+ */
+export function tokenizeNeutralSource(source: string): NeutralToken[] {
+  const tokens: NeutralToken[] = [];
+  const templateDepths: number[] = [];
+  let braceDepth = 0;
+  let i = 0;
+
+  while (i < source.length) {
+    const ch = source.charAt(i);
+
+    if (isSpace(ch)) {
+      i += 1;
+      continue;
+    }
+
+    // Comments — dropped, never tokens.
+    if (ch === "/" && source.charAt(i + 1) === "/") {
+      while (i < source.length && source.charAt(i) !== "\n") i += 1;
+      continue;
+    }
+    if (ch === "/" && source.charAt(i + 1) === "*") {
+      i += 2;
+      while (i < source.length && !(source.charAt(i) === "*" && source.charAt(i + 1) === "/")) i += 1;
+      i += 2;
+      continue;
+    }
+
+    // Regex literal — consumed and discarded (it can never be a specifier).
+    if (ch === "/" && regexMayStart(tokens[tokens.length - 1])) {
+      let j = i + 1;
+      let inClass = false;
+      let closed = false;
+      while (j < source.length) {
+        const c = source.charAt(j);
+        if (c === "\\") {
+          j += 2;
+          continue;
+        }
+        if (c === "\n") break;
+        if (c === "[") inClass = true;
+        else if (c === "]") inClass = false;
+        else if (c === "/" && !inClass) {
+          closed = true;
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      if (closed) {
+        while (j < source.length && isIdentPart(source.charAt(j))) j += 1;
+        i = j;
+        continue;
+      }
+      // Unterminated: fall through and treat as punctuation.
+    }
+
+    // Quoted strings.
+    if (ch === '"' || ch === "'") {
+      let j = i + 1;
+      let body = "";
+      while (j < source.length) {
+        const c = source.charAt(j);
+        if (c === "\\") {
+          body += source.charAt(j + 1);
+          j += 2;
+          continue;
+        }
+        if (c === ch || c === "\n") break;
+        body += c;
+        j += 1;
+      }
+      tokens.push({ kind: "string", value: body });
+      i = j + 1;
+      continue;
+    }
+
+    // Template literal — opaque, except that `${` opens normal tokenization.
+    if (ch === "`") {
+      let j = i + 1;
+      let body = "";
+      let opened = false;
+      while (j < source.length) {
+        const c = source.charAt(j);
+        if (c === "\\") {
+          body += source.charAt(j + 1);
+          j += 2;
+          continue;
+        }
+        if (c === "$" && source.charAt(j + 1) === "{") {
+          opened = true;
+          break;
+        }
+        if (c === "`") break;
+        body += c;
+        j += 1;
+      }
+      tokens.push({ kind: "string", value: body });
+      if (opened) {
+        templateDepths.push(braceDepth);
+        braceDepth += 1;
+        tokens.push({ kind: "punct", value: "{" });
+        i = j + 2;
+      } else {
+        i = j + 1;
+      }
+      continue;
+    }
+
+    if (isIdentStart(ch)) {
+      let j = i;
+      while (j < source.length && isIdentPart(source.charAt(j))) j += 1;
+      tokens.push({ kind: "ident", value: source.slice(i, j) });
+      i = j;
+      continue;
+    }
+
+    if (ch >= "0" && ch <= "9") {
+      let j = i;
+      while (j < source.length && (isIdentPart(source.charAt(j)) || source.charAt(j) === ".")) j += 1;
+      // Numbers are emitted as a value-like `ident` (never the literal text, so
+      // they can never match `from`/`import`). Value-like matters: it is what
+      // makes `regexMayStart` read the `/` in `10 / 2` as division.
+      tokens.push({ kind: "ident", value: "0" });
+      i = j;
+      continue;
+    }
+
+    if (ch === "{") braceDepth += 1;
+    if (ch === "}") {
+      braceDepth -= 1;
+      if (templateDepths.length > 0 && templateDepths[templateDepths.length - 1] === braceDepth) {
+        // Closing a `${...}` hole: resume the enclosing template literal.
+        templateDepths.pop();
+        tokens.push({ kind: "punct", value: "}" });
+        let j = i + 1;
+        let body = "";
+        let reopened = false;
+        while (j < source.length) {
+          const c = source.charAt(j);
+          if (c === "\\") {
+            body += source.charAt(j + 1);
+            j += 2;
+            continue;
+          }
+          if (c === "$" && source.charAt(j + 1) === "{") {
+            reopened = true;
+            break;
+          }
+          if (c === "`") break;
+          body += c;
+          j += 1;
+        }
+        tokens.push({ kind: "string", value: body });
+        if (reopened) {
+          templateDepths.push(braceDepth);
+          braceDepth += 1;
+          tokens.push({ kind: "punct", value: "{" });
+          i = j + 2;
+        } else {
+          i = j + 1;
+        }
+        continue;
+      }
+    }
+
+    tokens.push({ kind: "punct", value: ch });
+    i += 1;
+  }
+
+  return tokens;
+}
+
+const OPENERS = "([{";
+const CLOSERS = ")]}";
+
+function bracketDelta(token: NeutralToken): number {
+  if (token.kind !== "punct") return 0;
+  if (OPENERS.indexOf(token.value) !== -1) return 1;
+  if (CLOSERS.indexOf(token.value) !== -1) return -1;
+  return 0;
+}
+
+/**
+ * Every module specifier a source file references, de-duplicated, first-seen
+ * order. Recognised forms, all indentation- and comment-insensitive:
+ *
+ *   import x from "s"      import type {T} from "s"      import * as n from "s"
+ *   import "s"             export {x} from "s"           export * from "s"
+ *   import("s")            require("s")                  import /_ c _/ ("s")
+ */
 export function extractNeutralImportSpecifiers(source: string): string[] {
+  const tokens = tokenizeNeutralSource(source);
   const found: string[] = [];
-  for (const regex of [STATIC_SPECIFIER_RE, BARE_IMPORT_RE, CALL_SPECIFIER_RE]) {
-    regex.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(source)) !== null) {
-      if (found.indexOf(match[1]) === -1) found.push(match[1]);
+  const add = (specifier: string): void => {
+    if (specifier.length > 0 && found.indexOf(specifier) === -1) found.push(specifier);
+  };
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.kind !== "ident") continue;
+
+    const isImport = token.value === "import";
+    const isExport = token.value === "export";
+    const isRequire = token.value === "require";
+    if (!isImport && !isExport && !isRequire) continue;
+
+    const next = tokens[index + 1];
+    if (next === undefined) continue;
+
+    // Call form: `import(...)` / `require(...)`. Comments between the callee and
+    // the parenthesis have already been dropped, so `import /* c */ ("fs")`
+    // reaches here as the same three tokens as `import("fs")`.
+    if ((isImport || isRequire) && next.kind === "punct" && next.value === "(") {
+      const argument = tokens[index + 2];
+      if (argument !== undefined && argument.kind === "string") add(argument.value);
+      continue;
+    }
+
+    if (isRequire) continue;
+
+    // Bare side-effect import: `import "s"`.
+    if (isImport && next.kind === "string") {
+      add(next.value);
+      continue;
+    }
+
+    // Static form: scan forward for `from "s"` at bracket depth 0, bounded by
+    // the statement. Depth tracking is what lets `import { a, b } from "s"`
+    // work while a `from` used as a parameter name stays invisible.
+    let depth = 0;
+    for (let j = index + 1; j < tokens.length; j += 1) {
+      const candidate = tokens[j];
+      const delta = bracketDelta(candidate);
+      if (delta < 0 && depth === 0) break; // closed out of the enclosing block
+      depth += delta;
+      if (depth > 0) continue;
+      if (candidate.kind === "punct" && candidate.value === ";") break;
+      if (candidate.kind === "ident" && (candidate.value === "import" || candidate.value === "export")) {
+        break;
+      }
+      if (candidate.kind === "ident" && candidate.value === "from") {
+        const specifier = tokens[j + 1];
+        if (specifier !== undefined && specifier.kind === "string") add(specifier.value);
+        break;
+      }
     }
   }
+
   return found;
 }
 

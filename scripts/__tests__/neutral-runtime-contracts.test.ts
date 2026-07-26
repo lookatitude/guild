@@ -25,21 +25,28 @@
  * no host handle — so the suite is deterministic and host independent.
  */
 
+import * as fs from "fs";
+import * as path from "path";
+
 import {
   NEUTRAL_CONTRACTS_SCHEMA_VERSION,
   NEUTRAL_CONTRACT_VERSION,
   NEUTRAL_DISPOSITIONS,
   NEUTRAL_EVENT_NAMES,
+  NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2,
   NEUTRAL_LIFECYCLE_PHASES,
+  NEUTRAL_NORMALIZED_EVENT_VOCABULARY,
   NEUTRAL_OBSERVATION_STATES,
   NEUTRAL_OUTCOME_TYPES,
   NEUTRAL_REASON_CODES,
+  NEUTRAL_SUPERSEDED_EVENT_NAMES_V1,
   NEUTRAL_SUPPORT_STATES,
   NEUTRAL_SUPPORT_STATUS_VALUES,
   isNeutralCleanObservation,
   isNeutralDisposition,
   isNeutralEventName,
   isNeutralLifecyclePhase,
+  mapLegacyNeutralEventName,
   neutralCanonicalJson,
   neutralFingerprint,
   neutralOutcome,
@@ -185,9 +192,9 @@ describe("neutral runtime contract vocabularies", () => {
       "migration.rollback",
     ]);
     expect(isNeutralEventName("tool.before")).toBe(true);
-    // Divergent spelling from the boundary contract's normalized_event_contract
-    // (tool.pre / tool.post / session.stop / task.transition) is NOT silently
-    // accepted; see the recorded contract-divergence issue for MH-02.
+    // The SUPERSEDED guild.normalized_event.v1 spelling is not in the normative
+    // vocabulary. It is not silently accepted, and it is not merely unknown
+    // either — see the compatibility suite below (MH-02-R1-B05).
     expect(isNeutralEventName("tool.pre")).toBe(false);
   });
 
@@ -214,6 +221,181 @@ describe("neutral runtime contract vocabularies", () => {
     expect(NEUTRAL_REASON_CODES).toContain("capability_absent");
     expect(NEUTRAL_REASON_CODES).toContain("authentication_failed");
     expect(NEUTRAL_REASON_CODES).not.toContain("supported");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MH-02-R1-B05 — one normative event vocabulary, agreed by BOTH frozen sources
+//
+// The two frozen W0 artifacts are read as DATA, never imported as source: the
+// plugin declares its own copy of the shared block in neutral-runtime-contracts
+// and these assertions prove the three copies agree field-for-field. That is
+// what "define it in each repository's own source contract and prove equality in
+// tests" means here — no cross-repository source import exists.
+// ---------------------------------------------------------------------------
+
+describe("MH-02-R1-B05 normalized event vocabulary reconciliation", () => {
+  const CONTRACT_DIR =
+    "/Users/miguelp/.guild/worktrees/guild/codex-mh-02-contract-r2/" +
+    ".guild/artifacts/generated/multi-host-runtime-convergence";
+
+  function readContract(file: string): Record<string, any> {
+    return JSON.parse(fs.readFileSync(path.join(CONTRACT_DIR, file), "utf8"));
+  }
+
+  const boundary = readContract("runtime-boundary-contract.v1.json");
+  const conformance = readContract("conformance-scenarios.v1.json");
+
+  it("parses both frozen contract artifacts", () => {
+    expect(boundary.schema_version).toBe("guild.multi_host_runtime_boundary.v1");
+    expect(conformance.schema_version).toBe("guild.conformance_scenarios.v1");
+  });
+
+  it("declares guild.normalized_event.v2 normative in BOTH artifacts", () => {
+    expect(boundary.normalized_event_contract.normative_vocabulary_version).toBe(
+      "guild.normalized_event.v2"
+    );
+    expect(boundary.normalized_event_vocabulary.normative_version).toBe("guild.normalized_event.v2");
+    expect(conformance.normalized_event_vocabulary.normative_version).toBe(
+      "guild.normalized_event.v2"
+    );
+  });
+
+  it("carries a BYTE-IDENTICAL shared vocabulary block in both artifacts", () => {
+    expect(JSON.stringify(conformance.normalized_event_vocabulary)).toBe(
+      JSON.stringify(boundary.normalized_event_vocabulary)
+    );
+    expect(JSON.stringify(conformance.normative_amendments)).toBe(
+      JSON.stringify(boundary.normative_amendments)
+    );
+  });
+
+  it("makes the two artifacts' event vocabularies AGREE (the contradiction is gone)", () => {
+    expect(boundary.normalized_event_contract.event_types).toEqual(
+      conformance.closed_vocabularies.event_names
+    );
+    expect(boundary.normalized_event_contract.event_types).toEqual([...NEUTRAL_EVENT_NAMES]);
+    const onlyBoundary = boundary.normalized_event_contract.event_types.filter(
+      (n: string) => !conformance.closed_vocabularies.event_names.includes(n)
+    );
+    expect(onlyBoundary).toEqual([]);
+  });
+
+  it("agrees field-for-field with the plugin's own declared copy", () => {
+    const mine = NEUTRAL_NORMALIZED_EVENT_VOCABULARY as unknown as Record<string, any>;
+    for (const source of [boundary, conformance]) {
+      const theirs = source.normalized_event_vocabulary;
+      expect(theirs.block_id).toBe(mine.block_id);
+      expect(theirs.normative_version).toBe(mine.normative_version);
+      expect(theirs.reconciles).toBe(mine.reconciles);
+      expect(theirs.vocabulary_owner).toBe(mine.vocabulary_owner);
+      expect(theirs.native_mapping_owner).toBe(mine.native_mapping_owner);
+      expect(theirs.consumer).toBe(mine.consumer);
+      expect(theirs.normative_event_names).toEqual(mine.normative_event_names);
+      expect(theirs.superseded_versions).toEqual(mine.superseded_versions);
+      expect(theirs.compatibility).toEqual(mine.compatibility);
+    }
+    // The strongest form: canonical equality of the whole block.
+    expect(neutralCanonicalJson(boundary.normalized_event_vocabulary)).toBe(
+      neutralCanonicalJson(mine)
+    );
+  });
+
+  it("records the superseded v1 list exactly as the boundary contract used to carry it", () => {
+    expect([...NEUTRAL_SUPERSEDED_EVENT_NAMES_V1]).toEqual([
+      "session.start",
+      "session.resume",
+      "prompt.submit",
+      "tool.pre",
+      "tool.post",
+      "context.compact",
+      "task.transition",
+      "session.stop",
+    ]);
+    expect(boundary.normalized_event_vocabulary.superseded_versions[0].event_types).toEqual([
+      ...NEUTRAL_SUPERSEDED_EVENT_NAMES_V1,
+    ]);
+  });
+
+  it("declares the mapping PARTIAL rather than pretending it is lossless", () => {
+    const compat = boundary.normalized_event_vocabulary.compatibility;
+    expect(compat.mapping_totality).toBe("partial");
+    expect(boundary.normative_amendments[0].lossless).toBe(false);
+    expect(boundary.normative_amendments[0].irreducible_ambiguity[0].superseded_event_name).toBe(
+      "task.transition"
+    );
+  });
+
+  it("maps every unchanged and renamed v1 name to exactly one normative name", () => {
+    for (const [legacy, normative] of [
+      ["session.resume", "run.resume"],
+      ["tool.pre", "tool.before"],
+      ["tool.post", "tool.after"],
+      ["session.stop", "run.stop"],
+    ]) {
+      const outcome = mapLegacyNeutralEventName(legacy);
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("event_vocabulary_superseded");
+      expect(outcome.facts.normative_event_name).toBe(normative);
+      expect(NEUTRAL_EVENT_NAMES).toContain(normative as never);
+    }
+  });
+
+  it("accepts a name that is already normative instead of calling it superseded", () => {
+    for (const name of ["session.start", "prompt.submit", "context.compact", "tool.before"]) {
+      const outcome = mapLegacyNeutralEventName(name);
+      expect(outcome.disposition).toBe("succeeded");
+      expect(outcome.facts.normative_event_name).toBe(name);
+    }
+  });
+
+  it("REFUSES task.transition as ambiguous rather than guessing a replacement", () => {
+    const outcome = mapLegacyNeutralEventName("task.transition");
+    expect(outcome.disposition).toBe("refused");
+    expect(outcome.reason_code).toBe("event_vocabulary_ambiguous");
+    expect(outcome.facts.normative_event_name).toBeNull();
+    expect(outcome.facts.candidates).toEqual(["task.dispatch", "task.collect"]);
+  });
+
+  it("refuses a name in neither vocabulary as simply unknown", () => {
+    const outcome = mapLegacyNeutralEventName("session.teleport");
+    expect(outcome.disposition).toBe("refused");
+    expect(outcome.reason_code).toBe("unknown_event");
+    expect(outcome.facts.in_normative_vocabulary).toBe(false);
+  });
+
+  it("names the ten v2 events that have no v1 preimage at all", () => {
+    expect([...NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2]).toEqual([
+      "package.render",
+      "package.install",
+      "package.activate",
+      "package.update",
+      "runtime.verify",
+      "receipt.append",
+      "receipt.reconcile",
+      "migration.shadow",
+      "migration.cutover",
+      "migration.rollback",
+    ]);
+    expect(boundary.normalized_event_vocabulary.compatibility.introduced_in_v2).toEqual([
+      ...NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2,
+    ]);
+  });
+
+  it("keeps the conformance suite's 31 scenarios valid under the normative vocabulary", () => {
+    const names: string[] = conformance.closed_vocabularies.event_names;
+    for (const scenario of conformance.scenarios) {
+      if (scenario.action_event?.name) expect(names).toContain(scenario.action_event.name);
+    }
+    expect(conformance.scenarios).toHaveLength(31);
+  });
+
+  it("adds the normative superseded-name rule to the boundary contract's rules", () => {
+    expect(
+      boundary.normalized_event_contract.rules.some((rule: string) =>
+        rule.includes("superseded vocabulary version")
+      )
+    ).toBe(true);
   });
 });
 

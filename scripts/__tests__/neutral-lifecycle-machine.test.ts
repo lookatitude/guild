@@ -37,12 +37,53 @@ import type {
   NeutralLifecycleState,
 } from "../../src/modules/lifecycle/workflows/neutral-lifecycle-machine";
 import { NEUTRAL_LIFECYCLE_PHASES } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
+import { evaluateNeutralAdmission, freezeNeutralCapabilitySnapshot } from "../../src/modules/lifecycle/workflows/neutral-gate-policy";
+import type { NeutralAdmissionContext } from "../../src/modules/lifecycle/workflows/neutral-lifecycle-machine";
 
 // ---------------------------------------------------------------------------
 // Literal fixtures
 // ---------------------------------------------------------------------------
 
 const SNAPSHOT_HASH = "nfp1:0123456789abcdef";
+
+/**
+ * The run-bound admission inputs (MH-02-R1-B01). Every `tool.before` fixture
+ * decides against THIS, never against a verdict carried on the event.
+ */
+function admissionContext(overrides: Partial<NeutralAdmissionContext> = {}): NeutralAdmissionContext {
+  return {
+    snapshot: freezeNeutralCapabilitySnapshot({
+      snapshot_hash: SNAPSHOT_HASH,
+      host_id: "host-a",
+      host_version: "1.0.0",
+      capabilities: [
+        { capability_id: "tool.exec", supported: true, authenticated: true },
+        { capability_id: "tool.unauthenticated", supported: true, authenticated: false },
+      ],
+    }),
+    policy: {
+      policy_version: "policy-1",
+      denied_operations: ["forbidden-write"],
+      approval_required_operations: ["approval-write"],
+    },
+    gates: [
+      {
+        gate_id: "G-spec",
+        phase: "init",
+        operation_class: "mutating",
+        required_conditions: ["spec_approved"],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+/** The typed rule that makes `scope_diff` inapplicable (MH-02-R1-B02). */
+const NA_RULE = {
+  rule_id: "NA-SCOPE-DIFF-001",
+  applies_to_observation: "scope_diff",
+  rationale: "a documentation-only run produces no scope diff to check",
+};
 
 function openState(overrides: Partial<Parameters<typeof neutralInitialLifecycleState>[0]> = {}) {
   return neutralInitialLifecycleState({
@@ -51,8 +92,31 @@ function openState(overrides: Partial<Parameters<typeof neutralInitialLifecycleS
     phase: "init",
     required_gate_ids: ["G-spec"],
     required_observations: ["scope_diff"],
+    admission_context: admissionContext(),
+    not_applicable_rules: [NA_RULE],
     ...overrides,
   });
+}
+
+/** A `tool.before` event that supplies REQUEST FACTS, never a verdict. */
+function toolBefore(
+  transitionId: string,
+  input: Readonly<Record<string, unknown>> = {}
+): NeutralLifecycleEvent {
+  return {
+    name: "tool.before",
+    transition_id: transitionId,
+    capability_snapshot_hash: SNAPSHOT_HASH,
+    input: {
+      gate_id: "G-spec",
+      operation: "safe-write",
+      required_capability: "tool.exec",
+      operation_class: "mutating",
+      satisfied_conditions: ["spec_approved"],
+      approval_supplied: false,
+      ...input,
+    },
+  };
 }
 
 function event(overrides: Partial<NeutralLifecycleEvent> = {}): NeutralLifecycleEvent {
@@ -150,9 +214,31 @@ describe("MHRC-LIF-001 equivalent phase entry", () => {
   });
 
   it("refuses an event name outside the closed vocabulary", () => {
-    const result = applyNeutralLifecycleEvent(openState(), event({ name: "tool.pre" as never }));
+    const result = applyNeutralLifecycleEvent(openState(), event({ name: "not.an.event" as never }));
     expect(result.outcome.disposition).toBe("refused");
     expect(result.outcome.reason_code).toBe("unknown_event");
+    expect(result.state_changed).toBe(false);
+  });
+
+  it("refuses a SUPERSEDED v1 name with its normative replacement named (MH-02-R1-B05)", () => {
+    const result = applyNeutralLifecycleEvent(openState(), event({ name: "tool.pre" as never }));
+    expect(result.outcome.disposition).toBe("refused");
+    expect(result.outcome.reason_code).toBe("event_vocabulary_superseded");
+    expect(result.outcome.facts.normative_event_name).toBe("tool.before");
+    expect(result.outcome.facts.superseded_version).toBe("guild.normalized_event.v1");
+    expect(result.outcome.facts.normative_version).toBe("guild.normalized_event.v2");
+    expect(result.state_changed).toBe(false);
+  });
+
+  it("refuses the AMBIGUOUS v1 name rather than choosing a replacement", () => {
+    const result = applyNeutralLifecycleEvent(
+      openState(),
+      event({ name: "task.transition" as never })
+    );
+    expect(result.outcome.disposition).toBe("refused");
+    expect(result.outcome.reason_code).toBe("event_vocabulary_ambiguous");
+    expect(result.outcome.facts.normative_event_name).toBeNull();
+    expect(result.outcome.facts.candidates).toEqual(["task.dispatch", "task.collect"]);
     expect(result.state_changed).toBe(false);
   });
 
@@ -173,11 +259,7 @@ describe("MHRC-LIF-001 equivalent phase entry", () => {
 // ---------------------------------------------------------------------------
 
 describe("MHRC-LIF-002 equivalent gate violation", () => {
-  const violation = event({
-    name: "tool.before",
-    transition_id: "t-gate",
-    input: { gate_id: "G-spec", operation_class: "mutating", gate_condition: "unsatisfied" },
-  });
+  const violation = toolBefore("t-gate", { satisfied_conditions: [] });
 
   it("refuses with gate_unsatisfied and preserves the prior state exactly", () => {
     const before = openState();
@@ -191,6 +273,7 @@ describe("MHRC-LIF-002 equivalent gate violation", () => {
     expect(result.outcome.facts.side_effect).toBe(false);
     // a refused gate records no gate outcome, so it cannot satisfy a close gate
     expect(result.state.gate_outcomes).toEqual({});
+    expect(result.outcome.facts.unsatisfied_conditions).toEqual(["spec_approved"]);
   });
 
   it("returns the same refusal reason code on both hosts", () => {
@@ -202,27 +285,142 @@ describe("MHRC-LIF-002 equivalent gate violation", () => {
     expect(neutralLifecycleFingerprint(b.state)).toBe(neutralLifecycleFingerprint(a.state));
   });
 
-  it("records a satisfied gate outcome when the gate condition holds", () => {
-    const result = applyNeutralLifecycleEvent(
-      openState(),
-      event({
-        name: "tool.before",
-        transition_id: "t-gate-ok",
-        input: { gate_id: "G-spec", operation_class: "mutating", gate_condition: "satisfied" },
-      })
-    );
+  it("records a satisfied gate outcome when the declared conditions are met", () => {
+    const result = applyNeutralLifecycleEvent(openState(), toolBefore("t-gate-ok"));
     expect(result.outcome.disposition).toBe("succeeded");
     expect(result.state.gate_outcomes).toEqual({ "G-spec": "succeeded" });
   });
 
-  it("refuses a gate event that names no gate", () => {
+  it("refuses a gate event that names no declared gate", () => {
     const result = applyNeutralLifecycleEvent(
       openState(),
-      event({ name: "tool.before", input: { gate_condition: "satisfied" } })
+      toolBefore("t-no-gate", { gate_id: undefined })
     );
     expect(result.outcome.disposition).toBe("refused");
     expect(result.outcome.reason_code).toBe("gate_unsatisfied");
     expect(result.state_changed).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MH-02-R1-B01 — the lifecycle path and the admission evaluator are ONE decision
+// ---------------------------------------------------------------------------
+
+describe("MH-02-R1-B01 lifecycle admission cannot diverge from evaluateNeutralAdmission", () => {
+  /** The reviewer's exact probe: deny by policy, then assert a satisfied gate. */
+  it("refuses a policy-denied operation even when the caller asserts gate_condition=satisfied", () => {
+    const before = openState();
+    const result = applyNeutralLifecycleEvent(
+      before,
+      toolBefore("t-deny", { operation: "forbidden-write", gate_condition: "satisfied" })
+    );
+    expect(result.outcome.disposition).toBe("refused");
+    expect(result.outcome.reason_code).toBe("policy_denied");
+    expect(result.outcome.type).toBe("guild.policy_outcome.v1");
+    expect(result.state.gate_outcomes).toEqual({});
+    expect(result.state_changed).toBe(false);
+    expect(result.outcome.facts.caller_supplied_verdict_ignored).toBe(true);
+    expect(neutralLifecycleFingerprint(result.state)).toBe(neutralLifecycleFingerprint(before));
+  });
+
+  /**
+   * The invariant behind the probe, stated directly: for every request shape,
+   * the lifecycle disposition and reason code equal the admission evaluator's.
+   */
+  it.each([
+    ["absent capability", { required_capability: "tool.missing" }, "unsupported", "capability_absent"],
+    ["unauthenticated capability", { required_capability: "tool.unauthenticated" }, "failed", "authentication_failed"],
+    ["policy denial", { operation: "forbidden-write" }, "refused", "policy_denied"],
+    ["missing approval", { operation: "approval-write" }, "refused", "approval_required"],
+    ["unmet gate condition", { satisfied_conditions: [] }, "refused", "gate_unsatisfied"],
+    ["admissible", {}, "succeeded", null],
+  ])("keeps %s distinct and identical on both paths", (_label, patch, disposition, reason) => {
+    const state = openState();
+    const evt = toolBefore("t-probe", patch as Record<string, unknown>);
+
+    const direct = evaluateNeutralAdmission({
+      request: {
+        operation_id: evt.transition_id,
+        operation: (evt.input.operation as string) ?? "",
+        required_capability: (evt.input.required_capability as string) ?? "",
+        operation_class: "mutating",
+        satisfied_conditions: (evt.input.satisfied_conditions as string[]) ?? [],
+        approval_supplied: evt.input.approval_supplied === true,
+      },
+      snapshot: admissionContext().snapshot,
+      policy: admissionContext().policy,
+      gate: admissionContext().gates[0],
+    });
+
+    const viaLifecycle = applyNeutralLifecycleEvent(state, evt);
+
+    expect(direct.disposition).toBe(disposition);
+    expect(direct.reason_code).toBe(reason);
+    // The two paths agree — that is the whole point of the finding.
+    expect(viaLifecycle.outcome.disposition).toBe(direct.disposition);
+    expect(viaLifecycle.outcome.reason_code).toBe(direct.reason_code);
+    expect(viaLifecycle.outcome.type).toBe(direct.type);
+    // A non-succeeded admission records no gate outcome.
+    expect(viaLifecycle.state.gate_outcomes).toEqual(
+      disposition === "succeeded" ? { "G-spec": "succeeded" } : {}
+    );
+  });
+
+  it("fails closed when the run declares no admission context", () => {
+    const state = openState({ admission_context: undefined });
+    const result = applyNeutralLifecycleEvent(
+      state,
+      toolBefore("t-nocontext", { gate_condition: "satisfied" })
+    );
+    expect(result.outcome.disposition).toBe("refused");
+    expect(result.outcome.reason_code).toBe("admission_context_missing");
+    expect(result.state.gate_outcomes).toEqual({});
+  });
+
+  it("keeps EXECUTION failure distinct from refusal and blocks the close it would otherwise ride", () => {
+    const admitted = applyNeutralLifecycleEvent(openState(), toolBefore("t-gate-ok")).state;
+    expect(admitted.gate_outcomes).toEqual({ "G-spec": "succeeded" });
+
+    const failed = applyNeutralLifecycleEvent(
+      admitted,
+      event({
+        name: "tool.after",
+        transition_id: "t-exec",
+        input: { gate_id: "G-spec", execution_status: "failed" },
+      })
+    );
+    expect(failed.outcome.disposition).toBe("failed");
+    expect(failed.outcome.reason_code).toBe("execution_failed");
+    expect(failed.state.gate_outcomes).toEqual({ "G-spec": "failed" });
+
+    const observed = applyNeutralLifecycleEvent(
+      failed.state,
+      event({
+        name: "receipt.append",
+        transition_id: "t-obs",
+        input: { observation: "scope_diff", observation_state: "checked_clean" },
+      })
+    ).state;
+    const closed = applyNeutralLifecycleEvent(
+      observed,
+      event({ name: "run.stop", transition_id: "t-stop", input: { requested_terminal_state: "completed" } })
+    );
+    expect(closed.outcome.disposition).toBe("refused");
+    expect(closed.outcome.reason_code).toBe("required_gate_outcome_missing");
+    expect(closed.state.status).toBe("open");
+  });
+
+  it("refuses an execution result for a gate that was never admitted", () => {
+    const result = applyNeutralLifecycleEvent(
+      openState(),
+      event({
+        name: "tool.after",
+        transition_id: "t-exec-orphan",
+        input: { gate_id: "G-spec", execution_status: "succeeded" },
+      })
+    );
+    expect(result.outcome.disposition).toBe("refused");
+    expect(result.outcome.reason_code).toBe("required_gate_outcome_missing");
   });
 });
 
@@ -315,11 +513,7 @@ describe("MHRC-LIF-004 run close", () => {
   function readyToClose(): NeutralLifecycleState {
     const gated = applyNeutralLifecycleEvent(
       openState(),
-      event({
-        name: "tool.before",
-        transition_id: "t-gate-ok",
-        input: { gate_id: "G-spec", gate_condition: "satisfied" },
-      })
+      toolBefore("t-gate-ok")
     ).state;
     return applyNeutralLifecycleEvent(
       gated,
@@ -341,11 +535,7 @@ describe("MHRC-LIF-004 run close", () => {
   it("refuses completion when a required observation was never observed (BR-07)", () => {
     const gated = applyNeutralLifecycleEvent(
       openState(),
-      event({
-        name: "tool.before",
-        transition_id: "t-gate-ok",
-        input: { gate_id: "G-spec", gate_condition: "satisfied" },
-      })
+      toolBefore("t-gate-ok")
     ).state;
     const result = applyNeutralLifecycleEvent(gated, closeEvent);
     expect(result.outcome.disposition).toBe("refused");
@@ -357,11 +547,7 @@ describe("MHRC-LIF-004 run close", () => {
   it("refuses completion when a required observation failed", () => {
     const gated = applyNeutralLifecycleEvent(
       openState(),
-      event({
-        name: "tool.before",
-        transition_id: "t-gate-ok",
-        input: { gate_id: "G-spec", gate_condition: "satisfied" },
-      })
+      toolBefore("t-gate-ok")
     ).state;
     const observed = applyNeutralLifecycleEvent(
       gated,
@@ -394,24 +580,27 @@ describe("MHRC-LIF-004 run close", () => {
     expect(result.state.status).toBe("open");
   });
 
-  it("accepts not_applicable as a close-eligible observation state", () => {
-    const gated = applyNeutralLifecycleEvent(
-      openState(),
-      event({
-        name: "tool.before",
-        transition_id: "t-gate-ok",
-        input: { gate_id: "G-spec", gate_condition: "satisfied" },
-      })
-    ).state;
-    const observed = applyNeutralLifecycleEvent(
+  it("accepts not_applicable ONLY under a declared typed rule bound to that observation", () => {
+    const gated = applyNeutralLifecycleEvent(openState(), toolBefore("t-gate-ok")).state;
+    const recorded = applyNeutralLifecycleEvent(
       gated,
       event({
         name: "receipt.append",
         transition_id: "t-obs-na",
-        input: { observation: "scope_diff", observation_state: "not_applicable" },
+        input: {
+          observation: "scope_diff",
+          observation_state: "not_applicable",
+          not_applicable_rule_id: NA_RULE.rule_id,
+        },
       })
-    ).state;
-    expect(applyNeutralLifecycleEvent(observed, closeEvent).state.status).toBe("completed");
+    );
+    expect(recorded.outcome.disposition).toBe("succeeded");
+    expect(recorded.state.observations.scope_diff).toEqual({
+      state: "not_applicable",
+      not_applicable_rule_id: NA_RULE.rule_id,
+    });
+    expect(recorded.outcome.facts.not_applicable_rationale).toBe(NA_RULE.rationale);
+    expect(applyNeutralLifecycleEvent(recorded.state, closeEvent).state.status).toBe("completed");
   });
 
   it("aborts on an explicitly requested aborted terminal state without evidence gating", () => {
@@ -450,6 +639,125 @@ describe("MHRC-LIF-004 run close", () => {
     );
     expect(d.outcome.reason_code).toBe(c.outcome.reason_code);
     expect(d.state.status).toBe("open");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MH-02-R1-B02 — an unsubstantiated not_applicable must fail closed
+// ---------------------------------------------------------------------------
+
+describe("MH-02-R1-B02 not_applicable requires an explicit typed rule", () => {
+  const closeEvent = event({
+    name: "run.stop",
+    transition_id: "t-stop",
+    input: { requested_terminal_state: "completed" },
+  });
+
+  function admitted(): NeutralLifecycleState {
+    return applyNeutralLifecycleEvent(openState(), toolBefore("t-gate-ok")).state;
+  }
+
+  function recordNotApplicable(input: Record<string, unknown>) {
+    return applyNeutralLifecycleEvent(
+      admitted(),
+      event({
+        name: "receipt.append",
+        transition_id: "t-obs-na",
+        input: { observation: "scope_diff", observation_state: "not_applicable", ...input },
+      })
+    );
+  }
+
+  /** The reviewer's exact probe: a bare not_applicable, then a successful close. */
+  it("refuses a bare not_applicable and cannot then close the run", () => {
+    const recorded = recordNotApplicable({});
+    expect(recorded.outcome.disposition).toBe("refused");
+    expect(recorded.outcome.reason_code).toBe("not_applicable_rule_missing");
+    expect(recorded.state_changed).toBe(false);
+    expect(recorded.state.observations).toEqual({});
+
+    const closed = applyNeutralLifecycleEvent(recorded.state, closeEvent);
+    expect(closed.outcome.disposition).toBe("refused");
+    expect(closed.outcome.reason_code).toBe("required_observation_missing");
+    expect(closed.state.status).toBe("open");
+  });
+
+  it("refuses a rule id that no declared rule matches", () => {
+    const recorded = recordNotApplicable({ not_applicable_rule_id: "NA-INVENTED" });
+    expect(recorded.outcome.reason_code).toBe("not_applicable_rule_unknown");
+    expect(recorded.state.observations).toEqual({});
+  });
+
+  it("refuses a declared rule bound to a DIFFERENT observation", () => {
+    const state = neutralInitialLifecycleState({
+      run_id: "run-mh02-1",
+      capability_snapshot_hash: SNAPSHOT_HASH,
+      phase: "init",
+      required_gate_ids: [],
+      required_observations: ["scope_diff"],
+      admission_context: admissionContext(),
+      not_applicable_rules: [
+        { rule_id: "NA-OTHER", applies_to_observation: "some_other_check", rationale: "unrelated" },
+      ],
+    });
+    const recorded = applyNeutralLifecycleEvent(
+      state,
+      event({
+        name: "receipt.append",
+        transition_id: "t-obs-na",
+        input: {
+          observation: "scope_diff",
+          observation_state: "not_applicable",
+          not_applicable_rule_id: "NA-OTHER",
+        },
+      })
+    );
+    expect(recorded.outcome.reason_code).toBe("not_applicable_rule_mismatch");
+    expect(recorded.state.observations).toEqual({});
+  });
+
+  it("refuses a rule id attached to any state other than not_applicable", () => {
+    const recorded = applyNeutralLifecycleEvent(
+      admitted(),
+      event({
+        name: "receipt.append",
+        transition_id: "t-obs-clean",
+        input: {
+          observation: "scope_diff",
+          observation_state: "checked_clean",
+          not_applicable_rule_id: NA_RULE.rule_id,
+        },
+      })
+    );
+    expect(recorded.outcome.reason_code).toBe("not_applicable_rule_mismatch");
+  });
+
+  /**
+   * Defence in depth: even a state assembled by some other route — a restored
+   * checkpoint, a hand-built fixture — cannot close on an unruled inapplicability.
+   */
+  it("re-validates the rule binding at the close sentinel itself", () => {
+    const gated = admitted();
+    const forged = {
+      ...gated,
+      observations: { scope_diff: { state: "not_applicable", not_applicable_rule_id: null } },
+    } as unknown as NeutralLifecycleState;
+    const closed = applyNeutralLifecycleEvent(forged, closeEvent);
+    expect(closed.outcome.disposition).toBe("refused");
+    expect(closed.outcome.reason_code).toBe("not_applicable_rule_missing");
+    expect(closed.state.status).toBe("open");
+  });
+
+  it("re-validates a rule that was revoked from the registry after recording", () => {
+    const gated = admitted();
+    const forged = {
+      ...gated,
+      observations: { scope_diff: { state: "not_applicable", not_applicable_rule_id: NA_RULE.rule_id } },
+      not_applicable_rules: [],
+    } as unknown as NeutralLifecycleState;
+    const closed = applyNeutralLifecycleEvent(forged, closeEvent);
+    expect(closed.outcome.reason_code).toBe("not_applicable_rule_unknown");
+    expect(closed.state.status).toBe("open");
   });
 });
 

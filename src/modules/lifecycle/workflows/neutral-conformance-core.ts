@@ -536,76 +536,300 @@ export function deriveNeutralSupportClaim(record: NeutralSupportRecord): Neutral
 // Conformance decision
 // ---------------------------------------------------------------------------
 
+/**
+ * The REQUIRED scenario set for this suite version. Declared by the core, not
+ * chosen by the caller (MH-02-R1-B04): when the caller picked the required set,
+ * it could pick the empty set and promote `conformant` without running anything.
+ */
+export const NEUTRAL_REQUIRED_CORE_SCENARIO_IDS: readonly string[] = neutralFreeze(
+  NEUTRAL_CORE_SCENARIOS.map((scenario) => scenario.stable_id)
+);
+
+/** Evidence freshness. `unknown` is not a soft `fresh`. */
+export const NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS = ["fresh", "stale", "unknown"] as const;
+export type NeutralEvidenceFreshnessVerdict = (typeof NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS)[number];
+
+/**
+ * The exact activated runtime a conformance claim is bound to. CI-06 requires a
+ * claim to bind conformance to exact release AND runtime identities, so every
+ * field is mandatory and every field is compared.
+ */
+export interface NeutralRuntimeBinding {
+  readonly host_id: string;
+  readonly host_version: string;
+  readonly runtime_version: string;
+  readonly release_id: string;
+  readonly contract_version: number;
+}
+
+/** One ordered, typed, receipt-bound scenario result. */
 export interface NeutralScenarioResult {
-  readonly disposition: string;
+  readonly stable_id: string;
+  readonly outcome_type: NeutralOutcomeType;
+  readonly disposition: NeutralDisposition;
+  readonly reason_code: string | null;
+  /** A reference into the durable receipt journal (MH-06 owns the journal). */
+  readonly receipt_ref: string;
+  readonly runtime_binding: NeutralRuntimeBinding;
+  readonly evidence_freshness: NeutralEvidenceFreshnessVerdict;
+}
+
+/** The whole evidence package a promotion decision is taken against. */
+export interface NeutralConformanceEvidence {
+  readonly suite_id: string;
+  readonly suite_version: string;
+  readonly required_scenario_ids: readonly string[];
+  readonly activated_runtime: NeutralRuntimeBinding;
+  /** Ordered: `results[i]` MUST correspond to `required_scenario_ids[i]`. */
+  readonly results: readonly NeutralScenarioResult[];
+}
+
+const RUNTIME_BINDING_FIELDS: readonly string[] = [
+  "host_id",
+  "host_version",
+  "runtime_version",
+  "release_id",
+  "contract_version",
+];
+
+function runtimeBindingComplete(binding: NeutralRuntimeBinding | undefined): boolean {
+  if (binding === undefined || binding === null) return false;
+  if (typeof binding.contract_version !== "number") return false;
+  for (const field of RUNTIME_BINDING_FIELDS) {
+    if (field === "contract_version") continue;
+    const value = (binding as unknown as Record<string, unknown>)[field];
+    if (typeof value !== "string" || value.length === 0) return false;
+  }
+  return true;
+}
+
+function sameRuntimeBinding(a: NeutralRuntimeBinding, b: NeutralRuntimeBinding): boolean {
+  return RUNTIME_BINDING_FIELDS.every(
+    (field) =>
+      (a as unknown as Record<string, unknown>)[field] ===
+      (b as unknown as Record<string, unknown>)[field]
+  );
+}
+
+function refuseConformance(
+  reason:
+    | "scenario_suite_version_mismatch"
+    | "scenario_required_set_mismatch"
+    | "scenario_results_unordered"
+    | "scenario_evidence_incomplete"
+    | "scenario_receipt_reference_missing"
+    | "scenario_runtime_binding_mismatch"
+    | "scenario_evidence_stale",
+  assertions: readonly string[],
+  facts: Readonly<Record<string, unknown>>
+): NeutralOutcome {
+  return neutralOutcome({
+    type: "guild.support_transition_outcome.v1",
+    disposition: "refused",
+    reason_code: reason,
+    assertions: [...assertions],
+    facts: { ...facts, may_promote_conformant: false },
+  });
 }
 
 /**
- * Decide whether `conformant` may be promoted.
+ * Decide whether `conformant` may be promoted (MH-02-R1-B04).
  *
- * A required scenario whose result is ABSENT is a refusal, not a pass: absence of
- * evidence is never success (BR-07). A required scenario whose result disagrees
- * with its expected disposition is a failure. An expected REFUSAL that actually
- * refused is a pass — explicitly refusing is the correct behaviour for the
- * scenarios that test refusal, and it is exactly what "passed or explicitly
- * refused every required scenario" means in the conformance definition.
+ * Round 1 accepted `({}, [])` and five bare `{disposition}` strings, which meant
+ * a caller could publish a conformance claim without running a scenario. Every
+ * gate below exists because its absence was exploitable:
+ *
+ *   1. the suite version tuple must be the pinned one          (no silent drift)
+ *   2. the required set must be the CORE's set, non-empty      (no empty suite)
+ *   3. results must be ordered against that set                (no re-association)
+ *   4. each result must be a typed outcome, not a string       (no bare verdicts)
+ *   5. each result must cite a receipt reference               (no evidence-free pass)
+ *   6. each result must bind the EXACT activated runtime       (no cross-release reuse)
+ *   7. every result's freshness verdict must be `fresh`        (no stale evidence)
+ *   8. each disposition must match the scenario's expectation  (the original check)
+ *
+ * An expected REFUSAL that actually refused is still a pass — explicitly
+ * refusing is the correct behaviour for the refusal scenarios, and it is what
+ * "passed or explicitly refused every required scenario" means.
  */
 export function evaluateNeutralConformanceDecision(
-  results: Readonly<Record<string, NeutralScenarioResult>>,
-  requiredScenarioIds: readonly string[],
+  evidence: NeutralConformanceEvidence,
   scenarios: readonly NeutralScenarioDefinition[] = NEUTRAL_CORE_SCENARIOS
 ): NeutralOutcome {
-  const missing: string[] = [];
-  const mismatched: Array<{ stable_id: string; expected: string; observed: string }> = [];
-  const unknown: string[] = [];
+  const required = evidence?.required_scenario_ids ?? [];
+  const results = evidence?.results ?? [];
+  const expectedRequired = scenarios.map((scenario) => scenario.stable_id);
 
-  for (const id of requiredScenarioIds) {
-    const definition = scenarios.find((scenario) => scenario.stable_id === id);
-    if (definition === undefined) {
-      unknown.push(id);
-      continue;
-    }
-    const result = results[id];
-    if (result === undefined) {
-      missing.push(id);
-      continue;
-    }
-    const expected = definition.expected_typed_outcome.disposition;
-    if (result.disposition !== expected) {
-      mismatched.push({ stable_id: id, expected, observed: result.disposition });
-    }
-  }
-
-  const facts = {
+  const baseFacts = {
     suite_id: NEUTRAL_SCENARIO_SUITE_ID,
     suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-    required_count: requiredScenarioIds.length,
-    missing_scenarios: missing,
-    mismatched_scenarios: mismatched,
-    undeclared_scenarios: unknown,
-    may_promote_conformant: missing.length === 0 && mismatched.length === 0 && unknown.length === 0,
+    submitted_suite_id: evidence?.suite_id ?? null,
+    submitted_suite_version: evidence?.suite_version ?? null,
+    required_count: required.length,
+    result_count: results.length,
   };
 
-  if (missing.length > 0 || unknown.length > 0) {
-    return neutralOutcome({
-      type: "guild.support_transition_outcome.v1",
-      disposition: "refused",
-      reason_code: "scenario_evidence_incomplete",
-      assertions: [
-        "any required unobserved scenario prevents promotion",
-        "absence of evidence is never success",
+  // 1 — suite identity
+  if (
+    evidence?.suite_id !== NEUTRAL_SCENARIO_SUITE_ID ||
+    evidence?.suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION
+  ) {
+    return refuseConformance(
+      "scenario_suite_version_mismatch",
+      [
+        "a conformance claim is bound to one exact suite id and version",
+        "a claim against an unpinned suite proves nothing",
       ],
-      facts,
-    });
+      baseFacts
+    );
   }
 
+  // 2 — the required set is the core's, and it is not empty
+  const missingRequired = expectedRequired.filter((id) => required.indexOf(id) === -1);
+  const extraRequired = required.filter((id) => expectedRequired.indexOf(id) === -1);
+  if (required.length === 0 || missingRequired.length > 0 || extraRequired.length > 0) {
+    return refuseConformance(
+      "scenario_required_set_mismatch",
+      [
+        "the required scenario set is declared by the core for this suite version",
+        "an empty or caller-selected required set cannot back a conformance claim",
+      ],
+      {
+        ...baseFacts,
+        declared_required_scenario_ids: [...expectedRequired],
+        omitted_required_scenarios: missingRequired,
+        undeclared_scenarios: extraRequired,
+      }
+    );
+  }
+
+  // 3 — ordered results, one per required scenario, in the same order
+  if (results.length !== required.length) {
+    return refuseConformance(
+      "scenario_evidence_incomplete",
+      [
+        "every required scenario needs exactly one result",
+        "absence of evidence is never success",
+      ],
+      { ...baseFacts, declared_required_scenario_ids: [...expectedRequired] }
+    );
+  }
+  const outOfOrder = required
+    .map((id, index) => ({ index, expected: id, observed: results[index]?.stable_id ?? null }))
+    .filter((entry) => entry.expected !== entry.observed);
+  if (outOfOrder.length > 0) {
+    return refuseConformance(
+      "scenario_results_unordered",
+      [
+        "ordered results are what makes a result attributable to its scenario",
+        "an unordered result set cannot be attributed",
+      ],
+      { ...baseFacts, out_of_order: outOfOrder }
+    );
+  }
+
+  // 4/5 — typed outcomes with receipt references
+  const untyped: Array<Record<string, unknown>> = [];
+  const receiptless: string[] = [];
+  for (const result of results) {
+    const typedOk =
+      isNeutralOutcomeType(result.outcome_type) &&
+      isNeutralDisposition(result.disposition) &&
+      (result.disposition === "succeeded"
+        ? result.reason_code === null || result.reason_code === undefined
+        : typeof result.reason_code === "string" && result.reason_code.length > 0);
+    if (!typedOk) {
+      untyped.push({
+        stable_id: result.stable_id,
+        outcome_type: result.outcome_type ?? null,
+        disposition: result.disposition ?? null,
+        reason_code: result.reason_code ?? null,
+      });
+    }
+    if (typeof result.receipt_ref !== "string" || result.receipt_ref.length === 0) {
+      receiptless.push(result.stable_id);
+    }
+  }
+  if (untyped.length > 0) {
+    return refuseConformance(
+      "scenario_evidence_incomplete",
+      [
+        "a scenario result is a typed outcome, not a bare disposition string",
+        "a succeeded result carries no reason code and a non-succeeded result must carry one",
+      ],
+      { ...baseFacts, untyped_results: untyped }
+    );
+  }
+  if (receiptless.length > 0) {
+    return refuseConformance(
+      "scenario_receipt_reference_missing",
+      [
+        "every scenario result cites the receipt that records it",
+        "a result with no receipt reference is unverifiable",
+      ],
+      { ...baseFacts, results_without_receipt_reference: receiptless }
+    );
+  }
+
+  // 6 — exact activated-runtime binding
+  if (!runtimeBindingComplete(evidence.activated_runtime)) {
+    return refuseConformance(
+      "scenario_runtime_binding_mismatch",
+      [
+        "a conformance claim names the exact activated runtime",
+        "an incomplete runtime binding cannot be compared",
+      ],
+      { ...baseFacts, activated_runtime: evidence.activated_runtime ?? null }
+    );
+  }
+  const misbound = results
+    .filter(
+      (result) =>
+        !runtimeBindingComplete(result.runtime_binding) ||
+        !sameRuntimeBinding(result.runtime_binding, evidence.activated_runtime)
+    )
+    .map((result) => ({ stable_id: result.stable_id, runtime_binding: result.runtime_binding ?? null }));
+  if (misbound.length > 0) {
+    return refuseConformance(
+      "scenario_runtime_binding_mismatch",
+      [
+        "every result must have been produced by the exact activated runtime",
+        "evidence from another release or runtime cannot be reused",
+      ],
+      { ...baseFacts, activated_runtime: evidence.activated_runtime, misbound_results: misbound }
+    );
+  }
+
+  // 7 — explicit freshness verdict
+  const notFresh = results
+    .filter((result) => result.evidence_freshness !== "fresh")
+    .map((result) => ({ stable_id: result.stable_id, evidence_freshness: result.evidence_freshness ?? null }));
+  if (notFresh.length > 0) {
+    return refuseConformance(
+      "scenario_evidence_stale",
+      [
+        "every required scenario needs an explicit fresh evidence verdict",
+        "stale or unknown freshness is never read as fresh",
+      ],
+      { ...baseFacts, non_fresh_results: notFresh }
+    );
+  }
+
+  // 8 — disposition matches the scenario's expectation
+  const mismatched = results
+    .map((result) => {
+      const definition = scenarios.find((scenario) => scenario.stable_id === result.stable_id);
+      const expected = definition?.expected_typed_outcome.disposition;
+      return { stable_id: result.stable_id, expected: expected ?? null, observed: result.disposition };
+    })
+    .filter((entry) => entry.expected !== entry.observed);
   if (mismatched.length > 0) {
     return neutralOutcome({
       type: "guild.support_transition_outcome.v1",
       disposition: "failed",
       reason_code: "scenario_result_mismatch",
       assertions: ["any required failed scenario prevents promotion"],
-      facts,
+      facts: { ...baseFacts, mismatched_scenarios: mismatched, may_promote_conformant: false },
     });
   }
 
@@ -615,7 +839,17 @@ export function evaluateNeutralConformanceDecision(
     assertions: [
       "conformant may be promoted only for the exact evidence-bound version tuple",
       "constructed adapter smoke cannot satisfy lifecycle conformance",
+      "every required scenario passed or explicitly refused under fresh, receipt-bound evidence",
     ],
-    facts,
+    facts: {
+      ...baseFacts,
+      activated_runtime: evidence.activated_runtime,
+      evaluated_scenarios: results.map((result) => ({
+        stable_id: result.stable_id,
+        disposition: result.disposition,
+        receipt_ref: result.receipt_ref,
+      })),
+      may_promote_conformant: true,
+    },
   });
 }
