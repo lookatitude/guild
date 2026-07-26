@@ -417,8 +417,9 @@ describe("host-native discovery on --update with no receipts", () => {
 
   it("rejects TOML headers with trailing junk and near-miss names; accepts quoted/spaced", () => {
     // Drives the REAL sed line from install.sh over the shapes the gate named.
-    // The extractor is a THREE-line chain (header table, dotted assignment,
-    // inline table) with first-hit-wins guards — execute ALL of them in file
+    // The extractor is a FOUR-line chain (header table, dotted assignment,
+    // inline table under [marketplaces], dotted-key inline table) with
+    // first-hit-wins guards — execute ALL of them in file
     // order, exactly as install.sh does. Probing only the first line silently
     // skips the two forms the round-2 gate added.
     const lines = fs

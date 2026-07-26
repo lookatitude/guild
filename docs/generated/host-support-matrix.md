@@ -1,6 +1,6 @@
 # Generated Host Support Matrix
 
-Generated: 2026-07-19T03:05:42.662Z
+Generated: 2026-07-26T19:55:33.407Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 
@@ -51,7 +51,7 @@ This file is generated from host-adapter outputs and review-progress schema vali
 - model_params: degraded - Codex CLI maps model plus effort/reasoning, but cannot enforce unsupported model param key(s): thinking, verbosity
 - memory: degraded - Codex CLI uses filesystem/BM25 Guild memory until native MCP memory is available
 - dispatch: verified - Codex CLI dispatch uses codex exec with wrapper bootstrap when needed
-- hook_normalization: degraded - host has no native hooks; GuildHookEvent normalization uses forwarded/file-bus/preflight receipts
+- hook_normalization: verified - host has native hook capability in the registry row
 - review_progress: verified - all 10 canonical review_progress.v1 states validate
 - install_or_app_refusal: degraded - Codex package target renders .codex-plugin plus .agents skill tree; live install is target-level
 

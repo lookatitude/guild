@@ -274,7 +274,8 @@ export class CodexPaneAdapter implements PaneAdapter {
     //   hooks. So a Guild-gated per-tool deny IS achievable on codex.
     //
     //   NOT YET ENABLED in Guild, for two concrete reasons:
-    //     1. Guild's generated codex hook bundle wires only `UserPromptSubmit`,
+    //     1. Guild's generated codex hook bundle wires SessionStart (update-check)
+    //        and `UserPromptSubmit` (prompt bridge),
     //        NOT `PreToolUse` (scripts/build-host-packages.ts, writeCodexHookBridge)
     //        — there is no codex PreToolUse deny bridge to gate a bypass behind.
     //     2. The codex capability rows still record `hooks.pre_tool_use: false`
