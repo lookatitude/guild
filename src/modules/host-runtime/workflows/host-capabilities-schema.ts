@@ -99,7 +99,10 @@ export const UPDATE_COMMANDS = {
 export interface BootstrapCaps {
   /**
    * How startup context is injected. Claude: "hookSpecificOutput.additionalContext".
-   * Codex (no native hook injection): "instruction_file" (AGENTS.md / wrapper-injected).
+   * Codex: "instruction_file" (AGENTS.md / wrapper-injected) remains the
+   * BOOTSTRAP channel; since wi-04, SessionStart hook stdout additionally
+   * reaches session context (live-verified), but the bootstrap payload still
+   * rides the instruction file.
    */
   context_injection: string;
   /** Host autoloads skill files natively. */

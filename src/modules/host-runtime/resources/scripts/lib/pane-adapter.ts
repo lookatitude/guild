@@ -296,7 +296,8 @@ export class CodexPaneAdapter implements PaneAdapter {
     const taskFragment =
       spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer
-    // (lane panes only; Codex panes run no Claude hooks today, but the env
+    // (lane panes only; Codex panes run no Claude PostToolUse hook — only
+    // SessionStart/UserPromptSubmit are wired — but the env
     // parity keeps the heartbeat contract uniform across adapters).
     const specialistFragment =
       spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
