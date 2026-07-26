@@ -65,20 +65,32 @@ describe("README documents the registry's own update commands", () => {
     // right documented group. Refused surfaces are documented as no-command.
     const rows = HOST_REGISTRY_ROWS as Record<
       string,
-      { host_id: string; installability: string; capabilities?: { update?: { apply?: string } } }
+      {
+        host_id: string;
+        installability: string;
+        capabilities: { package: { update?: { apply?: string } } };
+      }
     >;
+    // NON-VACUITY FLOOR. The previous revision read `capabilities?.update`
+    // while the real path is `capabilities.package.update` — every apply came
+    // back undefined, ZERO branches executed, and the rail passed while
+    // asserting nothing. Count branch executions and require all three.
+    const executed = { marketplace_cli: 0, self_update: 0, reinstall_command: 0, refused: 0 };
     for (const [id, row] of Object.entries(rows)) {
-      const apply = row.capabilities?.update?.apply;
+      const apply = row.capabilities.package.update?.apply;
       if (row.installability === "none") {
         // The refused surfaces live in the no-update paragraph.
+        executed.refused++;
         expect(section).toMatch(new RegExp(`${id}[\\s\\S]{0,200}no (install and therefore no )?update`));
         continue;
       }
       if (apply === "marketplace_cli") {
+        executed.marketplace_cli++;
         expect(section.indexOf(id)).toBeGreaterThan(-1);
         expect(section.indexOf(id)).toBeLessThan(section.indexOf(UPDATE_COMMANDS.self_update));
       }
       if (apply === "self_update") {
+        executed.self_update++;
         // Round-1 gate: this branch was MISSING, so all seven wrapper hosts
         // could sit in the wrong group without failing. A wrapper host must
         // appear after the Claude command and before the reinstall block.
@@ -86,10 +98,13 @@ describe("README documents the registry's own update commands", () => {
         expect(section.indexOf(id)).toBeLessThan(section.indexOf(UPDATE_COMMANDS.reinstall_command));
       }
       if (apply === "reinstall_command") {
+        executed.reinstall_command++;
         // Reinstall-class hosts (file surfaces AND codex-cli after option A)
         // appear after the wrapper block.
         expect(section.indexOf(id)).toBeGreaterThan(section.indexOf(UPDATE_COMMANDS.self_update));
       }
     }
+    // 1 claude + 6 wrappers + (4 file surfaces + codex) + 4 refused = 16.
+    expect(executed).toEqual({ marketplace_cli: 1, self_update: 6, reinstall_command: 5, refused: 4 });
   });
 });

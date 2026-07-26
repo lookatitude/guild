@@ -58,8 +58,18 @@ export interface SelfUpdateDeps {
 export function childEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(base)) {
-    if (/^npm_/i.test(k)) continue;
-    if (k === "INIT_CWD" || k === "NODE_OPTIONS") continue;
+    // DENYLIST, not a blanket npm_* strip: an earlier revision removed every
+    // npm_ var, which also killed legitimately environment-provided settings
+    // (npm_config_registry, npm_config_cafile, npm_config_userconfig, proxy
+    // and cache config) that managed environments rely on. What actually
+    // poisons a nested npm is the PROJECT-CONTEXT set the outer npx exports:
+    //   - npm_config_local_prefix  (points at the INSTALLED PACKAGE root —
+    //     the variable that made `npm ci` resolve the wrong project)
+    //   - npm_package_* / npm_lifecycle_* / npm_command / npm_execpath
+    //     (identify the outer invocation, not ours)
+    //   - INIT_CWD (npm's original-cwd marker from the outer run)
+    if (/^npm_(package_|lifecycle_)/i.test(k)) continue;
+    if (/^(npm_config_local_prefix|npm_command|npm_execpath|INIT_CWD)$/i.test(k)) continue;
     out[k] = v;
   }
   return out;

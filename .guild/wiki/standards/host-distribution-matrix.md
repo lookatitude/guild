@@ -101,8 +101,13 @@ Scope that claim precisely — it does **not** apply to all 16 hosts:
 - the four unknown hosts (`cursor`, `github-copilot`, `opencode`, `rovo-dev`)
   may or may not have a remote source — untested, so unclaimed.
 
-A separate defect **does** span all hosts but `claude-code-cli`: none of them
-has a staleness signal.
+A separate defect spanned all hosts but `claude-code-cli` at the time of this
+page's G1 snapshot: none had a staleness signal. **CLOSED since:** Codex gained
+a SessionStart signal (#102), wrapper hosts always had the `guild-run` launch
+notice, and the file-surface trees now ship `update-check.js` with an AGENTS.md
+session-start preamble (wi-04 close-out). The per-row "Staleness signal"
+columns below describe the G1 snapshot; see the wi-04/wi-05 close-out for
+current state.
 
 Guild's own Codex registration is the symptom:
 
@@ -136,7 +141,7 @@ current wiring. Classes below describe *what Guild does today*; the
 | Class | What Guild does today | Updatable? |
 |---|---|---|
 | **A — remote ref** | registers a git ref; host's `marketplace update`/`upgrade` re-fetches the snapshot | **Explicitly updatable** — an operator command refreshes it. Whether an *installed* plugin then moves to the new version is host-dependent and **unverified for Codex** (see the behavior table above). Not "automatic". |
-| **B — local path** | registers a filesystem path into a rendered `dist/` tree | **Not by the host's own refresh** — `marketplace upgrade` rejects a local source outright. Guild-side paths still exist for an INSTALLER-MANAGED install: `install.sh --update` re-renders and reinstalls from the receipt, and the registry declares `guild-run update` as the canonical command. A registration the installer did not create (hand-run `codex plugin marketplace add`) has no receipt and neither path sees it. |
+| **B — local path** | registers a filesystem path into a rendered `dist/` tree | **Not by the host's own refresh** — `marketplace upgrade` rejects a local source outright. Guild-side paths still exist for an INSTALLER-MANAGED install: `install.sh --update` re-renders and reinstalls from the receipt, and the registry-canonical command is `install.sh --update` (option A, 2026-07-26: codex-cli is `reinstall_command`, never `self_update` — Codex owns its installed cache). A registration the installer did not create (hand-run `codex plugin marketplace add`) has no machine receipt; `--update` DETECTS it and advises, and the session-start check mints an identification-only package receipt. |
 | **C — rendered tree** | leaves a `dist/<host>/` tree. Wrapper-package hosts re-render via `guild-run update`; **file-surface** hosts (`agents-file`, `kiro`, `qoder`, `trae`) are refused it and told their real command instead — the AC-7 honesty guard in `self-update.ts:104-113` rejects any host whose capability row is not `apply: "self_update"` | Only on an explicit update command — and **which** command differs *within* the class |
 | **D — refused** | recognized by `is_refuse_host` (install.sh:151); the refuse block at install.sh:320-336 collects them and `exit 4`s | n/a |
 
@@ -330,7 +335,7 @@ Restricted to what the evidence forces:
 |---|---|
 | **G2** version SoT | Two manifests are load-bearing for install: `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (Codex reads the latter over git). `.codex-plugin/plugin.json` is load-bearing for the local path. A version field in the *generated Codex marketplace manifest* is **not** required — both install paths already resolve a version without it. The SoT requirement is that these agree; the drift gate is still justified. |
 | **G3** publish matrix | **Scope shrinks substantially.** Codex needs no new publish infrastructure — the repo is already a working git marketplace. The deliverable is switching Guild's *default registration* from local to remote (install.sh + README) for codex, and evaluating the same for pi (`git:`) and antigravity (`plugin@marketplace`). A GitHub Release artifact per host is **not** forced by the evidence; it is one option for genuinely file-surface hosts. **Constraint:** the switch must apply to *fetched* stable/beta installs only — install.sh:428-430 deliberately treats a checkout's working tree as the source, and making every invocation remote would break the development install path. **Channel switching requires `marketplace remove` + `add`**, not a re-`add`. |
-| **G4** staleness signal | Codex's generated hook manifest carries only `UserPromptSubmit`, so Codex has no session-start signal — that gap is real. But distribution class does not determine hook availability, and wrapper hosts already have `guild-run update`. The requirement is *a* reachable signal per host, not specifically a SessionStart port. |
+| **G4** staleness signal | AT THE G1 SNAPSHOT Codex's hook manifest carried only `UserPromptSubmit` — that gap was real and is CLOSED (#102 wired SessionStart; live-verified in a real codex session at the wi-04 close-out). Wrapper hosts carry the `guild-run` launch notice; file surfaces the AGENTS.md preamble + shipped bundle. |
 | **G5** update parity | Three defects are evidenced. (1) Receipts are written ONLY by `install.sh` — a host-native install (including the documented primary Claude path and the working Codex git path) leaves `install.sh --update` and `guild-run update` blind, which is the reporting machine's exact state. (2) `plugin_version_from` reads the Claude tree for every host's receipt. (3) The documented Guild-side Codex update paths assume an INSTALLER-MANAGED install. README:144-151 already matches the registry (the Claude two-command pair; `guild-run update` for the wrapper hosts incl. codex) — so the gap is NOT a docs-vs-registry mismatch. It is that the two **Guild-side** paths — `guild-run update` (`self-update.ts:95-99`) and `install.sh --update` (`install.sh:220-224`) — are both receipt-dependent, and a host-native install writes no receipt. The Claude marketplace pair is host-native and needs no receipt, so this does NOT affect a native Claude install; it bites Codex specifically, whose only documented command is the receipt-dependent `guild-run update`. The reporting machine had Guild on Codex, no receipt, and therefore no working documented update path. G5 owes that case a real answer, not a third mapping. |
 
 ## Verification method

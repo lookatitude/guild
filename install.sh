@@ -248,7 +248,14 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
       # guild, single or double), whitespace around the dot, and only
       # whitespace/comment after the bracket. Value: single- or double-quoted.
       # All shapes below were fed to the real Codex parser and accepted.
+      # Three TOML spellings Codex accepts for the same fact (all fed to the
+      # real Codex parser): a [marketplaces.guild] table (quotes/whitespace/
+      # trailing-comment tolerant), a top-level dotted assignment
+      # (marketplaces.guild.source_type = "git"), and an inline table under
+      # [marketplaces] (guild = { source_type = "git", … }). First hit wins.
       _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*\][[:space:]]*(#.*)?$/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      [ -z "$_cx_src" ] && _cx_src="$(sed -E -n 's/^[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*\.[[:space:]]*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\3/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      [ -z "$_cx_src" ] && _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\][[:space:]]*(#.*)?$/,/^[[:space:]]*\[/s/^[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*=[[:space:]]*\{.*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\2/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
       case "$_cx_src" in
         git)
           printf '      codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2

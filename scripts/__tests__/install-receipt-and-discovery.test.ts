@@ -417,16 +417,22 @@ describe("host-native discovery on --update with no receipts", () => {
 
   it("rejects TOML headers with trailing junk and near-miss names; accepts quoted/spaced", () => {
     // Drives the REAL sed line from install.sh over the shapes the gate named.
-    const line = fs
+    // The extractor is a THREE-line chain (header table, dotted assignment,
+    // inline table) with first-hit-wins guards — execute ALL of them in file
+    // order, exactly as install.sh does. Probing only the first line silently
+    // skips the two forms the round-2 gate added.
+    const lines = fs
       .readFileSync(INSTALL_SH, "utf8")
       .split("\n")
-      .find((l) => l.includes('_cx_src="$(sed'))!
-      .trim();
+      .filter((l) => l.includes('_cx_src="$(sed'))
+      .map((l) => l.trim());
+    expect(lines).toHaveLength(3);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-toml-"));
     const probe = (toml: string): string => {
       const f = path.join(dir, "config.toml");
       fs.writeFileSync(f, toml);
-      return sh(`${line.replace(/"\$_cx_home\/config.toml"/, f)}\necho "$_cx_src"`);
+      const script = lines.map((l) => l.replace(/"\$_cx_home\/config.toml"/, f)).join("\n");
+      return sh(`${script}\necho "$_cx_src"`);
     };
     try {
       expect(probe('[marketplaces.guild]\nsource_type = "local"\n')).toBe("local");
@@ -437,6 +443,9 @@ describe("host-native discovery on --update with no receipts", () => {
       // Round-1 gate: three MORE Codex-accepted forms were misclassified.
       expect(probe("[marketplaces.guild] # my note\nsource_type = 'git'\n")).toBe("git");
       expect(probe('["marketplaces"."guild"]\nsource_type = "local"\n')).toBe("local");
+      // Round-2 gate: two MORE Codex-accepted spellings.
+      expect(probe('marketplaces.guild.source_type = "git"\nmarketplaces.guild.source = "x"\n')).toBe("git");
+      expect(probe('[marketplaces]\nguild = { source_type = "local", source = "/x" }\nother = { source_type = "git" }\n')).toBe("local");
       expect(probe('[marketplaces.guilded]\nsource_type = "git"\n')).toBe("");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

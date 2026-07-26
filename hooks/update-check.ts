@@ -147,7 +147,7 @@ function main(): void {
   // RECEIPT MINTING for host-native installs (xhrd-wi-05 / G5). A `codex
   // plugin add` (or any host-native install path) runs no Guild code at
   // install time, so the package has no guild-install-receipt.json and
-  // `guild-run update` refuses (AC-7 needs the receipt's host row). The first
+  // `the receipt-consuming tools have nothing to read. The first
   // session start IS the earliest Guild code that runs — mint the receipt
   // here, PACKAGE-LOCAL ONLY:
   //   - version from the package's own manifest (state.version — the per-host

@@ -175,6 +175,10 @@ describe("the RENDERED Codex package (not the source text)", () => {
     const md = fs.readFileSync(path.join(agentsRoot, "AGENTS.md"), "utf8");
     expect(md).toContain("node hooks/dist/update-check.js --host agents-file");
     expect(md).toContain("## Update check (once per session)");
+    // The honesty sentences ARE the fix — pin them, or a revert to
+    // "silence means current" stays green (round-2 gate finding).
+    expect(md).toContain("Silence is NOT proof of currency");
+    expect(md).toContain("treat the package's age as unknown");
   });
 
   it("end to end: a stale RENDERED package produces a Codex-shaped signal", () => {
@@ -249,6 +253,11 @@ describe("update-check mints a package-local receipt for host-native installs", 
     expect(r["version"]).toBe("2.3.2");
     expect(r["channel"]).toBe("stable");
     expect(r["commit"]).toBeNull();
+    // Identification-only markers: the channel above is an ASSUMED default,
+    // and these fields are what say so. Their absence would silently restore
+    // a receipt that reads as authoritative.
+    expect(r["managed_by"]).toBe("host-native");
+    expect(r["channel_confidence"]).toBe("assumed-default");
   });
 
   it("does NOT clobber an existing receipt on later sessions", () => {
