@@ -16,6 +16,20 @@
  *     internals for a read-only sweep)
  *   - `handoffs/*.md` receipts (`<specialist>-<task-id>.md`)
  *
+ * Receipts are consumed through the typed document-contract path (MH-05
+ * DC-07). A receipt used to count purely because a file with the right name
+ * existed, which meant an empty, truncated or hand-forged file silently
+ * cleared a lane's stall verdict. Now each receipt is decided by
+ * `decideFromReceiptDocument`, which reads only the two structured regions of
+ * the document — the `guild.handoff_receipt.v1` frontmatter and the single
+ * fenced `guild.handoff.v2` JSON block — and never the surrounding prose.
+ *
+ * The decision fails closed: only a receipt that resolves to a canonical
+ * record with a non-refusing gate signal clears a stall. A receipt that cannot
+ * be proven is still reported as present (it is a real file on disk) but no
+ * longer suppresses the stall, and its refusal codes are surfaced on the row
+ * so the operator can see *why* it was not trusted.
+ *
  * Heartbeat join (lenient, in order): `in-progress/<laneId>.json` →
  * `in-progress/<specialist>-<laneId>.json` → `in-progress/<specialist>.json`
  * where <specialist> is derived from a matching receipt stem. An in-flight
@@ -31,13 +45,16 @@
  *   npx tsx scripts/check-lane-liveness.ts --run-dir <abs .guild/runs/<id>>
  *
  * Stdout: JSON { run_dir, run_state_present, timeout_ms, generated_at,
- *                lanes: [{ lane, status, receipt_present,
+ *                lanes: [{ lane, status, receipt_present, receipt_authority,
+ *                          receipt_disposition, receipt_refusals,
  *                          heartbeat_age_ms|null, stalled }] }
  * Exit:   0 always (report tool, not a gate) · 1 usage error only.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+
+import { decideFromReceiptDocument } from "../../documents";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,6 +63,9 @@ export const DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Terminal lane statuses — never reported stalled. */
 const TERMINAL_STATUSES = new Set(["done", "skipped", "dead", "failed"]);
+
+/** Receipts larger than this are not parsed — an unparsed receipt is untrusted. */
+const MAX_RECEIPT_BYTES = 512 * 1024;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,10 +83,38 @@ export interface HeartbeatRecord {
 export interface LaneLiveness {
   lane: string;
   status: string;
+  /** A receipt file (or a run-state `receipt_ref`) exists for this lane. */
   receipt_present: boolean;
+  /**
+   * Whether the receipt proved itself through the typed document-contract
+   * path. `none` means present-but-unproven, which never clears a stall.
+   */
+  receipt_authority: "canonical_record" | "none";
+  /** Disposition taken from the typed record — `unknown` when refused. */
+  receipt_disposition: string;
+  /** Why the receipt was not trusted, empty when it was. */
+  receipt_refusals: string[];
   heartbeat_age_ms: number | null;
   stalled: boolean;
 }
+
+/** Typed verdict for one `handoffs/<stem>.md` receipt. */
+export interface ReceiptEvidence {
+  stem: string;
+  authority: "canonical_record" | "none";
+  disposition: string;
+  refusals: string[];
+  /** True only for a canonical record whose gate signal is not `refuse`. */
+  trusted: boolean;
+}
+
+/** The evidence used when a lane has no receipt at all. */
+const NO_RECEIPT: Omit<ReceiptEvidence, "stem"> = {
+  authority: "none",
+  disposition: "unknown",
+  refusals: [],
+  trusted: false,
+};
 
 export interface LivenessReport {
   run_dir: string;
@@ -156,32 +204,69 @@ export function readHeartbeatAges(
   return ages;
 }
 
-/** Receipt file stems under `handoffs/` (without the `.md` extension). */
-export function readReceiptStems(runDir: string): string[] {
+/**
+ * Read every `handoffs/*.md` receipt and decide it through the typed
+ * document-contract path. Never throws — an unreadable or unprovable receipt
+ * becomes an untrusted row rather than an exception or a silent pass.
+ */
+export function readReceiptEvidence(runDir: string): ReceiptEvidence[] {
+  const dir = path.join(runDir, "handoffs");
+  let names: string[];
   try {
-    return fs
-      .readdirSync(path.join(runDir, "handoffs"))
-      .filter((n) => n.endsWith(".md"))
-      .map((n) => n.slice(0, -".md".length));
+    names = fs.readdirSync(dir);
   } catch {
     return [];
   }
+
+  const evidence: ReceiptEvidence[] = [];
+  for (const name of names.sort()) {
+    if (!name.endsWith(".md")) continue;
+    const stem = name.slice(0, -".md".length);
+    const filePath = path.join(dir, name);
+
+    let text: string | null = null;
+    try {
+      if (fs.statSync(filePath).size <= MAX_RECEIPT_BYTES) {
+        text = fs.readFileSync(filePath, "utf8");
+      }
+    } catch {
+      text = null; // vanished mid-sweep or unreadable — stays untrusted
+    }
+
+    const decision = decideFromReceiptDocument(text);
+    evidence.push({
+      stem,
+      authority: decision.authority,
+      disposition: decision.disposition,
+      refusals: decision.refusals,
+      trusted: decision.authority === "canonical_record" && decision.gate_signal !== "refuse",
+    });
+  }
+  return evidence;
+}
+
+/** Receipt file stems under `handoffs/` (without the `.md` extension). */
+export function readReceiptStems(runDir: string): string[] {
+  return readReceiptEvidence(runDir).map((entry) => entry.stem);
 }
 
 // ── Stall rule ───────────────────────────────────────────────────────────────
 
 /**
- * A lane is stalled when it has no receipt, is not in a terminal/pre-dispatch
- * state, and its freshest liveness signal is older than the timeout (or absent
- * entirely for an in_progress lane).
+ * A lane is stalled when no receipt vouches for it, it is not in a
+ * terminal/pre-dispatch state, and its freshest liveness signal is older than
+ * the timeout (or absent entirely for an in_progress lane).
+ *
+ * `receiptClearsStall` is the *typed* verdict from `readReceiptEvidence`, not
+ * the mere existence of a file: an unprovable receipt does not clear a stall.
  */
 export function isStalled(
   status: string,
-  receiptPresent: boolean,
+  receiptClearsStall: boolean,
   signalAgeMs: number | null,
   timeoutMs: number
 ): boolean {
-  if (receiptPresent) return false;
+  if (receiptClearsStall) return false;
   if (TERMINAL_STATUSES.has(status)) return false;
   if (status === "pending" && signalAgeMs === null) return false; // not started
   if (status === "in_progress") {
@@ -200,7 +285,9 @@ export function sweepLaneLiveness(
 ): LivenessReport {
   const lanes = readRunStateLanes(runDir);
   const heartbeats = readHeartbeatAges(runDir, now);
-  const receipts = readReceiptStems(runDir);
+  const receiptEvidence = readReceiptEvidence(runDir);
+  const receipts = receiptEvidence.map((entry) => entry.stem);
+  const evidenceByStem = new Map(receiptEvidence.map((entry) => [entry.stem, entry]));
   const consumedHeartbeats = new Set<string>();
   const rows: LaneLiveness[] = [];
 
@@ -211,6 +298,8 @@ export function sweepLaneLiveness(
       const receiptPresent =
         receiptStem !== undefined ||
         (typeof lane.receipt_ref === "string" && lane.receipt_ref.length > 0);
+      const evidence =
+        receiptStem !== undefined ? evidenceByStem.get(receiptStem) ?? NO_RECEIPT : NO_RECEIPT;
 
       // Heartbeat join: <laneId> → <specialist>-<laneId> → receipt-derived
       // <specialist>.
@@ -241,13 +330,17 @@ export function sweepLaneLiveness(
         lane: laneId,
         status,
         receipt_present: receiptPresent,
+        receipt_authority: evidence.authority,
+        receipt_disposition: evidence.disposition,
+        receipt_refusals: evidence.refusals,
         heartbeat_age_ms: heartbeatAgeMs,
-        stalled: isStalled(status, receiptPresent, signalAgeMs, timeoutMs),
+        stalled: isStalled(status, evidence.trusted, signalAgeMs, timeoutMs),
       });
     }
   } else {
     // No run-state: report from receipts (each receipt stem = a finished lane).
-    for (const stem of receipts) {
+    for (const entry of receiptEvidence) {
+      const stem = entry.stem;
       const hbKey = [...heartbeats.keys()].find(
         (k) => k === stem || stem.startsWith(`${k}-`)
       );
@@ -257,8 +350,11 @@ export function sweepLaneLiveness(
         lane: stem,
         status: "unknown",
         receipt_present: true,
+        receipt_authority: entry.authority,
+        receipt_disposition: entry.disposition,
+        receipt_refusals: entry.refusals,
         heartbeat_age_ms: heartbeatAgeMs,
-        stalled: false,
+        stalled: isStalled("unknown", entry.trusted, heartbeatAgeMs, timeoutMs),
       });
     }
   }
@@ -266,15 +362,17 @@ export function sweepLaneLiveness(
   // Heartbeats that joined no lane row — surface them, never drop silently.
   for (const [stem, ageMs] of heartbeats) {
     if (consumedHeartbeats.has(stem)) continue;
-    const receiptPresent = receipts.some(
-      (s) => s === stem || s.startsWith(`${stem}-`)
-    );
+    const matchedStem = receipts.find((s) => s === stem || s.startsWith(`${stem}-`));
+    const evidence = matchedStem !== undefined ? evidenceByStem.get(matchedStem) ?? NO_RECEIPT : NO_RECEIPT;
     rows.push({
       lane: stem,
       status: "unknown",
-      receipt_present: receiptPresent,
+      receipt_present: matchedStem !== undefined,
+      receipt_authority: evidence.authority,
+      receipt_disposition: evidence.disposition,
+      receipt_refusals: evidence.refusals,
       heartbeat_age_ms: ageMs,
-      stalled: isStalled("unknown", receiptPresent, ageMs, timeoutMs),
+      stalled: isStalled("unknown", evidence.trusted, ageMs, timeoutMs),
     });
   }
 
