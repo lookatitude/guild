@@ -346,3 +346,162 @@ describe("acceptance 4: every host the wrapper can plan still binds and behaves 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Acceptance 5 (MH-03-R2-B02) — receipt evidence is AUTHORED by the binding.
+//
+// Round 2 passed a `run-a` binding to `hostAdapterRuntimeReceipt()` for `run-b`
+// and got a successful receipt stamped `boundary.run_id = "run-b"` carrying
+// `run-a`'s snapshot hash. Evidence assembled from two different runs is worse
+// than no evidence: it reads as proof while describing a run that never
+// happened.
+//
+// The fix is that decision-bearing identity comes from the BINDING, and the
+// caller's requested identity is cross-checked against it BEFORE any adapter
+// operation runs. Legitimate alias/canonical pairs still agree, because they
+// resolve to one canonical identity — which is exactly the line between an alias
+// and a forgery.
+// ---------------------------------------------------------------------------
+
+describe("acceptance 5: boundary evidence is binding-authored and cannot be mixed", () => {
+  /** `guildRunId()` derives the run id from `--record`; this names a run. */
+  function runArgs(host: string, runId: string): CliArgs {
+    return args({ host, record: `/tmp/${runId}.json` });
+  }
+
+  test("evidence for a legitimate receipt is stamped from the binding, not the CLI args", () => {
+    const parsed = runArgs("claude", "run-authored");
+    const result = bindGuildRunHostAdapter(parsed, createHostAdapter, createHostCapabilitySnapshotStore());
+    const receipt = hostAdapterRuntimeReceipt(parsed, requestFor(parsed), planFor(parsed), result);
+
+    expect(receipt.boundary.disposition).toBe("succeeded");
+    expect(receipt.boundary.run_id).toBe(result.binding?.run_id);
+    expect(receipt.boundary.run_id).toBe("run-authored");
+    expect(receipt.boundary.host_id).toBe(result.binding?.host_id);
+    expect(receipt.boundary.capability_snapshot_hash).toBe(result.binding?.snapshot.snapshot_hash);
+  });
+
+  test("a binding created for run-a cannot mint a successful receipt for run-b", () => {
+    const store = createHostCapabilitySnapshotStore();
+    const runA = runArgs("claude", "run-a");
+    const runB = runArgs("claude", "run-b");
+
+    const spy = spyOn(createHostAdapter("claude"));
+    const bindingA = bindGuildRunHostAdapter(runA, () => spy.adapter, store);
+    expect(bindingA.disposition).toBe("succeeded");
+    const runAHash = bindingA.binding?.snapshot.snapshot_hash;
+    expect(runAHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    spy.calls.length = 0;
+
+    const receipt = hostAdapterRuntimeReceipt(runB, requestFor(runB), planFor(runB), bindingA);
+
+    // No success, and — the precise round-2 forgery — no run-a evidence under
+    // a run-b heading.
+    expect(receipt.boundary.disposition).not.toBe("succeeded");
+    expect(receipt.boundary.capability_snapshot_hash).toBeNull();
+    expect(receipt.boundary.capability_snapshot_hash).not.toBe(runAHash);
+    expect(receipt.boundary.host_id).toBeNull();
+    expect(receipt.boundary.entry_point_kind).toBeNull();
+    expect(receipt.boundary.event_source).toBeNull();
+    expect(receipt.boundary.reason_code).not.toBeNull();
+
+    // Fail-closed: nothing was reported, and no guarded operation ran.
+    expect(receipt.host).toBeNull();
+    expect(receipt.host_id).toBeNull();
+    expect(receipt.provenance).toBeNull();
+    expect(receipt.preflight).toBeNull();
+    expect(receipt.model_params).toBeNull();
+    expect(receipt.dispatch).toBeNull();
+    expect(spy.calls).toEqual([]);
+  });
+
+  test("a binding for one host cannot be mixed into another requested host's receipt", () => {
+    const store = createHostCapabilitySnapshotStore();
+    const codexArgs = runArgs("codex-cli", "run-mixed");
+    const claudeArgs = runArgs("claude-code-cli", "run-mixed");
+
+    const spy = spyOn(createHostAdapter("codex-cli"));
+    const codexBinding = bindGuildRunHostAdapter(codexArgs, () => spy.adapter, store);
+    expect(codexBinding.disposition).toBe("succeeded");
+    const codexHash = codexBinding.binding?.snapshot.snapshot_hash;
+    spy.calls.length = 0;
+
+    const receipt = hostAdapterRuntimeReceipt(claudeArgs, requestFor(claudeArgs), planFor(claudeArgs), codexBinding);
+
+    expect(receipt.boundary.disposition).not.toBe("succeeded");
+    expect(receipt.boundary.host_id).toBeNull();
+    expect(receipt.boundary.capability_snapshot_hash).toBeNull();
+    expect(receipt.boundary.capability_snapshot_hash).not.toBe(codexHash);
+    expect(receipt.preflight).toBeNull();
+    expect(receipt.model_params).toBeNull();
+    expect(receipt.dispatch).toBeNull();
+    expect(spy.calls).toEqual([]);
+  });
+
+  test("an alias INSIDE the binding's declared identity is still legitimate", () => {
+    // `claude` and `claude-code-cli` are one canonical host. A binding made under
+    // either name authors a receipt requested under the other — for the SAME run.
+    const store = createHostCapabilitySnapshotStore();
+    const aliasArgs = runArgs("claude", "run-alias");
+    const canonicalArgs = runArgs("claude-code-cli", "run-alias");
+
+    const aliasBinding = bindGuildRunHostAdapter(aliasArgs, createHostAdapter, store);
+    expect(aliasBinding.disposition).toBe("succeeded");
+
+    const receipt = hostAdapterRuntimeReceipt(
+      canonicalArgs,
+      requestFor(canonicalArgs),
+      planFor(canonicalArgs),
+      aliasBinding
+    );
+
+    expect(receipt.boundary.disposition).toBe("succeeded");
+    expect(receipt.boundary.host_id).toBe("claude-code-cli");
+    expect(receipt.boundary.run_id).toBe("run-alias");
+    expect(receipt.boundary.capability_snapshot_hash).toBe(aliasBinding.binding?.snapshot.snapshot_hash);
+    expect(receipt.preflight).not.toBeNull();
+    expect(receipt.dispatch).not.toBeNull();
+  });
+
+  test("every planner host rejects a receipt requested for a different run", () => {
+    for (const host of PLANNER_HOSTS) {
+      const store = createHostCapabilitySnapshotStore();
+      const own = runArgs(host, "run-own");
+      const other = runArgs(host, "run-other");
+      const binding = bindGuildRunHostAdapter(own, createHostAdapter, store);
+      expect(binding.disposition).toBe("succeeded");
+
+      const mixed = hostAdapterRuntimeReceipt(other, requestFor(other), planFor(other), binding);
+      expect(mixed.boundary.disposition).not.toBe("succeeded");
+      expect(mixed.boundary.capability_snapshot_hash).toBeNull();
+      expect(mixed.dispatch).toBeNull();
+
+      // …while the same binding still authors its OWN run's receipt.
+      const authored = hostAdapterRuntimeReceipt(own, requestFor(own), planFor(own), binding);
+      expect(authored.boundary.disposition).toBe("succeeded");
+      expect(authored.boundary.capability_snapshot_hash).toBe(binding.binding?.snapshot.snapshot_hash);
+    }
+  });
+
+  test("the refusal receipt for a genuinely unbound host carries no binding evidence", () => {
+    const parsed = runArgs("definitely-not-a-host", "run-unsupported");
+    const result = bindGuildRunHostAdapter(parsed, createHostAdapter, createHostCapabilitySnapshotStore());
+    expect(result.disposition).toBe("unsupported");
+
+    const receipt = hostAdapterRefusalReceipt(parsed, result);
+    expect(receipt.boundary.host_id).toBeNull();
+    expect(receipt.boundary.capability_snapshot_hash).toBeNull();
+    expect(receipt.boundary.run_id).toBe("run-unsupported");
+  });
+
+  test("guild-run refuses to print a plan whose receipt is not binding-authored", () => {
+    // The production caller binds and mints from ONE `parsed`, so it cannot
+    // currently mix. This pins the property structurally rather than by luck:
+    // the dry-run stdout is gated on the receipt's own boundary disposition.
+    const source = fs.readFileSync(LIVE_GUILD_RUN, "utf8");
+    const dryRunGate = source.indexOf("parsed.dryRun");
+    const authorshipGate = source.indexOf("hostAdapter.boundary.disposition");
+    expect(authorshipGate).toBeGreaterThan(-1);
+    expect(authorshipGate).toBeLessThan(dryRunGate);
+  });
+});

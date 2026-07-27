@@ -64,8 +64,10 @@ import {
   HOST_RUNTIME_BINDING_RESULT_SCHEMA,
   HOST_RUNTIME_BINDING_SCHEMA,
   bindHostRuntimeAdapter,
+  normalizeHostId,
   type HostAdapterProvider,
   type HostCapabilitySnapshotStore,
+  type HostRuntimeBinding,
   type HostRuntimeBindingDisposition,
   type HostRuntimeBindingResult,
 } from "../src/modules/host-runtime";
@@ -256,23 +258,66 @@ export function bindGuildRunHostAdapter(
   });
 }
 
-function boundaryEvidence(parsed: CliArgs, result: HostRuntimeBindingResult): HostAdapterBoundaryEvidence {
+/**
+ * Does this successful binding actually AUTHOR a receipt for this request?
+ *
+ * A binding is evidence about one host in one run. Reused for another, it stops
+ * being evidence and becomes a forgery that reads as proof — which is exactly
+ * what a `run-a` binding minting a `run-b` receipt produced.
+ *
+ * Identity is compared CANONICALLY, so `claude` and `claude-code-cli` are one
+ * host: an alias is a second name for the bound identity, not a second identity.
+ * That is the whole line between a legitimate alias and a mix.
+ */
+function authoredBinding(parsed: CliArgs, result: HostRuntimeBindingResult): HostRuntimeBinding | null {
   const binding = result.binding;
+  if (result.disposition !== "succeeded" || binding === null) return null;
+  const requestedHostId = normalizeHostId(String(parsed.host ?? ""));
+  if (requestedHostId === null || requestedHostId !== binding.host_id) return null;
+  if (guildRunId(parsed) !== binding.run_id) return null;
+  return binding;
+}
+
+/**
+ * Build the boundary evidence block.
+ *
+ * Every decision-bearing field is read off the AUTHORED binding — never
+ * recomputed from the parsed CLI input, which is the caller's request rather
+ * than the boundary's answer. With nothing authored there is no binding to
+ * quote, so those fields are null rather than filled in from somewhere else: a
+ * blank is honest, a value borrowed from another run is not.
+ */
+function boundaryEvidence(
+  parsed: CliArgs,
+  result: HostRuntimeBindingResult,
+  authored: HostRuntimeBinding | null
+): HostAdapterBoundaryEvidence {
+  // A binding that succeeded but does not author THIS request is reported as a
+  // refusal, not as a success with empty fields — the disposition is the field a
+  // reader trusts first, so it is the field that must carry the mismatch.
+  const mixed = authored === null && result.disposition === "succeeded";
   return {
     schema_version: "guild.run_host_adapter_boundary_evidence.v1",
     boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
     binding_schema_version: HOST_RUNTIME_BINDING_SCHEMA,
     binding_result_schema_version: HOST_RUNTIME_BINDING_RESULT_SCHEMA,
     adapter_contract_version: HOST_ADAPTER_CONTRACT_VERSION,
-    disposition: result.disposition,
-    reason_code: result.reason_code,
-    run_id: guildRunId(parsed),
-    host_id: binding ? binding.host_id : null,
-    entry_point_kind: binding ? binding.entry_point.kind : null,
-    event_source: binding ? binding.event_source : null,
-    capability_snapshot_schema: binding ? HOST_CAPABILITY_SNAPSHOT_SCHEMA : null,
-    capability_snapshot_hash: binding ? binding.snapshot.snapshot_hash : null,
-    assertions: [...result.assertions],
+    disposition: mixed ? "refused" : result.disposition,
+    reason_code: mixed ? "boundary_membership_mismatch" : result.reason_code,
+    // The run the BINDING was made for. Unbound, this names the run that was
+    // requested and refused — it never inherits an identity from a binding.
+    run_id: authored ? authored.run_id : guildRunId(parsed),
+    host_id: authored ? authored.host_id : null,
+    entry_point_kind: authored ? authored.entry_point.kind : null,
+    event_source: authored ? authored.event_source : null,
+    capability_snapshot_schema: authored ? HOST_CAPABILITY_SNAPSHOT_SCHEMA : null,
+    capability_snapshot_hash: authored ? authored.snapshot.snapshot_hash : null,
+    assertions: mixed
+      ? [
+          "the binding was created for a different host or run than this receipt",
+          "no binding evidence is carried across and no adapter operation ran",
+        ]
+      : [...result.assertions],
   };
 }
 
@@ -291,7 +336,7 @@ export function hostAdapterRefusalReceipt(
     host: null,
     host_id: null,
     provenance: null,
-    boundary: boundaryEvidence(parsed, result),
+    boundary: boundaryEvidence(parsed, result, null),
     preflight: null,
     model_params: null,
     dispatch: null,
@@ -307,6 +352,11 @@ export function hostAdapterRefusalReceipt(
  * resolution, or dispatch. There is deliberately no fallback to the factory:
  * silently rebuilding the adapter here would restore exactly the opt-in
  * behavior this path exists to remove.
+ *
+ * A successful binding is not sufficient on its own: it must be a binding for
+ * THIS host and THIS run. That cross-check happens first, so a binding borrowed
+ * from another run cannot reach an adapter method, let alone stamp its snapshot
+ * hash onto someone else's receipt.
  */
 export function hostAdapterRuntimeReceipt(
   parsed: CliArgs,
@@ -314,8 +364,8 @@ export function hostAdapterRuntimeReceipt(
   plan: WrapperPlan,
   result: HostRuntimeBindingResult
 ): HostAdapterRuntimeReceipt {
-  const binding = result.binding;
-  if (result.disposition !== "succeeded" || binding === null) {
+  const binding = authoredBinding(parsed, result);
+  if (binding === null) {
     return hostAdapterRefusalReceipt(parsed, result);
   }
 
@@ -327,7 +377,7 @@ export function hostAdapterRuntimeReceipt(
     host: adapter.host,
     host_id: adapter.hostId,
     provenance: adapter.capabilities().provenance,
-    boundary: boundaryEvidence(parsed, result),
+    boundary: boundaryEvidence(parsed, result, binding),
     preflight: adapter.preflight({ cwd: parsed.cwd, runId }),
     model_params: adapter.resolveModelParams({
       tier: "mid",
@@ -498,6 +548,20 @@ function main(): number {
   }
 
   const hostAdapter = hostAdapterRuntimeReceipt(parsed, request, plan, binding);
+
+  // The receipt must be AUTHORED by the binding obtained above. Production binds
+  // and mints from one `parsed`, so these cannot currently disagree — gating the
+  // plan on the receipt's own disposition anyway is what makes "an unauthored
+  // receipt never reaches stdout" a property of the code rather than of the
+  // current call site.
+  if (hostAdapter.boundary.disposition !== "succeeded") {
+    process.stderr.write(
+      `guild-run: host "${parsed.host}" receipt was not authored by ${HOST_ADAPTER_BOUNDARY_SCHEMA} ` +
+        `(${hostAdapter.boundary.disposition}: ${String(hostAdapter.boundary.reason_code)}); refusing to launch.\n`
+    );
+    process.stderr.write("guild-run: " + JSON.stringify({ host_adapter: hostAdapter }) + "\n");
+    return 1;
+  }
 
   if (parsed.dryRun) {
     process.stdout.write(JSON.stringify({ ...plan, host_adapter: hostAdapter }, null, 2) + "\n");

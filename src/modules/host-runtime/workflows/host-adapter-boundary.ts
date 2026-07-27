@@ -21,9 +21,14 @@
  *   registry. So the boundary takes a `HostAdapterProvider` — the real one is
  *   `scripts/lib/host-adapter-factory`'s `createHostAdapter` — and the binding is
  *   only as real as the provider passed in. That is not a loophole, because the
- *   boundary VERIFIES what it is handed: a provider that returns another host's
+ *   boundary VERIFIES what it is handed: a value that does not implement the
+ *   complete public interface is refused, a provider that returns another host's
  *   adapter is refused with `boundary_membership_mismatch`, and one that throws
  *   fails closed with `execution_failed`. An impostor cannot be bound.
+ *
+ *   The interface check is passive and total — see `inspectAdapterShape()`.
+ *   `succeeded` is a promise that `binding.adapter` is usable, so it is made by
+ *   inspecting every member rather than by trusting one identity string.
  *
  * WHAT THIS FILE DOES NOT OWN
  *   Lifecycle state, gate policy, artifact semantics, document rendering, and
@@ -40,7 +45,7 @@
  * Pure library module; reached through the host-runtime module's public index.
  */
 
-import type { HostAdapter } from "./host-adapter-contract";
+import { HOST_ADAPTER_OPERATIONS, type HostAdapter } from "./host-adapter-contract";
 import { normalizeHostId } from "./host-id-namespace";
 import {
   HOST_IDS,
@@ -355,6 +360,100 @@ function expectedAdapterHostId(hostId: HostId): HostId {
   return HOST_REGISTRY_ROWS[hostId].adapter_binding === "agents-file" ? "agents-file" : hostId;
 }
 
+// ---------------------------------------------------------------------------
+// Provider shape validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Read one OWN data property without running anything the provider controls.
+ *
+ * Descriptors are the whole trick. `candidate[key]` would INVOKE a getter, which
+ * is both an effect this boundary promises not to cause and a place a malformed
+ * provider can throw from. Reading the property SLOT instead means an accessor
+ * is rejected rather than called, a member synthesized by a proxy `get` trap is
+ * simply not there (the proxy owns nothing), and a trap that detonates is caught
+ * rather than propagated. Absent and unreadable are deliberately the same
+ * answer: both mean "this member cannot be relied on".
+ */
+function ownDataProperty(candidate: object, key: string): { present: boolean; value: unknown } {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
+    if (descriptor === undefined) return { present: false, value: undefined };
+    if (typeof descriptor.get === "function" || typeof descriptor.set === "function") {
+      return { present: false, value: undefined };
+    }
+    return { present: true, value: descriptor.value };
+  } catch {
+    return { present: false, value: undefined };
+  }
+}
+
+interface AdapterShape {
+  readonly valid: boolean;
+  /** Interface members that are absent, unreadable, or the wrong kind. */
+  readonly invalidMembers: readonly string[];
+  /** The adapter's self-declared id, only when it is genuinely a string. */
+  readonly hostId: string | null;
+}
+
+const SHAPE_NOT_AN_OBJECT = "<not an adapter object>";
+const SHAPE_UNINSPECTABLE = "<adapter shape could not be inspected>";
+
+/**
+ * Verify that a provider's return value implements the COMPLETE public
+ * `HostAdapter` interface, before it can be bound.
+ *
+ * This exists because a `succeeded` binding is a PROMISE to the caller that
+ * `binding.adapter` is usable. Checking only `hostId` made that promise on the
+ * strength of one string, so a plain `{ host, hostId }` object bound cleanly and
+ * the missing interface surfaced later as `adapter.capabilities is not a
+ * function` — the same failure, moved to a place with no boundary context and no
+ * reason code.
+ *
+ * Every member is required to be an OWN, callable data property. Own, because a
+ * method reached through a prototype chain or a `get` trap is not something this
+ * object durably has. Data, because an accessor cannot be inspected without
+ * running provider code. The operation list is the contract's own, so widening
+ * the interface widens this check automatically. Nothing here calls an adapter
+ * method: shape is proven by looking, never by trying.
+ *
+ * Total by construction — every path returns a verdict, and none throws.
+ */
+function inspectAdapterShape(candidate: unknown): AdapterShape {
+  try {
+    if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return { valid: false, invalidMembers: Object.freeze([SHAPE_NOT_AN_OBJECT]) as readonly string[], hostId: null };
+    }
+
+    const invalid: string[] = [];
+
+    const host = ownDataProperty(candidate, "host");
+    if (!host.present || typeof host.value !== "string" || host.value.length === 0) invalid.push("host");
+
+    // `hostId` is declared `HostId | null`; null is a legitimate value that the
+    // identity check below then refuses. An object that merely STRINGIFIES to a
+    // host id is not, because coercion is how an impostor borrows a name.
+    const declaredId = ownDataProperty(candidate, "hostId");
+    const hostIdWellFormed = declaredId.present && (typeof declaredId.value === "string" || declaredId.value === null);
+    if (!hostIdWellFormed) invalid.push("hostId");
+
+    for (const operation of HOST_ADAPTER_OPERATIONS) {
+      const member = ownDataProperty(candidate, operation);
+      if (!member.present || typeof member.value !== "function") invalid.push(operation);
+    }
+
+    return {
+      valid: invalid.length === 0,
+      invalidMembers: Object.freeze([...invalid]) as readonly string[],
+      hostId: typeof declaredId.value === "string" ? declaredId.value : null,
+    };
+  } catch {
+    // A revoked proxy can make even `typeof`/`Array.isArray` throw. Unreadable
+    // is refused, never trusted.
+    return { valid: false, invalidMembers: Object.freeze([SHAPE_UNINSPECTABLE]) as readonly string[], hostId: null };
+  }
+}
+
 /**
  * Bind a host to its real entry point and its immutable per-run capability
  * snapshot, through the public adapter interface.
@@ -421,7 +520,30 @@ export function bindHostRuntimeAdapter(request: HostRuntimeBindingRequest): Host
     );
   }
 
-  const boundHostId = adapter && typeof adapter === "object" ? normalizeHostId(String(adapter.hostId ?? "")) : null;
+  // Shape BEFORE identity: an identity read on an unvalidated value is itself a
+  // property access the provider can throw from, and a value that is not an
+  // adapter cannot be an identity match either.
+  const shape = inspectAdapterShape(adapter);
+  if (!shape.valid) {
+    return bindingFailure(
+      host,
+      "refused",
+      "boundary_membership_mismatch",
+      [
+        "the provider returned a value that does not implement the public HostAdapter interface",
+        "the interface was proven by inspection only: no adapter operation ran and no accessor was read",
+        "no partial binding is returned and no side effect occurs",
+      ],
+      {
+        requested_host: host,
+        host_id: hostId,
+        adapter_shape_valid: false,
+        invalid_adapter_members: shape.invalidMembers,
+      }
+    );
+  }
+
+  const boundHostId = shape.hostId === null ? null : normalizeHostId(shape.hostId);
   const expected = expectedAdapterHostId(hostId);
   if (boundHostId === null || boundHostId !== expected) {
     return bindingFailure(
@@ -464,6 +586,7 @@ export function bindHostRuntimeAdapter(request: HostRuntimeBindingRequest): Host
     host,
     binding,
     assertions: Object.freeze([
+      "the bound adapter implements every member of the public HostAdapter interface",
       "the bound adapter's own identity matches the requested host's declared binding",
       "the binding carries exactly one immutable capability snapshot for this run",
       "the entry point is the registry's declared host surface, not an inferred one",
@@ -472,6 +595,7 @@ export function bindHostRuntimeAdapter(request: HostRuntimeBindingRequest): Host
       requested_host: host,
       host_id: hostId,
       bound_host_id: expected,
+      adapter_shape_valid: true,
       entry_point_kind: entryPoint.kind,
       capability_snapshot_hash: captured.snapshot.snapshot_hash,
     }),

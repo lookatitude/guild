@@ -23,9 +23,11 @@ import {
   HOST_ADAPTER_CONTRACT_VERSION,
   HOST_ADAPTER_OWNED_CONCERNS,
   HOST_ADAPTER_NOT_OWNED_CONCERNS,
+  HOST_ADAPTER_OPERATIONS,
   HOST_ADAPTER_REASON_CODES,
   HOST_ENTRY_POINTS,
   bindHostRuntimeAdapter,
+  type HostAdapter,
   hostRuntimeBoundaryOwnership,
   reconcileHostRegistryWithCoreClaimVocabulary,
   resolveHostEntryPoint,
@@ -749,6 +751,298 @@ describe("MH-03 acceptance 5 — deterministic and fail-closed across the host s
     });
     expect(bound.disposition).toBe("unsupported");
     expect(bound.binding).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Acceptance 6 (MH-03-R2-B01) — a `succeeded` binding GUARANTEES an adapter.
+//
+// Round 2 handed the boundary a plain `{ host, hostId }` object and got
+// `disposition: "succeeded"` back; the absence of the rest of the interface only
+// surfaced later, in the caller, as `adapter.capabilities is not a function`. A
+// success answer that does not guarantee an adapter is not a boundary — it just
+// moves the crash somewhere with less context.
+//
+// So the shape check below is TOTAL and it is passive: every public member is
+// verified as an OWN, callable data property, read through property DESCRIPTORS
+// so that an accessor is rejected rather than invoked. That is what lets the
+// matrix assert two things at once — every malformed provider fails closed, and
+// no adapter operation runs while deciding that.
+// ---------------------------------------------------------------------------
+
+describe("MH-03 acceptance 6 — the boundary validates the COMPLETE adapter interface", () => {
+  const CANONICAL: HostId = "claude-code-cli";
+
+  /**
+   * A conforming adapter whose every member records that it was invoked.
+   *
+   * Building the malformed cases by DAMAGING this adapter (rather than by
+   * writing stubs) is what makes the "no operation ran" assertion meaningful:
+   * each case is one mutation away from a fully working adapter, so an empty
+   * call log is evidence of a passive check, not of a lifeless fixture.
+   */
+  function tripwire(calls: string[], host: string = CANONICAL): HostAdapter {
+    const inner = createRealHostAdapter(host) as unknown as Record<string, (request: unknown) => unknown>;
+    const adapter: Record<string, unknown> = { host: inner["host"], hostId: inner["hostId"] };
+    for (const operation of HOST_ADAPTER_OPERATIONS) {
+      adapter[operation] = (request: unknown): unknown => {
+        calls.push(operation);
+        return inner[operation](request);
+      };
+    }
+    return adapter as unknown as HostAdapter;
+  }
+
+  function bindProvided(value: unknown, host: string = CANONICAL) {
+    return bindHostRuntimeAdapter({
+      host,
+      runId: "shape-probe",
+      provider: () => value as HostAdapter,
+      snapshots: createHostCapabilitySnapshotStore(),
+    });
+  }
+
+  interface ShapeCase {
+    readonly name: string;
+    /** Built per-case so each gets its own tripwire call log. */
+    readonly build: (calls: string[]) => unknown;
+    /** The requested host, when the case is about identity rather than shape. */
+    readonly host?: string;
+  }
+
+  const MALFORMED_CASES: readonly ShapeCase[] = [
+    // --- the exact round-2 probe -------------------------------------------
+    { name: "the round-2 probe: matching identity strings and nothing else", build: () => ({ host: CANONICAL, hostId: CANONICAL }) },
+
+    // --- null and primitives ------------------------------------------------
+    { name: "null", build: () => null },
+    { name: "undefined", build: () => undefined },
+    { name: "a string that spells the host id", build: () => CANONICAL },
+    { name: "a number", build: () => 42 },
+    { name: "a boolean", build: () => true },
+    { name: "a symbol", build: () => Symbol(CANONICAL) },
+    { name: "a bigint", build: () => BigInt(7) },
+    { name: "an array", build: () => [] },
+    {
+      name: "a function carrying the identity properties",
+      build: () => Object.assign(function adapterish() {}, { host: CANONICAL, hostId: CANONICAL }),
+    },
+    { name: "an empty object", build: () => ({}) },
+    { name: "a null-prototype object with identity only", build: () => Object.assign(Object.create(null), { host: CANONICAL, hostId: CANONICAL }) },
+
+    // --- malformed identity members ----------------------------------------
+    {
+      name: "hostId is an object that stringifies to the host id",
+      build: (calls) => Object.assign(tripwire(calls), { hostId: { toString: () => CANONICAL } }),
+    },
+    {
+      name: "host is missing entirely",
+      build: (calls) => {
+        const adapter = tripwire(calls) as unknown as Record<string, unknown>;
+        delete adapter["host"];
+        return adapter;
+      },
+    },
+    {
+      name: "hostId is a throwing getter",
+      build: (calls) => {
+        const adapter = tripwire(calls);
+        Object.defineProperty(adapter, "hostId", {
+          get(): never {
+            throw new Error("hostId getter detonated");
+          },
+          configurable: true,
+        });
+        return adapter;
+      },
+    },
+
+    // --- exotic objects -----------------------------------------------------
+    {
+      name: "an object that INHERITS every method from a real adapter",
+      build: (calls) =>
+        Object.defineProperties(Object.create(tripwire(calls)), {
+          host: { value: CANONICAL, enumerable: true },
+          hostId: { value: CANONICAL, enumerable: true },
+        }),
+    },
+    {
+      name: "a proxy that synthesizes methods from a get trap and owns nothing",
+      build: (calls) =>
+        new Proxy(
+          {},
+          {
+            get: (_target, key) => {
+              if (key === "host" || key === "hostId") return CANONICAL;
+              return (): null => {
+                calls.push(String(key));
+                return null;
+              };
+            },
+          }
+        ),
+    },
+    {
+      name: "a proxy whose every trap throws",
+      build: () =>
+        new Proxy(
+          {},
+          {
+            get(): never {
+              throw new Error("get trap detonated");
+            },
+            getOwnPropertyDescriptor(): never {
+              throw new Error("gopd trap detonated");
+            },
+            has(): never {
+              throw new Error("has trap detonated");
+            },
+            ownKeys(): never {
+              throw new Error("ownKeys trap detonated");
+            },
+          }
+        ),
+    },
+
+    // --- identity mismatch --------------------------------------------------
+    { name: "a real adapter for a DIFFERENT host", build: (calls) => tripwire(calls, "codex-cli") },
+    {
+      name: "a well-shaped adapter claiming an unknown host id",
+      build: (calls) => Object.assign(tripwire(calls), { host: "not-a-host", hostId: "not-a-host" }),
+    },
+  ];
+
+  /** One missing / non-callable / accessor-aliased case per public operation. */
+  const PER_OPERATION_CASES: readonly ShapeCase[] = HOST_ADAPTER_OPERATIONS.flatMap((operation) => [
+    {
+      name: `${operation}() is missing`,
+      build: (calls: string[]) => {
+        const adapter = tripwire(calls) as unknown as Record<string, unknown>;
+        delete adapter[operation];
+        return adapter;
+      },
+    },
+    {
+      name: `${operation} is present but not callable`,
+      build: (calls: string[]) => Object.assign(tripwire(calls), { [operation]: 42 }),
+    },
+    {
+      name: `${operation} is a GETTER aliased to look like a method`,
+      build: (calls: string[]) => {
+        const adapter = tripwire(calls);
+        Object.defineProperty(adapter, operation, {
+          get: () => (): null => {
+            calls.push(operation);
+            return null;
+          },
+          configurable: true,
+        });
+        return adapter;
+      },
+    },
+    {
+      name: `${operation} is a throwing getter`,
+      build: (calls: string[]) => {
+        const adapter = tripwire(calls);
+        Object.defineProperty(adapter, operation, {
+          get(): never {
+            throw new Error(`${operation} getter detonated`);
+          },
+          configurable: true,
+        });
+        return adapter;
+      },
+    },
+  ]);
+
+  const ALL_CASES = [...MALFORMED_CASES, ...PER_OPERATION_CASES];
+
+  test.each(ALL_CASES.map((shapeCase) => [shapeCase.name, shapeCase] as const))(
+    "fails closed for a provider returning %s",
+    (_name, shapeCase) => {
+      const calls: string[] = [];
+      let value: unknown;
+      expect(() => {
+        value = shapeCase.build(calls);
+      }).not.toThrow();
+
+      let bound: ReturnType<typeof bindHostRuntimeAdapter> | undefined;
+      // No provider or property-access exception may cross the boundary.
+      expect(() => {
+        bound = bindProvided(value, shapeCase.host ?? CANONICAL);
+      }).not.toThrow();
+
+      const result = bound!;
+      expect(result.disposition).not.toBe("succeeded");
+      expect(result.binding).toBeNull();
+      expect(result.reason_code).not.toBeNull();
+      // The refusal is spelled in the core's CLOSED vocabulary, not a private one.
+      expect(isNeutralReasonCode(result.reason_code)).toBe(true);
+      expect(HOST_ADAPTER_REASON_CODES).toContain(result.reason_code);
+      // …and deciding that ran no adapter operation.
+      expect(calls).toEqual([]);
+    }
+  );
+
+  test("the matrix actually covers every public member of the interface", () => {
+    // A shape check is only total if the matrix is: one damaged case per
+    // operation, or a member could be dropped from both without a test noticing.
+    for (const operation of HOST_ADAPTER_OPERATIONS) {
+      expect(PER_OPERATION_CASES.filter((c) => c.name.startsWith(`${operation} `) || c.name.startsWith(`${operation}(`)).length).toBe(4);
+    }
+    expect(ALL_CASES.length).toBe(MALFORMED_CASES.length + HOST_ADAPTER_OPERATIONS.length * 4);
+  });
+
+  test("a VALID adapter still binds, and shape validation runs none of its operations", () => {
+    const calls: string[] = [];
+    const bound = bindHostRuntimeAdapter({
+      host: CANONICAL,
+      runId: "shape-positive",
+      provider: () => tripwire(calls),
+      snapshots: createHostCapabilitySnapshotStore(),
+    });
+    expect(bound.disposition).toBe("succeeded");
+    expect(bound.reason_code).toBeNull();
+    expect(bound.binding).not.toBeNull();
+    // Validation is passive: no effectful adapter method was called to prove shape.
+    expect(calls).toEqual([]);
+  });
+
+  test("the real factory adapter binds for every planner host after shape validation", () => {
+    for (const hostId of HOST_IDS) {
+      const bound = bindHostRuntimeAdapter({
+        host: hostId,
+        runId: `shape-sweep-${hostId}`,
+        provider: createRealHostAdapter,
+        snapshots: createHostCapabilitySnapshotStore(),
+      });
+      expect(bound.disposition).toBe("succeeded");
+      expect(bound.binding).not.toBeNull();
+    }
+  });
+
+  test("the fail-closed contract-local adapter is also shape-valid", () => {
+    const bound = bindHostRuntimeAdapter({
+      host: CANONICAL,
+      runId: "shape-contract-default",
+      provider: createFailClosedDefaultAdapter,
+      snapshots: createHostCapabilitySnapshotStore(),
+    });
+    expect(bound.disposition).toBe("succeeded");
+    expect(bound.binding).not.toBeNull();
+  });
+
+  test("a malformed provider result cannot reach a caller that trusts `succeeded`", () => {
+    // The round-2 crash reproduced end to end: bind, then USE the binding the
+    // way `hostAdapterRuntimeReceipt()` does. Fail-closed means the caller never
+    // gets the chance.
+    const bound = bindProvided({ host: CANONICAL, hostId: CANONICAL });
+    expect(bound.disposition).not.toBe("succeeded");
+    expect(() => {
+      if (bound.disposition === "succeeded" && bound.binding !== null) {
+        bound.binding.adapter.capabilities();
+      }
+    }).not.toThrow();
   });
 });
 
