@@ -102,6 +102,14 @@ import {
   buildTaskAssignment,
   writeTaskAssignment,
 } from "../src/modules/dispatch/workflows/task-assignment";
+// MH-04: the substrate DECISION lives behind the versioned execution port
+// (`guild.execution.transports.v1`), never in this launcher. The launcher reads
+// host FACTS through the capability probe below and reports what the port decided.
+import {
+  selectExecutionSubstrate,
+  type ExecutionCapabilityProbe,
+  type ExecutionDispatchMode,
+} from "../src/modules/dispatch/workflows/execution-transport-ports";
 // task-cell-runtime G3: the authoritative `guild.task_assignment.v2` channel
 // (per-attempt, one immutable file per task a specialist owns; no representative-
 // first-task collapse). Replaces v1 as the PRODUCTION write; v1 is retained above
@@ -885,17 +893,20 @@ function applyStatuslineEnv(cwd: string): void {
 
 // ── D5 dispatch ladder ─────────────────────────────────────────────────────
 //
-// Resolves the execution backend per D5 (v2x-command-surface-dispatch-and-
-// internalization.md). Explicit `agent_mode` wins over auto-detection.
-// auto resolution order:
-//   1. $TMUX set → team (in-session window — PRESERVE shipped in-session fix)
-//   2. tmux installed → team (new detached session)
-//   3. Host (claude|codex) signals independent agent support → agent
-//   4. Fallback → subagent
+// The ladder itself (D5, v2x-command-surface-dispatch-and-internalization.md) is
+// NOT decided here. MH-04 moved it behind `selectExecutionSubstrate` in the
+// versioned execution port, because a generic launcher may not own substrate,
+// lifecycle, or gate policy (runtime-boundary contract BR-04 / MHRC-MOD-003).
+//
+// What stays here is the launcher's legitimate half: reading host FACTS
+// (`$TMUX`, tmux availability, the host's independent-agent signal) and printing
+// whatever the port decided. The facts are read LAZILY, through the probe below,
+// so the port performs exactly the probes the shipped ladder performed — an
+// explicit `--agent-mode` pin still spawns no `tmux -V` subprocess.
 
 type AgentModeExplicit = "team" | "agent" | "subagent" | "auto";
 interface ResolvedMode {
-  mode: "team" | "agent" | "subagent";
+  mode: ExecutionDispatchMode;
   reason: string;
 }
 
@@ -919,54 +930,35 @@ function hostSupportsIndependentAgents(): boolean {
 }
 
 /**
- * Resolve the D5 ladder. `dryRun=true` still checks $TMUX and tmux availability
- * so the dry-run output accurately reflects what a real launch would choose.
- *
- * When `explicit` is non-null and not "auto", that value is used directly
- * (subject to availability: pinning "team" on a tmux-less host warns + falls
- * back to "subagent" for real runs; dry-run leaves team as-is to show intent).
+ * The launcher's host-fact probe. Every member is a FACT read, not a decision:
+ * am I inside a multiplexer, is one installed, does this host signal independent
+ * agents. The port calls only the ones its ladder needs.
  */
-function resolveAgentMode(explicit: AgentModeExplicit | null, dryRun: boolean): ResolvedMode {
-  const val: AgentModeExplicit = explicit ?? "auto";
+const executionCapabilityProbe: ExecutionCapabilityProbe = {
+  insideMultiplexer: () => !!process.env["TMUX"],
+  multiplexerAvailable: () => probeTmuxAvailable(),
+  independentAgents: () => hostSupportsIndependentAgents(),
+};
 
-  if (val === "team") {
-    // Pinned team: validate tmux availability for real launches.
-    if (!dryRun && !probeTmuxAvailable()) {
-      process.stderr.write(
-        "[agent-team-launcher] WARN: agent_mode=team pinned but tmux is not available — " +
-          "falling back to subagent. Install tmux or use agent_mode=auto.\n"
-      );
-      return { mode: "subagent", reason: "agent_mode=team pinned but tmux unavailable → subagent fallback" };
-    }
-    return { mode: "team", reason: "explicit agent_mode=team" };
-  }
-
-  if (val === "agent") {
-    return { mode: "agent", reason: "explicit agent_mode=agent" };
-  }
-
-  if (val === "subagent") {
-    return { mode: "subagent", reason: "explicit agent_mode=subagent" };
-  }
-
-  // auto — D5 ladder
-  // Step 1: inside a tmux session → team in-session (preserves shipped fix)
-  if (process.env["TMUX"]) {
-    return { mode: "team", reason: "auto: $TMUX set → team in-session" };
-  }
-
-  // Step 2: tmux installed but not currently inside one → team new-session
-  if (probeTmuxAvailable()) {
-    return { mode: "team", reason: "auto: tmux installed → team new-session" };
-  }
-
-  // Step 3: host signals independent agent support → agent
-  if (hostSupportsIndependentAgents()) {
-    return { mode: "agent", reason: "auto: host supports independent agents → agent" };
-  }
-
-  // Step 4: fallback
-  return { mode: "subagent", reason: "auto: no tmux, no independent-agent support → subagent" };
+/**
+ * Ask the execution port which substrate this dispatch gets, then report it.
+ *
+ * `dryRun=true` reports intent: the port leaves a pinned `team` alone rather than
+ * degrading it, exactly as the shipped ladder did. The degradation WARNING is
+ * authored by the port (it is part of the decision); the launcher only writes it
+ * to stderr, which is the launcher's own job.
+ */
+function resolveAgentMode(
+  explicit: AgentModeExplicit | null,
+  dryRun: boolean,
+  probe: ExecutionCapabilityProbe = executionCapabilityProbe
+): ResolvedMode {
+  const selection = selectExecutionSubstrate(
+    { requested_mode: explicit, dry_run: dryRun },
+    probe
+  );
+  if (selection.warning) process.stderr.write(selection.warning);
+  return { mode: selection.dispatch_mode, reason: selection.reason };
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
