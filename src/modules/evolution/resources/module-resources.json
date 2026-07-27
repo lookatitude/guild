@@ -22,14 +22,14 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "5eb61a1f89cc4491e995cc8ea0f870dda789ee69f2d1ba910585e64f3431caa3"
+      "sha256": "f5c0e955500359387e52129c91727d22c29c6081e6bebb0596f8586e30121e70"
     },
     {
       "category": "hooks",
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "89ca01cc45c6a5e600538af1bcd524a3b6ac0682ff4b25860ec1a2f437e29027"
+      "sha256": "6b9edeabfab25bbbefc82dbd6447332e2a41ec384132f01f37409e5de78ff214"
     },
     {
       "category": "scripts",

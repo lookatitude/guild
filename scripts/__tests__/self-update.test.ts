@@ -131,7 +131,7 @@ function makeLocalRemote(): string {
  * the `no plugins/guild nesting` one) both trip when the marketplace root is
  * copied instead of the payload.
  */
-describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () => {
+describe("runSelfUpdate staged swap (pi-cli) + codex-cli refusal (option A)", () => {
   const cleanups: string[] = [];
   const track = (p: string) => {
     cleanups.push(p);
@@ -140,18 +140,14 @@ describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () 
 
   // Cache isolation via the cacheFile seam, NOT via HOME: under jest,
   // process.env mutations never reach the native environment os.homedir()
-  // reads (verified with an in-test probe: HOME showed the temp dir while
-  // os.homedir() still returned the real home), so env-based isolation
-  // silently fails while the tests stay green.
+  // reads, so env-based isolation silently fails while the tests stay green.
   afterAll(() => {
     for (const p of cleanups) fs.rmSync(p, { recursive: true, force: true });
   });
 
-  it("lands .codex-plugin/plugin.json at the TOP of the swapped root, no plugins/guild nesting", () => {
+  /** Local one-commit-ahead remote; returns {repo, oldSha}. */
+  function mkRemote(): { repo: string; oldSha: string } {
     const { execFileSync } = require("child_process") as typeof import("child_process");
-    // Local "remote": next is one commit ahead of the receipt's commit, and the
-    // checkout carries .claude-plugin/plugin.json (runSelfUpdate reads the new
-    // version from the CLONE's manifest, not the rendered tree).
     const repo = track(mkTmp("guild-remote-swap-"));
     const g = (...args: string[]) =>
       execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
@@ -169,22 +165,22 @@ describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () 
     fs.writeFileSync(path.join(repo, "f"), "new-content");
     g("add", "-A");
     g("commit", "-qm", "new");
-    const newSha = g("rev-parse", "HEAD");
     g("branch", "next");
+    return { repo, oldSha };
+  }
 
-    // Installed package root: the PAYLOAD shape install.sh's receipt points at
-    // (Codex plugin cache layout) — .codex-plugin/plugin.json at top level.
-    const pkg = track(mkTmp("guild-codex-pkg-"));
-    fs.mkdirSync(path.join(pkg, ".codex-plugin"), { recursive: true });
-    fs.writeFileSync(
-      path.join(pkg, ".codex-plugin", "plugin.json"),
-      JSON.stringify({ name: "guild", version: "2.1.0" })
-    );
+  it("swaps a pi package root with dist/pi's FLAT shape; staging cleaned; receipt regenerated", () => {
+    const { execFileSync } = require("child_process") as typeof import("child_process");
+    const { repo, oldSha } = mkRemote();
+
+    // Installed pi package root: flat shape — pi-manifest.json at the top.
+    const pkg = track(mkTmp("guild-pi-pkg-"));
+    fs.writeFileSync(path.join(pkg, "pi-manifest.json"), JSON.stringify({ name: "guild", version: "2.1.0" }));
     fs.writeFileSync(
       path.join(pkg, RECEIPT_BASENAME),
       JSON.stringify({
         schema_version: RECEIPT_SCHEMA,
-        host: "codex-cli",
+        host: "pi-cli",
         channel: "beta",
         ref: "next",
         commit: oldSha,
@@ -192,16 +188,11 @@ describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () 
         installed_at: "2026-07-12T00:00:00Z",
       })
     );
-    // The staged-swap siblings live NEXT TO pkg inside its mkdtemp parent, so
-    // track() on pkg already covers them; still remove leftovers explicitly.
     track(`${pkg}.update-staging`);
     track(`${pkg}.update-old`);
 
-    // Injected runner: git clone runs for real (local path, offline); npm ci is
-    // skipped; the build-host-packages render is FABRICATED with the real
-    // renderer's marketplace shape — payload nested under plugins/guild, the
-    // marketplace manifest beside it. That nesting is exactly what the buggy
-    // mapping used to copy wholesale.
+    // Injected runner: real local git clone; npm skipped; the render FABRICATES
+    // dist/pi with the renderer's flat pi shape.
     const run = (cmd: string, args: string[], opts?: { cwd?: string }) => {
       if (cmd === "git") {
         execFileSync(cmd, args, { stdio: "ignore" });
@@ -211,22 +202,10 @@ describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () 
       if (cmd === "npx") {
         const cloneDir = opts?.cwd;
         if (!cloneDir) throw new Error("render invoked without cwd");
-        const payload = path.join(cloneDir, "dist", "codex-marketplace", "plugins", "guild");
-        fs.mkdirSync(path.join(payload, ".codex-plugin"), { recursive: true });
-        fs.writeFileSync(
-          path.join(payload, ".codex-plugin", "plugin.json"),
-          JSON.stringify({ name: "guild", version: "9.9.9" })
-        );
-        fs.mkdirSync(path.join(payload, "bin"), { recursive: true });
-        fs.writeFileSync(path.join(payload, "bin", "guild-run"), "#!/bin/sh\n");
-        fs.mkdirSync(
-          path.join(cloneDir, "dist", "codex-marketplace", ".agents", "plugins"),
-          { recursive: true }
-        );
-        fs.writeFileSync(
-          path.join(cloneDir, "dist", "codex-marketplace", ".agents", "plugins", "marketplace.json"),
-          JSON.stringify({ name: "guild" })
-        );
+        const pi = path.join(cloneDir, "dist", "pi");
+        fs.mkdirSync(path.join(pi, "bin"), { recursive: true });
+        fs.writeFileSync(path.join(pi, "pi-manifest.json"), JSON.stringify({ name: "guild", version: "9.9.9" }));
+        fs.writeFileSync(path.join(pi, "bin", "guild-run"), "#!/bin/sh\n");
         return;
       }
       throw new Error(`unexpected command: ${cmd}`);
@@ -240,28 +219,54 @@ describe("runSelfUpdate codex-cli staged swap uses the marketplace payload", () 
       deps: { log: (l) => lines.push(l), run },
     });
     expect(rc).toBe(0);
-
-    // The swapped root must have the PAYLOAD shape: manifest at the top, new
-    // version. Under the pre-fix mapping this file does not exist (it sits at
-    // plugins/guild/.codex-plugin/plugin.json instead) — the non-vacuity trip.
-    const manifestPath = path.join(pkg, ".codex-plugin", "plugin.json");
-    expect(fs.existsSync(manifestPath)).toBe(true);
-    expect(
-      (JSON.parse(fs.readFileSync(manifestPath, "utf8")) as { version?: string }).version
-    ).toBe("9.9.9");
-    // No double nesting: the marketplace root's plugins/guild/ and
-    // .agents/plugins/marketplace.json must NOT be inside the install root.
-    expect(fs.existsSync(path.join(pkg, "plugins", "guild"))).toBe(false);
-    expect(fs.existsSync(path.join(pkg, ".agents", "plugins", "marketplace.json"))).toBe(false);
-    // Payload contents made it across, and the receipt was regenerated at the
-    // new root with the new commit + version (existing behavior).
+    const manifest = JSON.parse(fs.readFileSync(path.join(pkg, "pi-manifest.json"), "utf8")) as {
+      version?: string;
+    };
+    expect(manifest.version).toBe("9.9.9");
     expect(fs.existsSync(path.join(pkg, "bin", "guild-run"))).toBe(true);
-    const receipt = readReceipt(pkg)!;
-    expect(receipt.commit).toBe(newSha);
-    expect(receipt.version).toBe("9.9.9");
-    // The staged-swap intermediates were cleaned up.
     expect(fs.existsSync(`${pkg}.update-staging`)).toBe(false);
     expect(fs.existsSync(`${pkg}.update-old`)).toBe(false);
+    const r = readReceipt(pkg)!;
+    expect(r.host).toBe("pi-cli");
+    expect(r.version).toBe("9.9.9");
+  });
+
+  it("REFUSES a codex-cli receipt outright — the manager-owned cache is never swapped (option A)", () => {
+    // The stronger replacement for the old codex swap-shape proof: after the
+    // operator's decision, the corrupting path is UNREACHABLE. AC-7 must
+    // refuse before any network/clone/render work, name the reinstall
+    // command, and leave the package untouched.
+    const pkg = track(mkTmp("guild-codex-pkg-"));
+    fs.mkdirSync(path.join(pkg, ".codex-plugin"), { recursive: true });
+    fs.writeFileSync(path.join(pkg, ".codex-plugin", "plugin.json"), JSON.stringify({ name: "guild", version: "2.1.0" }));
+    fs.writeFileSync(
+      path.join(pkg, RECEIPT_BASENAME),
+      JSON.stringify({
+        schema_version: RECEIPT_SCHEMA,
+        host: "codex-cli",
+        channel: "stable",
+        ref: "main",
+        commit: null,
+        version: "2.1.0",
+        installed_at: "2026-07-12T00:00:00Z",
+      })
+    );
+    const before = fs.readFileSync(path.join(pkg, ".codex-plugin", "plugin.json"), "utf8");
+    const lines: string[] = [];
+    const rc = runSelfUpdate({
+      pkgRoot: pkg,
+      cacheFile: path.join(mkTmp("guild-cache-"), "update-check.json"),
+      deps: {
+        log: (l) => lines.push(l),
+        run: () => {
+          throw new Error("refusal must happen before ANY subprocess runs");
+        },
+      },
+    });
+    expect(rc).toBe(1);
+    expect(lines.join("\n")).toContain("does not use guild-run self-update");
+    expect(lines.join("\n")).toContain("install.sh | bash -s -- --update");
+    expect(fs.readFileSync(path.join(pkg, ".codex-plugin", "plugin.json"), "utf8")).toBe(before);
   });
 });
 
@@ -277,7 +282,7 @@ describe("runSelfUpdate up-to-date with real local remote", () => {
       path.join(pkg, RECEIPT_BASENAME),
       JSON.stringify({
         schema_version: RECEIPT_SCHEMA,
-        host: "codex-cli",
+        host: "pi-cli",
         channel: "beta",
         ref: "next",
         commit: nextSha,

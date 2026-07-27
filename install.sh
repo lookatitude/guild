@@ -244,7 +244,20 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
       # header match misclassified those as unreadable.
       # sed -E: `\?` is a GNU extension BSD sed does not support, so a BRE
       # version of this matched NOTHING on macOS. -E is portable across both.
-      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*marketplaces\."?guild"?[[:space:]]*\]/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      # Header: optional quotes around EITHER dotted part ("marketplaces" and/or
+      # guild, single or double), whitespace around the dot, and only
+      # whitespace/comment after the bracket. Value: single- or double-quoted.
+      # All shapes below were fed to the real Codex parser and accepted.
+      # Four TOML spellings Codex accepts for the same fact (all fed to the
+      # real Codex parser): a [marketplaces.guild] table (quotes/whitespace/
+      # trailing-comment tolerant), a top-level dotted assignment
+      # (marketplaces.guild.source_type = "git"), and an inline table under
+      # [marketplaces] (guild = { source_type = "git", … }), and the dotted-key
+      # inline table (marketplaces.guild = { … }). First hit wins.
+      _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*\][[:space:]]*(#.*)?$/,/^[[:space:]]*\[/s/^[[:space:]]*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\1/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      [ -z "$_cx_src" ] && _cx_src="$(sed -E -n 's/^[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*\.[[:space:]]*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\3/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      [ -z "$_cx_src" ] && _cx_src="$(sed -E -n '/^[[:space:]]*\[[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\][[:space:]]*(#.*)?$/,/^[[:space:]]*\[/s/^[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*=[[:space:]]*\{.*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\2/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
+      [ -z "$_cx_src" ] && _cx_src="$(sed -E -n 's/^[[:space:]]*("marketplaces"|'"'"'marketplaces'"'"'|marketplaces)[[:space:]]*\.[[:space:]]*("guild"|'"'"'guild'"'"'|guild)[[:space:]]*=[[:space:]]*\{.*source_type[[:space:]]*=[[:space:]]*["'"'"']([^"'"'"']*)["'"'"'].*$/\3/p' "$_cx_home/config.toml" 2>/dev/null | head -1 || true)"
       case "$_cx_src" in
         git)
           printf '      codex plugin marketplace upgrade && codex plugin add %s\n' "$PLUGIN_SPEC" >&2
@@ -273,15 +286,35 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
     if [ -f "$_cl_reg" ] && command -v node >/dev/null 2>&1; then
       node -e '
         const fs = require("fs");
+        // A non-empty array is NOT proof of an install: [{}] and entries
+        // scoped to a DIFFERENT project both counted before. An entry counts
+        // only when it is an object carrying a version or installPath, and is
+        // either user-scoped or project-scoped FOR THE DIRECTORY WE ARE IN
+        // (process.argv[2] = the caller pwd).
         try {
           const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const here = process.argv[2] || "";
           const p = (r && r.plugins) || {};
+          const norm = (x) => (typeof x === "string" ? x.replace(/\/+$/, "") : x);
+          const valid = (e) =>
+            e && typeof e === "object" &&
+            (typeof e.version === "string" || typeof e.installPath === "string") &&
+            // v2 entries carry scope; registry v1 entries carry none and were
+            // user-level by construction — requiring scope MISSED them (a
+            // false negative on real installs). Trailing slashes on either
+            // side of the project-path comparison are not a difference.
+            (e.scope === undefined ||
+              e.scope === "user" ||
+              (e.scope === "project" && norm(e.projectPath) === norm(here)));
           const hit = Object.keys(p).some(
-            (k) => /^guild@/.test(k) && Array.isArray(p[k]) && p[k].length > 0
+            (k) =>
+              /^guild@/.test(k) &&
+              // v2: an array of install entries. v1: ONE object per plugin.
+              (Array.isArray(p[k]) ? p[k].some(valid) : valid(p[k]))
           );
           process.exit(hit ? 0 : 1);
         } catch { process.exit(1); }
-      ' "$_cl_reg" 2>/dev/null && _cl_installed=1
+      ' "$_cl_reg" "$PWD" 2>/dev/null && _cl_installed=1
     fi
     if [ "$_cl_installed" -eq 1 ]; then
       _found_native=1

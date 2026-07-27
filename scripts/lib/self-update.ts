@@ -40,10 +40,39 @@ import {
 } from "./update-check";
 
 export interface SelfUpdateDeps {
-  run: (cmd: string, args: string[], opts?: { cwd?: string }) => void;
+  run: (cmd: string, args: string[], opts?: { cwd?: string; env?: NodeJS.ProcessEnv }) => void;
   log: (line: string) => void;
   fsi: typeof fs;
   now: () => Date;
+}
+
+/**
+ * Environment for child npm/npx invocations, with the OUTER npm context
+ * stripped. guild-run itself runs under `npx tsx`, which exports npm_* vars
+ * (npm_config_local_prefix points at the INSTALLED PACKAGE root, npm_command,
+ * npm_lifecycle_*, INIT_CWD, …). An inner `npm ci` inheriting that set
+ * misresolves its project and dies with "Missing: scripts@ from lock file" —
+ * reproducible ONLY through the real bin/guild-run chain, which is why every
+ * mocked test missed it and a bare `npm ci --prefix` from a shell works.
+ */
+export function childEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(base)) {
+    // DENYLIST, not a blanket npm_* strip: an earlier revision removed every
+    // npm_ var, which also killed legitimately environment-provided settings
+    // (npm_config_registry, npm_config_cafile, npm_config_userconfig, proxy
+    // and cache config) that managed environments rely on. What actually
+    // poisons a nested npm is the PROJECT-CONTEXT set the outer npx exports:
+    //   - npm_config_local_prefix  (points at the INSTALLED PACKAGE root —
+    //     the variable that made `npm ci` resolve the wrong project)
+    //   - npm_package_* / npm_lifecycle_* / npm_command / npm_execpath
+    //     (identify the outer invocation, not ours)
+    //   - INIT_CWD (npm's original-cwd marker from the outer run)
+    if (/^npm_(package_|lifecycle_)/i.test(k)) continue;
+    if (/^(npm_config_local_prefix|npm_command|npm_execpath|INIT_CWD)$/i.test(k)) continue;
+    out[k] = v;
+  }
+  return out;
 }
 
 const defaultDeps: SelfUpdateDeps = {
@@ -172,7 +201,12 @@ export function runSelfUpdate(opts: {
       encoding: "utf8",
     }).trim();
     log("installing script runtime deps …");
-    run("npm", ["ci", "--prefix", path.join(tmp, "scripts"), "--omit=dev", "--no-audit", "--no-fund"]);
+    // cwd-form, NOT --prefix: combined with childEnv() this survives being a
+    // grandchild of the wrapper's own `npx tsx` (see childEnv's doc comment).
+    run("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund"], {
+      cwd: path.join(tmp, "scripts"),
+      env: childEnv(),
+    });
     log(`rendering ${receipt.host} package …`);
     const generatedAt = deps.now().toISOString().replace(/\.\d{3}Z$/, "Z");
     run(

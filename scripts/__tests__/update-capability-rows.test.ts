@@ -61,7 +61,7 @@ describe("AC-7 — every host has a coherent update capability row", () => {
     }
   });
 
-  it("claude = marketplace CLI (auto-capable); wrapped CLIs = guild-run self-update; file surfaces = reinstall command (not auto)", () => {
+  it("claude = marketplace CLI; wrapped CLIs = self-update EXCEPT codex (manager-owned cache -> reinstall); file surfaces = reinstall", () => {
     expect(HOST_REGISTRY_ROWS["claude-code-cli"].capabilities.package.update).toEqual({
       check: "marketplace_clone",
       apply: "marketplace_cli",
@@ -70,12 +70,22 @@ describe("AC-7 — every host has a coherent update capability row", () => {
     });
     for (const h of WRAPPED_CLI) {
       const u = HOST_REGISTRY_ROWS[h].capabilities.package.update;
-      expect(u.apply).toBe("self_update");
-      expect(u.command).toBe(UPDATE_COMMANDS.self_update);
       expect(u.check).toBe("receipt");
-      // Two-field honesty: guild-run update EXISTS but nothing invokes it
-      // automatically yet — auto_capable stays false until an auto path ships.
+      // Two-field honesty: nothing invokes an update automatically yet.
       expect(u.auto_capable).toBe(false);
+      if (h === "codex-cli") {
+        // Operator decision (cross-host-release-distribution, 2026-07-26):
+        // Codex OWNS its installed cache — `codex plugin list` tracks the
+        // registered marketplace source, so a Guild staged swap would mutate
+        // manager state behind Codex's back, and a minted receipt cannot know
+        // a native install's channel. install.sh --update is coherent for
+        // both populations (receipted -> re-render; native -> detect+advise).
+        expect(u.apply).toBe("reinstall_command");
+        expect(u.command).toBe(UPDATE_COMMANDS.reinstall_command);
+      } else {
+        expect(u.apply).toBe("self_update");
+        expect(u.command).toBe(UPDATE_COMMANDS.self_update);
+      }
     }
     for (const h of FILE_SURFACES) {
       const u = HOST_REGISTRY_ROWS[h].capabilities.package.update;

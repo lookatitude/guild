@@ -153,8 +153,12 @@ advertised or degraded.
   Codex-CLI knowledge. Verified-from-source values (from
   `per-host-packaging.ts`'s render-or-degrade behavior): `native_skills:false`,
   `native_agents:false`, `slash_commands:false` (commands → workflow
-  descriptors), native hooks all `false` (Codex hook taxonomy differs → degrades
-  through the HookEmitter, parent ADR Surface 3), `mcp.stdio:true / http:false`.
+  descriptors), native hooks all `false` **at this ADR's snapshot** —
+  SUPERSEDED for two events on 2026-07-26 (wi-04 close-out): Codex fires
+  `SessionStart` and `UserPromptSubmit` from the generated codex-hooks.json,
+  live-verified, and the capability rows now record them `true`; the remaining
+  hook taxonomy still degrades through the HookEmitter (parent ADR Surface 3).
+  `mcp.stdio:true / http:false`.
   Values **not** verified on a live Codex box are tagged `// INFERRED` in the
   module (the permission/launch/session/interaction rows). **L2/L3 must confirm
   the INFERRED values on the real host before relying on them**; per AC20 an

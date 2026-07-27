@@ -682,6 +682,16 @@ export function writeAgentsTree(
   const pkg = renderAgentsPackage(toNeutralManifest(inv), { renderedAt: generatedAt }, AGENTS_SKILL_ROOT);
   writeFileEnsured(path.join(dest, "AGENTS.md"), pkg.agents_md);
   exposeGuildSkillTree(root, inv, dest, resources);
+  // The AGENTS.md preamble instructs a session-start update check — ship the
+  // binary it names, or the instruction dies with ERR_MODULE_NOT_FOUND (the
+  // issue-#55 defect class). This is the G4 staleness fallback for the four
+  // file-surface hosts (agents-file/kiro/qoder/trae), which have no hook
+  // events for the signal to ride (xhrd-wi-04).
+  copyFileRequired(
+    path.join(root, "hooks", "dist", "update-check.js"),
+    path.join(dest, "hooks", "dist", "update-check.js"),
+    "hooks/dist/update-check.js"
+  );
   writeLauncher(dest, "agents");
   return dest;
 }
