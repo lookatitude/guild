@@ -17,6 +17,14 @@
  * a `refuse` decision. A receipt is trusted because it carries verifiable
  * structure, not because a file with the right name exists.
  *
+ * Both regions must declare the contract they are written to, and the two
+ * declarations are separate (BF-03). The frontmatter is the envelope that
+ * supplies provenance, so it must declare `guild.handoff_receipt.v1`; a
+ * document announcing some other envelope schema is explicitly not written to
+ * this contract, and reading its provenance anyway would let it borrow this
+ * contract's authority. A correct machine block does not vouch for a foreign
+ * envelope, and a correct envelope does not vouch for a foreign machine block.
+ *
  * Provenance is required and never invented: `agent`, `model_family` (or
  * `family`), `host`, and `generated_at` must all be present in frontmatter.
  */
@@ -66,6 +74,11 @@ export interface ReceiptParseResult {
  * Read top-level scalar `key: value` pairs from YAML frontmatter.
  * Deliberately minimal: indented lines and list items belong to nested
  * structures this reader does not model, and are skipped rather than guessed.
+ *
+ * A repeated key is refused rather than resolved. YAML implementations differ
+ * on whether the first or the last wins, and an envelope that reads one way
+ * here and another way elsewhere is exactly the ambiguity a trust boundary
+ * must not absorb.
  */
 export function readReceiptFrontmatter(
   text: string
@@ -84,7 +97,9 @@ export function readReceiptFrontmatter(
   }
   if (end === -1) return { ok: false, reason: "frontmatter is unterminated" };
 
-  const fields: Record<string, string> = {};
+  // Null-prototype: a frontmatter key is untrusted input, so `__proto__` and
+  // friends must land as ordinary own properties and never as inheritance.
+  const fields: Record<string, string> = Object.create(null);
   for (let index = 1; index < end; index += 1) {
     const line = lines[index] ?? "";
     if (line.trim() === "" || line.startsWith(" ") || line.startsWith("\t") || line.startsWith("-")) {
@@ -101,7 +116,10 @@ export function readReceiptFrontmatter(
     ) {
       value = value.slice(1, -1);
     }
-    if (!Object.prototype.hasOwnProperty.call(fields, key)) fields[key] = value;
+    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+      return { ok: false, reason: `frontmatter declares ${key} more than once` };
+    }
+    fields[key] = value;
   }
   return { ok: true, fields };
 }
@@ -185,6 +203,25 @@ export function parseReceiptDocument(input: unknown): ReceiptParseResult {
     }
 
     const fields = frontmatter.fields;
+
+    // The envelope schema is checked before any provenance is read out of it.
+    const declaredEnvelope = firstField(fields, ["schema_version"]);
+    if (declaredEnvelope === null) {
+      pushIssue(
+        errors,
+        "$.frontmatter.schema_version",
+        "missing_frontmatter_schema",
+        `frontmatter schema_version is required and must be ${RECEIPT_FRONTMATTER_SCHEMA_VERSION}`
+      );
+    } else if (declaredEnvelope !== RECEIPT_FRONTMATTER_SCHEMA_VERSION) {
+      pushIssue(
+        errors,
+        "$.frontmatter.schema_version",
+        "wrong_frontmatter_schema",
+        `frontmatter schema_version must be ${RECEIPT_FRONTMATTER_SCHEMA_VERSION}`
+      );
+    }
+
     const authorId = firstField(fields, ["agent", "specialist"]);
     const authorFamily = firstField(fields, ["model_family", "family"]);
     const hostId = firstField(fields, ["host"]);
@@ -277,19 +314,35 @@ export function parseReceiptDocument(input: unknown): ReceiptParseResult {
 }
 
 /**
+ * Parse errors that also deserve a named refusal on a consumer's report row.
+ * Consumers surface `refusals` but not the full evidence list, so the reason a
+ * receipt was distrusted has to survive that projection.
+ */
+const RECEIPT_REFUSAL_BY_ERROR_CODE: Readonly<Record<string, string>> = Object.freeze({
+  missing_frontmatter_schema: "receipt_envelope_schema_unsupported",
+  wrong_frontmatter_schema: "receipt_envelope_schema_unsupported",
+});
+
+/**
  * Receipt text → typed decision. The entrypoint shipped consumers call: a
  * receipt that cannot be proven yields `refuse`, never a silent pass.
  */
 export function decideFromReceiptDocument(input: unknown): DocumentDecision {
   const parsed = parseReceiptDocument(input);
   if (parsed.status !== "parsed" || parsed.record === null) {
+    const refusals = new Set<string>(["receipt_not_structured"]);
+    for (const error of parsed.errors) {
+      if (Object.prototype.hasOwnProperty.call(RECEIPT_REFUSAL_BY_ERROR_CODE, error.code)) {
+        refusals.add(RECEIPT_REFUSAL_BY_ERROR_CODE[error.code] as string);
+      }
+    }
     return {
       authority: "none",
       gate_signal: "refuse",
       disposition: "unknown",
       content_hash: null,
       projection: null,
-      refusals: ["receipt_not_structured"],
+      refusals: [...refusals].sort(),
       evidence: parsed.errors,
     };
   }

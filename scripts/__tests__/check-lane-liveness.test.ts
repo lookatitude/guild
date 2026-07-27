@@ -111,16 +111,18 @@ function writeHeartbeat(
 function writeReceipt(
   runDir: string,
   stem: string,
-  opts: { status?: string; prose?: string } = {}
+  opts: { status?: string; prose?: string; envelopeSchema?: string | null } = {}
 ): void {
   const dir = path.join(runDir, "handoffs");
   fs.mkdirSync(dir, { recursive: true });
   const taskId = stem.slice(stem.lastIndexOf("-") + 1);
+  const envelopeSchema =
+    opts.envelopeSchema === undefined ? "guild.handoff_receipt.v1" : opts.envelopeSchema;
   fs.writeFileSync(
     path.join(dir, `${stem}.md`),
     [
       "---",
-      "schema_version: guild.handoff_receipt.v1",
+      ...(envelopeSchema === null ? [] : [`schema_version: ${envelopeSchema}`]),
       `agent: ${stem.slice(0, stem.lastIndexOf("-"))}`,
       "model_family: claude",
       "host: claude-code-cli",
@@ -412,6 +414,33 @@ describe("typed receipt authority (MH-05 DC-07 adoption)", () => {
     );
 
     const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_authority).toBe("none");
+    expect(row.stalled).toBe(true);
+  });
+
+  it("refuses a receipt whose frontmatter declares the wrong envelope schema", () => {
+    // BF-03: the untrusted half of a receipt is the whole file. An envelope
+    // declaring a foreign schema must not be able to lend its provenance to
+    // this contract and clear a stale lane's stall.
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeReceipt(runDir, "tooling-engineer-FU2", { envelopeSchema: "guild.other.v9" });
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_present).toBe(true);
+    expect(row.receipt_authority).toBe("none");
+    expect(row.receipt_disposition).toBe("unknown");
+    expect(row.receipt_refusals).toContain("receipt_envelope_schema_unsupported");
+    expect(row.stalled).toBe(true);
+  });
+
+  it("refuses a receipt whose frontmatter declares no envelope schema", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeReceipt(runDir, "tooling-engineer-FU2", { envelopeSchema: null });
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_present).toBe(true);
     expect(row.receipt_authority).toBe("none");
     expect(row.stalled).toBe(true);
   });

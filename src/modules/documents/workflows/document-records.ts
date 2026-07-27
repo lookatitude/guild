@@ -394,7 +394,17 @@ function readStringArray(
   return ok ? out : null;
 }
 
-function readItemArray<T>(
+/**
+ * Read an array of identified items.
+ *
+ * Item ids are the nested identity of a record: evidence references and
+ * projection signals point at them. Two items sharing an id would collapse
+ * into one referent, so a duplicate is a validation failure, not a preference
+ * for the first or last writer (BF-02). Comparison is exact — item ids are
+ * ASCII-restricted by `DOCUMENT_ITEM_ID_PATTERN`, so `C1` and `c1` are two
+ * distinct identities rather than a confusable pair.
+ */
+function readItemArray<T extends { id: string }>(
   issues: DocumentIssue[],
   parent: unknown,
   path: string,
@@ -406,11 +416,28 @@ function readItemArray<T>(
   if (items === null) return null;
   const fieldPath = `${path}.${key}`;
   const out: T[] = [];
+  const firstIndexById = new Map<string, number>();
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
-    const parsed = readItem(issues, items[index], `${fieldPath}[${index}]`);
-    if (parsed === null) ok = false;
-    else out.push(parsed);
+    const itemPath = `${fieldPath}[${index}]`;
+    const parsed = readItem(issues, items[index], itemPath);
+    if (parsed === null) {
+      ok = false;
+      continue;
+    }
+    const firstIndex = firstIndexById.get(parsed.id);
+    if (firstIndex !== undefined) {
+      pushIssue(
+        issues,
+        `${itemPath}.id`,
+        "duplicate_item_id",
+        `${itemPath}.id duplicates ${fieldPath}[${firstIndex}].id (${parsed.id})`
+      );
+      ok = false;
+      continue;
+    }
+    firstIndexById.set(parsed.id, index);
+    out.push(parsed);
   }
   return ok ? out : null;
 }

@@ -387,6 +387,155 @@ describe("BF-02 hostile-value validation", () => {
 });
 
 // ---------------------------------------------------------------------------
+// BF-02 — nested identity is unambiguous
+//
+// A canonical record whose nested items share an id has no stable identity:
+// two `dup` checks collapse into one evidence reference, and a projection
+// signal can no longer be traced back to the item that produced it.
+// ---------------------------------------------------------------------------
+
+describe("BF-02 nested item identity", () => {
+  /** One case per canonical item array, each carrying two items with one id. */
+  const duplicateCases = [
+    {
+      kind: "plan",
+      array: "steps",
+      body: {
+        objectives: ["converge the runtime"],
+        steps: [
+          { id: "dup", title: "first", status: "done" },
+          { id: "dup", title: "second", status: "blocked" },
+        ],
+      },
+    },
+    {
+      kind: "spec",
+      array: "requirements",
+      body: {
+        requirements: [
+          { id: "dup", statement: "first", priority: "must" },
+          { id: "dup", statement: "second", priority: "may" },
+        ],
+      },
+    },
+    {
+      kind: "review",
+      array: "findings",
+      body: {
+        verdict: "approved",
+        findings: [
+          { id: "dup", severity: "note", statement: "first" },
+          { id: "dup", severity: "blocking", statement: "second" },
+        ],
+      },
+    },
+    {
+      kind: "verify",
+      array: "checks",
+      body: {
+        outcome: "pass",
+        checks: [
+          { id: "dup", name: "first", result: "pass" },
+          { id: "dup", name: "second", result: "fail" },
+        ],
+      },
+    },
+  ];
+
+  const build = (kind: string, body: unknown): Record<string, unknown> => ({
+    ...verifyRecord(),
+    kind,
+    id: `doc-${kind}-0001`,
+    body,
+  });
+
+  const clone = (body: unknown): any => JSON.parse(JSON.stringify(body));
+
+  it("refuses duplicate item ids in every canonical item array", () => {
+    for (const { kind, array, body } of duplicateCases) {
+      const result = validateDocumentRecord(build(kind, body));
+      expect(result.valid).toBe(false);
+      expect(result.record).toBeNull();
+      expect(result.errors.map((error) => error.code)).toContain("duplicate_item_id");
+      // The error names the *later* occurrence, so the first item stays the
+      // one that owns the identity.
+      expect(result.errors.some((error) => error.path === `$.body.${array}[1].id`)).toBe(true);
+    }
+  });
+
+  it("accepts the same arrays once every id is distinct", () => {
+    for (const { kind, array, body } of duplicateCases) {
+      const fixed = clone(body);
+      fixed[array][1].id = "dup-2";
+      const result = validateDocumentRecord(build(kind, fixed));
+      expect(result.valid).toBe(true);
+      expect(result.record).not.toBeNull();
+    }
+  });
+
+  it("treats ids differing only in case as distinct identities", () => {
+    const result = validateDocumentRecord(
+      build("verify", {
+        outcome: "pass",
+        checks: [
+          { id: "C1", name: "upper", result: "pass" },
+          { id: "c1", name: "lower", result: "pass" },
+        ],
+      })
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it("stays total and deterministic on a duplicate-carrying record", () => {
+    const build3 = (): Record<string, unknown> =>
+      build("verify", {
+        outcome: "pass",
+        checks: [
+          { id: "dup", name: "a", result: "pass" },
+          { id: "other", name: "b", result: "pass" },
+          { id: "dup", name: "c", result: "fail" },
+        ],
+      });
+
+    const first = validateDocumentRecord(build3());
+    const second = validateDocumentRecord(build3());
+    expect(first.valid).toBe(false);
+    expect(first.errors).toEqual(second.errors);
+
+    // Downstream steps stay total, and nothing may be decided from it.
+    expect(() => documentContentHash(build3())).not.toThrow();
+    expect(() => projectDocumentRecord(build3())).not.toThrow();
+    expect(() => renderDocumentHtml(build3())).not.toThrow();
+    const decision = decideFromDocumentSources({ record: build3() });
+    expect(decision.authority).toBe("none");
+    expect(decision.gate_signal).toBe("refuse");
+    expect(decision.content_hash).toBeNull();
+  });
+
+  it("refuses a duplicate id hidden behind hostile item values", () => {
+    const hostile: Record<string, unknown>[] = [
+      { id: "dup", name: "plain", result: "pass" },
+      new Proxy(
+        { id: "dup", name: "trapped", result: "pass" },
+        {
+          get(target, key) {
+            if (key === "name") throw new Error("name boom");
+            return Reflect.get(target, key);
+          },
+        }
+      ) as Record<string, unknown>,
+    ];
+    const record = build("verify", { outcome: "pass", checks: hostile });
+    let result!: ReturnType<typeof validateDocumentRecord>;
+    expect(() => {
+      result = validateDocumentRecord(record);
+    }).not.toThrow();
+    expect(result.valid).toBe(false);
+    expect(result.record).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // DC-01 / DC-02 — canonical records and closed, non-coercing validation
 // ---------------------------------------------------------------------------
 
@@ -752,6 +901,165 @@ describe("DC-08 service boundaries", () => {
     ]);
     expect(report.ok).toBe(true);
   });
+
+  // — F-01: an import edge the evaluator cannot see is a hole in the proof, so
+  //   re-export and aliased-require forms must be visible too.
+
+  it("detects a host-internal edge introduced by export-from (F-01)", () => {
+    for (const text of [
+      'export { hostRegistry } from "../../host-runtime/workflows/lib/host-registry";\n',
+      'export * from "../../host-runtime/workflows/lib/host-registry";\n',
+      'export * as host from "../../host-runtime/workflows/lib/host-registry";\n',
+      'export type { HostId } from "../../host-runtime/workflows/lib/host-registry";\n',
+      'export {\n  hostRegistry,\n} from "../../host-runtime/workflows/lib/host-registry";\n',
+    ]) {
+      const report = evaluateDocumentServiceBoundary([
+        { path: "src/modules/documents/workflows/x.ts", text },
+      ]);
+      expect(report.ok).toBe(false);
+      expect(report.violations[0]!.reason).toBe("host_internal_import");
+      expect(report.violations[0]!.specifier).toBe(
+        "../../host-runtime/workflows/lib/host-registry"
+      );
+    }
+  });
+
+  it("classifies a re-export exactly as it classifies the matching import", () => {
+    const cases: Array<[string, string]> = [
+      ["../../lifecycle/workflows/check-lane-liveness", "private_module_import"],
+      ["../../review", "undeclared_module_import"],
+      ["yaml", "external_package_import"],
+    ];
+    for (const [specifier, reason] of cases) {
+      const report = evaluateDocumentServiceBoundary([
+        {
+          path: "src/modules/documents/workflows/x.ts",
+          text: `export { thing } from "${specifier}";\n`,
+        },
+      ]);
+      expect(report.violations.map((violation) => violation.reason)).toEqual([reason]);
+    }
+  });
+
+  it("sees a specifier through a string-named binding clause", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        text: 'import { "host registry" as registry } from "../../host-runtime/workflows/x";\n',
+      },
+    ]);
+    expect(report.violations.map((violation) => violation.reason)).toEqual([
+      "host_internal_import",
+    ]);
+  });
+
+  it("does not read a specifier out of an ordinary string that ends in from", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        text:
+          'export const NOTE = "this record was derived from ";\n' +
+          'export const OTHER = \'and also from \';\n',
+      },
+    ]);
+    expect(report.violations).toEqual([]);
+  });
+
+  it("attributes a specifier to real code, never to prose that mentions import", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        text:
+          'const sentence = "import x from ";\n' +
+          'import { bad } from "../../host-runtime/a";\n',
+      },
+    ]);
+    // The sentence must not swallow the statement underneath it: the real
+    // import is still found, with its own specifier and reason.
+    expect(report.violations).toEqual([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        line: 2,
+        specifier: "../../host-runtime/a",
+        reason: "host_internal_import",
+      },
+    ]);
+  });
+
+  it("allows the shipped index shape: re-exporting the module's own workflows", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/index.ts",
+        text: 'export * from "./workflows/document-records";\nexport * from "./workflows/document-safe";\n',
+      },
+    ]);
+    expect(report.ok).toBe(true);
+  });
+
+  it("detects an aliased require and resolves the call made through it (F-01)", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        text: 'const load = require;\nload("../../host-runtime/workflows/secret");\n',
+      },
+    ]);
+    expect(report.ok).toBe(false);
+    const reasons = report.violations.map((violation) => violation.reason);
+    // The aliasing itself is unprovable, and the call through the alias names
+    // the specifier it actually reaches.
+    expect(reasons).toContain("indirect_specifier");
+    expect(reasons).toContain("host_internal_import");
+    expect(
+      report.violations.some(
+        (violation) => violation.specifier === "../../host-runtime/workflows/secret"
+      )
+    ).toBe(true);
+  });
+
+  it("detects a require handed to another value position", () => {
+    for (const text of [
+      "const loader = { load: require };\n",
+      "register(require);\n",
+      "export const boot = require;\n",
+    ]) {
+      const report = evaluateDocumentServiceBoundary([
+        { path: "src/modules/documents/workflows/x.ts", text },
+      ]);
+      expect(report.violations.map((violation) => violation.reason)).toContain(
+        "indirect_specifier"
+      );
+    }
+  });
+
+  it("detects a require built at runtime through createRequire", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        text:
+          'import { createRequire } from "node:module";\n' +
+          'const load = createRequire(import.meta.url);\n' +
+          'load("../../host-runtime/workflows/secret");\n',
+      },
+    ]);
+    expect(report.ok).toBe(false);
+    expect(report.violations.map((violation) => violation.reason)).toContain(
+      "indirect_specifier"
+    );
+  });
+
+  it("does not flag require property reads or the word require in a string", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        text:
+          "if (require.main === module) main();\n" +
+          'const help = "callers must require nothing at runtime";\n' +
+          'const also = `templates may say require too`;\n',
+      },
+    ]);
+    expect(report.violations).toEqual([]);
+    expect(report.ok).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -890,6 +1198,83 @@ describe("receipt bridge", () => {
   it("refuses a receipt missing required provenance", () => {
     const noProvenance = receipt().replace("host: claude-code-cli\n", "");
     expect(decideFromReceiptDocument(noProvenance).gate_signal).toBe("refuse");
+  });
+
+  // — BF-03: the envelope declares which contract the document is written to.
+  //   Reading provenance out of an envelope that declares a different schema
+  //   would let an untrusted document borrow this contract's authority.
+
+  it("refuses a receipt whose frontmatter declares a different envelope schema", () => {
+    const wrongEnvelope = receipt().replace(
+      "schema_version: guild.handoff_receipt.v1",
+      "schema_version: guild.other.v9"
+    );
+    const parsed = parseReceiptDocument(wrongEnvelope);
+    expect(parsed.status).toBe("unparsable");
+    expect(parsed.record).toBeNull();
+    expect(parsed.errors.map((error) => error.code)).toContain("wrong_frontmatter_schema");
+
+    const decision = decideFromReceiptDocument(wrongEnvelope);
+    expect(decision.authority).toBe("none");
+    expect(decision.gate_signal).toBe("refuse");
+    expect(decision.disposition).toBe("unknown");
+    expect(decision.content_hash).toBeNull();
+    expect(decision.refusals).toContain("receipt_envelope_schema_unsupported");
+  });
+
+  it("refuses a receipt with no frontmatter schema_version at all", () => {
+    const noEnvelope = receipt().replace("schema_version: guild.handoff_receipt.v1\n", "");
+    const parsed = parseReceiptDocument(noEnvelope);
+    expect(parsed.status).toBe("unparsable");
+    expect(parsed.errors.map((error) => error.code)).toContain("missing_frontmatter_schema");
+    expect(decideFromReceiptDocument(noEnvelope).gate_signal).toBe("refuse");
+  });
+
+  it("does not accept a machine-block schema_version as the envelope schema", () => {
+    // The two schema declarations are separate contracts: a correct machine
+    // block cannot vouch for the envelope that carries the provenance.
+    const swapped = receipt().replace(
+      "schema_version: guild.handoff_receipt.v1",
+      "schema_version: guild.handoff.v2"
+    );
+    expect(decideFromReceiptDocument(swapped).gate_signal).toBe("refuse");
+  });
+
+  it("refuses an envelope that declares the same key twice", () => {
+    // Two readers of the same file must not be able to disagree: YAML
+    // implementations split on first-wins vs last-wins.
+    const doubled = receipt().replace(
+      "schema_version: guild.handoff_receipt.v1",
+      "schema_version: guild.handoff_receipt.v1\nschema_version: guild.other.v9"
+    );
+    const parsed = parseReceiptDocument(doubled);
+    expect(parsed.status).toBe("unparsable");
+    expect(parsed.errors.map((error) => error.code)).toContain("frontmatter_unreadable");
+    expect(decideFromReceiptDocument(doubled).gate_signal).toBe("refuse");
+  });
+
+  it("does not let a frontmatter key reach the prototype chain", () => {
+    const polluted = receipt().replace(
+      "task: MH-05 document contracts",
+      "__proto__: { agent: attacker }\ntask: MH-05 document contracts"
+    );
+    const parsed = parseReceiptDocument(polluted);
+    // The odd key is inert data, so the receipt still parses on its own merits
+    // and its provenance is unchanged.
+    expect(parsed.status).toBe("parsed");
+    expect(parsed.record!.provenance.author_id).toBe("artifact-services");
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+
+  it("still trusts a well-formed envelope, quoted or not", () => {
+    for (const declared of [
+      "schema_version: guild.handoff_receipt.v1",
+      'schema_version: "guild.handoff_receipt.v1"',
+      "schema_version:   guild.handoff_receipt.v1  ",
+    ]) {
+      const variant = receipt().replace("schema_version: guild.handoff_receipt.v1", declared);
+      expect(decideFromReceiptDocument(variant).gate_signal).toBe("advance");
+    }
   });
 
   it("finds the machine block behind an earlier non-JSON fenced block", () => {
