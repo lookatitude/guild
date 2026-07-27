@@ -50,7 +50,7 @@ import {
   loadRunState,
   readResumeEnabled,
   type LaneResumeCheckpoint,
-} from "../../../../hooks/lib/run-state";
+} from "./run-state";
 import { readPlanTaskIdSet } from "../../teams";
 
 // ── Output type ─────────────────────────────────────────────────────────────

@@ -50,7 +50,7 @@ import {
   type LoopLayer,
   type LoopRoundEndEvent,
   type LoopRoundStartEvent,
-} from "../../../../hooks/lib/v1.4/log-jsonl.js";
+} from "./event-log";
 import { resolveGuildRoot } from "../../state";
 
 const VALID_EVENTS = new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);

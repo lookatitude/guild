@@ -33,7 +33,7 @@ import {
   markLaneDead,
   type RunStateInit,
   type LaneExhaustionSignal,
-} from "../../../../hooks/lib/run-state";
+} from "./run-state";
 
 // ── Parsed args ───────────────────────────────────────────────────────────────
 

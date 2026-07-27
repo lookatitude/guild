@@ -37,8 +37,8 @@ import { types as nodeTypes } from "util";
 import {
   type CellFanout,
   type ModelTier,
-} from "../../../../scripts/lib/core/contracts/task-cell-backend";
-import { type RosterAgentEntry, type RosterResolution } from "../../../../scripts/lib/roster";
+} from "../../dispatch";
+import { type RosterAgentEntry, type RosterResolution } from "../../specialists";
 
 // ── Stations ─────────────────────────────────────────────────────────────────
 

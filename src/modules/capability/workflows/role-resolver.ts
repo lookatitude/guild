@@ -20,7 +20,7 @@
 
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "../../host-runtime";
 import { resolveRoles, type RoleResolutionSet } from "./role-model-schema";
-import { ADVISORY_SUBSTRATES, type AdvisorySubstrate } from "../../../../scripts/lib/advisory-record";
+import { ADVISORY_SUBSTRATES, type AdvisorySubstrate } from "../../review";
 import type { DetectionResult } from "../../host-runtime";
 
 /**

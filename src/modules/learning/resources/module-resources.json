@@ -141,7 +141,7 @@
       "id": "learn/lib/graph-query",
       "source_path": "scripts/learn/lib/graph-query.ts",
       "resource_path": "resources/scripts/learn/lib/graph-query.ts",
-      "sha256": "d533e3fe2835b0be3b47e01e2d0a0bb3ccc1a425cc4501c7a6e3321a49557b8c"
+      "sha256": "2928e2e0d029f479215c301c613c603bd5d9308b40d1a17c0dfc534c8f1ea697"
     },
     {
       "category": "scripts",
@@ -309,7 +309,7 @@
       "id": "learn/wiki-lint-knowledge",
       "source_path": "scripts/learn/wiki-lint-knowledge.ts",
       "resource_path": "resources/scripts/learn/wiki-lint-knowledge.ts",
-      "sha256": "6f62e496927a0ba0d247fbee70498a7b895de931d03977c9c96e38ac3a809b18"
+      "sha256": "c26a64924afca28c350c7c23838918be6a1efaf4086913815134f798dbd441cc"
     },
     {
       "category": "scripts",

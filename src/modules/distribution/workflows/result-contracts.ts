@@ -35,7 +35,7 @@
  * Owned by plugin-architect (L0); consumed by L3 (normalizers) + L6 (tests).
  */
 
-import { validateHandoffV2 } from "../../../../hooks/lib/handoff-v2";
+import { validateHandoffV2 } from "./handoff-v2";
 import { parseReviewResult } from "./review-result";
 import {
   validatePhaseResultV1,

@@ -28,3 +28,11 @@ export interface GraphEdge {
   description?: string;
   [k: string]: unknown;
 }
+
+export const NODE_CATEGORIES = new Set([
+  "function", "class", "module", "config", "endpoint", "pipeline", "schema",
+  "concept", "fact", "claim", "principle", "definition", "example",
+  "guide", "tutorial", "reference", "overview", "changelog", "architecture",
+  "decision", "standard", "recipe", "checklist",
+  "component", "domain", "diagram", "index", "note",
+]);

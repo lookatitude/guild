@@ -35,7 +35,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { assertWithinRunTree } from "../../../../scripts/lib/core/contracts/task-cell-backend";
+import { assertWithinRunTree } from "../../dispatch";
 import {
   isStation,
   validateTeamPlanV1,

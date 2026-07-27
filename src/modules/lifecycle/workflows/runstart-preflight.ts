@@ -64,7 +64,7 @@ import {
   validateMcp,
   validateCrossHostBlock,
   validateDefaults,
-} from "../../../../scripts/read-guild-config";
+} from "../../config";
 import { execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";

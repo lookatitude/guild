@@ -42,8 +42,7 @@ import type { HostKind } from "../../host-runtime";
 import { resolveSettings } from "../../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../../state";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
-import { scrubbedWrite } from "../../../../hooks/lib/security/scrubbed-write";
-import type { ScrubbedWriteResult, ScrubSurface } from "../../../../hooks/lib/security/scrubbed-write";
+import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../../security";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 

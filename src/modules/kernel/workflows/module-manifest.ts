@@ -90,7 +90,7 @@ export interface ModuleBoundaryViolation {
   from_module: string;
   to_module: string;
   specifier: string;
-  reason: "undeclared_dependency" | "private_import";
+  reason: "undeclared_dependency" | "private_import" | "host_facing_import";
 }
 
 export interface ModuleBoundaryValidationResult {
@@ -405,8 +405,224 @@ function moduleIdForPath(modulesDir: string, filePath: string, moduleIds: Readon
   return moduleIds.has(moduleId) ? moduleId : null;
 }
 
-const IMPORT_SPECIFIER_RE =
-  /(?:import(?:\s+type)?[\s\S]*?from\s*|import\s*\(|require\s*\()\s*["']([^"']+)["']/g;
+interface DependencyToken {
+  kind: "word" | "number" | "string" | "punctuation";
+  value: string;
+  lineBreakBefore: boolean;
+}
+
+/**
+ * Tokenize only the JavaScript/TypeScript surface needed by the boundary rail.
+ * Comments, regex literals, and template raw text are discarded; template
+ * interpolations remain live code. Ordinary strings stay distinguishable from
+ * words and punctuation so recognition cannot span unrelated statements.
+ */
+function dependencyTokens(source: string): DependencyToken[] {
+  const tokens: DependencyToken[] = [];
+  let index = 0;
+  let lineBreakBefore = false;
+  const push = (kind: DependencyToken["kind"], value: string): void => {
+    tokens.push({ kind, value, lineBreakBefore });
+    lineBreakBefore = false;
+  };
+  const regexMayStart = (): boolean => {
+    const previous = tokens[tokens.length - 1];
+    if (!previous) return true;
+    if (previous.kind === "number" || previous.kind === "string") return false;
+    if (previous.kind === "word") {
+      return ["case", "delete", "else", "in", "instanceof", "new", "return", "throw", "typeof", "void", "yield"].includes(
+        previous.value
+      );
+    }
+    return ![")", "]", "}"].includes(previous.value);
+  };
+
+  const scanCode = (stopAtInterpolationEnd: boolean): void => {
+    let braceDepth = 0;
+    while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+
+    if (/\s/.test(char)) {
+      if (char === "\n" || char === "\r") lineBreakBefore = true;
+      index += 1;
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      index += 2;
+      while (index < source.length && source[index] !== "\n") index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      index += 2;
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) {
+        index += 1;
+      }
+      index = Math.min(source.length, index + 2);
+      continue;
+    }
+    if (char === "/" && regexMayStart()) {
+      index += 1;
+      let inCharacterClass = false;
+      while (index < source.length) {
+        if (source[index] === "\\") {
+          index += 2;
+        } else if (source[index] === "[") {
+          inCharacterClass = true;
+          index += 1;
+        } else if (source[index] === "]") {
+          inCharacterClass = false;
+          index += 1;
+        } else if (source[index] === "/" && !inCharacterClass) {
+          index += 1;
+          while (index < source.length && /[A-Za-z]/.test(source[index])) index += 1;
+          break;
+        } else {
+          index += 1;
+        }
+      }
+      continue;
+    }
+    if (char === "`") {
+      index += 1;
+      while (index < source.length) {
+        if (source[index] === "\\") {
+          index += 2;
+        } else if (source[index] === "$" && source[index + 1] === "{") {
+          index += 2;
+          scanCode(true);
+        } else if (source[index] === "`") {
+          index += 1;
+          break;
+        } else {
+          index += 1;
+        }
+      }
+      continue;
+    }
+    if (stopAtInterpolationEnd && char === "}" && braceDepth === 0) {
+      index += 1;
+      return;
+    }
+    if (char === '"' || char === "'") {
+      const quote = char;
+      let value = "";
+      index += 1;
+      while (index < source.length) {
+        if (source[index] === "\\") {
+          value += source[index];
+          if (index + 1 < source.length) value += source[index + 1];
+          index += 2;
+        } else if (source[index] === quote) {
+          index += 1;
+          break;
+        } else {
+          value += source[index];
+          index += 1;
+        }
+      }
+      push("string", value);
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(char)) {
+      const start = index;
+      index += 1;
+      while (index < source.length && /[A-Za-z0-9_$]/.test(source[index])) index += 1;
+      push("word", source.slice(start, index));
+      continue;
+    }
+    if (/[0-9]/.test(char)) {
+      const numeric = source.slice(index).match(
+        /^(?:0[xX][0-9A-Fa-f_]+|0[bB][01_]+|0[oO][0-7_]+|(?:[0-9][0-9_]*(?:\.[0-9_]*)?)(?:[eE][+-]?[0-9_]+)?)[n]?/
+      );
+      if (numeric) {
+        push("number", numeric[0]);
+        index += numeric[0].length;
+        continue;
+      }
+    }
+
+    if (stopAtInterpolationEnd && char === "{") braceDepth += 1;
+    if (stopAtInterpolationEnd && char === "}" && braceDepth > 0) braceDepth -= 1;
+    push("punctuation", char);
+    index += 1;
+    }
+  };
+
+  scanCode(false);
+
+  return tokens;
+}
+
+function literalRelativeDependencySpecifiers(source: string): string[] {
+  const tokens = dependencyTokens(source);
+  const specifiers: string[] = [];
+  const addString = (token: DependencyToken | undefined): void => {
+    if (token?.kind === "string" && token.value.startsWith(".")) specifiers.push(token.value);
+  };
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.kind !== "word") continue;
+    const previous = tokens[index - 1];
+    const isMember = previous?.value === "." || previous?.value === "?.";
+
+    if (token.value === "require" && !isMember && tokens[index + 1]?.value === "(") {
+      addString(tokens[index + 2]);
+      continue;
+    }
+    if (token.value !== "import" && token.value !== "export") continue;
+
+    if (token.value === "import" && !isMember && tokens[index + 1]?.value === "(") {
+      addString(tokens[index + 2]);
+      continue;
+    }
+    if (token.value === "import" && tokens[index + 1]?.kind === "string") {
+      addString(tokens[index + 1]);
+      continue;
+    }
+
+    for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
+      const candidate = tokens[cursor];
+      if (candidate.value === ";") break;
+      if (
+        candidate.lineBreakBefore &&
+        candidate.kind === "word" &&
+        ["const", "let", "var", "function", "class", "return", "throw"].includes(candidate.value)
+      ) {
+        break;
+      }
+      if (candidate.kind === "word" && (candidate.value === "import" || candidate.value === "export")) {
+        break;
+      }
+      if (candidate.kind === "word" && candidate.value === "from") {
+        addString(tokens[cursor + 1]);
+        break;
+      }
+    }
+  }
+
+  return specifiers;
+}
+
+/**
+ * Top-level trees that host-face: they mirror module logic for one host rather
+ * than owning it. A module reaching into one of these is depending on a mirror
+ * instead of a public module API, so the destination lands outside
+ * `src/modules` and every module-ownership rule stops applying to it.
+ */
+const HOST_FACING_ROOTS: readonly string[] = ["hooks", "scripts"];
+
+/**
+ * The host-facing root a resolved import lands in, or `null` when it stays
+ * inside the repository's module tree (or leaves the repository entirely).
+ */
+function hostFacingRootFor(root: string, filePath: string): string | null {
+  const rel = path.relative(root, filePath);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  const [top] = rel.split(path.sep);
+  return HOST_FACING_ROOTS.includes(top) ? top : null;
+}
 
 export function validateModuleBoundaries(
   root: string,
@@ -417,6 +633,7 @@ export function validateModuleBoundaries(
   const modulesDir = path.join(root, "src", "modules");
   const moduleIds = new Set(manifests.map((manifest) => manifest.id));
   const manifestById = new Map(manifests.map((manifest) => [manifest.id, manifest]));
+  const seenImporterSpecifiers = new Set<string>();
 
   for (const manifest of manifests) {
     const moduleDir = path.join(modulesDir, manifest.id);
@@ -429,14 +646,28 @@ export function validateModuleBoundaries(
     const fromModule = moduleIdForPath(modulesDir, importer, moduleIds);
     if (!fromModule) continue;
     const text = fs.readFileSync(importer, "utf8");
-    IMPORT_SPECIFIER_RE.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = IMPORT_SPECIFIER_RE.exec(text)) !== null) {
-      const specifier = match[1];
+    for (const specifier of literalRelativeDependencySpecifiers(text)) {
+      const importerSpecifier = `${importer}\0${specifier}`;
+      if (seenImporterSpecifiers.has(importerSpecifier)) continue;
+      seenImporterSpecifiers.add(importerSpecifier);
       const importedPath = resolveTsImport(importer, specifier);
       if (!importedPath) continue;
       const toModule = moduleIdForPath(modulesDir, importedPath, moduleIds);
-      if (!toModule || toModule === fromModule) continue;
+      if (!toModule) {
+        const hostRoot = hostFacingRootFor(root, importedPath);
+        if (hostRoot) {
+          violations.push({
+            importer: path.relative(root, importer).split(path.sep).join("/"),
+            imported: path.relative(root, importedPath).split(path.sep).join("/"),
+            from_module: fromModule,
+            to_module: hostRoot,
+            specifier,
+            reason: "host_facing_import",
+          });
+        }
+        continue;
+      }
+      if (toModule === fromModule) continue;
       const dependsOn = manifestById.get(fromModule)?.depends_on ?? [];
       if (!dependsOn.includes(toModule)) {
         violations.push({
@@ -490,6 +721,11 @@ export function formatBoundaryValidation(result: ModuleBoundaryValidationResult)
       lines.push(
         `BOUNDARY ${item.importer} imports ${item.to_module} via ${JSON.stringify(item.specifier)} ` +
           `without ${item.from_module}.depends_on including ${item.to_module}`
+      );
+    } else if (item.reason === "host_facing_import") {
+      lines.push(
+        `BOUNDARY ${item.importer} imports host-facing ${item.imported} via ${JSON.stringify(item.specifier)}; ` +
+          `module ${item.from_module} must not depend on the ${item.to_module}/ mirror`
       );
     } else {
       lines.push(

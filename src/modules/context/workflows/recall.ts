@@ -80,7 +80,7 @@ import {
   type GraphView as StructuralGraphView,
   type EvidenceNode,
   type Direction as StructuralDirection,
-} from "../../../../scripts/learn/lib/graph-query";
+} from "../../learning";
 import type { KnowledgeLinksDoc } from "../../knowledge";
 import {
   ingestImportanceScore,

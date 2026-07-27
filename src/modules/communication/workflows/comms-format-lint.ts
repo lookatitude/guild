@@ -45,7 +45,7 @@ import * as path from "path";
 import {
   ALLOWED_INJECTION_CLEAN_VALUES,
   ALLOWED_TOP_LEVEL_KEYS,
-} from "../../../../hooks/lib/handoff-v2";
+} from "../../distribution";
 import { loadYamlApi } from "../../kernel";
 
 const yaml = loadYamlApi();

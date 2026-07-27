@@ -26,7 +26,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 // HK-08: pure regex directive-language detector (no I/O).
-import { sanitizeForInjection } from "../../../../hooks/lib/security/injection-guard";
+import { sanitizeForInjection } from "../../security";
 import { parseFrontmatter as parseSharedFrontmatter } from "../../state";
 // R-TRACE (Wave 6): additive security_decision trace — NEVER changes return value
 import { emitTraceEvent } from "../../telemetry";
