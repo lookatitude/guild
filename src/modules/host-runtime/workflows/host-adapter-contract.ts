@@ -377,7 +377,10 @@ export function createHostAdapter(host: HostId | string): HostAdapter {
       if (!entry) return unavailable("resolveModelParams") as HostAdapterResult<Record<string, unknown>>;
       const params = modelParams(entry, request);
       if (!params) {
-        return result(
+        // Explicit type argument: passing `null` alone would infer `T = null` and
+        // yield `HostAdapterResult<null>`. Type-only; the returned record is
+        // byte-identical. Surfaced once this contract became a public export.
+        return result<Record<string, unknown>>(
           adapterHost,
           "resolveModelParams",
           "degraded",
