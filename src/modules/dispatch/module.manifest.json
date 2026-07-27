@@ -5,7 +5,7 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Transports prompts to Agent, tmux, in-process, remote, and deferred execution backends.",
-  "depends_on": ["communication", "host-runtime", "prompting", "state"],
+  "depends_on": ["communication", "host-runtime", "lifecycle", "prompting", "state"],
   "owns": {
     "skills": ["dispatching-parallel-agents"],
     "scripts": [
