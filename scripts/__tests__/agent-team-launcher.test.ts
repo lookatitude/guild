@@ -48,11 +48,22 @@ function runScript(
   for (const [k, v] of Object.entries({ ...baseEnv, ...env })) {
     if (v !== undefined) finalEnv[k] = v;
   }
-  const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
-    encoding: "utf8",
-    env: finalEnv,
-    timeout: 120_000,
-  });
+  // GUILD_TSX_BIN pins the TypeScript runner for the spawned launcher. When it is
+  // unset the default `npx tsx` path is used, so the repository's own `npm test`
+  // is unchanged; when it is set (hermetic/offline runs against a pre-provisioned
+  // runner) the child is exec'd directly and npx never resolves or fetches tsx.
+  const tsxBin = process.env["GUILD_TSX_BIN"];
+  const result = tsxBin
+    ? spawnSync(tsxBin, [SCRIPT, ...args], {
+        encoding: "utf8",
+        env: finalEnv,
+        timeout: 120_000,
+      })
+    : spawnSync("npx", ["tsx", SCRIPT, ...args], {
+        encoding: "utf8",
+        env: finalEnv,
+        timeout: 120_000,
+      });
   return {
     exitCode: result.status ?? 1,
     stdout: result.stdout ?? "",
@@ -753,6 +764,89 @@ describe("agent-team-launcher.ts", () => {
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
       expect(signal.backend).toBe("agent");
+    });
+
+    // MH-04 selector reach. Every assertion above is satisfied by BOTH the old
+    // inline ladder and the port rewire, because the port reproduces the shipped
+    // reason strings verbatim — so none of them can tell the two apart. This one
+    // can: it intercepts module loading INSIDE the spawned launcher process and
+    // records each call to the port's `selectExecutionSubstrate`. On the pre-MH-04
+    // launcher the recording stays empty while stdout is byte-for-byte the same,
+    // which is exactly what makes this assertion the discriminating one.
+    it("the spawned launcher reaches the port-authored selector (not a launcher-local ladder)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
+      const recordPath = path.join(tmpDir, "selector-calls.jsonl");
+
+      // A CommonJS preload that wraps the port module's export in the CHILD
+      // process. tsx compiles the launcher to CJS, so the port import goes
+      // through Module._load; a Proxy is used because esbuild's export getters
+      // are non-configurable and cannot be redefined in place.
+      const hookPath = path.join(tmpDir, "selector-probe.cjs");
+      fs.writeFileSync(
+        hookPath,
+        [
+          'const Module = require("module");',
+          'const fsx = require("fs");',
+          "const out = process.env.GUILD_SELECTOR_PROBE_FILE;",
+          "const load = Module._load;",
+          "Module._load = function (request) {",
+          "  const exported = load.apply(this, arguments);",
+          '  if (typeof request === "string" && request.endsWith("execution-transport-ports") && exported) {',
+          "    return new Proxy(exported, {",
+          "      get(target, prop, receiver) {",
+          "        const value = Reflect.get(target, prop, receiver);",
+          '        if (prop === "selectExecutionSubstrate" && typeof value === "function") {',
+          "          return function (...callArgs) {",
+          "            const selection = value.apply(this, callArgs);",
+          '            fsx.appendFileSync(out, JSON.stringify(selection) + "\\n");',
+          "            return selection;",
+          "          };",
+          "        }",
+          "        return value;",
+          "      },",
+          "    });",
+          "  }",
+          "  return exported;",
+          "};",
+          "",
+        ].join("\n")
+      );
+
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
+        {
+          TMUX: undefined,
+          PATH: `${noTmuxBin}:${process.env.PATH ?? ""}`,
+          GUILD_INDEPENDENT_AGENTS_SUPPORTED: "1",
+          GUILD_SELECTOR_PROBE_FILE: recordPath,
+          NODE_OPTIONS: `--require "${hookPath}"`,
+        }
+      );
+
+      expect(exitCode).toBe(0);
+
+      // The port-authored selector actually RAN in the launcher process.
+      expect(fs.existsSync(recordPath)).toBe(true);
+      const calls = fs
+        .readFileSync(recordPath, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+
+      // It returned the versioned contract record — facts the inline ladder
+      // never produced, so these cannot be reproduced by copied reason strings.
+      const selection = calls[0];
+      expect(selection.schema_version).toBe("guild.execution.transports.v1");
+      expect(selection.contract_version).toBe(1);
+      expect(selection.dispatch_mode).toBe("agent");
+      expect(selection.transport_id).toBe("in-process");
+
+      // And the launcher PRINTED the port's decision rather than one of its own.
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe(selection.dispatch_mode);
+      expect(signal.reason).toBe(selection.reason);
     });
   });
 
