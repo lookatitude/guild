@@ -34,25 +34,30 @@ import {
   normalizeExecutionError,
   redactExecutionDetail,
   isExecutionContractCompatible,
+  isTeamDispatchPort,
   selectExecutionSubstrate,
   type ExecutionCapabilityProbe,
   type ExecutionHandle,
+  type ExecutionObservationSink,
   type ExecutionOperation,
   type ExecutionOutcome,
   type ExecutionRunFn,
   type ExecutionRunResult,
   type ExecutionTransportPort,
   type PaneAdapterLike,
+  type RemoteProbeFacts,
   type RemoteTransportLike,
   type TeamBackendLike,
 } from "../../src/modules/dispatch/workflows/execution-transport-ports";
 import {
   PaneExecutionTransport,
   InProcessExecutionTransport,
+  TeamDispatchExecutionTransport,
   TmuxExecutionTransport,
   RemoteExecutionTransport,
   createHostExecutionRuntime,
   recordingObservationSink,
+  type TeamSessionSeamLike,
 } from "../../src/modules/dispatch/workflows/execution-transport-adapters";
 
 import {
@@ -143,6 +148,39 @@ const HANDLE: ExecutionHandle = {
 
 /** The five operations every transport port must answer for. */
 const CORE_OPS: ExecutionOperation[] = ["spawn", "send", "wait", "interrupt", "close"];
+
+/**
+ * A session-owning substrate, shaped exactly like `TmuxTeamBackend`'s session
+ * half. Pure and injected — no tmux, no subprocess.
+ */
+function fakeSessionSeam(
+  overrides: Partial<TeamSessionSeamLike> = {}
+): TeamSessionSeamLike & { spawns: number } {
+  const seam = {
+    spawns: 0,
+    sessionExists: () => false,
+    windowExists: () => false,
+    currentSessionName: () => "guild-session",
+    preflight: () => ({ ok: true, failures: [] }),
+    plan: (request: { targetName: string; mode: string }) => ({
+      mode: request.mode,
+      targetName: request.targetName,
+      commands: [{ display: "tmux new-session -d -s guild-mh04" }],
+    }),
+    spawn: () => {
+      seam.spawns += 1;
+      return {
+        ok: true,
+        failedCommand: null,
+        stderr: "",
+        orchestratorPaneId: "%1",
+        teammatePaneIds: { architect: "%2" },
+      };
+    },
+    ...overrides,
+  };
+  return seam as unknown as TeamSessionSeamLike & { spawns: number };
+}
 
 function callOperation(
   port: ExecutionTransportPort,
@@ -960,6 +998,15 @@ describe("every transport answers every operation with a closed typed outcome", 
         },
         target: { hostId: "box", hostKind: "claude", endpoint: "user@box" },
       }),
+      new TeamDispatchExecutionTransport({
+        transport_id: "in-process",
+        backend: new InProcessTeamBackend(),
+      }),
+      new TeamDispatchExecutionTransport({
+        transport_id: "tmux",
+        backend: new InProcessTeamBackend(),
+        session: fakeSessionSeam(),
+      }),
     ];
   }
 
@@ -980,5 +1027,563 @@ describe("every transport answers every operation with a closed typed outcome", 
         expect(typeof (transport as unknown as Record<string, unknown>)[op]).toBe("function");
       }
     }
+  });
+});
+
+// ── 12 · Observation delivery is TOTAL (BF-3) ────────────────────────────────
+//
+// The observation sink is an INJECTED collaborator. A defect inside it is the
+// observer's failure, never the operation's: a transport reports what the
+// substrate did, and a broken recorder cannot change that fact — nor may it
+// convert a decided outcome into a thrown host error at the boundary.
+
+describe("observation delivery never escapes as a thrown host error (BF-3)", () => {
+  /** The exact adversarial sink the round-2 review used. */
+  function explodingSink(): ExecutionObservationSink & { calls: number } {
+    const sink = {
+      calls: 0,
+      record() {
+        sink.calls += 1;
+        throw new Error("sink exploded");
+      },
+    };
+    return sink;
+  }
+
+  function transportsWith(sink: ExecutionObservationSink): ExecutionTransportPort[] {
+    return [
+      new PaneExecutionTransport({
+        adapter: new ClaudePaneAdapter({ run: () => ({ status: 0, stdout: "", stderr: "" }) }),
+        run: scriptedRun([OK]).run,
+        sink,
+      }),
+      new InProcessExecutionTransport({ backend: new InProcessTeamBackend(), sink }),
+      new InProcessExecutionTransport({
+        backend: new SerialBackend() as TeamBackendLike,
+        transport_id: "serial",
+        sink,
+      }),
+      new TmuxExecutionTransport({
+        run: scriptedRun([OK, NONZERO]).run,
+        clock: steppingClock(1),
+        sink,
+      }),
+      new RemoteExecutionTransport({
+        transport: {
+          kind: "mock",
+          connect: () => ({ ok: true, message: "ok" }),
+          probe: (_h, b) => ({ present: [...b], missing: [] }),
+          spawn: () => ({ remoteId: "mock-1" }),
+          teardown: () => undefined,
+        },
+        target: { hostId: "box", hostKind: "claude", endpoint: "user@box" },
+        sink,
+      }),
+      new TeamDispatchExecutionTransport({
+        transport_id: "in-process",
+        backend: new InProcessTeamBackend(),
+        sink,
+      }),
+      new TeamDispatchExecutionTransport({
+        transport_id: "tmux",
+        backend: new InProcessTeamBackend(),
+        session: fakeSessionSeam(),
+        sink,
+      }),
+    ];
+  }
+
+  it("a throwing sink never makes a transport operation throw", () => {
+    const sink = explodingSink();
+    const transport = new PaneExecutionTransport({
+      adapter: new ClaudePaneAdapter({ run: () => ({ status: 0, stdout: "", stderr: "" }) }),
+      run: scriptedRun([OK]).run,
+      sink,
+    });
+    let result: ExecutionOutcome<ExecutionHandle> | null = null;
+    expect(() => {
+      result = transport.spawn({ handle_id: "architect", pane: PANE_SPEC, host_kind: "claude" });
+    }).not.toThrow();
+    // The sink WAS called — the guard is not "skip observation".
+    expect(sink.calls).toBe(1);
+    assertClosedOutcome(result as unknown as ExecutionOutcome<unknown>);
+    expect((result as unknown as ExecutionOutcome<ExecutionHandle>).status).toBe("succeeded");
+  });
+
+  it("a throwing sink never makes transportFor() or selectSubstrate() throw", () => {
+    const sink = explodingSink();
+    const runtime = createHostExecutionRuntime({
+      transports: {
+        tmux: new TmuxExecutionTransport({ run: scriptedRun([OK]).run, clock: steppingClock(1) }),
+      },
+      sink,
+    });
+
+    let bound: ExecutionOutcome<ExecutionTransportPort> | null = null;
+    expect(() => {
+      bound = runtime.transportFor("tmux");
+    }).not.toThrow();
+    assertClosedOutcome(bound as unknown as ExecutionOutcome<unknown>);
+    expect((bound as unknown as ExecutionOutcome<ExecutionTransportPort>).status).toBe("succeeded");
+
+    // The unsupported branch is observed through the SAME sink and must be total too.
+    expect(() => runtime.transportFor("remote")).not.toThrow();
+    expect(runtime.transportFor("remote").status).toBe("unsupported");
+
+    expect(() =>
+      runtime.selectSubstrate(
+        { requested_mode: "auto", dry_run: false },
+        {
+          insideMultiplexer: () => true,
+          multiplexerAvailable: () => false,
+          independentAgents: () => false,
+        }
+      )
+    ).not.toThrow();
+  });
+
+  it("preserves the original immutable typed outcome when the sink fails", () => {
+    const good = recordingObservationSink();
+    const bad = explodingSink();
+    const build = (sink: ExecutionObservationSink) =>
+      new TmuxExecutionTransport({ run: scriptedRun([NONZERO]).run, clock: steppingClock(1), sink });
+
+    const withGood = build(good).spawn({ handle_id: "guild-mh04", command: "claude 'go'" });
+    const withBad = build(bad).spawn({ handle_id: "guild-mh04", command: "claude 'go'" });
+
+    // Byte-for-byte the same decided fact: a broken observer changes nothing.
+    expect(JSON.stringify(withBad)).toEqual(JSON.stringify(withGood));
+    expect(withBad.status).toBe("failed");
+    expect(withBad.reason_code).toBe("spawn_failed");
+    expect(Object.isFrozen(withBad)).toBe(true);
+    expect(Object.isFrozen(withBad.facts)).toBe(true);
+  });
+
+  it("a RE-ENTRANT sink cannot recurse through the transport or the runtime", () => {
+    // A sink that calls straight back into the seam it is observing. Without a
+    // re-entrancy guard this is unbounded recursion, not a caught error.
+    let transportDepth = 0;
+    let maxTransportDepth = 0;
+    const tmux: TmuxExecutionTransport = new TmuxExecutionTransport({
+      run: scriptedRun([OK], OK).run,
+      clock: steppingClock(1),
+      sink: {
+        record() {
+          transportDepth += 1;
+          maxTransportDepth = Math.max(maxTransportDepth, transportDepth);
+          try {
+            tmux.spawn({ handle_id: "reentrant", command: "claude 'go'" });
+          } finally {
+            transportDepth -= 1;
+          }
+        },
+      },
+    });
+    let spawned: ExecutionOutcome<ExecutionHandle> | null = null;
+    expect(() => {
+      spawned = tmux.spawn({ handle_id: "guild-mh04", command: "claude 'go'" });
+    }).not.toThrow();
+    assertClosedOutcome(spawned as unknown as ExecutionOutcome<unknown>);
+    // Bounded: the nested observation is dropped rather than re-entered.
+    expect(maxTransportDepth).toBe(1);
+
+    let runtimeDepth = 0;
+    let maxRuntimeDepth = 0;
+    const runtime = createHostExecutionRuntime({
+      transports: {
+        tmux: new TmuxExecutionTransport({ run: scriptedRun([OK]).run, clock: steppingClock(1) }),
+      },
+      sink: {
+        record() {
+          runtimeDepth += 1;
+          maxRuntimeDepth = Math.max(maxRuntimeDepth, runtimeDepth);
+          try {
+            runtime.transportFor("tmux");
+          } finally {
+            runtimeDepth -= 1;
+          }
+        },
+      },
+    });
+    expect(() => runtime.transportFor("tmux")).not.toThrow();
+    expect(maxRuntimeDepth).toBe(1);
+  });
+
+  it("every transport × every operation stays total under an exploding sink", () => {
+    const sink = explodingSink();
+    for (const transport of transportsWith(sink)) {
+      for (const op of EXECUTION_OPERATIONS) {
+        let result: ExecutionOutcome<unknown> | null = null;
+        expect(() => {
+          result = callOperation(transport, op);
+        }).not.toThrow();
+        assertClosedOutcome(result as unknown as ExecutionOutcome<unknown>);
+      }
+    }
+    expect(sink.calls).toBeGreaterThan(0);
+  });
+});
+
+// ── 12b · The run-scoped dispatch port (BF-2, unit level) ────────────────────
+//
+// The launcher-facing half of BF-2: ONE bounded adapter carries the in-process,
+// serial, remote and tmux substrates, and every dispatch answer is a closed
+// typed outcome. The production-path proof (that the launcher actually resolves
+// and executes through `transportFor`) lives in the launcher suite.
+
+describe("TeamDispatchExecutionTransport — run-scoped dispatch through one adapter", () => {
+  it("launches through the shipped in-process backend and reports the plan", () => {
+    const port = new TeamDispatchExecutionTransport({
+      transport_id: "in-process",
+      backend: new InProcessTeamBackend(),
+    });
+    const result = port.launch(LAUNCH_REQUEST);
+    assertClosedOutcome(result);
+    expect(result.status).toBe("succeeded");
+    expect(result.value?.ok).toBe(true);
+    expect(result.value?.dispatch_plan).toHaveLength(1);
+    expect(result.value?.orchestrator_pane_id).toBeNull();
+    expect(result.facts["dispatch_kind"]).toBe("in-process");
+  });
+
+  it("carries the serial floor and the remote backend through the SAME class", () => {
+    for (const [transport_id, backend, kind] of [
+      ["serial", new SerialBackend() as TeamBackendLike, "serial"],
+      [
+        "remote",
+        {
+          kind: "remote",
+          isAvailable: () => true,
+          launch: () => ({
+            kind: "remote",
+            ok: true,
+            plannedCommands: ["ssh ci@gpu-box …"],
+            orchestratorPaneId: null,
+            teammatePaneIds: {},
+            notes: [],
+          }),
+        } as TeamBackendLike,
+        "remote",
+      ],
+    ] as const) {
+      const port = new TeamDispatchExecutionTransport({
+        transport_id: transport_id as "serial" | "remote",
+        backend,
+      });
+      const result = port.launch(LAUNCH_REQUEST);
+      assertClosedOutcome(result);
+      expect(result.status).toBe("succeeded");
+      expect(result.transport_id).toBe(transport_id);
+      expect(result.facts["dispatch_kind"]).toBe(kind);
+    }
+  });
+
+  it("drives a session substrate through plan+spawn and keeps the failed command", () => {
+    const seam = fakeSessionSeam({
+      spawn: () => ({
+        ok: false,
+        failedCommand: { display: "tmux split-window -t guild-mh04" },
+        stderr: "no space for new pane",
+        orchestratorPaneId: "",
+        teammatePaneIds: {},
+      }),
+    });
+    const port = new TeamDispatchExecutionTransport({
+      transport_id: "tmux",
+      backend: new InProcessTeamBackend(),
+      session: seam,
+    });
+    const result = port.launch({ ...LAUNCH_REQUEST, dryRun: false });
+    assertClosedOutcome(result);
+    expect(result.status).toBe("failed");
+    expect(result.reason_code).toBe("spawn_failed");
+    // The exact failed command and its stderr survive as TYPED fields, so the
+    // caller never has to parse them back out of prose.
+    expect(result.value?.failed_command).toBe("tmux split-window -t guild-mh04");
+    expect(result.value?.failure_detail).toBe("no space for new pane");
+    expect(result.value?.planned_commands).toEqual(["tmux new-session -d -s guild-mh04"]);
+  });
+
+  it("never touches the substrate on a dry run", () => {
+    const seam = fakeSessionSeam();
+    const port = new TeamDispatchExecutionTransport({
+      transport_id: "tmux",
+      backend: new InProcessTeamBackend(),
+      session: seam,
+    });
+    const result = port.launch({ ...LAUNCH_REQUEST, dryRun: true });
+    expect(result.status).toBe("succeeded");
+    expect(seam.spawns).toBe(0);
+  });
+
+  it("reports availability, collision, preflight and session identity as typed facts", () => {
+    const seam = fakeSessionSeam({
+      windowExists: () => true,
+      preflight: () => ({
+        ok: false,
+        failures: [{ specialist: "architect", hostKind: "codex", message: "codex not found" }],
+      }),
+    });
+    const port = new TeamDispatchExecutionTransport({
+      transport_id: "tmux",
+      backend: new InProcessTeamBackend(),
+      session: seam,
+    });
+
+    const available = port.available();
+    assertClosedOutcome(available);
+    expect(available.status).toBe("succeeded");
+
+    const collision = port.collision({ target_name: "guild-mh04", scope: "window" });
+    assertClosedOutcome(collision);
+    expect(collision.status).toBe("succeeded");
+    expect(collision.value?.exists).toBe(true);
+
+    // A failed preflight is a FACT, not a verdict: the probe succeeded and the
+    // caller decides what an unmet host dependency means for the run (BR-04).
+    const preflight = port.preflight(LAUNCH_REQUEST);
+    assertClosedOutcome(preflight);
+    expect(preflight.status).toBe("succeeded");
+    expect(preflight.value?.ok).toBe(false);
+    expect(preflight.value?.failures).toEqual([
+      { specialist: "architect", host_kind: "codex", message: "codex not found" },
+    ]);
+
+    const identity = port.sessionIdentity();
+    assertClosedOutcome(identity);
+    expect(identity.value?.session_name).toBe("guild-session");
+  });
+
+  it("answers the session operations UNSUPPORTED on a substrate that owns no session", () => {
+    const port = new TeamDispatchExecutionTransport({
+      transport_id: "in-process",
+      backend: new InProcessTeamBackend(),
+    });
+    for (const result of [
+      port.collision({ target_name: "guild-mh04", scope: "session" }),
+      port.preflight(LAUNCH_REQUEST),
+      port.sessionIdentity(),
+    ]) {
+      assertClosedOutcome(result);
+      expect(result.status).toBe("unsupported");
+      expect(result.reason_code).toBe("operation_unsupported");
+    }
+  });
+
+  it("fails typed on a malformed launch request and on a throwing substrate", () => {
+    const port = new TeamDispatchExecutionTransport({
+      transport_id: "in-process",
+      backend: new InProcessTeamBackend(),
+    });
+    const malformed = port.launch({ nope: true } as never);
+    assertClosedOutcome(malformed);
+    expect(malformed.status).toBe("failed");
+    expect(malformed.reason_code).toBe("invalid_request");
+
+    const exploding = new TeamDispatchExecutionTransport({
+      transport_id: "in-process",
+      backend: {
+        kind: "in-process",
+        isAvailable: () => {
+          throw new Error("probe exploded");
+        },
+        launch: () => {
+          throw Object.assign(new Error("backend exploded"), { code: "EBOOM" });
+        },
+      },
+    });
+    const thrown = exploding.launch(LAUNCH_REQUEST);
+    assertClosedOutcome(thrown);
+    expect(thrown.status).toBe("failed");
+    expect(thrown.reason_code).toBe("spawn_failed");
+    expect(JSON.stringify(thrown)).not.toMatch(/EBOOM/);
+
+    const unavailable = exploding.available();
+    assertClosedOutcome(unavailable);
+    expect(unavailable.status).toBe("failed");
+    expect(unavailable.reason_code).toBe("transport_unavailable");
+  });
+
+  it("resolves through the runtime and narrows FAIL-CLOSED to a dispatch port", () => {
+    const dispatch = new TeamDispatchExecutionTransport({
+      transport_id: "in-process",
+      backend: new InProcessTeamBackend(),
+    });
+    const runtime = createHostExecutionRuntime({
+      transports: {
+        "in-process": dispatch,
+        // A transport that is NOT a dispatch port must not narrow to one.
+        tmux: new TmuxExecutionTransport({ run: scriptedRun([OK]).run, clock: steppingClock(1) }),
+      },
+    });
+
+    const bound = runtime.transportFor("in-process");
+    expect(bound.status).toBe("succeeded");
+    expect(isTeamDispatchPort(bound.value)).toBe(true);
+
+    const plain = runtime.transportFor("tmux");
+    expect(plain.status).toBe("succeeded");
+    expect(isTeamDispatchPort(plain.value)).toBe(false);
+
+    // An unregistered transport never resolves to anything dispatchable.
+    const absent = runtime.transportFor("remote");
+    expect(absent.status).toBe("unsupported");
+    expect(isTeamDispatchPort(absent.value)).toBe(false);
+
+    // Neither does a look-alike with the right methods but a foreign major.
+    const foreign = new TeamDispatchExecutionTransport({
+      transport_id: "in-process",
+      backend: new InProcessTeamBackend(),
+    });
+    Object.defineProperty(foreign, "contract_version", { value: 99 });
+    expect(isTeamDispatchPort(foreign)).toBe(false);
+    expect(isTeamDispatchPort({ dispatch_kind: "in-process" })).toBe(false);
+    expect(isTeamDispatchPort(null)).toBe(false);
+  });
+});
+
+// ── 13 · Malformed remote probe data fails CLOSED (BF-4) ─────────────────────
+//
+// `RemoteTransportLike.probe()` is an injected host seam: the value it returns is
+// untrusted transport data, not a validated contract record. Reading or joining
+// it before validation turns a partial or hostile remote response into a thrown
+// host error at exactly the boundary that must never throw.
+
+describe("RemoteExecutionTransport.probe — malformed remote data fails closed (BF-4)", () => {
+  const TARGET = { hostId: "box", hostKind: "claude", endpoint: "user@box" };
+
+  function probing(probe: () => unknown): RemoteExecutionTransport {
+    return new RemoteExecutionTransport({
+      transport: {
+        kind: "mock",
+        connect: () => ({ ok: true, message: "ok" }),
+        probe: probe as RemoteTransportLike["probe"],
+        spawn: () => ({ remoteId: "mock-1" }),
+        teardown: () => undefined,
+      },
+      target: TARGET,
+    });
+  }
+
+  /** A getter that throws the moment the boundary reads the property. */
+  function throwingGetter(key: "present" | "missing"): unknown {
+    const base: Record<string, unknown> = { present: ["tmux"], missing: [] };
+    return Object.defineProperty({ ...base }, key, {
+      enumerable: true,
+      get() {
+        throw new Error("hostile getter");
+      },
+    });
+  }
+
+  /** A Proxy that throws on ANY property read. */
+  function hostileProxy(): unknown {
+    return new Proxy(
+      { present: [], missing: [] },
+      {
+        get() {
+          throw new Error("hostile proxy");
+        },
+      }
+    );
+  }
+
+  /** An array-shaped Proxy whose element reads throw after `Array.isArray` passes. */
+  function hostileArrayProxy(): unknown {
+    const arr: unknown[] = ["tmux"];
+    return {
+      present: new Proxy(arr, {
+        get(target, prop, receiver) {
+          if (prop === "0") throw new Error("hostile element");
+          return Reflect.get(target, prop, receiver);
+        },
+      }),
+      missing: [],
+    };
+  }
+
+  const MALFORMED: Array<{ name: string; value: () => unknown }> = [
+    { name: "the exact round-2 partial response (no `missing`)", value: () => ({ present: ["tmux"] }) },
+    { name: "no `present`", value: () => ({ missing: ["codex"] }) },
+    { name: "neither array", value: () => ({}) },
+    { name: "null result", value: () => null },
+    { name: "undefined result", value: () => undefined },
+    { name: "a string result", value: () => "tmux" },
+    { name: "a number result", value: () => 7 },
+    { name: "an array result", value: () => ["tmux"] },
+    { name: "`present` is a string, not an array", value: () => ({ present: "tmux", missing: [] }) },
+    { name: "`missing` is an object, not an array", value: () => ({ present: [], missing: { 0: "codex" } }) },
+    { name: "`present` is array-LIKE but not an array", value: () => ({ present: { length: 1, 0: "tmux" }, missing: [] }) },
+    { name: "`present` is null", value: () => ({ present: null, missing: [] }) },
+    // eslint-disable-next-line no-sparse-arrays
+    { name: "a SPARSE `present` array", value: () => ({ present: ["tmux", , "codex"], missing: [] }) },
+    { name: "a non-string element in `present`", value: () => ({ present: ["tmux", 7], missing: [] }) },
+    { name: "a null element in `missing`", value: () => ({ present: [], missing: [null] }) },
+    { name: "an object element in `missing`", value: () => ({ present: [], missing: [{ toString: () => "codex" }] }) },
+    { name: "a throwing getter on `present`", value: () => throwingGetter("present") },
+    { name: "a throwing getter on `missing`", value: () => throwingGetter("missing") },
+    { name: "a hostile Proxy result", value: () => hostileProxy() },
+    { name: "an array Proxy whose element read throws", value: () => hostileArrayProxy() },
+  ];
+
+  for (const entry of MALFORMED) {
+    it(`rejects ${entry.name} as a closed typed failure`, () => {
+      const transport = probing(entry.value);
+      let result: ExecutionOutcome<RemoteProbeFacts> | null = null;
+      expect(() => {
+        result = transport.probe(TARGET, ["tmux", "codex"]);
+      }).not.toThrow();
+      const outcome = result as unknown as ExecutionOutcome<RemoteProbeFacts>;
+      assertClosedOutcome(outcome);
+      // A malformed response is a broken REQUEST/RESPONSE contract, never an
+      // absent capability: reporting `unsupported` here would license a caller
+      // to treat hostile data as "this host simply lacks the binary".
+      expect(outcome.status).toBe("failed");
+      expect(outcome.reason_code).toBe("invalid_request");
+      expect(outcome.detail).toEqual(expect.any(String));
+      expect(JSON.stringify(outcome)).not.toMatch(/hostile getter|hostile proxy|hostile element/);
+    });
+  }
+
+  it("keeps valid probe behavior and the explicit unsupported capability fact intact", () => {
+    const present = probing(() => ({ present: ["tmux", "codex"], missing: [] })).probe(TARGET, [
+      "tmux",
+      "codex",
+    ]);
+    assertClosedOutcome(present);
+    expect(present.status).toBe("succeeded");
+    expect(present.facts["present"]).toBe("tmux,codex");
+    expect(present.facts["missing"]).toBe("");
+    expect(present.value).toEqual({ present: ["tmux", "codex"], missing: [] });
+
+    const absent = probing(() => ({ present: ["tmux"], missing: ["codex"] })).probe(TARGET, [
+      "tmux",
+      "codex",
+    ]);
+    assertClosedOutcome(absent);
+    expect(absent.status).toBe("unsupported");
+    expect(absent.reason_code).toBe("capability_absent");
+    expect(absent.detail).toContain("codex");
+    expect(absent.facts["missing"]).toBe("codex");
+  });
+
+  it("hands the caller a validated copy, never the hostile object itself", () => {
+    const evil: Record<string, unknown> = { present: ["tmux"], missing: [] };
+    let reads = 0;
+    Object.defineProperty(evil, "present", {
+      enumerable: true,
+      get() {
+        reads += 1;
+        // Second read returns something entirely different — a TOCTOU response.
+        return reads > 1 ? "not-an-array" : ["tmux"];
+      },
+    });
+    const result = probing(() => evil).probe(TARGET, ["tmux"]);
+    assertClosedOutcome(result);
+    expect(result.status).toBe("succeeded");
+    expect(result.value).toEqual({ present: ["tmux"], missing: [] });
+    expect(result.value).not.toBe(evil);
+    // Whatever the boundary returned, re-reading it cannot change.
+    expect(result.value?.present).toEqual(["tmux"]);
   });
 });

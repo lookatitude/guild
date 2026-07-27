@@ -501,6 +501,130 @@ export interface RemoteProbeFacts {
   readonly missing: readonly string[];
 }
 
+/**
+ * The result of checking an untrusted remote probe response against the contract.
+ *
+ * Deliberately ONE record rather than a discriminated union: this file is
+ * compiled by consumers under both strict and non-strict TypeScript, and
+ * discriminated-union narrowing silently stops working without `strictNullChecks`.
+ * A fail-closed validator whose result stops narrowing is a validator that stops
+ * validating, so the shape is checkable either way.
+ */
+export interface RemoteProbeValidation {
+  readonly ok: boolean;
+  /** The validated, copied, frozen facts — null whenever `ok` is false. */
+  readonly value: RemoteProbeFacts | null;
+  /** Why the response was rejected — null when `ok` is true. */
+  readonly detail: string | null;
+}
+
+interface RemoteProbeFieldRead {
+  /** The copied strings — null whenever the field failed validation. */
+  readonly value: string[] | null;
+  readonly detail: string | null;
+}
+
+/**
+ * Read one probe array out of an UNTRUSTED remote response.
+ *
+ * Every access is guarded because the source is host-authored data, not a
+ * validated record: a partial response omits the field, a hostile one answers
+ * with a throwing getter or an array-shaped Proxy whose element reads explode.
+ * The elements are COPIED, so a source that changes what it returns between
+ * reads cannot alter the value the boundary already published.
+ */
+function readRemoteProbeField(
+  source: unknown,
+  key: "present" | "missing"
+): RemoteProbeFieldRead {
+  const reject = (detail: string): RemoteProbeFieldRead => ({ value: null, detail });
+  let raw: unknown;
+  try {
+    raw = (source as Record<string, unknown>)[key];
+  } catch {
+    return reject(`remote probe result threw while reading "${key}"`);
+  }
+  let isArray = false;
+  try {
+    isArray = Array.isArray(raw);
+  } catch {
+    return reject(`remote probe result "${key}" threw during array inspection`);
+  }
+  if (!isArray) {
+    return reject(`remote probe result "${key}" is not an array`);
+  }
+  let length: unknown;
+  try {
+    length = (raw as unknown[]).length;
+  } catch {
+    return reject(`remote probe result "${key}" threw while reading its length`);
+  }
+  if (typeof length !== "number" || !Number.isInteger(length) || length < 0) {
+    return reject(`remote probe result "${key}" has no usable length`);
+  }
+  const out: string[] = [];
+  for (let index = 0; index < length; index++) {
+    let element: unknown;
+    try {
+      element = (raw as unknown[])[index];
+    } catch {
+      return reject(`remote probe result "${key}[${index}]" threw on access`);
+    }
+    // A hole in a sparse array reads as `undefined` and is rejected here — an
+    // absent element is NOT an empty capability name.
+    if (typeof element !== "string") {
+      return reject(`remote probe result "${key}[${index}]" is not a string`);
+    }
+    out.push(element);
+  }
+  return { value: out, detail: null };
+}
+
+/**
+ * Fail-closed validation of a COMPLETE remote probe response (MHRC-UNS-001).
+ *
+ * A remote transport is an injected host seam, so what its `probe()` returns is
+ * untrusted transport data. Nothing downstream may read `present`/`missing`
+ * before this has accepted the whole record: a partial, non-array, sparse,
+ * non-string, throwing-getter or Proxy response is a broken response contract,
+ * and the boundary reports that as a typed failure rather than letting a
+ * property-access exception escape as a host error.
+ */
+export function validateRemoteProbeFacts(value: unknown): RemoteProbeValidation {
+  const reject = (detail: string): RemoteProbeValidation => ({ ok: false, value: null, detail });
+  if (value === null || value === undefined) {
+    return reject("remote probe returned no result record");
+  }
+  if (typeof value !== "object" && typeof value !== "function") {
+    return reject(`remote probe returned a ${typeof value}, not a result record`);
+  }
+  let isArray = false;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    return reject("remote probe result threw during array inspection");
+  }
+  if (isArray) {
+    return reject("remote probe returned an array, not a result record");
+  }
+  const present = readRemoteProbeField(value, "present");
+  if (present.value === null) {
+    return reject(present.detail ?? 'remote probe result "present" is invalid');
+  }
+  const missing = readRemoteProbeField(value, "missing");
+  if (missing.value === null) {
+    return reject(missing.detail ?? 'remote probe result "missing" is invalid');
+  }
+  return {
+    ok: true,
+    value: Object.freeze({
+      present: Object.freeze(present.value) as readonly string[],
+      missing: Object.freeze(missing.value) as readonly string[],
+    }),
+    detail: null,
+  };
+}
+
 // ── The port ─────────────────────────────────────────────────────────────────
 
 /**
@@ -578,6 +702,13 @@ export interface TeamLaunchRequestLike {
   readonly targetName: string;
   readonly mode: string;
   readonly dryRun: boolean;
+  /**
+   * Optional run-scoping the shipped backends already accept. Declared here so a
+   * RUN-SCOPED launch fits the versioned request without the caller reaching past
+   * the port — the narrow evolution the dispatch seam needed (see `TeamDispatchPort`).
+   */
+  readonly orchestratorHostKind?: string;
+  readonly teamPath?: string;
 }
 
 export interface TeamLaunchResultLike {
@@ -613,6 +744,117 @@ export interface RemoteTransportLike {
     command: string
   ): RemotePaneHandleLike;
   teardown(): void;
+}
+
+// ── Run-scoped team dispatch: the production launcher's execution seam ───────
+//
+// `spawn(payload)` alone had no typed room for a RUN-SCOPED launch: the shipped
+// substrates answer a whole team dispatch with planned commands, pane ids, notes
+// and a declarative dispatch plan, and the tmux substrate additionally owns an
+// addressable session namespace (availability, target collision, per-host
+// preflight, current session identity). This is that room — evolved NARROWLY,
+// inside the versioned contract, and nowhere else:
+//
+//   * every method still returns exactly one closed `ExecutionOutcome`;
+//   * the closed OPERATION vocabulary does not grow — a dispatch read reports as
+//     `probe` and the launch itself as `spawn`, because a port may not invent an
+//     eighth operation;
+//   * nothing here decides a lifecycle transition, a gate outcome, a receipt
+//     meaning or a support promotion (BR-04). `preflight()` reports what the host
+//     probes said and `collision()` reports whether a name is taken; whether that
+//     should abort a run stays the caller's decision, never the transport's.
+
+export interface TeamDispatchTarget {
+  readonly target_name: string;
+  /** tmux distinguishes a session namespace from a window namespace. */
+  readonly scope: "session" | "window";
+}
+
+export const TEAM_DISPATCH_SCOPES = ["session", "window"] as const;
+
+export function isTeamDispatchScope(value: unknown): value is "session" | "window" {
+  return includes(TEAM_DISPATCH_SCOPES, value);
+}
+
+export interface TeamDispatchCollision {
+  readonly target_name: string;
+  readonly scope: "session" | "window";
+  readonly exists: boolean;
+}
+
+export interface TeamDispatchPreflightFailure {
+  readonly specialist: string;
+  readonly host_kind: string;
+  readonly message: string;
+}
+
+export interface TeamDispatchPreflight {
+  readonly ok: boolean;
+  readonly failures: readonly TeamDispatchPreflightFailure[];
+}
+
+export interface TeamDispatchSession {
+  readonly session_name: string | null;
+}
+
+/** The typed result of a run-scoped launch. */
+export interface TeamDispatchLaunch {
+  readonly kind: string;
+  readonly ok: boolean;
+  readonly planned_commands: readonly string[];
+  /** Verbatim from the substrate — `""` when it opened no orchestrator pane. */
+  readonly orchestrator_pane_id: string | null;
+  readonly teammate_pane_ids: Readonly<Record<string, string>>;
+  readonly notes: readonly string[];
+  readonly dispatch_plan: readonly unknown[] | null;
+  readonly parallelism: number | null;
+  /** The exact substrate command that failed, when the substrate names one. */
+  readonly failed_command: string | null;
+  /** That command's own stderr, redacted but NOT truncated, for operator UX. */
+  readonly failure_detail: string | null;
+}
+
+/**
+ * `TeamDispatchPort` — an `ExecutionTransportPort` that also performs run-scoped
+ * team dispatch. A substrate that owns no session namespace answers
+ * `collision`/`preflight`/`sessionIdentity` with the closed `unsupported`
+ * outcome rather than faking a session it does not have.
+ */
+export interface TeamDispatchPort extends ExecutionTransportPort {
+  readonly dispatch_kind: string;
+  /** Is the substrate itself present? Never probed implicitly by `launch`. */
+  available(): ExecutionOutcome<undefined>;
+  collision(target: TeamDispatchTarget): ExecutionOutcome<TeamDispatchCollision>;
+  preflight(request: TeamLaunchRequestLike): ExecutionOutcome<TeamDispatchPreflight>;
+  launch(request: TeamLaunchRequestLike): ExecutionOutcome<TeamDispatchLaunch>;
+  sessionIdentity(): ExecutionOutcome<TeamDispatchSession>;
+}
+
+const TEAM_DISPATCH_METHODS = [
+  "available",
+  "collision",
+  "preflight",
+  "launch",
+  "sessionIdentity",
+] as const;
+
+/**
+ * Fail-closed narrowing from a resolved transport port to a dispatch port. A
+ * caller that resolved a transport which cannot dispatch must get a typed refusal,
+ * never an unchecked cast — so this returns false unless the WHOLE surface is
+ * present and the contract identity matches.
+ */
+export function isTeamDispatchPort(value: unknown): value is TeamDispatchPort {
+  if (value === null || typeof value !== "object") return false;
+  const port = value as Record<string, unknown>;
+  if (port["schema_version"] !== EXECUTION_TRANSPORT_SCHEMA_VERSION) return false;
+  if (!isExecutionContractCompatible(port["contract_version"])) return false;
+  if (!isExecutionTransportId(port["transport_id"])) return false;
+  if (typeof port["dispatch_kind"] !== "string") return false;
+  for (const method of TEAM_DISPATCH_METHODS) {
+    if (typeof port[method] !== "function") return false;
+  }
+  return true;
 }
 
 /** Fail-closed structural check for an in-process/serial launch payload. */
