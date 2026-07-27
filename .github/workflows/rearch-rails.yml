@@ -59,6 +59,24 @@ jobs:
         run: |
           cd tests && npx tsx rearch/run-all.ts
 
+      # Inventory drift gate (xhrd-wi-02 / cross-host-release-distribution G2).
+      #
+      # guild.inventory.json is a COMMITTED release artifact — the release cut regenerates it
+      # (AGENTS.md release step 1a) and every dist/ host package renders from it. But nothing
+      # verified the committed copy still matched the source tree, so it drifted silently:
+      # `next` shipped an inventory missing lib/emit-remote-orphan.ts (added by PR #88) and CI
+      # stayed green. `build-inventory.ts --check` already existed to catch exactly this and
+      # was wired nowhere.
+      #
+      # ORDERING IS LOAD-BEARING — this step MUST precede the install-channel gate below.
+      # build-host-packages.ts's loadInventory() REBUILDS the inventory and WRITES it to
+      # guild.inventory.json as a side effect (see its docstring: "persisted ... so the on-disk
+      # artifact stays in sync"). Running this check afterwards would compare the file against
+      # the render that just overwrote it and pass vacuously, gating nothing. Keep it here.
+      - name: Inventory drift gate — committed guild.inventory.json matches the source tree
+        run: |
+          cd scripts && npm run check:inventory -- --root ..
+
       # Install-channel flip (G7) — the generated tree is now the AUTHORITATIVE install surface.
       # Enforces SC-2 full-tree equivalence + SC-7b subset + the Claude install-surface render
       # (.claude-plugin/plugin.json + marketplace.json must equal the inventory render) + the

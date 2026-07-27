@@ -18,5 +18,6 @@
 
 ## standards
 
+- [host-distribution-matrix](standards/host-distribution-matrix.md) - 2026-07-25 - How a released version reaches each of the 16 registry hosts: what each host supports vs what Guild wires, per-host install/version/publish/update/staleness rows with V/S/U evidence marking. Key finding: Codex already has full Claude-parity git-marketplace distribution (verified: `codex plugin marketplace add lookatitude/guild --ref main` installs 2.3.2 today) — install.sh registers a LOCAL path instead, freezing it. Same gap for pi and antigravity.
 - [release-discipline](standards/release-discipline.md) - 2026-07-12 - Branch-backed channels (stable=main, beta=next), next-first PR flow, release/vX.Y.Z cut from next, automated tag+Release, sync-back; the numbered ruleset cited by pre-push, release.yml, and branch-policy.yml.
 - [shell-hook-json-parsing](standards/shell-hook-json-parsing.md) - 2026-05-02 - Shell hooks must use temp-file + python3 for JSON parsing; bash variable interpolation breaks silently.

@@ -40,10 +40,39 @@ import {
 } from "./update-check";
 
 export interface SelfUpdateDeps {
-  run: (cmd: string, args: string[], opts?: { cwd?: string }) => void;
+  run: (cmd: string, args: string[], opts?: { cwd?: string; env?: NodeJS.ProcessEnv }) => void;
   log: (line: string) => void;
   fsi: typeof fs;
   now: () => Date;
+}
+
+/**
+ * Environment for child npm/npx invocations, with the OUTER npm context
+ * stripped. guild-run itself runs under `npx tsx`, which exports npm_* vars
+ * (npm_config_local_prefix points at the INSTALLED PACKAGE root, npm_command,
+ * npm_lifecycle_*, INIT_CWD, …). An inner `npm ci` inheriting that set
+ * misresolves its project and dies with "Missing: scripts@ from lock file" —
+ * reproducible ONLY through the real bin/guild-run chain, which is why every
+ * mocked test missed it and a bare `npm ci --prefix` from a shell works.
+ */
+export function childEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(base)) {
+    // DENYLIST, not a blanket npm_* strip: an earlier revision removed every
+    // npm_ var, which also killed legitimately environment-provided settings
+    // (npm_config_registry, npm_config_cafile, npm_config_userconfig, proxy
+    // and cache config) that managed environments rely on. What actually
+    // poisons a nested npm is the PROJECT-CONTEXT set the outer npx exports:
+    //   - npm_config_local_prefix  (points at the INSTALLED PACKAGE root —
+    //     the variable that made `npm ci` resolve the wrong project)
+    //   - npm_package_* / npm_lifecycle_* / npm_command / npm_execpath
+    //     (identify the outer invocation, not ours)
+    //   - INIT_CWD (npm's original-cwd marker from the outer run)
+    if (/^npm_(package_|lifecycle_)/i.test(k)) continue;
+    if (/^(npm_config_local_prefix|npm_command|npm_execpath|INIT_CWD)$/i.test(k)) continue;
+    out[k] = v;
+  }
+  return out;
 }
 
 const defaultDeps: SelfUpdateDeps = {
@@ -54,9 +83,24 @@ const defaultDeps: SelfUpdateDeps = {
   now: () => new Date(),
 };
 
-/** dist tree name per host id (mirrors install.sh's RENDERED_DIST paths). */
+/**
+ * dist path (relative to the render's dist root) of the tree that matches the
+ * INSTALLED package root the receipt lives in — i.e. what install.sh handed
+ * write_receipt, NOT merely the host's top-level dist entry.
+ *
+ * codex-cli is the one host where those differ: the render emits a marketplace
+ * ROOT (dist/codex-marketplace with .agents/plugins/marketplace.json + the
+ * plugin payload nested at plugins/guild/), while the installed root —
+ * Codex's plugin cache dir, or the source fallback — has the PAYLOAD shape
+ * (.codex-plugin/plugin.json at top level). Returning the marketplace root
+ * here made the staged swap copy plugins/guild/... INTO the installed root,
+ * burying .codex-plugin/plugin.json and bin/guild-run one level too deep and
+ * corrupting the install on the first real update. This was latent while
+ * Codex installs carried no receipt (runSelfUpdate refused early); the
+ * xhrd-wi-05 receipt fix armed the path, so the source must be the payload.
+ */
 export function distDirForHost(hostId: string): string {
-  if (hostId === "codex-cli") return "codex-marketplace";
+  if (hostId === "codex-cli") return path.join("codex-marketplace", "plugins", "guild");
   if (hostId === "pi-cli") return "pi";
   if (hostId === "antigravity-cli") return "antigravity";
   if (hostId === "agents-file" || hostId === "kiro" || hostId === "qoder" || hostId === "trae") {
@@ -81,6 +125,15 @@ export function runSelfUpdate(opts: {
   force?: boolean;
   repo?: string;
   deps?: Partial<SelfUpdateDeps>;
+  /**
+   * Override the update-check cache file (default: cachePath() under the real
+   * home). Tests MUST pass this: under jest, `process.env` mutations do not
+   * reach the native environment `os.homedir()` reads, so HOME-based isolation
+   * silently fails and a test run overwrites the developer's real
+   * ~/.guild/update-check.json with fixture SHAs — which the update signal then
+   * trusts (it does not validate source_repo).
+   */
+  cacheFile?: string;
 }): number {
   const deps: SelfUpdateDeps = { ...defaultDeps, ...(opts.deps ?? {}) };
   const { log, run, fsi } = deps;
@@ -114,7 +167,7 @@ export function runSelfUpdate(opts: {
   }
 
   log(`host ${receipt.host}, channel ${receipt.channel} (ref ${receipt.ref}), installed ${receipt.commit?.slice(0, 7) ?? receipt.version}`);
-  const cache = refreshCache({ repo, now: deps.now() });
+  const cache = refreshCache({ repo, now: deps.now(), file: opts.cacheFile });
   if (!cache) {
     log("update check failed (offline / no git?) — nothing changed.");
     return 1;
@@ -148,7 +201,12 @@ export function runSelfUpdate(opts: {
       encoding: "utf8",
     }).trim();
     log("installing script runtime deps …");
-    run("npm", ["ci", "--prefix", path.join(tmp, "scripts"), "--omit=dev", "--no-audit", "--no-fund"]);
+    // cwd-form, NOT --prefix: combined with childEnv() this survives being a
+    // grandchild of the wrapper's own `npx tsx` (see childEnv's doc comment).
+    run("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund"], {
+      cwd: path.join(tmp, "scripts"),
+      env: childEnv(),
+    });
     log(`rendering ${receipt.host} package …`);
     const generatedAt = deps.now().toISOString().replace(/\.\d{3}Z$/, "Z");
     run(

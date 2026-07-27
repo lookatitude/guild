@@ -27,3 +27,7 @@
 
 ## [2026-07-14] decided task-cell-runtime-contract
 - decided task-cell-runtime-contract (freeze record for the task-cell-runtime initiative; G1/P0.1 truth reconciliation of docs/v2/dispatch-execution.md §5)
+
+
+## [2026-07-25] standard host-distribution-matrix
+- standard host-distribution-matrix (xhrd-wi-01 / cross-host-release-distribution G1; Codex already supports git-marketplace distribution — `codex plugin marketplace add lookatitude/guild --ref main` installs 2.3.2 today. install.sh registers a `local` path into a gitignored dist/ instead, freezing every host. Draft-1 claim "no Codex update path exists" refuted by codex adversarial review and corrected.)

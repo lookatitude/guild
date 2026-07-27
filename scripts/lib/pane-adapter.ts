@@ -274,7 +274,8 @@ export class CodexPaneAdapter implements PaneAdapter {
     //   hooks. So a Guild-gated per-tool deny IS achievable on codex.
     //
     //   NOT YET ENABLED in Guild, for two concrete reasons:
-    //     1. Guild's generated codex hook bundle wires only `UserPromptSubmit`,
+    //     1. Guild's generated codex hook bundle wires SessionStart (update-check)
+    //        and `UserPromptSubmit` (prompt bridge),
     //        NOT `PreToolUse` (scripts/build-host-packages.ts, writeCodexHookBridge)
     //        — there is no codex PreToolUse deny bridge to gate a bypass behind.
     //     2. The codex capability rows still record `hooks.pre_tool_use: false`
@@ -295,7 +296,8 @@ export class CodexPaneAdapter implements PaneAdapter {
     const taskFragment =
       spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer
-    // (lane panes only; Codex panes run no Claude hooks today, but the env
+    // (lane panes only; Codex panes run no Claude PostToolUse hook — only
+    // SessionStart/UserPromptSubmit are wired — but the env
     // parity keeps the heartbeat contract uniform across adapters).
     const specialistFragment =
       spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";

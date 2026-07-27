@@ -140,7 +140,17 @@ var init_host_capabilities_schema = __esm({
         installable: false,
         installability: "target",
         manifest_format: "codex-plugin",
-        update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
+        // NOT self_update (operator decision, initiative cross-host-release-
+        // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
+        // list` tracks the registered marketplace source, so a Guild-side staged
+        // swap of the cache mutates manager state behind Codex's back and the next
+        // `codex plugin add` reinstalls the old payload. A minted receipt also
+        // cannot know a native install's channel, so a self-update could silently
+        // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
+        // populations: receipted installs re-render properly; host-native installs
+        // are detected and told the precise codex command for their registered
+        // source type (git → marketplace upgrade + plugin add; local → reinstall).
+        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
       },
       bootstrap: {
         // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
@@ -163,10 +173,16 @@ var init_host_capabilities_schema = __esm({
       agents: { native_agents: false, agent_format: null },
       // Verified (per-host-packaging flags agents unsupported).
       hooks: {
-        // Verified-by-design: Codex hook taxonomy differs from Claude; no native
-        // Claude-equivalent hooks. All degrade through the HookEmitter (ADR Surface 3).
-        session_start: false,
-        user_prompt_submit: false,
+        // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+        // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+        // Claude-shaped hooks manifest and fires both events the generated
+        // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+        // bridge since the package existed, and SessionStart now carries the
+        // update-check signal, LIVE-VERIFIED in a real codex session (the model
+        // quoted the injected line verbatim). Remaining events stay false until
+        // individually verified.
+        session_start: true,
+        user_prompt_submit: true,
         pre_tool_use: false,
         post_tool_use: false,
         stop: false,
@@ -5418,15 +5434,19 @@ function resolveInstallState(pluginRoot, opts = {}) {
   }
   return { channel: "stable", version, commit: null, source: "default" };
 }
+var PLUGIN_MANIFEST_CANDIDATES = [
+  [".claude-plugin", "plugin.json"],
+  [".codex-plugin", "plugin.json"]
+];
 function readInstalledVersion(pluginRoot, fsi = fs) {
-  try {
-    const manifest = JSON.parse(
-      fsi.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")
-    );
-    return typeof manifest.version === "string" ? manifest.version : null;
-  } catch {
-    return null;
+  for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
+    try {
+      const manifest = JSON.parse(fsi.readFileSync(path.join(pluginRoot, dir, file), "utf8"));
+      if (typeof manifest.version === "string" && manifest.version.length > 0) return manifest.version;
+    } catch {
+    }
   }
+  return null;
 }
 function cachePath(homedir3 = os.homedir()) {
   return path.join(homedir3, ".guild", "update-check.json");
@@ -5573,23 +5593,67 @@ function main() {
   if (!pluginRoot) return;
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;
+  const hostArg = process.argv.indexOf("--host");
+  let hostId = "claude-code-cli";
+  if (hostArg !== -1) {
+    const raw = process.argv[hostArg + 1];
+    hostId = raw === void 0 || raw.startsWith("-") || raw === "" ? "unknown-host" : raw;
+  }
+  const caps = updateCapsForHost(hostId);
+  const hostKind = caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
   const state = resolveInstallState(pluginRoot);
   if (state.channel === "dev") return;
+  if (state.source === "default" && state.version) {
+    try {
+      const receiptPath = path7.join(pluginRoot, RECEIPT_BASENAME);
+      if (!fs5.existsSync(receiptPath)) {
+        fs5.writeFileSync(
+          receiptPath,
+          JSON.stringify(
+            {
+              schema_version: RECEIPT_SCHEMA,
+              host: hostId,
+              channel: state.channel,
+              ref: state.channel === "beta" ? "next" : "main",
+              commit: null,
+              version: state.version,
+              installed_at: (/* @__PURE__ */ new Date()).toISOString(),
+              minted_by: "update-check-session-start",
+              // Honesty markers: a native install's channel is UNKNOWABLE from
+              // inside the package, so channel/ref above are the stable/main
+              // DEFAULT, not a fact. Nothing may clone from them: codex-cli's
+              // capability row is reinstall_command (never self_update), so the
+              // minted receipt is identification-only.
+              managed_by: "host-native",
+              channel_confidence: "assumed-default"
+            },
+            null,
+            2
+          ) + "\n"
+        );
+      }
+    } catch {
+    }
+  }
   const cacheFile = cachePath();
   const cache = readCache(cacheFile);
   if (!cacheIsFresh(cache, cadenceHours, /* @__PURE__ */ new Date())) {
     spawnDetached(process.execPath, [__filename, "--refresh"]);
   }
-  const signal = computeSignal({ state, cache, hostKind: "claude", hostId: "claude-code-cli" });
+  const signal = computeSignal({ state, cache, hostKind, hostId });
   const line = renderSignalLine(signal);
   if (!line) return;
+  if (mode === "auto" && caps?.auto_capable !== true) {
+    const followUp = signal.command ? "run the command above." : "and no update command is known for this host \u2014 see the Guild docs.";
+    process.stdout.write(`${line}
+[guild-update] auto mode: ${hostId} cannot auto-apply \u2014 ${followUp}
+`);
+    return;
+  }
   if (mode === "auto") {
-    const target = signal.available ?? "";
+    const target = `${hostId}@${signal.available ?? ""}`;
     if (!alreadyStaged(target)) {
-      spawnDetached("/bin/sh", [
-        "-c",
-        "claude plugin marketplace update guild && claude plugin update guild@guild"
-      ]);
+      spawnDetached("/bin/sh", ["-c", caps.command]);
       markStaged(target);
       process.stdout.write(
         `${line}

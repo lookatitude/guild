@@ -8,7 +8,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "250337dedfc7011708cc16fc1fd9f3d5ae53aa5df9f6ebd17bacd2d8213057ab"
+      "sha256": "2cad389c7451df1188544496f80b53472e8c2df86ea9781ed9add7b7ce5ae497"
     },
     {
       "category": "scripts",
@@ -30,6 +30,13 @@
       "source_path": "scripts/check-bundle-determinism.ts",
       "resource_path": "resources/scripts/check-bundle-determinism.ts",
       "sha256": "c4d24dd72680f658c18e17b02a4328919410b26a5b63ef10c9d98c4d67167a33"
+    },
+    {
+      "category": "scripts",
+      "id": "check-channel-integrity",
+      "source_path": "scripts/check-channel-integrity.ts",
+      "resource_path": "resources/scripts/check-channel-integrity.ts",
+      "sha256": "0378d766689d0eab6f3dc40ea34253e353ffc3ea10397960c82c96f1b8a6bffe"
     },
     {
       "category": "scripts",
@@ -127,7 +134,7 @@
       "id": "lib/self-update",
       "source_path": "scripts/lib/self-update.ts",
       "resource_path": "resources/scripts/lib/self-update.ts",
-      "sha256": "7da08b616446352b2a67dab770d3b068f8676aac1d03f554264194efc721de76"
+      "sha256": "f0cfe18439f8d5b9dc7bd19ff608e361cf63cf26a6d34c9dd779e5c5eaa60216"
     },
     {
       "category": "scripts",
@@ -148,7 +155,7 @@
       "id": "lib/update-check",
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
-      "sha256": "7806ece8e9e04c9319ac98160a8d66ac2ce6bf04e222cf08117caf153f32e358"
+      "sha256": "341fd133d15f130300587f72bffb9d386f9f01beafd123c048a2563606784e52"
     },
     {
       "category": "scripts",

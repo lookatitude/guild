@@ -8,7 +8,41 @@ from v1.0.0 onward.
 
 ## [Unreleased]
 
-_Nothing yet — `next` is clean since v2.3.2._
+_Entries are generated at the release cut by `scripts/release-changelog.ts`._
+
+## [2.4.0] — 2026-07-27
+
+The cross-host release-distribution wave (initiative `cross-host-release-distribution`,
+PRs #97–#105): a release now reaches every host class, staleness is signalled on all of
+them, and the channel/version machinery is gated rather than prose. Opened by an operator
+report of a Codex install silently stuck at 2.2.0 while stable shipped 2.3.2.
+
+### Added
+
+- release: mechanize the rule-8 sync-back with a channel-integrity gate (xhrd-wi-06 / G6) ([#99](https://github.com/lookatitude/guild/pull/99)) — @lookatitude
+- update-check: give Codex a staleness signal naming ITS update command (xhrd-wi-04 / G4) ([#102](https://github.com/lookatitude/guild/pull/102)) — @lookatitude
+- update: close wi-04/wi-05 remaining scope — all-host signal + native-install receipts; option A: codex is never self-updated; the nested-npm fix that made `guild-run update` work ([#105](https://github.com/lookatitude/guild/pull/105)) — @lookatitude
+
+### Fixed
+
+- release: one canonical version field + wire the inventory drift gate (xhrd-wi-02 / G2) ([#98](https://github.com/lookatitude/guild/pull/98)) — @lookatitude
+- install: per-host receipt version + host-native discovery on --update (xhrd-wi-05) ([#103](https://github.com/lookatitude/guild/pull/103)) — @lookatitude
+
+### Documentation
+
+- wiki: host distribution matrix — how a release reaches all 16 hosts (xhrd-wi-01 / G1) ([#97](https://github.com/lookatitude/guild/pull/97)) — @lookatitude
+- wiki: G3 deferred on Codex payload parity — remote switch reverted, mechanism recorded (xhrd-wi-03) ([#101](https://github.com/lookatitude/guild/pull/101)) — @lookatitude
+
+### Internal
+
+- release: sync-back v2.3.2 to next ([#100](https://github.com/lookatitude/guild/pull/100)) — @lookatitude
+
+> Changelog note: the generator collected PRs since `v2.3.1` because the `v2.3.2` tag
+> sits on `main`'s squash commit, outside `next`'s ancestry — the exact breakage that
+> made this release's new merge-commit rule necessary. The v2.3.2 entries were removed
+> by hand here; from this release on, tags are reachable from `next` again.
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.3.2...v2.4.0
 
 ## [2.3.2] — 2026-07-25
 
