@@ -58,8 +58,8 @@ export interface DocumentProjection {
 }
 
 export type DocumentProjectionResult =
-  | { ok: true; projection: DocumentProjection }
-  | { ok: false; errors: DocumentIssue[] };
+  | { ok: true; projection: DocumentProjection; errors?: never }
+  | { ok: false; projection?: never; errors: DocumentIssue[] };
 
 interface DispositionDerivation {
   disposition: DocumentDisposition;

@@ -93,7 +93,7 @@ export function resolveDocumentAuthority(sources: unknown): DocumentAuthorityRes
     let unreadable = false;
     for (const key of SOURCE_KEYS) {
       const value = safeGet(sources, key);
-      if (!value.ok) {
+      if (value.ok === false) {
         unreadable = true;
         continue;
       }

@@ -964,6 +964,11 @@
       "kind": "cli"
     },
     {
+      "id": "build-release-candidate",
+      "source_path": "scripts/build-release-candidate.ts",
+      "kind": "cli"
+    },
+    {
       "id": "build-verify",
       "source_path": "scripts/build-verify.ts",
       "kind": "cli"
@@ -1866,6 +1871,11 @@
     {
       "id": "lib/recall-protect",
       "source_path": "scripts/lib/recall-protect.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/release-distribution-contract",
+      "source_path": "scripts/lib/release-distribution-contract.ts",
       "kind": "lib"
     },
     {

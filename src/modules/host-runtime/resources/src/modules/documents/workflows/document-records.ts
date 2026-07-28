@@ -238,7 +238,7 @@ function readShape(
     return false;
   }
   const keys = safeOwnKeys(value);
-  if (!keys.ok) {
+  if (keys.ok === false) {
     pushIssue(issues, path, "own_keys_threw", `${path}: ${keys.reason}`);
     return false;
   }
@@ -268,7 +268,7 @@ function readString(
 ): string | null {
   const fieldPath = `${path}.${key}`;
   const read = safeGet(parent, key);
-  if (!read.ok) {
+  if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
     return null;
   }
@@ -316,7 +316,7 @@ function readArray(
 ): unknown[] | null {
   const fieldPath = `${path}.${key}`;
   const read = safeGet(parent, key);
-  if (!read.ok) {
+  if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
     return null;
   }
@@ -325,7 +325,7 @@ function readArray(
     return null;
   }
   const length = safeArrayLength(read.value);
-  if (!length.ok) {
+  if (length.ok === false) {
     pushIssue(issues, fieldPath, "array_length_unreadable", `${fieldPath}: ${length.reason}`);
     return null;
   }
@@ -348,7 +348,7 @@ function readArray(
       continue;
     }
     const item = safeGet(read.value, indexKey);
-    if (!item.ok) {
+    if (item.ok === false) {
       pushIssue(issues, `${fieldPath}[${index}]`, "property_read_threw", `${fieldPath}[${index}]: property read threw`);
       ok = false;
       continue;
@@ -450,7 +450,7 @@ function readProvenance(
   path: string
 ): DocumentProvenance | null {
   const read = safeGet(parent, "provenance");
-  if (!read.ok) {
+  if (read.ok === false) {
     pushIssue(issues, `${path}.provenance`, "property_read_threw", `${path}.provenance: property read threw`);
     return null;
   }
@@ -633,7 +633,7 @@ export function validateDocumentRecord(input: unknown): DocumentValidationResult
     const provenance = readProvenance(errors, input, "$");
 
     const bodyRead = safeGet(input, "body");
-    if (!bodyRead.ok) {
+    if (bodyRead.ok === false) {
       pushIssue(errors, "$.body", "property_read_threw", "$.body: property read threw");
       return failure(errors);
     }

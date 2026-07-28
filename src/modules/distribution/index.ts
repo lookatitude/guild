@@ -10,6 +10,7 @@ export * from "./workflows/parity-contract";
 export * as PerHostPackaging from "./workflows/per-host-packaging";
 export * from "./workflows/result-contracts";
 export * from "./workflows/review-result";
+export * from "./workflows/release-distribution-contract";
 export * as SurfaceManifestApi from "./workflows/surface-manifest";
 export * from "./workflows/verify-host-packages";
 export * from "./workflows/verify-installer";

@@ -139,8 +139,8 @@ export interface DocumentHtmlBinding {
 }
 
 export type DocumentHtmlResult =
-  | { ok: true; html: string; binding: DocumentHtmlBinding }
-  | { ok: false; errors: DocumentIssue[] };
+  | { ok: true; html: string; binding: DocumentHtmlBinding; errors?: never }
+  | { ok: false; html?: never; binding?: never; errors: DocumentIssue[] };
 
 function meta(name: string, content: string): string {
   return `<meta name="${escapeHtml(name)}" content="${escapeHtml(content)}">`;
@@ -298,8 +298,8 @@ export function renderDocumentHtml(input: unknown): DocumentHtmlResult {
 // ── Binding extraction ───────────────────────────────────────────────────────
 
 export type DocumentHtmlBindingResult =
-  | { ok: true; binding: DocumentHtmlBinding }
-  | { ok: false; errors: DocumentIssue[] };
+  | { ok: true; binding: DocumentHtmlBinding; errors?: never }
+  | { ok: false; binding?: never; errors: DocumentIssue[] };
 
 const META_KEYS: ReadonlyArray<[keyof DocumentHtmlBinding, string]> = Object.freeze([
   ["record_id", "guild.record_id"],
@@ -336,7 +336,7 @@ export function extractDocumentHtmlBinding(html: unknown): DocumentHtmlBindingRe
       continue;
     }
     const decoded = unescapeHtmlStrict(matches[0]?.[1] ?? "");
-    if (!decoded.ok) {
+    if (decoded.ok === false) {
       pushIssue(errors, `$.${field}`, "ambiguous_entity", `${metaName}: ${decoded.reason}`);
       continue;
     }
@@ -365,9 +365,9 @@ export function verifyRenderedDocumentBinding(
   record: DocumentRecord
 ): string[] {
   const extracted = extractDocumentHtmlBinding(html);
-  if (!extracted.ok) return ["binding_unreadable"];
+  if (extracted.ok === false) return ["binding_unreadable"];
   const expected = renderValidatedRecordHtml(record);
-  if (!expected.ok) return ["record_unrenderable"];
+  if (expected.ok === false) return ["record_unrenderable"];
 
   const mismatches: string[] = [];
   for (const [field] of META_KEYS) {

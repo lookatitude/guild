@@ -159,10 +159,12 @@ describe("WAVE-1 Unit 1 — BM25 single-source parity", () => {
           if (SKIP.has(e.name)) continue;
           walk(path.join(dir, e.name));
         } else if (e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".test.ts")) {
+          const rel = path.relative(repoRoot, path.join(dir, e.name));
+          if (rel.includes(`${path.sep}resources${path.sep}`)) continue;
           const src = fs.readFileSync(path.join(dir, e.name), "utf8");
           // A DEFINITION (not a re-export `export { bm25Score } from ...`).
           if (/function\s+bm25Score\s*\(/.test(src)) {
-            definers.push(path.relative(repoRoot, path.join(dir, e.name)));
+            definers.push(rel);
           }
         }
       }

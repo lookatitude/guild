@@ -92,7 +92,7 @@ export function migrateDocumentRecord(input: unknown): DocumentMigrationResult {
     }
 
     const versionRead = safeGet(input, "schema_version");
-    if (!versionRead.ok) {
+    if (versionRead.ok === false) {
       pushIssue(errors, "$.schema_version", "property_read_threw", "$.schema_version: property read threw");
       return { status: "invalid", from_version: null, record: null, errors: sortIssues(errors) };
     }

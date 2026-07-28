@@ -45,8 +45,8 @@ export const MAX_ISSUES = 64;
 // ── Safe access ──────────────────────────────────────────────────────────────
 
 export type SafeRead =
-  | { ok: true; value: unknown }
-  | { ok: false; reason: string };
+  | { ok: true; value: unknown; reason?: never }
+  | { ok: false; value?: never; reason: string };
 
 /** Read a property without ever propagating a hostile getter/proxy throw. */
 export function safeGet(target: unknown, key: string): SafeRead {
@@ -95,7 +95,7 @@ export function safeArrayLength(
   value: unknown
 ): { ok: true; length: number } | { ok: false; reason: string } {
   const read = safeGet(value, "length");
-  if (!read.ok) return { ok: false, reason: read.reason };
+  if (read.ok === false) return { ok: false, reason: read.reason };
   const length = read.value;
   if (typeof length !== "number" || !Number.isInteger(length) || length < 0) {
     return { ok: false, reason: "array length is not a non-negative integer" };
@@ -138,8 +138,8 @@ export function sortIssues(issues: readonly DocumentIssue[]): DocumentIssue[] {
 // ── Canonical JSON ───────────────────────────────────────────────────────────
 
 export type CanonicalJsonResult =
-  | { ok: true; json: string }
-  | { ok: false; errors: DocumentIssue[] };
+  | { ok: true; json: string; errors?: never }
+  | { ok: false; json?: never; errors: DocumentIssue[] };
 
 /**
  * Deterministic canonical JSON with lexicographically sorted object keys.
@@ -200,7 +200,7 @@ export function canonicalDocumentJson(value: unknown): CanonicalJsonResult {
     try {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
-        if (!length.ok) {
+        if (length.ok === false) {
           pushIssue(errors, path, "array_length_unreadable", length.reason);
           return null;
         }
@@ -216,7 +216,7 @@ export function canonicalDocumentJson(value: unknown): CanonicalJsonResult {
             return null;
           }
           const read = safeGet(node, key);
-          if (!read.ok) {
+          if (read.ok === false) {
             pushIssue(errors, `${path}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
@@ -228,7 +228,7 @@ export function canonicalDocumentJson(value: unknown): CanonicalJsonResult {
       }
 
       const keys = safeOwnKeys(node);
-      if (!keys.ok) {
+      if (keys.ok === false) {
         pushIssue(errors, path, "own_keys_threw", keys.reason);
         return null;
       }
@@ -240,7 +240,7 @@ export function canonicalDocumentJson(value: unknown): CanonicalJsonResult {
       const parts: string[] = [];
       for (const key of sorted) {
         const read = safeGet(node, key);
-        if (!read.ok) {
+        if (read.ok === false) {
           pushIssue(errors, `${path}.${key}`, "property_read_threw", read.reason);
           return null;
         }
@@ -286,13 +286,13 @@ export function sha256Of(text: string): string {
 export const DOCUMENT_HASH_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
 export type DocumentHashResult =
-  | { ok: true; hash: string }
-  | { ok: false; errors: DocumentIssue[] };
+  | { ok: true; hash: string; errors?: never }
+  | { ok: false; hash?: never; errors: DocumentIssue[] };
 
 /** Content hash of any canonicalizable value. Total. */
 export function hashCanonicalValue(value: unknown): DocumentHashResult {
   const canonical = canonicalDocumentJson(value);
-  if (!canonical.ok) return { ok: false, errors: canonical.errors };
+  if (canonical.ok === false) return { ok: false, errors: canonical.errors };
   return { ok: true, hash: sha256Of(canonical.json) };
 }
 

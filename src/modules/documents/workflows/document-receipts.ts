@@ -192,12 +192,12 @@ export function parseReceiptDocument(input: unknown): ReceiptParseResult {
     }
 
     const frontmatter = readReceiptFrontmatter(input);
-    if (!frontmatter.ok) {
+    if (frontmatter.ok === false) {
       pushIssue(errors, "$.frontmatter", "frontmatter_unreadable", frontmatter.reason);
       return { status: "unparsable", record: null, errors: sortIssues(errors) };
     }
     const block = readReceiptMachineBlock(input);
-    if (!block.ok) {
+    if (block.ok === false) {
       pushIssue(errors, "$.machine_block", "machine_block_unreadable", block.reason);
       return { status: "unparsable", record: null, errors: sortIssues(errors) };
     }

@@ -148,6 +148,7 @@ describe("WAVE-1 Unit 2 — KG scorer single-source parity", () => {
         } else if (e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".test.ts")) {
           const src = fs.readFileSync(path.join(dir, e.name), "utf8");
           const rel = path.relative(repoRoot, path.join(dir, e.name));
+          if (rel.includes(`${path.sep}resources${path.sep}`)) continue;
           if (/function\s+scoreNode\s*\(/.test(src)) definers.scoreNode.push(rel);
           if (/function\s+buildProximityBonuses\s*\(/.test(src)) definers.buildProximityBonuses.push(rel);
           if (/function\s+termMatchScore\s*\(/.test(src)) definers.termMatchScore.push(rel);

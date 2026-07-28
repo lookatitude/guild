@@ -525,7 +525,7 @@
       "id": "projection:src/modules/documents/workflows/document-decisions.ts",
       "source_path": "src/modules/documents/workflows/document-decisions.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-decisions.ts",
-      "sha256": "6704c673b97d1dea94e90a445e69c41927de29b2f43b22fea12eef93f66d33aa",
+      "sha256": "cf02a844143a7472459db7189eae9263bf8b8b86035f74f6960e7135d1bd6d3a",
       "projection_dependency": true
     },
     {
@@ -541,7 +541,7 @@
       "id": "projection:src/modules/documents/workflows/document-html.ts",
       "source_path": "src/modules/documents/workflows/document-html.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-html.ts",
-      "sha256": "fbaac16ce8f8d25756ed07414c8331b3f571c72655ec654ba3c5677517d34538",
+      "sha256": "325875c0f530aa726361fca3d5437afd4a17f8bcf9240f2733925eaf9b76dd09",
       "projection_dependency": true
     },
     {
@@ -557,7 +557,7 @@
       "id": "projection:src/modules/documents/workflows/document-projection.ts",
       "source_path": "src/modules/documents/workflows/document-projection.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-projection.ts",
-      "sha256": "122f468f1e6210a37c91477de06d89ad78e1460a3b0f9ab337bdf4af069ca233",
+      "sha256": "49232c535565e7b2a88d513d47e25f099dd93f7e7428f4ccdf452c2702655245",
       "projection_dependency": true
     },
     {
@@ -565,7 +565,7 @@
       "id": "projection:src/modules/documents/workflows/document-receipts.ts",
       "source_path": "src/modules/documents/workflows/document-receipts.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-receipts.ts",
-      "sha256": "273b8d8652b9988937ba56438814b17226284f996f22daa44f54123db90baf53",
+      "sha256": "bf71b77188cbceab8ae0c10a3809dd5938c2aab4c8c5509ce7f64c28f95dfa3d",
       "projection_dependency": true
     },
     {
@@ -573,7 +573,7 @@
       "id": "projection:src/modules/documents/workflows/document-records.ts",
       "source_path": "src/modules/documents/workflows/document-records.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-records.ts",
-      "sha256": "194ed48ffe3f81a4de0f5abd59ccf2f38d79a3de00feb5f18c56dd8edc824cfe",
+      "sha256": "990e52d880cf621a2875529b414c75591ba313aa5c1930b555479c28e7290bd0",
       "projection_dependency": true
     },
     {
@@ -581,7 +581,7 @@
       "id": "projection:src/modules/documents/workflows/document-safe.ts",
       "source_path": "src/modules/documents/workflows/document-safe.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-safe.ts",
-      "sha256": "4b88cd962d4bfdc7c1941b900cb14dd677c75582723e3ada728548e1f7992f64",
+      "sha256": "7c770b6d2ff664dcb65be6b1baecea1c6849028e988a761eed68ad1f94a8fa2d",
       "projection_dependency": true
     },
     {
@@ -597,7 +597,7 @@
       "id": "projection:src/modules/documents/workflows/document-versioning.ts",
       "source_path": "src/modules/documents/workflows/document-versioning.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-versioning.ts",
-      "sha256": "e9ea272c0bb24c32ba96ffc3824f81f66563571a5159aee02659a6e34ce3753c",
+      "sha256": "f3d30e4424e9c23e2adf1b320fa2270e5d34dbac603dbbfc916bccaa41db2fc7",
       "projection_dependency": true
     },
     {

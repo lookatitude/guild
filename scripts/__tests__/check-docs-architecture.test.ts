@@ -57,15 +57,15 @@ function sectionFor(html: string, dataset: string) {
 }
 
 describe("check:docs-architecture", () => {
-  it("derives the real 30-module architecture spine and exact kind counts", () => {
+  it("derives the real 31-module architecture spine and exact kind counts", () => {
     const derived = deriveSpineTables(pluginRoot);
 
-    expect(derived.moduleCount).toBe(30);
-    expect(derived.edges).toHaveLength(30);
-    expect(derived.ownedInventory).toHaveLength(30);
+    expect(derived.moduleCount).toBe(31);
+    expect(derived.edges).toHaveLength(31);
+    expect(derived.ownedInventory).toHaveLength(31);
     expect(derived.kindCounts).toEqual({
       substrate: 13,
-      capability: 11,
+      capability: 12,
       operator: 5,
       build: 1,
     });
@@ -80,9 +80,9 @@ describe("check:docs-architecture", () => {
 
       expect(parsed.structuralErrors).toEqual([]);
       expect(Object.keys(parsed.kindCounts)).toHaveLength(4);
-      expect(parsed.edges).toHaveLength(30);
+      expect(parsed.edges).toHaveLength(31);
       expect(parsed.fanIn.length).toBeGreaterThan(0);
-      expect(parsed.ownedInventory).toHaveLength(30);
+      expect(parsed.ownedInventory).toHaveLength(31);
       expect(parsed.totals).toBeDefined();
     });
 
@@ -96,8 +96,8 @@ describe("check:docs-architecture", () => {
 
     it("ANTI-VACUITY edges: dropping a dependency reports DRIFT for context", () => {
       const mutated = realHtml.replace(
-        "<td>config, knowledge, state, telemetry, learning</td>",
-        "<td>config, knowledge, state, telemetry</td>",
+        "<td>config, knowledge, learning, security, state, telemetry</td>",
+        "<td>config, knowledge, learning, security, state</td>",
       );
       expect(mutated).not.toBe(realHtml);
 
@@ -144,8 +144,8 @@ describe("check:docs-architecture", () => {
 
     it("ANTI-VACUITY identifiers: an em dash in a module id reports DRIFT", () => {
       const mutated = realHtml.replace(
-        "<tr><td>host-runtime</td><td>substrate</td><td>config, state</td></tr>",
-        "<tr><td>host—runtime</td><td>substrate</td><td>config, state</td></tr>",
+        "<tr><td>host-runtime</td><td>substrate</td><td>config, lifecycle, state</td></tr>",
+        "<tr><td>host—runtime</td><td>substrate</td><td>config, lifecycle, state</td></tr>",
       );
       expect(mutated).not.toBe(realHtml);
 
@@ -192,7 +192,7 @@ describe("check:docs-architecture", () => {
     });
 
     it("ANTI-VACUITY totals: changing a grand total reports DRIFT for inventory scripts", () => {
-      const mutated = realHtml.replace("254 scripts</strong>", "253 scripts</strong>");
+      const mutated = realHtml.replace("258 scripts</strong>", "257 scripts</strong>");
       expect(mutated).not.toBe(realHtml);
 
       // The derived script total tracks the live inventory, so assert against the
@@ -201,7 +201,7 @@ describe("check:docs-architecture", () => {
       const section = sectionFor(mutated, "grand totals");
       expect(section.status).toBe("DRIFT");
       expect(section.discrepancies.join("\n")).toMatch(
-        new RegExp(`scripts.*expected ${expectedScripts}.*found 253`, "i"),
+        new RegExp(`scripts.*expected ${expectedScripts}.*found 257`, "i"),
       );
     });
 
