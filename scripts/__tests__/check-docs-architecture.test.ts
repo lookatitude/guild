@@ -17,6 +17,7 @@ const realDocCandidates = [
 ];
 const realDocPath = realDocCandidates.find((candidate) => fs.existsSync(candidate));
 const realHtml = realDocPath ? fs.readFileSync(realDocPath, "utf8") : undefined;
+const umbrellaRoot = realDocPath ? path.resolve(path.dirname(realDocPath), "../../..") : undefined;
 const scriptsDir = path.resolve(__dirname, "..");
 const tsxBin = path.join(scriptsDir, "node_modules", ".bin", "tsx");
 const canExerciseEacces =
@@ -84,6 +85,21 @@ describe("check:docs-architecture", () => {
       expect(parsed.fanIn.length).toBeGreaterThan(0);
       expect(parsed.ownedInventory).toHaveLength(31);
       expect(parsed.totals).toBeDefined();
+
+      const requiredReconciliations = [
+        ["docs/v2/architecture/README.html", /31 implementation modules/, /documents\.html/, /eight tightly-coupled sibling pairs/],
+        ["docs/v2/architecture/modules/documents.html", /guild\.document\.v1/, /Record-only projection/, /plugin\/src\/modules\/documents\/index\.ts/],
+        ["docs/v2/conformance-and-rollback.html", /Compatibility window/, /Host adapter/, /Transport/, /Consumer/, /Receipt journal/],
+        [".guild/wiki/decisions/multi-host-runtime-convergence.md", /status: accepted/, /Implementation shipped through MH-09/, /D8 cumulative rail/],
+        ["website/src/content/docs/architecture.mdx", /31 ownership-scoped modules/, /module: 'documents'/, /Release Conformance And Rollback/],
+        ["website/src/content/docs/migration-v1-to-v2.mdx", /Compatibility Window And Independent Rollback/, /Adapter rollback/, /Transport rollback/, /Consumer rollback/],
+      ] as const;
+      for (const [relativePath, ...patterns] of requiredReconciliations) {
+        const absolutePath = path.join(umbrellaRoot!, relativePath);
+        expect(fs.existsSync(absolutePath)).toBe(true);
+        const body = fs.readFileSync(absolutePath, "utf8");
+        for (const pattern of patterns) expect(body).toMatch(pattern);
+      }
     });
 
     it("parses the real document's prefix cells without structural or prefix drift", () => {
