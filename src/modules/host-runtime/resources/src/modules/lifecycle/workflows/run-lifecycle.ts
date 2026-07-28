@@ -651,6 +651,24 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
 
       // Flip run.yaml.status to the terminal value.
       flipRunStatus(env, root, runId, opts.status);
+
+      // G5(a) (v23x-deferred-followups rf-wi-05, origin oir-wi-58): clear the
+      // current-run-id sentinel IFF it still points at the run being closed.
+      // Before this, closeRun never touched the sentinel — every one of its
+      // readers (capture-telemetry.ts, pre-tool-use.ts, pre-compact.ts,
+      // post-tool-use.ts, reanchor.ts, lifecycle-gate.ts) had to independently
+      // reimplement a "prove freshness" workaround because a CLOSED run's id
+      // stayed armed until the NEXT startRun overwrote it. Every sentinel
+      // reader already treats an empty/whitespace-only file identically to a
+      // missing one (`value.length > 0 ? value : undefined`), so writing ""
+      // is a safe, effective clear — no reader needs to change.
+      // Guarded on identity so an out-of-order close (closing an OLDER run
+      // while a NEWER one is current) can never clobber the newer sentinel.
+      const sp = sentinelPath(root);
+      const currentSentinel = env.fs.readFile(sp);
+      if (currentSentinel !== null && currentSentinel.trim() === runId) {
+        env.fs.writeFile(sp, "");
+      }
     },
   };
 }
@@ -996,6 +1014,104 @@ export function readRecordStatusRuns(root: string): boolean {
   } catch {
     return true;
   }
+}
+
+// ── G5(b) — run.yaml `gates:` writer ─────────────────────────────────────────
+//
+// (v23x-deferred-followups rf-wi-05, origin oir-wi-58). `buildRunManifest`
+// writes `gates: {}` once at start and NOTHING ever updated it — a repo-wide
+// grep for a gates: writer other than the start manifest and closeRun's
+// provenance.json write (a DIFFERENT file) found none. hooks/lib/reanchor.ts's
+// `readRunYamlFacts`/`deriveNextGate` (the re-anchor header's next-gate
+// pointer) already READS run.yaml's `gates:` map and treats any entry whose
+// `outcome` is a canonical success as PASSED — that reader has had nothing to
+// read until now. `appendGateOutcome` is the missing writer.
+
+/** The record shape recorded per gate — mirrors CloseRunOpts["gates"]'s value type. */
+export interface GateOutcomeRecord {
+  posture: string;
+  outcome: string;
+  codex_review: string;
+}
+
+/** Gate token shape: lower-kebab, matches reanchor.ts's GATE_SEQUENCE_BY_PHASE tokens. */
+const GATE_TOKEN = /^[a-z][a-z0-9-]{0,63}$/;
+
+/**
+ * Targeted line-surgery for run.yaml's `gates:` block — same posture as
+ * `flipRunStatus`/`appendToPhasesLog`: every other byte of run.yaml is left
+ * untouched. Returns null when there is no `gates:` key at all (never
+ * fabricate the key on a manifest that doesn't have it).
+ */
+function writeGateBlock(raw: string, gate: string, rec: GateOutcomeRecord): string | null {
+  const lines = raw.split("\n");
+  const idx = lines.findIndex((l) => l.startsWith("gates:"));
+  if (idx === -1) return null;
+
+  const entryLines = [
+    `    posture: ${yamlScalar(rec.posture)}`,
+    `    outcome: ${yamlScalar(rec.outcome)}`,
+    `    codex_review: ${yamlScalar(rec.codex_review)}`,
+  ];
+  const gateKeyLine = `  ${gate}:`;
+
+  // Case A: `gates: {}` inline empty map — convert to a block for this ONE gate.
+  if (lines[idx].slice("gates:".length).trim() === "{}") {
+    lines.splice(idx, 1, "gates:", gateKeyLine, ...entryLines);
+    return lines.join("\n");
+  }
+
+  // Case B: block form already exists. Its items are every indented,
+  // non-blank line immediately after `gates:`, ending at the first column-0
+  // line (next top-level key) or EOF — same boundary rule appendToPhasesLog
+  // uses for phases_log.
+  let end = idx + 1;
+  while (end < lines.length && /^\s/.test(lines[end]) && lines[end].trim() !== "") {
+    end++;
+  }
+
+  // An existing entry for this SAME gate is REPLACED (idempotent re-record),
+  // not duplicated — a re-run gate corrects the record.
+  const gateIdx = lines.findIndex((l, i) => i > idx && i < end && l === gateKeyLine);
+  if (gateIdx !== -1) {
+    let bodyEnd = gateIdx + 1;
+    while (bodyEnd < end && /^\s{4,}/.test(lines[bodyEnd])) bodyEnd++;
+    lines.splice(gateIdx, bodyEnd - gateIdx, gateKeyLine, ...entryLines);
+    return lines.join("\n");
+  }
+
+  // No existing entry for this gate — append before the block's end.
+  lines.splice(end, 0, gateKeyLine, ...entryLines);
+  return lines.join("\n");
+}
+
+/**
+ * Record a gate outcome into run.yaml's `gates:` block. Fail-open on a
+ * missing/corrupt run.yaml or an invalid gate token (returns false, never
+ * throws) — same posture as `appendPhase`.
+ *
+ * `fs` accepts the same minimal read/write seam `writeResolvedSettingsSnapshot`
+ * uses (`ProvenanceFsSeam`, read+write only — no scrub requirement: run.yaml's
+ * OTHER line-surgery writers, `flipRunStatus`/`appendPhase`, are plain
+ * unscrubbed writes too).
+ *
+ * @returns true iff a gate entry was recorded.
+ */
+export function appendGateOutcome(
+  fs: Pick<ProvenanceFsSeam, "readFile" | "writeFile">,
+  root: string,
+  runId: string,
+  gate: string,
+  record: GateOutcomeRecord,
+): boolean {
+  if (!GATE_TOKEN.test(gate)) return false; // reject a bad token — never write it
+  const p = runYamlPath(root, runId);
+  const raw = fs.readFile(p);
+  if (raw === null) return false;
+  const next = writeGateBlock(raw, gate, record);
+  if (next === null) return false;
+  fs.writeFile(p, next);
+  return true;
 }
 
 /**

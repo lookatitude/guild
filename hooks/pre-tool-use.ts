@@ -72,6 +72,51 @@ import {
   resolveScopeDecision,
 } from "./lib/security/enforce.js";
 import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
+import {
+  describeViolation,
+  dispatchViolations,
+  resolveDispatchAttribution,
+} from "./lib/dispatch-attribution.js";
+// #56 backend-degradation detector — dispatch.md's "refuse-don't-fallback" prose
+// as code. Extends the #58 attribution above with the lane-brief signature and
+// the resolved-backend / tmux facts. See lib/backend-degradation.ts header.
+import {
+  appendBackendDegradationEvent,
+  AUTO_AGENT_MODE,
+  BACKEND_DEGRADATION_EVENT,
+  buildAllowMessage,
+  buildBackendDegradationEvent,
+  buildDenyMessage,
+  dispatchAssertsRunId,
+  isBlockUnmarkedEngaged,
+  isGuildLaneDispatch,
+  isLeadProcess,
+  isOverrideEngaged,
+  isRunFresh,
+  readSnapshotAgentMode,
+  resolveBackendDegradation,
+  resolveTeamSubstrate,
+  type RunIdSource,
+  TEAM_AGENT_MODE,
+} from "./lib/backend-degradation.js";
+// #60 tier-scoring guard — execute-plan's "the Agent `model` param is the only
+// tiering lever, and it is REQUIRED" prose as code, plus the SKILL.md:113
+// dispatch line as a run-record receipt. See lib/tier-dispatch.ts header.
+import {
+  appendTierDispatchEvent,
+  buildDenyMessage as buildTierDenyMessage,
+  buildRecordMessage as buildTierRecordMessage,
+  buildTierDispatchEvent,
+  isUntieredOverrideEngaged,
+  readConfiguredTierModels,
+  resolveTierDispatch,
+  TIER_DISPATCH_EVENT,
+} from "./lib/tier-dispatch.js";
+import { redactField as redactTierField } from "./lib/v1.4/redact-log.js";
+import { genSpanId } from "./lib/trace-v2.js";
+// G5(d) — per-tool lifecycle bound (v23x-deferred-followups rf-wi-05, origin
+// oir-wi-59). See lib/tool-turn-bound.ts header for the full mechanism.
+import { evaluateToolTurnBound, buildToolTurnAskReason } from "./lib/tool-turn-bound.js";
 // L5a: host-neutral hook payload + Claude emitter. PreToolUsePayload is now the
 // shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
 // PreToolUse security behavior is preserved byte-for-byte.
@@ -689,6 +734,448 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
   return false;
 }
 
+// ── Dispatch-integrity guard (#58) ──────────────────────────────────────────
+//
+// Make specialist type-erasure DETECTABLE. During an active Guild run, an
+// `Agent` dispatch that CLAIMS a project-specialist persona (its prompt carries
+// the `.guild/agents/<role>.md` adoption instruction / the "dispatched as the
+// Guild <role> specialist" prose, OR it carries GUILD_SPECIALIST+GUILD_TASK_ID)
+// but is dispatched as `subagent_type: "general-purpose"` WITHOUT a matching
+// GUILD_AGENT_DEFINITION env is a silently persona-stripped dispatch — the
+// intended (definition-carrying) call and the defective one were otherwise
+// byte-identical. Fail closed: deny it with a loud, actionable message.
+//
+// Scope is deliberately tight (NEVER interfere with a non-Guild Agent call):
+//   - only tool_name === "Agent";
+//   - only inside a resolvable Guild run (GUILD_RUN_ID / current-run-id);
+//   - only when isPersonaStrippedDispatch — i.e. generic type ∧ specialist
+//     adoption ∧ no GUILD_AGENT_DEFINITION.
+// A correctly-carried project dispatch (definition present), a shipped agent
+// dispatched by name (non-generic), a generic learn/fan-out lane (no adoption
+// signature), and any non-Guild Agent call all fall through untouched.
+
+/**
+ * Returns true iff it handled the event (emitted a deny decision on stdout; the
+ * caller must then return without writing telemetry, keeping stdout = exactly
+ * the decision JSON). A best-effort guild.security_event.v1 is recorded, but the
+ * deny NEVER depends on the log write succeeding.
+ */
+function runDispatchIntegrityGuard(payload: GuildHookEvent, cwd: string): boolean {
+  if (payload.tool_name !== "Agent") return false;
+
+  // Only inside an active Guild run — non-Guild sessions are never gated.
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0) return false;
+
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return false;
+  const violations = dispatchViolations(attr);
+  if (violations.length === 0) return false;
+
+  const role = attr.specialist ?? "<unknown>";
+  // The message names the invariant(s) that ACTUALLY failed — telling an
+  // operator "GUILD_AGENT_DEFINITION is missing" when it is present and correct
+  // is worse than useless for an observability rail (adversarial review r6).
+  const detail = violations.map((v) => describeViolation(v, role, attr)).join("; ");
+  const reason =
+    `Guild dispatch integrity (#58): a lane claiming the Guild "${role}" specialist ` +
+    `is being dispatched as subagent_type="general-purpose", but ${detail}. ` +
+    `The specialist's persona, scoped skills, tool permissions, and ` +
+    `TRIGGER/DO-NOT-TRIGGER boundaries would be silently stripped — a real ` +
+    `"${role}" lane and a bare generic agent would be indistinguishable. ` +
+    `guild:execute-plan's backend descriptor (composeInProcessDispatch + ` +
+    `buildPrompt) sets every required carrier; re-dispatch through it. ` +
+    `Blocking this dispatch. [violations: ${violations.join(",")}]`;
+
+  // Best-effort audit record — never gate on the write.
+  try {
+    const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+    const laneEnv = process.env["GUILD_LANE_ID"];
+    const laneId =
+      typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
+        ? laneEnv
+        : undefined;
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        event_type: "dispatch_attribution_missing",
+        decision: "deny",
+        tool: "Agent",
+        detail: reason,
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
+      },
+    }),
+  );
+  return true;
+}
+
+// ── Backend-degradation detector (#56) ──────────────────────────────────────
+//
+// Convert `dispatch.md §"Backend choice"`'s refuse-don't-fallback PROSE into a
+// runtime detector. When the run's backend resolves to team (agent_mode "team",
+// or "auto" that the D5 ladder resolves to team) and a team substrate (tmux or
+// cmux) IS available, a Guild specialist lane dispatched through the in-session
+// `Agent` tool is a silent BACKEND DEGRADATION — the exact ~26h collapse issue
+// #56 documents. Deny it loudly, or (with GUILD_ALLOW_BACKEND_DEGRADE) allow it
+// CONSCIOUSLY. Two cases are RECORDED but never blocked: team-with-no-substrate
+// (the launcher downgrades that itself), and a lane identified from prompt text
+// ALONE (indistinguishable from a prompt quoting a live brief). See
+// `BackendDegradationReason` / `LaneEvidence` for the per-row rationale.
+//
+// EVERY non-pass decision writes a `guild.backend_degradation.v1` receipt to
+// `<runDir>/logs/backend-degradation.jsonl` — a durable, greppable record of the
+// downgrade. (Consumer wiring in verify-done/reflect is a followup; the receipt
+// is auditable by path today.)
+//
+// Scope is as tight as the #58 guard's (never interfere with a non-Guild call):
+//   - only tool_name === "Agent";
+//   - only inside a resolvable, SAFE, and FRESH Guild run (a stale
+//     current-run-id sentinel from a long-finished run never gates);
+//   - only when the run's resolved-settings snapshot proves the configured
+//     agent_mode (no snapshot ⇒ no proof ⇒ no gate);
+//   - only when the dispatching process is the LEAD (a specialist already
+//     running in a pane that spawns a helper is not degrading anything);
+//   - only for a Guild LANE dispatch, and only STRUCTURED lane evidence blocks.
+// A learn-lane generic fan-out, an Explore sweep, an `agent`/`subagent`-mode run
+// (where Agent dispatch is the DESIGNED path), and any non-Guild Agent call all
+// fall through untouched.
+
+/** The detector's outcome, when it produced one. */
+interface BackendGuardOutcome {
+  /** True when the dispatch must be denied and this message shown. */
+  deny: boolean;
+  message: string;
+}
+
+/**
+ * Evaluate the detector AND emit its receipts. Returns null when the dispatch is
+ * clean (or unprovable) and undecided otherwise.
+ *
+ * Receipt emission is deliberately SEPARATE from the deny emission: the #58
+ * dispatch-integrity guard may own stdout for the same event, and a dispatch
+ * that is both persona-stripped AND backend-degraded must still leave a
+ * `backend_degradation` receipt (adversarial review round 1, finding 6).
+ */
+function evaluateBackendDegradation(
+  payload: GuildHookEvent,
+  cwd: string,
+): BackendGuardOutcome | null {
+  if (payload.tool_name !== "Agent") return null;
+
+  // The run id's PROVENANCE decides whether a freshness test applies: an
+  // explicit GUILD_RUN_ID is session-bound identity; the current-run-id sentinel
+  // outlives the run that wrote it (closeRun never clears it).
+  const envRunId = process.env["GUILD_RUN_ID"];
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) return null;
+  // Trusted identity = an exported GUILD_RUN_ID, OR the dispatch itself naming
+  // this run in its descriptor env (the `/guild:build` sentinel-only shape).
+  const runIdSource: RunIdSource =
+    (typeof envRunId === "string" && envRunId.length > 0) ||
+    dispatchAssertsRunId(payload.tool_input, runId)
+      ? "env"
+      : "sentinel";
+
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return null;
+  const ti = payload.tool_input as Record<string, unknown> | undefined;
+  const prompt = typeof ti?.["prompt"] === "string" ? (ti["prompt"] as string) : "";
+
+  // Cheap-first short-circuits — these only avoid work. `resolveBackendDegradation`
+  // re-checks every condition and remains the single authority on the matrix.
+  if (!isLeadProcess(process.env)) return null;
+  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+
+  const guildRoot = resolveGuildRoot(cwd);
+  const agentMode = readSnapshotAgentMode(guildRoot, runId);
+  if (agentMode !== TEAM_AGENT_MODE && agentMode !== AUTO_AGENT_MODE) return null;
+  const runFresh = isRunFresh(guildRoot, runId, runIdSource);
+  if (!runFresh) return null;
+
+  // Only now pay for the subprocess probe.
+  const substrate = resolveTeamSubstrate(agentMode, process.env);
+  const result = resolveBackendDegradation({
+    toolInput: payload.tool_input,
+    attr,
+    prompt,
+    runId,
+    agentMode,
+    substrate,
+    overrideEngaged: isOverrideEngaged(process.env),
+    isLead: true,
+    runFresh,
+    blockUnmarked: isBlockUnmarkedEngaged(process.env),
+  });
+  if (result.decision === "pass" || result.reason === undefined) return null;
+
+  const role = result.specialist ?? "<unattributed>";
+  const message =
+    result.decision === "deny"
+      ? buildDenyMessage(result.reason, role, result.subagentType, substrate, result.evidence)
+      : buildAllowMessage(
+          result.reason,
+          role,
+          result.subagentType,
+          substrate,
+          result.evidence,
+          result.decision,
+        );
+
+  // ── Receipt: the run-record artifact (the #56 acceptance criterion) ───────
+  // Written for EVERY non-pass decision — an allowed downgrade is exactly the
+  // silent degrade this issue is about, so it must leave a trail too.
+  const ts = new Date().toISOString();
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId =
+    typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
+      ? laneEnv
+      : undefined;
+  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  try {
+    appendBackendDegradationEvent(
+      runDir,
+      buildBackendDegradationEvent({
+        runId,
+        ts,
+        spanId: genSpanId(runId, BACKEND_DEGRADATION_EVENT, ts, result.specialist ?? "main"),
+        decision: result.decision,
+        reason: result.reason,
+        specialist: result.specialist ?? "",
+        subagentType: result.subagentType,
+        agentMode,
+        effectiveBackend: result.effectiveBackend,
+        substrate,
+        evidence: result.evidence,
+        detail: message,
+        laneId,
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  // Audit-rail twin of the decision, alongside the #58 guard's records. `detail`
+  // is redacted by buildSecurityEvent before it reaches disk.
+  try {
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        event_type: "backend_degradation",
+        decision: result.decision === "deny" ? "deny" : "allow",
+        tool: "Agent",
+        detail: message,
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  if (result.decision !== "deny") {
+    // Loud on stderr, but the dispatch proceeds.
+    process.stderr.write(`warn: [pre-tool-use] ${message}\n`);
+  }
+  return { deny: result.decision === "deny", message };
+}
+
+/** Emit the #56 deny decision. The caller must then own stdout for this event. */
+function emitBackendDegradationDeny(message: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: message,
+      },
+    }),
+  );
+}
+
+// ── Tier-scoring guard (#60) ────────────────────────────────────────────────
+//
+// Convert `execute-plan/SKILL.md §"Tier resolution"`'s two PROSE mandates into
+// runtime behavior:
+//
+//   1. the Agent `model` param is the ONLY tiering lever and is REQUIRED on
+//      every lane dispatch (default cheap; `powerful` must be justified) — a
+//      Guild lane dispatched WITHOUT it silently inherits the dispatching
+//      process's model, which is exactly how a post-/compact opus orchestrator
+//      turned 48 cheap/mid lanes into opus lanes;
+//   2. the dispatch line `lane <task-id> · score N · tier <tier> · model <model>`
+//      is printed and recorded — "never silent" (SKILL.md:113) — which vanished
+//      along with the param.
+//
+// A `guild.tier_dispatch.v1` receipt is written to
+// `<runDir>/logs/tier-dispatch.jsonl` for EVERY Guild-lane dispatch decision,
+// compliant ones included: "48 dispatches, none tiered" is only answerable
+// post-hoc when the compliant lines are on the record too. (Consumer wiring in
+// verify-done/reflect is a followup; the sink is auditable by path today.)
+//
+// Scope mirrors the #58 guard's, plus #56's stale-sentinel defense:
+//   - only tool_name === "Agent";
+//   - only inside a resolvable, SAFE, and FRESH Guild run;
+//   - only for a Guild LANE dispatch, and only STRUCTURED lane evidence blocks.
+// Deliberately NOT lead-only (unlike #56): the tier contract binds the DISPATCH,
+// not the dispatcher — a helper spawned from inside a lane with no `model` param
+// inherits that lane's model just as silently.
+
+/** The guard's outcome, when it produced one. */
+interface TierGuardOutcome {
+  /** True when the dispatch must be denied and this message shown. */
+  deny: boolean;
+  message: string;
+}
+
+/**
+ * Evaluate the tier guard AND emit its receipts. Returns null when the dispatch
+ * is not a gateable Guild lane.
+ *
+ * Receipt emission is deliberately SEPARATE from the deny emission, for the same
+ * reason #56's is: the #58 or #56 guard may own stdout for the same event, and a
+ * dispatch that is both persona-stripped/backend-degraded AND untiered must
+ * still leave its tier receipt — they are independent audit dimensions.
+ */
+function evaluateTierDispatch(
+  payload: GuildHookEvent,
+  cwd: string,
+): TierGuardOutcome | null {
+  if (payload.tool_name !== "Agent") return null;
+
+  // Same run-identity provenance rule as #56: an exported GUILD_RUN_ID (or a
+  // dispatch naming this run in its own descriptor env) is trusted identity; a
+  // `current-run-id` sentinel must additionally prove freshness, since closeRun
+  // never clears it.
+  const envRunId = process.env["GUILD_RUN_ID"];
+  const runId = resolveRunId(cwd);
+  if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) return null;
+  const runIdSource: RunIdSource =
+    (typeof envRunId === "string" && envRunId.length > 0) ||
+    dispatchAssertsRunId(payload.tool_input, runId)
+      ? "env"
+      : "sentinel";
+
+  const attr = resolveDispatchAttribution(payload.tool_input);
+  if (attr === null) return null;
+  const ti = payload.tool_input as Record<string, unknown> | undefined;
+  const prompt = typeof ti?.["prompt"] === "string" ? (ti["prompt"] as string) : "";
+
+  // Cheap-first short-circuit — `resolveTierDispatch` re-checks both conditions
+  // and remains the single authority on the matrix.
+  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+  const guildRoot = resolveGuildRoot(cwd);
+  const runFresh = isRunFresh(guildRoot, runId, runIdSource);
+  if (!runFresh) return null;
+
+  const tierModels = readConfiguredTierModels(
+    guildRoot,
+    resolveHostResolution(process.env).id,
+  );
+  const result = resolveTierDispatch({
+    toolInput: payload.tool_input,
+    attr,
+    prompt,
+    runId,
+    tierModels,
+    overrideEngaged: isUntieredOverrideEngaged(process.env),
+    runFresh,
+  });
+  if (!result.recorded) return null;
+
+  const message =
+    result.decision === "deny"
+      ? buildTierDenyMessage(result, tierModels)
+      : buildTierRecordMessage(result, tierModels);
+
+  // ── Receipt: the resurrected SKILL.md:113 dispatch line ──────────────────
+  const ts = new Date().toISOString();
+  const laneEnv = process.env["GUILD_LANE_ID"];
+  const laneId =
+    typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
+      ? laneEnv
+      : undefined;
+  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  try {
+    appendTierDispatchEvent(
+      runDir,
+      buildTierDispatchEvent({
+        runId,
+        ts,
+        spanId: genSpanId(runId, TIER_DISPATCH_EVENT, ts, result.specialist ?? "main"),
+        result,
+        detail: message,
+        ...(laneId !== undefined ? { laneId } : {}),
+      }),
+    );
+  } catch {
+    /* telemetry must never block the gate */
+  }
+
+  // Audit-rail twin — ONLY for a genuine untiered violation (reason
+  // "missing_model"): that is the one case the `tier_dispatch_untiered` event
+  // name is accurate for (adversarial review finding #6). A `tier_unverifiable`
+  // or `tier_model_mismatch` record carries an explicit model — it is NOT
+  // untiered, so labeling it so would poison security analytics. Compliant
+  // dispatches never emit a twin (the tier-dispatch sink already carries the
+  // complete per-dispatch record).
+  if (result.reason === "missing_model" && result.decision !== "pass") {
+    try {
+      appendSecurityEvent(
+        runDir,
+        buildSecurityEvent({
+          run_id: runId,
+          lane_id: laneId,
+          event_type: "tier_dispatch_untiered",
+          decision: result.decision === "deny" ? "deny" : "allow",
+          tool: "Agent",
+          detail: message,
+        }),
+      );
+    } catch {
+      /* telemetry must never block the gate */
+    }
+  }
+
+  // The print half of the "never silent" mandate — restore the dispatch line on
+  // stderr for every Guild-lane dispatch, not just the violations. The message
+  // is built only from bounded identifiers (role, model, tier tokens, bounded
+  // config values), but pass it through the shared redaction anyway so no path
+  // out of this guard can print an unredacted config/detail value (round 2, P1).
+  const safeMessage = redactTierField(message);
+  process.stderr.write(
+    result.decision === "pass"
+      ? `[pre-tool-use] guild-tier: ${result.model} · ${result.decision} — ${safeMessage}\n`
+      : `warn: [pre-tool-use] ${safeMessage}\n`,
+  );
+  return { deny: result.decision === "deny", message };
+}
+
+/** Emit the #60 deny decision. The caller must then own stdout for this event. */
+function emitTierDispatchDeny(message: string): void {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: message,
+      },
+    }),
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export async function main(): Promise<void> {
@@ -702,6 +1189,50 @@ export async function main(): Promise<void> {
   }
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+
+  // Both dispatch guards run BEFORE capability enforcement so an `Agent`
+  // dispatch defect is DENIED outright and can never be downgraded to an `ask`
+  // (and then approved) by a capability-scope gate. Each is scoped tightly to
+  // the `Agent` tool inside an active run and falls through untouched otherwise.
+  // Whichever denies owns stdout for this event, so the rest is skipped.
+  //
+  // #56 backend-degradation detector. EVALUATED FIRST (before #58 can own
+  // stdout) so its receipt is written even when the same dispatch is ALSO
+  // persona-stripped — the two defects are independent audit dimensions and a
+  // #58 deny must not swallow the #56 record. It does not emit its decision
+  // here, only its receipts.
+  const backend = evaluateBackendDegradation(payload, cwd);
+
+  // #60 tier-scoring guard. Evaluated alongside #56 and for the same reason: its
+  // receipt is the run-record dispatch line and must exist even when another
+  // guard owns stdout for this event. It emits its decision LAST of the three —
+  // a stripped persona (#58) and a wrong backend (#56) are the more specific
+  // defects, and under the team backend the lane never takes a `model` param at
+  // all (panes carry the tier on the teammate definition).
+  const tier = evaluateTierDispatch(payload, cwd);
+
+  // #58 dispatch-integrity guard — fail closed on a persona-stripped Guild
+  // specialist dispatch. It emits first when both fire: a stripped persona is
+  // the more specific defect, and the #56 receipt is already on disk.
+  if (runDispatchIntegrityGuard(payload, cwd)) return;
+
+  // #56 deny — runs before capability enforcement for the same reason the #58
+  // guard does: a backend downgrade must not be reachable through an `ask` a
+  // capability gate could approve. A recorded/overridden allow falls through so
+  // the rest of the hook (telemetry sidecar) still runs.
+  if (backend !== null && backend.deny) {
+    emitBackendDegradationDeny(backend.message);
+    return;
+  }
+
+  // #60 deny — before capability enforcement for the same reason as the two
+  // above: an untiered dispatch must not be reachable through an `ask` a
+  // capability gate could approve. A recorded/overridden allow falls through so
+  // the rest of the hook (telemetry sidecar) still runs.
+  if (tier !== null && tier.deny) {
+    emitTierDispatchDeny(tier.message);
+    return;
+  }
 
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
@@ -790,6 +1321,35 @@ export async function main(): Promise<void> {
   } catch (err) {
     process.stderr.write(
       `warn: [pre-tool-use] sidecar write failed: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+  }
+
+  // G5(d): per-tool lifecycle bound — a soft advisory checkpoint when a SINGLE
+  // agentic turn has made an unbounded number of tool calls with no
+  // checkpoint back to the user. Runs LAST (lowest priority) — every guard
+  // above it may already have claimed stdout and returned before this point;
+  // this is advisory-only (`ask`, never `deny`) and must never override a
+  // security decision. Fail-open: evaluateToolTurnBound never throws, but the
+  // whole block is wrapped anyway so a future change to it can never turn an
+  // advisory checkpoint into a blocked tool call.
+  try {
+    const bound = evaluateToolTurnBound(runDir);
+    if (bound.ask) {
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "ask",
+            permissionDecisionReason: buildToolTurnAskReason(bound, toolName),
+          },
+        }),
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-tool-use] tool-turn-bound eval failed: ${
         err instanceof Error ? err.message : String(err)
       }\n`,
     );

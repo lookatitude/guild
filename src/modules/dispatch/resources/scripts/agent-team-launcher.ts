@@ -76,6 +76,10 @@ import {
 // task-cell-runtime G4: real, confirmed pane termination (replaces signal-only
 // [DISMISS]) + the acceptance gate that authorizes it.
 import { terminatePane } from "./lib/host/tmux-backend";
+// #76 — pane-path dispatch receipts into the orchestrating run's trace.
+import { emitPaneDispatchEvents } from "./lib/host/pane-dispatch-trace";
+// rf-wi-04 item 2 — durable sink for orphaned remote lanes (Q2a).
+import { emitRemoteOrphan } from "./lib/emit-remote-orphan";
 import {
   findRunAcceptances,
   findRunTaskCells,
@@ -247,6 +251,9 @@ function parseYaml(raw: string): TeamYaml {
         // This ensures generated teams (default_tier only) route at their roster tier,
         // not collapse to mid. Scored tier wins when execute-plan writes it.
         tier: cur.tier ?? cur.default_tier,
+        // rf-wi-03 (G3): the raw cost score, carried through to GUILD_TIER_SCORE
+        // on the dispatch env (audit-only). Undefined until a producer writes it.
+        score: cur.score,
         capabilityRequirements: cur.capabilityRequirements, // GAP-A1/ARCH-2 (may be undefined)
         // D-CAP: thread capability_scope onto the Specialist — undefined when absent
         // (no restrictions). Populated by applyMapEntry + block-list interceptor above.
@@ -377,6 +384,22 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
     const t = stripQuotes(value).trim().toLowerCase();
     if (t === "cheap" || t === "mid" || t === "powerful") {
       target.default_tier = t as "cheap" | "mid" | "powerful";
+    }
+  }
+  // rf-wi-03 (G3): the raw cost-scorer `score:` for this specialist, when a
+  // producer wrote one back to team.yaml. composeInProcessDispatch carries it as
+  // GUILD_TIER_SCORE (audit-only — the tier guard never gates on it). Populating
+  // this key is the execute-plan writeback's job (a followup owned by rf-wi-06,
+  // the SKILL-surface lane); the parse + descriptor plumbing is complete here so
+  // the value flows the moment the writeback emits it.
+  else if (key === "score") {
+    const s = stripQuotes(value).trim();
+    // Guard the empty string — Number("") === 0 would fabricate a score of 0
+    // where none was written ("never a fake value"). A real 0 (cheap lane) is a
+    // non-empty "0" and still parses.
+    if (s.length > 0) {
+      const n = Number(s);
+      if (Number.isFinite(n)) target.score = n;
     }
   }
   // GAP-A1/ARCH-2: capability requirements from team.yaml, forwarded by
@@ -851,10 +874,9 @@ interface CrossHostConfig {
 function loadCrossHostConfig(cwd: string): CrossHostConfig {
   try {
     const { config } = resolveSettings({ cwd });
-    const ch = config.defaults.cross_host as Record<string, unknown> | undefined;
+    const ch = config.defaults.cross_host;
     // R-018: capability_manifest_ttl_s lives under defaults.*, not under cross_host.
-    const defs = config.defaults as Record<string, unknown>;
-    const rawTtl = defs["capability_manifest_ttl_s"];
+    const rawTtl = config.defaults.capability_manifest_ttl_s;
     return {
       enabled: ch?.enabled === true,
       hosts: isPlainObject(ch?.hosts)
@@ -970,6 +992,7 @@ function inProcessTransportPort(): ExecutionTransportPort {
 /** The remote (ssh) substrate, behind the versioned dispatch port. */
 function remoteTransportPort(opts: {
   resolveHostTarget: (spec: Specialist) => RemoteHostTarget;
+  warn?: (message: string) => void;
 }): ExecutionTransportPort {
   return new TeamDispatchExecutionTransport({
     transport_id: "remote",
@@ -977,6 +1000,7 @@ function remoteTransportPort(opts: {
       transport: new SshRemoteTransport(),
       resolveHostTarget: opts.resolveHostTarget,
       resolveAdapter: resolveAdapter(),
+      warn: opts.warn,
     }),
   });
 }
@@ -1832,7 +1856,17 @@ async function main(): Promise<void> {
           // that refuses the transport refuses the dispatch — it never falls back
           // to constructing RemoteTeamBackend here.
           const remoteRuntime = createHostExecutionRuntime({
-            transports: { remote: remoteTransportPort({ resolveHostTarget }) },
+            transports: {
+              remote: remoteTransportPort({
+                resolveHostTarget,
+                // rf-wi-04 item 2 (codex review Q2a) — route the orphaned-lane
+                // warning to a DURABLE run-scoped sink. launch() is wrapped in
+                // bounded retry below; a later successful attempt discards the
+                // failed attempt's envelope, so the orphan must be persisted at
+                // detection time (NDJSON events log + trace), not left on stderr.
+                warn: (msg) => emitRemoteOrphan(cwd, runId, msg),
+              }),
+            },
           });
           const resolvedRemote = resolveDispatchPort(remoteRuntime, "remote");
           if (!resolvedRemote.port) {
@@ -1869,7 +1903,7 @@ async function main(): Promise<void> {
                   targetName,
                   mode,
                   dryRun: args.dryRun,
-                  teamPath: args.team, // C13: resolved per-phase path → orchestrator prompt
+                  teamPath: args.team ?? undefined, // C13: resolved per-phase path → orchestrator prompt
                 });
                 const res = attempt.value;
                 if (!res || !res.ok) {
@@ -1939,6 +1973,44 @@ async function main(): Promise<void> {
             );
             for (const cmd of remoteResult.planned_commands ?? []) {
               process.stdout.write(`  ${cmd}\n`);
+            }
+          } else {
+            // ── #76: remote lanes are pane-dispatched too ────────────────────
+            // A remote lane opens a pane on the FAR host, so its hooks write
+            // into that host's context — exactly the same blind spot as a local
+            // tmux pane, and reached via a different code path that returns
+            // before (and, for an all-remote team, exits before) the local
+            // spawn emit below. Recorded here, after the retry loop settled on
+            // a COMMITTED batch (a partial remote spawn tears every pane back
+            // down, so an aborted attempt has no live lane to record); skipped
+            // on dry-run, which dispatches nothing.
+            const emittedRemote = emitPaneDispatchEvents({
+              cwd,
+              runId,
+              // NO pane_target: `targetName` is this machine's tmux session /
+              // window name and means nothing on the far host, where each lane
+              // lives in its own independently-named detached `ssh-…` session.
+              // A wrong target is worse than an absent one — pane_id carries
+              // the real remote handle.
+              target: "",
+              surface: "remote",
+              lanes: remoteSpecialists.map((s) => ({
+                specialist: s.name,
+                taskId: s.taskId,
+                paneId: remoteResult.teammate_pane_ids?.[s.name],
+              })),
+            });
+            if (emittedRemote > 0) {
+              process.stdout.write(
+                `[agent-team-launcher] recorded ${emittedRemote} remote dispatch(es) → ` +
+                  `.guild/runs/${runId}/logs/v1.4-events.jsonl\n`,
+              );
+            }
+            if (emittedRemote < remoteSpecialists.length) {
+              process.stderr.write(
+                `[agent-team-launcher] WARN: recorded ${emittedRemote}/${remoteSpecialists.length} remote ` +
+                  `dispatch receipt(s) — this run's trace under-reports its specialists (#76).\n`,
+              );
             }
           }
 
@@ -2159,6 +2231,42 @@ async function main(): Promise<void> {
     if (identity.status !== "succeeded" || !identity.value) return null;
     return identity.value.session_name;
   };
+
+  // ── #76: pane dispatch → the ORCHESTRATING run's trace ───────────────────
+  // The panes are separate interactive host sessions; their own hooks write
+  // into their own contexts, and the lead makes no `Agent` call for the
+  // #58/#66 attribution path to stamp. Without this emit a 10-lane pane run
+  // reads as a solo run (`specialists_dispatched: [(none)]`). Emitted HERE —
+  // after spawn confirmed ok, so a receipt means the pane really opened — and
+  // only on the real path (dry-run exits above, having dispatched nothing).
+  {
+    const emitted = emitPaneDispatchEvents({
+      cwd,
+      runId,
+      target: targetName,
+      surface: "tmux",
+      lanes: team.specialists.map((s) => ({
+        specialist: s.name,
+        taskId: s.taskId,
+        paneId: launchResult.teammate_pane_ids[s.name],
+      })),
+    });
+    if (emitted > 0) {
+      process.stdout.write(
+        `[agent-team-launcher] recorded ${emitted} pane dispatch(es) → ` +
+          `.guild/runs/${runId}/logs/v1.4-events.jsonl\n`,
+      );
+    }
+    // The count sums emitTraceEvent's own per-write verdicts, so a shortfall is
+    // a REAL gap in the run record. Never silent (the whole point of #76 is a
+    // trace you can trust) — but never fatal: the panes are up, the team runs.
+    if (emitted < team.specialists.length) {
+      process.stderr.write(
+        `[agent-team-launcher] WARN: recorded ${emitted}/${team.specialists.length} pane ` +
+          `dispatch receipt(s) — this run's trace under-reports its specialists (#76).\n`,
+      );
+    }
+  }
 
   const manifestPath = writeManifest(
     cwd,

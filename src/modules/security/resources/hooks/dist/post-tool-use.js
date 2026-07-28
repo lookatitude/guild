@@ -645,6 +645,118 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
   return { orphans, events };
 }
 
+// lib/dispatch-attribution.ts
+var GENERIC_SUBAGENT_TYPE = "general-purpose";
+var DEF_PATH_RE = /^\.guild\/agents\/([A-Za-z0-9._-]+)\.md$/;
+var SAFE_ROLE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+var ROLE_DEF_ANCHOR_RE = /role definition is at\s*[`'"]?\.guild\/agents\/([A-Za-z0-9._-]+)\.md/i;
+var DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{0,2}\s+specialist/i;
+var DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
+var PRODUCER_MARKER_HEAD = "GUILD_DISPATCH_PRODUCER=";
+var PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;
+var PRODUCER_MARKER_TOKEN_RE = /^[A-Za-z][A-Za-z0-9_]*=[^\s]+$/;
+function producerMarkerRole(firstLine) {
+  if (!firstLine.startsWith(PRODUCER_MARKER_HEAD)) return void 0;
+  const tokens = firstLine.split(/\s+/).filter((t) => t.length > 0);
+  if (tokens.length === 0) return void 0;
+  const value = tokens[0].slice(PRODUCER_MARKER_HEAD.length);
+  if (!PRODUCER_MARKER_VALUE_RE.test(value)) return void 0;
+  let role;
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (!PRODUCER_MARKER_TOKEN_RE.test(t)) return void 0;
+    const eq = t.indexOf("=");
+    const k = t.slice(0, eq);
+    if (k === "role") {
+      if (role !== void 0) return void 0;
+      role = t.slice(eq + 1);
+    }
+  }
+  return safeRole(role);
+}
+var PRODUCER_HEAD_CHARS = 300;
+function safeRole(v) {
+  return v !== void 0 && SAFE_ROLE_RE.test(v) ? v : void 0;
+}
+function envStr2(env, key) {
+  const v = env[key];
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function resolveDispatchAttribution(toolInput) {
+  if (toolInput === null || typeof toolInput !== "object") return null;
+  const ti = toolInput;
+  if (!("subagent_type" in ti) && !("prompt" in ti)) return null;
+  const subagentType = typeof ti.subagent_type === "string" ? ti.subagent_type : "";
+  const prompt = typeof ti.prompt === "string" ? ti.prompt : "";
+  const env = ti.env !== null && typeof ti.env === "object" ? ti.env : {};
+  const definitionPathRaw = envStr2(env, "GUILD_AGENT_DEFINITION");
+  const definitionPath = definitionPathRaw?.trim();
+  const taskId = envStr2(env, "GUILD_TASK_ID");
+  const specialistEnv = safeRole(envStr2(env, "GUILD_SPECIALIST"));
+  const firstLine = (prompt.split("\n", 1)[0] ?? "").trim();
+  const markerPath = DEFINITION_MARKER_RE.exec(firstLine)?.[1];
+  const markerRole = safeRole(
+    markerPath !== void 0 ? DEF_PATH_RE.exec(markerPath)?.[1] : void 0
+  );
+  const producerMarkerRoleValue = producerMarkerRole(firstLine);
+  const hasProjectMarker = markerRole !== void 0;
+  const hasAnyMarker = hasProjectMarker || producerMarkerRoleValue !== void 0;
+  const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
+  const anchorRole = hasProjectMarker ? void 0 : safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
+  const rawProseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
+  const proseRole = hasAnyMarker ? void 0 : rawProseRole;
+  const hasProseSignature = rawProseRole !== void 0;
+  const hasAdoptionPrompt = markerRole !== void 0 || anchorRole !== void 0;
+  const defMatch = definitionPath !== void 0 && definitionPath.length > 0 ? DEF_PATH_RE.exec(definitionPath) : null;
+  const defRole = safeRole(defMatch?.[1]);
+  const hasValidDefinition = defMatch !== null && defRole !== void 0 && (specialistEnv === void 0 || defRole === specialistEnv);
+  const roles = [
+    specialistEnv,
+    defRole,
+    markerRole,
+    producerMarkerRoleValue,
+    anchorRole,
+    proseRole
+  ].filter((r) => r !== void 0);
+  const hasConsistentIdentity = roles.every((r) => r === roles[0]);
+  const specialist = specialistEnv ?? defRole ?? markerRole ?? producerMarkerRoleValue ?? anchorRole ?? proseRole;
+  const promptTeammate = /teammate for run-id/i.test(head);
+  const isComposedLane = taskId !== void 0 && specialistEnv !== void 0;
+  const isSpecialistLane = hasAdoptionPrompt || hasProseSignature || isComposedLane;
+  const hasLaneSignature = isSpecialistLane || promptTeammate || taskId !== void 0 || specialistEnv !== void 0 || // G3 — the universal producer marker is a lane signature (not adoption proof,
+  // so it stays out of isSpecialistLane / the #58 persona-strip predicate).
+  producerMarkerRoleValue !== void 0;
+  const out = {
+    subagentType,
+    isGeneric: subagentType === GENERIC_SUBAGENT_TYPE,
+    isSpecialistLane,
+    hasAdoptionPrompt,
+    hasValidDefinition,
+    hasConsistentIdentity,
+    hasLaneSignature
+  };
+  if (specialist !== void 0) out.specialist = specialist;
+  if (definitionPath !== void 0) out.definitionPath = definitionPath;
+  if (taskId !== void 0) out.taskId = taskId;
+  return out;
+}
+
+// lib/lane-attribution.ts
+var UNATTRIBUTED_WORKER_LANE_ID = "unattributed-worker";
+function isWorkerInvocation(env = process.env) {
+  const laneId = env["GUILD_LANE_ID"];
+  const taskId = env["GUILD_TASK_ID"];
+  return typeof laneId === "string" && laneId.length > 0 || typeof taskId === "string" && taskId.length > 0;
+}
+function resolveLaneAttribution(env = process.env) {
+  for (const candidate of [env["GUILD_LANE_ID"], env["GUILD_TASK_ID"]]) {
+    if (typeof candidate === "string" && candidate.length > 0 && isSafeLaneId(candidate)) {
+      return candidate;
+    }
+  }
+  return isWorkerInvocation(env) ? UNATTRIBUTED_WORKER_LANE_ID : void 0;
+}
+
 // lib/security/scrubbed-write.ts
 var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
@@ -1214,8 +1326,7 @@ async function main() {
     const earlyRunId = resolveRunId(guildRoot);
     const earlyRunIdSafe = typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId) ? earlyRunId : void 0;
     const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path7.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
-    const earlyRawLaneId = process.env["GUILD_LANE_ID"];
-    const earlyLaneId = typeof earlyRawLaneId === "string" && earlyRawLaneId.length > 0 && isSafeLaneId(earlyRawLaneId) ? earlyRawLaneId : void 0;
+    const earlyLaneId = resolveLaneAttribution();
     try {
       runGuildArtifactScrub(payload, guildRoot, earlyRunDir, earlyRunIdSafe, earlyLaneId);
     } catch (err) {
@@ -1246,6 +1357,7 @@ async function main() {
       "warn: [post-tool-use] invalid GUILD_LANE_ID \u2014 omitting lane_id.\n"
     );
   }
+  const attributionLaneId = resolveLaneAttribution();
   const tsPost = (/* @__PURE__ */ new Date()).toISOString();
   try {
     const sweep = sweepOrphanedSidecarFull(runDir);
@@ -1285,7 +1397,7 @@ async function main() {
         run_id: runId,
         tool: toolName,
         result_excerpt_redacted: resultExcerpt(payload),
-        ...laneId !== void 0 ? { lane_id: laneId } : {},
+        ...attributionLaneId !== void 0 ? { lane_id: attributionLaneId } : {},
         ...typeof payload.duration_ms === "number" ? { latency_ms_override: payload.duration_ms } : {}
       });
     } else {
@@ -1295,6 +1407,9 @@ async function main() {
         status: isOk(payload),
         result_excerpt_redacted: resultExcerpt(payload)
       });
+      if (attributionLaneId !== void 0) {
+        event.lane_id = attributionLaneId;
+      }
     }
     const isLlmCallTool = toolName === "Agent" || toolName === "Skill";
     const tokens = isLlmCallTool ? normalizeTokens(payload.tokens ?? payload.usage) : void 0;
@@ -1302,9 +1417,15 @@ async function main() {
       runId,
       eventType: "tool_call",
       ts: tsPost,
-      actorId: laneId ?? "main",
+      actorId: attributionLaneId ?? "main",
       tokens
     });
+    if (toolName === "Agent") {
+      const attr = resolveDispatchAttribution(payload.tool_input);
+      if (attr?.isSpecialistLane === true && attr.specialist !== void 0) {
+        traceV2.attribution_specialist = attr.specialist;
+      }
+    }
     appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(

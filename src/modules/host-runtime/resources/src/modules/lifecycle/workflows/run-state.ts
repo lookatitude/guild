@@ -62,7 +62,8 @@ export type LaneTier = "cheap" | "mid" | "powerful";
 
 /** R5 full host-native model parameter object. */
 export interface LaneModelParams {
-  model: string;
+  /** Absent means Guild leaves model selection to the host default. */
+  model?: string;
   effort?: string;
   reasoning?: string;
   thinking?: string;
@@ -91,8 +92,11 @@ export interface LaneState {
     independence: "strong" | "weak";
     /** Per-lane tier actually routed (ARCH-6 — may differ from plan estimate). */
     tier: LaneTier;
-    /** Concrete model resolved for the routed tier on the selected host. */
-    model: string;
+    /**
+     * Concrete model resolved for the routed tier on the selected host.
+     * Null means Guild has no mapped override and the host selects its default.
+     */
+    model: string | null;
     /** Full host-native model params; legacy `model` mirrors this object's model. */
     modelParams?: LaneModelParams;
   };
@@ -152,7 +156,7 @@ export interface LanePatch {
     degraded: boolean;
     independence: "strong" | "weak";
     tier: LaneTier;
-    model: string;
+    model: string | null;
     modelParams?: LaneModelParams;
   };
   attempt?: number;

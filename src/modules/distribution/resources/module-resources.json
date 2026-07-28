@@ -8,7 +8,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "bce17bcb10b909400c9e278dcdef86c53dcbc3ad4c56914f014f47b4cc2bcdae"
+      "sha256": "2cad389c7451df1188544496f80b53472e8c2df86ea9781ed9add7b7ce5ae497"
     },
     {
       "category": "scripts",
@@ -33,10 +33,38 @@
     },
     {
       "category": "scripts",
+      "id": "check-bundle-determinism",
+      "source_path": "scripts/check-bundle-determinism.ts",
+      "resource_path": "resources/scripts/check-bundle-determinism.ts",
+      "sha256": "c4d24dd72680f658c18e17b02a4328919410b26a5b63ef10c9d98c4d67167a33"
+    },
+    {
+      "category": "scripts",
+      "id": "check-channel-integrity",
+      "source_path": "scripts/check-channel-integrity.ts",
+      "resource_path": "resources/scripts/check-channel-integrity.ts",
+      "sha256": "0378d766689d0eab6f3dc40ea34253e353ffc3ea10397960c82c96f1b8a6bffe"
+    },
+    {
+      "category": "scripts",
+      "id": "check-entrypoint-packaging",
+      "source_path": "scripts/check-entrypoint-packaging.ts",
+      "resource_path": "resources/scripts/check-entrypoint-packaging.ts",
+      "sha256": "9b334ed148f0fda88ff7ecc6f00e9d9df2c899cf50be00e28656ab6ebbf8e975"
+    },
+    {
+      "category": "scripts",
       "id": "check-module-ownership",
       "source_path": "scripts/check-module-ownership.ts",
       "resource_path": "resources/scripts/check-module-ownership.ts",
       "sha256": "451faa587a9c8234d45a7467015240d799e3a1fb68fe288ce4bb9acf378fda6e"
+    },
+    {
+      "category": "scripts",
+      "id": "check-plugin-root-fallback",
+      "source_path": "scripts/check-plugin-root-fallback.ts",
+      "resource_path": "resources/scripts/check-plugin-root-fallback.ts",
+      "sha256": "70c22c6a07b68e52792e130497cce643f5a25b54cc4f0f39c338dff2f59e9af4"
     },
     {
       "category": "scripts",
@@ -57,7 +85,7 @@
       "id": "description-optimizer",
       "source_path": "scripts/description-optimizer.ts",
       "resource_path": "resources/scripts/description-optimizer.ts",
-      "sha256": "f89a3f741dd2c38b93e28e7b4f466a902793919c93dc3250d3effb0d59efbbc0"
+      "sha256": "4c13c7446d5c45ce50f9c809a7b545860ee1eca0eba1fa30754e480ba467fd53"
     },
     {
       "category": "scripts",
@@ -120,7 +148,7 @@
       "id": "lib/self-update",
       "source_path": "scripts/lib/self-update.ts",
       "resource_path": "resources/scripts/lib/self-update.ts",
-      "sha256": "7da08b616446352b2a67dab770d3b068f8676aac1d03f554264194efc721de76"
+      "sha256": "f0cfe18439f8d5b9dc7bd19ff608e361cf63cf26a6d34c9dd779e5c5eaa60216"
     },
     {
       "category": "scripts",
@@ -141,7 +169,7 @@
       "id": "lib/update-check",
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
-      "sha256": "7806ece8e9e04c9319ac98160a8d66ac2ce6bf04e222cf08117caf153f32e358"
+      "sha256": "341fd133d15f130300587f72bffb9d386f9f01beafd123c048a2563606784e52"
     },
     {
       "category": "scripts",
@@ -163,7 +191,7 @@
       "id": "release-changelog",
       "source_path": "scripts/release-changelog.ts",
       "resource_path": "resources/scripts/release-changelog.ts",
-      "sha256": "787f2fe373d8c57df5bd7ebcefb8c6c8fc4e1c578e0ca9262ffa1d96a814cb90"
+      "sha256": "ef9f4bb21aee390e46b9baaaa2b8cfe84452f5af8489a9d45d072304ea7b8c76"
     },
     {
       "category": "scripts",

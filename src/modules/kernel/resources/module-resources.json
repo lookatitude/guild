@@ -15,14 +15,14 @@
       "id": "SessionStart:detect-guild-version.js",
       "source_path": "hooks/dist/detect-guild-version.js",
       "resource_path": "resources/hooks/dist/detect-guild-version.js",
-      "sha256": "62681b8597adce32b0ce3ac4a6f247cfaff406ff6a0e7a1bf957e8ddb80c3a1b"
+      "sha256": "5622a54fac5d873ae1465734f5cc8c0eab36549484295a48d335b3c24dfc198a"
     },
     {
       "category": "hooks",
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "d3bc5852d13698fcb707ecd25ba4e3282a47b12af16cc6c90aed6b358961a881"
+      "sha256": "34ce282127af25a7422b9ae21a0993503a205c7bab22e87f9b8d2949a1684222"
     },
     {
       "category": "hooks",
@@ -36,7 +36,7 @@
       "id": "UserPromptSubmit:check-skill-coverage.sh",
       "source_path": "hooks/check-skill-coverage.sh",
       "resource_path": "resources/hooks/check-skill-coverage.sh",
-      "sha256": "5cd5278ff4be7d18cfb9313c14596a0bae1b008e75c7f5d7af1049872b586260"
+      "sha256": "bc1c2b5273fa47c7254fce2d38cfac55060555c324a5f9d903bd23aaa2dd6c63"
     },
     {
       "category": "scripts",
@@ -64,7 +64,7 @@
       "id": "using-guild",
       "source_path": "skills/meta/using-guild/SKILL.src.md",
       "resource_path": "resources/skills/meta/using-guild/SKILL.src.md",
-      "sha256": "19f8ba9ff731e9d5ce5a82f3145943c4e4952433b9b2e71b6d3f70dcb223378a"
+      "sha256": "49cffc41ff477b5bbeae47ca70a34ac141106ea68bf60e047135753eaf4f045c"
     }
   ]
 }

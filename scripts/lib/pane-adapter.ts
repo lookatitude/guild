@@ -46,6 +46,10 @@ import {
   type PreflightResult,
   type RunFn,
 } from "./team-backend";
+import {
+  DISPATCH_PRODUCER_ENV,
+  DISPATCH_PRODUCER_TOKEN,
+} from "./core/contracts/team-backend";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "./host-registry-schema";
 import { registryIdToCanonicalHostKind } from "./host-id-namespace";
 import { spawnSync } from "child_process";
@@ -105,6 +109,23 @@ function taskAssignmentEnv(spec: PaneSpec): Record<string, string> {
   return spec.specialist ? { GUILD_TASK_ASSIGNMENT: taskAssignmentPathFor(spec) } : {};
 }
 
+// ── Universal structured producer marker (rf-wi-03 / G3) ─────────────────────
+//
+// Every producer-composed dispatch carries GUILD_DISPATCH_PRODUCER. The Claude
+// adapter gets it via `paneCommand` (command) already; every OTHER adapter emits
+// it here so the marker is universal across ALL pane backends (Codex / Pi /
+// Antigravity / wrapped-CLI), including remote dispatch which routes through
+// these adapters. Both channels — the shell `export …` fragment (command) and
+// the env map (env) — so the marker rides whichever the launcher/transport uses.
+/** `export GUILD_DISPATCH_PRODUCER=…; ` fragment for a non-Claude pane command. */
+function producerMarkerExport(): string {
+  return `export ${DISPATCH_PRODUCER_ENV}=${shellQuote(DISPATCH_PRODUCER_TOKEN)}; `;
+}
+/** The producer-marker entry for any adapter's env map. */
+function producerMarkerEnv(): Record<string, string> {
+  return { [DISPATCH_PRODUCER_ENV]: DISPATCH_PRODUCER_TOKEN };
+}
+
 /**
  * Claude Code pane. `command()` delegates to the shared `paneCommand`, so a
  * Claude-only team built through the adapter path is byte-identical to the
@@ -150,6 +171,7 @@ export class ClaudePaneAdapter implements PaneAdapter {
     return {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
@@ -239,10 +261,43 @@ export class CodexPaneAdapter implements PaneAdapter {
     // NO CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS — Codex is not on the Claude bus.
     // D-CAP: export GUILD_TASK_ID (scope-file locator) and optionally
     // GUILD_CAPABILITY_SCOPE (env fast-path) so D-CAP enforces on Codex panes.
+    //
+    // rf-wi-04 (G4) — CODEX-SIDE PreToolUse ENFORCEMENT: NOT WIRED THIS WAVE,
+    // with a corrected rationale (not silence, and NOT the "infeasible" claim an
+    // earlier draft made — the rf-wi-04 codex review disproved that). A codex
+    // pane launches BARE here. The honest, current picture:
+    //
+    //   FEASIBLE at the CLI level: Codex CLI ships stable `hooks` (stable since
+    //   codex 0.124.0; live-observed on 0.144.5) whose `PreToolUse` hook can
+    //   intercept Bash/apply_patch/MCP/tool calls and DENY them before execution
+    //   (`permissionDecision:"deny"` / exit 2). See developers.openai.com/codex/
+    //   hooks. So a Guild-gated per-tool deny IS achievable on codex.
+    //
+    //   NOT YET ENABLED in Guild, for two concrete reasons:
+    //     1. Guild's generated codex hook bundle wires SessionStart (update-check)
+    //        and `UserPromptSubmit` (prompt bridge),
+    //        NOT `PreToolUse` (scripts/build-host-packages.ts, writeCodexHookBridge)
+    //        — there is no codex PreToolUse deny bridge to gate a bypass behind.
+    //     2. The codex capability rows still record `hooks.pre_tool_use: false`
+    //        (INFERRED / "confirm on-box", never verified) in BOTH
+    //        host-capabilities-schema.ts and host-registry-schema.ts — stale vs.
+    //        the live CLI. (Note the same rows DO already declare a bypass launch
+    //        mode `--dangerously-bypass-approvals-and-sandbox`, so the earlier
+    //        "launch_modes: {}" claim was also wrong.)
+    //
+    //   PRECONDITION to enable a codex bypass flag later (mirrors the remote-
+    //   Claude item-1 gate): (a) on-box confirm codex PreToolUse deny, (b) refresh
+    //   the codex capability rows to `pre_tool_use: true` (blast-radius: routing/
+    //   degradation/support-matrix consumers), (c) add a codex `PreToolUse` deny
+    //   bridge to writeCodexHookBridge, (d) add a codex-side probe analogous to
+    //   RemoteTransport.probeHooks and gate the bypass on it. That is a scoped
+    //   followup (host-package build + a new hook + capability-row refresh),
+    //   beyond this lane's remote-precondition core — filed, not silently dropped.
     const taskFragment =
       spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer
-    // (lane panes only; Codex panes run no Claude hooks today, but the env
+    // (lane panes only; Codex panes run no Claude PostToolUse hook — only
+    // SessionStart/UserPromptSubmit are wired — but the env
     // parity keeps the heartbeat contract uniform across adapters).
     const specialistFragment =
       spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
@@ -252,6 +307,7 @@ export class CodexPaneAdapter implements PaneAdapter {
         : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment +
       specialistFragment +
       taskAssignmentExport(spec) +
@@ -264,6 +320,7 @@ export class CodexPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
@@ -329,6 +386,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `agy ${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -338,6 +396,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
@@ -398,6 +457,7 @@ export class PiPaneAdapter implements PaneAdapter {
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `pi -p ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -407,6 +467,7 @@ export class PiPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
@@ -516,6 +577,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
     const argv = [this.bin, ...this.argvPrefix(), "-p", shellQuote(spec.prompt)].join(" ");
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      producerMarkerExport() +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
       `${argv}; ` +
       `exec $SHELL`
@@ -525,6 +587,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...producerMarkerEnv(),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined

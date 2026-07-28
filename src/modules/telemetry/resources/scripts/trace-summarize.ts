@@ -29,6 +29,13 @@
 import * as fs from "fs";
 import * as path from "path";
 import { loadRunEvents, RunEvent } from "./lib/run-events";
+import {
+  loadRunSinks,
+  renderSinkAuditSection,
+  sinkAuditFrontmatterLines,
+  sinkAuditReflectionHint,
+  type RunSinkAudit,
+} from "./lib/run-sinks";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +47,320 @@ import { loadRunEvents, RunEvent } from "./lib/run-events";
  * via a local unsafe `JSON.parse(...) as TelemetryEvent` cast).
  */
 type TelemetryEvent = RunEvent;
+
+// ── Event normalization ───────────────────────────────────────────────────
+
+/**
+ * Bridges the canonical v1.4 field names (`status`, `latency_ms`,
+ * `hook_name`) onto the `ok`/`ms`/`tool` fields the rest of this module
+ * reads, ONCE at ingest, without overwriting a field already present (the
+ * legacy hook-mirror shape already carries `ok`/`ms`/`tool` natively — this
+ * is a no-op for those lines). Everything downstream then reads ONE dialect:
+ * `ok`/`ms`/`tool`, tri-stated on `ok`.
+ *
+ * `status` is mapped via an explicit WHITELIST, not a `!== "n/a"` blacklist,
+ * because the v1.4 vocabulary reuses the `status` field name with three
+ * DIFFERENT enums (hooks/lib/v1.4/log-jsonl-schema.ts):
+ *   - `tool_call`  → "ok" | "err" | "n/a"
+ *   - `hook_event` → "ok" | "err"
+ *   - `phase_end`  → "ok" | "error" | "escalated"
+ * Across all three, exactly one value means success ("ok") and two spell
+ * failure ("err" for tool_call/hook_event, "error" for phase_end — the same
+ * verdict, two spellings). "n/a" and "escalated" are NOT failures: a
+ * blacklist would silently normalize a valid `phase_end status:"escalated"`
+ * into `ok:false`, reproducing this same issue's false-ERROR defect one
+ * layer up. Any status value outside the whitelist (including "n/a",
+ * "escalated", and any future/unrecognized value) leaves `ok` `undefined` —
+ * an unknown verdict, not a failure and not a success.
+ *
+ * `latency_ms`/`duration_ms` must be a non-negative number to map onto `ms`:
+ * the orphan-sweep producer (hooks/post-tool-use.ts) emits `latency_ms: -1`
+ * as an "unmeasured" sentinel on `status:"err"` rows, not a real duration.
+ *
+ * `hook_name` bridges to `tool` for `hook_event` rows so a canonical
+ * `hook_event status:"err"` (e.g. hooks/lib/context-compliance.ts) is
+ * visible in buildTimeline() the same way a `tool_call` error is, keeping
+ * the Timeline and the frontmatter error count in agreement. Mirrors
+ * mcp-servers/guild-telemetry/src/index.ts's normalizeEvent — the same fix
+ * already shipped there for this issue's sibling MCP-query symptom.
+ */
+function normalizeEvent(raw: TelemetryEvent): TelemetryEvent {
+  const e: TelemetryEvent = { ...raw };
+  if (e.ok === undefined && typeof e.status === "string") {
+    if (e.status === "ok") e.ok = true;
+    else if (e.status === "err" || e.status === "error") e.ok = false;
+  }
+  if (e.ms === undefined) {
+    if (typeof e.latency_ms === "number" && e.latency_ms >= 0) e.ms = e.latency_ms;
+    else if (typeof e.duration_ms === "number" && e.duration_ms >= 0) e.ms = e.duration_ms;
+  }
+  if (e.tool === undefined && e.event === "hook_event" && typeof e.hook_name === "string") {
+    e.tool = e.hook_name;
+  }
+  return e;
+}
+
+// ── Event predicates ───────────────────────────────────────────────────────
+
+/**
+ * #76 — an event FAILED only when it SAYS so.
+ *
+ * The canonical log interleaves three shapes and only one of them natively
+ * has `ok`:
+ *   - hook-mirror lines  → `ok: boolean`
+ *   - v1.4 wrapped lines → `status`, NO `ok` (normalizeEvent bridges it)
+ *   - guild.trace.*.v1   → neither (dispatch / recall / degradation / config)
+ *
+ * The old `!e.ok` test collapsed all three: every `status`-dialect line and
+ * every trace line became a phantom "⚠ ERROR" row, a per-specialist error
+ * tally, and a bogus "skill-improvement candidates" hint — while a genuine
+ * `status: "err"` was indistinguishable from a healthy `status: "ok"`. Both
+ * halves are fixed: the `status` dialect is read (at ingest, by
+ * normalizeEvent), and absence of a verdict is NOT failure. (Verified against
+ * a real run log: 18 `status:"ok"` + 2 `status:"err"` tool_calls, none
+ * carrying `ok`.)
+ *
+ * This matters more now that the pane path (#76) puts a dispatch receipt on
+ * the log for EVERY lane — a receipt carries no verdict in either dialect.
+ *
+ * Reads `ok` ONLY: every caller sees post-normalizeEvent events, so a second
+ * dialect-reader here would be a divergent duplicate of the bridge above.
+ */
+function isErrorEvent(e: TelemetryEvent): boolean {
+  return e.ok === false;
+}
+
+/**
+ * The other half of the tri-state: an event SUCCEEDED only when it says so.
+ *
+ * "Not an error" is not "success". A dispatch receipt, a `run_started` marker
+ * and a recall trace all carry no verdict at all — folding them into the OK
+ * tally would replace one lie (every trace line is an error) with its mirror
+ * image (every trace line is a passing tool call). A verdict-less event
+ * contributes to NEITHER count.
+ */
+function isSuccessEvent(e: TelemetryEvent): boolean {
+  return e.ok === true;
+}
+
+/** `"<n>ms"` when a numeric duration is known, else `"n/a"` — never the bare `undefined` string. */
+function durationLabel(ms: unknown): string {
+  return typeof ms === "number" ? `${ms}ms` : "n/a";
+}
+
+/** The Timeline's rendering of the same tri-state isErrorEvent decides. */
+function errorLabel(e: TelemetryEvent): string {
+  return isErrorEvent(e) ? " ⚠ ERROR" : "";
+}
+
+/**
+ * #G7b (v23x-deferred-followups) — reconciles a mixed-dialect log to ONE set
+ * of "logical tool-call events": a genuine duplicate PAIR counts once, but a
+ * genuinely UNPAIRED row from either dialect is never dropped.
+ *
+ * Legacy hook-mirror lines name the activity `event: "PostToolUse"` (the
+ * literal Claude Code hook name); the canonical v1.4 shape
+ * (hooks/lib/v1.4/log-jsonl-schema.ts's ToolCallEvent) names the SAME
+ * activity `event: "tool_call"`. Gating on "PostToolUse" alone (pre-#G7b)
+ * silently zeroed buildSpecialistActivity's toolCalls/fileOps tally and both
+ * slow-call detectors for every canonical run — hooks.json's PostToolUse
+ * matcher runs BOTH hooks/capture-telemetry.ts and hooks/post-tool-use.ts,
+ * and a pre-de-dup-fix canonical log carries BOTH a `PostToolUse` row (from
+ * capture-telemetry.ts) AND a `tool_call` row (from post-tool-use.ts) for the
+ * SAME invocation, landing within a few ms of each other with the same
+ * `tool` name (verified against the checked-in
+ * tests/rearch/perf-corpus/run-medium-942.jsonl fixture).
+ *
+ * A whole-log "prefer one dialect" heuristic is WRONG: `tool_call.tool` is a
+ * closed enum (log-jsonl-schema.ts's TOOL_CALL_TOOL_VALUES) and
+ * post-tool-use.ts deliberately skips any tool outside it (isKnownTool()), so
+ * a tool like Monitor/SendMessage/ToolSearch/an MCP tool only EVER gets a
+ * `PostToolUse` row — real, distinct data, not a duplicate of anything.
+ * Conversely post-tool-use.ts's orphan-sweep can emit a `tool_call` row for a
+ * hung invocation that never completed (so no `PostToolUse` ever fired for
+ * it either) — also real, distinct data. Suppressing "the other dialect"
+ * wholesale (as an earlier version of this fix did) silently drops both of
+ * these real-data cases (confirmed against the perf-corpus fixture: 21
+ * `PostToolUse`-only invocations + 18 `tool_call`-only orphans, alongside 444
+ * genuinely paired duplicates — 483 total logical records, not 462 or 465).
+ *
+ * Algorithm: IDENTITY, not just cardinality. A pure "min(a,b) of this tool
+ * are paired" slice (an earlier version of this fix) gets the total COUNT
+ * right via max(a,b) = a+b-min(a,b), but silently mispairs whenever a tool
+ * has genuinely unpaired rows on BOTH sides at once (one real pair + one
+ * post-only orphan + one call-only orphan for the same tool: cardinality
+ * slicing reports max(2,2)=2, dropping a real record whose true count is 3).
+ * A GREEDY nearest-first match (a later version) fixes that, but is not
+ * guaranteed optimal either: greedily claiming each post's single nearest
+ * still-free call, in timestamp order, can grab a call that a LATER post
+ * needed more, stranding both that later post and the call the greedy pick
+ * ignored (e.g. posts at relative ts 0/40, calls at -35/30, window 50ms: the
+ * true optimal is post0↔call-35 (dist 35) + post40↔call30 (dist 10) = 2
+ * matches, but greedy lets post0 grab call30 first (dist 30 < 35), stranding
+ * post40 and call-35 unmatched = 3 reported records instead of 2).
+ *
+ * Group same-`tool` rows per dialect, then compute the TRUE
+ * maximum-cardinality (most pairs), minimum-total-distance (tie-break)
+ * matching subject to each pair being within MATCH_WINDOW_MS — a real
+ * pair's two hook-fired rows land within ~1ms of each other in production,
+ * (measured max separation 48ms in the checked-in corpus), while a genuine
+ * orphan has no counterpart nearby in time. This is the classical 1-D
+ * assignment problem: for any cost that is a sum of |timestamp differences|,
+ * an optimal matching between two TIME-SORTED sequences never needs to
+ * "cross" pairs (if postA↔callX and postB↔callY with postA before postB,
+ * an optimal solution has callX before callY too) — so a
+ * sequence-alignment-style DP over the two sorted lists (same recurrence as
+ * edit distance / LCS: at each step, skip the next post, skip the next call,
+ * or match them if within window) finds the true optimum in O(postCount ×
+ * callCount) per tool, exact rather than heuristic. A matched pair is kept
+ * once (represented by the richer `tool_call` row); anything left unmatched
+ * on either side — a real orphan — is kept as its own distinct row,
+ * preserving its own specialist/duration/tool fields. When one dialect is
+ * entirely absent from the log (the common, current single-dialect shape),
+ * this is a no-op passthrough of the other dialect.
+ *
+ * Deliberately excludes `hook_event` from both dialects: a lifecycle hook
+ * (SessionStart, PreCompact, ...) is bridged onto Timeline's `tool` field for
+ * error/duration display (see normalizeEvent), but it is not itself a tool
+ * CALL — counting it here would inflate the "Tool calls" tally with non-tool
+ * activity.
+ */
+const MATCH_WINDOW_MS = 50;
+
+/**
+ * Exact maximum-cardinality, minimum-total-distance matching between two
+ * timestamp-sorted sequences, restricted to pairs within `windowMs`. See
+ * reconcileToolCallEvents's docstring for why this must be a DP (greedy
+ * nearest-first is not optimal) and why a non-crossing DP is exact here.
+ */
+function maxCardinalityMinCostMatch(
+  sortedPosts: TelemetryEvent[],
+  sortedCalls: TelemetryEvent[],
+  tsOf: (e: TelemetryEvent) => number,
+  windowMs: number
+): Array<[TelemetryEvent, TelemetryEvent]> {
+  const n = sortedPosts.length;
+  const m = sortedCalls.length;
+  // count[i][j]/cost[i][j] = best (most pairs, then least total distance)
+  // matching using only sortedPosts[0..i) and sortedCalls[0..j).
+  const count: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  const cost: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  const betterThan = (aCount: number, aCost: number, bCount: number, bCost: number): boolean =>
+    aCount > bCount || (aCount === bCount && aCost < bCost);
+
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      let bestCount = count[i - 1][j];
+      let bestCost = cost[i - 1][j];
+      if (betterThan(count[i][j - 1], cost[i][j - 1], bestCount, bestCost)) {
+        bestCount = count[i][j - 1];
+        bestCost = cost[i][j - 1];
+      }
+      const diff = Math.abs(tsOf(sortedPosts[i - 1]) - tsOf(sortedCalls[j - 1]));
+      if (diff <= windowMs) {
+        const matchCount = count[i - 1][j - 1] + 1;
+        const matchCost = cost[i - 1][j - 1] + diff;
+        if (betterThan(matchCount, matchCost, bestCount, bestCost)) {
+          bestCount = matchCount;
+          bestCost = matchCost;
+        }
+      }
+      count[i][j] = bestCount;
+      cost[i][j] = bestCost;
+    }
+  }
+
+  const matches: Array<[TelemetryEvent, TelemetryEvent]> = [];
+  let i = n;
+  let j = m;
+  while (i > 0 && j > 0) {
+    const diff = Math.abs(tsOf(sortedPosts[i - 1]) - tsOf(sortedCalls[j - 1]));
+    if (diff <= windowMs && count[i - 1][j - 1] + 1 === count[i][j] && cost[i - 1][j - 1] + diff === cost[i][j]) {
+      matches.push([sortedPosts[i - 1], sortedCalls[j - 1]]);
+      i--;
+      j--;
+    } else if (count[i - 1][j] === count[i][j] && cost[i - 1][j] === cost[i][j]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return matches;
+}
+
+function reconcileToolCallEvents(events: TelemetryEvent[]): TelemetryEvent[] {
+  const posts = events.filter((e) => e.event === "PostToolUse");
+  const calls = events.filter((e) => e.event === "tool_call");
+  if (posts.length === 0 || calls.length === 0) {
+    return posts.length > 0 ? posts : calls;
+  }
+
+  const byTool = new Map<string, { posts: TelemetryEvent[]; calls: TelemetryEvent[] }>();
+  const bucket = (tool: unknown) => {
+    const key = typeof tool === "string" ? tool : "";
+    if (!byTool.has(key)) byTool.set(key, { posts: [], calls: [] });
+    return byTool.get(key)!;
+  };
+  for (const e of posts) bucket(e.tool).posts.push(e);
+  for (const e of calls) bucket(e.tool).calls.push(e);
+
+  const tsOf = (e: TelemetryEvent): number =>
+    typeof e.ts === "string" ? Date.parse(e.ts) : Number.NaN;
+  const byTs = (a: TelemetryEvent, b: TelemetryEvent) => tsOf(a) - tsOf(b);
+
+  const reconciled: TelemetryEvent[] = [];
+  for (const { posts: toolPosts, calls: toolCalls } of byTool.values()) {
+    const sortedPosts = [...toolPosts].sort(byTs);
+    const sortedCalls = [...toolCalls].sort(byTs);
+    const matches = maxCardinalityMinCostMatch(sortedPosts, sortedCalls, tsOf, MATCH_WINDOW_MS);
+    const matchedPosts = new Set(matches.map(([post]) => post));
+    const matchedCalls = new Set(matches.map(([, call]) => call));
+    for (const [, call] of matches) reconciled.push(call); // paired dupe, kept once (richer tool_call representative)
+    for (const post of sortedPosts) {
+      if (!matchedPosts.has(post)) reconciled.push(post); // unpaired PostToolUse-only — kept with its own fields
+    }
+    for (const call of sortedCalls) {
+      if (!matchedCalls.has(call)) reconciled.push(call); // unpaired tool_call-only (orphan)
+    }
+  }
+  return reconciled;
+}
+
+/** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
+function isDispatchEvent(e: TelemetryEvent): boolean {
+  return e.schema_version === "guild.trace.dispatch.v1";
+}
+
+/**
+ * A CONFIRMED dispatch: the lane actually reached a backend.
+ *
+ * A bare `backend: "unknown"` receipt is excluded on purpose. write-task-run.ts
+ * emits one per TASK before any routing decision ("backend not determinable at
+ * emit time" — its own contract), so they are pre-dispatch INTENT, and they
+ * count in a different unit than the per-lane receipts the backends emit.
+ * Mixing the two would report `[tmux: 3, unknown: 5]` for a three-lane run.
+ */
+function isConfirmedDispatch(e: TelemetryEvent): boolean {
+  if (!isDispatchEvent(e)) return false;
+  // A surface the closed `backend` enum cannot name (cmux) rides
+  // `backend: "unknown"` and identifies itself in `pane_backend`. Its presence
+  // is what separates such a receipt from a pre-routing intent, which carries
+  // "unknown" and nothing else. The producer-side cross-field invariant
+  // (validateDispatchEvent) guarantees a `pane_backend` line really is a
+  // confirmed dispatch: backend "unknown" AND backend_rung >= 1.
+  if (typeof e.pane_backend === "string" && e.pane_backend !== "") return true;
+  return typeof e.backend === "string" && e.backend !== "" && e.backend !== "unknown";
+}
+
+/**
+ * The surface to report a dispatch under: the concrete `pane_backend` when the
+ * closed `backend` enum could not name it, else `backend` itself. Absent on
+ * every pre-#76 event, which simply report their `backend`.
+ */
+function dispatchSurface(e: TelemetryEvent): string {
+  if (typeof e.pane_backend === "string" && e.pane_backend) return e.pane_backend;
+  return e.backend as string;
+}
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
@@ -75,6 +396,16 @@ interface RunStats {
   eventCount: number;
   specialists: string[];
   toolCounts: Array<{ tool: string; count: number }>;
+  /**
+   * #76 — DISTINCT LANES dispatched per surface ("tmux"/"cmux" for a visible
+   * pane, "remote" for an SSH lane, "agent" for the in-session Agent path).
+   * Pre-routing `unknown` intents are excluded — see isConfirmedDispatch.
+   * On a pane run these ARE the specialist signal: the panes are separate host
+   * sessions, so none of their tool calls land in this log.
+   */
+  dispatchCounts: Array<{ backend: string; count: number }>;
+  /** #76 — raw receipt lines per surface, so retry volume is not hidden. */
+  dispatchReceiptCounts: Array<{ backend: string; count: number }>;
   filesTouchedCount: number;
   errors: number;
   okRate: number;
@@ -90,6 +421,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
       eventCount: 0,
       specialists: [],
       toolCounts: [],
+      dispatchCounts: [],
+      dispatchReceiptCounts: [],
       filesTouchedCount: 0,
       errors: 0,
       okRate: 1,
@@ -121,12 +454,52 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     .map(([tool, count]) => ({ tool, count }))
     .sort((a, b) => b.count - a.count || a.tool.localeCompare(b.tool));
 
+  // #76: CONFIRMED dispatches grouped by surface, sorted count-desc then alpha
+  // (same ordering contract as toolCounts). BOTH numbers are reported, because
+  // they answer different questions and neither may hide the other:
+  //   dispatched_lanes   — distinct lanes (keyed task_id, else specialist).
+  //                        "How many specialists ran?" A retry must not inflate.
+  //   dispatch_receipts  — raw receipt lines. "How many dispatch attempts were
+  //                        committed?" Retry volume stays visible.
+  const dispatchLanes = new Map<string, Set<string>>();
+  const receiptMap = new Map<string, number>();
+  for (const event of events) {
+    if (!isConfirmedDispatch(event)) continue;
+    const surface = dispatchSurface(event);
+    receiptMap.set(surface, (receiptMap.get(surface) ?? 0) + 1);
+    const lane =
+      (typeof event.task_id === "string" && event.task_id) ||
+      (typeof event.specialist === "string" && event.specialist) ||
+      "";
+    if (!lane) continue;
+    if (!dispatchLanes.has(surface)) dispatchLanes.set(surface, new Set());
+    dispatchLanes.get(surface)!.add(lane);
+  }
+  const bySurface = (a: { backend: string; count: number }, b: { backend: string; count: number }) =>
+    b.count - a.count || a.backend.localeCompare(b.backend);
+  const dispatchCounts = Array.from(dispatchLanes.entries())
+    .map(([backend, lanes]) => ({ backend, count: lanes.size }))
+    .sort(bySurface);
+  const dispatchReceiptCounts = Array.from(receiptMap.entries())
+    .map(([backend, count]) => ({ backend, count }))
+    .sort(bySurface);
+
   const filesTouchedCount = events.filter(
     (e) => e.tool === "Write" || e.tool === "Edit"
   ).length;
 
-  const errors = events.filter((e) => e.ok === false).length;
-  const okRate = events.length > 0 ? (events.length - errors) / events.length : 1;
+  const errors = events.filter(isErrorEvent).length;
+  // ok_rate is a rate over events that ACTUALLY REPORT AN OUTCOME. The old
+  // denominator was every line, so a verdict-less event silently scored as a
+  // success — an undefined verdict (canonical status:"n/a"/"escalated", a
+  // guild.trace.*.v1 line) belongs in NEITHER the numerator nor the
+  // denominator (mirrors mcp-servers/guild-telemetry). #76 makes that worse by
+  // putting one dispatch receipt per lane on the log: a pane-only run would
+  // read `ok_rate: 1` having verified nothing, and any mixed run's rate would
+  // be diluted upward by its own receipts.
+  // No verdict, no vote (same tri-state buildSpecialistActivity uses).
+  const verdictBearing = events.filter((e) => isErrorEvent(e) || isSuccessEvent(e)).length;
+  const okRate = verdictBearing > 0 ? (verdictBearing - errors) / verdictBearing : 1;
 
   return {
     runId,
@@ -136,6 +509,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     eventCount: events.length,
     specialists,
     toolCounts,
+    dispatchCounts,
+    dispatchReceiptCounts,
     filesTouchedCount,
     errors,
     okRate: Math.round(okRate * 1000) / 1000,
@@ -144,7 +519,7 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
 
 // ── Summary sections ───────────────────────────────────────────────────────
 
-function buildFrontmatter(stats: RunStats): string {
+function buildFrontmatter(stats: RunStats, sinkAudit?: RunSinkAudit): string {
   const toolsLine =
     stats.toolCounts.length > 0
       ? stats.toolCounts.map(({ tool, count }) => `${tool}: ${count}`).join(", ")
@@ -155,6 +530,20 @@ function buildFrontmatter(stats: RunStats): string {
       ? stats.specialists.join(", ")
       : "(none)";
 
+  // #76: a pane run's dispatch signal, so "10 lanes ran" is answerable from the
+  // frontmatter alone even though no pane tool call reached this log.
+  const surfaceLine = (rows: Array<{ backend: string; count: number }>): string =>
+    rows.length > 0
+      ? rows.map(({ backend, count }) => `${backend}: ${count}`).join(", ")
+      : "(none)";
+  const dispatchedLanesLine = surfaceLine(stats.dispatchCounts);
+  const dispatchReceiptsLine = surfaceLine(stats.dispatchReceiptCounts);
+
+  // rf-wi-02: the dispatch-integrity sink counts, so a run with a silent backend
+  // downgrade or an un-tiered dispatch reads VISIBLY dirty from the frontmatter
+  // alone. Zero-valued on a clean run (affirmed, not silently absent).
+  const sinkLines = sinkAudit ? sinkAuditFrontmatterLines(sinkAudit) : [];
+
   return [
     "---",
     `run_id: ${stats.runId}`,
@@ -163,10 +552,13 @@ function buildFrontmatter(stats: RunStats): string {
     `duration_ms: ${stats.durationMs}`,
     `event_count: ${stats.eventCount}`,
     `specialists_dispatched: [${specialistsLine}]`,
+    `dispatched_lanes: [${dispatchedLanesLine}]`,
+    `dispatch_receipts: [${dispatchReceiptsLine}]`,
     `tools_used: [${toolsLine}]`,
     `files_touched_count: ${stats.filesTouchedCount}`,
     `errors: ${stats.errors}`,
     `ok_rate: ${stats.okRate}`,
+    ...sinkLines,
     "---",
   ].join("\n");
 }
@@ -179,15 +571,13 @@ function buildTimeline(events: TelemetryEvent[]): string {
     const ts = event.ts;
     if (event.event === "SubagentStop") {
       const spec = event.specialist || "(main session)";
-      lines.push(`- \`${ts}\` — specialist **${spec}** completed (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — specialist **${spec}** completed (${durationLabel(event.ms)})`);
     } else if (event.tool === "Write" || event.tool === "Edit") {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = event.ok ? "" : " ⚠ ERROR";
-      lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — ${event.tool}${spec}${errorLabel(event)} (${durationLabel(event.ms)})`);
     } else if (event.tool) {
       const spec = event.specialist ? ` [${event.specialist}]` : "";
-      const status = event.ok ? "" : " ⚠ ERROR";
-      lines.push(`- \`${ts}\` — ${event.tool}${spec}${status} (${event.ms}ms)`);
+      lines.push(`- \`${ts}\` — ${event.tool}${spec}${errorLabel(event)} (${durationLabel(event.ms)})`);
     }
   }
   return lines.join("\n");
@@ -201,6 +591,7 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
     string,
     { toolCalls: number; fileOps: number; errors: number; ok: number }
   >();
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
 
   for (const event of events) {
     const key = event.specialist || "(main session)";
@@ -208,12 +599,13 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
       specialistMap.set(key, { toolCalls: 0, fileOps: 0, errors: 0, ok: 0 });
     }
     const s = specialistMap.get(key)!;
-    if (event.event === "PostToolUse" && event.tool) {
+    if (toolCallEvents.has(event) && event.tool) {
       s.toolCalls++;
       if (event.tool === "Write" || event.tool === "Edit") s.fileOps++;
     }
-    if (!event.ok) s.errors++;
-    else s.ok++;
+    // Tri-state: failed / succeeded / no verdict at all (counted in neither).
+    if (isErrorEvent(event)) s.errors++;
+    else if (isSuccessEvent(event)) s.ok++;
   }
 
   // Sort: named specialists alphabetically first, then (main session)
@@ -235,20 +627,45 @@ function buildSpecialistActivity(events: TelemetryEvent[]): string {
   return lines.join("\n").trim();
 }
 
+/**
+ * #G7b — the legacy hook-mirror `payload_digest` field has no canonical
+ * v1.4 equivalent by that name (log-jsonl-schema.ts's ToolCallEvent /
+ * HookEvent carry `result_excerpt_redacted` / `payload_excerpt_redacted`
+ * instead), so a canonical ERROR row printed the literal string
+ * "digest: undefined". Render whichever redacted excerpt IS present, and
+ * omit the "— digest: ..." segment entirely rather than print a non-value.
+ *
+ * Collapses internal whitespace (including newlines) to single spaces before
+ * deciding presence and rendering: production `result_excerpt_redacted`
+ * (hooks/post-tool-use.ts's resultExcerpt()) preserves a raw string
+ * tool-response verbatim, so it can be whitespace-only (would otherwise
+ * render a visually-empty "— digest: " segment) or multiline (would
+ * otherwise break the single-line Notable-events list entry across lines).
+ */
+function errorDigest(e: TelemetryEvent): string {
+  const digest = e.payload_digest ?? e.result_excerpt_redacted ?? e.payload_excerpt_redacted;
+  if (typeof digest !== "string") return "";
+  const collapsed = digest.replace(/\s+/g, " ").trim();
+  return collapsed.length > 0 ? ` — digest: ${collapsed}` : "";
+}
+
 function buildNotableEvents(events: TelemetryEvent[]): string {
   const notable: string[] = [];
 
-  // Errors
-  const errorEvents = events.filter((e) => !e.ok);
+  // Errors — only an explicit failure verdict is an error; unknown/absent
+  // verdicts (canonical status:"n/a"/"escalated", verdict-less trace lines)
+  // are not.
+  const errorEvents = events.filter(isErrorEvent);
   for (const e of errorEvents) {
     notable.push(
-      `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"} — digest: ${e.payload_digest}`
+      `- ERROR at \`${e.ts}\`: tool **${e.tool || "(none)"}** by ${e.specialist || "(main session)"}${errorDigest(e)}`
     );
   }
 
   // Very long tool calls (> 2000ms for tool use events, heuristic)
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
   const longCalls = events.filter(
-    (e) => e.event === "PostToolUse" && e.ms > 2000
+    (e) => toolCallEvents.has(e) && typeof e.ms === "number" && e.ms > 2000
   );
   for (const e of longCalls) {
     notable.push(
@@ -259,12 +676,23 @@ function buildNotableEvents(events: TelemetryEvent[]): string {
   return notable.length > 0 ? notable.join("\n") : "No notable events.";
 }
 
-function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string {
+function buildReflectionHints(
+  stats: RunStats,
+  events: TelemetryEvent[],
+  sinkAudit?: RunSinkAudit
+): string {
   const hints: string[] = [];
+
+  // rf-wi-02: a backend degradation or un-tiered dispatch is a first-class
+  // reflection signal — surface it ahead of the softer heuristics so reflect
+  // routes it (skill-improvement / followup) instead of it staying auditable-by-
+  // path only.
+  const sinkHint = sinkAudit ? sinkAuditReflectionHint(sinkAudit) : null;
+  if (sinkHint) hints.push(sinkHint);
 
   // Skill-improvement candidates: specialists with errors
   const specialistsWithErrors = Array.from(
-    new Set(events.filter((e) => !e.ok && e.specialist).map((e) => e.specialist))
+    new Set(events.filter((e) => isErrorEvent(e) && e.specialist).map((e) => e.specialist))
   ).sort();
   if (specialistsWithErrors.length > 0) {
     hints.push(
@@ -273,8 +701,9 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
   }
 
   // Missing-specialist candidates: events from main session (empty specialist) with tool use
+  const toolCallEvents = new Set(reconcileToolCallEvents(events));
   const mainSessionToolCalls = events.filter(
-    (e) => e.event === "PostToolUse" && !e.specialist && e.tool
+    (e) => toolCallEvents.has(e) && !e.specialist && e.tool
   );
   if (mainSessionToolCalls.length > 0) {
     hints.push(
@@ -284,7 +713,7 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
 
   // Context-bundle issues: any tool calls over 5000ms
   const verySlowCalls = events.filter(
-    (e) => e.event === "PostToolUse" && e.ms > 5000
+    (e) => toolCallEvents.has(e) && typeof e.ms === "number" && e.ms > 5000
   );
   if (verySlowCalls.length > 0) {
     hints.push(
@@ -306,11 +735,15 @@ function buildReflectionHints(stats: RunStats, events: TelemetryEvent[]): string
   return hints.join("\n");
 }
 
-function buildSummary(runId: string, events: TelemetryEvent[]): string {
+function buildSummary(
+  runId: string,
+  events: TelemetryEvent[],
+  sinkAudit?: RunSinkAudit
+): string {
   const stats = computeStats(runId, events);
 
   const sections = [
-    buildFrontmatter(stats),
+    buildFrontmatter(stats, sinkAudit),
     "",
     `# Run ${runId} summary`,
     "",
@@ -326,9 +759,13 @@ function buildSummary(runId: string, events: TelemetryEvent[]): string {
     "",
     buildNotableEvents(events),
     "",
+    // rf-wi-02: the dispatch-integrity sink consumers. reflect reads summary.md,
+    // so surfacing degradations + un-tiered dispatches here wires the sinks into
+    // the reflection path without reflect re-reading the raw jsonl.
+    ...(sinkAudit ? [renderSinkAuditSection(sinkAudit), ""] : []),
     "## Reflection hints",
     "",
-    buildReflectionHints(stats, events),
+    buildReflectionHints(stats, events, sinkAudit),
     "",
   ];
 
@@ -371,8 +808,15 @@ function main(): void {
     );
   }
 
-  // Build summary
-  const summary = buildSummary(runId, events);
+  // rf-wi-02: read the dispatch-integrity sinks from the SAME run dir. They live
+  // OUTSIDE the event log (their own frozen-vocabulary jsonl), so they are read
+  // separately from `events` and folded into the summary — see run-sinks.ts.
+  const sinkAudit = loadRunSinks(runDir);
+
+  // Build summary — normalize canonical status/latency_ms onto ok/ms first
+  // (scripts/lib/run-events.ts intentionally leaves shape interpretation to
+  // the caller; see normalizeEvent's docstring above).
+  const summary = buildSummary(runId, events.map(normalizeEvent), sinkAudit);
 
   // Write output
   const outDir = path.dirname(outFile);

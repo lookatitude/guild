@@ -89,6 +89,44 @@ function sha256(bytes: Buffer | string): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+/**
+ * The pinned oracle predates the universal dispatch-producer marker. Preserve
+ * byte-pinned historical execution while allowing exactly that additive,
+ * security-relevant current contract through the compatibility comparison.
+ */
+function historicalProjection(receipt: LaunchReceipt): LaunchReceipt {
+  const projected = structuredClone(receipt);
+  for (const descriptor of projected.dispatchPlan) {
+    const env = descriptor.env;
+    if (env && typeof env === "object" && !Array.isArray(env)) {
+      delete (env as Record<string, unknown>).GUILD_DISPATCH_PRODUCER;
+    }
+    if (typeof descriptor.prompt === "string" && typeof descriptor.name === "string") {
+      const marker =
+        `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=${descriptor.name}\n`;
+      if (descriptor.prompt.startsWith(marker)) {
+        descriptor.prompt = descriptor.prompt.slice(marker.length);
+      }
+    }
+  }
+  return projected;
+}
+
+function expectCurrentProducerMarker(receipt: LaunchReceipt): void {
+  for (const descriptor of receipt.dispatchPlan) {
+    expect(descriptor.env).toMatchObject({
+      GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
+    });
+    expect(descriptor.prompt).toEqual(
+      expect.stringMatching(
+        new RegExp(
+          `^GUILD_DISPATCH_PRODUCER=guild\\.dispatch\\.v1 role=${String(descriptor.name)}\\n`
+        )
+      )
+    );
+  }
+}
+
 function writeTeam(root: string, lifecycleVersion: string): string {
   const team = path.join(root, "team.yaml");
   fs.writeFileSync(
@@ -157,25 +195,27 @@ function executeLauncher(
 }
 
 function normalize(receipt: LaunchReceipt): unknown {
+  const projected = historicalProjection(receipt);
   return {
-    backend: receipt.backend,
-    reason: receipt.reason,
-    slug: receipt.slug,
-    ok: receipt.ok,
-    dispatch_plan: receipt.dispatchPlan,
-    orchestrator_pane_id: receipt.orchestratorPaneId,
-    teammate_pane_ids: receipt.teammatePaneIds,
-    notes: receipt.notes,
+    backend: projected.backend,
+    reason: projected.reason,
+    slug: projected.slug,
+    ok: projected.ok,
+    dispatch_plan: projected.dispatchPlan,
+    orchestrator_pane_id: projected.orchestratorPaneId,
+    teammate_pane_ids: projected.teammatePaneIds,
+    notes: projected.notes,
   };
 }
 
 function orderedReceiptSequence(receipt: LaunchReceipt): readonly string[] {
+  const projected = historicalProjection(receipt);
   return [
-    `launch:${receipt.backend}:${receipt.reason}:${receipt.slug}`,
-    ...receipt.dispatchPlan.map(
+    `launch:${projected.backend}:${projected.reason}:${projected.slug}`,
+    ...projected.dispatchPlan.map(
       (descriptor, index) => `dispatch:${index}:${JSON.stringify(descriptor)}`
     ),
-    `terminal:${receipt.ok}:${JSON.stringify(receipt.notes)}`,
+    `terminal:${projected.ok}:${JSON.stringify(projected.notes)}`,
   ];
 }
 
@@ -262,7 +302,8 @@ describe("MH-08 pinned historical fixture replay", () => {
       expect(orderedReceiptSequence(current.receipt)).toEqual(
         orderedReceiptSequence(oracle.receipt)
       );
-      expect(current.raw).toEqual(oracle.raw);
+      expectCurrentProducerMarker(current.receipt);
+      expect(current.raw).not.toEqual(oracle.raw);
       expect(oracle.raw).toEqual(historicalBytesBefore);
       expect(oracleEffects.count).toBe(1);
       expect(currentEffects.count).toBe(1);

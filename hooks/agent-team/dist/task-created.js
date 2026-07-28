@@ -59,6 +59,16 @@ var init_config_defaults = __esm({
       auto_approve: [],
       review: "local",
       host: "auto",
+      /**
+       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+       * this top-level placement (sibling of the `host` dispatch selector) is the registered
+       * replacement. One of only three keys ever legitimately null-typed at the top level.
+       */
+      host_mode: null,
       roles: { host: null, advisory: null, adversarial: null },
       host_profiles: {},
       initiative_default: null,
@@ -163,7 +173,20 @@ var init_config_defaults = __esm({
         // the SessionStart signal; `auto` additionally stages the host apply path;
         // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
         update: { mode: "notify", cadence_hours: 24 },
-        allowed_tools: []
+        allowed_tools: [],
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+         * "Inline shortcut under high autonomy").
+         */
+        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+         * activity count before the lifecycle gate advisory fires.
+         */
+        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
       }
     };
   }
@@ -277,7 +300,17 @@ var init_host_capabilities_schema = __esm({
         installable: false,
         installability: "target",
         manifest_format: "codex-plugin",
-        update: { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false }
+        // NOT self_update (operator decision, initiative cross-host-release-
+        // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
+        // list` tracks the registered marketplace source, so a Guild-side staged
+        // swap of the cache mutates manager state behind Codex's back and the next
+        // `codex plugin add` reinstalls the old payload. A minted receipt also
+        // cannot know a native install's channel, so a self-update could silently
+        // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
+        // populations: receipted installs re-render properly; host-native installs
+        // are detected and told the precise codex command for their registered
+        // source type (git → marketplace upgrade + plugin add; local → reinstall).
+        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
       },
       bootstrap: {
         // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
@@ -300,10 +333,16 @@ var init_host_capabilities_schema = __esm({
       agents: { native_agents: false, agent_format: null },
       // Verified (per-host-packaging flags agents unsupported).
       hooks: {
-        // Verified-by-design: Codex hook taxonomy differs from Claude; no native
-        // Claude-equivalent hooks. All degrade through the HookEmitter (ADR Surface 3).
-        session_start: false,
-        user_prompt_submit: false,
+        // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+        // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+        // Claude-shaped hooks manifest and fires both events the generated
+        // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+        // bridge since the package existed, and SessionStart now carries the
+        // update-check signal, LIVE-VERIFIED in a real codex session (the model
+        // quoted the injected line verbatim). Remaining events stay false until
+        // individually verified.
+        session_start: true,
+        user_prompt_submit: true,
         pre_tool_use: false,
         post_tool_use: false,
         stop: false,
@@ -4388,6 +4427,9 @@ function parseSettingsFile_fromParsed(parsed) {
     const normalized = normalizeDispatchHostId(parsed["host"]);
     if (normalized) out.host = normalized;
   }
+  if (parsed["host_mode"] === null) out.host_mode = null;
+  else if (typeof parsed["host_mode"] === "string" && HOST_MODES.includes(parsed["host_mode"]))
+    out.host_mode = parsed["host_mode"];
   if (isPlainObject2(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"]);
   if (isPlainObject2(parsed["host_profiles"]))
@@ -4812,7 +4854,7 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs5, path6, yaml, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
+var fs5, path6, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
 var init_settings_reader = __esm({
   "../src/modules/config/workflows/settings-reader.ts"() {
     fs5 = __toESM(require("fs"));
@@ -4825,6 +4867,7 @@ var init_settings_reader = __esm({
     init_kernel();
     init_workspace_manifest();
     yaml = loadYamlApi();
+    HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
     DEFAULTS2 = DEFAULTS;
     VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
     KNOWN_HOST_IDS2 = new Set(HOST_IDS);
@@ -4857,8 +4900,11 @@ var init_settings_reader = __esm({
       // R-018
       "allowed_tools",
       // R-020
-      "update"
+      "update",
       // plugin-update-lifecycle AC-6
+      "lean_lead",
+      "lifecycle_gate"
+      // rf-wi-01 (G1)
     ]);
   }
 });
@@ -4910,6 +4956,26 @@ function validateDispatchEvent(ev) {
   }
   if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"])) {
     return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
+  }
+  for (const optKey of ["attribution_specialist", "pane_id", "pane_target", "pane_backend"]) {
+    if (e[optKey] === void 0) continue;
+    if (typeof e[optKey] !== "string" || e[optKey] === "") {
+      return { ok: false, reason: `${optKey}, when present, must be a non-empty string` };
+    }
+  }
+  if (e["pane_backend"] !== void 0) {
+    if (e["backend"] !== "unknown") {
+      return {
+        ok: false,
+        reason: `pane_backend is only for a surface the backend enum cannot name; it must not accompany backend "${e["backend"]}"`
+      };
+    }
+    if (e["backend_rung"] < 1) {
+      return {
+        ok: false,
+        reason: "pane_backend marks a CONFIRMED dispatch, so backend_rung must be >= 1"
+      };
+    }
   }
   return { ok: true };
 }
@@ -5112,7 +5178,7 @@ function liveLogPath(runDir) {
   return path7.join(runDir, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir) {
-  if (!runDir) return;
+  if (!runDir) return false;
   const validationResult = validateGuildTraceEvent(event);
   if (!validationResult.ok) {
     const schemaVersion = event["schema_version"];
@@ -5121,7 +5187,7 @@ function emitTraceEvent(event, runDir) {
       `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}
 `
     );
-    return;
+    return false;
   }
   try {
     const live = liveLogPath(runDir);
@@ -5129,11 +5195,13 @@ function emitTraceEvent(event, runDir) {
     fs6.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
     fs6.appendFileSync(live, line, "utf8");
+    return true;
   } catch (err) {
     process.stderr.write(
       `[guild-trace-emit] WARN: could not write trace event to ${runDir}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
 `
     );
+    return false;
   }
 }
 var fs6, path7;
@@ -5759,6 +5827,38 @@ function validateDefaults(d, selfBuild) {
   }
   if (d["allowed_tools"] !== void 0 && !Array.isArray(d["allowed_tools"]))
     rejects.push(`defaults.allowed_tools must be an array of strings`);
+  if (d["lean_lead"] !== void 0 && !isPlainObject3(d["lean_lead"])) {
+    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(d["lean_lead"])})`);
+  } else if (isPlainObject3(d["lean_lead"])) {
+    const ll = d["lean_lead"];
+    const VALID_LEAN_LEAD_KEYS = /* @__PURE__ */ new Set(["enabled", "hands_on_edit_threshold"]);
+    for (const k of Object.keys(ll)) {
+      if (!VALID_LEAN_LEAD_KEYS.has(k)) rejects.push(`unknown defaults.lean_lead key "${k}" (valid: enabled, hands_on_edit_threshold)`);
+    }
+    if (ll["enabled"] !== void 0 && typeof ll["enabled"] !== "boolean")
+      rejects.push(`defaults.lean_lead.enabled must be a boolean (got ${JSON.stringify(ll["enabled"])})`);
+    if (ll["hands_on_edit_threshold"] !== void 0) {
+      const v = ll["hands_on_edit_threshold"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(v)})`);
+    }
+  }
+  if (d["lifecycle_gate"] !== void 0 && !isPlainObject3(d["lifecycle_gate"])) {
+    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(d["lifecycle_gate"])})`);
+  } else if (isPlainObject3(d["lifecycle_gate"])) {
+    const lg = d["lifecycle_gate"];
+    const VALID_LIFECYCLE_GATE_KEYS = /* @__PURE__ */ new Set(["enabled", "adhoc_activity_threshold"]);
+    for (const k of Object.keys(lg)) {
+      if (!VALID_LIFECYCLE_GATE_KEYS.has(k)) rejects.push(`unknown defaults.lifecycle_gate key "${k}" (valid: enabled, adhoc_activity_threshold)`);
+    }
+    if (lg["enabled"] !== void 0 && typeof lg["enabled"] !== "boolean")
+      rejects.push(`defaults.lifecycle_gate.enabled must be a boolean (got ${JSON.stringify(lg["enabled"])})`);
+    if (lg["adhoc_activity_threshold"] !== void 0) {
+      const v = lg["adhoc_activity_threshold"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(v)})`);
+    }
+  }
   if (isPlainObject3(d["index"])) {
     const idx = d["index"];
     for (const ik of Object.keys(idx)) {
@@ -5803,6 +5903,7 @@ function loadFileConfig(cwd, selfBuild) {
       "auto_approve",
       "review",
       "host",
+      "host_mode",
       "roles",
       "host_profiles",
       "initiative_default",
@@ -5847,6 +5948,21 @@ function loadFileConfig(cwd, selfBuild) {
           `host "${parsed["host"]}" is invalid for the top-level dispatch selector (valid: auto or dispatch-selectable host ids ${[...DISPATCH_HOST_IDS2].join("|")})`
         );
       }
+    }
+    if (parsed["host_mode"] === null) {
+      out.host_mode = null;
+    } else if (typeof parsed["host_mode"] === "string") {
+      if (HOST_MODES2.includes(parsed["host_mode"])) {
+        out.host_mode = parsed["host_mode"];
+      } else {
+        rejects.push(
+          `host_mode "${parsed["host_mode"]}" is invalid \u2014 valid: ${HOST_MODES2.join("|")} or null`
+        );
+      }
+    } else if (parsed["host_mode"] !== void 0) {
+      rejects.push(
+        `host_mode must be a string (${HOST_MODES2.join("|")}) or null (got ${JSON.stringify(parsed["host_mode"])})`
+      );
     }
     if (isPlainObject3(parsed["roles"])) {
       const rawRoles = parsed["roles"];
@@ -6150,7 +6266,7 @@ function main() {
   }
   process.stdout.write(JSON.stringify(output, null, 2) + "\n");
 }
-var fs8, path10, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, DEFAULTS_ALLOWED_KEYS2;
+var fs8, path10, HOST_MODES2, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, DEFAULTS_ALLOWED_KEYS2;
 var init_config_cli = __esm({
   "../scripts/lib/core/config-cli.ts"() {
     fs8 = __toESM(require("fs"));
@@ -6162,6 +6278,7 @@ var init_config_cli = __esm({
     init_safe_object2();
     init_config_defaults2();
     init_tier_model();
+    HOST_MODES2 = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
     DEFAULTS3 = DEFAULTS;
     HELP = {
       rigor: "quick | standard | deep \u2014 profile knob; expands loops/caps/review depth",
@@ -6249,6 +6366,12 @@ var init_config_cli = __esm({
       "defaults.update": '{ mode: "auto"|"notify"|"off" (default "notify"), cadence_hours: number > 0 (default 24) } \u2014 channel-aware update-check behavior. Consumed by hooks/update-check.ts (SessionStart signal + background cache refresh) and guild-run update. Dev/symlink installs are always excluded.',
       // ── R-020: defaults.allowed_tools
       "defaults.allowed_tools": "string[] (default []) \u2014 explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F). Replaces, not extends, the shared tool allow-list. [] \u21D2 no restriction.",
+      // ── rf-wi-01 (G1): host_mode + defaults.lean_lead.* + defaults.lifecycle_gate.*
+      host_mode: `read_only|ask|accept_edits|auto|bypass_all|null (default null) \u2014 the sanctioned, schema-registered P1-L10 host-autonomy override (permission-policy-schema.ts HOST_MODES). null = no override (host default "ask" applies, lifted to bypass_all for unattended local tmux team panes per issue #54's resolveTeamPaneHostMode). NEVER lifts a Guild lifecycle gate (host_mode \u22A5 guild_gates orthogonality invariant) \u2014 see permission-policy.ts. NOT under security. \u2014 the #54 lane reverted an ad-hoc security.host_mode key for bypassing this schema; this is the registered replacement.`,
+      "defaults.lean_lead.enabled": 'bool (default true) \u2014 master toggle for the lean-lead inline-shortcut-expired advisory (hooks/lib/lean-lead-guard.ts, SKILL.md "Inline shortcut under high autonomy").',
+      "defaults.lean_lead.hands_on_edit_threshold": "int >= 1 (default 8) \u2014 direct lead Edit/Write ops (while lanes are open) before the advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
+      "defaults.lifecycle_gate.enabled": "bool (default true) \u2014 master toggle for the lifecycle-gate ad-hoc-activity advisory (hooks/lib/lifecycle-gate.ts).",
+      "defaults.lifecycle_gate.adhoc_activity_threshold": "int >= 1 (default 20) \u2014 ad-hoc (non-skill) activity count before the lifecycle-gate advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
       _precedence: "CLI flag > --rigor profile > settings.json > built-in default. For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
       _docs: "Canonical schema: architecture/command-surface.md \xA74.4. Regenerate with: /guild config init"
     };
@@ -6331,8 +6454,12 @@ var init_config_cli = __esm({
       // R-018: number s (host-router.ts CR-5 manifest freshness)
       "update",
       // plugin-update-lifecycle AC-6: { mode: "auto"|"notify"|"off", cadence_hours: number }
-      "allowed_tools"
+      "allowed_tools",
       // R-020: string[] (boundary-config-and-tracking Decision F)
+      "lean_lead",
+      // rf-wi-01 (G1): { enabled: bool, hands_on_edit_threshold: int }
+      "lifecycle_gate"
+      // rf-wi-01 (G1): { enabled: bool, adhoc_activity_threshold: int }
     ]);
   }
 });

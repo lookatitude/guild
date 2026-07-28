@@ -8,28 +8,28 @@
       "id": "evolve",
       "source_path": "commands/evolve.md",
       "resource_path": "resources/commands/evolve.md",
-      "sha256": "48287a880f5a8e2939cf1464bf47751eff6dbf46d17bdeff48df161b6c3352f0"
+      "sha256": "88cd4ed085538b2cb720c5a075ca036ac4fb6a683d478fe92d04042288536b7a"
     },
     {
       "category": "commands",
       "id": "rollback",
       "source_path": "commands/rollback.md",
       "resource_path": "resources/commands/rollback.md",
-      "sha256": "5c807f15405d2bb5b88792b9cfcccbc6131f5cf8582caec5cca9be8342e0bfb7"
+      "sha256": "d59679a84b3b3b8b22f7e37430ef2b0da8e3d9adb59afaf7e2fd4023aa08101d"
     },
     {
       "category": "hooks",
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "df529ef300f23e347c33063033431ca651c31c577ac2cb97c45c0ce7926a577c"
+      "sha256": "f5c0e955500359387e52129c91727d22c29c6081e6bebb0596f8586e30121e70"
     },
     {
       "category": "hooks",
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "3e916a66872585ea76c6599e24ae3ac56c538c6293e1dd2ad3e7856ee228a4a5"
+      "sha256": "6b9edeabfab25bbbefc82dbd6447332e2a41ec384132f01f37409e5de78ff214"
     },
     {
       "category": "scripts",
@@ -106,7 +106,7 @@
       "id": "guild-evolve-skill",
       "source_path": "skills/meta/evolve-skill/SKILL.md",
       "resource_path": "resources/skills/meta/evolve-skill/SKILL.md",
-      "sha256": "ec1a51896fcd7c5db8bfd9eb3feaf80af5b688c1ede0c6e9c5d176c9ff738858"
+      "sha256": "05dd85e698a270543e751d95976e17f1396513cd2d6bc3d00f54f37e77e55244"
     },
     {
       "category": "skills",
@@ -120,14 +120,14 @@
       "id": "guild-learning-checkpoint",
       "source_path": "skills/meta/learning-checkpoint/SKILL.md",
       "resource_path": "resources/skills/meta/learning-checkpoint/SKILL.md",
-      "sha256": "d0a55ee98f059c8fe8be71c8c8ed8d6766e5bbace360bc5f305f668df65f6f0d"
+      "sha256": "97887c2fc97c853d108d8a6be4f112e5fb655e56d3a6430cd846c96a8ad0143a"
     },
     {
       "category": "skills",
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "f934e9f28414e45021ceb5d3171e93084b94553c1049af5602bad327c37d6a10"
+      "sha256": "1c57be19408f1ff4d4f9f4be00c0edb4a20c9917bf8952fc7f5a64b0b27b380c"
     },
     {
       "category": "skills",

@@ -47,8 +47,10 @@
  * Owned by hook-engineer (P1-L10).
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
+// rf-wi-01 (G1 codex-review round-2 fix): readRuntimePermissionConfig now delegates
+// to the canonical resolveSettings() (see its own doc comment) instead of hand-rolled
+// fs reads, so this file no longer touches the filesystem directly.
+import { resolveSettings } from "../../src/modules/config/workflows/settings-reader";
 
 import {
   type HostMode,
@@ -66,6 +68,7 @@ import {
   PHASES,
   GATE_TYPES,
   ALWAYS_ASK_HARD_SET,
+  HOST_MODES,
 } from "./permission-policy-schema";
 
 import {
@@ -352,56 +355,70 @@ export function resolveEffectivePolicy(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Best-effort config reader (never throws — same discipline as security/config.ts)
+// Config reader (never throws — same discipline as security/config.ts)
 // ---------------------------------------------------------------------------
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function isStringArray(v: unknown): v is string[] {
-  return Array.isArray(v) && v.every((x) => typeof x === "string");
-}
-
 /**
- * Read the runtime permission config from `<cwd>/.guild/settings.json`:
- *   defaults.gates.auto_approve         → auto_approve   (default [])
- *   security.bypass_permissions_policy  → bypass         (default "audit")
- * Returns the documented defaults on ANY failure (missing file / parse error /
- * mistyped value). NEVER throws.
+ * rf-wi-01 (G1 codex-review round-2 fix, P1): delegates to the canonical
+ * `resolveSettings()` (the SAME 5-layer resolver `config show`/`config resolve`
+ * use — builtin < workspace settings.json < workspace settings.local.json <
+ * project settings.json < project settings.local.json < CLI flags), rather than
+ * hand-rolling a project-file-only, two-layer read. The round-1 fix (settings.json
+ * + settings.local.json applied in order) missed WORKSPACE-level inheritance
+ * (reproduced by codex: a workspace child's `resolveSettings()` picked up a
+ * parent-workspace `host_mode`/`auto_approve`/`bypass_permissions_policy` that
+ * this reader's own two-file read never saw) AND silently kept a stale
+ * higher-layer value when a LOWER layer explicitly cleared it with `host_mode:
+ * null` (the old per-field "apply if string" merge had no way to represent
+ * "clear"). `resolveSettings()`'s real deepMerge handles both correctly by
+ * construction. Imports the PURE resolver directly (settings-reader.ts, not the
+ * `scripts/lib/settings-resolver.ts` R-TRACE-emitting wrapper) so this stays a
+ * side-effect-free read, matching this function's "never throws, no I/O side
+ * effects" contract.
  *
- * (Reads the SAME locations as hooks/lib/security/config.ts `readSettingsAutoApprove`
- * + `parseSecurityConfig`, kept consistent so the policy and the PreToolUse hook
- * agree on the live posture.)
+ * rf-wi-01 (G1): `host_mode` is a registered key in the canonical closed config
+ * schema (scripts/lib/core/config-cli.ts GuildSettings.host_mode + scripts/lib/
+ * config-schema.ts CONFIG_SCHEMA, derived from config-defaults.ts DEFAULTS —
+ * top-level, NOT under `security.`; the #54 lane reverted an ad-hoc
+ * `security.host_mode` key for bypassing this schema). A resolved `host_mode`
+ * of `null` (the schema default, or an explicit lower-layer clear) leaves
+ * `out.host_mode` unset, so `resolvePermissionPolicy`'s default (no overlay)
+ * still reproduces the C2 baseline golden byte-for-byte. `host_mode_by_phase`
+ * remains unregistered (out of scope for G1 — a narrower, separate per-phase
+ * surface; see the handoff receipt followups).
  */
 export function readRuntimePermissionConfig(cwd: string): RuntimePermissionConfig {
-  const out: RuntimePermissionConfig = {
-    auto_approve: [],
-    bypass_permissions_policy: "audit",
-  };
-  let parsed: unknown;
   try {
-    const settingsPath = path.join(cwd, ".guild", "settings.json");
-    parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-  } catch {
+    const { config } = resolveSettings({ cwd });
+    // NOTE: this reads `defaults.gates.auto_approve`, NOT the top-level
+    // `auto_approve` key — a DIFFERENT schema field (both exist; see
+    // config-defaults.ts) — matching this function's pre-existing,
+    // long-documented contract (see the doc comment above).
+    const rawAutoApprove = config.defaults?.gates?.auto_approve;
+    // codex-review round-3 P1 fix: the pre-round-2 implementation required EVERY
+    // element to be a string (isStringArray); Array.isArray alone let a malformed
+    // array (e.g. ["all", false]) through, which resolvePermissionPolicy would
+    // then treat as containing the "all" sentinel — a fail-OPEN regression
+    // (reproduced: 12 plan/qa cells flipped to auto-safe from malformed config).
+    const auto_approve: string[] =
+      Array.isArray(rawAutoApprove) && rawAutoApprove.every((x) => typeof x === "string")
+        ? (rawAutoApprove as string[])
+        : [];
+    const bpp = config.security?.bypass_permissions_policy;
+    const bypass_permissions_policy: BypassPolicy =
+      bpp === "deny" || bpp === "allow" || bpp === "audit" ? bpp : "audit";
+    const out: RuntimePermissionConfig = { auto_approve, bypass_permissions_policy };
+    const hm = (config as unknown as { host_mode?: unknown }).host_mode;
+    if (typeof hm === "string" && (HOST_MODES as readonly string[]).includes(hm)) {
+      out.host_mode = hm as HostMode;
+    }
     return out;
+  } catch {
+    // resolveSettings() does not throw in practice (every I/O step is its own
+    // try/catch), but this reader's own contract is "never throws" — degrade
+    // to the documented defaults on ANY failure, same as before.
+    return { auto_approve: [], bypass_permissions_policy: "audit" };
   }
-  if (!isPlainObject(parsed)) return out;
-
-  // defaults.gates.auto_approve
-  if (isPlainObject(parsed["defaults"])) {
-    const gates = (parsed["defaults"] as Record<string, unknown>)["gates"];
-    if (isPlainObject(gates) && isStringArray(gates["auto_approve"])) {
-      out.auto_approve = gates["auto_approve"];
-    }
-  }
-  // security.bypass_permissions_policy
-  if (isPlainObject(parsed["security"])) {
-    const bpp = (parsed["security"] as Record<string, unknown>)["bypass_permissions_policy"];
-    if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
-      out.bypass_permissions_policy = bpp;
-    }
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------

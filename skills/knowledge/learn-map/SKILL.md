@@ -92,13 +92,13 @@ by an **LLM semantic half** under the strict *"trust the script, do not re-read
 source"* constraint.
 
 0. **Check children first (workspace detection, before any scan).** Run `npx
-   tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/detect.ts --cwd <root>` — a bounded `.git/`/`.guild/`
+   tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/detect.ts --cwd <root>` — a bounded `.git/`/`.guild/`
    stat over **immediate children only** (depth fixed at 1; no nesting, no
    knob), honoring `settings.json` `workspace.mode: auto | on | off`. If the
    root is a **workspace** (≥1 child has a nested `.git/` or `.guild/`; plain
    dirs like `docs/` are ignored), do **not** scan the union as one monolithic
    repo: register the detected sub-guilds and write the federation manifest with
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/write-manifest.ts --cwd <root>` →
+   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/write-manifest.ts --cwd <root>` →
    `.guild/workspace.json` (`guild.workspace.v1`, by pointer — see the
    output-locations table). For the cheap-map sub-verb (`/guild:learn map`),
    deep per-sub-repo learn is **delegated/offered** (run `/guild:learn map
@@ -116,7 +116,7 @@ source"* constraint.
    for them), stage the cross-cutting ones for the workspace-knowledge-flow
    human gate (AGENTS.md §Cross-project knowledge rules, rule 3) by running:
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/workspace/promote-upstream.ts \
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/promote-upstream.ts \
      --workspace-root <root> [--child <name>] [--run-id <id>]
    ```
    This only STAGES a `guild.upstream_candidates.v1` manifest at

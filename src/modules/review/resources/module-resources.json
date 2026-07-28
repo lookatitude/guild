@@ -8,14 +8,14 @@
       "id": "audit",
       "source_path": "commands/audit.md",
       "resource_path": "resources/commands/audit.md",
-      "sha256": "7c31370b09744ff9e7321c5c674c45fa2c337df2f5007f5a76bd29da931f6645"
+      "sha256": "239a6e569c4f4f4942d12c3be70da7ca16ed817bcc4560a53ffd53552f0744b1"
     },
     {
       "category": "commands",
       "id": "fix",
       "source_path": "commands/fix.md",
       "resource_path": "resources/commands/fix.md",
-      "sha256": "2d0a85dce4752de1f7c9b405c8c423f17ad69ff74d215e0001f8e53146d35b78"
+      "sha256": "d9c38150f863f0dd94cc54c6f21ca7dbf28af3eadb0ecc98564ee4177355b727"
     },
     {
       "category": "scripts",
@@ -57,7 +57,7 @@
       "id": "verify-codex-review-trail",
       "source_path": "scripts/verify-codex-review-trail.ts",
       "resource_path": "resources/scripts/verify-codex-review-trail.ts",
-      "sha256": "38f61338e95f2433e804776d6380c929f124c1856891907592ad3c3600586ab1"
+      "sha256": "e09c6b48c073aee45c89e7cc4ab3b01ca19153240e544f1f43526f6259e1a3f5"
     },
     {
       "category": "scripts",
@@ -78,14 +78,14 @@
       "id": "guild-codex-review",
       "source_path": "skills/meta/codex-review/SKILL.md",
       "resource_path": "resources/skills/meta/codex-review/SKILL.md",
-      "sha256": "8a0e6d61846f802fa0d4a41db108c0e80431e5fadbbeafcbb3cf85358d4e787a"
+      "sha256": "665bb71e9a88c273d533577c253d8232c6e4abe584ed72f028a2e1f4a194c943"
     },
     {
       "category": "skills",
       "id": "guild-diagnose",
       "source_path": "skills/meta/diagnose/SKILL.md",
       "resource_path": "resources/skills/meta/diagnose/SKILL.md",
-      "sha256": "8eb9ef6ce5d1dabc663906b987fd190e50206336214f33ec7ddcf611cf33c96e"
+      "sha256": "53fc9ad4ab55f239b06c43c0f3e055ea1c2b5c28b0864449e8a41381ef50cf8b"
     },
     {
       "category": "skills",
@@ -99,7 +99,7 @@
       "id": "guild-review-broker",
       "source_path": "skills/meta/review-broker/SKILL.md",
       "resource_path": "resources/skills/meta/review-broker/SKILL.md",
-      "sha256": "b4fed4018c886be2850b7f8b8e7d91d3d2134a3f7ce9d6d3ca89253bd8e89cf9"
+      "sha256": "2ce37adb2f674d18846283831752a26b00b6de431939c6a56d6ba3ed79c3f780"
     },
     {
       "category": "skills",

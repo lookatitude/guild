@@ -990,6 +990,27 @@ export function renderAgentsPackage(
     `A \`guild-run\` launcher is bundled at \`bin/guild-run\` (forwards to the bundled`,
     "`scripts/guild-run.ts`).",
     ``,
+    `## Update check (once per session)`,
+    // File-surface hosts have no hook events, so the staleness signal cannot
+    // fire on its own — this preamble instruction IS the G4 fallback for them
+    // (xhrd-wi-04). The bundle ships in this package; the command degrades
+    // silently offline and never blocks.
+    `This package is a point-in-time copy and does not update itself. At the start`,
+    `of a session, if a Node runtime is available, run:`,
+    ``,
+    "```bash",
+    `node hooks/dist/update-check.js --host agents-file`,
+    "```",
+    ``,
+    `and surface any line it prints to the user verbatim — it names the installed`,
+    `version, the latest release, and the exact update command for this package.`,
+    `Silence is NOT proof of currency: the check needs the`,
+    `\`guild-install-receipt.json\` the installer writes beside this file. If that`,
+    `receipt is missing (for example, this tree was hand-copied without it), the`,
+    `check cannot run — treat the package's age as unknown and suggest re-running`,
+    `the installer when the user asks about updates. With the receipt present,`,
+    `silence means current-or-offline.`,
+    ``,
     `<!-- rendered_at: ${opts.renderedAt} · source_version: ${manifest.version} -->`,
     ``,
   ].join("\n");

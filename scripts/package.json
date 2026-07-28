@@ -4,6 +4,7 @@
   "scripts": {
     "test": "npx jest --testPathPattern=__tests__ --no-coverage --runInBand",
     "build:inventory": "npx tsx build-inventory.ts",
+    "check:inventory": "npx tsx build-inventory.ts --check",
     "build:hosts": "npx tsx build-host-packages.ts",
     "check:docs-architecture": "npx tsx check-docs-architecture.ts",
     "check:modules": "npx tsx check-module-ownership.ts",
@@ -16,6 +17,7 @@
     "check:module-source-of-truth": "npm run check:modules -- --root .. && npm run check:module-resources -- --root .. && npm run check:live-resources -- --root .. && npm run check:claude-install -- --root ..",
     "verify:host-packages": "npx tsx sync-live-resources.ts --check --root .. && npx tsx build-host-packages.ts --check-claude-install && npx tsx verify-host-packages.ts",
     "check:host-support-matrix": "npx tsx generate-support-matrix.ts --check",
+    "check:channel-integrity": "npx tsx check-channel-integrity.ts",
     "verify:installer": "npx tsx verify-installer.ts",
     "verify:installer-execution": "npx tsx verify-installer.ts --execute-fixtures",
     "verify:installer-live": "npx tsx verify-installer.ts --execute-live-isolated",
@@ -25,7 +27,7 @@
     "verify:desktop-app-smoke": "npx tsx verify-desktop-app-smoke.ts"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.3.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

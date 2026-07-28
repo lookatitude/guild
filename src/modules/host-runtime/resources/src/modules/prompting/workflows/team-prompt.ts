@@ -28,6 +28,27 @@ function isClaudeCli(hostKind: HostKind): boolean {
   return hostKindToRegistryId(hostKind) === "claude-code-cli";
 }
 
+// ── Universal structured producer marker (rf-wi-03 / G3) ─────────────────────
+//
+// The prompt line-1 twin of the dispatch-env marker set by
+// `composeInProcessDispatch` / `paneCommand` (canonical constants:
+// scripts/lib/core/contracts/team-backend.ts DISPATCH_PRODUCER_ENV /
+// DISPATCH_PRODUCER_TOKEN — restated here because the prompting module must not
+// import the dispatch host layer; keep the literals in step). Emitted as the
+// prompt's FIRST LINE for EVERY non-project dispatch (shipped specialist +
+// orchestrator) so line-1 always carries producer identity — the anchor the
+// legacy 300-char producer-head parsing (rf-wi-07c) will collapse onto. A
+// PROJECT specialist keeps its existing GUILD_AGENT_DEFINITION line-1 marker
+// (#58) verbatim, which already carries role via its path, so the two dispatch
+// classes are jointly universal without disturbing the #58 guard.
+const DISPATCH_PRODUCER_ENV = "GUILD_DISPATCH_PRODUCER";
+const DISPATCH_PRODUCER_TOKEN = "guild.dispatch.v1";
+
+/** The line-1 producer marker (`role=` carries the dispatch identity). */
+function producerMarkerLine(role: string): string {
+  return `${DISPATCH_PRODUCER_ENV}=${DISPATCH_PRODUCER_TOKEN} role=${role}\n`;
+}
+
 export function buildPrompt(
   slug: string,
   runId: string,
@@ -45,6 +66,7 @@ export function buildPrompt(
           `write dispatch/brief records under \`.guild/runs/${runId}/agent-bus/\`, ` +
           `then aggregate handoffs and invoke guild:review → guild:verify-done → guild:reflect.`;
     return (
+      producerMarkerLine("orchestrator") +
       `You are the Guild orchestrator for team \`${slug}\`, run-id \`${runId}\`. ` +
       `The spec is at \`.guild/spec/${slug}.md\`, the team at \`${teamRef}\`, ` +
       `and the approved plan at \`.guild/plan/${slug}.md\`. ` +
@@ -87,7 +109,26 @@ export function buildPrompt(
         `in its frontmatter \`skills:\`, load the project-local instance at ` +
         `\`.guild/skills/<skill>/SKILL.md\` when it exists before starting your lane. `
       : "";
+  // #58 — the machine-readable definition-adoption PREFIX. Emitted as the very
+  // FIRST LINE for a project specialist, alongside the human-readable
+  // instruction above. The PreToolUse dispatch-integrity guard parses identity
+  // from THIS line only: a fixed, producer-owned position that the lane's
+  // arbitrary `scope` text (appended below) can never forge or contradict. This
+  // is what makes a correct dispatch textually distinguishable from a
+  // persona-stripped one instead of byte-identical.
+  const isProjectSpecialist =
+    specialist.definition_source === "project" && Boolean(specialist.definition);
+  const definitionMarker = isProjectSpecialist
+    ? `GUILD_AGENT_DEFINITION=${specialist.definition}\n`
+    : "";
+  // rf-wi-03 (G3) — a PROJECT specialist keeps its GUILD_AGENT_DEFINITION line-1
+  // marker (#58); every OTHER (shipped) specialist gets the universal producer
+  // marker as line-1, so line-1 identity is universal across dispatch classes.
+  const line1Marker = isProjectSpecialist
+    ? definitionMarker
+    : producerMarkerLine(specialist.name);
   return (
+    line1Marker +
     `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` +
     definitionInstruction +
     `Your lane scope: \`${specialist.scope}\`. ` +

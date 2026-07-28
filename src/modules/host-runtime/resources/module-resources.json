@@ -106,7 +106,7 @@
       "id": "lib/host-adapters/codex-cli",
       "source_path": "scripts/lib/host-adapters/codex-cli.ts",
       "resource_path": "resources/scripts/lib/host-adapters/codex-cli.ts",
-      "sha256": "4c44c8deddda29782fbba72c4306a0bdf4779d3e053d4e46d32a3d04b064a7cc"
+      "sha256": "42151dc9ce9fbe4ccad0c2903dea9128fb56d38d39e5dd3a5e021f13407a7ad6"
     },
     {
       "category": "scripts",
@@ -225,7 +225,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "f804b65618241370eb5965c15bb440ba3951fd098e986f4e90c400b0a9ce705c"
+      "sha256": "797ae5b7894b19be9076fd251a4611ad71b3358288063a3ee13832e74b96ea4a"
     },
     {
       "category": "scripts",
@@ -250,10 +250,18 @@
     },
     {
       "category": "scripts",
+      "id": "projection:scripts/lib/capability/rank.ts",
+      "source_path": "scripts/lib/capability/rank.ts",
+      "resource_path": "resources/scripts/lib/capability/rank.ts",
+      "sha256": "9dcbacfb5d7e27f94205a956d69554cc9c5e127d2e9ca78d692a92b0be4582fd",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
       "id": "projection:scripts/lib/core/contracts/team-backend.ts",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "84776d47be00b89ac3ef9a262adf88e32a8c28a4631dfb4c87eed1e61bf81f8b",
+      "sha256": "3d04b5414307997d218b7a504b4f77f0cc058bde8abd0c16c156974a06887caa",
       "projection_dependency": true
     },
     {
@@ -261,7 +269,7 @@
       "id": "projection:scripts/lib/host/inprocess-backend.ts",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "1f91528f57539221c2e6ffff02f57f8b590186d3fff760d8d6a4551dd7114149",
+      "sha256": "26cb6ad530068342447e91784206454bb195c48a6a9d4978279aed483bd4b9c7",
       "projection_dependency": true
     },
     {
@@ -269,7 +277,7 @@
       "id": "projection:scripts/lib/host/remote-backend.ts",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "b67b7f7f83ae8f5292c3075713fba5345283873aa28e6ccc420c1322c02746a4",
+      "sha256": "12a57828166f7c6e0fa8a366aff7c595116b414132dae64e15505b7c0a62eb24",
       "projection_dependency": true
     },
     {
@@ -277,7 +285,7 @@
       "id": "projection:scripts/lib/host/tmux-backend.ts",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "c1e8e7fb5ff5fe7d3c9eef082e0f30e15f711a567b89ae912c2db6156ce087fc",
+      "sha256": "ee08a29f15412f2f926c51455f03ce9a40e4fea999d1680b437093e149ec2816",
       "projection_dependency": true
     },
     {
@@ -286,6 +294,22 @@
       "source_path": "scripts/lib/memory-adapter.ts",
       "resource_path": "resources/scripts/lib/memory-adapter.ts",
       "sha256": "b0b5bdf0a53252024af0f3e3327b1dc5403010632d48bf8e2045c7a2ab864a1d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:scripts/lib/permission-policy-schema.ts",
+      "source_path": "scripts/lib/permission-policy-schema.ts",
+      "resource_path": "resources/scripts/lib/permission-policy-schema.ts",
+      "sha256": "56917bbaae7ca2625e3d5949bd201c28f3a2d2e4c1e0568368b5a12a3b82836d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:scripts/lib/permission-policy.ts",
+      "source_path": "scripts/lib/permission-policy.ts",
+      "resource_path": "resources/scripts/lib/permission-policy.ts",
+      "sha256": "4cbc49a281b950432ee69f5fd828c742ef905caf6046f279a9aefaf0733fd008",
       "projection_dependency": true
     },
     {
@@ -309,7 +333,7 @@
       "id": "projection:scripts/lib/team-backend.ts",
       "source_path": "scripts/lib/team-backend.ts",
       "resource_path": "resources/scripts/lib/team-backend.ts",
-      "sha256": "2aea429a4ca2b43b35b959964ea271ea772c991eb964b64294dc9846e4ddea70",
+      "sha256": "83106b4522c4045bbe4db5f93527c2749b56b6b216c2cbd3c8df921d97b90d4e",
       "projection_dependency": true
     },
     {
@@ -381,7 +405,7 @@
       "id": "projection:src/modules/config/workflows/config-defaults.ts",
       "source_path": "src/modules/config/workflows/config-defaults.ts",
       "resource_path": "resources/src/modules/config/workflows/config-defaults.ts",
-      "sha256": "d7a984d9a7d137ca497afddf324a842021ef00947f1fc7393753c057e6dd6de0",
+      "sha256": "47e61834955c37b7a6d37e031de52ea56652b92e4a89f89d5d8eabb077a0e11e",
       "projection_dependency": true
     },
     {
@@ -389,7 +413,7 @@
       "id": "projection:src/modules/config/workflows/config-validation.ts",
       "source_path": "src/modules/config/workflows/config-validation.ts",
       "resource_path": "resources/src/modules/config/workflows/config-validation.ts",
-      "sha256": "34685e6792b4ec89808e8a47e7452afdef93b03aef318b6c7cc3dcf3a3c5ca72",
+      "sha256": "63f157d6af129f1f6c3e635a386dc0b3f53a48c48602cc410b40550307fb5b97",
       "projection_dependency": true
     },
     {
@@ -397,7 +421,7 @@
       "id": "projection:src/modules/config/workflows/settings-reader.ts",
       "source_path": "src/modules/config/workflows/settings-reader.ts",
       "resource_path": "resources/src/modules/config/workflows/settings-reader.ts",
-      "sha256": "5112f15f67f2dc6ee002a302fb2b7c46ab0b812ae364e8b8cc1310832fcccea6",
+      "sha256": "d2dccec816fd45ae56062945e2184941043598bf8f02cafd7dbf8c903ca67aad",
       "projection_dependency": true
     },
     {
@@ -637,7 +661,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "source_path": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-capabilities-schema.ts",
-      "sha256": "cf1f71c4e1433719f5fa159ba748c58a0119151f854ebd00750a2079926dd563",
+      "sha256": "b853b20d320aea0d1adae6c14f618a2e018f219da25dcebbedd25a773ead9885",
       "projection_dependency": true
     },
     {
@@ -949,7 +973,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "539a1177b97fe8d9914757c85a4008984e3728e233fc58fb9f988c30e1effc80",
+      "sha256": "919b400b747f94156f716bb08aa257b1b52142ff981e444b56c6f36eaddc4a89",
       "projection_dependency": true
     },
     {
@@ -965,7 +989,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-state.ts",
       "source_path": "src/modules/lifecycle/workflows/run-state.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-state.ts",
-      "sha256": "d2798d4303f8db0be6e80e4d6b3b1f990e2b884825b1d0e29d461c848067794c",
+      "sha256": "07ff1599ea034c520f9a97787053827f45af09499d4d87c7e2307ee6ebfb02f5",
       "projection_dependency": true
     },
     {
@@ -989,7 +1013,7 @@
       "id": "projection:src/modules/lifecycle/workflows/trace-v2.ts",
       "source_path": "src/modules/lifecycle/workflows/trace-v2.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/trace-v2.ts",
-      "sha256": "306c2b3d2ed6e09c0b3fb67879ac1c2e2af90fc711f845e1345a923751ce408c",
+      "sha256": "bc5ac6d95b85ce20b311e1ed4f164e5b1f50dbefa4273d6a0453ba520871e7dd",
       "projection_dependency": true
     },
     {
@@ -1037,7 +1061,7 @@
       "id": "projection:src/modules/prompting/workflows/team-prompt.ts",
       "source_path": "src/modules/prompting/workflows/team-prompt.ts",
       "resource_path": "resources/src/modules/prompting/workflows/team-prompt.ts",
-      "sha256": "baef813db5dc345fcd0dcabdd65249b42a90c79916d0ee33b84539b78caec142",
+      "sha256": "f80057cb7dcb3ab34d83c8886b00873c6ff943b8b5969ca2ec1fd8dfbd5bb7f9",
       "projection_dependency": true
     },
     {
@@ -1101,7 +1125,7 @@
       "id": "projection:src/modules/security/workflows/events.ts",
       "source_path": "src/modules/security/workflows/events.ts",
       "resource_path": "resources/src/modules/security/workflows/events.ts",
-      "sha256": "fea65d1e67ccc4f5aa5d0f7ea544a3db299b559feb83476638ccfaa03f4537f2",
+      "sha256": "a03bfe0051461e1e8f1495e3b105b2f9157722a91b1fad9c9821ce1e9f747e3f",
       "projection_dependency": true
     },
     {
@@ -1261,7 +1285,7 @@
       "id": "projection:src/modules/telemetry/workflows/guild-trace-emit.ts",
       "source_path": "src/modules/telemetry/workflows/guild-trace-emit.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/guild-trace-emit.ts",
-      "sha256": "2d23ff04cd55fbc1e5b2731438ff76cb39cd58d9d2157c58744d5d1edb626137",
+      "sha256": "027f1f6c37658c97c4e2060b2b1efa75965552631c3060a1293874f10a59021a",
       "projection_dependency": true
     },
     {
@@ -1269,7 +1293,7 @@
       "id": "projection:src/modules/telemetry/workflows/guild-trace-events.ts",
       "source_path": "src/modules/telemetry/workflows/guild-trace-events.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/guild-trace-events.ts",
-      "sha256": "c25065fc37ce7aa1aa9e0ee04cf529002fb4196eac7d3e980d1f3fe88c0452f0",
+      "sha256": "3c1e01acd6d8f5e89ebd0ee8c15c26923e1fbb9ed3c4a1ed9aed68a0e5b9097b",
       "projection_dependency": true
     },
     {

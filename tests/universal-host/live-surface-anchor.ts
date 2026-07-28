@@ -117,10 +117,149 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * RATIFIED_MANIFESTS and RATIFIED_CLAUDE_PLUGIN_FILES below are UNCHANGED —
  * verified, not assumed. Both guards were observed RED against the old pin
  * before this bump, which is the anti-vacuity evidence that the pin is live.
+ *
+ * Re-ratified 2026-07-21 (issue #36 shell-fallback sweep, guild#61) — a
+ * DELIBERATE, purely mechanical text substitution across every command/skill
+ * resource doc: `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}` →
+ * `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}`
+ * (the two host env vars are render-time only and unset in the Bash tool's
+ * shell, so documented CLI invocations expanded to `/scripts/...`). No command
+ * or skill BEHAVIOUR changed — only the fallback tail of the documented plugin
+ * root. 270 occurrences / 111 files, mirrors + registries re-synced in the same
+ * commit (both module-resource sync directions checked clean).
+ * `.claude-plugin/**` untouched — RATIFIED_MANIFESTS unchanged. Both guards
+ * observed RED against the old pin on guild#61 CI (jest (tests) job of run
+ * 29794297180) before this bump — anti-vacuity evidence the pin is live.
+ *
+ * Re-ratified 2026-07-21 (issue #58 type-erasure detectability, guild#66) —
+ * DELIBERATE skill-surface change: `skills/meta/execute-plan/{SKILL.md,dispatch.md}`
+ * now state the ENFORCED project-lane dispatch contract (GUILD_AGENT_DEFINITION
+ * line-1 marker + adoption prefix are guaranteed and hook-verified, replacing the
+ * "env not guaranteed on the subagent path" caveat). `skill-src/skill-registry.json`
+ * was re-extracted in the SAME commit so `render(entry) === skills/meta/execute-plan/
+ * SKILL.md` byte-parity holds (SC-W2-1 + skill-source-transform suites green).
+ * `commands/**` untouched — its pin is UNCHANGED (verified). `.claude-plugin/**`
+ * untouched — RATIFIED_MANIFESTS unchanged. Both guards observed RED against the
+ * old skills pin on guild#66 CI (run 29800612956) — anti-vacuity evidence.
+ *
+ * Re-ratified 2026-07-22 (merge of guild#61 sweep + guild#66 onto next) —
+ * mechanical MERGE re-ratification: the merged tree carries BOTH the #61
+ * fallback sweep and the #66 execute-plan contract text, so both prior pins
+ * are stale by construction. skill-src/skill-registry.json re-based on next's
+ * (sweep-consistent) copy with the execute-plan entry re-extracted from the
+ * merged SKILL.md (all 5 wave-2 skills round-trip byte-identical). commands
+ * pin recomputed on the merged tree.
+ *
+ * Re-ratified 2026-07-21 (issue #56 backend-degradation detector, guild#67) —
+ * DELIBERATE: `skills/meta/execute-plan/dispatch.md` additionally documents the
+ * now-enforced refuse-don't-fallback backend contract + degradation receipts.
+ * SKILL.md unchanged vs guild#66, so skill-src/skill-registry.json needed no
+ * further re-extraction (round-trip verified). commands + .claude-plugin pins
+ * unchanged. Guard observed RED on guild#67 CI (run 29805091863) — anti-vacuity.
+ *
+ * Re-ratified 2026-07-21 (issue #57 lean-lead expiry, guild#68) — DELIBERATE:
+ * `skills/meta/execute-plan/SKILL.md` gains the §Expiry contract for the
+ * inline shortcut (lapse after N lead edits or any compaction boundary).
+ * `skill-src/skill-registry.json` re-extracted in the SAME commit (all 5
+ * wave-2 skills round-trip byte-identical). commands + .claude-plugin pins
+ * unchanged. The stale pin was observed RED locally against this tree before
+ * the bump — anti-vacuity.
+ *
+ * Re-ratified 2026-07-21 (issue #60 tier guard, guild#69) — DELIBERATE:
+ * `skills/meta/execute-plan/dispatch.md` additionally documents the enforced
+ * tier contract + the guild.tier_dispatch.v1 receipt sink. SKILL.md unchanged
+ * vs guild#67 (registry round-trip re-verified, no re-extraction needed).
+ * commands + .claude-plugin pins unchanged. Stale pin observed RED locally
+ * against this tree before the bump — anti-vacuity.
+ *
+ * Re-ratified 2026-07-22 (merge-train integration, guild#69) — mechanical
+ * MERGE re-ratification on the tree carrying #61+#66+#67+#69 content
+ * (dispatch.md now documents backend-degradation AND tier contracts).
+ * Registry round-trip verified against the merged SKILL.md set; commands pin
+ * = the post-sweep value.
+ *
+ * Re-ratified 2026-07-22 (final merge-train integration, guild#69) — the
+ * merged tree now also carries guild#68 (§Expiry + lean-lead). Registry
+ * re-extracted for the fully merged SKILL.md; pins recomputed.
+ *
+ * Re-ratified 2026-07-22 (issue #59 lifecycle adherence, oir-wi-59) —
+ * DELIBERATE: `skills/meta/execute-plan/SKILL.md` §"Resuming dead lanes" gains
+ * the §"Close requires review + verify-done" contract — a build run must pass
+ * guild:review + guild:verify-done before close, resuming is not a shortcut
+ * past a skipped gate — plus the code-not-prose enforcement pointer at the new
+ * `hooks/lib/lifecycle-gate.ts` (the active UserPromptSubmit gate and the
+ * close-time Stop backstop), their override/threshold semantics, and the two
+ * honestly-stated known gaps. `skill-src/skill-registry.json` re-extracted in
+ * the SAME commit (all 5 wave-2 skills round-trip byte-identical).
+ * commands + .claude-plugin pins unchanged (verified, not assumed). Both
+ * guards were observed RED locally against the old skills pin before the bump
+ * (SC-W2-5(1) and SC-W3-6(B), each naming
+ * `M skills/meta/execute-plan/SKILL.md`) — anti-vacuity.
+ *
+ * Re-ratified 2026-07-22 (merge-train integration, guild#70) — mechanical
+ * MERGE re-ratification on the tree carrying #61+#66+#68+#70 content
+ * (SKILL.md: §Expiry + #66 contract + §Close-requires-review+verify).
+ * Registry re-extracted for the merged SKILL.md (5/5 round-trip). commands
+ * pin = post-sweep value.
+ *
+ * Re-ratified 2026-07-22 (final merge-train integration, guild#70) — the
+ * merged tree carries ALL wave content (#61+#66+#67+#68+#69+#70:
+ * dispatch.md backend+tier contracts, SKILL.md §Expiry + #66 contract +
+ * §Close-requires-review+verify). Registry re-extracted for the fully
+ * merged SKILL.md; pins recomputed on this tree.
+ *
+ * Re-ratified 2026-07-23 (initiative v23x-deferred-followups, rf-wi-06) —
+ * DELIBERATE skill-surface change, two files:
+ *   (a) `skills/meta/execute-plan/SKILL.md` §"Backend + routing (summary)" cmux
+ *       obligation (a) now WIRES the cmux dispatch-receipt CLI
+ *       (`scripts/lib/host/pane-dispatch-trace.ts`) as the executable form of
+ *       "the dispatch records the launcher would have" — removing the
+ *       manual-lead-invocation limitation (G6a).
+ *   (d) `skills/meta/codex-review/SKILL.md` §"Cap handling"/"Trail format"/
+ *       "Output shape" now name the two codex-review cap TERMINAL states —
+ *       `cap-pushback-recorded` ("cap + reasoned pushback recorded") and
+ *       `cap-verification-only` ("verification-only round beyond cap") — matching
+ *       the two new clean terminals in `scripts/verify-codex-review-trail.ts`
+ *       (G6d).
+ * `skill-src/skill-registry.json` was re-extracted in the SAME commit
+ * (extractSkillV1 → all 5 WAVE2 skills round-trip byte-identical via
+ * renderSkillFromRegistry; only the execute-plan `body` changed —
+ * codex-review is not a registry skill). `commands/**` UNTOUCHED — its pin is
+ * UNCHANGED (verified equal, not assumed). `.claude-plugin/**` untouched —
+ * RATIFIED_MANIFESTS unchanged. The pins below were recomputed AFTER the hooks
+ * rebuild + module-resource sync (both `--check` modes clean). The
+ * `check-surface-pins.ts` checklist-as-code (G6b) was observed RED against the
+ * old skills pin before this bump (registry_stale execute-plan + tree_pin_stale
+ * skills) — anti-vacuity evidence the pin is live.
+ *
+ * Re-ratified 2026-07-23 (initiative v23x-deferred-followups, rf-wi-02) —
+ * DELIBERATE skill-surface change, two files, wiring the dispatch-integrity
+ * SINK CONSUMERS:
+ *   (a) `skills/meta/verify-done/SKILL.md` gains check #6 "Dispatch integrity
+ *       (sink audit)" — verify-done now gates on `scripts/audit-run-sinks.ts`
+ *       (exit 1 on a run with a backend degradation or an un-tiered dispatch),
+ *       so a downgraded/un-tiered run reads VISIBLY dirty instead of
+ *       auditable-by-path only. "Five checks" → "Six checks".
+ *   (b) `skills/meta/reflect/SKILL.md` §Input now names summary.md's new
+ *       `## Sink audit` section + `backend_degradations`/`tier_violations`/
+ *       `untiered_dispatches` frontmatter (produced by trace-summarize.ts via
+ *       `scripts/lib/run-sinks.ts`) as a first-class reflection signal.
+ * `skill-src/skill-registry.json` was re-extracted in the SAME commit
+ * (extractSkillV1 → all 5 WAVE2 skills round-trip byte-identical; only the
+ * verify-done `body` changed — reflect is not a registry skill). `commands/**`
+ * UNTOUCHED — its pin is UNCHANGED (verified equal, not assumed).
+ * `.claude-plugin/**` untouched. Pins recomputed AFTER the module-resource sync
+ * (both `--check` modes clean); `check-surface-pins.ts` observed RED
+ * (tree_pin_stale skills) against the prior pin before this bump.
+ *
+ * MERGE-TRAIN re-ratification 2026-07-23: this branch merged post-#86 `next`
+ * (execute-plan surface change), so the skills tree is the UNION of #86 + #89
+ * surface changes; recomputed hash EQUALS this branch's pre-merge pin (the
+ * branch already carried #86's content — stacked) — verified, not assumed.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
-  skills: "e539a219ed4c01aac2d6fdb795b898cf474988dd",
+  commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
+  skills: "819d795207286ee81e50b142ff217d219df84e4d",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

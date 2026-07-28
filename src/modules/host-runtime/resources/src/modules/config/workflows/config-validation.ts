@@ -24,7 +24,7 @@ const DEFAULT_KEYS = new Set([
   "auto_learn", "adversarial", "team", "review_workflow", "skill_policy",
   "gates", "wiki", "quality", "reporting", "index", "cross_host", "retry",
   "resume", "heartbeat_timeout_ms", "capability_manifest_ttl_s", "update",
-  "allowed_tools",
+  "allowed_tools", "lean_lead", "lifecycle_gate",
 ]);
 const INDEX_KEYS = new Set([
   "enabled", "kg_node_threshold", "kg_size_threshold_mb", "links_edge_threshold",
@@ -221,6 +221,32 @@ export function validateDefaults(value: Record<string, unknown>, selfBuild: bool
     if (number !== undefined && (typeof number !== "number" || number <= 0 || (key === "heartbeat_timeout_ms" && !Number.isInteger(number)))) rejects.push(`defaults.${key} must be a positive ${key === "heartbeat_timeout_ms" ? "integer" : "number"} (got ${JSON.stringify(number)})`);
   }
   if (value["allowed_tools"] !== undefined && !Array.isArray(value["allowed_tools"])) rejects.push("defaults.allowed_tools must be an array of strings");
+  if (value["lean_lead"] !== undefined && !object(value["lean_lead"])) {
+    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(value["lean_lead"])})`);
+  } else if (object(value["lean_lead"])) {
+    const leanLead = value["lean_lead"];
+    rejects.push(...rejectUnknown(leanLead, new Set(["enabled", "hands_on_edit_threshold"]), "defaults.lean_lead"));
+    if (leanLead["enabled"] !== undefined && typeof leanLead["enabled"] !== "boolean") {
+      rejects.push(`defaults.lean_lead.enabled must be a boolean (got ${JSON.stringify(leanLead["enabled"])})`);
+    }
+    const threshold = leanLead["hands_on_edit_threshold"];
+    if (threshold !== undefined && (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1)) {
+      rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
+    }
+  }
+  if (value["lifecycle_gate"] !== undefined && !object(value["lifecycle_gate"])) {
+    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(value["lifecycle_gate"])})`);
+  } else if (object(value["lifecycle_gate"])) {
+    const lifecycleGate = value["lifecycle_gate"];
+    rejects.push(...rejectUnknown(lifecycleGate, new Set(["enabled", "adhoc_activity_threshold"]), "defaults.lifecycle_gate"));
+    if (lifecycleGate["enabled"] !== undefined && typeof lifecycleGate["enabled"] !== "boolean") {
+      rejects.push(`defaults.lifecycle_gate.enabled must be a boolean (got ${JSON.stringify(lifecycleGate["enabled"])})`);
+    }
+    const threshold = lifecycleGate["adhoc_activity_threshold"];
+    if (threshold !== undefined && (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1)) {
+      rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
+    }
+  }
   if (object(value["update"])) {
     const update = value["update"];
     rejects.push(...rejectUnknown(update, new Set(["mode", "cadence_hours"]), "defaults.update"));

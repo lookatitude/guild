@@ -450,6 +450,46 @@ describe("Claude HostAdapter concrete parity", () => {
     }
   });
 
+  it("generated Claude package ships the emit-learning-checkpoint CLI entrypoint (issue #55)", () => {
+    // hooks/emit-learning-checkpoint.ts is not a Claude hook-event binding — it's a
+    // standalone CLI the learning-checkpoint skill invokes directly via
+    // `npx tsx .../hooks/emit-learning-checkpoint.ts` (SKILL.md step 7.5). tsx runs the
+    // .ts SOURCE, so the raw file must be shipped, not just its bundled dist/*.js.
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-claude-checkpoint-cli-"));
+    try {
+      const dest = writeClaudeTree(PLUGIN_ROOT, buildInventory(PLUGIN_ROOT), tmpDist, UNSTAMPED_GENERATED_AT);
+
+      const shippedSource = path.join(dest, "hooks", "emit-learning-checkpoint.ts");
+      expect(fs.existsSync(shippedSource)).toBe(true);
+      expect(fs.readFileSync(shippedSource, "utf8")).toContain("export function writeCheckpoint");
+
+      const shippedDist = path.join(dest, "hooks", "dist", "emit-learning-checkpoint.js");
+      expect(fs.existsSync(shippedDist)).toBe(true);
+
+      // The documented invocation must actually run from the shipped tree.
+      const cliProbe = spawnSync("npx", ["tsx", shippedSource], {
+        cwd: dest,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GUILD_RUN_ID: "run-package-probe",
+          GUILD_PHASE: "development",
+          GUILD_EVIDENCE_REF: "none",
+          GUILD_CWD: dest,
+        },
+        timeout: 30000,
+      });
+      expect(cliProbe.status).toBe(0);
+      expect(
+        fs.existsSync(
+          path.join(dest, ".guild", "runs", "run-package-probe", "learning", "development-run-package-probe.yaml")
+        )
+      ).toBe(true);
+    } finally {
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+    }
+  });
+
   it("generated packages refuse stale module resource mirrors", () => {
     const fixtureRoot = copyPluginFixture();
     const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-stale-module-resources-"));

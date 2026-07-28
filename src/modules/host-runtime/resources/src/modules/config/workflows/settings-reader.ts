@@ -95,7 +95,19 @@ interface DefaultsBlock {
   allowed_tools: string[];
   // plugin-update-lifecycle AC-6: channel-aware update-check behavior
   update: { mode: "auto" | "notify" | "off"; cadence_hours: number };
+  // rf-wi-01 (G1): hooks/lib/lean-lead-guard.ts tolerant reader.
+  lean_lead: { enabled: boolean; hands_on_edit_threshold: number };
+  // rf-wi-01 (G1): hooks/lib/lifecycle-gate.ts tolerant reader.
+  lifecycle_gate: { enabled: boolean; adhoc_activity_threshold: number };
 }
+/**
+ * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
+ * Duplicated here as a small closed literal union (mirrors this file's existing
+ * SecurityBlock/BypassPolicy inline-enum convention) rather than an import, since
+ * permission-policy-schema.ts has not been migrated into a src/modules/* workflow yet.
+ */
+const HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const;
+type HostMode = (typeof HOST_MODES)[number];
 interface WorkspaceBlock {
   mode: "auto" | "on" | "off";
 }
@@ -211,6 +223,13 @@ export interface ResolvedConfig {
   auto_approve: string[];
   review: "local" | "cross" | "off";
   host: HostId | "auto";
+  /**
+   * rf-wi-01 (G1): the sanctioned, schema-registered P1-L10 host-autonomy override.
+   * null (default) = no override (host default "ask" applies, unless the team-pane
+   * host_mode->bypass_all lift in tmux-backend.ts's resolveTeamPaneHostMode applies).
+   * NOT under `security.` — see config-defaults.ts's doc comment for why.
+   */
+  host_mode: HostMode | null;
   /** LW1-6: per-run role pins. Default all null = auto-resolve via the role model. */
   roles: RolesBlock;
   /** LW1-6: per-host config-render overrides keyed by host_id. Default {} = none. */
@@ -379,9 +398,10 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "capability_manifest_ttl_s",      // R-018
   "allowed_tools",                  // R-020
   "update",                         // plugin-update-lifecycle AC-6
+  "lean_lead", "lifecycle_gate",    // rf-wi-01 (G1)
 ]);
 const TIER1_KEYS = new Set([
-  "rigor", "auto_approve", "review", "host", "roles", "host_profiles", "initiative_default",
+  "rigor", "auto_approve", "review", "host", "host_mode", "roles", "host_profiles", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace",
   "models", "security", "secrets_policy", "mcp",
   "statusline",                  // R-009
@@ -580,6 +600,10 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
     const normalized = normalizeDispatchHostId(parsed["host"]);
     if (normalized) out.host = normalized;
   }
+  // rf-wi-01 (G1): host_mode — nullable P1-L10 host-autonomy override.
+  if (parsed["host_mode"] === null) out.host_mode = null;
+  else if (typeof parsed["host_mode"] === "string" && (HOST_MODES as readonly string[]).includes(parsed["host_mode"]))
+    out.host_mode = parsed["host_mode"] as HostMode;
   // LW1-6: roles + host_profiles (sparse — deep-merged across layers by assembleLayers).
   if (isPlainObject(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"] as Record<string, unknown>);

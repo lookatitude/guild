@@ -48,19 +48,27 @@ function liveLogPath(runDir: string): string {
 /**
  * Emit a guild.trace.*.v1 event to the run's live log.
  *
- * Behavior-neutral: returns void, never throws, never affects the caller's
- * return value. All I/O errors are caught and written to stderr only.
+ * Behavior-neutral: never throws, never affects the caller's real path. All
+ * I/O errors are caught and written to stderr only.
+ *
+ * Returns whether the line was actually appended (#76). This was `void`, which
+ * made every failure mode — no runDir, failed validation, failed append —
+ * indistinguishable from success at the call site, so a caller counting its own
+ * loop iterations could truthfully-looking report "recorded 3" for zero writes.
+ * Widening `void` to `boolean` is source-compatible: no existing caller can
+ * have depended on a void return, and every one of them still ignores it.
  *
  * @param event   A GuildTraceEvent (built by a make*Event factory).
  * @param runDir  Absolute path to the run directory (e.g. .guild/runs/run-xxx).
  *                Pass undefined/null to silently skip emission.
+ * @returns true when the event reached the log; false on any skip/failure.
  */
 export function emitTraceEvent(
   event: GuildTraceEvent,
   runDir: string | null | undefined,
-): void {
+): boolean {
   // Guard: no runDir → skip silently.
-  if (!runDir) return;
+  if (!runDir) return false;
 
   // Validate before writing — a malformed event must never land in the log.
   const validationResult = validateGuildTraceEvent(event);
@@ -73,7 +81,7 @@ export function emitTraceEvent(
     process.stderr.write(
       `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}\n`,
     );
-    return;
+    return false;
   }
 
   try {
@@ -91,6 +99,7 @@ export function emitTraceEvent(
     // For writes above PIPE_BUF, appendFileSync uses multiple syscalls and can
     // interleave — acceptable for advisory trace events (never run data).
     fs.appendFileSync(live, line, "utf8");
+    return true;
   } catch (err) {
     // Trace failures must never surface to callers.
     process.stderr.write(
@@ -98,5 +107,6 @@ export function emitTraceEvent(
         err instanceof Error ? err.message : String(err)
       }\n`,
     );
+    return false;
   }
 }

@@ -26,9 +26,11 @@ describe("CONFIG_UI_METADATA coverage (V9)", () => {
     expect(report.ok).toBe(true);
   });
 
-  it("has metadata for all 132 schema keys", () => {
-    expect(CONFIG_SCHEMA.length).toBe(132);
-    expect(Object.keys(CONFIG_UI_METADATA).length).toBe(132);
+  it("has metadata for all 137 schema keys", () => {
+    // rf-wi-01 (G1): +5 — host_mode, defaults.lean_lead.{enabled,hands_on_edit_threshold},
+    // defaults.lifecycle_gate.{enabled,adhoc_activity_threshold}.
+    expect(CONFIG_SCHEMA.length).toBe(137);
+    expect(Object.keys(CONFIG_UI_METADATA).length).toBe(137);
   });
 
   it("every key declares all required UI fields", () => {
