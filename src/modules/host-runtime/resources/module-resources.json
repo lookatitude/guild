@@ -148,7 +148,7 @@
       "id": "lib/host-adapters/wrapped-cli-base",
       "source_path": "scripts/lib/host-adapters/wrapped-cli-base.ts",
       "resource_path": "resources/scripts/lib/host-adapters/wrapped-cli-base.ts",
-      "sha256": "fbb4e03acc4a580f9a308f5e3b18103387e6e782b7f61a944d23819310595dc3"
+      "sha256": "8554b4097fed8147195eecbf009fdc35ac772e3e210a414abc3e2766e4820274"
     },
     {
       "category": "scripts",
