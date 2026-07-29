@@ -111,6 +111,10 @@ describe("L7 new-CLI adapters — AC-ADP-1/AC-ADP-3 concrete adapter (real facto
           expect(value.args[0]).toBe(host.subcommand);
           expect(value.args[0]).toBe(row.detection.subcommand);
           expect(value.args[1]).toBe("run the lane");
+        } else if (host.id === "opencode") {
+          // opencode: a bare positional is a PROJECT PATH and opens the TUI
+          // (verified live, issue #104) — non-interactive form is `run <msg>`.
+          expect(value.args).toEqual(["run", "run the lane"]);
         } else {
           expect(value.args[0]).toBe("run the lane");
         }

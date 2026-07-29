@@ -171,10 +171,10 @@ the registry does.
 | `pi-cli` | C *(provisional)* | **`npm:` · `git:` · `https://` · `ssh://` · local path** (`pi install --help`) | install.sh:545 → `pi install $RENDERED_DIST/pi` — the local-path option | render-time snapshot *(assumed — depends on what `pi install` copies/links)* | none used; git/npm sources available | `guild-run update` (guild-run.ts:74,300) | No | **capability V** (`--help` run) · **Guild path S** — install not executed, so B-vs-C is not forced |
 | `antigravity-cli` | C *(provisional)* | `install <target>` incl. **`plugin@marketplace`**, plus `link <mp> <target>` (`agy plugin --help`) | install.sh:561 → `agy plugin install $RENDERED_DIST/antigravity` — local path | render-time snapshot *(assumed — same caveat)* | none used; marketplace mechanism available | `guild-run update` | No | **capability V** (`--help` run) · **Guild path S** — install not executed |
 | `agents-file` | C | n/a — file surface | install.sh:576 writes the receipt; the copy instructions it prints are :578-581 — the installer renders only, the user copies `dist/agents/` | copy-time snapshot, no version marker in the copied tree | none | `install.sh --update` (**not** `guild-run update` — the AC-7 guard at self-update.ts:104-113 refuses any host whose capability row is not `apply: "self_update"`) | No | S |
-| `cursor` | C | unknown | install.sh:591 sets `NEW_CLI_PATH`; the launcher it points at is :594/:607-608 — renders `dist/cursor/` + `bin/guild-run` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; registry `provenance: inferred` |
-| `github-copilot` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/github-copilot/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
-| `opencode` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/opencode/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
-| `rovo-dev` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/rovo-dev/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
+| `cursor` | C | unknown — CLI has no plugin manager (confirmed: `cursor-agent --help` shows none) | install.sh:591 sets `NEW_CLI_PATH`; the launcher it points at is :594/:607-608 — renders `dist/cursor/` + `bin/guild-run` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **V (partial)** — package/receipt/notice/update all verified on-box; `cursor-agent -p` flag shape confirmed real, but the model run itself is auth-gated (not logged in). See §issue-104 verification |
+| `github-copilot` | C | unknown — reached as `gh copilot` passthrough to the standalone Copilot CLI (auto-download needs a TTY; `npm i -g @github/copilot` sidesteps) | install.sh:591 (+ :594/:607-608) renders `dist/github-copilot/` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **V** — FULL end-to-end 2026-07-30: `bin/guild-run --host github-copilot --prompt …` spawned `gh copilot -p`, a real completion ran, wrapper record emitted, exit 0. See §issue-104 verification |
+| `opencode` | C | unknown — CLI has no plugin manager | install.sh:591 (+ :594/:607-608) renders `dist/opencode/` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **V** — FULL 2026-07-30, WITH A CONTRACT DEFECT FOUND: the inferred `-p` form is silently ignored (TUI opens — a hung pane); the real non-interactive form `opencode run "<prompt>"` completed a live model turn. Both argv sites fixed in PR #109. See §issue-104 verification |
+| `rovo-dev` | C | unknown — `acli rovodev` is AUTH-WALLED before even `--help` (unauthenticated probe errors), so install.sh detection cannot see it either | install.sh:591 (+ :594/:607-608) renders `dist/rovo-dev/` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **U (narrowed)** — Guild's side fully verified; the HOST leg needs Atlassian auth. The CLI's own error names `acli rovodev run`, so the inferred `-p` shape is SUSPECT — documented in guild-run-wrapper.ts. See §issue-104 verification |
 | `kiro` | C | n/a — editor file surface (`adapter_binding: agents-file`) | install.sh:624 reuses `dist/agents/`; user copies to project root | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — editor not exercised; `inferred` |
 | `qoder` | C | same as `kiro` | install.sh:624 reuses `dist/agents/` | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — `inferred` |
 | `trae` | C | same as `kiro` | install.sh:624 reuses `dist/agents/` | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — `inferred` |
@@ -436,3 +436,39 @@ notes.
 Out of scope by prior decision: the four unverified-contract hosts (carve-out
 issue #104) and the codex remote-source switch (#101 revert — local-marketplace
 class validated via the install.sh render instead).
+
+
+## Issue #104 verification (2026-07-30) — the four inferred hosts, on-box
+
+All four CLIs were installed on the operator machine (cursor-agent 2026.07.23,
+gh + standalone Copilot CLI 1.0.75, opencode 1.18.5, acli 1.3.22) and the
+carve-out recipe executed from a checkout: `install.sh --hosts
+cursor,github-copilot,opencode,rovo-dev --yes`.
+
+| Check | cursor | github-copilot | opencode | rovo-dev |
+|---|---|---|---|---|
+| Package rendered + receipt (per-host version 2.4.0) | PASS | PASS | PASS | PASS |
+| `guild-run --host <h> --dry-run` plan builds | PASS | PASS | PASS | PASS |
+| Launch staleness notice (seeded isolated HOME, 2.4.0 → 9.9.9, stripped rendering) | PASS | PASS | PASS | PASS |
+| `guild-run update` live swap (receipt backdated to 2.3.2 → swapped to v2.4.0) | PASS | PASS | PASS | PASS |
+| Host accepts the invocation | flag shape real (`-p` exists); model run auth-gated | **FULL** — real completion through `guild-run` end to end | **FULL** — after fixing the invocation (`run` positional, not `-p`; PR #109) | auth-walled (`acli rovodev` errors before `--help` without an Atlassian token) |
+
+Findings:
+
+1. **opencode contract defect (fixed).** The G4b `-p` convention is silently
+   ignored by opencode — the TUI opens, which for a wrapper is a hung pane, not
+   an error. Non-interactive form is `opencode run "<prompt>"`. Fixed in both
+   argv sites (wrapper plan + pane adapter) in PR #109, red-first test
+   `scripts/__tests__/opencode-invocation.test.ts`.
+2. **rovo-dev is auth-walled pre-help**, which also breaks install.sh's
+   detection probe (`acli rovodev --help` fails unauthenticated → the host is
+   never auto-detected on a machine that has acli but no Atlassian token).
+   Its own error text names `acli rovodev run`, so the inferred `-p` shape is
+   suspect; kept INFERRED with the suspicion documented in code.
+3. **gh copilot auto-download needs a TTY** — non-interactive `gh copilot …`
+   on a machine without the standalone CLI prints "Copilot CLI not installed"
+   instead of downloading. `npm i -g @github/copilot` sidesteps.
+4. **Registry provenance flips are a followup**, not done here: github-copilot
+   and opencode now qualify for `provenance: verified`; cursor is partial
+   (auth), rovo-dev still inferred. Flipping touches degradation-receipt
+   strings and golden fixtures — tracked in the #104 close-out.
