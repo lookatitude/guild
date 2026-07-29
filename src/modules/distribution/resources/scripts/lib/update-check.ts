@@ -446,7 +446,10 @@ export function computeSignal(opts: {
     return {
       ...base,
       update_available: true,
-      available: latest,
+      // The cache stores the tag verbatim ("v2.4.0"); the signal compares and
+      // renders VERSIONS, so strip the tag prefix — "2.2.0 → v2.4.0" mixed the
+      // two vocabularies (observed live in the v2.4.0 validation pass).
+      available: latest.replace(/^v/, ""),
       command,
       reason: "stable-newer-tag",
     };

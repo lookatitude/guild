@@ -155,7 +155,7 @@
       "id": "lib/update-check",
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
-      "sha256": "341fd133d15f130300587f72bffb9d386f9f01beafd123c048a2563606784e52"
+      "sha256": "05ee9efb07ab6e5120f3fcd379152098085de463ad1c33ee5074aeedfac1e422"
     },
     {
       "category": "scripts",
