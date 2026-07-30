@@ -24173,10 +24173,30 @@ function realpathOrSelf(p) {
     }
   }
 }
+function sameDirectory(a, b) {
+  try {
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
 function assertNotPayloadScoped(candidate, source) {
   if (PAYLOAD_ROOT === null) return;
   const real = realpathOrSelf(candidate);
-  if (real === PAYLOAD_ROOT || real.startsWith(PAYLOAD_ROOT + path.sep)) {
+  let cur = real;
+  for (; ; ) {
+    if (sameDirectory(cur, PAYLOAD_ROOT)) {
+      throw new PayloadScopedRootError(source, candidate);
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  const foldedReal = real.toLowerCase();
+  const foldedPayload = PAYLOAD_ROOT.toLowerCase();
+  if (foldedReal === foldedPayload || foldedReal.startsWith(foldedPayload + path.sep)) {
     throw new PayloadScopedRootError(source, candidate);
   }
 }

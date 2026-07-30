@@ -467,3 +467,51 @@ describe.each([
     });
   }
 );
+
+/**
+ * Found by probing before gate round 7 reported: on a CASE-INSENSITIVE
+ * filesystem (macOS default), a case-variant path names the same directory but
+ * is a different STRING — the string comparison missed it and payload data
+ * leaked. Identity is now decided by (device, inode), which is also immune to
+ * symlinks and hardlinks; a case-folded string check backstops paths that do
+ * not exist yet and therefore cannot be stat'ed.
+ */
+describe.each([
+  ["guild-memory", MEMORY_BIN, "wiki_list"],
+  ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs"],
+] as Array<[string, string, string]>)("%s payload identity is not string-based", (_n, bin, tool) => {
+  let payload: string;
+  beforeAll(() => {
+    payload = makeFakePluginRoot();
+  });
+  afterAll(() => fs.rmSync(payload, { recursive: true, force: true }));
+
+  it("a CASE-VARIANT of the payload path is refused where the fs is case-insensitive", () => {
+    const base = path.basename(payload);
+    const variant = path.join(path.dirname(payload), base.toUpperCase());
+    // Only meaningful when the filesystem actually resolves the variant.
+    if (!fs.existsSync(variant)) {
+      expect(fs.existsSync(variant)).toBe(false); // case-sensitive fs: nothing to bypass
+      return;
+    }
+    const r = callTool(bin, tool, { cwd: variant }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/own plugin payload/);
+    expect(r.text).not.toContain("PLUGINSENTINEL");
+  });
+
+  it("a trailing separator does not bypass the check", () => {
+    const r = callTool(bin, tool, { cwd: payload + path.sep }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+    expect(r.isError).toBe(true);
+  });
+
+  it("'..' segments inside an absolute payload path do not bypass the check", () => {
+    const r = callTool(
+      bin,
+      tool,
+      { cwd: path.join(payload, ".guild", "..") },
+      { cwd: payload, flags: ["--no-cwd-fallback"] }
+    );
+    expect(r.isError).toBe(true);
+  });
+});

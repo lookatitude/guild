@@ -175,10 +175,40 @@ function realpathOrSelf(p: string): string {
  * naming the payload (directly or via a link) still returned the plugin's own
  * wiki/runs (gate r5, reproduced live against the shipped bundles).
  */
+function sameDirectory(a: string, b: string): boolean {
+  // Identity by (device, inode) — the only comparison that is correct on a
+  // CASE-INSENSITIVE filesystem, where "…/Payload" and "…/payload" are one
+  // directory but two different strings (a case-variant path defeated the
+  // string compare and leaked payload data), and which also collapses
+  // symlinks and hardlinks for free.
+  try {
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
+
 function assertNotPayloadScoped(candidate: string, source: string): void {
   if (PAYLOAD_ROOT === null) return;
   const real = realpathOrSelf(candidate);
-  if (real === PAYLOAD_ROOT || real.startsWith(PAYLOAD_ROOT + path.sep)) {
+  // Walk the candidate's existing ancestry: the payload is off-limits whether
+  // the candidate IS it or lives beneath it.
+  let cur = real;
+  for (;;) {
+    if (sameDirectory(cur, PAYLOAD_ROOT)) {
+      throw new PayloadScopedRootError(source, candidate);
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  // Belt-and-braces for paths that do not exist yet (stat cannot compare them):
+  // case-folded string containment, which is a superset on both fs kinds.
+  const foldedReal = real.toLowerCase();
+  const foldedPayload = PAYLOAD_ROOT.toLowerCase();
+  if (foldedReal === foldedPayload || foldedReal.startsWith(foldedPayload + path.sep)) {
     throw new PayloadScopedRootError(source, candidate);
   }
 }
