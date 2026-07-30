@@ -24131,6 +24131,7 @@ function bm25Score(queryTokens, docs) {
 
 // src/index.ts
 var NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
+var CWD_PARAM_DESCRIPTION = NO_CWD_FALLBACK ? "REQUIRED here \u2014 absolute path of the consuming project root. This server runs outside the project and has no default; calls without it fail." : "Override consuming-repo root (defaults to the server's working directory).";
 var UnresolvedProjectRootError = class extends Error {
   constructor() {
     super(
@@ -24263,7 +24264,10 @@ function buildServer() {
   const server = new McpServer(
     { name: "guild-memory", version: "0.1.0" },
     {
-      instructions: "BM25 search, read, and list over .guild/wiki/. Read-only. Pass `cwd` to override the consuming repo root per-tool, or set GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory."
+      // Flag-aware: under --no-cwd-fallback there is no default root at all, so
+      // the instructions must say REQUIRED, not "override". A caller reading the
+      // old text would have its first call fail (gate r3 finding).
+      instructions: NO_CWD_FALLBACK ? "BM25 search, read, and list over .guild/wiki/. Read-only. IMPORTANT: this server was launched OUTSIDE the consuming project, so it has no default root. You MUST pass `cwd` (absolute path of the project root) on EVERY tool call, or set GUILD_MEMORY_WIKI_ROOT. Calls without it fail." : "BM25 search, read, and list over .guild/wiki/. Read-only. Pass `cwd` to override the consuming repo root per-tool, or set GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory."
     }
   );
   server.registerTool(
@@ -24275,7 +24279,7 @@ function buildServer() {
         query: external_exports.string().min(1).describe("Free-text query"),
         category: external_exports.string().optional().describe("Restrict to a single wiki category (e.g. 'decisions')"),
         limit: external_exports.number().int().min(1).max(200).optional().describe("Max number of results (default 20)"),
-        cwd: external_exports.string().optional().describe("Override consuming-repo root (defaults to server cwd)")
+        cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION)
       }
     },
     async ({ query, category, limit, cwd }) => {
@@ -24308,7 +24312,7 @@ function buildServer() {
       description: "Return the full content and parsed YAML frontmatter for a wiki page. `path` must be a relative path inside the wiki root.",
       inputSchema: {
         path: external_exports.string().min(1).describe("Wiki-relative path, e.g. 'decisions/foo.md'"),
-        cwd: external_exports.string().optional().describe("Override consuming-repo root")
+        cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION)
       }
     },
     async ({ path: rel, cwd }) => {
@@ -24333,7 +24337,7 @@ function buildServer() {
       inputSchema: {
         category: external_exports.string().optional().describe("Filter by category"),
         updated_since: external_exports.string().optional().describe("ISO date/time; keep pages with `updated_at` (or legacy `updated`) on/after this"),
-        cwd: external_exports.string().optional().describe("Override consuming-repo root")
+        cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION)
       }
     },
     async ({ category, updated_since, cwd }) => {

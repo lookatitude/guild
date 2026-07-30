@@ -85,6 +85,17 @@ import { WikiPageType, isWikiPageType } from "../../../src/modules/knowledge/wor
  */
 const NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
 
+/**
+ * The `cwd` parameter description the tools expose. Flag-aware for the same
+ * reason as the server instructions: under --no-cwd-fallback it is REQUIRED in
+ * practice, and a schema that calls it an optional override sends the caller
+ * into a guaranteed first-call failure.
+ */
+const CWD_PARAM_DESCRIPTION = NO_CWD_FALLBACK
+  ? "REQUIRED here — absolute path of the consuming project root. This server runs " +
+    "outside the project and has no default; calls without it fail."
+  : "Override consuming-repo root (defaults to the server's working directory).";
+
 /** Thrown when no project root can be determined and guessing would be wrong. */
 export class UnresolvedProjectRootError extends Error {
   constructor() {
@@ -331,10 +342,17 @@ function buildServer(): McpServer {
   const server = new McpServer(
     { name: "guild-memory", version: "0.1.0" },
     {
-      instructions:
-        "BM25 search, read, and list over .guild/wiki/. Read-only. " +
-        "Pass `cwd` to override the consuming repo root per-tool, or set " +
-        "GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory.",
+      // Flag-aware: under --no-cwd-fallback there is no default root at all, so
+      // the instructions must say REQUIRED, not "override". A caller reading the
+      // old text would have its first call fail (gate r3 finding).
+      instructions: NO_CWD_FALLBACK
+        ? "BM25 search, read, and list over .guild/wiki/. Read-only. " +
+          "IMPORTANT: this server was launched OUTSIDE the consuming project, so it has " +
+          "no default root. You MUST pass `cwd` (absolute path of the project root) on " +
+          "EVERY tool call, or set GUILD_MEMORY_WIKI_ROOT. Calls without it fail."
+        : "BM25 search, read, and list over .guild/wiki/. Read-only. " +
+          "Pass `cwd` to override the consuming repo root per-tool, or set " +
+          "GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory.",
     }
   );
 
@@ -364,7 +382,7 @@ function buildServer(): McpServer {
         cwd: z
           .string()
           .optional()
-          .describe("Override consuming-repo root (defaults to server cwd)"),
+          .describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ query, category, limit, cwd }) => {
@@ -406,7 +424,10 @@ function buildServer(): McpServer {
           .string()
           .min(1)
           .describe("Wiki-relative path, e.g. 'decisions/foo.md'"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z
+          .string()
+          .optional()
+          .describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ path: rel, cwd }) => {
@@ -440,7 +461,10 @@ function buildServer(): McpServer {
           .string()
           .optional()
           .describe("ISO date/time; keep pages with `updated_at` (or legacy `updated`) on/after this"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z
+          .string()
+          .optional()
+          .describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ category, updated_since, cwd }) => {

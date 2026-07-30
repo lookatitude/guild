@@ -100,6 +100,12 @@ interface TelemetryEvent {
  */
 const NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
 
+/** Flag-aware `cwd` description — REQUIRED when launched outside the project. */
+const CWD_PARAM_DESCRIPTION = NO_CWD_FALLBACK
+  ? "REQUIRED here — absolute path of the consuming project root. This server runs " +
+    "outside the project and has no default; calls without it fail."
+  : "Override consuming-repo root (defaults to the server's working directory).";
+
 /** Thrown when no project root can be determined and guessing would be wrong. */
 export class UnresolvedProjectRootError extends Error {
   constructor() {
@@ -551,11 +557,17 @@ function buildServer(): McpServer {
   const server = new McpServer(
     { name: "guild-telemetry", version: "0.1.0" },
     {
-      instructions:
-        "Read-only structured query over .guild/runs/. Reads each run's " +
-        "logs/v1.4-events.jsonl (falls back to legacy events.ndjson). Use " +
-        "trace_list_runs first to discover run ids, then trace_summary, " +
-        "trace_query, or trace_cost_rollup (token usage by tier/model/specialist).",
+      instructions: NO_CWD_FALLBACK
+        ? "Read-only structured query over .guild/runs/. IMPORTANT: this server was " +
+          "launched OUTSIDE the consuming project, so it has no default root. You MUST " +
+          "pass `cwd` (absolute path of the project root) on EVERY tool call, or set " +
+          "GUILD_TELEMETRY_CWD. Calls without it fail. Use trace_list_runs first to " +
+          "discover run ids, then trace_summary, trace_query, or trace_cost_rollup."
+        : "Read-only structured query over .guild/runs/. Reads each run's " +
+          "logs/v1.4-events.jsonl (falls back to legacy events.ndjson). Use " +
+          "trace_list_runs first to discover run ids, then trace_summary, " +
+          "trace_query, or trace_cost_rollup (token usage by tier/model/specialist). " +
+          "Pass `cwd` to override the consuming repo root per-tool.",
     }
   );
 
@@ -571,7 +583,7 @@ function buildServer(): McpServer {
         "Does not write anything.",
       inputSchema: {
         run_id: z.string().min(1).describe("The run identifier"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ run_id, cwd }) => {
@@ -641,7 +653,7 @@ function buildServer(): McpServer {
           .max(10000)
           .optional()
           .describe("Max number of events returned"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ run_id, event, specialist, since, limit, cwd }) => {
@@ -698,7 +710,7 @@ function buildServer(): McpServer {
             "ISO date/time; keep runs whose ended_at (or started_at if no events) is on/after this"
           ),
         limit: z.number().int().min(1).max(1000).optional().describe("Max runs"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ since, limit, cwd }) => {
@@ -752,7 +764,7 @@ function buildServer(): McpServer {
           .string()
           .optional()
           .describe("ISO date/time; keep events on/after this timestamp"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ run_id, since, cwd }) => {

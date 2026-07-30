@@ -45,7 +45,7 @@ function callTool(
   tool: string,
   args: Record<string, unknown>,
   opts: { cwd: string; flags?: string[] }
-): { text: string } {
+): { isError: boolean; text: string } {
   const lines = [
     JSON.stringify({
       jsonrpc: "2.0",
@@ -68,7 +68,37 @@ function callTool(
     timeout: 30_000,
   });
   const last = out.trim().split("\n").filter(Boolean).pop() ?? "{}";
-  return { text: last };
+  // Parse the envelope rather than string-matching raw text: a tool that returns
+  // its error as ordinary content would otherwise read as success (gate r3).
+  const parsed = JSON.parse(last) as {
+    result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    error?: { message?: string };
+  };
+  const text =
+    parsed.result?.content?.map((c) => c.text ?? "").join("\n") ?? parsed.error?.message ?? last;
+  return { isError: parsed.result?.isError === true || parsed.error !== undefined, text };
+}
+
+/**
+ * A FAKE plugin payload root seeded with its own sentinel wiki page + run.
+ * The servers are launched with THIS as cwd, standing in for the Codex install
+ * cache. Using a controlled root (rather than Guild's real tree) keeps the
+ * leak assertions hermetic — they no longer depend on Guild-owned strings like
+ * "release-discipline" that could be renamed or removed (gate r3).
+ */
+function makeFakePluginRoot(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-fake-plugin-payload-"));
+  fs.mkdirSync(path.join(dir, ".guild", "wiki"), { recursive: true });
+  fs.mkdirSync(path.join(dir, ".guild", "runs", "run-PLUGINSENTINEL-0001", "logs"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, ".guild", "wiki", "plugin-payload-sentinel.md"),
+    "---\ntype: standard\n---\n\n# PLUGINSENTINEL page\n"
+  );
+  fs.writeFileSync(
+    path.join(dir, ".guild", "runs", "run-PLUGINSENTINEL-0001", "logs", "v1.4-events.jsonl"),
+    JSON.stringify({ ts: "2026-01-01T00:00:00Z", event: "run_start" }) + "\n"
+  );
+  return dir;
 }
 
 /** A FOREIGN consuming repo — never the plugin tree, so leakage is visible. */
@@ -80,81 +110,138 @@ function makeForeignRepo(): string {
     path.join(dir, ".guild", "wiki", "foreign-only-page.md"),
     "---\ntype: standard\n---\n\n# Foreign only page\n"
   );
+  // A uniquely identifiable run so the telemetry positive case proves it READ the
+  // consumer's runs, not merely that it did not error against an empty dir.
+  const run = path.join(dir, ".guild", "runs", "run-CONSUMERSENTINEL-0001", "logs");
+  fs.mkdirSync(run, { recursive: true });
+  fs.writeFileSync(
+    path.join(run, "v1.4-events.jsonl"),
+    JSON.stringify({ ts: "2026-01-01T00:00:00Z", event: "run_start" }) + "\n"
+  );
   return dir;
 }
 
 describe("guild-memory data root", () => {
   let foreign: string;
+  let fakePlugin: string;
   beforeAll(() => {
     if (!fs.existsSync(MEMORY_BIN)) {
       throw new Error(`${MEMORY_BIN} missing — run \`npm run build\` in mcp-servers/guild-memory first.`);
     }
     foreign = makeForeignRepo();
+    fakePlugin = makeFakePluginRoot();
   });
-  afterAll(() => fs.rmSync(foreign, { recursive: true, force: true }));
-
-  it("FAILS CLOSED with --no-cwd-fallback and no cwd — never silently serves Guild's own wiki", () => {
-    // Launched FROM the plugin root, exactly as Codex does it.
-    const { text } = callTool(MEMORY_BIN, "wiki_list", {}, { cwd: PLUGIN_ROOT, flags: ["--no-cwd-fallback"] });
-    expect(text).toContain("no project root available");
-    // The specific leak: Guild's own wiki root must not appear anywhere.
-    expect(text).not.toContain(path.join(PLUGIN_ROOT, ".guild", "wiki"));
+  afterAll(() => {
+    fs.rmSync(foreign, { recursive: true, force: true });
+    fs.rmSync(fakePlugin, { recursive: true, force: true });
   });
 
-  it("serves the FOREIGN project when cwd is passed, with no Guild content", () => {
-    const { text } = callTool(
+  it("FAILS CLOSED with --no-cwd-fallback and no cwd — isError, and no payload content", () => {
+    // Launched from the PLUGIN payload root (seeded with its own sentinel page),
+    // exactly as Codex does it.
+    const r = callTool(MEMORY_BIN, "wiki_list", {}, { cwd: fakePlugin, flags: ["--no-cwd-fallback"] });
+    expect(r.isError).toBe(true);
+    expect(r.text).toContain("no project root available");
+    // The leak this whole fix exists to prevent: the payload's own page must not appear.
+    expect(r.text).not.toContain("plugin-payload-sentinel");
+    expect(r.text).not.toContain("PLUGINSENTINEL");
+  });
+
+  it("serves the CONSUMER project when cwd is passed, with zero payload bleed", () => {
+    const r = callTool(
       MEMORY_BIN,
       "wiki_list",
       { cwd: foreign },
-      { cwd: PLUGIN_ROOT, flags: ["--no-cwd-fallback"] }
+      { cwd: fakePlugin, flags: ["--no-cwd-fallback"] }
     );
-    expect(text).toContain("foreign-only-page");
-    expect(text).toContain(path.join(foreign, ".guild", "wiki"));
-    // Cross-project isolation: a page that exists ONLY in Guild's own wiki.
-    expect(text).not.toContain("release-discipline");
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("foreign-only-page");
+    expect(r.text).toContain(path.join(foreign, ".guild", "wiki"));
+    expect(r.text).not.toContain("plugin-payload-sentinel");
   });
 
   it("WITHOUT the flag, the cwd fallback still works — Claude Code and dev checkouts unchanged", () => {
-    // No flag, launched IN the consuming project: the pre-existing contract.
-    const { text } = callTool(MEMORY_BIN, "wiki_list", {}, { cwd: foreign });
-    expect(text).toContain("foreign-only-page");
-    expect(text).toContain(path.join(foreign, ".guild", "wiki"));
+    const r = callTool(MEMORY_BIN, "wiki_list", {}, { cwd: foreign });
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("foreign-only-page");
+    expect(r.text).toContain(path.join(foreign, ".guild", "wiki"));
+  });
+
+  it("the exposed metadata TELLS the caller cwd is required in flagged mode", () => {
+    // gate r3: instructions/schema that call cwd an optional override send a
+    // compliant caller into a guaranteed first-call failure.
+    const out = execFileSync("node", [MEMORY_BIN, "--no-cwd-fallback"], {
+      input:
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+        }) +
+        "\n" +
+        JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) +
+        "\n",
+      cwd: fakePlugin,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+      timeout: 30_000,
+    });
+    const lines = out.trim().split("\n").filter(Boolean);
+    const init = JSON.parse(lines[0]) as { result?: { instructions?: string } };
+    expect(init.result?.instructions ?? "").toMatch(/MUST pass `cwd`/);
+    const tools = JSON.parse(lines[lines.length - 1]) as {
+      result?: { tools?: Array<{ inputSchema?: { properties?: { cwd?: { description?: string } } } }> };
+    };
+    const described = (tools.result?.tools ?? []).filter(
+      (t) => t.inputSchema?.properties?.cwd !== undefined
+    );
+    expect(described.length).toBeGreaterThan(0);
+    for (const t of described) {
+      expect(t.inputSchema?.properties?.cwd?.description ?? "").toMatch(/REQUIRED/);
+    }
   });
 });
 
 describe("guild-telemetry data root", () => {
   let foreign: string;
+  let fakePlugin: string;
   beforeAll(() => {
     if (!fs.existsSync(TELEMETRY_BIN)) {
       throw new Error(`${TELEMETRY_BIN} missing — run \`npm run build\` in mcp-servers/guild-telemetry first.`);
     }
     foreign = makeForeignRepo();
+    fakePlugin = makeFakePluginRoot();
   });
-  afterAll(() => fs.rmSync(foreign, { recursive: true, force: true }));
-
-  it("FAILS CLOSED with --no-cwd-fallback and no cwd — never exposes Guild's own runs", () => {
-    const { text } = callTool(TELEMETRY_BIN, "trace_list_runs", {}, { cwd: PLUGIN_ROOT, flags: ["--no-cwd-fallback"] });
-    expect(text).toContain("no project root available");
-    // Guild's self-build run ids must not leak into a consumer's view.
-    expect(text).not.toContain("run-2026");
+  afterAll(() => {
+    fs.rmSync(foreign, { recursive: true, force: true });
+    fs.rmSync(fakePlugin, { recursive: true, force: true });
   });
 
-  it("scopes to the FOREIGN project when cwd is passed", () => {
-    const { text } = callTool(
+  it("FAILS CLOSED with --no-cwd-fallback and no cwd — never lists the payload's runs", () => {
+    const r = callTool(TELEMETRY_BIN, "trace_list_runs", {}, { cwd: fakePlugin, flags: ["--no-cwd-fallback"] });
+    expect(r.isError).toBe(true);
+    expect(r.text).toContain("no project root available");
+    expect(r.text).not.toContain("PLUGINSENTINEL");
+  });
+
+  it("lists the CONSUMER's run when cwd is passed — positive proof, not just 'no error'", () => {
+    const r = callTool(
       TELEMETRY_BIN,
       "trace_list_runs",
       { cwd: foreign },
-      { cwd: PLUGIN_ROOT, flags: ["--no-cwd-fallback"] }
+      { cwd: fakePlugin, flags: ["--no-cwd-fallback"] }
     );
-    // The foreign repo has an empty runs dir: an EMPTY result is the correct
-    // answer, and proves it did not fall back to Guild's populated runs dir.
-    expect(text).not.toContain("run-2026");
-    expect(text).not.toContain("no project root available");
+    expect(r.isError).toBe(false);
+    // It actually READ the consumer's runs dir…
+    expect(r.text).toContain("CONSUMERSENTINEL");
+    // …and did not fall back to the payload's.
+    expect(r.text).not.toContain("PLUGINSENTINEL");
   });
 
   it("WITHOUT the flag, the cwd fallback still works", () => {
-    const { text } = callTool(TELEMETRY_BIN, "trace_list_runs", {}, { cwd: foreign });
-    expect(text).not.toContain("no project root available");
+    const r = callTool(TELEMETRY_BIN, "trace_list_runs", {}, { cwd: foreign });
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("CONSUMERSENTINEL");
   });
 });
 

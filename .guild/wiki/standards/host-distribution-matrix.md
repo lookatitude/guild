@@ -528,8 +528,12 @@ and there the repo's own wiki is correct — so the host declares it via the fla
 servers then fail closed with an actionable message instead of guessing.
 
 So the honest capability statement: Codex git installs get **working, correctly scoped**
-wiki-search and telemetry MCP servers **when the caller passes `cwd`** on each tool call
-(the servers' own instruction strings already tell it to). Without `cwd` they refuse rather
+wiki-search and telemetry MCP servers **when the caller passes `cwd`** on each tool call.
+In flagged mode both servers now SAY so in the metadata a caller actually reads — the
+server `instructions` string and every tool's `cwd` parameter description switch to
+"REQUIRED" (gate r3 caught that the earlier claim "the instruction strings already tell
+it to" was FALSE: they described `cwd` as an optional override, so a compliant caller's
+first call was guaranteed to fail). Without `cwd` they refuse rather
 than answer from the wrong project. The rendered local-marketplace package still declares no
 MCP servers at all — tracked in #115.
 

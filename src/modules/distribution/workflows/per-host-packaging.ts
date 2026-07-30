@@ -37,6 +37,8 @@
  * Owned by plugin-architect; consumed by future per-host packaging scripts.
  */
 
+import * as path from "node:path";
+
 // ---------------------------------------------------------------------------
 // Input type — the neutral Guild plugin manifest
 // ---------------------------------------------------------------------------
@@ -620,9 +622,10 @@ export function renderCodexGitInstallManifest(
     // every arg was plugin-relative. Check every escape shape after normalizing.
     const unresolvable = args.find((a) => {
       if (a.includes("${")) return true; // unexpanded placeholder
-      if (a.startsWith("/")) return true; // POSIX absolute
-      if (/^[A-Za-z]:[\\/]/.test(a)) return true; // Windows drive absolute (C:\ or C:/)
-      if (a.startsWith("\\\\")) return true; // Windows UNC (\\server\share)
+      // Rooted on EITHER platform. posix catches "/x"; win32 catches "C:\\x", "C:/x",
+      // UNC "\\\\server\\share", AND the root-relative "\\x" form a hand-rolled
+      // two-backslash check missed (gate r3: `\rooted.js` is win32-absolute).
+      if (path.posix.isAbsolute(a) || path.win32.isAbsolute(a)) return true;
       if (a.startsWith("./") || a.startsWith(".\\")) return true; // measured: `./` does not resolve
       // Traversal, in either separator, before or after normalization.
       const norm = a.replace(/\\/g, "/");
