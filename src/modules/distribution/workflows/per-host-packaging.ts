@@ -533,56 +533,100 @@ export function renderClaudeMarketplacePackage(
   };
 }
 
+/** One MCP server entry as a Codex git-install declaration. */
+export interface CodexGitInstallMcpEntry {
+  type: "stdio";
+  command: string;
+  /** PLUGIN-RELATIVE (no `${CLAUDE_PLUGIN_ROOT}`) — resolved against `cwd`. */
+  args: string[];
+  /** Always "." — Codex resolves a relative plugin MCP cwd beneath the plugin root. */
+  cwd: ".";
+}
+
 /** The committed repo-root Codex manifest (`.codex-plugin/plugin.json`). */
 export interface CodexGitInstallJson {
   name: string;
   version: string;
-  mcpServers: Record<string, never>;
+  mcpServers: Record<string, CodexGitInstallMcpEntry>;
 }
+
+const CLAUDE_PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}/";
 
 /**
  * Render the repo-root Codex manifest consumed by a Codex GIT-REF install
  * (`codex plugin marketplace add lookatitude/guild --ref <ref>`), which
  * materializes THE REPO as the plugin payload — not a rendered `dist/` tree.
  *
- * WHY IT EXISTS (issue #114). With no Codex manifest at the repo root, Codex fell
- * back to Claude's `.mcp.json`, whose args are `${CLAUDE_PLUGIN_ROOT}`-prefixed.
- * Codex does NOT expand that placeholder for MCP server args, so it spawned
- * `node '${CLAUDE_PLUGIN_ROOT}/…'` and every session opened with two
- * "failed to start … connection closed" warnings. Measured on codex 0.146.0:
- * `${CLAUDE_PLUGIN_ROOT}/…`, bare-relative, and `./`-relative args all fail to
- * start; ONLY an absolute path works — and an absolute path cannot be published,
- * because the install root is a version-keyed cache dir unknown at publish time.
+ * WHY IT EXISTS (issue #114). Without a Codex manifest at the repo root, Codex
+ * falls back to Claude's `.mcp.json`, whose args are `${CLAUDE_PLUGIN_ROOT}`-
+ * prefixed. Codex does NOT expand that placeholder for MCP server args, so it
+ * spawned `node '${CLAUDE_PLUGIN_ROOT}/…'` and every session opened with two
+ * "failed to start … connection closed" warnings.
  *
- * So this manifest declares `mcpServers: {}` — the same decision
- * `renderCodexPluginJson` has always made for the rendered package (it never
- * emits `mcpServers`), which is why a local-marketplace install was silent while
- * the git install was not. This aligns both paths.
+ * HOW THE PATH IS MADE RESOLVABLE. Measured on codex 0.146.0 (functional oracle:
+ * ask Codex to call `wiki_list`):
  *
- * DELIBERATELY MINIMAL — three fields, and each omission is load-bearing:
- *   - NO `skills`/`hooks`: the rendered package points at `./.agents/skills/`,
- *     a layout that does not exist in the repo. Declaring it would break skill
- *     discovery for git installs (verified: discovery stays intact when omitted,
- *     because Codex then uses its own defaults).
- *   - `version` IS required: omitting it makes `codex plugin list` report the
- *     installed plugin as "local" instead of the real version (measured — a
- *     control install on a ref without this manifest reports the version
- *     correctly). That command is how an operator sees staleness at all, so a
- *     missing version would regress the very defect this initiative fixed.
+ *   | declaration                                  | server starts? |
+ *   |----------------------------------------------|----------------|
+ *   | args `${CLAUDE_PLUGIN_ROOT}/mcp-servers/…`   | NO             |
+ *   | args `mcp-servers/…` (no cwd)                | NO             |
+ *   | args `./mcp-servers/…` (no cwd)              | NO             |
+ *   | args absolute                                | yes (unpublishable — version-keyed cache root) |
+ *   | args `mcp-servers/…` + `cwd: "."`            | YES            |
  *
- * The version is single-sourced from the neutral manifest (canonical
- * `.claude-plugin/plugin.json`), and this file is part of the generated +
- * drift-gated install surface in `build-host-packages.ts`, so it can never be
- * hand-bumped out of agreement (wi-02 / G2).
+ * Codex resolves a RELATIVE plugin MCP `cwd` beneath the plugin root, so
+ * `cwd: "."` + plugin-relative args is the one form that is both resolvable and
+ * publishable. An absolute path cannot be committed: the install root is
+ * `~/.codex/plugins/cache/guild/guild/<version>/`, unknown at publish time.
+ *
+ * NOTE the asymmetry with the RENDERED Codex package, whose `renderCodexPluginJson`
+ * emits no `mcpServers`: that package is silent because it ships no `.mcp.json` to
+ * fall back to — NOT because omission and `{}` mean the same thing. For a payload
+ * that DOES carry `.mcp.json` (the repo), omitting the field re-enables the broken
+ * fallback, so this renderer always emits the map explicitly.
+ *
+ * DELIBERATELY MINIMAL OTHERWISE — no `skills`/`hooks` keys. Codex defaults to
+ * `skills/` + `commands/` migration and root `hooks/hooks.json`, which is the
+ * behavior a git install already had (verified: 110 native skills + 3 migrated
+ * command skills still discovered). The rendered package points `skills` at
+ * `./.agents/skills/`, a layout that does not exist in the repo, so declaring it
+ * here would BREAK discovery.
+ *
+ * `version` is required: omitting it makes `codex plugin list` report the plugin as
+ * "local" instead of its real version (measured against a control install on a ref
+ * without this manifest, which reported correctly) — and that command is how an
+ * operator sees staleness at all. It is single-sourced from the neutral (canonical)
+ * manifest, and this file is part of the generated + drift-gated install surface in
+ * `build-host-packages.ts`, so it cannot be hand-bumped out of agreement (wi-02).
  */
 export function renderCodexGitInstallManifest(
   manifest: GuildPluginManifest,
   _opts: RenderOptions
 ): CodexGitInstallJson {
+  const mcpServers: Record<string, CodexGitInstallMcpEntry> = {};
+  for (const s of manifest.mcpServers ?? []) {
+    // Only stdio servers are launched by path; an http server has no cwd problem
+    // and no command to resolve, so it is not representable here.
+    if (s.transport !== "stdio" || !s.command) continue;
+    const args = (s.args ?? []).map((a) =>
+      a.startsWith(CLAUDE_PLUGIN_ROOT_TOKEN) ? a.slice(CLAUDE_PLUGIN_ROOT_TOKEN.length) : a
+    );
+    // A path we could not make plugin-relative would resolve against the wrong
+    // root at runtime — refuse rather than ship a silently broken declaration.
+    const unresolvable = args.find((a) => a.startsWith("/") || a.includes("${"));
+    if (unresolvable !== undefined) {
+      throw new Error(
+        `renderCodexGitInstallManifest: MCP server "${s.id}" has an arg that cannot be made ` +
+          `plugin-relative (${unresolvable}). Codex resolves relative args against cwd ".", so ` +
+          `every path arg must be relative to the plugin root.`
+      );
+    }
+    mcpServers[s.id] = { type: "stdio", command: s.command, args, cwd: "." };
+  }
   return {
     name: manifest.name,
     version: manifest.version,
-    mcpServers: {},
+    mcpServers,
   };
 }
 

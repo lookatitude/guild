@@ -253,7 +253,7 @@ Codex package. Measured on a real install (isolated `CODEX_HOME`, `--ref next`):
 
 | Artifact the rendered package provides | Present in a remote install? |
 |---|---|
-| `.codex-plugin/plugin.json` | **✗ missing** |
+| `.codex-plugin/plugin.json` | **✓ present since PR #114** (generated repo-root manifest — see §Codex git-install MCP declaration) |
 | `.<HIGH_ENTROPY_REDACTED>` | **✗ missing** |
 | `hooks/codex-hooks.json` | **✗ missing** |
 | `hooks/codex-guild-prompt-bridge.js` | **✗ missing** |
@@ -345,7 +345,7 @@ Restricted to what the evidence forces:
 
 | Goal | What follows |
 |---|---|
-| **G2** version SoT | Two manifests are load-bearing for install: `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (Codex reads the latter over git). `.codex-plugin/plugin.json` is load-bearing for the local path. A version field in the *generated Codex marketplace manifest* is **not** required — both install paths already resolve a version without it. The SoT requirement is that these agree; the drift gate is still justified. |
+| **G2** version SoT | Two manifests are load-bearing for install: `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (Codex reads the latter over git). `.codex-plugin/plugin.json` is load-bearing for BOTH the local path and — since PR #114 — the repo-root git-install path. **CORRECTED 2026-07-30:** the earlier conclusion that a version field in the Codex manifest is *not* required is FALSE for the repo-root manifest. Measured: a git install whose `.codex-plugin/plugin.json` omits `version` makes `codex plugin list` report the plugin as `local` instead of its real version (control install on a ref without the manifest reported correctly). So the repo-root Codex manifest carries the canonical version and is part of the generated + drift-gated install surface. Three files now: the two `.claude-plugin` manifests and `.codex-plugin/plugin.json`. |
 | **G3** publish matrix | **Scope shrinks substantially.** Codex needs no new publish infrastructure — the repo is already a working git marketplace. The deliverable is switching Guild's *default registration* from local to remote (install.sh + README) for codex, and evaluating the same for pi (`git:`) and antigravity (`plugin@marketplace`). A GitHub Release artifact per host is **not** forced by the evidence; it is one option for genuinely file-surface hosts. **Constraint:** the switch must apply to *fetched* stable/beta installs only — install.sh:428-430 deliberately treats a checkout's working tree as the source, and making every invocation remote would break the development install path. **Channel switching requires `marketplace remove` + `add`**, not a re-`add`. |
 | **G4** staleness signal | AT THE G1 SNAPSHOT Codex's hook manifest carried only `UserPromptSubmit` — that gap was real and is CLOSED (#102 wired SessionStart; live-verified in a real codex session at the wi-04 close-out). Wrapper hosts carry the `guild-run` launch notice; file surfaces the AGENTS.md preamble + shipped bundle. |
 | **G5** update parity | Three defects are evidenced. (1) Receipts are written ONLY by `install.sh` — a host-native install (including the documented primary Claude path and the working Codex git path) leaves `install.sh --update` and `guild-run update` blind, which is the reporting machine's exact state. (2) `plugin_version_from` reads the Claude tree for every host's receipt. (3) The documented Guild-side Codex update paths assume an INSTALLER-MANAGED install. README:144-151 already matches the registry (the Claude two-command pair; `guild-run update` for the wrapper hosts incl. codex) — so the gap is NOT a docs-vs-registry mismatch. It is that the two **Guild-side** paths — `guild-run update` (`self-update.ts:95-99`) and `install.sh --update` (`install.sh:220-224`) — are both receipt-dependent, and a host-native install writes no receipt. The Claude marketplace pair is host-native and needs no receipt, so this does NOT affect a native Claude install; it bit Codex specifically at the G1 snapshot, whose then-documented command (`guild-run update`) was receipt-dependent. CURRENT (option A): codex-cli's command is `install.sh --update`, which handles the no-receipt case by detection+advice, and the session-start check mints an identification-only package receipt. The reporting machine had Guild on Codex, no receipt, and therefore no working documented update path. G5 owes that case a real answer, not a third mapping. |
@@ -475,3 +475,58 @@ Findings:
    (partial — no authenticated completion), rovo-dev stays inferred
    (auth-walled). Both flipped hosts remain in `INFERRED_HOSTS`
    (adapter-fallback-ladders) — capability RUNGS are a separate, stricter bar.
+
+
+## Codex git-install MCP declaration (issue #114, PR #114 — 2026-07-30)
+
+Re-registering the operator machine from the stale local marketplace to the git
+source (the fix this initiative shipped) surfaced a defect the validation pass had
+missed: **every Codex session opened with two failed MCP servers.**
+
+```
+⚠ MCP client for `guild-memory` failed to start: … connection closed
+⚠ MCP client for `guild-telemetry` failed to start: … connection closed
+```
+
+**Mechanism.** A git-ref install materializes THE REPO as the payload. With no
+Codex manifest at the repo root, Codex fell back to Claude's `.mcp.json`, whose
+args are `${CLAUDE_PLUGIN_ROOT}`-prefixed — a placeholder Codex expands for
+**hooks** but NOT for MCP server args. It spawned `node '${CLAUDE_PLUGIN_ROOT}/…'`,
+node exited on the nonexistent path, and the client reported a closed connection.
+The servers themselves were never broken (they handshake fine when spawned
+directly); only the declaration was.
+
+**What Codex actually resolves** — measured on codex 0.146.0, functional oracle
+(ask Codex to call `wiki_list` and see whether the tool answers):
+
+| declaration | server starts? |
+|---|---|
+| args `${CLAUDE_PLUGIN_ROOT}/mcp-servers/…` | NO |
+| args `mcp-servers/…` (no cwd) | NO |
+| args `./mcp-servers/…` (no cwd) | NO |
+| args absolute | YES — but unpublishable (version-keyed cache root) |
+| **args `mcp-servers/…` + `cwd: "."`** | **YES** |
+
+Codex resolves a **relative plugin MCP `cwd` beneath the plugin root**, so
+`cwd: "."` plus plugin-relative args is the one form that is both resolvable and
+publishable. Setting `CLAUDE_PLUGIN_ROOT` in Codex's environment does nothing —
+`codex mcp list` shows the placeholder stored and passed literally.
+
+**Fix.** A generated repo-root `.codex-plugin/plugin.json` declaring both servers
+in that form (`renderCodexGitInstallManifest`, part of the drift-gated install
+surface). Codex git installs now get **working** wiki-search and telemetry MCP
+servers — a capability no prior install path delivered.
+
+**Two traps recorded for future host work:**
+
+1. *Omission ≠ empty.* The rendered Codex package omits `mcpServers` and is silent
+   only because that tree ships no `.mcp.json` to fall back to. For a payload that
+   carries one, omitting the field re-enables the broken fallback. A first attempt
+   at this fix shipped `mcpServers: {}` (suppression) and the adversarial gate
+   correctly rejected it for disabling working functionality — the experiment had
+   varied only `args`, never `cwd`.
+2. *Declare only what the layout supports.* The repo-root manifest must NOT declare
+   `skills`/`hooks`: the rendered package points `skills` at `./.agents/skills/`,
+   which does not exist in the repo. Omitted, Codex uses its own defaults
+   (`skills/` + `commands/` migration, root `hooks/hooks.json`) — verified 110
+   native skills + 3 migrated command skills still discovered.
