@@ -186,8 +186,9 @@ more than the registry does.
 
 **Registry cross-check** (16/16 rows): `installability` — `native` ×1
 (`claude-code-cli`), `target` ×11, `none` ×4. `adapter_binding` — `self` ×13,
-`agents-file` ×3 (`kiro`, `qoder`, `trae`). `provenance` — `verified` ×4
-(`claude-code-cli`, `codex-cli`, `pi-cli`, `antigravity-cli`), `inferred` ×12.
+`agents-file` ×3 (`kiro`, `qoder`, `trae`). `provenance` — `verified` ×6
+(`claude-code-cli`, `codex-cli`, `pi-cli`, `antigravity-cli`, and — since
+issue #110, PR #112 — `github-copilot`, `opencode`), `inferred` ×10.
 
 ## Open items this page does NOT close
 
@@ -439,7 +440,7 @@ issue #104) and the codex remote-source switch (#101 revert — local-marketplac
 class validated via the install.sh render instead).
 
 
-## Issue #104 verification (2026-07-30) — the four inferred hosts, on-box
+## Issue #104 verification (2026-07-30) — the four then-inferred hosts, on-box
 
 All four CLIs were installed on the operator machine (cursor-agent 2026.07.23,
 gh + standalone Copilot CLI 1.0.75, opencode 1.18.5, acli 1.3.22) and the
@@ -469,7 +470,8 @@ Findings:
 3. **gh copilot auto-download needs a TTY** — non-interactive `gh copilot …`
    on a machine without the standalone CLI prints "Copilot CLI not installed"
    instead of downloading. `npm i -g @github/copilot` sidesteps.
-4. **Registry provenance flips are a followup**, not done here: github-copilot
-   and opencode now qualify for `provenance: verified`; cursor is partial
-   (auth), rovo-dev still inferred. Flipping touches degradation-receipt
-   strings and golden fixtures — tracked in the #104 close-out.
+4. **Registry provenance flips — DONE (issue #110, PR #112)**: github-copilot
+   and opencode flipped to `provenance: verified`; cursor stays inferred
+   (partial — no authenticated completion), rovo-dev stays inferred
+   (auth-walled). Both flipped hosts remain in `INFERRED_HOSTS`
+   (adapter-fallback-ladders) — capability RUNGS are a separate, stricter bar.
