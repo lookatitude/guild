@@ -57,7 +57,7 @@
       "id": "lib/guild-run-wrapper",
       "source_path": "scripts/lib/guild-run-wrapper.ts",
       "resource_path": "resources/scripts/lib/guild-run-wrapper.ts",
-      "sha256": "4b5e4ae4b2a1f72689c34be219e43de3047669a26e435faed1ef21062cecb445"
+      "sha256": "2f08ebdf7d4f1833ecb9a28f1a60f376f8a1f0d98b5ff33a1e0f07a350c28113"
     },
     {
       "category": "scripts",
@@ -148,7 +148,7 @@
       "id": "lib/host-adapters/wrapped-cli-base",
       "source_path": "scripts/lib/host-adapters/wrapped-cli-base.ts",
       "resource_path": "resources/scripts/lib/host-adapters/wrapped-cli-base.ts",
-      "sha256": "fbb4e03acc4a580f9a308f5e3b18103387e6e782b7f61a944d23819310595dc3"
+      "sha256": "8554b4097fed8147195eecbf009fdc35ac772e3e210a414abc3e2766e4820274"
     },
     {
       "category": "scripts",
@@ -225,7 +225,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "797ae5b7894b19be9076fd251a4611ad71b3358288063a3ee13832e74b96ea4a"
+      "sha256": "a7b9f51e4005a1e5e941a02123b770fd690d578e21d17379a78df0382e083688"
     },
     {
       "category": "scripts",

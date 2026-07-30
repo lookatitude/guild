@@ -91,6 +91,25 @@ describe("the signal names the CORRECT command per host", () => {
       "Guild update available on stable: 2.2.0 → 2.3.2 — run: curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
     );
   });
+
+  it("strips the tag's v prefix — the signal renders VERSIONS, not tags", () => {
+    // The real cache stores latest_tag verbatim from ls-remote ("v2.4.0"); the
+    // synthetic CACHE above hides that by seeding a bare version. The v2.4.0
+    // validation pass observed "2.2.0 → v2.4.0" live: installed was a version,
+    // available a tag. Both sides must speak the same vocabulary.
+    const cache = {
+      schema_version: "guild.update_check_cache.v1",
+      checked_at: "2026-07-29T00:00:00Z",
+      remote: { latest_tag: "v2.4.0", latest_sha: null },
+    } as never;
+    const s = computeSignal({ state: STATE, cache, hostKind: "wrapper", hostId: "codex-cli" } as never) as {
+      update_available: boolean;
+    };
+    expect(s.update_available).toBe(true);
+    const line = renderSignalLine(s as never);
+    expect(line).toMatch(/2\.2\.0 → 2\.4\.0/);
+    expect(line).not.toContain("v2.4.0");
+  });
 });
 
 // Asserting on build-host-packages.ts's SOURCE TEXT proves nothing about what it

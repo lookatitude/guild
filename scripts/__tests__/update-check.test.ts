@@ -239,10 +239,11 @@ describe("computeSignal — per-channel staleness", () => {
     expect(sig).toMatchObject({
       update_available: true,
       reason: "stable-newer-tag",
-      available: "v2.1.0",
+      // The tag is "v2.1.0"; the signal renders VERSIONS (v prefix stripped).
+      available: "2.1.0",
     });
     expect(renderSignalLine(sig)).toBe(
-      "Guild update available on stable: 2.0.1 → v2.1.0 — run: claude plugin marketplace update guild && claude plugin update guild@guild"
+      "Guild update available on stable: 2.0.1 → 2.1.0 — run: claude plugin marketplace update guild && claude plugin update guild@guild"
     );
   });
 

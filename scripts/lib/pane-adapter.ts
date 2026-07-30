@@ -574,7 +574,11 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
     const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment = spec.capability_scope !== undefined
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
-    const argv = [this.bin, ...this.argvPrefix(), "-p", shellQuote(spec.prompt)].join(" ");
+    // opencode: `-p` is silently ignored and the TUI opens (VERIFIED 2026-07-30,
+    // opencode 1.18.5 — issue #104); its non-interactive form is `run '<prompt>'`.
+    const promptArgs =
+      this.hostKind === "opencode" ? ["run", shellQuote(spec.prompt)] : ["-p", shellQuote(spec.prompt)];
+    const argv = [this.bin, ...this.argvPrefix(), ...promptArgs].join(" ");
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       producerMarkerExport() +

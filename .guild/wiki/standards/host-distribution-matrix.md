@@ -42,10 +42,10 @@ repo, with no changes to Guild:
 
 ```console
 $ codex plugin marketplace add lookatitude/guild --ref main
-Added marketplace `guild` from https://github.com/lookatitude/guild.git#main.
+Added marketplace `guild` from https://github.<HIGH_ENTROPY_REDACTED>.git#main.
 
 $ codex plugin add guild@guild
-Installed plugin root: …/plugins/cache/guild/guild/2.3.2
+Installed plugin root: …<HIGH_ENTROPY_REDACTED>.3.2
 
 $ codex plugin marketplace upgrade
 Upgraded 1 marketplace(s).
@@ -68,21 +68,29 @@ probes establish and what they do not:
 | `marketplace upgrade` fails on a local source | **Verified** — ``marketplace `guild` is not configured as a Git marketplace`` |
 | A pinned **tag** ref stays pinned across `upgrade` | **Verified** — 2.3.0 stayed 2.3.0 (correct behavior) |
 | A marketplace's ref can be re-pointed in place | **Verified FALSE** — `Error: marketplace 'guild' is already added from a different source; remove it before adding this source`. Switching channel requires `marketplace remove` + `add`. |
-| An **installed** plugin moves to a newer version when its **branch** ref advances | **UNVERIFIED** — see blocker below |
+| An **installed** plugin moves to a newer version when its **branch** ref advances | **Verified — YES** (probe run 2026-07-27, v2.4.0 cut). `marketplace upgrade` ALONE moved the reported installed version 2.3.2 → 2.4.0; `plugin list` read 2.4.0 *before* any `plugin add`. |
 
-Blocker on the last row: Codex accepts only `owner/repo` or a remote git URL as
-a git source (a local path — even a bare repo or `file://` URL — is rejected
-with `--ref is only supported for git marketplace sources` / `invalid
-marketplace source format`), so a moving branch cannot be simulated offline.
-Guild's own capability rows already encode the distinction: `claude-code-cli` is
-`auto_capable: true`, `codex-cli` is `auto_capable: false`
-(`host-capabilities-schema.ts`). **Do not assume upgrade propagation works.**
+**Probe record (closes the row).** The durable probe at
+`~/.guild/probes/codex-propagation` was installed from `--ref next` at 2.3.2
+*before* the v2.4.0 cut, then exercised after it with the
+list-BETWEEN-upgrade-and-add ordering:
 
-Concrete re-test trigger: when G6 lands the v2.3.2 sync-back, `origin/next`
-advances 2.3.1 → 2.3.2. Install from `--ref next` *before* that merge, then run
-`marketplace upgrade` and `plugin add` after it, and record whether the
-installed version moves. That single observation closes this row and is a
-required G4/G5 acceptance test.
+1. `codex plugin marketplace upgrade guild` → "Upgraded … to the latest
+   configured revision."
+2. `codex plugin list` → **`guild@guild installed, enabled 2.4.0`** — the
+   upgrade alone refreshed the marketplace checkout AND the reported version.
+3. `codex plugin add guild@guild` → materialized the version-keyed cache payload
+   `<HIGH_ENTROPY_REDACTED>.4.0/` (full tree incl. `.codex-plugin/`). Only
+   the 2.4.0 version dir remained afterwards.
+4. `codex plugin list` → still 2.4.0.
+
+So the native git-source update recipe is the two-step
+`codex plugin marketplace upgrade guild && codex plugin add guild@guild`:
+`upgrade` moves the checkout + reported version, `add` materializes the
+version-keyed cache. Guild's capability row for `codex-cli` stays
+`auto_capable: false` and `apply: reinstall_command` (option A, operator
+decision 2026-07-26) — the reason is now purely that Codex owns its manager
+state, no longer any propagation uncertainty.
 
 So the real defect is **not** missing infrastructure:
 
@@ -112,11 +120,11 @@ current state.
 Guild's own Codex registration is the symptom:
 
 ```toml
-# ~/.codex/config.toml — the reporting machine
+# ~/.codex/[REDACTED] — the reporting machine
 [marketplaces.guild]
 last_updated = "2026-07-05T01:57:27Z"
 source_type = "local"
-source = "/Users/miguelp/Projects/guild/plugin/dist/codex-marketplace"
+source = "<HIGH_ENTROPY_REDACTED>-marketplace"
 ```
 
 `dist/` is gitignored, so that root is a build artifact on one machine. A
@@ -159,20 +167,20 @@ the registry does.
 | Host | Class | Host supports | Guild's install path | Version resolution | Publish mechanism | Update command | Staleness signal | Ev |
 |---|---|---|---|---|---|---|---|---|
 | `claude-code-cli` | A *(README)* / B *(install.sh)* | git ref **and** local path | README:108,121 → `claude plugin marketplace add lookatitude/guild[@next]`; **but** install.sh:504 registers `$RENDERED_DIST/claude-code`, a local path | git ref, or local snapshot via install.sh | git push to `main`/`next` | **`claude plugin marketplace update guild && claude plugin update guild@guild`** — the canonical pair per `UPDATE_COMMANDS.marketplace_cli` (`host-capabilities-schema.ts:94`, wired at `:282`, `auto_capable: true`). Refreshing the marketplace alone does NOT move the installed plugin; that second command is not optional, and this page records no live proof that the first alone suffices. | **Yes** — `hooks/hooks.json:16` `SessionStart` → `update-check.js` | V |
-| `codex-cli` | B *(as wired)* — A *available today* | **git ref, verified working** (`--ref main` → 2.3.2) **and** local path | install.sh:526 registers `$RENDERED_DIST/codex-marketplace` (local); README:167 documents the same | pinned semver dir `plugins/cache/guild/guild/<v>/`; version from `.codex-plugin/plugin.json` (local) or `.claude-plugin/marketplace.json` (git) | git push — **already works, unused** | **git source:** `codex plugin marketplace upgrade` (propagation to an installed plugin UNVERIFIED — see the behavior table). **local source:** `marketplace upgrade` **fails** (not a Git marketplace); a re-`codex plugin add` re-resolves. **Guild-side (option A, operator decision 2026-07-26):** `install.sh --update` — the registry-canonical command (`UPDATE_COMMANDS.reinstall_command`; codex-cli is deliberately NOT `self_update`, because Codex owns the installed cache and a Guild-side swap would mutate manager state behind `codex plugin list`'s back). It reinstalls from the receipt (install.sh:212 consumes receipts, :529 writes the codex one). Its per-receipt-channel re-render applies to the **no-checkout/fetched** path only — run from a checkout, the working tree is the source and the channel is ignored (install.sh:428-430, note at :432). **A registration the installer did not create has no receipt and neither Guild-side path sees it** — which is the reporting machine's exact state. | **G1 snapshot: No** (then wired only `UserPromptSubmit`). **Current: Yes** — SessionStart carries update-check (#102), live-verified in a real codex session (wi-04). | V |
+| `codex-cli` | B *(as wired)* — A *available today* | **git ref, verified working** (`--ref main` → 2.3.2) **and** local path | install.sh:526 registers `$RENDERED_DIST/codex-marketplace` (local); README:167 documents the same | pinned semver dir `<HIGH_ENTROPY_REDACTED><v>/`; version from `.codex-plugin/plugin.json` (local) or `.claude-plugin/marketplace.json` (git) | git push — **already works, unused** | **git source:** `codex plugin marketplace upgrade && codex plugin add guild@guild` (propagation VERIFIED 2026-07-27 — see the probe record in the behavior table: `upgrade` alone moves the reported version, `add` materializes the version-keyed cache). **local source:** `marketplace upgrade` **fails** (not a Git marketplace); a re-`codex plugin add` re-resolves. **Guild-side (option A, operator decision 2026-07-26):** `install.sh --update` — the registry-canonical command (`UPDATE_COMMANDS.reinstall_command`; codex-cli is deliberately NOT `self_update`, because Codex owns the installed cache and a Guild-side swap would mutate manager state behind `codex plugin list`'s back). It reinstalls from the receipt (install.sh:212 consumes receipts, :529 writes the codex one). Its per-receipt-channel re-render applies to the **no-checkout/fetched** path only — run from a checkout, the working tree is the source and the channel is ignored (install.sh:428-430, note at :432). **A registration the installer did not create has no receipt and neither Guild-side path sees it** — which is the reporting machine's exact state. | **G1 snapshot: No** (then wired only `UserPromptSubmit`). **Current: Yes** — SessionStart carries update-check (#102), live-verified in a real codex session (wi-04). | V |
 | `pi-cli` | C *(provisional)* | **`npm:` · `git:` · `https://` · `ssh://` · local path** (`pi install --help`) | install.sh:545 → `pi install $RENDERED_DIST/pi` — the local-path option | render-time snapshot *(assumed — depends on what `pi install` copies/links)* | none used; git/npm sources available | `guild-run update` (guild-run.ts:74,300) | No | **capability V** (`--help` run) · **Guild path S** — install not executed, so B-vs-C is not forced |
 | `antigravity-cli` | C *(provisional)* | `install <target>` incl. **`plugin@marketplace`**, plus `link <mp> <target>` (`agy plugin --help`) | install.sh:561 → `agy plugin install $RENDERED_DIST/antigravity` — local path | render-time snapshot *(assumed — same caveat)* | none used; marketplace mechanism available | `guild-run update` | No | **capability V** (`--help` run) · **Guild path S** — install not executed |
 | `agents-file` | C | n/a — file surface | install.sh:576 writes the receipt; the copy instructions it prints are :578-581 — the installer renders only, the user copies `dist/agents/` | copy-time snapshot, no version marker in the copied tree | none | `install.sh --update` (**not** `guild-run update` — the AC-7 guard at self-update.ts:104-113 refuses any host whose capability row is not `apply: "self_update"`) | No | S |
-| `cursor` | C | unknown | install.sh:591 sets `NEW_CLI_PATH`; the launcher it points at is :594/:607-608 — renders `dist/cursor/` + `bin/guild-run` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; registry `provenance: inferred` |
-| `github-copilot` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/github-copilot/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
-| `opencode` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/opencode/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
-| `rovo-dev` | C | unknown | install.sh:591 (+ :594/:607-608) renders `dist/rovo-dev/` | render-time snapshot | unknown | `guild-run update` | No | **U** — host not on PATH; `inferred` |
+| `cursor` | C | unknown — CLI has no plugin manager (confirmed: `cursor-agent --help` shows none) | install.sh:591 sets `NEW_CLI_PATH`; the launcher it points at is :594/:607-608 — renders `dist/cursor/` + `bin/guild-run` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **V (partial)** — package/receipt/notice/update all verified on-box; `cursor-agent -p` flag shape confirmed real, but the model run itself is auth-gated (not logged in). See §issue-104 verification |
+| `github-copilot` | C | unknown — reached as `gh copilot` passthrough to the standalone Copilot CLI (auto-download needs a TTY; `npm i -g @github/copilot` sidesteps) | install.sh:591 (+ :594/:607-608) renders `dist/github-copilot/` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **V** — FULL end-to-end 2026-07-30: `bin/guild-run --host github-copilot --prompt …` spawned `gh copilot -p`, a real completion ran, wrapper record emitted, exit 0. See §issue-104 verification |
+| `opencode` | C | unknown — CLI has no plugin manager | install.sh:591 (+ :594/:607-608) renders `dist/opencode/` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **V** — FULL 2026-07-30, WITH A CONTRACT DEFECT FOUND: the inferred `-p` form is silently ignored (TUI opens — a hung pane); the real non-interactive form `opencode run "<prompt>"` completed a live model turn. Both argv sites fixed in PR #109. See §issue-104 verification |
+| `rovo-dev` | C | unknown — `acli rovodev` is AUTH-WALLED before even `--help` (unauthenticated probe errors), so install.sh detection cannot see it either | install.sh:591 (+ :594/:607-608) renders `dist/rovo-dev/` | render-time snapshot | n/a | `guild-run update` — **live-verified 2026-07-30** (receipted swap → 2.4.0) | **Yes** — launch notice live-verified | **U (narrowed)** — Guild's side fully verified; the HOST leg needs Atlassian auth. The CLI's own error names `acli rovodev run`, so the inferred `-p` shape is SUSPECT — documented in guild-run-wrapper.ts. See §issue-104 verification |
 | `kiro` | C | n/a — editor file surface (`adapter_binding: agents-file`) | install.sh:624 reuses `dist/agents/`; user copies to project root | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — editor not exercised; `inferred` |
 | `qoder` | C | same as `kiro` | install.sh:624 reuses `dist/agents/` | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — `inferred` |
 | `trae` | C | same as `kiro` | install.sh:624 reuses `dist/agents/` | copy-time snapshot | none | `install.sh --update` + re-copy | No | **U** — `inferred` |
 | `claude-code-app` | D | n/a | refused — `is_refuse_host` install.sh:151; refuse block install.sh:320-336 (`exit 4` at :336) | n/a | n/a | n/a | n/a | S |
 | `claude-code-web` | D | n/a | refused — `is_refuse_host` install.sh:151; refuse block install.sh:320-336 | n/a | n/a | n/a | n/a | S |
-| `codex-app` | D *on paper* — reached via `codex-cli` in practice | inherits Codex CLI's marketplace | refused by `install.sh` (`is_refuse_host` :151, refuse block :320-336), **but** the app shares `~/.codex/` with the CLI and install.sh:534 prints a `codex://plugins/guild?marketplacePath=…` deep link for it | inherits `codex-cli`'s pinned semver cache | inherits | inherits — fix the CLI registration and the app follows | No | **S** — shared-`~/.codex/` inheritance is read from install.sh + the operator's report, not from an app run; registry `provenance: inferred` |
+| `codex-app` | D *on paper* — reached via `codex-cli` in practice | inherits Codex CLI's marketplace | refused by `install.sh` (`is_refuse_host` :151, refuse block :320-336), **but** the app shares `~/.codex/[REDACTED] with the CLI and install.sh:534 prints a `codex://plugins/guild?marketplacePath=…` deep link for it | inherits `codex-cli`'s pinned semver cache | inherits | inherits — fix the CLI registration and the app follows | No | **S** — shared-`~/.codex/[REDACTED] inheritance is read from install.sh + the operator's report, not from an app run; registry `provenance: inferred` |
 | `claude-ai-connector` | D | n/a | refused — `is_refuse_host` install.sh:151; refuse block install.sh:320-336 | n/a | n/a | n/a | n/a | S |
 
 **Registry cross-check** (16/16 rows): `installability` — `native` ×1
@@ -226,8 +234,10 @@ round-1 gate caught it failing under the wrapper's own nested-npm environment.
 What remains untested is each HOST's side: whether the host accepts the
 package, and the same chain run on that host's machine.
 
-The upgrade-propagation row above is a second such gate: it is a required
-G4/G5 acceptance test with a concrete trigger, not an open curiosity.
+The upgrade-propagation row above was a second such gate — a required G4/G5
+acceptance test with a concrete trigger. It is now CLOSED: the v2.4.0 cut
+provided the trigger and the probe verified propagation (see the probe record
+above).
 
 ## The remote switch is BLOCKED on payload parity (xhrd-wi-03 / G3)
 
@@ -242,7 +252,7 @@ Codex package. Measured on a real install (isolated `CODEX_HOME`, `--ref next`):
 | Artifact the rendered package provides | Present in a remote install? |
 |---|---|
 | `.codex-plugin/plugin.json` | **✗ missing** |
-| `.agents/skills/guild/` | **✗ missing** |
+| `.<HIGH_ENTROPY_REDACTED>` | **✗ missing** |
 | `hooks/codex-hooks.json` | **✗ missing** |
 | `hooks/codex-guild-prompt-bridge.js` | **✗ missing** |
 | `bin/guild-run` | **✗ missing** |
@@ -259,7 +269,7 @@ broken* install. Do not run it until payload parity exists.
 
 ### The mechanism that makes G3 solvable (measured)
 
-Codex reads **`.agents/plugins/marketplace.json` in preference to
+Codex reads **`.<HIGH_ENTROPY_REDACTED>.json` in preference to
 `.claude-plugin/marketplace.json`**, and its plugin `source` may be a
 **subdirectory**. Verified with a fixture carrying both manifests pointing at
 different payloads — the `.agents/plugins` subdirectory entry won:
@@ -267,7 +277,7 @@ different payloads — the `.agents/plugins` subdirectory entry won:
 ```console
 $ codex plugin marketplace add <fixture>   # both manifests present
 $ codex plugin add prec@prec
-Installed plugin root: …/plugins/cache/prec/prec/1.0.0-SUBDIR   # the subdir, not "./"
+Installed plugin root: …<HIGH_ENTROPY_REDACTED>.0.0-SUBDIR   # the subdir, not "./"
 ```
 
 That resolves the hard part: Guild can point Codex at a rendered Codex tree
@@ -354,14 +364,14 @@ Executed on this machine, 2026-07-25:
   `agy plugin --help`.
 - Host presence probe: `pi`, `agy`, `claude`, `codex` present; `cursor`,
   `opencode`, `acli` absent.
-- `~/.codex/config.toml` `[marketplaces.*]`, `~/.codex/plugins/cache/guild/**`.
+- `~/.codex/[REDACTED] `[marketplaces.*]`, `~/.codex/[REDACTED]
 - `install.sh` (line numbers cited inline, re-checked against the file),
   `scripts/guild-run.ts`, `scripts/lib/self-update.ts`.
 - `HOST_REGISTRY_ROWS` dumped from `scripts/lib/host-registry.ts`.
 - `git show origin/{main,next}:.claude-plugin/plugin.json` → 2.3.2 / 2.3.1.
 
 Isolated-probe hygiene: every probe ran under a scratch `CODEX_HOME`, was
-exercised, and was deleted. The operator's `~/.codex/config.toml` was read but
+exercised, and was deleted. The operator's `~/.codex/[REDACTED] was read but
 never modified — it still carries the stale `local` registration, so the
 reported defect remains reproducible until the operator applies the fix above.
 
@@ -395,3 +405,70 @@ wrong before each of the first five.
 The lesson worth carrying: *"the host cannot do X"* is the claim most likely to
 be wrong, because it is the one nobody tests. Rounds 1, 3 and 6 all turned on
 some version of it.
+
+## v2.4.0 validation pass (2026-07-27) — the release leg, observed live
+
+v2.4.0 was the initiative's validation release: cut from `next` via
+`release/v2.4.0`, merged to `main` with a MERGE COMMIT (the squash divergence
+was healed in the same PR — #106), auto-tagged and published by `release.yml`,
+then synced back by fast-forwarding `next` to `main`'s exact tip (`1eb30e3`).
+`check-channel-integrity` reports both channels at 2.4.0 — the first time the
+channels have shared a commit since v2.3.1. Observed per host class:
+
+| # | Class / host | Observation | Result |
+|---|---|---|---|
+| 1 | git-ref marketplace (`claude-code-cli`) | `origin/main:.claude-plugin/plugin.json` carries 2.4.0 — the ref-advance IS the distribution | PASS |
+| 2 | codex native git install | fresh isolated `CODEX_HOME`, `marketplace add lookatitude/guild --ref main` + `plugin add` → `installed, enabled 2.4.0`, cache dir `plugins/cache/guild/guild/2.4.0` | PASS |
+| 3 | staleness signal, REAL + unseeded | the reporting machine's actual 2.2.0 codex cache, `~/.guild/update-check.json` absent: run 1 silently spawned the detached refresh (by design), run 2 emitted `Guild update available on stable: 2.2.0 → v2.4.0 — run: curl … install.sh \| bash -s -- --update` — the option-A reinstall command, never `guild-run update` | PASS (cosmetic residual: tag renders with its `v` prefix) |
+| 4 | wrapper live update (`guild-run update`) | a freshly rendered 2.4.0 `pi` package receipted at 2.3.2: full live run — real clone, all-host render, `gates PASS`, staged swap, `updated to 1eb30e3 (v2.4.0)`, receipt refreshed | PASS |
+| 5 | codex upgrade propagation | the pre-cut probe (see probe record above) | PASS — row closed |
+
+**Finding: the ≤2.3.2 wrapper bootstrap gap.** `guild-run update` executes the
+*installed* package's own updater, and packages rendered at ≤2.3.2 carry the
+pre-#105 updater (nested-npm env poison + `npm ci --prefix`), which fails —
+observed live against a genuine pre-#105 2.3.2 package. The #105 fix therefore
+only benefits packages rendered at ≥2.4.0. Remedy for existing wrapper installs
+at ≤2.3.2: run the reinstall path once
+(`curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update`); from
+2.4.0 onward `guild-run update` self-heals. Recorded in the v2.4.0 release
+notes.
+
+Out of scope by prior decision: the four unverified-contract hosts (carve-out
+issue #104) and the codex remote-source switch (#101 revert — local-marketplace
+class validated via the install.sh render instead).
+
+
+## Issue #104 verification (2026-07-30) — the four inferred hosts, on-box
+
+All four CLIs were installed on the operator machine (cursor-agent 2026.07.23,
+gh + standalone Copilot CLI 1.0.75, opencode 1.18.5, acli 1.3.22) and the
+carve-out recipe executed from a checkout: `install.sh --hosts
+cursor,github-copilot,opencode,rovo-dev --yes`.
+
+| Check | cursor | github-copilot | opencode | rovo-dev |
+|---|---|---|---|---|
+| Package rendered + receipt (per-host version 2.4.0) | PASS | PASS | PASS | PASS |
+| `guild-run --host <h> --dry-run` plan builds | PASS | PASS | PASS | PASS |
+| Launch staleness notice (seeded isolated HOME, 2.4.0 → 9.9.9, stripped rendering) | PASS | PASS | PASS | PASS |
+| `guild-run update` live swap (receipt backdated to 2.3.2 → swapped to v2.4.0) | PASS | PASS | PASS | PASS |
+| Host accepts the invocation | flag shape real (`-p` exists); model run auth-gated | **FULL** — real completion through `guild-run` end to end | **FULL** — after fixing the invocation (`run` positional, not `-p`; PR #109) | auth-walled (`acli rovodev` errors before `--help` without an Atlassian token) |
+
+Findings:
+
+1. **opencode contract defect (fixed).** The G4b `-p` convention is silently
+   ignored by opencode — the TUI opens, which for a wrapper is a hung pane, not
+   an error. Non-interactive form is `opencode run "<prompt>"`. Fixed in both
+   argv sites (wrapper plan + pane adapter) in PR #109, red-first test
+   `scripts/__tests__/opencode-invocation.test.ts`.
+2. **rovo-dev is auth-walled pre-help**, which also breaks install.sh's
+   detection probe (`acli rovodev --help` fails unauthenticated → the host is
+   never auto-detected on a machine that has acli but no Atlassian token).
+   Its own error text names `acli rovodev run`, so the inferred `-p` shape is
+   suspect; kept INFERRED with the suspicion documented in code.
+3. **gh copilot auto-download needs a TTY** — non-interactive `gh copilot …`
+   on a machine without the standalone CLI prints "Copilot CLI not installed"
+   instead of downloading. `npm i -g @github/copilot` sidesteps.
+4. **Registry provenance flips are a followup**, not done here: github-copilot
+   and opencode now qualify for `provenance: verified`; cursor is partial
+   (auth), rovo-dev still inferred. Flipping touches degradation-receipt
+   strings and golden fixtures — tracked in the #104 close-out.
