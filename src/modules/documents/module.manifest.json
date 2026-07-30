@@ -5,6 +5,6 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns HTML-native typed document contracts: canonical plan/spec/handoff/review/verify records, total validation, record-only execution projections, deterministic inert HTML rendering, bounded legacy Markdown import, schema evolution, and the fail-closed typed authority flow consumed for machine decisions.",
-  "depends_on": [],
+  "depends_on": ["kernel"],
   "owns": {}
 }

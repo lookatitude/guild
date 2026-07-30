@@ -4,8 +4,8 @@
  * DC-08 — artifact/document/knowledge service boundaries.
  *
  * The documents service may depend only on public module entrypoints
- * (`src/modules/<id>/index.ts`) and exact external parser packages from explicit
- * allowlists, plus Node builtins. It may never reach into host internals.
+ * (`src/modules/<id>/index.ts`) plus Node builtins. It may never reach into host
+ * internals or import an external package directly.
  *
  * Review note F-01 observed that a regex evaluator recognising only quoted
  * literal `import` specifiers is not a standalone proof: the forms it cannot
@@ -42,14 +42,13 @@ export const DOCUMENTS_MODULE_ID = "documents" as const;
 
 /** Public module entrypoints this service is permitted to import. */
 export const DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES = Object.freeze([
+  "kernel",
   "lifecycle",
   "telemetry",
 ]);
 
-/** Exact external parser packages this service is permitted to import. */
-export const DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES = Object.freeze([
-  "js-yaml",
-]);
+/** External packages are resolved behind public module seams, never directly. */
+export const DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES = Object.freeze([] as string[]);
 
 export type BoundaryViolationReason =
   | "host_internal_import"

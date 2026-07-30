@@ -589,7 +589,7 @@
       "id": "projection:src/modules/documents/workflows/document-receipts.ts",
       "source_path": "src/modules/documents/workflows/document-receipts.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-receipts.ts",
-      "sha256": "a7ed89dbd6581724e5e2675f2daf2f9da9d8248cc7301af08f4a1cafcc75aac5",
+      "sha256": "65191015a7f3d9894132c2040e43e7a20b7962a87aa262045b0bc89cbc65f918",
       "projection_dependency": true
     },
     {
@@ -613,7 +613,7 @@
       "id": "projection:src/modules/documents/workflows/document-service-boundary.ts",
       "source_path": "src/modules/documents/workflows/document-service-boundary.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-service-boundary.ts",
-      "sha256": "fb5cc067d7ca52dce35874c4a2c7d317a9df8afd9faea944421e7b19b07db315",
+      "sha256": "fe393eb34876ae145aa2682320ba341309c850883f3c8e965b8e1ae000059c20",
       "projection_dependency": true
     },
     {

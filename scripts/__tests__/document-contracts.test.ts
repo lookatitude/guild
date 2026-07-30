@@ -851,7 +851,7 @@ describe("DC-08 service boundaries", () => {
     expect(report.ok).toBe(true);
   });
 
-  it("allows only the exact policy-required js-yaml parser package", () => {
+  it("requires external parsers to stay behind a public module seam", () => {
     const report = evaluateDocumentServiceBoundary([
       {
         path: "src/modules/documents/workflows/x.ts",
@@ -861,6 +861,12 @@ describe("DC-08 service boundaries", () => {
       },
     ]);
     expect(report.violations).toEqual([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        line: 1,
+        specifier: "js-yaml",
+        reason: "external_package_import",
+      },
       {
         path: "src/modules/documents/workflows/x.ts",
         line: 2,

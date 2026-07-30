@@ -29,8 +29,8 @@
  * `family`), `host`, and `generated_at` must all be present in frontmatter.
  */
 
+import { loadYamlApi } from "../../kernel";
 import { DocumentIssue, pushIssue, safeGet, sortIssues } from "./document-safe";
-import * as yaml from "js-yaml";
 import {
   DOCUMENT_ID_PATTERN,
   DOCUMENT_SCHEMA_VERSION,
@@ -95,6 +95,7 @@ export function readReceiptFrontmatter(
   }
   let parsed: unknown;
   try {
+    const yaml = loadYamlApi();
     parsed = yaml.load(frontmatter, { schema: yaml.JSON_SCHEMA });
   } catch {
     return { ok: false, reason: "frontmatter is not a valid YAML mapping" };
