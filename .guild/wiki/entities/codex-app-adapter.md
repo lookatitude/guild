@@ -67,7 +67,7 @@ model_tiers:
   powerful: { model: "default", reasoning: "high" }
 
 mcp:
-  stdio: true                   # local app context if plugin/config supports it
+  stdio: false                # corrected 2026-07-30 (#114) — authoritative row is stdio:false (INFERRED); the app's MCP path has never been exercised live
   http: false                 # corrected 2026-07-30 (#114) — authoritative row is stdio:false, http:false (INFERRED)
   plugin_bundled: true
   core_provides_mcp: true
