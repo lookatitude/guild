@@ -123,7 +123,7 @@ ttl_seconds: 3600
 | FDC-10 Visuals / UI | Host-native | Codex CLI text / startup card | No degradation; visual renderer is Codex-specific. |
 | FDC-11 Security / permissions | Policy core + ask path | `PermissionRequest` replaces `PreToolUse ask` | `ScopePolicy` runs identically; emitter degraded for ask path. `permission_mode: degraded` recorded. |
 | FDC-12 Cost + subscription | Native billing path | `cost_path: native_process` (codex exec is native) | No degradation; `codex exec` is Codex's native lane path. |
-| FDC-13 MCP | stdio / HTTP | Full | MCP bundled; both transports supported. |
+| FDC-13 MCP | stdio only | Partial | **CORRECTED 2026-07-30 (#114).** Only stdio is supported (authoritative row `mcp: {stdio: true, http: false}`); the earlier "both transports" claim was wrong. MCP is bundled via the repo-root `.codex-plugin/plugin.json` for git installs, with plugin-relative args + `cwd: "."` + `--no-cwd-fallback`; the rendered local-marketplace package still declares none (#115). |
 | FDC-14 Host-native subagents | Parallel agents | Codex native subagents (Rung 2) | Subagent dispatch available; no tmux required for parallelism. |
 | FDC-15 Work isolation | Worktrees | Via shell/Git | All CLI hosts drive Git; approval policy needed for branch ops. |
 | FDC-16 Telemetry + replay | Normalized `guild.trace_event.v1` | Requires `GuildHookEvent` normalization layer | Codex has `turn_id`, `PermissionRequest`, `apply_patch` field names. `HookPayload` normalization (LEAKS H-1) must be applied. `source: host_hook`, `fidelity: full` when hooks present. |

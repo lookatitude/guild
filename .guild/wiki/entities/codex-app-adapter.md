@@ -11,7 +11,7 @@ source_refs:
 related: [host-adapter-contract, feature-degradation-contracts, phase-continuity-requirements, claude-code-adapter, codex-adapter, gemini-cli-adapter, pi-adapter, claude-code-desktop-adapter, claude-code-web-adapter, codex-app-adapter, antigravity-2-adapter, claude-ai-connector-adapter]
 applies_to: [plugin]
 created_at: 2026-05-28
-updated_at: 2026-05-28
+updated_at: 2026-07-30
 expires_at: null
 supersedes: null
 sensitivity: public
@@ -68,7 +68,7 @@ model_tiers:
 
 mcp:
   stdio: true                   # local app context if plugin/config supports it
-  http: true
+  http: false                 # corrected 2026-07-30 (#114) — authoritative row is stdio:false, http:false (INFERRED)
   plugin_bundled: true
   core_provides_mcp: true
 
@@ -104,14 +104,14 @@ ttl_seconds: 3600
 | (4) Dispatch | Codex app parallel threads/worktrees (Rung 2) + subagents (also Rung 2) → serial (Rung 4) | No tmux | `HostIndependentAgentBackend` maps Guild lanes to app threads with built-in worktrees. `DispatchAdapter` uses app-native thread model rather than `codex exec` tmux panes. |
 | (5) Permissions | `PermissionRequest` event (app trust/approval UI) | No `PreToolUse ask` | Same as CLI: `ScopePolicy.resolve()` runs; emitter maps `ask` → `PermissionRequest` → app approval UI, or file-bus pause if not available. |
 | (6) Model tiers | `{ model: "default", reasoning: low/medium/high }` | — | Identical to CLI `ModelResolver`. |
-| (7) MCP | stdio + HTTP via plugin bundle | App trust flow required | `McpAdapter` emits MCP entries in `.codex-plugin/plugin.json`. Exact trust/setup flow for MCP servers in app context needs live verification (audit §"MCP support matrix / Codex app"). |
+| (7) MCP | **UNVERIFIED — authoritative row is `mcp: {stdio: false, http: false}` (provenance `inferred`)** | App trust flow required | **CORRECTED 2026-07-30 (#114):** the earlier "stdio + HTTP via plugin bundle" claim exceeded the registry row and is withdrawn. `McpAdapter` emits MCP entries in `.codex-plugin/plugin.json`, but nothing about MCP in the APP has been exercised on a live host; treat as an unverified target until it is. |
 | (8) Team visibility | Rung 2 (app threads/worktrees) → subagent Rung 2 → serial Rung 4 | No tmux as primary surface | `app_threads: true`; Guild lanes mapped to app threads, not tmux panes. `has_tmux: false` in app context. |
 
 ## Per-feature degradation matrix
 
 | FDC | Full behavior | This host | Degradation contract |
 |---|---|---|---|
-| FDC-1 Memory | MCP stdio `guild-memory` | stdio or HTTP via plugin | App MCP trust flow required; fallback to fs/BM25 if MCP not trusted/started. |
+| FDC-1 Memory | MCP stdio `guild-memory` | **UNVERIFIED (row says stdio:false, http:false — inferred)** | Corrected 2026-07-30 (#114): no transport is claimed for the app. Falls back to fs/BM25. |
 | FDC-2 Knowledge-graph + recall | `guild-memory` or fs scan | MCP or fallback | Index re-scan if MCP unavailable. |
 | FDC-3 Context assembly | Context bundle always written | Full | Bundle written in project folder; `degraded_retrieval` if FDC-1/2 degrade. |
 | FDC-4 Agent communication | File bus canonical | Full (app writes to local project `.guild/`) | `agent_bus.transport: file_bus_native`; threads write receipts and events to local project tree. |
@@ -123,7 +123,7 @@ ttl_seconds: 3600
 | FDC-10 Visuals / UI | Host-native | App threads panel, terminal/actions, in-app browser, artifacts | No tmux; app provides richer visual surface than CLI for reviewing parallel work. |
 | FDC-11 Security / permissions | Policy core + ask path | `PermissionRequest` (app approval UI) | Same as CLI: `ask_renderer: permission_request`. |
 | FDC-12 Cost + subscription | Native billing | `cost_path: native_process` | Codex app subscription path is native. |
-| FDC-13 MCP | stdio / HTTP | Full (once trusted) | App trust flow required before MCP servers start. `mcp.stdio_available: true` after trust. |
+| FDC-13 MCP | **none claimed** | UNVERIFIED | Corrected 2026-07-30 (#114): "Full (once trusted)" overstated an `inferred` row of stdio:false/http:false. Requires live verification on the app before any transport is claimed. |
 | FDC-14 Host-native subagents | Parallel agents | App threads + subagents (Rung 2) | Threads provide worktree isolation; subagents provide parallel execution. `coordination.parallelism: host_native`. |
 | FDC-15 Work isolation | Worktrees | Built-in app worktrees | Native worktree support per app docs. No serialization needed for parallel conflicting lanes. |
 | FDC-16 Telemetry + replay | Normalized trace | Normalization required | Same as CLI: `GuildHookEvent` normalization for Codex field names. `source: host_hook`, `fidelity: full` when hooks trusted. |
