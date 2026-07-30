@@ -101,6 +101,7 @@ describe("WAVE-1 Unit 3 — scrub share-set single-source parity", () => {
           const full = path.join(dir, e.name);
           const src = fs.readFileSync(full, "utf8");
           const rel = path.relative(repoRoot, full);
+          if (rel.includes(`${path.sep}resources${path.sep}`)) continue;
           if (/function\s+inShareSet\s*\(/.test(src)) inShareSetDefiners.push(rel);
           // The deleted dup: a re-spelled SHARED/SCRUB share-names Set or inScrubShareSet.
           if (/inScrubShareSet\s*\(/.test(src) || /SCRUB_SHARED_NAMES\s*=/.test(src)) {

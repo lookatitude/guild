@@ -32,6 +32,7 @@ export interface ModuleResourceEntry {
   source_path: string;
   resource_path: string;
   sha256: string;
+  projection_dependency?: boolean;
 }
 
 export interface ModuleResourceManifest {
@@ -100,6 +101,27 @@ function stripSurfacePrefix(category: OwnedInventoryCategory, sourcePath: string
 
 function resourcePathFor(category: OwnedInventoryCategory, sourcePath: string): string {
   return toPosix(path.posix.join("resources", category, stripSurfacePrefix(category, sourcePath)));
+}
+
+function relativeTypeScriptSpecifiers(content: string): string[] {
+  const specifiers: string[] = [];
+  const pattern = /(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?["'](\.[^"']+)["']/g;
+  for (const match of content.matchAll(pattern)) specifiers.push(match[1]);
+  return specifiers;
+}
+
+function resolveProjectedDependency(
+  root: string,
+  importerSourcePath: string,
+  specifier: string
+): string | undefined {
+  const base = toPosix(path.posix.normalize(path.posix.join(path.posix.dirname(importerSourcePath), specifier)));
+  const extensionless = base.endsWith(".js") ? base.slice(0, -3) : base;
+  for (const candidate of [base, `${base}.ts`, `${base}/index.ts`, `${extensionless}.ts`]) {
+    const abs = path.join(root, candidate);
+    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return candidate;
+  }
+  return undefined;
 }
 
 function assertSafeRelativePath(value: string, label: string): void {
@@ -206,6 +228,53 @@ export function buildModuleResourcePlan(root: string = PLUGIN_ROOT): ModuleResou
     }
   }
 
+  for (const manifest of manifests) {
+    const entrypoints = manifest.resource_projection_entrypoints ?? [];
+    if (entrypoints.length === 0) continue;
+    const plan = plans.get(manifest.id)!;
+    const directById = new Map(
+      plan.entries
+        .filter((entry) => entry.category === "scripts")
+        .map((entry) => [entry.id, entry])
+    );
+    const directByPath = new Map(
+      plan.entries
+        .filter((entry) => entry.category === "scripts")
+        .map((entry) => [entry.source_path, entry])
+    );
+    const queue = entrypoints.map((id) => {
+      const entry = directById.get(id);
+      if (!entry) throw new Error(`${manifest.id}: unknown resource projection entrypoint scripts:${id}`);
+      return entry;
+    });
+    const projectedPaths = new Set(queue.map((entry) => entry.source_path));
+    for (let index = 0; index < queue.length; index += 1) {
+      const importer = queue[index];
+      const content = fs.readFileSync(path.join(root, importer.source_path), "utf8");
+      for (const specifier of relativeTypeScriptSpecifiers(content)) {
+        const dependencyPath = resolveProjectedDependency(root, importer.source_path, specifier);
+        if (!dependencyPath || projectedPaths.has(dependencyPath)) continue;
+        projectedPaths.add(dependencyPath);
+        const directDependency = directByPath.get(dependencyPath);
+        if (directDependency) {
+          queue.push(directDependency);
+          continue;
+        }
+        const dependencyContent = fs.readFileSync(path.join(root, dependencyPath));
+        const projected: ModuleResourceEntry = {
+          category: "scripts",
+          id: `projection:${dependencyPath}`,
+          source_path: dependencyPath,
+          resource_path: toPosix(path.posix.join("resources", dependencyPath)),
+          sha256: sha256(dependencyContent),
+          projection_dependency: true,
+        };
+        plan.entries.push(projected);
+        queue.push(projected);
+      }
+    }
+  }
+
   return [...plans.values()].sort((a, b) => a.module_id.localeCompare(b.module_id));
 }
 
@@ -296,6 +365,9 @@ function readModuleResourceManifest(root: string, moduleId: string): ModuleResou
     if (!/^[a-f0-9]{64}$/.test(entry.sha256)) {
       throw new Error(`${moduleId}:${entry.id} sha256 must be a lowercase SHA-256 hex digest`);
     }
+    if (entry.projection_dependency !== undefined && entry.projection_dependency !== true) {
+      throw new Error(`${moduleId}:${entry.id} projection_dependency must be true when present`);
+    }
   }
   return parsed;
 }
@@ -349,6 +421,7 @@ export function syncLiveResourcesFromModules(options: SyncOptions = {}): ModuleL
   for (const manifest of manifests) {
     errors.push(...validateResourceBytes(root, manifest));
     for (const entry of manifest.entries) {
+      if (entry.projection_dependency) continue;
       const key = `${entry.category}:${entry.source_path}`;
       const previous = ownerByTarget.get(key);
       if (previous !== undefined && previous.sha256 !== entry.sha256) {
@@ -373,6 +446,7 @@ export function syncLiveResourcesFromModules(options: SyncOptions = {}): ModuleL
 
   for (const manifest of manifests) {
     for (const entry of manifest.entries) {
+      if (entry.projection_dependency) continue;
       const resourceAbs = path.join(root, "src", "modules", manifest.module_id, entry.resource_path);
       const liveAbs = path.join(root, entry.source_path);
       if (check) {

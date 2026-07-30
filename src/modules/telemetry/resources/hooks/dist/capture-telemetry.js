@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // capture-telemetry.ts
-var fs5 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+var fs7 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
 var crypto2 = __toESM(require("crypto"));
 
 // lib/guild-root.ts
@@ -59,11 +59,11 @@ function resolveGuildRoot(startCwd) {
 
 // lib/guild-hook-event.ts
 async function readHookStdin() {
-  return new Promise((resolve2) => {
+  return new Promise((resolve4) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve2(""));
+    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve4(""));
   });
 }
 function emitClaudeHookEvent(raw) {
@@ -74,9 +74,307 @@ function emitClaudeHookEvent(raw) {
   return { ...parsed, host: "claude" };
 }
 
-// lib/security/config.ts
+// ../src/modules/security/workflows/config.ts
+var fs4 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+
+// ../src/modules/state/workflows/guild-root.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
+function resolveGuildRoot2(startDir) {
+  const resolvedStart = path2.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs2.existsSync(path2.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path2.join(current, ".guild");
+      try {
+        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path2.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// ../src/modules/migrations/workflows/index-migrate.ts
+var import_node_child_process = require("node:child_process");
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function openDatabase(dbPath) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
+}
+var CURRENT_SCHEMA_VERSION = 3;
+function resolveGuildRoot3(cwd) {
+  try {
+    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const abs = path3.isAbsolute(raw) ? raw : path3.resolve(cwd, raw);
+    const root = path3.dirname(abs);
+    if (fs3.existsSync(root)) return root;
+  } catch {
+  }
+  return path3.resolve(cwd);
+}
+var MIGRATIONS = [
+  // ── v1: core tables ───────────────────────────────────────────────────────
+  {
+    version: 1,
+    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+      db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+      }
+    }
+  },
+  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+  //
+  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+  //
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
+  {
+    version: 2,
+    tables: ["federation_wiki_cache"],
+    up(db) {
+      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+      db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+    }
+  },
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
+    }
+  }
+];
+function runMigrations(dbPath) {
+  let db;
+  let fromVersion = 0;
+  try {
+    fs3.mkdirSync(path3.dirname(dbPath), { recursive: true });
+    db = openDatabase(dbPath);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA synchronous = NORMAL");
+    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
+    for (const mig of MIGRATIONS) {
+      if (mig.version <= fromVersion) continue;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        mig.up(db);
+        db.exec(`PRAGMA user_version = ${mig.version}`);
+        db.exec("COMMIT");
+        fromVersion = mig.version;
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+        }
+        for (const tbl of mig.tables) {
+          try {
+            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
+          } catch {
+          }
+        }
+        db.close();
+        return {
+          ok: false,
+          fromVersion,
+          toVersion: fromVersion,
+          dbPath,
+          message: `migration to v${mig.version} failed: ${err.message}`
+        };
+      }
+    }
+    db.close();
+    return {
+      ok: true,
+      fromVersion,
+      toVersion: CURRENT_SCHEMA_VERSION,
+      dbPath
+    };
+  } catch (err) {
+    try {
+      db?.close();
+    } catch {
+    }
+    return {
+      ok: false,
+      fromVersion,
+      toVersion: fromVersion,
+      dbPath,
+      message: `migration runner error: ${err.message}`
+    };
+  }
+}
+function runIndexMigrateCli() {
+  const argv = process.argv.slice(2);
+  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
+  let dbPath;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
+  }
+  if (!dbPath) {
+    const guildRoot = resolveGuildRoot3(cwd);
+    dbPath = path3.join(guildRoot, ".guild", "index.sqlite");
+  }
+  const result = runMigrations(dbPath);
+  if (result.ok) {
+    process.stdout.write(
+      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
+`
+    );
+  } else {
+    process.stderr.write(`[index-migrate] WARN: ${result.message}
+`);
+    process.exit(1);
+  }
+}
+if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runIndexMigrateCli();
+}
+
+// ../src/modules/security/workflows/config.ts
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -151,10 +449,10 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path4.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs2.readFileSync(settingsPath, "utf8");
+    raw = fs4.readFileSync(settingsPath, "utf8");
   } catch {
     return securityDefaults();
   }
@@ -167,7 +465,7 @@ function readSecurityConfig(cwd) {
   return parseSecurityConfig(parsed);
 }
 
-// lib/v1.4/redact-log.ts
+// ../src/modules/security/workflows/redact-log.ts
 var TOKEN_REDACTED = "[REDACTED_TOKEN]";
 var PATH_REDACTED = "[REDACTED]";
 var KV_REDACTED = "[REDACTED]";
@@ -295,7 +593,7 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
   return out;
 }
 
-// lib/security/secrets.ts
+// ../src/modules/security/workflows/secrets.ts
 function applySecretsPolicy(value, policy, opts) {
   if (typeof value !== "string") {
     return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
@@ -324,9 +622,9 @@ function resolveTelemetryField(scrub, policy) {
   return { value: scrub.value, warn: true };
 }
 
-// lib/security/events.ts
-var fs3 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+// ../src/modules/security/workflows/events.ts
+var fs5 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
 var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-cli",
@@ -391,9 +689,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir, record) {
   try {
-    const logsDir = path3.join(runDir, "logs");
-    fs3.mkdirSync(logsDir, { recursive: true });
-    fs3.appendFileSync(path3.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    const logsDir = path5.join(runDir, "logs");
+    fs5.mkdirSync(logsDir, { recursive: true });
+    fs5.appendFileSync(path5.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -405,12 +703,12 @@ function appendSecurityEvent(runDir, record) {
 }
 function resolveRunDir(cwd, runId, explicitRunDir) {
   if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
-  return path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  return path5.join(resolveGuildRoot2(cwd), ".guild", "runs", runId);
 }
 
-// lib/trace-v2.ts
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+// ../src/modules/lifecycle/workflows/trace-v2.ts
+var fs6 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
 var TRACE_PAYLOAD_SCHEMA = "guild.trace_payload.v1";
 var SIDECAR_MAX_BYTES = 16 * 1024;
@@ -475,7 +773,7 @@ function pruneUndefined(obj) {
   return out;
 }
 function payloadSidecarPath(runDir, evtId) {
-  return path4.join(runDir, "logs", "payloads", `${evtId}.json`);
+  return path6.join(runDir, "logs", "payloads", `${evtId}.json`);
 }
 function payloadRef(evtId) {
   return `logs/payloads/${evtId}.json`;
@@ -511,8 +809,8 @@ function writePayloadSidecar(runDir, evtId, input, redact) {
       serialized = JSON.stringify(record);
     }
     const file = payloadSidecarPath(runDir, evtId);
-    fs4.mkdirSync(path4.dirname(file), { recursive: true });
-    fs4.writeFileSync(file, serialized + "\n", "utf8");
+    fs6.mkdirSync(path6.dirname(file), { recursive: true });
+    fs6.writeFileSync(file, serialized + "\n", "utf8");
     return payloadRef(evtId);
   } catch {
     return void 0;
@@ -535,9 +833,9 @@ function isOk(payload) {
   return true;
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path5.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path7.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs5.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs7.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -612,7 +910,7 @@ async function main() {
     if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
     if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
-  const runsDir = path5.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runsDir = path7.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const redact = (s) => applySecretsPolicy(s, secPolicy).value;
   const spanId = genSpanId(runId, eventName, ts, actorId);
   const body = {};
@@ -657,13 +955,13 @@ async function main() {
     )
   );
   const eventLine = JSON.stringify(event) + "\n";
-  const logsDir = path5.join(runsDir, "logs");
-  const canonicalFile = path5.join(logsDir, "v1.4-events.jsonl");
-  const legacyFile = path5.join(runsDir, "events.ndjson");
+  const logsDir = path7.join(runsDir, "logs");
+  const canonicalFile = path7.join(logsDir, "v1.4-events.jsonl");
+  const legacyFile = path7.join(runsDir, "events.ndjson");
   if (eventName !== "PostToolUse") {
     try {
-      fs5.mkdirSync(logsDir, { recursive: true });
-      fs5.appendFileSync(canonicalFile, eventLine, "utf8");
+      fs7.mkdirSync(logsDir, { recursive: true });
+      fs7.appendFileSync(canonicalFile, eventLine, "utf8");
     } catch (err) {
       process.stderr.write(
         `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${err instanceof Error ? err.message : String(err)}
@@ -672,8 +970,8 @@ async function main() {
     }
   }
   try {
-    fs5.mkdirSync(runsDir, { recursive: true });
-    fs5.appendFileSync(legacyFile, eventLine, "utf8");
+    fs7.mkdirSync(runsDir, { recursive: true });
+    fs7.appendFileSync(legacyFile, eventLine, "utf8");
   } catch (err) {
     process.stderr.write(
       `[capture-telemetry] WARN: mirror write to events.ndjson failed: ${err instanceof Error ? err.message : String(err)}

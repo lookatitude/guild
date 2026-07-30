@@ -78,8 +78,10 @@ describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
           walk(path.join(dir, e.name));
         } else if (e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".test.ts")) {
           const full = path.join(dir, e.name);
+          const rel = path.relative(repoRoot, full);
+          if (rel.includes(`${path.sep}resources${path.sep}`)) continue;
           const src = fs.readFileSync(full, "utf8");
-          if (DEF_RE.test(src)) definers.push(path.relative(repoRoot, full));
+          if (DEF_RE.test(src)) definers.push(rel);
         }
       }
     }

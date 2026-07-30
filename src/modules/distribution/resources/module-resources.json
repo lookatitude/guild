@@ -19,6 +19,13 @@
     },
     {
       "category": "scripts",
+      "id": "build-release-candidate",
+      "source_path": "scripts/build-release-candidate.ts",
+      "resource_path": "resources/scripts/build-release-candidate.ts",
+      "sha256": "07297774a0f7a413f27dd78234a53f9ea13555a09cdd872ae7ec102da503dadc"
+    },
+    {
+      "category": "scripts",
       "id": "build-verify",
       "source_path": "scripts/build-verify.ts",
       "resource_path": "resources/scripts/build-verify.ts",
@@ -124,6 +131,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/release-distribution-contract",
+      "source_path": "scripts/lib/release-distribution-contract.ts",
+      "resource_path": "resources/scripts/lib/release-distribution-contract.ts",
+      "sha256": "4f1782d8f00cb454f5341c695047bcb288eb43ddfc1d5c1420ff495c3b2fe2cd"
+    },
+    {
+      "category": "scripts",
       "id": "lib/result-contracts",
       "source_path": "scripts/lib/result-contracts.ts",
       "resource_path": "resources/scripts/lib/result-contracts.ts",
@@ -156,6 +170,14 @@
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
       "sha256": "05ee9efb07ab6e5120f3fcd379152098085de463ad1c33ee5074aeedfac1e422"
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-distribution-contract.ts",
+      "source_path": "src/modules/distribution/workflows/release-distribution-contract.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-distribution-contract.ts",
+      "sha256": "73661baab296e915fa9939a19b21ffc81f3c64e534f238062573c8810c82cb63",
+      "projection_dependency": true
     },
     {
       "category": "scripts",

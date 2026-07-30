@@ -37,9 +37,8 @@ import {
   splitFrontmatter,
   fmValue,
   isProvenance,
-} from "../../../../scripts/dot-guild/convert/wiki-importance";
-import { lintKnowledgeNodes } from "../../../../scripts/learn/wiki-lint-knowledge";
-import type { GraphNode } from "../../../../scripts/learn/lib/schema";
+} from "../../migrations";
+import { lintKnowledgeNodes, type GraphNode } from "../../learning";
 import { loadYamlApi } from "../../kernel";
 import { WIKI_PAGE_TYPES, isWikiPageType } from "../../knowledge";
 
@@ -164,13 +163,14 @@ export function lintWiki(root: string): Finding[] {
       const base = path.basename(f).toLowerCase();
       if (base.startsWith("lint-")) continue; // prior lint reports
       const { fmLines } = splitFrontmatter(fs.readFileSync(f, "utf8"));
-      const importance = fmValue(fmLines, "importance");
-      const durable = !STRUCTURAL_BASENAMES.has(base) && !isProvenance(relInWiki, fmLines);
-      if (fmValue(fmLines, "importance_draft") === "true") {
+      const frontmatterLines = fmLines ?? [];
+      const importance = fmValue(frontmatterLines, "importance");
+      const durable = !STRUCTURAL_BASENAMES.has(base) && !isProvenance(relInWiki, frontmatterLines);
+      if (fmValue(frontmatterLines, "importance_draft") === "true") {
         findings.push({
           check: "pending-grade-review",
           file: rel,
-          detail: `importance: ${importance || "??"} (graded_by: ${fmValue(fmLines, "graded_by") || "??"}) — review, edit if needed, then run migrate-guild.ts --accept-grades`,
+          detail: `importance: ${importance || "??"} (graded_by: ${fmValue(frontmatterLines, "graded_by") || "??"}) — review, edit if needed, then run migrate-guild.ts --accept-grades`,
         });
       } else if (!importance && durable) {
         // EXACT same skip predicate as the migration grader (wiki-importance.ts):
@@ -181,7 +181,7 @@ export function lintWiki(root: string): Finding[] {
       // M3 invalid-type: PRESENT-but-wrong `type:` only (see file header) —
       // same durable/structural/provenance exemption as M2, so a legitimately
       // free-form exploratory or structural page never trips this check.
-      const typeValue = fmValue(fmLines, "type");
+      const typeValue = fmValue(frontmatterLines, "type");
       if (durable && typeValue !== null && !isWikiPageType(typeValue)) {
         findings.push({
           check: "invalid-type",
@@ -192,7 +192,7 @@ export function lintWiki(root: string): Finding[] {
       // Label coverage (item 5): durable pages only, and only when a taxonomy
       // is authored (inert otherwise → no findings on un-opted-in repos).
       if (taxonomy && durable) {
-        findings.push(...lintLabels(rel, fmLines.join("\n"), taxonomy));
+        findings.push(...lintLabels(rel, frontmatterLines.join("\n"), taxonomy));
       }
     }
   }

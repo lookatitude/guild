@@ -45,17 +45,11 @@
       "/__tests__/fixtures/"
     ],
     "moduleNameMapper": {
+      "^js-yaml$": "<rootDir>/node_modules/js-yaml",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "transform": {
-      "^.+\\.tsx?$": [
-        "ts-jest",
-        {
-          "tsconfig": {
-            "module": "commonjs"
-          }
-        }
-      ]
+      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs", "target": "es2022" } }]
     },
     "testTimeout": 30000
   }

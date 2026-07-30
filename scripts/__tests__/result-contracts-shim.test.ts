@@ -21,7 +21,7 @@ describe("result-contracts compatibility shim", () => {
     expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/distribution\/workflows\/result-contracts["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+RESULT_CONTRACTS/);
     expect(modulePath).toMatch(/export\s+const\s+RESULT_CONTRACTS/);
-    expect(modulePath).toMatch(/from\s+["']\.\.\/\.\.\/\.\.\/\.\.\/hooks\/lib\/handoff-v2["']/);
+    expect(modulePath).toMatch(/from\s+["']\.\/handoff-v2["']/);
     expect(modulePath).toMatch(/from\s+["']\.\/review-result["']/);
   });
 });

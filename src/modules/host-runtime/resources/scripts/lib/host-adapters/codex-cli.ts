@@ -221,7 +221,7 @@ export function createCodexCliAdapter(entry: HostRegistryEntry = ENTRY): HostAda
           resolveRung("semantic_tool", HOST_ID)
         );
       }
-      const modelParams = { ...configured, model };
+      const modelParams: Record<string, unknown> = { ...configured, model };
       const unsupported = unsupportedModelParamKeys(modelParams, ["model", "effort", "reasoning"]);
       const reasoningEffort =
         typeof modelParams["reasoning"] === "string"
