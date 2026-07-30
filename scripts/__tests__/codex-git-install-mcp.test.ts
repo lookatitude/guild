@@ -35,19 +35,25 @@
  * `renderCodexPluginJson` never emits `mcpServers` for exactly this reason — which
  * is why a local-marketplace install was always silent while the git install was not.
  *
- * WHY THE MANIFEST IS MINIMAL. It carries `name` + `mcpServers` ONLY.
+ * WHY THE MANIFEST IS MINIMAL. It carries `name`, `version`, `mcpServers` — no more.
  *   - No `skills`/`hooks` paths: the rendered package points at `./.agents/skills/`,
  *     a layout that does NOT exist in the repo. Declaring it would break skill
  *     discovery for git installs. Omitted → Codex keeps its working default
  *     discovery (verified live: 113 guild skills still visible after this change).
- *   - No `version`: a second committed version site would violate the single
- *     canonical version field (wi-02) and need its own drift gate.
+ *   - `version` IS required and IS generated. Omitting it made `codex plugin list`
+ *     report the plugin as "local" instead of the real version (measured against a
+ *     control install on a ref without this manifest, which reported 2.4.0). To
+ *     avoid a second hand-kept version site (wi-02), this file joined the
+ *     GENERATED + drift-gated install surface in build-host-packages.ts.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { renderCodexPluginJson } from "../../src/modules/distribution/workflows/per-host-packaging";
+import {
+  renderCodexGitInstallManifest,
+  renderCodexPluginJson,
+} from "../../src/modules/distribution/workflows/per-host-packaging";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 
@@ -70,7 +76,7 @@ describe("the repo root ships a Codex manifest that declares no MCP servers", ()
 
   it("stays minimal — no skills/hooks paths that would break git-install discovery", () => {
     const m = readJson(manifestRel);
-    expect(Object.keys(m).sort()).toEqual(["mcpServers", "name"]);
+    expect(Object.keys(m).sort()).toEqual(["mcpServers", "name", "version"]);
     expect(m["name"]).toBe("guild");
     // Guard the specific footgun: the rendered layout's skills path does not
     // exist in the repo, so it must never be declared here.
@@ -78,10 +84,21 @@ describe("the repo root ships a Codex manifest that declares no MCP servers", ()
     expect(m["hooks"]).toBeUndefined();
   });
 
-  it("carries no version — the canonical version field stays the only one (wi-02)", () => {
-    expect(readJson(manifestRel)["version"]).toBeUndefined();
-    // The canonical site still holds it.
-    expect(typeof readJson(path.join(".claude-plugin", "plugin.json"))["version"]).toBe("string");
+  it("carries the CANONICAL version verbatim — a missing one makes codex report \"local\"", () => {
+    const canonical = readJson(path.join(".claude-plugin", "plugin.json"))["version"];
+    expect(typeof canonical).toBe("string");
+    expect(readJson(manifestRel)["version"]).toBe(canonical);
+  });
+
+  it("is GENERATED from the canonical manifest, not hand-kept (wi-02)", () => {
+    // Same renderer the install-surface sync uses, fed the canonical manifest:
+    // its output must equal the committed file, so a hand-bump cannot survive.
+    const canonical = readJson(path.join(".claude-plugin", "plugin.json"));
+    const rendered = renderCodexGitInstallManifest(canonical as never, {
+      renderedAt: "1970-01-01T00:00:00Z",
+    } as never) as unknown as Record<string, unknown>;
+    expect(rendered).toEqual(readJson(manifestRel));
+    expect(rendered["mcpServers"]).toEqual({});
   });
 });
 

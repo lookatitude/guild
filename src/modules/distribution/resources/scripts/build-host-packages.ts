@@ -56,6 +56,7 @@ import {
 import {
   renderClaudePluginPackage,
   renderClaudeMarketplacePackage,
+  renderCodexGitInstallManifest,
   renderCodexPluginJson,
   renderPiManifest,
   renderAntigravityManifest,
@@ -529,9 +530,15 @@ export function writeClaudeTree(
   return dest;
 }
 
+// The committed root manifests a LIVE install reads straight out of the repo.
+// Two are Claude's; the third is Codex's, needed because a `codex plugin
+// marketplace add <owner/repo> --ref <ref>` install materializes THE REPO as the
+// payload (issue #114 — see renderCodexGitInstallManifest for the full rationale).
+// All are rendered from the canonical version and gated against hand-edits.
 const CLAUDE_INSTALL_SURFACE_FILES = [
   ".claude-plugin/plugin.json",
   ".claude-plugin/marketplace.json",
+  ".codex-plugin/plugin.json",
 ] as const;
 
 type ClaudeInstallSurfacePath = (typeof CLAUDE_INSTALL_SURFACE_FILES)[number];
@@ -546,6 +553,7 @@ function renderClaudeInstallSurface(inv: GuildInventoryV1, generatedAt: string):
   return {
     ".claude-plugin/plugin.json": stableJson(renderClaudePluginPackage(neutral, { renderedAt: generatedAt })),
     ".claude-plugin/marketplace.json": stableJson(renderClaudeMarketplacePackage(neutral, { renderedAt: generatedAt })),
+    ".codex-plugin/plugin.json": stableJson(renderCodexGitInstallManifest(neutral, { renderedAt: generatedAt })),
   };
 }
 

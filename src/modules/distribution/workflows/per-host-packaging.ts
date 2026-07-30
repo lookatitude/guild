@@ -533,6 +533,59 @@ export function renderClaudeMarketplacePackage(
   };
 }
 
+/** The committed repo-root Codex manifest (`.codex-plugin/plugin.json`). */
+export interface CodexGitInstallJson {
+  name: string;
+  version: string;
+  mcpServers: Record<string, never>;
+}
+
+/**
+ * Render the repo-root Codex manifest consumed by a Codex GIT-REF install
+ * (`codex plugin marketplace add lookatitude/guild --ref <ref>`), which
+ * materializes THE REPO as the plugin payload — not a rendered `dist/` tree.
+ *
+ * WHY IT EXISTS (issue #114). With no Codex manifest at the repo root, Codex fell
+ * back to Claude's `.mcp.json`, whose args are `${CLAUDE_PLUGIN_ROOT}`-prefixed.
+ * Codex does NOT expand that placeholder for MCP server args, so it spawned
+ * `node '${CLAUDE_PLUGIN_ROOT}/…'` and every session opened with two
+ * "failed to start … connection closed" warnings. Measured on codex 0.146.0:
+ * `${CLAUDE_PLUGIN_ROOT}/…`, bare-relative, and `./`-relative args all fail to
+ * start; ONLY an absolute path works — and an absolute path cannot be published,
+ * because the install root is a version-keyed cache dir unknown at publish time.
+ *
+ * So this manifest declares `mcpServers: {}` — the same decision
+ * `renderCodexPluginJson` has always made for the rendered package (it never
+ * emits `mcpServers`), which is why a local-marketplace install was silent while
+ * the git install was not. This aligns both paths.
+ *
+ * DELIBERATELY MINIMAL — three fields, and each omission is load-bearing:
+ *   - NO `skills`/`hooks`: the rendered package points at `./.agents/skills/`,
+ *     a layout that does not exist in the repo. Declaring it would break skill
+ *     discovery for git installs (verified: discovery stays intact when omitted,
+ *     because Codex then uses its own defaults).
+ *   - `version` IS required: omitting it makes `codex plugin list` report the
+ *     installed plugin as "local" instead of the real version (measured — a
+ *     control install on a ref without this manifest reports the version
+ *     correctly). That command is how an operator sees staleness at all, so a
+ *     missing version would regress the very defect this initiative fixed.
+ *
+ * The version is single-sourced from the neutral manifest (canonical
+ * `.claude-plugin/plugin.json`), and this file is part of the generated +
+ * drift-gated install surface in `build-host-packages.ts`, so it can never be
+ * hand-bumped out of agreement (wi-02 / G2).
+ */
+export function renderCodexGitInstallManifest(
+  manifest: GuildPluginManifest,
+  _opts: RenderOptions
+): CodexGitInstallJson {
+  return {
+    name: manifest.name,
+    version: manifest.version,
+    mcpServers: {},
+  };
+}
+
 // ---------------------------------------------------------------------------
 // renderPiManifest
 // ---------------------------------------------------------------------------
