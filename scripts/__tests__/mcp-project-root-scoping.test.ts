@@ -418,3 +418,52 @@ describe.each([
     });
   }
 );
+
+/**
+ * gate r6: the guard validated the project ROOT, then appended the data dir
+ * afterwards — so a root OUTSIDE the payload whose `.guild/<data>` symlinks back
+ * INTO it still passed. The check now runs on the effective data directory,
+ * which subsumes the root check, with canonicalization that resolves symlinked
+ * ancestors of paths that do not exist yet.
+ */
+describe.each([
+  ["guild-memory", MEMORY_BIN, "wiki_list", "wiki"],
+  ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs", "runs"],
+] as Array<[string, string, string, string]>)(
+  "%s refuses a root whose DATA DIR symlinks into the payload",
+  (_n, bin, tool, dataDir) => {
+    let payload: string;
+    let trap: string;
+    let consumerLink: string;
+    let consumer: string;
+    beforeAll(() => {
+      payload = makeFakePluginRoot();
+      // A project root OUTSIDE the payload whose data dir points back inside it.
+      trap = fs.mkdtempSync(path.join(os.tmpdir(), "guild-nested-symlink-trap-"));
+      fs.mkdirSync(path.join(trap, ".guild"), { recursive: true });
+      fs.symlinkSync(path.join(payload, ".guild", dataDir), path.join(trap, ".guild", dataDir), "dir");
+      // A legitimate consumer reached THROUGH a symlink must keep working.
+      consumer = makeForeignRepo();
+      consumerLink = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "guild-ok-link-")), "link");
+      fs.symlinkSync(consumer, consumerLink, "dir");
+    });
+    afterAll(() => {
+      for (const d of [payload, trap, consumer, path.dirname(consumerLink)]) {
+        fs.rmSync(d, { recursive: true, force: true });
+      }
+    });
+
+    it("the nested data-dir symlink is refused", () => {
+      const r = callTool(bin, tool, { cwd: trap }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+      expect(r.isError).toBe(true);
+      expect(r.text).toMatch(/own plugin payload/);
+      expect(r.text).not.toContain("PLUGINSENTINEL");
+    });
+
+    it("a legitimate consumer reached through a symlink still resolves", () => {
+      const r = callTool(bin, tool, { cwd: consumerLink }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+      expect(r.isError).toBe(false);
+      expect(r.text).not.toContain("PLUGINSENTINEL");
+    });
+  }
+);

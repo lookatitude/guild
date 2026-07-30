@@ -24109,10 +24109,17 @@ var PayloadScopedRootError = class extends Error {
 };
 var PAYLOAD_ROOT = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
 function realpathOrSelf(p) {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
+  let cur = path.resolve(p);
+  const tail = [];
+  for (; ; ) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p);
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
   }
 }
 function assertNotPayloadScoped(candidate, source) {
@@ -24127,16 +24134,18 @@ function resolveCwd(cwdArg) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
-    assertNotPayloadScoped(cwdArg, "cwd");
-    return path.resolve(cwdArg);
+    const root = path.resolve(cwdArg);
+    assertNotPayloadScoped(path.join(root, ".guild", "runs"), "cwd");
+    return root;
   }
   const envRoot = process.env.GUILD_TELEMETRY_CWD;
   if (envRoot) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_TELEMETRY_CWD", envRoot);
     }
-    assertNotPayloadScoped(envRoot, "GUILD_TELEMETRY_CWD");
-    return path.resolve(envRoot);
+    const envRootAbs = path.resolve(envRoot);
+    assertNotPayloadScoped(path.join(envRootAbs, ".guild", "runs"), "GUILD_TELEMETRY_CWD");
+    return envRootAbs;
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();

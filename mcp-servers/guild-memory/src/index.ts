@@ -139,11 +139,23 @@ export class PayloadScopedRootError extends Error {
  */
 const PAYLOAD_ROOT: string | null = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
 
+/**
+ * Canonicalize a path that may not exist yet: realpath the nearest EXISTING
+ * ancestor and re-append the remainder. A plain realpath on a missing directory
+ * throws and would leave symlinked ancestors unresolved.
+ */
 function realpathOrSelf(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
+  let cur = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p); // reached the filesystem root
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
   }
 }
 
@@ -169,16 +181,21 @@ function resolveWikiRoot(cwdArg?: string): string {
     if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
-    assertNotPayloadScoped(cwdArg, "cwd");
-    return path.join(path.resolve(cwdArg), ".guild", "wiki");
+    // Check the EFFECTIVE data dir, not the project root: a root outside the
+    // payload whose `.guild/wiki` symlinks back INTO the payload would otherwise
+    // pass (gate r6). Checking the final target subsumes the root check.
+    const wikiRoot = path.join(path.resolve(cwdArg), ".guild", "wiki");
+    assertNotPayloadScoped(wikiRoot, "cwd");
+    return wikiRoot;
   }
   const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
   if (envRoot) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
     }
-    assertNotPayloadScoped(envRoot, "GUILD_MEMORY_WIKI_ROOT");
-    return path.resolve(envRoot);
+    const envWiki = path.resolve(envRoot);
+    assertNotPayloadScoped(envWiki, "GUILD_MEMORY_WIKI_ROOT");
+    return envWiki;
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();

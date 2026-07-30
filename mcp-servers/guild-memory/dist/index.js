@@ -24160,10 +24160,17 @@ var PayloadScopedRootError = class extends Error {
 };
 var PAYLOAD_ROOT = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
 function realpathOrSelf(p) {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
+  let cur = path.resolve(p);
+  const tail = [];
+  for (; ; ) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p);
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
   }
 }
 function assertNotPayloadScoped(candidate, source) {
@@ -24178,16 +24185,18 @@ function resolveWikiRoot(cwdArg) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
-    assertNotPayloadScoped(cwdArg, "cwd");
-    return path.join(path.resolve(cwdArg), ".guild", "wiki");
+    const wikiRoot = path.join(path.resolve(cwdArg), ".guild", "wiki");
+    assertNotPayloadScoped(wikiRoot, "cwd");
+    return wikiRoot;
   }
   const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
   if (envRoot) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
     }
-    assertNotPayloadScoped(envRoot, "GUILD_MEMORY_WIKI_ROOT");
-    return path.resolve(envRoot);
+    const envWiki = path.resolve(envRoot);
+    assertNotPayloadScoped(envWiki, "GUILD_MEMORY_WIKI_ROOT");
+    return envWiki;
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();

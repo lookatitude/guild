@@ -149,11 +149,23 @@ export class PayloadScopedRootError extends Error {
  */
 const PAYLOAD_ROOT: string | null = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
 
+/**
+ * Canonicalize a path that may not exist yet: realpath the nearest EXISTING
+ * ancestor and re-append the remainder. A plain realpath on a missing directory
+ * throws and would leave symlinked ancestors unresolved.
+ */
 function realpathOrSelf(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
+  let cur = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p); // reached the filesystem root
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
   }
 }
 
@@ -178,16 +190,20 @@ function resolveCwd(cwdArg?: string): string {
     if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
-    assertNotPayloadScoped(cwdArg, "cwd");
-    return path.resolve(cwdArg);
+    // Check the EFFECTIVE runs dir (see guild-memory): a root outside the payload
+    // whose `.guild/runs` symlinks into it would otherwise pass (gate r6).
+    const root = path.resolve(cwdArg);
+    assertNotPayloadScoped(path.join(root, ".guild", "runs"), "cwd");
+    return root;
   }
   const envRoot = process.env.GUILD_TELEMETRY_CWD;
   if (envRoot) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_TELEMETRY_CWD", envRoot);
     }
-    assertNotPayloadScoped(envRoot, "GUILD_TELEMETRY_CWD");
-    return path.resolve(envRoot);
+    const envRootAbs = path.resolve(envRoot);
+    assertNotPayloadScoped(path.join(envRootAbs, ".guild", "runs"), "GUILD_TELEMETRY_CWD");
+    return envRootAbs;
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();
