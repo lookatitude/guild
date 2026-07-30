@@ -1,0 +1,23 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: xhrd-wi-03
+initiative_id: cross-host-release-distribution
+title: "G3 — remote-registration switch: point install.sh + README at git/remote marketplace sources instead of rendered local paths"
+type: implementation
+status: deferred
+owner: tooling-engineer
+depends_on: [xhrd-wi-01, xhrd-wi-02]
+acceptance:
+  - "per goals.md §G3 (REVISED after xhrd-wi-01) — install.sh + README register Codex against the repo's git marketplace (`codex plugin marketplace add lookatitude/guild --ref <main|next>`), not `$RENDERED_DIST/codex-marketplace`"
+  - "SCOPE CORRECTION: no new Codex publish infrastructure is built — xhrd-wi-01 verified the repo ALREADY works as a git Codex marketplace (--ref main installs 2.3.2 today). The refuted thesis 'Codex cannot install from git, attach a release artifact' must NOT be implemented"
+  - "channel switching uses `marketplace remove` + `add` — verified that an in-place re-add is rejected ('already added from a different source')"
+  - "the remote switch applies to FETCHED stable/beta installs only; install.sh:428 deliberately treats a checkout working tree as the source and the development install path must keep working — proven with a checkout-path regression"
+  - "pi (`git:`/`npm:` sources) and antigravity (`plugin@marketplace`) are evaluated for the same switch; adopt or record why not"
+  - "a versioned per-host GitHub Release artifact is OPTIONAL and justified per host — it is NOT forced by the evidence and is only warranted for genuinely file-surface hosts (agents-file/kiro/qoder/trae)"
+  - "any publish credential is a repo secret: never inlined in the workflow, never written to a receipt, never echoed to a log; security-auditor reviews any publish leg before merge (xhrd-def-constraint-3)"
+  - "dist/ stays gitignored (xhrd-def-nongoal-2); release.yml stays idempotent on re-run"
+  - "codex adversarial review RAN; PR to next"
+evidence_refs:
+  - "DEFERRED by operator decision (2026-07-26, during the wi-05 close-out): the remote-registration switch requires either committing the rendered Codex payload (~18MB/1211 files vs a 44MB .git — compounding per release) or a separately published artifact; neither adopted. The measured blocker + the .agents/plugins-manifest-precedence mechanism that makes it solvable are recorded in PR #101 and the host-distribution-matrix. If Codex-ecosystem reach is wanted later, the recommended shape is a separate published repo (e.g. lookatitude/guild-codex) fed by a release leg — a new initiative, not a reopening of this item."
+  - "goals.md §G3 (revised)"
+  - ".guild/wiki/standards/host-distribution-matrix.md §The finding, §What this implies for G2–G5"
+  - "install.sh:526 (local codex marketplace), README.md:167 (documents the local path), install.sh:428 (checkout-is-source)"
