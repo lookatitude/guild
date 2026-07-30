@@ -131,6 +131,46 @@ export class RelativeProjectRootError extends Error {
   }
 }
 
+/** Thrown when a root points AT (or inside) this server's own payload tree. */
+export class PayloadScopedRootError extends Error {
+  constructor(source: string, value: string) {
+    super(
+      `guild-telemetry: ${source} resolves inside this server's own plugin payload ("${value}"). ` +
+        "That would return the plugin's bundled data instead of the consuming project's. " +
+        "Pass the absolute root of the project you are working in."
+    );
+    this.name = "PayloadScopedRootError";
+  }
+}
+
+/**
+ * The payload tree this server was launched from, canonicalized once.
+ * Only meaningful in flagged mode, where cwd IS the plugin payload.
+ */
+const PAYLOAD_ROOT: string | null = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
+
+function realpathOrSelf(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/**
+ * Reject a root that is the payload itself, lives beneath it, or reaches it
+ * through a symlink. `path.isAbsolute` alone is not enough: an absolute path
+ * naming the payload (directly or via a link) still returned the plugin's own
+ * wiki/runs (gate r5, reproduced live against the shipped bundles).
+ */
+function assertNotPayloadScoped(candidate: string, source: string): void {
+  if (PAYLOAD_ROOT === null) return;
+  const real = realpathOrSelf(candidate);
+  if (real === PAYLOAD_ROOT || real.startsWith(PAYLOAD_ROOT + path.sep)) {
+    throw new PayloadScopedRootError(source, candidate);
+  }
+}
+
 function resolveCwd(cwdArg?: string): string {
   if (cwdArg) {
     // See guild-memory: a relative root resolves against the plugin payload in
@@ -138,6 +178,7 @@ function resolveCwd(cwdArg?: string): string {
     if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
+    assertNotPayloadScoped(cwdArg, "cwd");
     return path.resolve(cwdArg);
   }
   const envRoot = process.env.GUILD_TELEMETRY_CWD;
@@ -145,6 +186,7 @@ function resolveCwd(cwdArg?: string): string {
     if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_TELEMETRY_CWD", envRoot);
     }
+    assertNotPayloadScoped(envRoot, "GUILD_TELEMETRY_CWD");
     return path.resolve(envRoot);
   }
   if (NO_CWD_FALLBACK) {

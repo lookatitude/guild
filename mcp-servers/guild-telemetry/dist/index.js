@@ -6802,6 +6802,7 @@ var require_dist = __commonJS({
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  PayloadScopedRootError: () => PayloadScopedRootError,
   RelativeProjectRootError: () => RelativeProjectRootError,
   UnresolvedProjectRootError: () => UnresolvedProjectRootError
 });
@@ -24098,11 +24099,35 @@ var RelativeProjectRootError = class extends Error {
     this.name = "RelativeProjectRootError";
   }
 };
+var PayloadScopedRootError = class extends Error {
+  constructor(source, value) {
+    super(
+      `guild-telemetry: ${source} resolves inside this server's own plugin payload ("${value}"). That would return the plugin's bundled data instead of the consuming project's. Pass the absolute root of the project you are working in.`
+    );
+    this.name = "PayloadScopedRootError";
+  }
+};
+var PAYLOAD_ROOT = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
+function realpathOrSelf(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+function assertNotPayloadScoped(candidate, source) {
+  if (PAYLOAD_ROOT === null) return;
+  const real = realpathOrSelf(candidate);
+  if (real === PAYLOAD_ROOT || real.startsWith(PAYLOAD_ROOT + path.sep)) {
+    throw new PayloadScopedRootError(source, candidate);
+  }
+}
 function resolveCwd(cwdArg) {
   if (cwdArg) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
+    assertNotPayloadScoped(cwdArg, "cwd");
     return path.resolve(cwdArg);
   }
   const envRoot = process.env.GUILD_TELEMETRY_CWD;
@@ -24110,6 +24135,7 @@ function resolveCwd(cwdArg) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_TELEMETRY_CWD", envRoot);
     }
+    assertNotPayloadScoped(envRoot, "GUILD_TELEMETRY_CWD");
     return path.resolve(envRoot);
   }
   if (NO_CWD_FALLBACK) {
@@ -24569,6 +24595,7 @@ main().catch((err) => {
 });
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  PayloadScopedRootError,
   RelativeProjectRootError,
   UnresolvedProjectRootError
 });

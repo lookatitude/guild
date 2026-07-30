@@ -9837,6 +9837,7 @@ var require_js_yaml = __commonJS({
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  PayloadScopedRootError: () => PayloadScopedRootError,
   RelativeProjectRootError: () => RelativeProjectRootError,
   UnresolvedProjectRootError: () => UnresolvedProjectRootError
 });
@@ -24149,11 +24150,35 @@ var RelativeProjectRootError = class extends Error {
     this.name = "RelativeProjectRootError";
   }
 };
+var PayloadScopedRootError = class extends Error {
+  constructor(source, value) {
+    super(
+      `guild-memory: ${source} resolves inside this server's own plugin payload ("${value}"). That would return the plugin's bundled data instead of the consuming project's. Pass the absolute root of the project you are working in.`
+    );
+    this.name = "PayloadScopedRootError";
+  }
+};
+var PAYLOAD_ROOT = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
+function realpathOrSelf(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+function assertNotPayloadScoped(candidate, source) {
+  if (PAYLOAD_ROOT === null) return;
+  const real = realpathOrSelf(candidate);
+  if (real === PAYLOAD_ROOT || real.startsWith(PAYLOAD_ROOT + path.sep)) {
+    throw new PayloadScopedRootError(source, candidate);
+  }
+}
 function resolveWikiRoot(cwdArg) {
   if (cwdArg) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
+    assertNotPayloadScoped(cwdArg, "cwd");
     return path.join(path.resolve(cwdArg), ".guild", "wiki");
   }
   const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
@@ -24161,6 +24186,7 @@ function resolveWikiRoot(cwdArg) {
     if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
     }
+    assertNotPayloadScoped(envRoot, "GUILD_MEMORY_WIKI_ROOT");
     return path.resolve(envRoot);
   }
   if (NO_CWD_FALLBACK) {
@@ -24399,6 +24425,7 @@ main().catch((err) => {
 });
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  PayloadScopedRootError,
   RelativeProjectRootError,
   UnresolvedProjectRootError
 });

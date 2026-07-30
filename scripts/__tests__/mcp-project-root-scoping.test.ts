@@ -335,3 +335,86 @@ describe.each([
     expect(last).toMatch(/must be an ABSOLUTE path/);
   });
 });
+
+/**
+ * gate r5: `path.isAbsolute` alone was not enough — an ABSOLUTE path naming the
+ * payload (directly, as a descendant, or through a symlink) still returned the
+ * plugin's own data. Flagged mode now canonicalizes both roots and refuses any
+ * candidate that IS the payload or lives beneath it.
+ */
+describe.each([
+  ["guild-memory", MEMORY_BIN, "wiki_list", "GUILD_MEMORY_WIKI_ROOT"],
+  ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs", "GUILD_TELEMETRY_CWD"],
+] as Array<[string, string, string, string]>)(
+  "%s refuses payload-scoped roots in flagged mode",
+  (_n, bin, tool, envVar) => {
+    let payload: string;
+    let link: string;
+    let consumer: string;
+    beforeAll(() => {
+      payload = makeFakePluginRoot();
+      consumer = makeForeignRepo();
+      link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "guild-payload-link-")), "link");
+      fs.symlinkSync(payload, link, "dir");
+    });
+    afterAll(() => {
+      fs.rmSync(payload, { recursive: true, force: true });
+      fs.rmSync(consumer, { recursive: true, force: true });
+      fs.rmSync(path.dirname(link), { recursive: true, force: true });
+    });
+
+    it("the payload root itself is refused", () => {
+      const r = callTool(bin, tool, { cwd: payload }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+      expect(r.isError).toBe(true);
+      expect(r.text).toMatch(/own plugin payload/);
+      expect(r.text).not.toContain("PLUGINSENTINEL");
+    });
+
+    it("a DESCENDANT of the payload is refused", () => {
+      const r = callTool(
+        bin,
+        tool,
+        { cwd: path.join(payload, ".guild") },
+        { cwd: payload, flags: ["--no-cwd-fallback"] }
+      );
+      expect(r.isError).toBe(true);
+      expect(r.text).toMatch(/own plugin payload/);
+    });
+
+    it("an absolute SYMLINK to the payload is refused (canonicalized)", () => {
+      const r = callTool(bin, tool, { cwd: link }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+      expect(r.isError).toBe(true);
+      expect(r.text).toMatch(/own plugin payload/);
+      expect(r.text).not.toContain("PLUGINSENTINEL");
+    });
+
+    it("the ENV override is checked the same way", () => {
+      const out = execFileSync("node", [bin, "--no-cwd-fallback"], {
+        input:
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+          }) +
+          "\n" +
+          JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: {} } }) +
+          "\n",
+        cwd: payload,
+        env: { ...process.env, [envVar]: payload },
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+        timeout: 30_000,
+      });
+      const last = out.trim().split("\n").filter(Boolean).pop() ?? "{}";
+      expect(last).toMatch(/own plugin payload/);
+      expect(last).not.toContain("PLUGINSENTINEL");
+    });
+
+    it("a REAL consumer root outside the payload still works", () => {
+      const r = callTool(bin, tool, { cwd: consumer }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+      expect(r.isError).toBe(false);
+      expect(r.text).not.toContain("PLUGINSENTINEL");
+    });
+  }
+);
