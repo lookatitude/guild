@@ -87,6 +87,29 @@ contributed. Omit `run_id` to roll up across all runs.
 2. `GUILD_TELEMETRY_CWD` env var (used in tests, when no `cwd` is given).
 3. Server process cwd → `<cwd>/.guild/runs/`.
 
+### `--no-cwd-fallback` (hosts that launch the server outside the project)
+
+A Codex plugin install must declare `cwd: "."` so Codex can resolve the server
+path (measured on codex 0.146.0: `${{CLAUDE_PLUGIN_ROOT}}`-prefixed, bare-relative
+and `./`-relative args all fail to start without a cwd; only an absolute path
+works, and that cannot be published from a version-keyed cache root). That cwd is
+the PLUGIN payload root, and Codex passes the child a scrubbed env with no
+workspace signal at all — so step 3 above would resolve to the *plugin's own*
+`.guild/`, serving Guild's bundled data instead of the consumer's.
+
+The generated Codex manifest therefore passes `--no-cwd-fallback` alongside
+`cwd: "."`. In that mode:
+
+- step 3 is **removed** — no process-cwd default;
+- the per-call `cwd` and the env override **must be ABSOLUTE** (a relative value
+  would resolve against the payload, which is the same leak);
+- calls without a usable root fail closed with `isError: true` and an actionable
+  message, and the server's `instructions` plus every tool's `cwd` description
+  say REQUIRED.
+
+Unflagged behavior is unchanged: Claude Code and a dev checkout both launch the
+server inside the consuming project, where step 3 is correct.
+
 ## Invariants
 
 - **Read-only.** No `writeFile`, no `appendFile`. `.guild/runs/` is never

@@ -167,39 +167,6 @@ describe("guild-memory data root", () => {
     expect(r.text).toContain(path.join(foreign, ".guild", "wiki"));
   });
 
-  it("the exposed metadata TELLS the caller cwd is required in flagged mode", () => {
-    // gate r3: instructions/schema that call cwd an optional override send a
-    // compliant caller into a guaranteed first-call failure.
-    const out = execFileSync("node", [MEMORY_BIN, "--no-cwd-fallback"], {
-      input:
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } },
-        }) +
-        "\n" +
-        JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) +
-        "\n",
-      cwd: fakePlugin,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "ignore"],
-      timeout: 30_000,
-    });
-    const lines = out.trim().split("\n").filter(Boolean);
-    const init = JSON.parse(lines[0]) as { result?: { instructions?: string } };
-    expect(init.result?.instructions ?? "").toMatch(/MUST pass `cwd`/);
-    const tools = JSON.parse(lines[lines.length - 1]) as {
-      result?: { tools?: Array<{ inputSchema?: { properties?: { cwd?: { description?: string } } } }> };
-    };
-    const described = (tools.result?.tools ?? []).filter(
-      (t) => t.inputSchema?.properties?.cwd !== undefined
-    );
-    expect(described.length).toBeGreaterThan(0);
-    for (const t of described) {
-      expect(t.inputSchema?.properties?.cwd?.description ?? "").toMatch(/REQUIRED/);
-    }
-  });
 });
 
 describe("guild-telemetry data root", () => {
@@ -265,5 +232,106 @@ describe("the generated Codex manifest ships the flag WITH cwd — they are one 
     for (const bin of [MEMORY_BIN, TELEMETRY_BIN]) {
       expect(fs.readFileSync(bin, "utf8")).toContain("--no-cwd-fallback");
     }
+  });
+});
+
+/**
+ * Metadata regression coverage for BOTH servers (gate r4: the earlier version
+ * covered memory only and FILTERED OUT tools lacking `cwd`, so deleting `cwd`
+ * from a tool would have passed silently). Asserts the exact tool-name set and
+ * requires `cwd` on every tool.
+ */
+describe.each([
+  ["guild-memory", MEMORY_BIN, ["wiki_get", "wiki_list", "wiki_search"]],
+  [
+    "guild-telemetry",
+    TELEMETRY_BIN,
+    ["trace_cost_rollup", "trace_list_runs", "trace_query", "trace_summary"],
+  ],
+] as Array<[string, string, string[]]>)("%s exposed metadata in flagged mode", (_name, bin, expectedTools) => {
+  function metadata(): {
+    instructions: string;
+    tools: Array<{ name: string; inputSchema?: { properties?: { cwd?: { description?: string } } } }>;
+  } {
+    const out = execFileSync("node", [bin, "--no-cwd-fallback"], {
+      input:
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+        }) +
+        "\n" +
+        JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) +
+        "\n",
+      cwd: os.tmpdir(),
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+      timeout: 30_000,
+    });
+    const lines = out.trim().split("\n").filter(Boolean);
+    const init = JSON.parse(lines[0]) as { result?: { instructions?: string } };
+    const list = JSON.parse(lines[lines.length - 1]) as {
+      result?: { tools?: Array<{ name: string; inputSchema?: { properties?: { cwd?: { description?: string } } } }> };
+    };
+    return { instructions: init.result?.instructions ?? "", tools: list.result?.tools ?? [] };
+  }
+
+  it("instructions state that cwd MUST be passed", () => {
+    expect(metadata().instructions).toMatch(/MUST pass `cwd`/);
+  });
+
+  it("exposes exactly the expected tools — a renamed or dropped tool fails here", () => {
+    expect(metadata().tools.map((t) => t.name).sort()).toEqual(expectedTools);
+  });
+
+  it("EVERY tool takes cwd and describes it as REQUIRED", () => {
+    for (const t of metadata().tools) {
+      // No filtering: a tool that lost its `cwd` param must fail, not be skipped.
+      expect(t.inputSchema?.properties?.cwd).toBeDefined();
+      expect(t.inputSchema?.properties?.cwd?.description ?? "").toMatch(/REQUIRED/);
+    }
+  });
+});
+
+describe.each([
+  ["guild-memory", MEMORY_BIN, "wiki_list"],
+  ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs"],
+] as Array<[string, string, string]>)("%s rejects a RELATIVE root in flagged mode", (_n, bin, tool) => {
+  let payload: string;
+  beforeAll(() => {
+    payload = makeFakePluginRoot();
+  });
+  afterAll(() => fs.rmSync(payload, { recursive: true, force: true }));
+
+  it("cwd '.' is refused — it would resolve to the plugin payload (gate r4 leak)", () => {
+    const r = callTool(bin, tool, { cwd: "." }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/must be an ABSOLUTE path/);
+    expect(r.text).not.toContain("PLUGINSENTINEL");
+    expect(r.text).not.toContain("plugin-payload-sentinel");
+  });
+
+  it("a relative env override is refused for the same reason", () => {
+    const envVar = bin === MEMORY_BIN ? "GUILD_MEMORY_WIKI_ROOT" : "GUILD_TELEMETRY_CWD";
+    const out = execFileSync("node", [bin, "--no-cwd-fallback"], {
+      input:
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } },
+        }) +
+        "\n" +
+        JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: {} } }) +
+        "\n",
+      cwd: payload,
+      env: { ...process.env, [envVar]: "./relative-root" },
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+      timeout: 30_000,
+    });
+    const last = out.trim().split("\n").filter(Boolean).pop() ?? "{}";
+    expect(last).toMatch(/must be an ABSOLUTE path/);
   });
 });

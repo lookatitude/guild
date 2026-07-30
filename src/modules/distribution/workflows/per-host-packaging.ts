@@ -626,10 +626,13 @@ export function renderCodexGitInstallManifest(
       // UNC "\\\\server\\share", AND the root-relative "\\x" form a hand-rolled
       // two-backslash check missed (gate r3: `\rooted.js` is win32-absolute).
       if (path.posix.isAbsolute(a) || path.win32.isAbsolute(a)) return true;
-      if (a.startsWith("./") || a.startsWith(".\\")) return true; // measured: `./` does not resolve
-      // Traversal, in either separator, before or after normalization.
-      const norm = a.replace(/\\/g, "/");
-      if (norm === ".." || norm.startsWith("../") || norm.split("/").includes("..")) return true;
+      // Only ESCAPING traversal is unsafe. `./server.js` and internal
+      // normalization like `a/../server.js` both resolve fine beneath the
+      // declared cwd — verified by launching `node ./mcp-servers/.../index.js`
+      // from cwd ".". (An earlier revision rejected these on the strength of the
+      // NO-cwd experiment, which is a different configuration; gate r4.)
+      const norm = path.posix.normalize(a.replace(/\\/g, "/"));
+      if (norm === ".." || norm.startsWith("../")) return true;
       return false;
     });
     if (unresolvable !== undefined) {

@@ -9837,6 +9837,7 @@ var require_js_yaml = __commonJS({
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  RelativeProjectRootError: () => RelativeProjectRootError,
   UnresolvedProjectRootError: () => UnresolvedProjectRootError
 });
 module.exports = __toCommonJS(index_exports);
@@ -24140,12 +24141,27 @@ var UnresolvedProjectRootError = class extends Error {
     this.name = "UnresolvedProjectRootError";
   }
 };
+var RelativeProjectRootError = class extends Error {
+  constructor(source, value) {
+    super(
+      `guild-memory: ${source} must be an ABSOLUTE path here (got "${value}"). This server runs outside the consuming project, so a relative path would resolve against the plugin payload and return the plugin's own data. Pass the absolute project root.`
+    );
+    this.name = "RelativeProjectRootError";
+  }
+};
 function resolveWikiRoot(cwdArg) {
   if (cwdArg) {
+    if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
+      throw new RelativeProjectRootError("cwd", cwdArg);
+    }
     return path.join(path.resolve(cwdArg), ".guild", "wiki");
   }
-  if (process.env.GUILD_MEMORY_WIKI_ROOT) {
-    return path.resolve(process.env.GUILD_MEMORY_WIKI_ROOT);
+  const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
+  if (envRoot) {
+    if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
+      throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
+    }
+    return path.resolve(envRoot);
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();
@@ -24383,5 +24399,6 @@ main().catch((err) => {
 });
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  RelativeProjectRootError,
   UnresolvedProjectRootError
 });

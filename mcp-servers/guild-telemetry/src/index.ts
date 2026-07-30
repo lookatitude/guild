@@ -119,12 +119,33 @@ export class UnresolvedProjectRootError extends Error {
   }
 }
 
+/** Thrown when a root arrives but is RELATIVE, which would resolve to the payload. */
+export class RelativeProjectRootError extends Error {
+  constructor(source: string, value: string) {
+    super(
+      `guild-telemetry: ${source} must be an ABSOLUTE path here (got "${value}"). This server runs ` +
+        "outside the consuming project, so a relative path would resolve against the plugin " +
+        "payload and return the plugin's own data. Pass the absolute project root."
+    );
+    this.name = "RelativeProjectRootError";
+  }
+}
+
 function resolveCwd(cwdArg?: string): string {
   if (cwdArg) {
+    // See guild-memory: a relative root resolves against the plugin payload in
+    // flagged mode, which is the leak wearing a different hat.
+    if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
+      throw new RelativeProjectRootError("cwd", cwdArg);
+    }
     return path.resolve(cwdArg);
   }
-  if (process.env.GUILD_TELEMETRY_CWD) {
-    return path.resolve(process.env.GUILD_TELEMETRY_CWD);
+  const envRoot = process.env.GUILD_TELEMETRY_CWD;
+  if (envRoot) {
+    if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
+      throw new RelativeProjectRootError("GUILD_TELEMETRY_CWD", envRoot);
+    }
+    return path.resolve(envRoot);
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();

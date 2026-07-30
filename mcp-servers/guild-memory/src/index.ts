@@ -109,12 +109,34 @@ export class UnresolvedProjectRootError extends Error {
   }
 }
 
+/** Thrown when a root arrives but is RELATIVE, which would resolve to the payload. */
+export class RelativeProjectRootError extends Error {
+  constructor(source: string, value: string) {
+    super(
+      `guild-memory: ${source} must be an ABSOLUTE path here (got "${value}"). This server runs ` +
+        "outside the consuming project, so a relative path would resolve against the plugin " +
+        "payload and return the plugin's own data. Pass the absolute project root."
+    );
+    this.name = "RelativeProjectRootError";
+  }
+}
+
 function resolveWikiRoot(cwdArg?: string): string {
   if (cwdArg) {
+    // In flagged mode a RELATIVE root would be path.resolve()d against the
+    // process cwd — which is the plugin payload — reopening the exact leak this
+    // guard exists to close (`cwd: "."` served the payload's own wiki).
+    if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
+      throw new RelativeProjectRootError("cwd", cwdArg);
+    }
     return path.join(path.resolve(cwdArg), ".guild", "wiki");
   }
-  if (process.env.GUILD_MEMORY_WIKI_ROOT) {
-    return path.resolve(process.env.GUILD_MEMORY_WIKI_ROOT);
+  const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
+  if (envRoot) {
+    if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
+      throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
+    }
+    return path.resolve(envRoot);
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();
