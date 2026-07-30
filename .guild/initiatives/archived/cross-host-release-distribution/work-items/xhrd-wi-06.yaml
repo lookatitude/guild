@@ -1,0 +1,30 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: xhrd-wi-06
+initiative_id: cross-host-release-distribution
+title: "G6 — channel-integrity enforcement: CI check that next never trails main, plus backfill the missing v2.3.2 sync-back"
+type: implementation
+status: done
+owner: tooling-engineer
+depends_on: []
+acceptance:
+  - "per goals.md §G6 — a CI check FAILS when origin/next's version trails origin/main's, mechanizing release-discipline rule 8's sync-back clause (rule 4 in the standard is documentation completeness — corrected during the lane)"
+  - "the missing v2.3.2 sync-back is backfilled so next is no longer behind stable (observed 2026-07-25: next=2.3.1, main=2.3.2)"
+  - "the backfill lands as a fast-forward when ancestral, else a delta-copy sync-back PR — ff-vs-diverged is decided by `git merge-base --is-ancestor`, NOT by dates. When diverged, ancestry is already lost so merge style no longer matters (content+version agreement, not SHA)"
+  - "red-first: the check is proven to fail against the current trailing-next state before the backfill lands, then green after"
+  - "release-discipline rules 1-3 and 5-8 are unchanged — only rule 8's sync-back ENFORCEMENT is added, plus the new MERGE-COMMIT-ONLY clause for release PRs the lane's forensics justified — squash AND Rebase-and-merge both rewrite SHAs, so either destroys the ancestry the fast-forward sync-back depends on (xhrd-def-nongoal-1)"
+  - "codex adversarial review RAN; PR to next"
+evidence_refs:
+  - "PR #99 (gate) MERGED to next; PR #100 (v2.3.2 backfill) MERGED to next 2026-07-26 — BOTH halves landed, item CLOSED"
+  - "GREEN CONFIRMED live: check-channel-integrity against the real origin/main + origin/next reports OK, both channels at 2.3.2. Was exit 2 all session."
+  - "backfill was a DELTA COPY, not a fast-forward: PR #96's squash-merge had destroyed ancestry. Built with the single-field procedure PR #98 landed (bump plugin.json only -> sync:claude-install + build:inventory), dogfooding it before its first real release cut."
+  - "receipt: .guild/runs/run-3de5c1bb-5ee7-42ba-851f-6e0aa9190477/handoffs/tooling-engineer-xhrd-wi-06.md"
+  - "RESOLVED: the backfill landed as PR #100 with operator approval; the red-first half is now green."
+  - "CORRECTION 1: divergence was NOT next moving after the release (next tip 066a83c 18:35 PREDATES release 127a868 20:34). PR #96 was SQUASH-merged -> single-parent commit, ancestry destroyed. Standard now forbids squash-merging release PRs; ff-vs-diverged decided by git merge-base --is-ancestor, not dates"
+  - "CORRECTION 2: the gate DETECTS, it does not PREVENT — release.yml publishes on the merged-PR event and a push-triggered workflow cannot block it. Followup: put the check on the release path"
+  - "full SemVer §11 precedence (main=2.3.2 vs next=2.3.2-rc1 correctly FAILS); strict grammar rejects 2.3.2junk / 1.0.0-alpha..1 / 1.0.0-01 / 01.0.0; arbitrary-precision numeric ordering (Number() collapses above 2^53); 27 tests"
+  - "rule references corrected: the sync-back is rule 8 in the standard, not rule 4"
+  - "codex adversarial review: 5 rounds — caught the prerelease false-PASS blocker, the false causation claim, an npx-vs-npm-prefix invocation bug, the >2^53 Number() precision bug, an over-permissive SemVer parser, the Rebase-also-rewrites-SHAs error, stale rule-4 references, and an unsynced module-resource mirror that would have failed CI; all fixed"
+  - "goals.md §G6"
+  - "git show origin/next:.claude-plugin/plugin.json = 2.3.1 vs origin/main = 2.3.2 (verified 2026-07-25)"
+  - ".guild/wiki/standards/release-discipline.md rule 8 (sync-back clause)"
+  - ".github/workflows/branch-policy.yml, .githooks/pre-push"

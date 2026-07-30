@@ -1,0 +1,25 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: xhrd-wi-01
+initiative_id: cross-host-release-distribution
+title: "G1 — host distribution contract discovery: build the empirically-verified 16-host distribution matrix (Codex publish path is the proof case)"
+type: research
+status: done
+owner: tooling-engineer
+depends_on: []
+acceptance:
+  - "per goals.md §G1 — a checked-in host distribution matrix covering all 16 registry hosts, one row each: install path, version-resolution mechanism, publisher + publish mechanism, update command, staleness-signal reachability"
+  - "every row is empirically verified on a real host OR explicitly marked UNVERIFIED with the named blocker — no inferred rows presented as facts"
+  - "resolves xhrd-def-openq-1: how Guild 2.2.0 reached the Codex plugin index and what publishing 2.3.2 there requires (operator was unsure; do not assume)"
+  - "resolves xhrd-def-openq-2: which of the 14 non-Claude/non-Codex hosts have native registries vs agents-file snapshot as the only channel"
+  - "confirms or falsifies xhrd-def-assumption-1 (Codex resolves a pinned semver from an index, not a git ref)"
+  - "codex adversarial review RAN; PR to next"
+evidence_refs:
+  - "DELIVERABLE: .guild/wiki/standards/host-distribution-matrix.md (branch feature/xhrd-wi-01-host-distribution-matrix)"
+  - "receipt: .guild/runs/run-3de5c1bb-5ee7-42ba-851f-6e0aa9190477/handoffs/tooling-engineer-xhrd-wi-01.md"
+  - "HEADLINE: the initiating thesis was REFUTED — `codex plugin marketplace add lookatitude/guild --ref main` + `codex plugin add guild@guild` installs 2.3.2 today, no Guild change. Real defect: install.sh registers a LOCAL path for the 3 remote-capable hosts (codex/pi/antigravity)"
+  - "openq-1 CLOSED: 2.2.0 was never published — a `local` marketplace into a gitignored dist/ (~/.codex/config.toml [marketplaces.guild], last_updated 2026-07-05)"
+  - "openq-2 PARTIAL: pi (npm:/git:/https/ssh) + antigravity (plugin@marketplace) have unused remote mechanisms; cursor/github-copilot/opencode/rovo-dev UNVERIFIED (hosts unavailable) — carried into xhrd-wi-05"
+  - "UNVERIFIED carried forward: Codex upgrade propagation on a moving branch ref (untestable offline — Codex rejects local/bare/file:// git sources); re-test trigger = G6's v2.3.2 sync-back"
+  - "SCOPE CHANGE APPLIED: goals.md §G3 + xhrd-wi-03.yaml rewritten so the implementation lane cannot follow the refuted thesis; xhrd-wi-05.yaml gained blocked-by-unknown criteria"
+  - "wiki-lint-checks.ts clean on the new page"
+  - "codex adversarial review: NOT_SATISFIED @ cap 5 — every objection across 5 rounds applied or independently re-verified; R5's single residual applied post-cap; recommend a confirming pass at PR review"
