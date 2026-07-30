@@ -163,14 +163,23 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
     expect(claude.result_adapter).toBe(false);
   });
 
-  it("provenance: the 4 CLI/file primary hosts verified; agents-file + the app/web/connector surfaces + G4b's 7 new hosts inferred", () => {
+  it("provenance: the 6 live-verified hosts verified; agents-file + the app/web/connector surfaces + the still-unverified new hosts inferred", () => {
     // Oracle refreshed to current production after commit 445f7b6 ("fix(host-registry):
     // verify pi + antigravity capability rows on-host; correct antigravity bin to agy"):
     // pi + antigravity were LIVE-VERIFIED on-host (the newer truth, not a regression),
-    // so their provenance is "verified". The agents-file target, the four app/web/
-    // connector surfaces, and G4b's 7 new hosts (off-box, no live-host verification
-    // yet) were NOT live-verified → "inferred".
-    for (const id of ["claude-code-cli", "codex-cli", "pi-cli", "antigravity-cli"] as HostId[]) {
+    // so their provenance is "verified". Refreshed again after issue #110 (2026-07-30):
+    // github-copilot + opencode were live-verified on-box in the #104 pass (real
+    // completions through guild-run, receipts, live self-update swaps) → "verified".
+    // cursor stays inferred (partial — no authenticated completion); rovo-dev stays
+    // inferred (auth-walled); the rest were NOT live-verified → "inferred".
+    for (const id of [
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "github-copilot",
+      "opencode",
+    ] as HostId[]) {
       expect(HOST_REGISTRY_ROWS[id].provenance).toBe("verified");
     }
     for (const id of [
@@ -180,8 +189,6 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
       "codex-app",
       "claude-ai-connector",
       "cursor",
-      "github-copilot",
-      "opencode",
       "rovo-dev",
       "kiro",
       "qoder",
