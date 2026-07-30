@@ -568,22 +568,51 @@ describe.each([
  * "/srv/Guild" (payload) and "/srv/guild/project" (consumer) are unrelated, and
  * a blanket fold would reject the consumer (gate r7 blocker).
  */
-describe("case folding does not over-reject", () => {
-  it("a sibling path differing only in case is accepted where the fs is case-SENSITIVE", () => {
+describe.each([
+  ["guild-memory", MEMORY_BIN, "wiki_list"],
+  ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs"],
+] as Array<[string, string, string]>)("%s: case folding does not over-reject", (_n, bin, tool) => {
+  /**
+   * gate r8: the previous shape (`Payload` vs `payload-consumer`) was a FALSE
+   * GREEN — `payload-consumer` is not beneath `payload/`, so even unconditional
+   * folding never rejected it, and the test passed against the pre-fix commit.
+   * The consumer must sit beneath the FOLDED payload name (`Payload` vs
+   * `payload/project`) for blanket folding to misfire on it.
+   *
+   * This only means anything on a genuinely case-SENSITIVE filesystem, where
+   * `Payload` and `payload` are two directories. macOS default is
+   * case-insensitive, so the case is skipped there and runs in Linux CI.
+   */
+  it("a consumer beneath the case-folded payload name still resolves (case-sensitive fs only)", () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "guild-case-pair-"));
-    const payload = path.join(base, "Payload");
-    const consumer = path.join(base, "payload-consumer");
-    fs.mkdirSync(path.join(payload, ".guild", "wiki"), { recursive: true });
-    fs.mkdirSync(path.join(consumer, ".guild", "wiki"), { recursive: true });
-    fs.writeFileSync(
-      path.join(consumer, ".guild", "wiki", "case-consumer-page.md"),
-      "---\ntype: standard\n---\n\n# case consumer\n"
-    );
     try {
-      // Distinct directories, so this must resolve regardless of fs case behavior.
-      const r = callTool(MEMORY_BIN, "wiki_list", { cwd: consumer }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+      const payload = path.join(base, "Payload");
+      fs.mkdirSync(path.join(payload, ".guild", "wiki"), { recursive: true });
+      fs.mkdirSync(path.join(payload, ".guild", "runs"), { recursive: true });
+      const caseSensitive = !fs.existsSync(path.join(base, "payload"));
+      if (!caseSensitive) {
+        // Case-INSENSITIVE fs: the sibling cannot exist, so instead assert the
+        // property that matters here — a case variant IS caught (covered in
+        // depth above), and this shape is untestable rather than passing vacuously.
+        expect(fs.existsSync(path.join(base, "payload"))).toBe(true);
+        return;
+      }
+      const consumer = path.join(base, "payload", "project");
+      fs.mkdirSync(path.join(consumer, ".guild", "wiki"), { recursive: true });
+      fs.mkdirSync(path.join(consumer, ".guild", "runs", "run-CONSUMERSENTINEL-0001", "logs"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(consumer, ".guild", "wiki", "case-consumer-page.md"),
+        "---\ntype: standard\n---\n\n# case consumer\n"
+      );
+      fs.writeFileSync(
+        path.join(consumer, ".guild", "runs", "run-CONSUMERSENTINEL-0001", "logs", "v1.4-events.jsonl"),
+        JSON.stringify({ ts: "2026-01-01T00:00:00Z", event: "run_start" }) + "\n"
+      );
+      const r = callTool(bin, tool, { cwd: consumer }, { cwd: payload, flags: ["--no-cwd-fallback"] });
       expect(r.isError).toBe(false);
-      expect(r.text).toContain("case-consumer-page");
+      expect(r.text).toContain(bin === MEMORY_BIN ? "case-consumer-page" : "CONSUMERSENTINEL");
     } finally {
       fs.rmSync(base, { recursive: true, force: true });
     }

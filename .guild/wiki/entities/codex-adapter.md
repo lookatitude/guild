@@ -11,7 +11,7 @@ source_refs:
 related: [host-adapter-contract, feature-degradation-contracts, phase-continuity-requirements, claude-code-adapter, codex-adapter, gemini-cli-adapter, pi-adapter, claude-code-desktop-adapter, claude-code-web-adapter, codex-app-adapter, antigravity-2-adapter, claude-ai-connector-adapter]
 applies_to: [plugin]
 created_at: 2026-05-28
-updated_at: 2026-05-28
+updated_at: 2026-07-30
 expires_at: null
 supersedes: null
 sensitivity: public
@@ -19,7 +19,7 @@ sensitivity: public
 
 # Codex CLI adapter
 
-Codex CLI is a local terminal coding agent (source: audit §"Source-backed platform facts / Codex CLI and Codex app") that offers native subagent dispatch, `codex exec` for non-interactive lane execution, MCP support (stdio and streamable HTTP), plugin hooks, and a `.codex-plugin/plugin.json` manifest format. It is the **strong parity target** for Guild's CLI track — the existing `CodexPaneAdapter` (`plugin/scripts/lib/pane-adapter.ts:111-168`) already emits `codex exec '<prompt>'` and exports `GUILD_RUN_ID`, establishing the skeleton. The key adaptation challenges relative to the Claude reference implementation are: hook `permissionDecision: ask` is unsupported in `PreToolUse` (Codex documents this as "parsed but not supported, causes hook failure"); a separate `PermissionRequest` event exists instead; and auth preflight must accept both `OPENAI_API_KEY` and `codex login` paths (audit §"Current local defects blocking generic tmux teams", LEAKS D-6).
+Codex CLI is a local terminal coding agent (source: audit §"Source-backed platform facts / Codex CLI and Codex app") that offers native subagent dispatch, `codex exec` for non-interactive lane execution, MCP support (stdio; streamable HTTP is NOT supported — corrected 2026-07-30, #114), plugin hooks, and a `.codex-plugin/plugin.json` manifest format. It is the **strong parity target** for Guild's CLI track — the existing `CodexPaneAdapter` (`plugin/scripts/lib/pane-adapter.ts:111-168`) already emits `codex exec '<prompt>'` and exports `GUILD_RUN_ID`, establishing the skeleton. The key adaptation challenges relative to the Claude reference implementation are: hook `permissionDecision: ask` is unsupported in `PreToolUse` (Codex documents this as "parsed but not supported, causes hook failure"); a separate `PermissionRequest` event exists instead; and auth preflight must accept both `OPENAI_API_KEY` and `codex login` paths (audit §"Current local defects blocking generic tmux teams", LEAKS D-6).
 
 ## Target host capabilities
 
@@ -68,7 +68,7 @@ model_tiers:
 
 mcp:
   stdio: true
-  http: true                  # streamable HTTP also supported
+  http: false                 # corrected 2026-07-30 (#114) to match host-capabilities-schema.ts mcp.http:false
   plugin_bundled: true
   core_provides_mcp: true
 
