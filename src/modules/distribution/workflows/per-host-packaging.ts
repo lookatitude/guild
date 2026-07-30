@@ -770,8 +770,10 @@ export interface WrappedCliRenderSpec {
  * skill dirs passed through, native agents/hooks/MCP flagged in `_unsupported`).
  * `schema_version` is the host's own `manifest_format` so each host's package is
  * self-identifying. R1: a rendered manifest is NEVER support — `installability`
- * stays "target" and `_provenance` "inferred" until an operator-box receipt promotes
- * the derived public state (host-public-state.ts, L5/L7).
+ * stays "target"; `_provenance` mirrors the row (issue #110: github-copilot +
+ * opencode are "verified" from live on-box runs, cursor + rovo-dev remain
+ * "inferred"). Runtime promotion still comes only from an operator-box receipt
+ * on the derived public state (host-public-state.ts, L5/L7).
  */
 export interface WrappedCliPackage {
   /** Host-own package schema id, e.g. "cursor-package" (from manifest_format). */
@@ -799,10 +801,9 @@ export interface WrappedCliPackage {
   _source_version: string;
   /**
    * Registry provenance for the row that backed the render — "verified" or
-   * "inferred" (today always "inferred" per R1: these 4 rows are
-   * installability:"target" and have no operator-box receipt yet, but the value
-   * is DERIVED from `spec.provenance`, not hardcoded, so a future receipt-driven
-   * flip surfaces here automatically).
+   * "inferred". DERIVED from `spec.provenance`, not hardcoded, so registry
+   * flips surface here automatically (issue #110 flipped github-copilot +
+   * opencode to "verified"; cursor + rovo-dev remain "inferred").
    */
   _provenance: "verified" | "inferred";
 }

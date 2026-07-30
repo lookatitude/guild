@@ -663,6 +663,9 @@ var init_host_registry_schema = __esm({
       result_adapter: false,
       dispatch_selectable: true,
       capabilities: inferredCaps("cursor", "cursor", "cli"),
+      // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
+      // were live-checked 2026-07-30, but no authenticated completion has run —
+      // partial verification does not flip the row.
       provenance: "inferred"
     };
     GITHUB_COPILOT_ENTRY = {
@@ -677,7 +680,11 @@ var init_host_registry_schema = __esm({
       result_adapter: false,
       dispatch_selectable: true,
       capabilities: inferredCaps("github-copilot", "copilot", "cli"),
-      provenance: "inferred"
+      // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
+      // real completion end to end through guild-run; per-host receipt + live
+      // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
+      // INFERRED_HOSTS) until all cells are live-verified.
+      provenance: "verified"
     };
     OPENCODE_ENTRY = {
       schema_version: "guild.host_registry.v1",
@@ -690,7 +697,11 @@ var init_host_registry_schema = __esm({
       result_adapter: false,
       dispatch_selectable: true,
       capabilities: inferredCaps("opencode", "opencode", "cli"),
-      provenance: "inferred"
+      // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
+      // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
+      // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
+      // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
+      provenance: "verified"
     };
     ROVO_DEV_ENTRY = {
       schema_version: "guild.host_registry.v1",

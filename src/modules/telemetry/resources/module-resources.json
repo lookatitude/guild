@@ -22,14 +22,14 @@
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "a82c3762a6c707058403fa6a5868b3023bcb836ea54aff5e222e8495db4775ee"
+      "sha256": "d03f7d4352a34d0a457c170372d0bfc1ce1f8be7024f2f774216c5ec95d1ef2b"
     },
     {
       "category": "hooks",
       "id": "UserPromptSubmit:run-trace-start.js",
       "source_path": "hooks/dist/run-trace-start.js",
       "resource_path": "resources/hooks/dist/run-trace-start.js",
-      "sha256": "eb99993fb9656c1c66a704a7efd7c33014be7631b16c2b6bac239911f6333d74"
+      "sha256": "194b4a36a490426a4bb789e72ed74ab32154cd09e6b4eb69bbf091f6ac2629d9"
     },
     {
       "category": "mcp_servers",
@@ -50,7 +50,7 @@
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "52d5cd73f88ed1c4b31693bf419804e63194f8517edb936d0744f85f47df826c"
+      "sha256": "e717ea549b1a354646bca9db7417fe862d6e283cf732ce210d97ffeb32087bb5"
     },
     {
       "category": "scripts",
