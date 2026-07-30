@@ -20,7 +20,6 @@ const CURRENT_LAUNCHER = path.join(SCRIPTS, "agent-team-launcher.ts");
 const MH04 = "6bfac1668e914eed9c6e9d07c933915f25ec274d";
 const ORACLE_COMMIT = "fe07587e420c51fbc864225c69a984c71a0b89c8";
 const CURRENT_BASE = "1ad54903684f59eb3b87895a7c2becd69e799a47";
-const SEEDED_DESCENDANT = "59de1654337e017f544f80ca86884ea203096dd0";
 const PINS = [
   {
     path: "scripts/agent-team-launcher.ts",
@@ -67,12 +66,18 @@ function descendsFromCurrentBase(commit: string): boolean {
   ).status === 0;
 }
 
-function createForeignCommitObject(): string {
+function createControlCommitObject(parent?: string): string {
   const emptyTree = git("mktree");
-  return execFileSync("git", ["commit-tree", emptyTree], {
+  return execFileSync("git", [
+    "commit-tree",
+    emptyTree,
+    ...(parent ? ["-p", parent] : []),
+  ], {
     cwd: REPO,
     encoding: "utf8",
-    input: "MH-08 unrelated ancestry control\n",
+    input: parent
+      ? "MH-08 descendant ancestry control\n"
+      : "MH-08 unrelated ancestry control\n",
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: "MH-08 ancestry control",
@@ -335,9 +340,10 @@ describe("MH-08 pinned historical fixture replay", () => {
   );
 
   it("has discriminating controls for normalized output and receipt order", () => {
-    const foreignCommit = createForeignCommitObject();
+    const seededDescendant = createControlCommitObject(CURRENT_BASE);
+    const foreignCommit = createControlCommitObject();
     expect(descendsFromCurrentBase(CURRENT_BASE)).toBe(true);
-    expect(descendsFromCurrentBase(SEEDED_DESCENDANT)).toBe(true);
+    expect(descendsFromCurrentBase(seededDescendant)).toBe(true);
     expect(descendsFromCurrentBase(foreignCommit)).toBe(false);
 
     const oracle = executeLauncher(
