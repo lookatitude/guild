@@ -84,12 +84,44 @@ interface TelemetryEvent {
 
 // ─── CWD + runs dir ──────────────────────────────────────────────────────
 
+/**
+ * `--no-cwd-fallback` — set by a host whose launch cwd is NOT the consuming
+ * project (see the identical guard in guild-memory for the full rationale).
+ *
+ * A Codex plugin install declares `cwd: "."` so Codex can resolve the server
+ * path, which makes the launch cwd the PLUGIN payload root, and Codex passes a
+ * scrubbed env with no workspace signal. Falling back to `process.cwd()` there
+ * would read Guild's OWN bundled `.guild/runs` from the install cache — i.e.
+ * report Guild's self-build runs as if they were the consumer's, which is a
+ * data-scoping leak, not merely a wrong answer.
+ *
+ * Path inspection cannot separate that from a Guild developer working in the
+ * checkout (identical shape, opposite intent), so the host declares it.
+ */
+const NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
+
+/** Thrown when no project root can be determined and guessing would be wrong. */
+export class UnresolvedProjectRootError extends Error {
+  constructor() {
+    super(
+      "guild-telemetry: no project root available. This host launches the MCP server " +
+        "outside the consuming project (--no-cwd-fallback), so the working directory " +
+        "cannot be used. Pass `cwd` with the absolute path of the project root on the " +
+        "tool call, or set GUILD_TELEMETRY_CWD to the project root."
+    );
+    this.name = "UnresolvedProjectRootError";
+  }
+}
+
 function resolveCwd(cwdArg?: string): string {
   if (cwdArg) {
     return path.resolve(cwdArg);
   }
   if (process.env.GUILD_TELEMETRY_CWD) {
     return path.resolve(process.env.GUILD_TELEMETRY_CWD);
+  }
+  if (NO_CWD_FALLBACK) {
+    throw new UnresolvedProjectRootError();
   }
   return process.cwd();
 }

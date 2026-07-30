@@ -28,6 +28,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
@@ -6799,6 +6800,11 @@ var require_dist = __commonJS({
 });
 
 // src/index.ts
+var index_exports = {};
+__export(index_exports, {
+  UnresolvedProjectRootError: () => UnresolvedProjectRootError
+});
+module.exports = __toCommonJS(index_exports);
 var fs = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
@@ -24073,12 +24079,24 @@ var StdioServerTransport = class {
 };
 
 // src/index.ts
+var NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
+var UnresolvedProjectRootError = class extends Error {
+  constructor() {
+    super(
+      "guild-telemetry: no project root available. This host launches the MCP server outside the consuming project (--no-cwd-fallback), so the working directory cannot be used. Pass `cwd` with the absolute path of the project root on the tool call, or set GUILD_TELEMETRY_CWD to the project root."
+    );
+    this.name = "UnresolvedProjectRootError";
+  }
+};
 function resolveCwd(cwdArg) {
   if (cwdArg) {
     return path.resolve(cwdArg);
   }
   if (process.env.GUILD_TELEMETRY_CWD) {
     return path.resolve(process.env.GUILD_TELEMETRY_CWD);
+  }
+  if (NO_CWD_FALLBACK) {
+    throw new UnresolvedProjectRootError();
   }
   return process.cwd();
 }
@@ -24531,4 +24549,8 @@ main().catch((err) => {
   process.stderr.write(`[guild-telemetry] fatal: ${err?.stack ?? err}
 `);
   process.exit(1);
+});
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  UnresolvedProjectRootError
 });

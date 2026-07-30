@@ -83,6 +83,7 @@ describe("the repo-root Codex manifest declares servers Codex can actually start
         expect(a.startsWith("./")).toBe(false);
       }
       expect(e.args?.[0]).toBe(`mcp-servers/${name}/dist/index.js`);
+      expect(e.args).toContain("--no-cwd-fallback");
     }
   });
 
@@ -191,7 +192,9 @@ describe("the renderer refuses a declaration it cannot make resolvable", () => {
       } as never,
       { renderedAt: STAMP } as never
     );
-    expect(out.mcpServers["y"].args).toEqual(["a/b.js"]);
+    // The flag rides alongside every declaration (see mcp-project-root-scoping.test.ts
+    // for why cwd "." without it is the data-leak configuration).
+    expect(out.mcpServers["y"].args).toEqual(["a/b.js", "--no-cwd-fallback"]);
     expect(out.mcpServers["y"].cwd).toBe(".");
   });
 });

@@ -104,14 +104,14 @@ ttl_seconds: 3600
 | (4) Dispatch | Codex subagents + `codex exec` for tmux lanes | — | `DispatchAdapter` wraps `codex exec '<prompt>'` per lane. Receipt collection via `.guild/runs/<run-id>/handoffs/` unchanged. |
 | (5) Permissions | `PermissionRequest` event for ask; `PreToolUse` deny for hard deny | No in-line `PreToolUse ask` | `ScopePolicy.resolve()` runs identically; `PermissionEmitter` maps `ask` → `PermissionRequest`; if `PermissionRequest` unavailable → file-bus `approval_request` + pause (FDC-11). |
 | (6) Model tiers | `{ model: "default", reasoning: low/medium/high }` | — | `ModelResolver` maps Guild tiers; no Claude model names used (audit §"P0: Model tiers are Claude-specific"). |
-| (7) MCP | stdio + streamable HTTP; plugin-bundled MCP manifest block | — | `McpAdapter` emits MCP entries in `.codex-plugin/plugin.json`; `CLAUDE_PLUGIN_ROOT` compat OK for existing scripts (audit §"MCP support matrix"). |
+| (7) MCP | stdio + streamable HTTP; plugin-bundled MCP manifest block | — | `McpAdapter` emits MCP entries in `.codex-plugin/plugin.json`. **CORRECTED 2026-07-30 (#114): `CLAUDE_PLUGIN_ROOT` compat is NOT OK for MCP args** — Codex expands that placeholder for hooks but never for MCP server args (measured, codex 0.146.0). The resolvable form is plugin-relative args + `cwd: "."`, which additionally requires `--no-cwd-fallback` so the server does not take the plugin payload root as its data root. |
 | (8) Team visibility | Rung 1 (tmux + `codex exec` panes) → Rung 2 (Codex subagents) → Rung 4 (serial) | No `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env | Team env gate stays inside `ClaudePaneAdapter` only; Codex pane adapter does not set it (audit §"Current local defects" / D-4). |
 
 ## Per-feature degradation matrix
 
 | FDC | Full behavior | This host | Degradation contract |
 |---|---|---|---|
-| FDC-1 Memory | MCP stdio `guild-memory` | stdio or HTTP MCP available | No degradation; MCP bundled in plugin manifest. |
+| FDC-1 Memory | MCP stdio `guild-memory` | stdio or HTTP MCP available | **PARTIAL, corrected 2026-07-30 (#114).** A git-ref install now bundles a working declaration (relative args + `cwd: "."` + `--no-cwd-fallback`), so `guild-memory` runs — but the caller MUST pass `cwd` per tool call, because Codex gives the child no workspace signal (scrubbed env, cwd = plugin root) and the server fails closed rather than serving Guild's own bundled wiki. The runtime adapter still reports `memory` as `degraded` with a filesystem-BM25 primary (`host-adapters/codex-cli.ts`); that row stands until the adapter is rewired to prefer the now-working MCP path. The rendered (local-marketplace) package still declares no MCP servers — tracked in #115. |
 | FDC-2 Knowledge-graph + recall | `guild-memory` MCP or fs scan | MCP available | No degradation expected; fallback to fs/BM25 if server fails. |
 | FDC-3 Context assembly | Context bundle always written | Full | Bundle written identically; `degraded_retrieval` only if FDC-1/2 degrade. |
 | FDC-4 Agent communication | File bus canonical | Full | File bus via `codex exec` pane writes; `SendMessage` not used (FDC-4 contract). |

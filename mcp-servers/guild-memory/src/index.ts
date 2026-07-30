@@ -59,12 +59,54 @@ import { WikiPageType, isWikiPageType } from "../../../src/modules/knowledge/wor
 
 // ─── Wiki root resolution ────────────────────────────────────────────────
 
+/**
+ * `--no-cwd-fallback` — set by a host whose launch cwd is NOT the consuming
+ * project.
+ *
+ * A Codex plugin install must declare `cwd: "."` so Codex can resolve the server
+ * path (measured: `${CLAUDE_PLUGIN_ROOT}`, bare-relative and `./`-relative args
+ * all fail to start; only an absolute path or a relative path plus `cwd` works,
+ * and an absolute path cannot be published from a version-keyed cache root).
+ * That cwd is the PLUGIN payload root, and Codex hands the child a scrubbed env
+ * with no workspace signal at all (measured: no PWD, no CODEX_*), so
+ * `process.cwd()` would silently resolve to Guild's OWN bundled `.guild/wiki`
+ * inside the install cache and serve Guild's self-build knowledge to the
+ * consumer.
+ *
+ * This cannot be detected by inspecting paths: a Guild DEVELOPER working in the
+ * guild checkout has cwd == plugin root too, and there the repo's own wiki is
+ * exactly what they want. The two cases are path-identical, so the host that
+ * knows the difference declares it — hence an explicit flag rather than a guess.
+ *
+ * With the flag set, the cwd fallback is removed: a root must arrive per-call
+ * (`cwd` argument) or via the env override, else the tool fails closed with an
+ * actionable message. Without it, behavior is unchanged (Claude Code and a dev
+ * checkout both launch the server in the consuming project).
+ */
+const NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
+
+/** Thrown when no project root can be determined and guessing would be wrong. */
+export class UnresolvedProjectRootError extends Error {
+  constructor() {
+    super(
+      "guild-memory: no project root available. This host launches the MCP server " +
+        "outside the consuming project (--no-cwd-fallback), so the working directory " +
+        "cannot be used. Pass `cwd` with the absolute path of the project root on the " +
+        "tool call, or set GUILD_MEMORY_WIKI_ROOT to the wiki directory."
+    );
+    this.name = "UnresolvedProjectRootError";
+  }
+}
+
 function resolveWikiRoot(cwdArg?: string): string {
   if (cwdArg) {
     return path.join(path.resolve(cwdArg), ".guild", "wiki");
   }
   if (process.env.GUILD_MEMORY_WIKI_ROOT) {
     return path.resolve(process.env.GUILD_MEMORY_WIKI_ROOT);
+  }
+  if (NO_CWD_FALLBACK) {
+    throw new UnresolvedProjectRootError();
   }
   return path.join(process.cwd(), ".guild", "wiki");
 }

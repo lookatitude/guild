@@ -551,6 +551,8 @@ export interface CodexGitInstallJson {
 }
 
 const CLAUDE_PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}/";
+/** Tells a server its launch cwd is the plugin payload, not the project. */
+const NO_CWD_FALLBACK_FLAG = "--no-cwd-fallback";
 
 /**
  * Render the repo-root Codex manifest consumed by a Codex GIT-REF install
@@ -613,7 +615,20 @@ export function renderCodexGitInstallManifest(
     );
     // A path we could not make plugin-relative would resolve against the wrong
     // root at runtime — refuse rather than ship a silently broken declaration.
-    const unresolvable = args.find((a) => a.startsWith("/") || a.includes("${"));
+    // Gate round-2 finding: rejecting only a leading "/" and "${…}" let through
+    // `../outside`, `./x`, and Windows absolute/UNC forms while still claiming
+    // every arg was plugin-relative. Check every escape shape after normalizing.
+    const unresolvable = args.find((a) => {
+      if (a.includes("${")) return true; // unexpanded placeholder
+      if (a.startsWith("/")) return true; // POSIX absolute
+      if (/^[A-Za-z]:[\\/]/.test(a)) return true; // Windows drive absolute (C:\ or C:/)
+      if (a.startsWith("\\\\")) return true; // Windows UNC (\\server\share)
+      if (a.startsWith("./") || a.startsWith(".\\")) return true; // measured: `./` does not resolve
+      // Traversal, in either separator, before or after normalization.
+      const norm = a.replace(/\\/g, "/");
+      if (norm === ".." || norm.startsWith("../") || norm.split("/").includes("..")) return true;
+      return false;
+    });
     if (unresolvable !== undefined) {
       throw new Error(
         `renderCodexGitInstallManifest: MCP server "${s.id}" has an arg that cannot be made ` +
@@ -621,7 +636,18 @@ export function renderCodexGitInstallManifest(
           `every path arg must be relative to the plugin root.`
       );
     }
-    mcpServers[s.id] = { type: "stdio", command: s.command, args, cwd: "." };
+    // `--no-cwd-fallback` is REQUIRED alongside `cwd: "."`: that cwd is the plugin
+    // payload root, and Codex passes a scrubbed env (measured: no PWD, no CODEX_*),
+    // so without the flag each server would default its data root to Guild's OWN
+    // bundled `.guild/` inside the install cache and serve Guild's self-build wiki
+    // and runs to the consumer. With it, the servers fail closed and demand an
+    // explicit per-call `cwd`. The two settings are one unit — never emit one alone.
+    mcpServers[s.id] = {
+      type: "stdio",
+      command: s.command,
+      args: [...args, NO_CWD_FALLBACK_FLAG],
+      cwd: ".",
+    };
   }
   return {
     name: manifest.name,
