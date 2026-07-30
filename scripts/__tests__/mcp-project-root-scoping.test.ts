@@ -36,6 +36,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
+
+/** Ambient root overrides removed, so a developer's shell cannot steer a test. */
+function cleanEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
+  const e = { ...process.env, ...(extra ?? {}) };
+  if (!extra || !("GUILD_MEMORY_WIKI_ROOT" in extra)) delete e["GUILD_MEMORY_WIKI_ROOT"];
+  if (!extra || !("GUILD_TELEMETRY_CWD" in extra)) delete e["GUILD_TELEMETRY_CWD"];
+  return e;
+}
 const MEMORY_BIN = path.join(PLUGIN_ROOT, "mcp-servers", "guild-memory", "dist", "index.js");
 const TELEMETRY_BIN = path.join(PLUGIN_ROOT, "mcp-servers", "guild-telemetry", "dist", "index.js");
 
@@ -44,7 +52,7 @@ function callTool(
   bin: string,
   tool: string,
   args: Record<string, unknown>,
-  opts: { cwd: string; flags?: string[] }
+  opts: { cwd: string; flags?: string[]; env?: Record<string, string> }
 ): { isError: boolean; text: string } {
   const lines = [
     JSON.stringify({
@@ -63,6 +71,10 @@ function callTool(
   const out = execFileSync("node", [bin, ...(opts.flags ?? [])], {
     input: lines,
     cwd: opts.cwd,
+    // HERMETIC: the servers honour GUILD_MEMORY_WIKI_ROOT / GUILD_TELEMETRY_CWD,
+    // and a developer who exports either (both are documented) would otherwise
+    // silently redirect these tests. Strip them unless a case sets them.
+    env: cleanEnv(opts.env),
     encoding: "utf8",
     stdio: ["pipe", "pipe", "ignore"],
     timeout: 30_000,
@@ -265,6 +277,7 @@ describe.each([
         JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) +
         "\n",
       cwd: os.tmpdir(),
+      env: cleanEnv(),
       encoding: "utf8",
       stdio: ["pipe", "pipe", "ignore"],
       timeout: 30_000,
@@ -326,7 +339,7 @@ describe.each([
         JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: {} } }) +
         "\n",
       cwd: payload,
-      env: { ...process.env, [envVar]: "./relative-root" },
+      env: cleanEnv({ [envVar]: "./relative-root" }),
       encoding: "utf8",
       stdio: ["pipe", "pipe", "ignore"],
       timeout: 30_000,
@@ -401,7 +414,7 @@ describe.each([
           JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: {} } }) +
           "\n",
         cwd: payload,
-        env: { ...process.env, [envVar]: payload },
+        env: cleanEnv({ [envVar]: payload }),
         encoding: "utf8",
         stdio: ["pipe", "pipe", "ignore"],
         timeout: 30_000,
@@ -513,5 +526,66 @@ describe.each([
       { cwd: payload, flags: ["--no-cwd-fallback"] }
     );
     expect(r.isError).toBe(true);
+  });
+});
+
+/**
+ * Positive environment-override coverage (gate r7): the env cases only proved
+ * REJECTION, so a guard that refused every env root would have passed. These
+ * assert a legitimate absolute override actually reads the CONSUMER's data.
+ * Note the two servers take different shapes: guild-memory's variable points at
+ * the wiki directory itself, guild-telemetry's at the project root.
+ */
+describe.each([
+  ["guild-memory", MEMORY_BIN, "wiki_list", "GUILD_MEMORY_WIKI_ROOT", true],
+  ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs", "GUILD_TELEMETRY_CWD", false],
+] as Array<[string, string, string, string, boolean]>)(
+  "%s accepts a legitimate absolute env override",
+  (_n, bin, tool, envVar, pointsAtWikiDir) => {
+    let payload: string;
+    let consumer: string;
+    beforeAll(() => {
+      payload = makeFakePluginRoot();
+      consumer = makeForeignRepo();
+    });
+    afterAll(() => {
+      fs.rmSync(payload, { recursive: true, force: true });
+      fs.rmSync(consumer, { recursive: true, force: true });
+    });
+
+    it("reads the CONSUMER's data via the env root, with no payload bleed", () => {
+      const value = pointsAtWikiDir ? path.join(consumer, ".guild", "wiki") : consumer;
+      const r = callTool(bin, tool, {}, { cwd: payload, flags: ["--no-cwd-fallback"], env: { [envVar]: value } });
+      expect(r.isError).toBe(false);
+      expect(r.text).toContain(pointsAtWikiDir ? "foreign-only-page" : "CONSUMERSENTINEL");
+      expect(r.text).not.toContain("PLUGINSENTINEL");
+    });
+  }
+);
+
+/**
+ * Case folding must be MEASURED, not assumed: on a case-SENSITIVE filesystem
+ * "/srv/Guild" (payload) and "/srv/guild/project" (consumer) are unrelated, and
+ * a blanket fold would reject the consumer (gate r7 blocker).
+ */
+describe("case folding does not over-reject", () => {
+  it("a sibling path differing only in case is accepted where the fs is case-SENSITIVE", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "guild-case-pair-"));
+    const payload = path.join(base, "Payload");
+    const consumer = path.join(base, "payload-consumer");
+    fs.mkdirSync(path.join(payload, ".guild", "wiki"), { recursive: true });
+    fs.mkdirSync(path.join(consumer, ".guild", "wiki"), { recursive: true });
+    fs.writeFileSync(
+      path.join(consumer, ".guild", "wiki", "case-consumer-page.md"),
+      "---\ntype: standard\n---\n\n# case consumer\n"
+    );
+    try {
+      // Distinct directories, so this must resolve regardless of fs case behavior.
+      const r = callTool(MEMORY_BIN, "wiki_list", { cwd: consumer }, { cwd: payload, flags: ["--no-cwd-fallback"] });
+      expect(r.isError).toBe(false);
+      expect(r.text).toContain("case-consumer-page");
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
   });
 });

@@ -90,7 +90,7 @@ contributed. Omit `run_id` to roll up across all runs.
 ### `--no-cwd-fallback` (hosts that launch the server outside the project)
 
 A Codex plugin install must declare `cwd: "."` so Codex can resolve the server
-path (measured on codex 0.146.0: `${{CLAUDE_PLUGIN_ROOT}}`-prefixed, bare-relative
+path (measured on codex 0.146.0: `${CLAUDE_PLUGIN_ROOT}`-prefixed, bare-relative
 and `./`-relative args all fail to start without a cwd; only an absolute path
 works, and that cannot be published from a version-keyed cache root). That cwd is
 the PLUGIN payload root, and Codex passes the child a scrubbed env with no

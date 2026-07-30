@@ -24159,6 +24159,18 @@ var PayloadScopedRootError = class extends Error {
   }
 };
 var PAYLOAD_ROOT = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
+var PAYLOAD_FS_CASE_INSENSITIVE = (() => {
+  if (PAYLOAD_ROOT === null) return false;
+  const flipped = PAYLOAD_ROOT.split("").map((ch) => ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()).join("");
+  if (flipped === PAYLOAD_ROOT) return false;
+  try {
+    const a = fs.statSync(PAYLOAD_ROOT);
+    const b = fs.statSync(flipped);
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false;
+  }
+})();
 function realpathOrSelf(p) {
   let cur = path.resolve(p);
   const tail = [];
@@ -24194,9 +24206,10 @@ function assertNotPayloadScoped(candidate, source) {
     if (parent === cur) break;
     cur = parent;
   }
-  const foldedReal = real.toLowerCase();
-  const foldedPayload = PAYLOAD_ROOT.toLowerCase();
-  if (foldedReal === foldedPayload || foldedReal.startsWith(foldedPayload + path.sep)) {
+  const compare = (v) => PAYLOAD_FS_CASE_INSENSITIVE ? v.toLowerCase() : v;
+  const c = compare(real);
+  const pay = compare(PAYLOAD_ROOT);
+  if (c === pay || c.startsWith(pay + path.sep)) {
     throw new PayloadScopedRootError(source, candidate);
   }
 }

@@ -140,6 +140,28 @@ export class PayloadScopedRootError extends Error {
 const PAYLOAD_ROOT: string | null = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
 
 /**
+ * Whether the payload lives on a case-insensitive filesystem, decided by
+ * MEASUREMENT rather than by platform guess: flip the case of the path and see
+ * whether it resolves to the same (device, inode). Only then may the string
+ * backstop fold case — otherwise it would reject legitimate sibling paths that
+ * differ only in case.
+ */
+const PAYLOAD_FS_CASE_INSENSITIVE: boolean = (() => {
+  if (PAYLOAD_ROOT === null) return false;
+  const flipped = PAYLOAD_ROOT.split("")
+    .map((ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()))
+    .join("");
+  if (flipped === PAYLOAD_ROOT) return false; // no cased characters to test with
+  try {
+    const a = fs.statSync(PAYLOAD_ROOT);
+    const b = fs.statSync(flipped);
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false; // flipped path does not resolve ⇒ case-sensitive
+  }
+})();
+
+/**
  * Canonicalize a path that may not exist yet: realpath the nearest EXISTING
  * ancestor and re-append the remainder. A plain realpath on a missing directory
  * throws and would leave symlinked ancestors unresolved.
@@ -194,11 +216,15 @@ function assertNotPayloadScoped(candidate: string, source: string): void {
     if (parent === cur) break;
     cur = parent;
   }
-  // Belt-and-braces for paths that do not exist yet (stat cannot compare them):
-  // case-folded string containment, which is a superset on both fs kinds.
-  const foldedReal = real.toLowerCase();
-  const foldedPayload = PAYLOAD_ROOT.toLowerCase();
-  if (foldedReal === foldedPayload || foldedReal.startsWith(foldedPayload + path.sep)) {
+  // String backstop for paths that do not exist yet (stat cannot compare them).
+  // Case folding is applied ONLY where the filesystem is actually
+  // case-insensitive: on a case-SENSITIVE filesystem "/srv/Guild" and
+  // "/srv/guild/project" are unrelated directories, and folding would reject the
+  // second as payload-scoped — a legitimate root refused.
+  const compare = (v: string): string => (PAYLOAD_FS_CASE_INSENSITIVE ? v.toLowerCase() : v);
+  const c = compare(real);
+  const pay = compare(PAYLOAD_ROOT);
+  if (c === pay || c.startsWith(pay + path.sep)) {
     throw new PayloadScopedRootError(source, candidate);
   }
 }
