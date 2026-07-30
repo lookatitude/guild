@@ -474,9 +474,11 @@ const CLAUDE_AI_CONNECTOR_ENTRY: HostRegistryEntry = {
 // ---------------------------------------------------------------------------
 // New-CLI rows (verified_multi_host L0 ADR §2.3) — full 11-concern chain on the
 // shared wrapped-CLI base. adapter_binding "self"; installability "target";
-// result_adapter false; dispatch_selectable true; provenance "inferred" until an
-// operator-box receipt flips the DERIVED public state (registry provenance is
-// decoupled from runtime support — L0 ADR §5.2; L1 does NOT mutate provenance).
+// result_adapter false; dispatch_selectable true. Provenance is per-row since
+// issue #110: github-copilot + opencode are "verified" (live on-box completions,
+// #104 pass); cursor + rovo-dev remain "inferred". Registry provenance stays
+// decoupled from runtime support — L0 ADR §5.2; L1 does NOT mutate provenance,
+// and an operator-box receipt is still what flips the DERIVED public state.
 // Each bootstraps via the guild-run wrapper (inferredCaps → wrapper_injection: true).
 // ---------------------------------------------------------------------------
 

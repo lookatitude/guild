@@ -160,9 +160,10 @@ reading Guild's source (proves what Guild *intends to run*, not that the host
 accepted it). **U** = unverified, blocker named.
 
 Marking discipline: a row is **V** only where the host binary was present and
-the path was actually exercised. `HOST_REGISTRY_ROWS.provenance` marks 12 of 16
-rows `inferred` (`host-registry-schema.ts`); this table does not claim more than
-the registry does.
+the path was actually exercised. `HOST_REGISTRY_ROWS.provenance` marks 10 of 16
+rows `inferred` (`host-registry-schema.ts` — issue #110 flipped github-copilot
++ opencode to `verified` after the on-box #104 pass); this table does not claim
+more than the registry does.
 
 | Host | Class | Host supports | Guild's install path | Version resolution | Publish mechanism | Update command | Staleness signal | Ev |
 |---|---|---|---|---|---|---|---|---|

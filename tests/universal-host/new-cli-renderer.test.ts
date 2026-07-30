@@ -56,10 +56,15 @@ describe("shared wrapped-CLI renderer base (AC-PKG-3)", () => {
     expect(pkg.host_id).toBe(hostId);
 
     // R1 — renderer ≠ support. Derived from the row's own provenance (audit fix:
-    // this used to be a hardcoded "inferred" literal in the renderer).
+    // this used to be a hardcoded "inferred" literal in the renderer). Since
+    // issue #110, the four rows are no longer uniform: github-copilot + opencode
+    // are live-verified, cursor + rovo-dev remain inferred — assert row-grounding
+    // against each host's OWN value, plus the current expected split.
     expect(pkg.installability).toBe("target");
     expect(pkg._provenance).toBe(HOST_REGISTRY_ROWS[hostId].provenance);
-    expect(pkg._provenance).toBe("inferred");
+    expect(pkg._provenance).toBe(
+      hostId === "github-copilot" || hostId === "opencode" ? "verified" : "inferred"
+    );
 
     // Packaging contract (L2 adapter surface) + 11th concern.
     expect(pkg.agents_skill_root).toBe(".agents/skills/guild");
