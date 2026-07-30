@@ -589,7 +589,7 @@
       "id": "projection:src/modules/documents/workflows/document-receipts.ts",
       "source_path": "src/modules/documents/workflows/document-receipts.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-receipts.ts",
-      "sha256": "bf71b77188cbceab8ae0c10a3809dd5938c2aab4c8c5509ce7f64c28f95dfa3d",
+      "sha256": "a7ed89dbd6581724e5e2675f2daf2f9da9d8248cc7301af08f4a1cafcc75aac5",
       "projection_dependency": true
     },
     {
@@ -613,7 +613,7 @@
       "id": "projection:src/modules/documents/workflows/document-service-boundary.ts",
       "source_path": "src/modules/documents/workflows/document-service-boundary.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-service-boundary.ts",
-      "sha256": "681985441d4bfe0c481cadbf6eddf9c9c2b773d3a94ee0e4b90e68e318523cbf",
+      "sha256": "fb5cc067d7ca52dce35874c4a2c7d317a9df8afd9faea944421e7b19b07db315",
       "projection_dependency": true
     },
     {
@@ -1053,7 +1053,7 @@
       "id": "projection:src/modules/migrations/workflows/wiki-importance.ts",
       "source_path": "src/modules/migrations/workflows/wiki-importance.ts",
       "resource_path": "resources/src/modules/migrations/workflows/wiki-importance.ts",
-      "sha256": "2487edfe07a587f8716bb1f399c8e58d636121acb9932fc904797edd63796503",
+      "sha256": "cbd3a7266b9da6151121906b08f628f2639ecc6d50b5a2f5c52d68acf89b4b1a",
       "projection_dependency": true
     },
     {

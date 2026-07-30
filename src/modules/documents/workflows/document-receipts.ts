@@ -30,6 +30,7 @@
  */
 
 import { DocumentIssue, pushIssue, safeGet, sortIssues } from "./document-safe";
+import * as yaml from "js-yaml";
 import {
   DOCUMENT_ID_PATTERN,
   DOCUMENT_SCHEMA_VERSION,
@@ -47,6 +48,9 @@ export const RECEIPT_PARSE_BOUNDS = Object.freeze({
   max_frontmatter_lines: 200,
   max_json_blocks: 20,
 });
+
+const RECEIPT_FRONTMATTER_BLOCK =
+  /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 /**
  * Closed synonym table for the receipt status vocabulary. This is declared
@@ -71,55 +75,47 @@ export interface ReceiptParseResult {
 // ── Bounded structured readers ───────────────────────────────────────────────
 
 /**
- * Read top-level scalar `key: value` pairs from YAML frontmatter.
- * Deliberately minimal: indented lines and list items belong to nested
- * structures this reader does not model, and are skipped rather than guessed.
+ * Read top-level scalar fields from YAML frontmatter through the shared parser.
  *
- * A repeated key is refused rather than resolved. YAML implementations differ
- * on whether the first or the last wins, and an envelope that reads one way
- * here and another way elsewhere is exactly the ambiguity a trust boundary
- * must not absorb.
+ * A repeated key is refused by js-yaml rather than resolved. YAML
+ * implementations differ on whether the first or the last wins, and an
+ * envelope that reads one way here and another way elsewhere is exactly the
+ * ambiguity a trust boundary must not absorb.
  */
 export function readReceiptFrontmatter(
   text: string
 ): { ok: true; fields: Record<string, string> } | { ok: false; reason: string } {
-  const lines = text.split("\n");
-  if ((lines[0] ?? "").trim() !== "---") {
-    return { ok: false, reason: "receipt does not begin with YAML frontmatter" };
+  const match = RECEIPT_FRONTMATTER_BLOCK.exec(text);
+  if (match === null) {
+    return { ok: false, reason: "receipt frontmatter is missing or unterminated" };
   }
-  const limit = Math.min(lines.length, RECEIPT_PARSE_BOUNDS.max_frontmatter_lines);
-  let end = -1;
-  for (let index = 1; index < limit; index += 1) {
-    if ((lines[index] ?? "").trim() === "---") {
-      end = index;
-      break;
-    }
+  const frontmatter = match[1] ?? "";
+  if (frontmatter.split("\n").length + 2 > RECEIPT_PARSE_BOUNDS.max_frontmatter_lines) {
+    return { ok: false, reason: "frontmatter exceeds the line bound" };
   }
-  if (end === -1) return { ok: false, reason: "frontmatter is unterminated" };
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(frontmatter, { schema: yaml.JSON_SCHEMA });
+  } catch {
+    return { ok: false, reason: "frontmatter is not a valid YAML mapping" };
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, reason: "frontmatter is not a valid YAML mapping" };
+  }
 
   // Null-prototype: a frontmatter key is untrusted input, so `__proto__` and
   // friends must land as ordinary own properties and never as inheritance.
   const fields: Record<string, string> = Object.create(null);
-  for (let index = 1; index < end; index += 1) {
-    const line = lines[index] ?? "";
-    if (line.trim() === "" || line.startsWith(" ") || line.startsWith("\t") || line.startsWith("-")) {
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (
+      typeof value !== "string" &&
+      typeof value !== "number" &&
+      typeof value !== "boolean"
+    ) {
       continue;
     }
-    const separator = line.indexOf(":");
-    if (separator <= 0) continue;
-    const key = line.slice(0, separator).trim();
-    let value = line.slice(separator + 1).trim();
-    if (value === "") continue;
-    if (
-      (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
-      (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (Object.prototype.hasOwnProperty.call(fields, key)) {
-      return { ok: false, reason: `frontmatter declares ${key} more than once` };
-    }
-    fields[key] = value;
+    const scalar = String(value);
+    if (scalar !== "") fields[key] = scalar;
   }
   return { ok: true, fields };
 }

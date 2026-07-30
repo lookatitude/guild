@@ -45,6 +45,7 @@
       "/__tests__/fixtures/"
     ],
     "moduleNameMapper": {
+      "^js-yaml$": "<rootDir>/node_modules/js-yaml",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "transform": {

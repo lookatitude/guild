@@ -1123,6 +1123,487 @@ var init_provider_detect = __esm({
   }
 });
 
+// ../src/modules/host-runtime/workflows/host-adapter-contract.ts
+var init_host_adapter_contract = __esm({
+  "../src/modules/host-runtime/workflows/host-adapter-contract.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
+function deepFreeze(value) {
+  if (value === null || typeof value !== "object") return value;
+  if (Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const key of Object.keys(value)) {
+    deepFreeze(value[key]);
+  }
+  return value;
+}
+function canonicalJson(value) {
+  if (value === null) return "null";
+  const kind = typeof value;
+  if (kind === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
+  if (kind === "boolean" || kind === "string") return JSON.stringify(value);
+  if (kind === "undefined" || kind === "function" || kind === "symbol") return "null";
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  const record = value;
+  const parts = [];
+  for (const key of Object.keys(record).sort()) {
+    if (record[key] === void 0) continue;
+    parts.push(`${JSON.stringify(key)}:${canonicalJson(record[key])}`);
+  }
+  return `{${parts.join(",")}}`;
+}
+function snapshotHash(hostId, hostVersion, facts) {
+  const digest = (0, import_node_crypto.createHash)("sha256").update(
+    canonicalJson({
+      schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
+      host_id: hostId,
+      host_version: hostVersion,
+      capabilities: facts.map((fact) => ({
+        capability_id: fact.capability_id,
+        supported: fact.supported,
+        authenticated: fact.authenticated
+      }))
+    })
+  ).digest("hex");
+  return `sha256:${digest}`;
+}
+function authenticatedFor(entry, supported, observation) {
+  if (!supported) return false;
+  if (observation === "unauthenticated") return false;
+  if (!entry.detection.requires_auth) return true;
+  return observation === "authenticated";
+}
+function buildFacts(entry, observation) {
+  return HOST_CAPABILITY_IDS.map((capabilityId) => {
+    const supported = CAPABILITY_READERS[capabilityId](entry);
+    return {
+      capability_id: capabilityId,
+      supported,
+      authenticated: authenticatedFor(entry, supported, observation)
+    };
+  });
+}
+function unsupportedResult(request) {
+  return deepFreeze({
+    schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
+    disposition: "unsupported",
+    reason_code: "capability_absent",
+    host: request.host,
+    host_id: null,
+    run_id: request.runId,
+    snapshot: null,
+    unsupported_capability_ids: [...HOST_CAPABILITY_IDS],
+    assertions: [
+      "an unrecognized host has no capability truth to snapshot",
+      "no snapshot is minted and no capability is assumed present",
+      "no fallback is implied and no side effect occurs"
+    ]
+  });
+}
+function createHostCapabilitySnapshotStore() {
+  const minted = /* @__PURE__ */ new Map();
+  function keyFor(runId, hostId) {
+    return `${runId}\0${hostId}`;
+  }
+  return {
+    capture(request) {
+      const hostId = normalizeHostId(String(request.host ?? ""));
+      const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
+      if (!hostId || !entry) return unsupportedResult(request);
+      const hostVersion = request.hostVersion ?? UNKNOWN_HOST_VERSION;
+      const observation = request.authentication ?? "not_observed";
+      const inputHash = canonicalJson({ host_id: hostId, host_version: hostVersion, authentication: observation });
+      const key = keyFor(request.runId, hostId);
+      const existing = minted.get(key);
+      if (existing !== void 0) {
+        if (existing.inputHash === inputHash) return existing.result;
+        return deepFreeze({
+          schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
+          disposition: "refused",
+          reason_code: "capability_snapshot_mismatch",
+          host: request.host,
+          host_id: hostId,
+          run_id: request.runId,
+          snapshot: null,
+          unsupported_capability_ids: [],
+          assertions: [
+            "exactly one capability snapshot binds a run",
+            "the bound snapshot is returned unchanged and is not replaced",
+            "no second snapshot is minted and no side effect occurs"
+          ]
+        });
+      }
+      const facts = buildFacts(entry, observation);
+      const snapshot = deepFreeze({
+        schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
+        snapshot_hash: snapshotHash(hostId, hostVersion, facts),
+        host_id: hostId,
+        host_version: hostVersion,
+        capabilities: facts
+      });
+      const result = deepFreeze({
+        schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
+        disposition: "succeeded",
+        reason_code: null,
+        host: request.host,
+        host_id: hostId,
+        run_id: request.runId,
+        snapshot,
+        unsupported_capability_ids: facts.filter((fact) => !fact.supported).map((fact) => fact.capability_id),
+        assertions: [
+          "every declared capability id carries an explicit fact",
+          "an unsupported capability is reported, never defaulted to supported",
+          "the snapshot is immutable and bound to exactly one host and run"
+        ]
+      });
+      minted.set(key, { result, inputHash });
+      return result;
+    },
+    release(runId) {
+      const prefix = `${runId}\0`;
+      const doomed = [];
+      minted.forEach((_stored, key) => {
+        if (key.startsWith(prefix)) doomed.push(key);
+      });
+      doomed.forEach((key) => minted.delete(key));
+    },
+    size() {
+      return minted.size;
+    }
+  };
+}
+var import_node_crypto, HOST_CAPABILITY_SNAPSHOT_SCHEMA, HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA, HOST_CAPABILITY_IDS, CAPABILITY_READERS, UNKNOWN_HOST_VERSION, DEFAULT_STORE;
+var init_host_capability_snapshot = __esm({
+  "../src/modules/host-runtime/workflows/host-capability-snapshot.ts"() {
+    import_node_crypto = require("node:crypto");
+    init_host_id_namespace();
+    init_host_registry_schema();
+    HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
+    HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
+    HOST_CAPABILITY_IDS = [
+      "host.artifacts.direct_filesystem",
+      "host.artifacts.file_bus",
+      "host.bootstrap.context_injection",
+      "host.bootstrap.skill_autoload",
+      "host.bootstrap.wrapper_injection",
+      "host.commands.command_files",
+      "host.commands.slash_commands",
+      "host.dispatch.selectable",
+      "host.hooks.post_tool_use",
+      "host.hooks.pre_compact",
+      "host.hooks.pre_tool_use",
+      "host.hooks.session_start",
+      "host.hooks.stop",
+      "host.hooks.subagent_stop",
+      "host.hooks.task_completed",
+      "host.hooks.task_created",
+      "host.hooks.teammate_idle",
+      "host.hooks.user_prompt_submit",
+      "host.interaction.native_questions",
+      "host.mcp.http",
+      "host.mcp.stdio",
+      "host.models.tier_map",
+      "host.package.install",
+      "host.package.render",
+      "host.package.update",
+      "host.permissions.ask",
+      "host.permissions.deny",
+      "host.result_adapter",
+      "host.sessions.resume_by_id",
+      "host.structured_output.native_json"
+    ];
+    CAPABILITY_READERS = {
+      "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
+      "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
+      "host.bootstrap.context_injection": (entry) => {
+        const injection = entry.capabilities.bootstrap.context_injection;
+        return typeof injection === "string" && injection.length > 0 && injection !== "none";
+      },
+      "host.bootstrap.skill_autoload": (entry) => entry.capabilities.bootstrap.skill_autoload,
+      "host.bootstrap.wrapper_injection": (entry) => entry.capabilities.bootstrap.wrapper_injection,
+      "host.commands.command_files": (entry) => entry.capabilities.commands.command_files !== "none",
+      "host.commands.slash_commands": (entry) => entry.capabilities.commands.slash_commands,
+      "host.dispatch.selectable": (entry) => entry.dispatch_selectable,
+      "host.hooks.post_tool_use": (entry) => entry.capabilities.hooks.post_tool_use,
+      "host.hooks.pre_compact": (entry) => entry.capabilities.hooks.pre_compact,
+      "host.hooks.pre_tool_use": (entry) => entry.capabilities.hooks.pre_tool_use,
+      "host.hooks.session_start": (entry) => entry.capabilities.hooks.session_start,
+      "host.hooks.stop": (entry) => entry.capabilities.hooks.stop,
+      "host.hooks.subagent_stop": (entry) => entry.capabilities.hooks.subagent_stop,
+      "host.hooks.task_completed": (entry) => entry.capabilities.hooks.task_completed,
+      "host.hooks.task_created": (entry) => entry.capabilities.hooks.task_created,
+      "host.hooks.teammate_idle": (entry) => entry.capabilities.hooks.teammate_idle,
+      "host.hooks.user_prompt_submit": (entry) => entry.capabilities.hooks.user_prompt_submit,
+      "host.interaction.native_questions": (entry) => entry.capabilities.interaction.native_questions,
+      "host.mcp.http": (entry) => entry.capabilities.mcp.http,
+      "host.mcp.stdio": (entry) => entry.capabilities.mcp.stdio,
+      "host.models.tier_map": (entry) => {
+        const models = entry.capabilities.models;
+        return Boolean(models.cheap.model || models.mid.model || models.powerful.model);
+      },
+      // `installability` is the REGISTRY column, and it is the one that decides
+      // whether an install is proven. A renderer that exists but was never installed
+      // is `target`, which is render-capable and install-INCAPABLE — collapsing the
+      // two is precisely the optimistic default this snapshot exists to prevent.
+      "host.package.install": (entry) => entry.installability === "native" && entry.capabilities.package.installable,
+      "host.package.render": (entry) => entry.installability !== "none",
+      "host.package.update": (entry) => entry.capabilities.package.update.apply !== "none",
+      "host.permissions.ask": (entry) => entry.capabilities.permissions.ask,
+      "host.permissions.deny": (entry) => entry.capabilities.permissions.deny,
+      "host.result_adapter": (entry) => entry.result_adapter,
+      "host.sessions.resume_by_id": (entry) => entry.capabilities.sessions.resume_by_id,
+      "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
+    };
+    UNKNOWN_HOST_VERSION = "unknown";
+    DEFAULT_STORE = createHostCapabilitySnapshotStore();
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-event-normalizer.ts
+function advertisesNativeHooks(entry) {
+  return Object.values(entry.capabilities.hooks).some(Boolean);
+}
+function hostEventSource(host) {
+  const hostId = normalizeHostId(String(host ?? ""));
+  const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
+  if (!hostId || !entry) return NO_SOURCE;
+  const familyBindings = NATIVE_BINDINGS_BY_FAMILY[entry.family];
+  if (advertisesNativeHooks(entry) && familyBindings !== void 0) {
+    return Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: hostId,
+      kind: "native_hooks",
+      bindings: familyBindings
+    });
+  }
+  if (entry.surface_kind === "app") {
+    return Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: hostId,
+      kind: "none",
+      bindings: Object.freeze([])
+    });
+  }
+  if (entry.surface_kind === "file" || entry.adapter_binding === "agents-file") {
+    return Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: hostId,
+      kind: "instruction_file",
+      bindings: Object.freeze([])
+    });
+  }
+  return Object.freeze({
+    schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+    host_id: hostId,
+    kind: "wrapper",
+    bindings: WRAPPER_NATIVE_EVENT_BINDINGS
+  });
+}
+var HOST_EVENT_NORMALIZATION_SCHEMA, CLAUDE_NATIVE_EVENT_BINDINGS, WRAPPER_NATIVE_EVENT_BINDINGS, NATIVE_BINDINGS_BY_FAMILY, NO_SOURCE;
+var init_host_event_normalizer = __esm({
+  "../src/modules/host-runtime/workflows/host-event-normalizer.ts"() {
+    init_host_id_namespace();
+    init_host_registry_schema();
+    HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
+    CLAUDE_NATIVE_EVENT_BINDINGS = Object.freeze([
+      Object.freeze({
+        native_event: "PostToolUse",
+        normalized_event: "tool.after",
+        rationale: "fires after a tool call completes"
+      }),
+      Object.freeze({
+        native_event: "PreCompact",
+        normalized_event: "context.compact",
+        rationale: "fires before the host compacts its context window"
+      }),
+      Object.freeze({
+        native_event: "PreToolUse",
+        normalized_event: "tool.before",
+        rationale: "fires before a tool call is admitted"
+      }),
+      Object.freeze({
+        native_event: "SessionStart",
+        normalized_event: "session.start",
+        rationale: "fires once when the host session opens"
+      }),
+      Object.freeze({
+        native_event: "Stop",
+        normalized_event: "run.stop",
+        rationale: "Guild's state model is run-centric, so the host's session stop is the run stop the core names"
+      }),
+      Object.freeze({
+        native_event: "SubagentStop",
+        normalized_event: null,
+        rationale: "a subagent finishing is not a task collection: the normative vocabulary has no subagent lifecycle name, and reusing the task-collection name would report a collection that never happened. Declared unmapped rather than approximated."
+      }),
+      Object.freeze({
+        native_event: "TaskCompleted",
+        normalized_event: "task.collect",
+        rationale: "the shipped task-completion producer the normative vocabulary was chosen to keep distinct"
+      }),
+      Object.freeze({
+        native_event: "TaskCreated",
+        normalized_event: "task.dispatch",
+        rationale: "the shipped task-creation producer the normative vocabulary was chosen to keep distinct"
+      }),
+      Object.freeze({
+        native_event: "TeammateIdle",
+        normalized_event: null,
+        rationale: "teammate idleness is a scheduling signal, not a lifecycle transition; the normative vocabulary declares no image for it. Declared unmapped rather than approximated."
+      }),
+      Object.freeze({
+        native_event: "UserPromptSubmit",
+        normalized_event: "prompt.submit",
+        rationale: "fires when the operator submits a prompt"
+      })
+    ]);
+    WRAPPER_NATIVE_EVENT_BINDINGS = Object.freeze([
+      Object.freeze({
+        native_event: "guild.wrapper.context_compact",
+        normalized_event: "context.compact",
+        rationale: "the wrapper reports a context reduction it performed on the host's behalf"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.prompt_submit",
+        normalized_event: "prompt.submit",
+        rationale: "the wrapper hands the host an operator prompt"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.run_resume",
+        normalized_event: "run.resume",
+        rationale: "the wrapper re-enters an existing run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.run_stop",
+        normalized_event: "run.stop",
+        rationale: "the wrapper observes the host process closing the run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.session_start",
+        normalized_event: "session.start",
+        rationale: "the wrapper opens the host process for this run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.task_collect",
+        normalized_event: "task.collect",
+        rationale: "the wrapper collects a finished task run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.task_dispatch",
+        normalized_event: "task.dispatch",
+        rationale: "the wrapper dispatches a task run onto the host"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.tool_after",
+        normalized_event: "tool.after",
+        rationale: "the wrapper observes a completed tool call"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.tool_before",
+        normalized_event: "tool.before",
+        rationale: "the wrapper observes a tool call about to run"
+      })
+    ]);
+    NATIVE_BINDINGS_BY_FAMILY = Object.freeze({
+      claude: CLAUDE_NATIVE_EVENT_BINDINGS
+    });
+    NO_SOURCE = Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: null,
+      kind: "none",
+      bindings: Object.freeze([])
+    });
+  }
+});
+
+// ../src/modules/host-runtime/workflows/host-adapter-boundary.ts
+function entryPointFor(hostId) {
+  const row = HOST_REGISTRY_ROWS[hostId];
+  const subcommand = row.detection.subcommand ?? null;
+  const kind = row.surface_kind === "app" ? "app_surface" : row.surface_kind === "file" || row.adapter_binding === "agents-file" ? "instruction_file" : subcommand ? "cli_subcommand" : "cli_binary";
+  return Object.freeze({
+    schema_version: HOST_ENTRY_POINT_SCHEMA,
+    host_id: hostId,
+    kind,
+    surface_kind: row.surface_kind,
+    adapter_binding: row.adapter_binding,
+    bin: row.detection.bin,
+    subcommand,
+    instruction_file: row.detection.marker?.agents_placement ?? (kind === "instruction_file" ? DEFAULT_INSTRUCTION_FILE : null),
+    requires_auth: row.detection.requires_auth,
+    auth_probe: row.detection.auth_probe,
+    event_source: hostEventSource(hostId).kind,
+    dispatch_selectable: row.dispatch_selectable
+  });
+}
+var HOST_ADAPTER_BOUNDARY_SCHEMA, HOST_ENTRY_POINT_SCHEMA, HOST_ADAPTER_OWNERSHIP_SCHEMA, HOST_ADAPTER_REASON_CODES, HOST_ADAPTER_OWNED_CONCERNS, HOST_ADAPTER_NOT_OWNED_CONCERNS, CONCERN_OWNERS, OWNERSHIP, DEFAULT_INSTRUCTION_FILE, HOST_ENTRY_POINTS, BOUNDARY_STORE;
+var init_host_adapter_boundary = __esm({
+  "../src/modules/host-runtime/workflows/host-adapter-boundary.ts"() {
+    init_host_adapter_contract();
+    init_host_id_namespace();
+    init_host_registry_schema();
+    init_host_capability_snapshot();
+    init_host_event_normalizer();
+    HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
+    HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
+    HOST_ADAPTER_OWNERSHIP_SCHEMA = "guild.host_adapter_ownership.v1";
+    HOST_ADAPTER_REASON_CODES = Object.freeze([
+      "boundary_membership_mismatch",
+      "capability_absent",
+      "capability_snapshot_mismatch",
+      "execution_failed",
+      "unknown_event"
+    ]);
+    HOST_ADAPTER_OWNED_CONCERNS = [
+      "host_identity_resolution",
+      "host_entry_point_binding",
+      "host_capability_snapshot",
+      "host_native_event_normalization"
+    ];
+    HOST_ADAPTER_NOT_OWNED_CONCERNS = [
+      "lifecycle_state",
+      "gate_policy",
+      "artifact_semantics",
+      "document_rendering",
+      "transport_execution"
+    ];
+    CONCERN_OWNERS = Object.freeze({
+      host_identity_resolution: "host-adapters",
+      host_entry_point_binding: "host-adapters",
+      host_capability_snapshot: "host-adapters",
+      host_native_event_normalization: "host-adapters",
+      lifecycle_state: "host-neutral-core",
+      gate_policy: "host-neutral-core",
+      artifact_semantics: "artifact-document-services",
+      document_rendering: "artifact-document-services",
+      transport_execution: "execution-transports"
+    });
+    OWNERSHIP = Object.freeze({
+      schema_version: HOST_ADAPTER_OWNERSHIP_SCHEMA,
+      boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
+      owned: Object.freeze([...HOST_ADAPTER_OWNED_CONCERNS]),
+      not_owned: Object.freeze([...HOST_ADAPTER_NOT_OWNED_CONCERNS]),
+      owners: CONCERN_OWNERS
+    });
+    DEFAULT_INSTRUCTION_FILE = "AGENTS.md";
+    HOST_ENTRY_POINTS = Object.freeze(
+      HOST_IDS.reduce(
+        (accumulator, hostId) => {
+          accumulator[hostId] = entryPointFor(hostId);
+          return accumulator;
+        },
+        {}
+      )
+    );
+    BOUNDARY_STORE = createHostCapabilitySnapshotStore();
+  }
+});
+
 // ../src/modules/host-runtime/index.ts
 var init_host_runtime = __esm({
   "../src/modules/host-runtime/index.ts"() {
@@ -1132,6 +1613,10 @@ var init_host_runtime = __esm({
     init_host_registry();
     init_host_registry_schema();
     init_provider_detect();
+    init_host_adapter_contract();
+    init_host_adapter_boundary();
+    init_host_capability_snapshot();
+    init_host_event_normalizer();
   }
 });
 
@@ -1143,17 +1628,50 @@ var init_safe_object = __esm({
   }
 });
 
-// ../src/modules/security/workflows/share-set.ts
-var init_share_set = __esm({
-  "../src/modules/security/workflows/share-set.ts"() {
+// ../src/modules/security/workflows/injection-guard.ts
+var init_injection_guard = __esm({
+  "../src/modules/security/workflows/injection-guard.ts"() {
   }
 });
 
-// ../src/modules/security/index.ts
-var init_security = __esm({
-  "../src/modules/security/index.ts"() {
-    init_safe_object();
-    init_share_set();
+// ../src/modules/security/workflows/redact-log.ts
+var FIELD_SIZE_CAP_BYTES;
+var init_redact_log = __esm({
+  "../src/modules/security/workflows/redact-log.ts"() {
+    FIELD_SIZE_CAP_BYTES = 4 * 1024;
+  }
+});
+
+// ../src/modules/security/workflows/secrets.ts
+var init_secrets = __esm({
+  "../src/modules/security/workflows/secrets.ts"() {
+    init_redact_log();
+  }
+});
+
+// ../src/modules/state/workflows/plugin-install-guard.ts
+var init_plugin_install_guard = __esm({
+  "../src/modules/state/workflows/plugin-install-guard.ts"() {
+  }
+});
+
+// ../src/modules/state/workflows/atomic-write.ts
+var init_atomic_write = __esm({
+  "../src/modules/state/workflows/atomic-write.ts"() {
+    init_plugin_install_guard();
+  }
+});
+
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var init_dependency_graph_schema = __esm({
+  "../src/modules/state/workflows/dependency-graph-schema.ts"() {
+  }
+});
+
+// ../src/modules/state/workflows/dependency-graph-reader.ts
+var init_dependency_graph_reader = __esm({
+  "../src/modules/state/workflows/dependency-graph-reader.ts"() {
+    init_dependency_graph_schema();
   }
 });
 
@@ -4257,12 +4775,401 @@ var init_kernel = __esm({
   }
 });
 
+// ../src/modules/state/workflows/frontmatter.ts
+var init_frontmatter = __esm({
+  "../src/modules/state/workflows/frontmatter.ts"() {
+    init_kernel();
+  }
+});
+
+// ../src/modules/state/workflows/guild-root.ts
+var init_guild_root = __esm({
+  "../src/modules/state/workflows/guild-root.ts"() {
+  }
+});
+
+// ../src/modules/state/workflows/guild-discovery.ts
+var init_guild_discovery = __esm({
+  "../src/modules/state/workflows/guild-discovery.ts"() {
+    init_guild_root();
+  }
+});
+
+// ../src/modules/migrations/workflows/index-migrate.ts
+function openDatabase(dbPath) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
+}
+function resolveGuildRoot3(cwd) {
+  try {
+    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const abs = path3.isAbsolute(raw) ? raw : path3.resolve(cwd, raw);
+    const root = path3.dirname(abs);
+    if (fs2.existsSync(root)) return root;
+  } catch {
+  }
+  return path3.resolve(cwd);
+}
+function runMigrations(dbPath) {
+  let db;
+  let fromVersion = 0;
+  try {
+    fs2.mkdirSync(path3.dirname(dbPath), { recursive: true });
+    db = openDatabase(dbPath);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA synchronous = NORMAL");
+    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
+    for (const mig of MIGRATIONS) {
+      if (mig.version <= fromVersion) continue;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        mig.up(db);
+        db.exec(`PRAGMA user_version = ${mig.version}`);
+        db.exec("COMMIT");
+        fromVersion = mig.version;
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+        }
+        for (const tbl of mig.tables) {
+          try {
+            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
+          } catch {
+          }
+        }
+        db.close();
+        return {
+          ok: false,
+          fromVersion,
+          toVersion: fromVersion,
+          dbPath,
+          message: `migration to v${mig.version} failed: ${err.message}`
+        };
+      }
+    }
+    db.close();
+    return {
+      ok: true,
+      fromVersion,
+      toVersion: CURRENT_SCHEMA_VERSION,
+      dbPath
+    };
+  } catch (err) {
+    try {
+      db?.close();
+    } catch {
+    }
+    return {
+      ok: false,
+      fromVersion,
+      toVersion: fromVersion,
+      dbPath,
+      message: `migration runner error: ${err.message}`
+    };
+  }
+}
+function runIndexMigrateCli() {
+  const argv = process.argv.slice(2);
+  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
+  let dbPath;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
+  }
+  if (!dbPath) {
+    const guildRoot = resolveGuildRoot3(cwd);
+    dbPath = path3.join(guildRoot, ".guild", "index.sqlite");
+  }
+  const result = runMigrations(dbPath);
+  if (result.ok) {
+    process.stdout.write(
+      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
+`
+    );
+  } else {
+    process.stderr.write(`[index-migrate] WARN: ${result.message}
+`);
+    process.exit(1);
+  }
+}
+var import_node_child_process, fs2, path3, CURRENT_SCHEMA_VERSION, MIGRATIONS;
+var init_index_migrate = __esm({
+  "../src/modules/migrations/workflows/index-migrate.ts"() {
+    import_node_child_process = require("node:child_process");
+    fs2 = __toESM(require("node:fs"));
+    path3 = __toESM(require("node:path"));
+    CURRENT_SCHEMA_VERSION = 3;
+    MIGRATIONS = [
+      // ── v1: core tables ───────────────────────────────────────────────────────
+      {
+        version: 1,
+        tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+        up(db) {
+          db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+          db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+          try {
+            db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+          } catch {
+            db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+          }
+        }
+      },
+      // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+      //
+      // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+      // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+      // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+      //
+      // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+      // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+      // invalidate function (ensureFederationWikiCache) was removed in
+      // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+      // schema migration is retained (harmless empty table) since altering the
+      // migration ladder is a separate, out-of-scope decision.
+      {
+        version: 2,
+        tables: ["federation_wiki_cache"],
+        up(db) {
+          db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+          db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+        }
+      },
+      // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+      //
+      // Two OPTIONAL acceleration tables projected from the canonical, file-first
+      // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+      // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+      // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+      // remains the source of truth that returns IDENTICAL answers.
+      //
+      //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+      //                    indexed on source AND target so the call-graph BFS
+      //                    (kgTrace / kgDeadCode) is fetched without parsing the
+      //                    whole JSON graph.
+      //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+      //                    node, so identifier search (`process_order` →
+      //                    `processOrder`) is an index lookup, not a full node scan.
+      //                    Tokens are PRE-SPLIT with the shared identifier-aware
+      //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+      //                    document and query side, so the FTS built-in tokenizer
+      //                    only has to whitespace-split — the camel/snake behaviour
+      //                    lives in the (deterministic, model-free) projection feed.
+      {
+        version: 3,
+        tables: ["kg_calls", "kg_symbols_fts"],
+        up(db) {
+          db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+          db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+          try {
+            db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+          } catch {
+            db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+          }
+        }
+      }
+    ];
+    if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+      runIndexMigrateCli();
+    }
+  }
+});
+
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var init_wiki_importance = __esm({
+  "../src/modules/migrations/workflows/wiki-importance.ts"() {
+    init_state();
+  }
+});
+
+// ../src/modules/migrations/index.ts
+var init_migrations = __esm({
+  "../src/modules/migrations/index.ts"() {
+    init_index_migrate();
+    init_wiki_importance();
+  }
+});
+
+// ../src/modules/state/workflows/index-cache.ts
+var init_index_cache = __esm({
+  "../src/modules/state/workflows/index-cache.ts"() {
+    init_migrations();
+    init_kernel();
+  }
+});
+
+// ../src/modules/state/index.ts
+var init_state = __esm({
+  "../src/modules/state/index.ts"() {
+    init_atomic_write();
+    init_dependency_graph_reader();
+    init_dependency_graph_schema();
+    init_frontmatter();
+    init_guild_discovery();
+    init_guild_root();
+    init_index_cache();
+  }
+});
+
+// ../src/modules/security/workflows/config.ts
+var init_config = __esm({
+  "../src/modules/security/workflows/config.ts"() {
+    init_state();
+  }
+});
+
+// ../src/modules/security/workflows/events.ts
+var KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET;
+var init_events = __esm({
+  "../src/modules/security/workflows/events.ts"() {
+    init_state();
+    init_redact_log();
+    KNOWN_GUILD_HOST_KINDS = [
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector"
+    ];
+    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+  }
+});
+
+// ../src/modules/security/workflows/scrubbed-write.ts
+var init_scrubbed_write = __esm({
+  "../src/modules/security/workflows/scrubbed-write.ts"() {
+    init_secrets();
+    init_config();
+    init_events();
+  }
+});
+
+// ../src/modules/security/workflows/share-set.ts
+var init_share_set = __esm({
+  "../src/modules/security/workflows/share-set.ts"() {
+  }
+});
+
+// ../src/modules/security/index.ts
+var init_security = __esm({
+  "../src/modules/security/index.ts"() {
+    init_safe_object();
+    init_injection_guard();
+    init_scrubbed_write();
+    init_redact_log();
+    init_share_set();
+  }
+});
+
 // ../src/modules/config/workflows/workspace-manifest.ts
 function parseWorkspaceManifest(manifestPath) {
   let raw;
   try {
-    if (!fs2.existsSync(manifestPath)) return { status: "absent" };
-    raw = fs2.readFileSync(manifestPath, "utf8");
+    if (!fs3.existsSync(manifestPath)) return { status: "absent" };
+    raw = fs3.readFileSync(manifestPath, "utf8");
   } catch (e) {
     return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
   }
@@ -4278,10 +5185,10 @@ function parseWorkspaceManifest(manifestPath) {
   return { status: "not_workspace" };
 }
 function discoverWorkspace(startDir) {
-  let current = path3.dirname(startDir);
-  const fsRoot = path3.parse(current).root;
+  let current = path4.dirname(startDir);
+  const fsRoot = path4.parse(current).root;
   while (current !== fsRoot) {
-    const manifestPath = path3.join(current, ".guild", "workspace.json");
+    const manifestPath = path4.join(current, ".guild", "workspace.json");
     const parsed = parseWorkspaceManifest(manifestPath);
     if (parsed.status === "workspace") {
       return { rootDir: current, manifest: parsed.manifest };
@@ -4289,17 +5196,17 @@ function discoverWorkspace(startDir) {
     if (parsed.status === "not_workspace") {
       return null;
     }
-    const parent = path3.dirname(current);
+    const parent = path4.dirname(current);
     if (parent === current) break;
     current = parent;
   }
   return null;
 }
-var fs2, path3;
+var fs3, path4;
 var init_workspace_manifest = __esm({
   "../src/modules/config/workflows/workspace-manifest.ts"() {
-    fs2 = __toESM(require("fs"));
-    path3 = __toESM(require("path"));
+    fs3 = __toESM(require("fs"));
+    path4 = __toESM(require("path"));
   }
 });
 
@@ -4393,21 +5300,21 @@ function rigorProfile(rigor) {
   }
 }
 function parseSettingsFile(filePath) {
-  if (!fs3.existsSync(filePath)) return {};
+  if (!fs4.existsSync(filePath)) return {};
   let parsed;
   try {
-    parsed = JSON.parse(fs3.readFileSync(filePath, "utf8"));
+    parsed = JSON.parse(fs4.readFileSync(filePath, "utf8"));
   } catch {
     return {};
   }
   return parseSettingsFile_fromParsed(parsed);
 }
 function parseLocalFile(guildDir) {
-  const localPath = path4.join(guildDir, "settings.local.json");
-  if (!fs3.existsSync(localPath)) return {};
+  const localPath = path5.join(guildDir, "settings.local.json");
+  if (!fs4.existsSync(localPath)) return {};
   let localParsed;
   try {
-    localParsed = JSON.parse(fs3.readFileSync(localPath, "utf8"));
+    localParsed = JSON.parse(fs4.readFileSync(localPath, "utf8"));
   } catch {
     return {};
   }
@@ -4596,22 +5503,22 @@ function isValidInitiativeId(id) {
   return true;
 }
 function isContainedIn(candidatePath, baseDir) {
-  const resolved = path4.resolve(candidatePath);
-  const resolvedBase = path4.resolve(baseDir);
-  return resolved.startsWith(resolvedBase + path4.sep);
+  const resolved = path5.resolve(candidatePath);
+  const resolvedBase = path5.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path5.sep);
 }
 function initiativeIsWorkspaceScoped(workspaceRoot, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = path4.join(
+    const registryPath = path5.join(
       workspaceRoot,
       ".guild",
       "indexes",
       "initiatives-registry.yaml"
     );
-    if (fs3.existsSync(registryPath)) {
+    if (fs4.existsSync(registryPath)) {
       try {
-        const raw = fs3.readFileSync(registryPath, "utf8");
+        const raw = fs4.readFileSync(registryPath, "utf8");
         const parsed = yaml.load(raw);
         if (isPlainObject2(parsed)) {
           const list = parsed["initiatives"];
@@ -4629,33 +5536,33 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
         return false;
       }
     }
-    const initiativesBase = path4.join(workspaceRoot, ".guild", "initiatives");
-    const activePath = path4.join(
+    const initiativesBase = path5.join(workspaceRoot, ".guild", "initiatives");
+    const activePath = path5.join(
       initiativesBase,
       "active",
       id,
       "initiative.yaml"
     );
-    const archivedPath = path4.join(
+    const archivedPath = path5.join(
       initiativesBase,
       "archived",
       id,
       "initiative.yaml"
     );
-    const activeBase = path4.join(initiativesBase, "active");
-    const archivedBase = path4.join(initiativesBase, "archived");
+    const activeBase = path5.join(initiativesBase, "active");
+    const archivedBase = path5.join(initiativesBase, "archived");
     if (!isContainedIn(activePath, activeBase) && !isContainedIn(archivedPath, archivedBase)) {
       return false;
     }
     let yamlPath = null;
-    if (isContainedIn(activePath, activeBase) && fs3.existsSync(activePath)) {
+    if (isContainedIn(activePath, activeBase) && fs4.existsSync(activePath)) {
       yamlPath = activePath;
-    } else if (isContainedIn(archivedPath, archivedBase) && fs3.existsSync(archivedPath)) {
+    } else if (isContainedIn(archivedPath, archivedBase) && fs4.existsSync(archivedPath)) {
       yamlPath = archivedPath;
     }
     if (yamlPath !== null) {
       try {
-        const raw = fs3.readFileSync(yamlPath, "utf8");
+        const raw = fs4.readFileSync(yamlPath, "utf8");
         const parsed = yaml.load(raw);
         if (isPlainObject2(parsed)) {
           const doc = parsed["initiative"];
@@ -4686,8 +5593,8 @@ function resolveSettings(opts) {
   let wsSettings = {};
   let wsLocalSettings = {};
   if (ws !== null) {
-    const wsGuildDir = path4.join(ws.rootDir, ".guild");
-    const rawWsSettings = parseSettingsFile(path4.join(wsGuildDir, "settings.json"));
+    const wsGuildDir = path5.join(ws.rootDir, ".guild");
+    const rawWsSettings = parseSettingsFile(path5.join(wsGuildDir, "settings.json"));
     const wsInheritable = {};
     for (const [k, v] of Object.entries(rawWsSettings)) {
       const key = k;
@@ -4723,8 +5630,8 @@ function resolveSettings(opts) {
     } catch {
     }
   }
-  const projectGuildDir = path4.join(cwd, ".guild");
-  const projectSettings = parseSettingsFile(path4.join(projectGuildDir, "settings.json"));
+  const projectGuildDir = path5.join(cwd, ".guild");
+  const projectSettings = parseSettingsFile(path5.join(projectGuildDir, "settings.json"));
   for (const key of Object.keys(projectSettings)) {
     if (key === "workspace") {
       sources["workspace.mode"] = "project";
@@ -4854,11 +5761,11 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs3, path4, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
+var fs4, path5, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
 var init_settings_reader = __esm({
   "../src/modules/config/workflows/settings-reader.ts"() {
-    fs3 = __toESM(require("fs"));
-    path4 = __toESM(require("path"));
+    fs4 = __toESM(require("fs"));
+    path5 = __toESM(require("path"));
     init_host_runtime();
     init_host_runtime();
     init_host_runtime();
@@ -5175,7 +6082,7 @@ var init_guild_trace_events = __esm({
 
 // ../src/modules/telemetry/workflows/guild-trace-emit.ts
 function liveLogPath(runDir) {
-  return path5.join(runDir, "logs", "v1.4-events.jsonl");
+  return path6.join(runDir, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir) {
   if (!runDir) return false;
@@ -5191,10 +6098,10 @@ function emitTraceEvent(event, runDir) {
   }
   try {
     const live = liveLogPath(runDir);
-    const dir = path5.dirname(live);
-    fs4.mkdirSync(dir, { recursive: true });
+    const dir = path6.dirname(live);
+    fs5.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
-    fs4.appendFileSync(live, line, "utf8");
+    fs5.appendFileSync(live, line, "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -5204,12 +6111,33 @@ function emitTraceEvent(event, runDir) {
     return false;
   }
 }
-var fs4, path5;
+var fs5, path6;
 var init_guild_trace_emit = __esm({
   "../src/modules/telemetry/workflows/guild-trace-emit.ts"() {
-    fs4 = __toESM(require("node:fs"));
-    path5 = __toESM(require("node:path"));
+    fs5 = __toESM(require("node:fs"));
+    path6 = __toESM(require("node:path"));
     init_guild_trace_events();
+  }
+});
+
+// ../src/modules/telemetry/workflows/receipt-journal.ts
+var init_receipt_journal = __esm({
+  "../src/modules/telemetry/workflows/receipt-journal.ts"() {
+    init_state();
+  }
+});
+
+// ../src/modules/telemetry/workflows/receipt-reconcile.ts
+var init_receipt_reconcile = __esm({
+  "../src/modules/telemetry/workflows/receipt-reconcile.ts"() {
+    init_receipt_journal();
+  }
+});
+
+// ../src/modules/telemetry/workflows/debug-bundle.ts
+var init_debug_bundle = __esm({
+  "../src/modules/telemetry/workflows/debug-bundle.ts"() {
+    init_receipt_journal();
   }
 });
 
@@ -5218,6 +6146,9 @@ var init_telemetry = __esm({
   "../src/modules/telemetry/index.ts"() {
     init_guild_trace_emit();
     init_guild_trace_events();
+    init_receipt_journal();
+    init_receipt_reconcile();
+    init_debug_bundle();
   }
 });
 
@@ -5237,7 +6168,7 @@ function resolveSettings2(opts) {
     const { cwd, flags = {} } = opts;
     const assembled = result.config;
     const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
-    const _traceRunDir = _traceRunId && cwd ? path6.join(cwd, ".guild", "runs", _traceRunId) : void 0;
+    const _traceRunDir = _traceRunId && cwd ? path7.join(cwd, ".guild", "runs", _traceRunId) : void 0;
     if (_traceRunDir) {
       const _fingerprint = crypto.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result.sources;
@@ -5266,10 +6197,10 @@ function resolveSettings2(opts) {
   }
   return result;
 }
-var path6, crypto;
+var path7, crypto;
 var init_settings_resolver = __esm({
   "../src/modules/config/workflows/settings-resolver.ts"() {
-    path6 = __toESM(require("path"));
+    path7 = __toESM(require("path"));
     crypto = __toESM(require("crypto"));
     init_settings_reader();
     init_settings_reader();
@@ -5278,1204 +6209,10 @@ var init_settings_resolver = __esm({
   }
 });
 
-// ../src/modules/config/workflows/tier-model.ts
-function normalizeTierValue(v) {
-  if (typeof v === "string") {
-    const t = v.trim();
-    return t ? { model: t } : { model: null };
-  }
-  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-    const o = v;
-    if (typeof o["model"] === "string" && o["model"].trim()) {
-      const out = { model: o["model"].trim() };
-      if (typeof o["effort"] === "string") out.effort = o["effort"];
-      if (typeof o["reasoning"] === "string") out.reasoning = o["reasoning"];
-      if (typeof o["thinking"] === "string") out.thinking = o["thinking"];
-      if (typeof o["verbosity"] === "string") out.verbosity = o["verbosity"];
-      return out;
-    }
-  }
-  return { model: null };
-}
-function resolveTierModel(tiers, tier, host) {
-  if (typeof tiers !== "object" || tiers === null || Array.isArray(tiers)) {
-    return { model: null };
-  }
-  const entry = tiers[tier];
-  if (entry === null || entry === void 0) return { model: null };
-  if (typeof entry === "string") return normalizeTierValue(entry);
-  if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
-  const hostMap = entry;
-  const canonical = normalizeHostId(host);
-  if (canonical && canonical in hostMap) return normalizeTierValue(hostMap[canonical]);
-  return normalizeTierValue(hostMap[host]);
-}
-var init_tier_model = __esm({
-  "../src/modules/config/workflows/tier-model.ts"() {
-    init_host_runtime();
-  }
-});
-
-// ../scripts/lib/settings-resolver.ts
-var init_settings_resolver2 = __esm({
-  "../scripts/lib/settings-resolver.ts"() {
-    init_settings_resolver();
-  }
-});
-
-// ../scripts/lib/host-registry-schema.ts
-var init_host_registry_schema2 = __esm({
-  "../scripts/lib/host-registry-schema.ts"() {
-    init_host_registry_schema();
-  }
-});
-
-// ../scripts/lib/host-id-namespace.ts
-var init_host_id_namespace2 = __esm({
-  "../scripts/lib/host-id-namespace.ts"() {
-    init_host_id_namespace();
-  }
-});
-
-// ../scripts/lib/host-profiles-validate.ts
-var init_host_profiles_validate2 = __esm({
-  "../scripts/lib/host-profiles-validate.ts"() {
-    init_host_profiles_validate();
-  }
-});
-
-// ../scripts/lib/shared/safe-object.ts
-var init_safe_object2 = __esm({
-  "../scripts/lib/shared/safe-object.ts"() {
-    init_safe_object();
-  }
-});
-
-// ../scripts/lib/shared/config-defaults.ts
-var init_config_defaults2 = __esm({
-  "../scripts/lib/shared/config-defaults.ts"() {
-    init_config_defaults();
-  }
-});
-
-// ../scripts/lib/core/config-cli.ts
-var config_cli_exports = {};
-__export(config_cli_exports, {
-  DEFAULTS: () => DEFAULTS3,
-  HELP: () => HELP,
-  __main: () => main,
-  resolveTierModel: () => resolveTierModel,
-  scaffold: () => scaffold,
-  validateCrossHostBlock: () => validateCrossHostBlock,
-  validateDefaults: () => validateDefaults,
-  validateHostProfiles: () => validateHostProfiles,
-  validateMcp: () => validateMcp,
-  validateModels: () => validateModels,
-  validateRoles: () => validateRoles,
-  validateSecretsPolicy: () => validateSecretsPolicy,
-  validateSecurity: () => validateSecurity
-});
-function normalizeDispatchHostId2(value) {
-  const normalized = normalizeHostId(value);
-  return normalized && DISPATCH_HOST_IDS2.has(normalized) ? normalized : null;
-}
-function parseAutoApprove(v) {
-  if (v === "" || v === "all") return v === "all" ? ["all"] : ["all"];
-  return v.split(",").map((s) => s.trim()).filter((s) => VALID_PHASES.has(s));
-}
-function parseArgs(argv) {
-  const flags = {};
-  let cwd;
-  let mode = "resolve";
-  let selfBuild = false;
-  let modelTier;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--cwd" && argv[i + 1]) cwd = argv[++i];
-    else if (arg === "--scaffold") mode = "scaffold";
-    else if (arg === "--validate") mode = "validate";
-    else if (arg === "--self-build") selfBuild = true;
-    else if (arg.startsWith("--rigor=")) {
-      const v = arg.slice("--rigor=".length);
-      if (VALID_RIGOR2.has(v)) flags.rigor = v;
-    } else if (arg.startsWith("--review=")) {
-      const v = arg.slice("--review=".length);
-      if (VALID_REVIEW2.has(v)) flags.review = v;
-    } else if (arg.startsWith("--host=")) {
-      const v = arg.slice("--host=".length);
-      if (v === "auto") flags.host = "auto";
-      else {
-        const normalized = normalizeDispatchHostId2(v);
-        if (normalized) flags.host = normalized;
-      }
-    } else if (arg === "--auto-approve") {
-      flags.auto_approve = ["all"];
-    } else if (arg.startsWith("--auto-approve=")) {
-      flags.auto_approve = parseAutoApprove(arg.slice("--auto-approve=".length));
-    } else if (arg.startsWith("--agent-mode=")) {
-      const v = arg.slice("--agent-mode=".length);
-      if (VALID_AGENT_MODE2.has(v)) flags.agent_mode = v;
-    } else if (arg.startsWith("--model-tier=")) {
-      const v = arg.slice("--model-tier=".length);
-      if (VALID_MODEL_TIER.has(v)) modelTier = v;
-    } else if (arg.startsWith("--loops=")) {
-      flags.loops = arg.slice("--loops=".length);
-    } else if (arg.startsWith("--loop-cap=")) {
-      const n = parseInt(arg.slice("--loop-cap=".length), 10);
-      if (!isNaN(n)) flags.loop_cap = Math.min(256, Math.max(1, n));
-    } else if (arg.startsWith("--codex-cap=")) {
-      const n = parseInt(arg.slice("--codex-cap=".length), 10);
-      if (!isNaN(n)) flags.codex_cap = Math.min(10, Math.max(1, n));
-    } else if (arg === "--statusline") {
-      flags.statusline = true;
-    }
-  }
-  return { cwd, mode, selfBuild, modelTier, flags };
-}
-function collectKeyPaths2(obj, prefix = "") {
-  const paths = /* @__PURE__ */ new Set();
-  for (const [k, v] of Object.entries(obj)) {
-    const full = prefix ? `${prefix}.${k}` : k;
-    paths.add(full);
-    if (isPlainObject3(v)) {
-      for (const sub of collectKeyPaths2(v, full)) {
-        paths.add(sub);
-      }
-    }
-  }
-  return paths;
-}
-function validateLocalKeys(localObj, baseObj) {
-  const basePaths = collectKeyPaths2(baseObj);
-  for (const key of Object.keys(localObj)) {
-    if (key.startsWith("_")) continue;
-    if (!basePaths.has(key)) {
-      throw new Error(
-        `share-dot-guild: settings.local.json key '${key}' not in settings.json schema \u2014 refusing to silently extend. Declare it in settings.json first (with the team default) or remove it from settings.local.json.`
-      );
-    }
-  }
-}
-function deepMergeLocal(base, local) {
-  const result = Object.assign(/* @__PURE__ */ Object.create(null), base);
-  for (const [k, v] of Object.entries(local)) {
-    if (PROTO_POISON_KEYS.has(k)) continue;
-    if (Array.isArray(v)) {
-      result[k] = v;
-    } else if (isPlainObject3(v) && isPlainObject3(result[k])) {
-      result[k] = deepMergeLocal(
-        result[k],
-        v
-      );
-    } else {
-      result[k] = v;
-    }
-  }
-  return result;
-}
-function loadLocalOverride(cwd, fileConfig, selfBuild) {
-  const localPath = path8.join(cwd, ".guild", "settings.local.json");
-  if (!fs6.existsSync(localPath)) return fileConfig;
-  let localParsed;
-  try {
-    localParsed = JSON.parse(fs6.readFileSync(localPath, "utf8"));
-  } catch (e) {
-    process.stderr.write(
-      `[read-guild-config] WARN: could not parse .guild/settings.local.json (${e.message}) \u2014 local overrides ignored.
-`
-    );
-    return fileConfig;
-  }
-  const schemaBase = DEFAULTS3;
-  validateLocalKeys(localParsed, schemaBase);
-  const base = {
-    ...DEFAULTS3,
-    ...fileConfig
-  };
-  const merged = deepMergeLocal(base, localParsed);
-  process.stderr.write(
-    `[read-guild-config] INFO: .guild/settings.local.json loaded \u2014 ${Object.keys(localParsed).length} override key(s): [${Object.keys(localParsed).join(", ")}]
-`
-  );
-  return merged;
-}
-function isPlainObject3(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function validateModels(m) {
-  const rejects = [];
-  for (const k of Object.keys(m)) {
-    if (!VALID_MODELS_KEYS.has(k)) {
-      rejects.push(`unknown models key "${k}" (closed key set \u2014 check spelling against ADR \xA710)`);
-    }
-  }
-  if (isPlainObject3(m["tiers"])) {
-    const rt = m["tiers"];
-    const VALID_TIER_KEYS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
-    const VALID_TIER_SPEC_KEYS = /* @__PURE__ */ new Set(["model", "effort", "reasoning", "thinking", "verbosity"]);
-    for (const tk of Object.keys(rt)) {
-      if (!VALID_TIER_KEYS.has(tk)) {
-        rejects.push(`unknown models.tiers key "${tk}" (valid: cheap|mid|powerful)`);
-        continue;
-      }
-      if (!isPlainObject3(rt[tk])) continue;
-      const hostMap = rt[tk];
-      const seenCanonicalHosts = /* @__PURE__ */ new Map();
-      for (const [hk, hv] of Object.entries(hostMap)) {
-        const canonicalHostId = normalizeHostId(hk);
-        if (!canonicalHostId) {
-          rejects.push(
-            `unknown models.tiers.${tk} host key "${hk}" (closed key set \u2014 valid: ${[...VALID_TIER_HOST_KEYS2].join(", ")})`
-          );
-          continue;
-        }
-        const previousHostKey = seenCanonicalHosts.get(canonicalHostId);
-        if (previousHostKey && previousHostKey !== hk) {
-          rejects.push(
-            `duplicate models.tiers.${tk} host keys "${previousHostKey}" and "${hk}" both normalize to "${canonicalHostId}"`
-          );
-          continue;
-        }
-        seenCanonicalHosts.set(canonicalHostId, hk);
-        if (hv === null || typeof hv === "string") continue;
-        if (isPlainObject3(hv)) {
-          const spec = hv;
-          for (const sk of Object.keys(spec)) {
-            if (!VALID_TIER_SPEC_KEYS.has(sk)) {
-              rejects.push(
-                `unknown models.tiers.${tk}.${hk} key "${sk}" (object form is a closed key set \u2014 only model, effort, reasoning, thinking, verbosity)`
-              );
-            }
-          }
-          if (typeof spec["model"] !== "string" || !spec["model"].trim()) {
-            rejects.push(
-              `models.tiers.${tk}.${hk}.model is required and must be a non-empty string in the object form`
-            );
-          }
-          if (spec["effort"] !== void 0 && typeof spec["effort"] !== "string") {
-            rejects.push(`models.tiers.${tk}.${hk}.effort must be a string (got ${JSON.stringify(spec["effort"])})`);
-          }
-          if (spec["reasoning"] !== void 0 && typeof spec["reasoning"] !== "string") {
-            rejects.push(`models.tiers.${tk}.${hk}.reasoning must be a string (got ${JSON.stringify(spec["reasoning"])})`);
-          }
-          if (spec["thinking"] !== void 0 && typeof spec["thinking"] !== "string") {
-            rejects.push(`models.tiers.${tk}.${hk}.thinking must be a string (got ${JSON.stringify(spec["thinking"])})`);
-          }
-          if (spec["verbosity"] !== void 0 && typeof spec["verbosity"] !== "string") {
-            rejects.push(`models.tiers.${tk}.${hk}.verbosity must be a string (got ${JSON.stringify(spec["verbosity"])})`);
-          }
-        } else {
-          rejects.push(
-            `models.tiers.${tk}.${hk} must be a string, null, or {model, effort?, reasoning?, thinking?, verbosity?} (got ${JSON.stringify(hv)})`
-          );
-        }
-      }
-    }
-  }
-  if (isPlainObject3(m["thresholds"])) {
-    const t = m["thresholds"];
-    for (const tk of Object.keys(t)) {
-      if (tk !== "mid" && tk !== "powerful") {
-        rejects.push(`unknown models.thresholds key "${tk}" \u2014 only mid and powerful are valid`);
-      }
-    }
-  }
-  if (isPlainObject3(m["cacheTTL"])) {
-    const ttl = m["cacheTTL"];
-    for (const ck of Object.keys(ttl)) {
-      if (ck !== "coordinator" && ck !== "leaf") {
-        rejects.push(`unknown models.cacheTTL key "${ck}" \u2014 only coordinator and leaf are valid`);
-      }
-    }
-    if (ttl["coordinator"] !== void 0 && !VALID_CACHE_TTL2.has(ttl["coordinator"])) {
-      rejects.push(`models.cacheTTL.coordinator "${ttl["coordinator"]}" is invalid \u2014 valid: 1h|5m|off`);
-    }
-    if (ttl["leaf"] !== void 0 && !VALID_CACHE_TTL2.has(ttl["leaf"])) {
-      rejects.push(`models.cacheTTL.leaf "${ttl["leaf"]}" is invalid \u2014 valid: 1h|5m|off`);
-    }
-  }
-  if (m["importanceGate"] !== void 0) {
-    const ig = m["importanceGate"];
-    if (typeof ig !== "number" || ig < 1 || ig > 5 || !Number.isInteger(ig)) {
-      rejects.push(`models.importanceGate must be an integer 1\u20135 (got ${JSON.stringify(ig)})`);
-    }
-  }
-  if (m["compositeRecall"] !== void 0 && typeof m["compositeRecall"] !== "boolean") {
-    rejects.push(`models.compositeRecall must be a boolean (got ${JSON.stringify(m["compositeRecall"])})`);
-  }
-  if (m["importanceAtIngest"] !== void 0 && typeof m["importanceAtIngest"] !== "boolean") {
-    rejects.push(`models.importanceAtIngest must be a boolean (got ${JSON.stringify(m["importanceAtIngest"])})`);
-  }
-  if (m["advisorRounds"] !== void 0) {
-    const ar = m["advisorRounds"];
-    if (typeof ar !== "number" || ar < 1 || !Number.isInteger(ar)) {
-      rejects.push(`models.advisorRounds must be an integer > 0 (got ${JSON.stringify(ar)})`);
-    }
-  }
-  if (m["recallScoreThreshold"] !== void 0) {
-    const rs = m["recallScoreThreshold"];
-    if (typeof rs !== "number" || rs < 0 || rs > 1) {
-      rejects.push(`models.recallScoreThreshold must be a float 0\u20131 (got ${JSON.stringify(rs)})`);
-    }
-  }
-  if (m["ingestSimilarityGate"] !== void 0) {
-    const ig = m["ingestSimilarityGate"];
-    if (typeof ig !== "number" || ig < 0 || ig > 1) {
-      rejects.push(`models.ingestSimilarityGate must be a float 0\u20131 (got ${JSON.stringify(ig)})`);
-    }
-  }
-  return rejects;
-}
-function validateSecurity(s) {
-  const rejects = [];
-  for (const k of Object.keys(s)) {
-    if (!VALID_SECURITY_KEYS.has(k)) {
-      rejects.push(`unknown security key "${k}" (closed key set \u2014 only bypass_permissions_policy is valid)`);
-    }
-  }
-  if (s["bypass_permissions_policy"] !== void 0) {
-    const v = s["bypass_permissions_policy"];
-    if (v !== "deny" && v !== "audit" && v !== "allow") {
-      rejects.push(`security.bypass_permissions_policy "${v}" is invalid \u2014 valid: deny|audit|allow`);
-    }
-  }
-  return rejects;
-}
-function validateSecretsPolicy(sp) {
-  const rejects = [];
-  for (const k of Object.keys(sp)) {
-    if (!VALID_SECRETS_POLICY_KEYS.has(k)) {
-      rejects.push(`unknown secrets_policy key "${k}" (closed key set \u2014 check v2-security-and-untrusted-content ADR)`);
-    }
-  }
-  if (sp["fail_mode_durable"] !== void 0 && sp["fail_mode_durable"] !== "closed" && sp["fail_mode_durable"] !== "open") {
-    rejects.push(`secrets_policy.fail_mode_durable "${sp["fail_mode_durable"]}" is invalid \u2014 valid: closed|open`);
-  }
-  if (sp["fail_mode_telemetry"] !== void 0 && sp["fail_mode_telemetry"] !== "open" && sp["fail_mode_telemetry"] !== "closed") {
-    rejects.push(`secrets_policy.fail_mode_telemetry "${sp["fail_mode_telemetry"]}" is invalid \u2014 valid: open|closed`);
-  }
-  if (sp["env_allowlist"] !== void 0 && !Array.isArray(sp["env_allowlist"])) {
-    rejects.push(`secrets_policy.env_allowlist must be an array of strings`);
-  }
-  if (sp["redaction_patterns"] !== void 0 && !Array.isArray(sp["redaction_patterns"])) {
-    rejects.push(`secrets_policy.redaction_patterns must be an array of regex strings`);
-  }
-  return rejects;
-}
-function validateMcp(m) {
-  const rejects = [];
-  for (const k of Object.keys(m)) {
-    if (!VALID_MCP_KEYS.has(k)) {
-      rejects.push(`unknown mcp key "${k}" (closed key set \u2014 valid: tool_description_hashes, stdio_available, http_available, bridge_package)`);
-    }
-  }
-  if (m["tool_description_hashes"] !== void 0 && !isPlainObject3(m["tool_description_hashes"])) {
-    rejects.push(`mcp.tool_description_hashes must be an object (tool-name \u2192 SHA-256 hash)`);
-  }
-  if (m["stdio_available"] !== void 0 && typeof m["stdio_available"] !== "boolean") {
-    rejects.push(`mcp.stdio_available must be a boolean (got ${JSON.stringify(m["stdio_available"])})`);
-  }
-  if (m["http_available"] !== void 0 && typeof m["http_available"] !== "boolean") {
-    rejects.push(`mcp.http_available must be a boolean (got ${JSON.stringify(m["http_available"])})`);
-  }
-  if (m["bridge_package"] !== void 0 && m["bridge_package"] !== null && typeof m["bridge_package"] !== "string") {
-    rejects.push(`mcp.bridge_package must be a string or null (got ${JSON.stringify(m["bridge_package"])})`);
-  }
-  return rejects;
-}
-function validateRoles(r) {
-  const rejects = [];
-  for (const k of Object.keys(r)) {
-    if (!VALID_ROLES_KEYS.has(k)) {
-      rejects.push(`unknown roles key "${k}" (closed key set \u2014 only host, advisory, adversarial)`);
-      continue;
-    }
-    const v = r[k];
-    if (v !== null && !(typeof v === "string" && normalizeHostId(v) !== null)) {
-      rejects.push(
-        `roles.${k} must be null or a known registry host_id (${[...KNOWN_HOST_IDS3].join("|")}); got ${JSON.stringify(v)}`
-      );
-    }
-  }
-  return rejects;
-}
-function validateCrossHostBlock(ch) {
-  const rejects = [];
-  const ALLOWED_CH = /* @__PURE__ */ new Set(["enabled", "hosts", "fallback_to_claude"]);
-  for (const k of Object.keys(ch)) {
-    if (!ALLOWED_CH.has(k)) {
-      rejects.push(`unknown defaults.cross_host key "${k}" (closed key set \u2014 valid: enabled, hosts, fallback_to_claude)`);
-    }
-  }
-  if (ch["enabled"] !== void 0 && typeof ch["enabled"] !== "boolean") {
-    rejects.push(`defaults.cross_host.enabled must be a boolean (got ${JSON.stringify(ch["enabled"])})`);
-  }
-  if (ch["fallback_to_claude"] !== void 0 && typeof ch["fallback_to_claude"] !== "boolean") {
-    rejects.push(`defaults.cross_host.fallback_to_claude must be a boolean (got ${JSON.stringify(ch["fallback_to_claude"])})`);
-  }
-  if (ch["hosts"] !== void 0) {
-    if (!isPlainObject3(ch["hosts"])) {
-      rejects.push(`defaults.cross_host.hosts must be an object { host_id: { address, port?, user? } }`);
-    } else {
-      const hosts = ch["hosts"];
-      const ALLOWED_ENTRY = /* @__PURE__ */ new Set(["address", "port", "user", "login_shell"]);
-      for (const [hostId, entry] of Object.entries(hosts)) {
-        if (!isPlainObject3(entry)) {
-          rejects.push(`defaults.cross_host.hosts["${hostId}"] must be an object { address, port?, user? }`);
-          continue;
-        }
-        const e = entry;
-        for (const ek of Object.keys(e)) {
-          if (!ALLOWED_ENTRY.has(ek)) {
-            rejects.push(
-              `unknown defaults.cross_host.hosts["${hostId}"] key "${ek}" (closed key set \u2014 valid: address, port, user; no secrets stored here)`
-            );
-          }
-        }
-        if (!e["address"] || typeof e["address"] !== "string") {
-          rejects.push(
-            `defaults.cross_host.hosts["${hostId}"].address is required and must be a string`
-          );
-        }
-        if (e["port"] !== void 0) {
-          const p = e["port"];
-          if (typeof p !== "number" || !Number.isInteger(p) || p < 1 || p > 65535) {
-            rejects.push(
-              `defaults.cross_host.hosts["${hostId}"].port must be an integer 1\u201365535 (got ${JSON.stringify(p)})`
-            );
-          }
-        }
-        if (e["user"] !== void 0 && typeof e["user"] !== "string") {
-          rejects.push(
-            `defaults.cross_host.hosts["${hostId}"].user must be a string (got ${JSON.stringify(e["user"])})`
-          );
-        }
-        if (e["login_shell"] !== void 0 && typeof e["login_shell"] !== "string") {
-          rejects.push(
-            `defaults.cross_host.hosts["${hostId}"].login_shell must be a string (got ${JSON.stringify(e["login_shell"])})`
-          );
-        }
-      }
-    }
-  }
-  return rejects;
-}
-function validateDefaults(d, selfBuild) {
-  const rejects = [];
-  for (const k of Object.keys(d)) {
-    if (!DEFAULTS_ALLOWED_KEYS2.has(k)) rejects.push(`unknown defaults key "${k}" (closed key set \u2014 a typo must surface)`);
-  }
-  if (d["adversarial"] === "off" && selfBuild)
-    rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
-  if (isPlainObject3(d["wiki"]) && d["wiki"]["autopromote"] === true)
-    rejects.push(`defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)`);
-  if (isPlainObject3(d["quality"])) {
-    const q = d["quality"]["budget"];
-    if (isPlainObject3(q)) {
-      for (const bk of Object.keys(q)) {
-        if (bk !== "per_class_minutes" && bk !== "total_minutes")
-          rejects.push(`unknown defaults.quality.budget key "${bk}"`);
-      }
-    }
-  }
-  if (isPlainObject3(d["cross_host"])) {
-    rejects.push(...validateCrossHostBlock(d["cross_host"]));
-  }
-  if (isPlainObject3(d["retry"])) {
-    const retry = d["retry"];
-    const VALID_RETRY_KEYS = /* @__PURE__ */ new Set(["max_attempts", "backoff"]);
-    for (const rk of Object.keys(retry)) {
-      if (!VALID_RETRY_KEYS.has(rk)) rejects.push(`unknown defaults.retry key "${rk}" (valid: max_attempts, backoff)`);
-    }
-    if (retry["max_attempts"] !== void 0) {
-      const v = retry["max_attempts"];
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
-        rejects.push(`defaults.retry.max_attempts must be an integer \u2265 1 (got ${JSON.stringify(v)})`);
-    }
-    if (retry["backoff"] !== void 0) {
-      const v = retry["backoff"];
-      if (v !== "immediate" && v !== "linear" && v !== "exponential")
-        rejects.push(`defaults.retry.backoff must be "immediate"|"linear"|"exponential" (got ${JSON.stringify(v)})`);
-    }
-  }
-  if (isPlainObject3(d["resume"])) {
-    const res = d["resume"];
-    const VALID_RESUME_KEYS = /* @__PURE__ */ new Set(["enabled"]);
-    for (const rk of Object.keys(res)) {
-      if (!VALID_RESUME_KEYS.has(rk)) rejects.push(`unknown defaults.resume key "${rk}" (valid: enabled)`);
-    }
-    if (res["enabled"] !== void 0 && typeof res["enabled"] !== "boolean")
-      rejects.push(`defaults.resume.enabled must be a boolean (got ${JSON.stringify(res["enabled"])})`);
-  }
-  if (d["heartbeat_timeout_ms"] !== void 0) {
-    const v = d["heartbeat_timeout_ms"];
-    if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
-      rejects.push(`defaults.heartbeat_timeout_ms must be a positive integer (ms) (got ${JSON.stringify(v)})`);
-  }
-  if (d["update"] !== void 0) {
-    const v = d["update"];
-    if (typeof v !== "object" || v === null || Array.isArray(v)) {
-      rejects.push(`defaults.update must be an object { mode, cadence_hours } (got ${JSON.stringify(v)})`);
-    } else {
-      const u = v;
-      if (u["mode"] !== void 0 && u["mode"] !== "auto" && u["mode"] !== "notify" && u["mode"] !== "off")
-        rejects.push(`defaults.update.mode must be "auto" | "notify" | "off" (got ${JSON.stringify(u["mode"])})`);
-      if (u["cadence_hours"] !== void 0 && (typeof u["cadence_hours"] !== "number" || u["cadence_hours"] <= 0))
-        rejects.push(`defaults.update.cadence_hours must be a positive number of hours (got ${JSON.stringify(u["cadence_hours"])})`);
-      for (const k of Object.keys(u)) {
-        if (k !== "mode" && k !== "cadence_hours")
-          rejects.push(`defaults.update.${k} is not a recognized key (closed shape: mode, cadence_hours)`);
-      }
-    }
-  }
-  if (d["capability_manifest_ttl_s"] !== void 0) {
-    const v = d["capability_manifest_ttl_s"];
-    if (typeof v !== "number" || v <= 0)
-      rejects.push(`defaults.capability_manifest_ttl_s must be a positive number (seconds) (got ${JSON.stringify(v)})`);
-  }
-  if (d["allowed_tools"] !== void 0 && !Array.isArray(d["allowed_tools"]))
-    rejects.push(`defaults.allowed_tools must be an array of strings`);
-  if (d["lean_lead"] !== void 0 && !isPlainObject3(d["lean_lead"])) {
-    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(d["lean_lead"])})`);
-  } else if (isPlainObject3(d["lean_lead"])) {
-    const ll = d["lean_lead"];
-    const VALID_LEAN_LEAD_KEYS = /* @__PURE__ */ new Set(["enabled", "hands_on_edit_threshold"]);
-    for (const k of Object.keys(ll)) {
-      if (!VALID_LEAN_LEAD_KEYS.has(k)) rejects.push(`unknown defaults.lean_lead key "${k}" (valid: enabled, hands_on_edit_threshold)`);
-    }
-    if (ll["enabled"] !== void 0 && typeof ll["enabled"] !== "boolean")
-      rejects.push(`defaults.lean_lead.enabled must be a boolean (got ${JSON.stringify(ll["enabled"])})`);
-    if (ll["hands_on_edit_threshold"] !== void 0) {
-      const v = ll["hands_on_edit_threshold"];
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
-        rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(v)})`);
-    }
-  }
-  if (d["lifecycle_gate"] !== void 0 && !isPlainObject3(d["lifecycle_gate"])) {
-    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(d["lifecycle_gate"])})`);
-  } else if (isPlainObject3(d["lifecycle_gate"])) {
-    const lg = d["lifecycle_gate"];
-    const VALID_LIFECYCLE_GATE_KEYS = /* @__PURE__ */ new Set(["enabled", "adhoc_activity_threshold"]);
-    for (const k of Object.keys(lg)) {
-      if (!VALID_LIFECYCLE_GATE_KEYS.has(k)) rejects.push(`unknown defaults.lifecycle_gate key "${k}" (valid: enabled, adhoc_activity_threshold)`);
-    }
-    if (lg["enabled"] !== void 0 && typeof lg["enabled"] !== "boolean")
-      rejects.push(`defaults.lifecycle_gate.enabled must be a boolean (got ${JSON.stringify(lg["enabled"])})`);
-    if (lg["adhoc_activity_threshold"] !== void 0) {
-      const v = lg["adhoc_activity_threshold"];
-      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
-        rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(v)})`);
-    }
-  }
-  if (isPlainObject3(d["index"])) {
-    const idx = d["index"];
-    for (const ik of Object.keys(idx)) {
-      if (!VALID_INDEX_KEYS.has(ik)) {
-        rejects.push(`unknown defaults.index key "${ik}" (closed key set \u2014 see v2-persistence-and-sqlite-index ADR D-PS-1)`);
-      }
-    }
-    if (idx["enabled"] !== void 0 && typeof idx["enabled"] !== "boolean") {
-      rejects.push(`defaults.index.enabled must be a boolean (got ${JSON.stringify(idx["enabled"])})`);
-    }
-    for (const numKey of ["kg_node_threshold", "links_edge_threshold", "runs_threshold", "wiki_file_threshold"]) {
-      if (idx[numKey] !== void 0) {
-        const v = idx[numKey];
-        if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
-          rejects.push(`defaults.index.${numKey} must be a positive integer (got ${JSON.stringify(v)})`);
-        }
-      }
-    }
-    if (idx["kg_size_threshold_mb"] !== void 0) {
-      const v = idx["kg_size_threshold_mb"];
-      if (typeof v !== "number" || v <= 0) {
-        rejects.push(`defaults.index.kg_size_threshold_mb must be a positive number (got ${JSON.stringify(v)})`);
-      }
-    }
-  }
-  return rejects;
-}
-function loadFileConfig(cwd, selfBuild) {
-  const settingsPath = path8.join(cwd, ".guild", "settings.json");
-  if (fs6.existsSync(settingsPath)) {
-    let parsed;
-    try {
-      parsed = JSON.parse(fs6.readFileSync(settingsPath, "utf8"));
-    } catch (e) {
-      process.stderr.write(`[read-guild-config] WARN: could not parse .guild/settings.json (${e.message}) \u2014 using defaults
-`);
-      return { config: {}, rejects: [], source: "none" };
-    }
-    const rejects = [];
-    const TIER1 = /* @__PURE__ */ new Set([
-      "rigor",
-      "auto_approve",
-      "review",
-      "host",
-      "host_mode",
-      "roles",
-      "host_profiles",
-      "initiative_default",
-      "index",
-      "record_status_runs",
-      "codex_skip_enforcement",
-      "agent_mode",
-      "workspace",
-      "models",
-      "security",
-      "secrets_policy",
-      "mcp",
-      "statusline",
-      // R-009: status-line pane enable (--statusline flag / settings key)
-      "adversarial_review_provider",
-      // R-008: cross-review provider pin
-      "loops",
-      "loop_cap",
-      "codex_cap",
-      "defaults"
-    ]);
-    for (const k of Object.keys(parsed)) {
-      if (k.startsWith("_")) continue;
-      if (!TIER1.has(k)) {
-        rejects.push(
-          `unknown top-level key "${k}" (closed key set \u2014 check spelling; known: ${[...TIER1].join(", ")})`
-        );
-        process.stderr.write(`[read-guild-config] WARN: unknown top-level key "${k}" ignored
-`);
-      }
-    }
-    const out = {};
-    if (VALID_RIGOR2.has(parsed["rigor"])) out.rigor = parsed["rigor"];
-    if (Array.isArray(parsed["auto_approve"])) out.auto_approve = parsed["auto_approve"];
-    if (VALID_REVIEW2.has(parsed["review"])) out.review = parsed["review"];
-    if (parsed["host"] === "auto") out.host = "auto";
-    else if (typeof parsed["host"] === "string") {
-      const normalized = normalizeDispatchHostId2(parsed["host"]);
-      if (normalized) out.host = normalized;
-      else {
-        rejects.push(
-          `host "${parsed["host"]}" is invalid for the top-level dispatch selector (valid: auto or dispatch-selectable host ids ${[...DISPATCH_HOST_IDS2].join("|")})`
-        );
-      }
-    }
-    if (parsed["host_mode"] === null) {
-      out.host_mode = null;
-    } else if (typeof parsed["host_mode"] === "string") {
-      if (HOST_MODES2.includes(parsed["host_mode"])) {
-        out.host_mode = parsed["host_mode"];
-      } else {
-        rejects.push(
-          `host_mode "${parsed["host_mode"]}" is invalid \u2014 valid: ${HOST_MODES2.join("|")} or null`
-        );
-      }
-    } else if (parsed["host_mode"] !== void 0) {
-      rejects.push(
-        `host_mode must be a string (${HOST_MODES2.join("|")}) or null (got ${JSON.stringify(parsed["host_mode"])})`
-      );
-    }
-    if (isPlainObject3(parsed["roles"])) {
-      const rawRoles = parsed["roles"];
-      rejects.push(...validateRoles(rawRoles));
-      const mergedRoles = { ...DEFAULTS3.roles };
-      for (const rk of VALID_ROLES_KEYS) {
-        const v = rawRoles[rk];
-        if (v === null) {
-          mergedRoles[rk] = null;
-        } else if (typeof v === "string") {
-          const normalized = normalizeHostId(v);
-          if (normalized) mergedRoles[rk] = normalized;
-        }
-      }
-      out.roles = mergedRoles;
-    }
-    if (isPlainObject3(parsed["host_profiles"])) {
-      const rawHp = parsed["host_profiles"];
-      rejects.push(...validateHostProfiles(rawHp));
-      const mergedHp = {};
-      for (const [hostId, entry] of Object.entries(rawHp)) {
-        const normalized = normalizeHostId(hostId);
-        if (normalized && isPlainObject3(entry)) {
-          mergedHp[normalized] = entry;
-        }
-      }
-      out.host_profiles = mergedHp;
-    }
-    if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
-      out.initiative_default = parsed["initiative_default"];
-    if (parsed["index"] === "auto" || parsed["index"] === "off") out.index = parsed["index"];
-    if (typeof parsed["record_status_runs"] === "boolean")
-      out.record_status_runs = parsed["record_status_runs"];
-    if (parsed["codex_skip_enforcement"] === "warn" || parsed["codex_skip_enforcement"] === "block")
-      out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
-    else if (parsed["codex_skip_enforcement"] !== void 0) {
-      rejects.push(
-        `codex_skip_enforcement "${parsed["codex_skip_enforcement"]}" is invalid \u2014 valid: warn|block`
-      );
-    }
-    if (VALID_AGENT_MODE2.has(parsed["agent_mode"]))
-      out.agent_mode = parsed["agent_mode"];
-    if (isPlainObject3(parsed["workspace"])) {
-      const ws = parsed["workspace"];
-      const wsMode = ws["mode"];
-      if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
-        out.workspace = { mode: wsMode };
-      } else if (ws["mode"] !== void 0) {
-        process.stderr.write(
-          `[read-guild-config] WARN: unknown workspace.mode "${wsMode}" \u2014 valid values: auto|on|off. Using auto.
-`
-        );
-      }
-      const VALID_WS_KEYS = /* @__PURE__ */ new Set(["mode"]);
-      for (const wk of Object.keys(ws)) {
-        if (!VALID_WS_KEYS.has(wk)) {
-          rejects.push(
-            `unknown workspace key "${wk}" (closed key set \u2014 no max_depth, depth is hard-fixed at 1)`
-          );
-        }
-      }
-    }
-    if (isPlainObject3(parsed["models"])) {
-      const rawModels = parsed["models"];
-      rejects.push(...validateModels(rawModels));
-      const mergedModels = { ...DEFAULTS3.models };
-      if (typeof rawModels["enabled"] === "boolean") mergedModels.enabled = rawModels["enabled"];
-      if (isPlainObject3(rawModels["tiers"])) {
-        const rt = rawModels["tiers"];
-        mergedModels.tiers = { ...DEFAULTS3.models.tiers };
-        for (const tier of ["cheap", "mid", "powerful"]) {
-          if (isPlainObject3(rt[tier])) {
-            const rawHostMap = rt[tier];
-            const knownHosts = {};
-            for (const hk of Object.keys(rawHostMap)) {
-              const canonicalHostId = normalizeHostId(hk);
-              if (canonicalHostId) {
-                knownHosts[canonicalHostId] = rawHostMap[hk];
-              }
-            }
-            mergedModels.tiers[tier] = { ...DEFAULTS3.models.tiers[tier], ...knownHosts };
-          }
-        }
-      }
-      if (isPlainObject3(rawModels["scoreWeights"])) {
-        mergedModels.scoreWeights = { ...DEFAULTS3.models.scoreWeights, ...rawModels["scoreWeights"] };
-      }
-      if (isPlainObject3(rawModels["thresholds"])) {
-        mergedModels.thresholds = { ...DEFAULTS3.models.thresholds, ...rawModels["thresholds"] };
-      }
-      if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1) {
-        mergedModels.advisorRounds = Math.floor(rawModels["advisorRounds"]);
-      }
-      if (Array.isArray(rawModels["escalationMarkers"])) {
-        mergedModels.escalationMarkers = rawModels["escalationMarkers"];
-      }
-      if (typeof rawModels["recallBeforeRead"] === "boolean") mergedModels.recallBeforeRead = rawModels["recallBeforeRead"];
-      if (typeof rawModels["compositeRecall"] === "boolean") mergedModels.compositeRecall = rawModels["compositeRecall"];
-      if (typeof rawModels["importanceAtIngest"] === "boolean") mergedModels.importanceAtIngest = rawModels["importanceAtIngest"];
-      if (typeof rawModels["recallScoreThreshold"] === "number") mergedModels.recallScoreThreshold = rawModels["recallScoreThreshold"];
-      if (typeof rawModels["structuredOutputRequired"] === "boolean") mergedModels.structuredOutputRequired = rawModels["structuredOutputRequired"];
-      if (isPlainObject3(rawModels["cacheTTL"])) {
-        const rttl = rawModels["cacheTTL"];
-        const newTTL = { ...DEFAULTS3.models.cacheTTL };
-        if (VALID_CACHE_TTL2.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
-        if (VALID_CACHE_TTL2.has(rttl["leaf"])) newTTL.leaf = rttl["leaf"];
-        mergedModels.cacheTTL = newTTL;
-      }
-      if (typeof rawModels["importanceGate"] === "number" && rawModels["importanceGate"] >= 1 && rawModels["importanceGate"] <= 5) {
-        mergedModels.importanceGate = Math.floor(rawModels["importanceGate"]);
-      }
-      if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1) {
-        mergedModels.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-      }
-      if (isPlainObject3(rawModels["shortOutputThreshold"])) {
-        const sot = rawModels["shortOutputThreshold"];
-        const merged = {};
-        for (const taskType of Object.keys(sot)) {
-          if (!isPlainObject3(sot[taskType])) continue;
-          const innerRaw = sot[taskType];
-          const innerMerged = {};
-          for (const tier of Object.keys(innerRaw)) {
-            if (typeof innerRaw[tier] === "number") {
-              innerMerged[tier] = innerRaw[tier];
-            }
-          }
-          if (Object.keys(innerMerged).length > 0) merged[taskType] = innerMerged;
-        }
-        mergedModels.shortOutputThreshold = merged;
-      }
-      if (isPlainObject3(rawModels["knowledge"])) {
-        const rawK = rawModels["knowledge"];
-        const mergedK = { ...DEFAULTS3.models.knowledge };
-        if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
-          mergedK.maxDepth = Math.floor(rawK["maxDepth"]);
-        if (typeof rawK["maxBranching"] === "number" && rawK["maxBranching"] >= 1)
-          mergedK.maxBranching = Math.floor(rawK["maxBranching"]);
-        if (typeof rawK["minTopicImportance"] === "number" && rawK["minTopicImportance"] >= 0 && rawK["minTopicImportance"] <= 1)
-          mergedK.minTopicImportance = rawK["minTopicImportance"];
-        if (typeof rawK["relMinConf"] === "number" && rawK["relMinConf"] >= 0 && rawK["relMinConf"] <= 1)
-          mergedK.relMinConf = rawK["relMinConf"];
-        if (typeof rawK["maxFiles"] === "number" && rawK["maxFiles"] >= 1)
-          mergedK.maxFiles = Math.floor(rawK["maxFiles"]);
-        if (typeof rawK["maxTokens"] === "number" && rawK["maxTokens"] >= 1)
-          mergedK.maxTokens = Math.floor(rawK["maxTokens"]);
-        if (typeof rawK["batchSize"] === "number" && rawK["batchSize"] >= 1)
-          mergedK.batchSize = Math.floor(rawK["batchSize"]);
-        mergedModels.knowledge = mergedK;
-      }
-      out.models = mergedModels;
-    }
-    if (isPlainObject3(parsed["security"])) {
-      const rawSec = parsed["security"];
-      rejects.push(...validateSecurity(rawSec));
-      const mergedSec = { ...DEFAULTS3.security };
-      const bpp = rawSec["bypass_permissions_policy"];
-      if (bpp === "deny" || bpp === "audit" || bpp === "allow") mergedSec.bypass_permissions_policy = bpp;
-      out.security = mergedSec;
-    }
-    if (isPlainObject3(parsed["secrets_policy"])) {
-      const rawSp = parsed["secrets_policy"];
-      rejects.push(...validateSecretsPolicy(rawSp));
-      const mergedSp = { ...DEFAULTS3.secrets_policy };
-      if (Array.isArray(rawSp["env_allowlist"])) mergedSp.env_allowlist = rawSp["env_allowlist"];
-      if (Array.isArray(rawSp["redaction_patterns"])) mergedSp.redaction_patterns = rawSp["redaction_patterns"];
-      if (rawSp["fail_mode_durable"] === "closed" || rawSp["fail_mode_durable"] === "open") mergedSp.fail_mode_durable = rawSp["fail_mode_durable"];
-      if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") mergedSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
-      out.secrets_policy = mergedSp;
-    }
-    if (isPlainObject3(parsed["mcp"])) {
-      const rawMcp = parsed["mcp"];
-      rejects.push(...validateMcp(rawMcp));
-      const mergedMcp = { ...DEFAULTS3.mcp };
-      if (isPlainObject3(rawMcp["tool_description_hashes"])) {
-        mergedMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
-      }
-      if (typeof rawMcp["stdio_available"] === "boolean") mergedMcp.stdio_available = rawMcp["stdio_available"];
-      if (typeof rawMcp["http_available"] === "boolean") mergedMcp.http_available = rawMcp["http_available"];
-      if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string") {
-        mergedMcp.bridge_package = rawMcp["bridge_package"];
-      }
-      out.mcp = mergedMcp;
-    }
-    if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"];
-    if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
-    if (typeof parsed["codex_cap"] === "number") out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-    if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
-    if (typeof parsed["adversarial_review_provider"] === "string") {
-      out.adversarial_review_provider = parsed["adversarial_review_provider"];
-    }
-    if (isPlainObject3(parsed["defaults"])) {
-      rejects.push(...validateDefaults(parsed["defaults"], selfBuild));
-      const rawDefaults = parsed["defaults"];
-      const knownDefaults = {};
-      for (const k of Object.keys(rawDefaults)) {
-        if (DEFAULTS_ALLOWED_KEYS2.has(k)) knownDefaults[k] = rawDefaults[k];
-      }
-      const rawCrossHost = knownDefaults["cross_host"];
-      if (rawCrossHost && isPlainObject3(rawCrossHost)) {
-        knownDefaults["cross_host"] = { ...DEFAULTS3.defaults.cross_host, ...rawCrossHost };
-      }
-      out.defaults = { ...DEFAULTS3.defaults, ...knownDefaults };
-    }
-    if (out.index === "off" && out.defaults) {
-      out.defaults = { ...out.defaults, index: { ...out.defaults.index, enabled: false } };
-    }
-    return { config: out, rejects, source: "settings.json" };
-  }
-  return { config: {}, rejects: [], source: "none" };
-}
-function scaffold() {
-  return JSON.stringify({ ...DEFAULTS3, _help: HELP }, null, 2) + "\n";
-}
-function main() {
-  const { cwd: cwdFlag, mode, selfBuild, modelTier, flags } = parseArgs(process.argv.slice(2));
-  const cwd = cwdFlag ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (mode === "scaffold") {
-    process.stdout.write(scaffold());
-    return;
-  }
-  if (mode === "validate") {
-    const { config: fileConfigRaw, rejects, source } = loadFileConfig(cwd, selfBuild);
-    let fileConfig = fileConfigRaw;
-    if (source === "settings.json") {
-      try {
-        fileConfig = loadLocalOverride(cwd, fileConfigRaw, selfBuild);
-      } catch (e) {
-        rejects.push(e.message);
-        process.stderr.write(`[read-guild-config] ERROR: ${e.message}
-`);
-      }
-    }
-    if (source === "none") {
-      process.stdout.write("no .guild/settings.json found \u2014 built-in defaults are valid.\n");
-      return;
-    }
-    if (rejects.length === 0) {
-      process.stdout.write(`.guild/${source}: VALID (closed-key checks pass)
-`);
-      return;
-    }
-    process.stdout.write(`.guild/${source}: INVALID \u2014 ${rejects.length} violation(s):
-`);
-    for (const r of rejects) process.stdout.write(`  - ${r}
-`);
-    process.exit(1);
-    return;
-  }
-  const localPath = path8.join(cwd, ".guild", "settings.local.json");
-  let localLoadedKeys = [];
-  if (fs6.existsSync(localPath)) {
-    try {
-      const rawLocal = JSON.parse(fs6.readFileSync(localPath, "utf8"));
-      localLoadedKeys = Object.keys(rawLocal).filter((k) => !k.startsWith("_"));
-      const schemaBase = DEFAULTS3;
-      const basePaths = /* @__PURE__ */ new Set();
-      (function collectPaths(obj, prefix = "") {
-        for (const [k, v] of Object.entries(obj)) {
-          const full = prefix ? `${prefix}.${k}` : k;
-          basePaths.add(full);
-          if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-            collectPaths(v, full);
-          }
-        }
-      })(schemaBase);
-      for (const key of localLoadedKeys) {
-        if (!basePaths.has(key)) {
-          const errMsg = `share-dot-guild: settings.local.json key '${key}' not in settings.json schema \u2014 refusing to silently extend. Declare it in settings.json first (with the team default) or remove it from settings.local.json.`;
-          process.stderr.write(`[read-guild-config] ERROR: ${errMsg}
-`);
-          localLoadedKeys = [];
-          break;
-        }
-      }
-      if (localLoadedKeys.length > 0) {
-        process.stderr.write(
-          `[read-guild-config] INFO: .guild/settings.local.json loaded \u2014 ${localLoadedKeys.length} override key(s): [${localLoadedKeys.join(", ")}]
-`
-        );
-      }
-    } catch {
-    }
-  }
-  const { config: resolved } = resolveSettings2({
-    cwd,
-    flags,
-    selfBuild
-  });
-  const rigorExpanded = resolved._rigorExpanded;
-  const { _rigorExpanded: _drop, ...resolvedWithout } = resolved;
-  const output = {
-    ...resolvedWithout,
-    _rigor_expanded: rigorExpanded
-  };
-  if (modelTier !== void 0) {
-    output["_model_tier_override"] = {
-      tier: modelTier,
-      source: "--model-tier CLI flag",
-      note: "Top of tier precedence ladder: --model-tier > per-lane override > models.thresholds > built-in"
-    };
-  }
-  process.stdout.write(JSON.stringify(output, null, 2) + "\n");
-}
-var fs6, path8, HOST_MODES2, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, DEFAULTS_ALLOWED_KEYS2;
-var init_config_cli = __esm({
-  "../scripts/lib/core/config-cli.ts"() {
-    fs6 = __toESM(require("fs"));
-    path8 = __toESM(require("path"));
-    init_settings_resolver2();
-    init_host_registry_schema2();
-    init_host_id_namespace2();
-    init_host_profiles_validate2();
-    init_safe_object2();
-    init_config_defaults2();
-    init_tier_model();
-    HOST_MODES2 = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
-    DEFAULTS3 = DEFAULTS;
-    HELP = {
-      rigor: "quick | standard | deep \u2014 profile knob; expands loops/caps/review depth",
-      auto_approve: "[] | [spec,plan,build,qa] | [all] \u2014 opt-in autonomy; destructive/network/spend STILL ask. qa (G-14/SC-9): auto-proceed ONLY on a computed ReleaseGate PASS \u2014 a BLOCK-override and the always-ask hard set still prompt. No ops token (rails stay interactive by design).",
-      review: "local | cross | off \u2014 cross engages the Claude<->Codex adversarial review broker",
-      host: "canonical host id | legacy alias | auto \u2014 co-equal host adapter selection",
-      roles: "per-run role pins {host,advisory,adversarial}; null = resolve via the role model (capability-matrix), or pin a canonical registry host_id. Legacy aliases normalize to canonical ids. Top-level `host` stays the dispatch-host selector; the v2 registry ids also key roles.*/host_profiles.*.",
-      host_profiles: "per-host config-render overrides keyed by host_id; {} = none (defaults render from the host-registry capability rows). CLOSED entry shape: { models?: {cheap?,mid?,powerful?}, enabled?: bool }.",
-      initiative_default: "null | <initiative-id> \u2014 attach runs to a durable initiative",
-      index: "auto | off \u2014 optional SQLite read-through cache (auto = lazy-build past measured slowness)",
-      record_status_runs: "bool (default true) \u2014 OQ6 (SC-B): /guild:status records a lightweight run (run.yaml + provenance.json, runs/-only; never wiki/decisions/indexes). false = revert to historical pure-read (no run written). Default-safe-when-absent.",
-      codex_skip_enforcement: '"warn" | "block" (default "warn") \u2014 FU-E codex-skip enforcement: warn surfaces the block sentinel (.guild/codex-skip-streak.json) at G-gates without stopping dispatch; block hard-refuses dispatch at the gate until the streak is cleared. Referenced by guild:codex-review and guild:review-broker.',
-      agent_mode: "team | agent | subagent | auto (default) \u2014 execution backend (D5 dispatch ladder). auto: $TMUX\u2192team(in-session); tmux-installed\u2192team(new-session); independent-agents-supported\u2192agent; else\u2192subagent.",
-      "workspace.mode": "auto (default) | on | off \u2014 workspace federation mode (guild.workspace.v1). auto: detect by immediate-child rule (.git/.guild). on: force workspace. off: force regular. Depth is hard-fixed at 1 \u2014 no max_depth knob. Overridden by --mode flag on workspace/detect.ts.",
-      loops: "null | none|spec|plan|implementation|all|<csv> \u2014 power-user; null = derive from rigor",
-      loop_cap: "int 1-256 \u2014 max rounds per adversarial loop",
-      codex_cap: "int 1-10 \u2014 max rounds per Codex review gate",
-      "defaults.auto_learn": "bool (default false) \u2014 when true, /guild init runs the full learn-* pipeline at bootstrap (D3). Precedence: --learn CLI flag > settings.json > built-in(false).",
-      "defaults.adversarial": "on | off \u2014 (off REJECTED for Guild self-build)",
-      "defaults.team.size": "null = 3-4 rule | <int> (cap-6 unless overridden)",
-      "defaults.team.always_include": "[] | subset of the specialist roles",
-      "defaults.review_workflow": "standard | cross | minimal \u2014 default review depth",
-      "defaults.skill_policy": "standard | conservative \u2014 default skill-usage",
-      "defaults.gates.auto_approve": "[] | [spec,plan,build,qa,all] \u2014 default approval-gate posture. qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
-      "defaults.wiki.share_mode": "team | private \u2014 wiki share mode (moved here from legacy project.yaml)",
-      "defaults.wiki.autopromote": "false ALWAYS (true REJECTED \u2014 agents emit candidates only)",
-      "defaults.quality.budget.per_class_minutes": "int > 0 \u2014 per-check-class wall-clock cap",
-      "defaults.quality.budget.total_minutes": "int > 0 \u2014 whole-phase wall-clock cap",
-      "defaults.reporting": "standard | quiet | verbose \u2014 default task/progress reporting",
-      // ── models: block (cost-aware-tiering-and-lean-context ADR §10)
-      "models.enabled": "bool (default true) \u2014 master toggle for cost-tiering. false = all lanes run at mid (current v2 behavior).",
-      "models.tiers": '{cheap|mid|powerful: {<canonical-host-id>: value}} \u2014 host-agnostic tier\u2192model map. Each host value is string | {model, effort?, reasoning?, thinking?, verbosity?} | null. Object form pins a model PLUS host-defined effort/reasoning/thinking/verbosity axes, e.g. powerful: {"claude-code-cli": {model: "opus", effort: "high", reasoning: "xhigh"}}. Closed sub-keys: only model/effort/reasoning/thinking/verbosity are accepted inside the object form. null host slot = no model for that tier on that host (fall through to host mapping). Defaults: cheap=haiku, mid=sonnet, powerful=opus (plain strings). Legacy host aliases normalize to canonical ids; non-Claude host slots default to null until configured. Consumers unpack the union ONLY via resolveTierModel() (read-guild-config.ts).',
-      "models.scoreWeights": "object (signal\u2192int) \u2014 auto-score rubric weights (ADR \xA72). Signals: workType, blastRadius, dependsOn, security, priorEscalation. Ship fixed; tunable per-repo.",
-      "models.thresholds": "{mid:int, powerful:int} \u2014 score-band cutoffs (ADR \xA72). Default {mid:1, powerful:3}. score<mid\u2192cheap; mid\u2264score<powerful\u2192mid; score\u2265powerful\u2192powerful.",
-      "models.advisorRounds": "int > 0 (default 2) \u2014 max advisor consults per lane before recording inconclusive (ADR \xA73).",
-      "models.escalationMarkers": `string[] \u2014 uncertainty phrases that trigger advisor escalation (ADR \xA73). Defaults: ["I'm not sure", "unclear", "cannot determine", ...].`,
-      "models.recallBeforeRead": "bool (default true) \u2014 enforce recall-before-read: query wiki before opening a file (ADR \xA74).",
-      "models.recallScoreThreshold": "float 0\u20131 (default 0.4) \u2014 min BM25 recall score to skip a full file read (ADR \xA74).",
-      "models.structuredOutputRequired": "bool (default true) \u2014 reject non-guild.handoff.v2 agent returns (ADR \xA75).",
-      "models.cacheTTL.coordinator": '"1h" | "5m" | "off" (default "1h") \u2014 coordinator prompt-cache TTL hint (ADR \xA79).',
-      "models.cacheTTL.leaf": '"1h" | "5m" | "off" (default "5m") \u2014 leaf-agent prompt-cache TTL hint (ADR \xA79).',
-      "models.importanceGate": "int 1\u20135 (default 3) \u2014 min wiki importance level for routine recall (ADR \xA76).",
-      "models.compositeRecall": "bool (default true) \u2014 composite recall scoring (docs/v2/knowledge-memory.html \xA7Recall scoring). true = wiki recall ranks by relevance \xD7 recency \xD7 importance and filters pages scoring below models.importanceGate. Because this requires raw BM25 scores, it bypasses the SQLite FTS read-through cache and uses file-BM25 for bundle recall. false = legacy BM25-only ranking with the SQLite cache eligible above defaults.index.wiki_file_threshold.",
-      "models.importanceAtIngest": "bool (default true) \u2014 write-time importance-at-ingest scorer (docs/v2/knowledge-memory.html \xA7Importance-at-ingest). true = the ingest/learn path stamps each wiki page with a 1\u20135 recall_importance: score so recall reads a stable stored weight. false = recall derives the weight from the page category at query time.",
-      "models.ingestSimilarityGate": "float 0\u20131 (default 0.80) \u2014 BM25 top-1 similarity threshold for the wiki ingest anomaly gate (D-INGEST-GATE). If a candidate page scores \u2265 this against existing pages, guild:wiki-ingest pauses: supersede / skip / proceed \u2014 never silently overwrites.",
-      "models.shortOutputThreshold": "object (default {}) \u2014 O-3 short-output advisor trigger buckets (D-OBS-3). Shape: { [task_type]: { [tier]: number } } where numbers are output-token floors. Empty map \u21D2 O-3 trigger is silent for all (task_type, tier) buckets. Values are proposed by benchmark/src/calibrate-o3-cli.ts after \u226530 samples per bucket; operator reviews and lands them here \u2014 nothing auto-writes this key.",
-      // ── security: block (v2-security-and-untrusted-content ADR — D-BYPASS)
-      "security.bypass_permissions_policy": '"deny" | "audit" | "allow" (default "audit") \u2014 bypassPermissions governance during Guild-managed runs (D-BYPASS). deny: hard-block + security event (forced under auto_approve / autonomous_after_plan_approval). audit: surfaces always-ask channel + security event (default for interactive mode). allow: opt-in for interactive mode only. Guild cannot govern bypass outside its own run lifecycle.',
-      // ── secrets_policy: block (v2-security-and-untrusted-content ADR — D-SECRETS)
-      "secrets_policy.env_allowlist": "string[] (default []) \u2014 env var names explicitly permitted in agent-context injection. All others are redacted before context assembly.",
-      "secrets_policy.redaction_patterns": "string[] (default []) \u2014 regex patterns applied as the first stage of the 3-stage secrets scrubber (prefix regexes \u2192 Shannon-entropy \u2192 file-path context). Run over all .guild/ artifact writes.",
-      "secrets_policy.fail_mode_durable": '"closed" | "open" (default "closed") \u2014 on scrub failure for durable shared-git artifacts (handoff, provenance, wiki, review): closed = block the write + surface always-ask; open = warn + proceed.',
-      "secrets_policy.fail_mode_telemetry": '"open" | "closed" (default "open") \u2014 on scrub failure for local gitignored telemetry writes (runs/<id>/logs/*.jsonl): open = warn + security event + proceed; closed = block.',
-      // ── mcp: block (v2-security-and-untrusted-content ADR — D-MCP)
-      "mcp.tool_description_hashes": "object (default {}) \u2014 map of MCP tool-name \u2192 SHA-256 hash of the tool description string (description only; see hooks/lib/security/mcp-hash-pin.ts hashDescription), pinned at /guild:config init time (D-MCP PI-6). PreToolUse compares the live hash per call. Drift triggers a warn+gate-on-approval. Re-pin via /guild:config update-mcp-hashes.",
-      // ── defaults.index: block (v2-persistence-and-sqlite-index ADR — D-PS-1)
-      "defaults.index.enabled": "bool (default true) \u2014 master switch for the lazy index.sqlite cache. false = always direct-parse, no index.sqlite ever written. Equivalent to the /guild:stats --no-index one-shot, made persistent.",
-      "defaults.index.kg_node_threshold": "int (default 2000) \u2014 populate kg_nodes/kg_edges tables when knowledge-graph.json has more than N nodes.",
-      "defaults.index.kg_size_threshold_mb": "number (default 1) \u2014 populate kg_nodes/kg_edges tables when knowledge-graph.json exceeds N MB.",
-      "defaults.index.links_edge_threshold": "int (default 2000) \u2014 populate kl_edges table when knowledge-links.json has more than N edges.",
-      "defaults.index.runs_threshold": "int (default 20) \u2014 populate run_provenance table when runs/*/provenance.json count exceeds N.",
-      "defaults.index.wiki_file_threshold": "int (default 500) \u2014 populate wiki_fts table when wiki/** file count exceeds N. Below threshold, guild-memory BM25 grep path is used unchanged.",
-      // ── defaults.cross_host: block (v2-cross-host-orchestration ADR — CR-1/CH-1)
-      "defaults.cross_host.enabled": "bool (default false) \u2014 THE local-vs-remote switch. false (default) \u21D2 EVERYTHING RUNS LOCALLY (single-host, byte-identical to today; no SSH, ever). true \u21D2 a specialist may run on a remote host, but ONLY when ALL of: (1) this is true, (2) the specialist is routed to a remote host (team.yaml `host:` / capability routing), (3) that host has an endpoint in defaults.cross_host.hosts, and (4) the pre-dispatch capability probe confirms the host has the brand CLI + tmux (missing \u21D2 fail-fast, nothing spawned). Otherwise the lane stays local (or falls back to Claude per fallback_to_claude). Env override: GUILD_CROSS_HOST_ENABLED=1 (env wins). SECURITY: enables SSH dispatch \u2014 ssh keys/agent only, no passwords.",
-      "defaults.cross_host.hosts": "object { <host_id>: { address: string, port?: number, user?: string } } \u2014 SSH endpoint config keyed by guild.host_capability.v1 host_id. SECURITY: address/port/user ONLY \u2014 NO secrets, NO passwords. Auth via ssh keys/agent. Non-standard ports: prefer ~/.ssh/config Host entries over the port field.",
-      // ── R-009: statusline
-      statusline: "bool (default false) \u2014 enable the Guild status-line pane (R-009). When true, the skill orchestrator sets GUILD_STATUSLINE=1 in the session env before invoking the launcher; statusline-guild.sh reads the flag to enable the tmux status pane. CLI flag: --statusline. Config: config set statusline true --scope project",
-      // ── R-019: mcp transport availability
-      "mcp.stdio_available": "bool (default true) \u2014 MCP stdio transport available (R-019, FDC-13). true for Claude Code CLI/Desktop; consumed by hooks/lib/security/config.ts McpAvailability.",
-      "mcp.http_available": "bool (default false) \u2014 MCP HTTP transport available (R-019, FDC-13). true for Claude Code Web and some enterprise setups.",
-      "mcp.bridge_package": "string|null (default null) \u2014 MCP bridge package name for restricted-transport envs (R-019, FDC-13). null = no bridge. Used by pi-adapter and antigravity connectors.",
-      // ── R-008: adversarial_review_provider
-      adversarial_review_provider: '"auto" | <provider-id> (default "auto") \u2014 pin the cross-review provider (R-008, v2-cross-host-orchestration ADR). Only honored when review=cross. "auto" \u21D2 provider-detect.ts selects the best available provider. Explicit IDs: "codex-plugin", "codex-cli". Set via: config set adversarial_review_provider codex-plugin',
-      // ── R-015: defaults.cross_host.fallback_to_claude
-      "defaults.cross_host.fallback_to_claude": "bool (default true) \u2014 CR-3 level-4 Claude-only fallback (v2-cross-host-orchestration ADR CR-3). When true, the host-router falls back to the Claude host if no non-Claude host can satisfy a lane. Consumed by host-router.ts RouteOptions.fallbackToClaude.",
-      // ── R-016: defaults.retry.* + defaults.resume.*
-      "defaults.retry.max_attempts": "int \u2265 1 (default 1) \u2014 max retry attempts per lane on transient failure (v2-runtime-and-execution-model.md \xA7retry). 1 = no retry.",
-      "defaults.retry.backoff": '"immediate" | "linear" | "exponential" (default "exponential") \u2014 backoff strategy between retries.',
-      "defaults.resume.enabled": "bool (default true) \u2014 enable lane resume from checkpoint on failure (v2-runtime-and-execution-model.md \xA7resume).",
-      // ── R-017: defaults.heartbeat_timeout_ms
-      "defaults.heartbeat_timeout_ms": "int > 0 (default 600000 ms = 10 min) \u2014 staleness threshold for the heartbeat sentinel. hooks/lib/heartbeat.ts:153 reads this via tolerant reader (fallback = DEFAULT_HEARTBEAT_TIMEOUT_MS). Adding to the closed-key set lets config validate accept it and config set write it.",
-      // ── R-018: defaults.capability_manifest_ttl_s
-      "defaults.capability_manifest_ttl_s": "number > 0 (default 3600 s = 1 hour) \u2014 host capability manifest freshness TTL (v2-cross-host-orchestration ADR CR-5). Consumed by host-router.ts RouteOptions.manifestTtlS.",
-      // ── plugin-update-lifecycle AC-6: defaults.update
-      "defaults.update": '{ mode: "auto"|"notify"|"off" (default "notify"), cadence_hours: number > 0 (default 24) } \u2014 channel-aware update-check behavior. Consumed by hooks/update-check.ts (SessionStart signal + background cache refresh) and guild-run update. Dev/symlink installs are always excluded.',
-      // ── R-020: defaults.allowed_tools
-      "defaults.allowed_tools": "string[] (default []) \u2014 explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F). Replaces, not extends, the shared tool allow-list. [] \u21D2 no restriction.",
-      // ── rf-wi-01 (G1): host_mode + defaults.lean_lead.* + defaults.lifecycle_gate.*
-      host_mode: `read_only|ask|accept_edits|auto|bypass_all|null (default null) \u2014 the sanctioned, schema-registered P1-L10 host-autonomy override (permission-policy-schema.ts HOST_MODES). null = no override (host default "ask" applies, lifted to bypass_all for unattended local tmux team panes per issue #54's resolveTeamPaneHostMode). NEVER lifts a Guild lifecycle gate (host_mode \u22A5 guild_gates orthogonality invariant) \u2014 see permission-policy.ts. NOT under security. \u2014 the #54 lane reverted an ad-hoc security.host_mode key for bypassing this schema; this is the registered replacement.`,
-      "defaults.lean_lead.enabled": 'bool (default true) \u2014 master toggle for the lean-lead inline-shortcut-expired advisory (hooks/lib/lean-lead-guard.ts, SKILL.md "Inline shortcut under high autonomy").',
-      "defaults.lean_lead.hands_on_edit_threshold": "int >= 1 (default 8) \u2014 direct lead Edit/Write ops (while lanes are open) before the advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
-      "defaults.lifecycle_gate.enabled": "bool (default true) \u2014 master toggle for the lifecycle-gate ad-hoc-activity advisory (hooks/lib/lifecycle-gate.ts).",
-      "defaults.lifecycle_gate.adhoc_activity_threshold": "int >= 1 (default 20) \u2014 ad-hoc (non-skill) activity count before the lifecycle-gate advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
-      _precedence: "CLI flag > --rigor profile > settings.json > built-in default. For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
-      _docs: "Canonical schema: architecture/command-surface.md \xA74.4. Regenerate with: /guild config init"
-    };
-    VALID_RIGOR2 = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
-    VALID_REVIEW2 = /* @__PURE__ */ new Set(["local", "cross", "off"]);
-    DISPATCH_HOST_IDS2 = new Set(
-      HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
-    );
-    VALID_PHASES = /* @__PURE__ */ new Set(["spec", "plan", "build", "qa", "all"]);
-    VALID_AGENT_MODE2 = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
-    VALID_MODEL_TIER = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
-    VALID_CACHE_TTL2 = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
-    VALID_MODELS_KEYS = /* @__PURE__ */ new Set([
-      "enabled",
-      "tiers",
-      "scoreWeights",
-      "thresholds",
-      "advisorRounds",
-      "escalationMarkers",
-      "recallBeforeRead",
-      "recallScoreThreshold",
-      "structuredOutputRequired",
-      "cacheTTL",
-      "importanceGate",
-      "compositeRecall",
-      "importanceAtIngest",
-      "ingestSimilarityGate",
-      "shortOutputThreshold",
-      "knowledge"
-    ]);
-    VALID_TIER_HOST_KEYS2 = new Set(HOST_IDS);
-    KNOWN_HOST_IDS3 = new Set(HOST_IDS);
-    VALID_ROLES_KEYS = /* @__PURE__ */ new Set(["host", "advisory", "adversarial"]);
-    VALID_SECURITY_KEYS = /* @__PURE__ */ new Set(["bypass_permissions_policy"]);
-    VALID_SECRETS_POLICY_KEYS = /* @__PURE__ */ new Set([
-      "env_allowlist",
-      "redaction_patterns",
-      "fail_mode_durable",
-      "fail_mode_telemetry"
-    ]);
-    VALID_MCP_KEYS = /* @__PURE__ */ new Set([
-      "tool_description_hashes",
-      "stdio_available",
-      // R-019: bool — stdio transport available
-      "http_available",
-      // R-019: bool — HTTP transport available
-      "bridge_package"
-      // R-019: string|null — bridge package name
-    ]);
-    VALID_INDEX_KEYS = /* @__PURE__ */ new Set([
-      "enabled",
-      "kg_node_threshold",
-      "kg_size_threshold_mb",
-      "links_edge_threshold",
-      "runs_threshold",
-      "wiki_file_threshold"
-    ]);
-    DEFAULTS_ALLOWED_KEYS2 = /* @__PURE__ */ new Set([
-      "auto_learn",
-      // D3: bool, default false
-      "adversarial",
-      "team",
-      "review_workflow",
-      "skill_policy",
-      "gates",
-      "wiki",
-      "quality",
-      "reporting",
-      "index",
-      // D-PS-1: SQLite lazy-cache trigger thresholds
-      "cross_host",
-      // CR-1/CH-1: cross-host SSH endpoint config (R-015 adds fallback_to_claude)
-      "retry",
-      // R-016: { max_attempts: int, backoff: "immediate"|"linear"|"exponential" }
-      "resume",
-      // R-016: { enabled: bool }
-      "heartbeat_timeout_ms",
-      // R-017: int ms (hooks/lib/heartbeat.ts tolerant reader)
-      "capability_manifest_ttl_s",
-      // R-018: number s (host-router.ts CR-5 manifest freshness)
-      "update",
-      // plugin-update-lifecycle AC-6: { mode: "auto"|"notify"|"off", cadence_hours: number }
-      "allowed_tools",
-      // R-020: string[] (boundary-config-and-tracking Decision F)
-      "lean_lead",
-      // rf-wi-01 (G1): { enabled: bool, hands_on_edit_threshold: int }
-      "lifecycle_gate"
-      // rf-wi-01 (G1): { enabled: bool, adhoc_activity_threshold: int }
-    ]);
-  }
-});
-
 // lean-lead-guard.ts
 var lean_lead_guard_exports = {};
 __export(lean_lead_guard_exports, {
-  main: () => main3
+  main: () => main2
 });
 module.exports = __toCommonJS(lean_lead_guard_exports);
 
@@ -6510,312 +6247,24 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/run-trace.ts
-var fs9 = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
+var fs8 = __toESM(require("fs"));
+var path10 = __toESM(require("path"));
 
 // ../src/modules/config/index.ts
 init_config_defaults();
+
+// ../src/modules/config/workflows/config-validation.ts
+init_host_runtime();
+
+// ../src/modules/config/index.ts
 init_settings_resolver();
-init_tier_model();
 
-// ../src/modules/state/workflows/frontmatter.ts
-init_kernel();
-
-// ../src/modules/migrations/workflows/index-migrate.ts
-var import_node_child_process = require("node:child_process");
-var fs5 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
-function openDatabase(dbPath) {
-  const { DatabaseSync } = require("node:sqlite");
-  const db = new DatabaseSync(dbPath);
-  db.exec("PRAGMA busy_timeout = 5000");
-  return db;
-}
-var CURRENT_SCHEMA_VERSION = 3;
-function resolveGuildRoot2(cwd) {
-  try {
-    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
-      cwd,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
-    const abs = path7.isAbsolute(raw) ? raw : path7.resolve(cwd, raw);
-    const root = path7.dirname(abs);
-    if (fs5.existsSync(root)) return root;
-  } catch {
-  }
-  return path7.resolve(cwd);
-}
-var MIGRATIONS = [
-  // ── v1: core tables ───────────────────────────────────────────────────────
-  {
-    version: 1,
-    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_nodes;
-        DROP TABLE IF EXISTS kg_edges;
-        DROP TABLE IF EXISTS kl_edges;
-        DROP TABLE IF EXISTS run_provenance;
-        DROP TABLE IF EXISTS wiki_fts;
-        DROP TABLE IF EXISTS _fingerprints;
-      `);
-      db.exec(`
-        CREATE TABLE kg_nodes (
-          id         TEXT NOT NULL PRIMARY KEY,
-          type       TEXT,
-          name       TEXT,
-          source_refs TEXT,
-          confidence TEXT,
-          layer      TEXT,
-          data       TEXT
-        );
-
-        CREATE TABLE kg_edges (
-          id        INTEGER PRIMARY KEY,
-          source    TEXT NOT NULL,
-          target    TEXT NOT NULL,
-          type      TEXT,
-          direction TEXT,
-          weight    REAL,
-          data      TEXT
-        );
-
-        CREATE TABLE kl_edges (
-          id        INTEGER PRIMARY KEY,
-          from_node TEXT NOT NULL,
-          to_node   TEXT NOT NULL,
-          type      TEXT,
-          run_id    TEXT,
-          data      TEXT
-        );
-
-        CREATE TABLE run_provenance (
-          run_id TEXT NOT NULL PRIMARY KEY,
-          ts     TEXT,
-          data   TEXT
-        );
-
-        CREATE TABLE _fingerprints (
-          table_name   TEXT NOT NULL PRIMARY KEY,
-          source_path  TEXT NOT NULL,
-          sha256       TEXT NOT NULL,
-          populated_at TEXT NOT NULL
-        );
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE wiki_fts USING fts5(
-            path      UNINDEXED,
-            title,
-            content,
-            tokenize='porter ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE wiki_fts (
-            path    TEXT,
-            title   TEXT,
-            content TEXT
-          );
-        `);
-      }
-    }
-  },
-  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
-  //
-  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
-  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
-  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
-  //
-  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
-  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
-  // invalidate function (ensureFederationWikiCache) was removed in
-  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
-  // schema migration is retained (harmless empty table) since altering the
-  // migration ladder is a separate, out-of-scope decision.
-  {
-    version: 2,
-    tables: ["federation_wiki_cache"],
-    up(db) {
-      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
-      db.exec(`
-        CREATE TABLE federation_wiki_cache (
-          sub_guild_root TEXT NOT NULL,
-          path           TEXT NOT NULL,
-          title          TEXT,
-          snippet        TEXT,
-          PRIMARY KEY (sub_guild_root, path)
-        );
-      `);
-    }
-  },
-  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
-  //
-  // Two OPTIONAL acceleration tables projected from the canonical, file-first
-  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
-  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
-  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
-  // remains the source of truth that returns IDENTICAL answers.
-  //
-  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
-  //                    indexed on source AND target so the call-graph BFS
-  //                    (kgTrace / kgDeadCode) is fetched without parsing the
-  //                    whole JSON graph.
-  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
-  //                    node, so identifier search (`process_order` →
-  //                    `processOrder`) is an index lookup, not a full node scan.
-  //                    Tokens are PRE-SPLIT with the shared identifier-aware
-  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
-  //                    document and query side, so the FTS built-in tokenizer
-  //                    only has to whitespace-split — the camel/snake behaviour
-  //                    lives in the (deterministic, model-free) projection feed.
-  {
-    version: 3,
-    tables: ["kg_calls", "kg_symbols_fts"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_calls;
-        DROP TABLE IF EXISTS kg_symbols_fts;
-      `);
-      db.exec(`
-        CREATE TABLE kg_calls (
-          id         INTEGER PRIMARY KEY,
-          source     TEXT NOT NULL,
-          target     TEXT NOT NULL,
-          confidence TEXT
-        );
-        CREATE INDEX kg_calls_source ON kg_calls (source);
-        CREATE INDEX kg_calls_target ON kg_calls (target);
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
-            node_id UNINDEXED,
-            name_tokens,
-            tokenize='ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE kg_symbols_fts (
-            node_id     TEXT,
-            name_tokens TEXT
-          );
-        `);
-      }
-    }
-  }
-];
-function runMigrations(dbPath) {
-  let db;
-  let fromVersion = 0;
-  try {
-    fs5.mkdirSync(path7.dirname(dbPath), { recursive: true });
-    db = openDatabase(dbPath);
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec("PRAGMA synchronous = NORMAL");
-    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
-    for (const mig of MIGRATIONS) {
-      if (mig.version <= fromVersion) continue;
-      try {
-        db.exec("BEGIN IMMEDIATE");
-        mig.up(db);
-        db.exec(`PRAGMA user_version = ${mig.version}`);
-        db.exec("COMMIT");
-        fromVersion = mig.version;
-      } catch (err) {
-        try {
-          db.exec("ROLLBACK");
-        } catch {
-        }
-        for (const tbl of mig.tables) {
-          try {
-            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
-          } catch {
-          }
-        }
-        db.close();
-        return {
-          ok: false,
-          fromVersion,
-          toVersion: fromVersion,
-          dbPath,
-          message: `migration to v${mig.version} failed: ${err.message}`
-        };
-      }
-    }
-    db.close();
-    return {
-      ok: true,
-      fromVersion,
-      toVersion: CURRENT_SCHEMA_VERSION,
-      dbPath
-    };
-  } catch (err) {
-    try {
-      db?.close();
-    } catch {
-    }
-    return {
-      ok: false,
-      fromVersion,
-      toVersion: fromVersion,
-      dbPath,
-      message: `migration runner error: ${err.message}`
-    };
-  }
-}
-function runIndexMigrateCli() {
-  const argv = process.argv.slice(2);
-  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
-  let dbPath;
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
-    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
-  }
-  if (!dbPath) {
-    const guildRoot = resolveGuildRoot2(cwd);
-    dbPath = path7.join(guildRoot, ".guild", "index.sqlite");
-  }
-  const result = runMigrations(dbPath);
-  if (result.ok) {
-    process.stdout.write(
-      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
-`
-    );
-  } else {
-    process.stderr.write(`[index-migrate] WARN: ${result.message}
-`);
-    process.exit(1);
-  }
-}
-if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  runIndexMigrateCli();
-}
-
-// ../src/modules/state/workflows/index-cache.ts
-init_kernel();
-
-// lib/v1.4/redact-log.ts
-var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-
-// lib/security/events.ts
-var KNOWN_GUILD_HOST_KINDS = [
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector"
-];
-var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+// ../src/modules/config/workflows/tier-model.ts
+init_host_runtime();
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
+init_state();
+init_security();
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
   if (runId.includes("\0")) return false;
@@ -6848,7 +6297,25 @@ var HOST_ID_SET3 = new Set(HOST_IDS);
 // ../src/modules/capability/workflows/role-resolver.ts
 init_host_runtime();
 
-// ../scripts/lib/advisory-record.ts
+// ../src/modules/review/workflows/review-pairing.ts
+init_host_runtime();
+
+// ../src/modules/review/workflows/review-progress.ts
+var REVIEW_PROGRESS_STATES = [
+  "launched",
+  "running",
+  "heartbeat",
+  "activity",
+  "no_output",
+  "reviewer_error",
+  "tool_error",
+  "cancelled",
+  "skipped",
+  "succeeded"
+];
+var STATE_SET = new Set(REVIEW_PROGRESS_STATES);
+
+// ../src/modules/review/resources/scripts/lib/advisory-record.ts
 var ADVISORY_RECORD_SCHEMA = "guild.advisory.v1";
 var ADVISORY_BACKENDS = [
   "tmux_team",
@@ -6924,16 +6391,9 @@ if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.arg
   process.stdout.write(JSON.stringify(skeleton, null, 2) + "\n");
 }
 
-// ../scripts/read-guild-config.ts
-init_config_cli();
-if (require.main === module && /^read-guild-config\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  const { __main } = (init_config_cli(), __toCommonJS(config_cli_exports));
-  __main();
-}
-
 // emit-learning-checkpoint.ts
-var fs7 = __toESM(require("fs"));
-var path9 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 
 // ../src/modules/initiatives/workflows/classify-proposal.ts
 function classifyProposal(input) {
@@ -7305,7 +6765,7 @@ function classifyPhase(artifacts) {
 
 // emit-learning-checkpoint.ts
 var SCHEMA_VERSION = "guild.learning_checkpoint.v1";
-var VALID_PHASES2 = [
+var VALID_PHASES = [
   "init",
   "ideation",
   "planning",
@@ -7357,9 +6817,9 @@ var FORBIDDEN_NODE_PREFIXES = [
   "component:"
 ];
 function assertPhase(phase) {
-  if (!VALID_PHASES2.includes(phase)) {
+  if (!VALID_PHASES.includes(phase)) {
     throw new Error(
-      `[emit-learning-checkpoint] invalid phase: "${phase}". Expected one of: ${VALID_PHASES2.join(", ")}`
+      `[emit-learning-checkpoint] invalid phase: "${phase}". Expected one of: ${VALID_PHASES.join(", ")}`
     );
   }
 }
@@ -7443,12 +6903,12 @@ function buildYaml(opts) {
 }
 function appendKnowledgeLinksIndex(guildRoot, links) {
   if (links.length === 0) return;
-  const indexDir = path9.join(guildRoot, ".guild", "indexes");
-  const indexPath = path9.join(indexDir, "knowledge-links.json");
+  const indexDir = path8.join(guildRoot, ".guild", "indexes");
+  const indexPath = path8.join(indexDir, "knowledge-links.json");
   let existing = [];
-  if (fs7.existsSync(indexPath)) {
+  if (fs6.existsSync(indexPath)) {
     try {
-      const raw = fs7.readFileSync(indexPath, "utf8");
+      const raw = fs6.readFileSync(indexPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed["links"])) {
         existing = parsed["links"];
@@ -7470,8 +6930,8 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
   if (novel.length === 0) return;
   const merged = [...existing, ...novel];
   try {
-    fs7.mkdirSync(indexDir, { recursive: true });
-    fs7.writeFileSync(
+    fs6.mkdirSync(indexDir, { recursive: true });
+    fs6.writeFileSync(
       indexPath,
       JSON.stringify(
         { schema_version: "guild.knowledge_links.v1", links: merged },
@@ -7490,14 +6950,14 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
 function appendReflections(guildRoot, runId, phase, decisions) {
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return;
-  const reflectionsDir = path9.join(guildRoot, ".guild", "reflections");
-  fs7.mkdirSync(reflectionsDir, { recursive: true });
-  const reflPath = path9.join(reflectionsDir, `${runId}.md`);
+  const reflectionsDir = path8.join(guildRoot, ".guild", "reflections");
+  fs6.mkdirSync(reflectionsDir, { recursive: true });
+  const reflPath = path8.join(reflectionsDir, `${runId}.md`);
   const entry = `
 ## Phase: ${phase} (${runId})
 
 ` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
-  fs7.appendFileSync(reflPath, entry, "utf8");
+  fs6.appendFileSync(reflPath, entry, "utf8");
 }
 function writeCheckpoint(opts) {
   assertPhase(opts.phase);
@@ -7506,11 +6966,11 @@ function writeCheckpoint(opts) {
   assertNodePrefixes(links);
   const guildRoot = opts.guildRoot ?? process.cwd();
   const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
-  const learningDir = path9.join(guildRoot, ".guild", "runs", opts.runId, "learning");
-  fs7.mkdirSync(learningDir, { recursive: true });
-  const checkpointFile = path9.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const learningDir = path8.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  fs6.mkdirSync(learningDir, { recursive: true });
+  const checkpointFile = path8.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path9.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path8.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
   const observed = opts.observed ?? [];
   const yaml3 = buildYaml({
     runId: opts.runId,
@@ -7522,13 +6982,13 @@ function writeCheckpoint(opts) {
     knowledgeLinksBatch: links,
     ...opts.backstop === true ? { backstop: true } : {}
   });
-  fs7.writeFileSync(checkpointFile, yaml3, "utf8");
+  fs6.writeFileSync(checkpointFile, yaml3, "utf8");
   appendReflections(guildRoot, opts.runId, opts.phase, decisions);
   appendKnowledgeLinksIndex(guildRoot, links);
   void reflectionsAbsPath;
   return checkpointFile;
 }
-function main2() {
+function main() {
   const runId = process.env["GUILD_RUN_ID"];
   const phase = process.env["GUILD_PHASE"];
   const evidenceRef = process.env["GUILD_EVIDENCE_REF"] ?? "none";
@@ -7547,7 +7007,7 @@ function main2() {
   let decisions;
   if (verdictPath) {
     try {
-      const raw = fs7.readFileSync(verdictPath, "utf8");
+      const raw = fs6.readFileSync(verdictPath, "utf8");
       decisions = JSON.parse(raw);
     } catch (e) {
       process.stderr.write(
@@ -7558,7 +7018,7 @@ function main2() {
   }
   if (decisions === void 0 && artifactsJsonPath) {
     try {
-      const rawArtifacts = fs7.readFileSync(artifactsJsonPath, "utf8");
+      const rawArtifacts = fs6.readFileSync(artifactsJsonPath, "utf8");
       const artifacts = JSON.parse(rawArtifacts);
       if (!artifacts.runId) artifacts.runId = runId;
       if (!artifacts.phase) artifacts.phase = phase ?? void 0;
@@ -7579,7 +7039,7 @@ function main2() {
   let knowledgeLinksBatch = [];
   if (linksPath) {
     try {
-      const raw = fs7.readFileSync(linksPath, "utf8");
+      const raw = fs6.readFileSync(linksPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         knowledgeLinksBatch = parsed;
@@ -7614,14 +7074,14 @@ function main2() {
   }
 }
 if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-checkpoint.ts") || process.argv[1].endsWith("emit-learning-checkpoint.js"))) {
-  main2();
+  main();
 }
 
-// lib/run-state.ts
-var fs8 = __toESM(require("node:fs"));
-var path10 = __toESM(require("node:path"));
+// ../src/modules/lifecycle/workflows/run-state.ts
+var fs7 = __toESM(require("node:fs"));
+var path9 = __toESM(require("node:path"));
 
-// lib/v1.4/v1.4-lock.ts
+// ../src/modules/lifecycle/workflows/stable-lock.ts
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");
 function stableLockPath(runDir) {
@@ -7631,11 +7091,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path13 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path13), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path13)) return;
+  const path12 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path12), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path12)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path13, "wx");
+    const fd = (0, import_node_fs.openSync)(path12, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -7687,15 +7147,16 @@ function withStableLock(runDir, fn, opts = {}) {
   }
 }
 
-// lib/run-state.ts
+// ../src/modules/lifecycle/workflows/run-state.ts
+init_state();
 var RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
 function runStatePath(runDir) {
-  return path10.join(runDir, "run-state.json");
+  return path9.join(runDir, "run-state.json");
 }
 function loadRunState(runDir) {
   let raw;
   try {
-    raw = fs8.readFileSync(runStatePath(runDir), "utf8");
+    raw = fs7.readFileSync(runStatePath(runDir), "utf8");
   } catch {
     return null;
   }
@@ -7718,15 +7179,15 @@ var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
 function resolveRunIdForTrace(root, env) {
   const fromEnv = env.GUILD_RUN_ID;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-  const legacy = readSentinel(path11.join(root, ".guild", "runs", "current-run-id"));
+  const legacy = readSentinel(path10.join(root, ".guild", "runs", "current-run-id"));
   if (legacy) return legacy;
-  const b2 = readSentinel(path11.join(root, ".guild", "current-run-id"));
+  const b2 = readSentinel(path10.join(root, ".guild", "current-run-id"));
   if (b2) return b2;
   return null;
 }
 function readSentinel(p) {
   try {
-    const v = fs9.readFileSync(p, "utf8").trim();
+    const v = fs8.readFileSync(p, "utf8").trim();
     return v.length > 0 ? v : null;
   } catch {
     return null;
@@ -7734,10 +7195,10 @@ function readSentinel(p) {
 }
 
 // lib/lean-lead-guard.ts
-var fs10 = __toESM(require("node:fs"));
-var path12 = __toESM(require("node:path"));
+var fs9 = __toESM(require("node:fs"));
+var path11 = __toESM(require("node:path"));
 
-// lib/v1.4/log-jsonl-schema.ts
+// ../src/modules/lifecycle/workflows/event-log-schema.ts
 var EVENT_TYPES = /* @__PURE__ */ new Set([
   "phase_start",
   "phase_end",
@@ -7753,15 +7214,16 @@ var EVENT_TYPES = /* @__PURE__ */ new Set([
   "codex_review_round"
 ]);
 
-// lib/v1.4/log-jsonl-writer.ts
+// ../src/modules/lifecycle/workflows/event-log-writer.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
+init_security();
 
-// lib/trace-v2.ts
+// ../src/modules/lifecycle/workflows/trace-v2.ts
 var SIDECAR_MAX_BYTES2 = 16 * 1024;
 
-// lib/v1.4/log-jsonl-writer.ts
+// ../src/modules/lifecycle/workflows/event-log-writer.ts
 function liveLogPath2(runDir) {
   return (0, import_node_path2.join)(runDir, "logs", "v1.4-events.jsonl");
 }
@@ -7791,9 +7253,9 @@ function listArchives(runDir) {
   entries.sort((a, b) => a.n - b.n);
   return entries.map((e) => e.path);
 }
-async function readArchive(path13) {
+async function readArchive(path12) {
   const chunks = [];
-  const src = (0, import_node_fs2.createReadStream)(path13);
+  const src = (0, import_node_fs2.createReadStream)(path12);
   const gunzip = (0, import_node_zlib.createGunzip)();
   src.pipe(gunzip);
   for await (const chunk of gunzip) {
@@ -7874,7 +7336,8 @@ function appendParsedLines(text, source, out, opts) {
   }
 }
 
-// lib/v1.4/log-jsonl-sidecar.ts
+// ../src/modules/lifecycle/workflows/event-log-sidecar.ts
+init_security();
 var SIDECAR_MAX_BYTES3 = 1024 * 1024;
 var ORPHAN_RESULT_EXCERPT = "<orphaned \u2014 pre/post pairing failed>";
 
@@ -7903,8 +7366,10 @@ function isWorkerInvocation(env = process.env) {
   return typeof laneId === "string" && laneId.length > 0 || typeof taskId === "string" && taskId.length > 0;
 }
 
+// ../scripts/lib/shared/config-defaults.ts
+init_config_defaults();
+
 // lib/lean-lead-guard.ts
-init_config_defaults2();
 var LEAN_LEAD_MARKER = "[GUILD LEAN-LEAD]";
 var DEFAULT_THRESHOLD = DEFAULTS.defaults.lean_lead.hands_on_edit_threshold;
 var DEFAULT_ENABLED = DEFAULTS.defaults.lean_lead.enabled;
@@ -7960,11 +7425,11 @@ async function countHandsOnEdits(runDir, runId) {
   return { count, anchorTs };
 }
 function advisoryStatePath(runDir) {
-  return path12.join(runDir, "lean-lead-advisory-state.json");
+  return path11.join(runDir, "lean-lead-advisory-state.json");
 }
 function loadAdvisoryState(runDir) {
   try {
-    const raw = fs10.readFileSync(advisoryStatePath(runDir), "utf8");
+    const raw = fs9.readFileSync(advisoryStatePath(runDir), "utf8");
     const parsed = JSON.parse(raw);
     if (parsed["schema_version"] !== ADVISORY_STATE_SCHEMA) return null;
     const anchorTs = parsed["anchor_ts"];
@@ -7980,15 +7445,15 @@ function loadAdvisoryState(runDir) {
   }
 }
 function writeAdvisoryState(runDir, state) {
-  fs10.mkdirSync(runDir, { recursive: true });
+  fs9.mkdirSync(runDir, { recursive: true });
   const finalPath = advisoryStatePath(runDir);
   const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  fs10.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
+  fs9.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
-    fs10.renameSync(tmpPath, finalPath);
+    fs9.renameSync(tmpPath, finalPath);
   } catch (err) {
     try {
-      fs10.unlinkSync(tmpPath);
+      fs9.unlinkSync(tmpPath);
     } catch {
     }
     throw err;
@@ -8024,7 +7489,7 @@ async function evaluateLeanLeadGuard(guildRoot, runId, env = process.env) {
   if (safeRunId === null) return { advisory: null };
   const config = readLeanLeadConfig(guildRoot);
   if (!config.enabled || isOverridden(env)) return { advisory: null };
-  const runDir = env["GUILD_RUN_DIR"] ?? path12.join(guildRoot, ".guild", "runs", safeRunId);
+  const runDir = env["GUILD_RUN_DIR"] ?? path11.join(guildRoot, ".guild", "runs", safeRunId);
   const openLanes = countOpenLanes(runDir);
   if (openLanes === 0) return { advisory: null };
   const { count, anchorTs } = await countHandsOnEdits(runDir, safeRunId);
@@ -8045,7 +7510,7 @@ async function readStdin() {
     process.stdin.on("error", () => resolve5(""));
   });
 }
-async function main3() {
+async function main2() {
   const raw = await readStdin();
   let payload = {};
   try {
@@ -8075,7 +7540,7 @@ async function main3() {
   }
 }
 if (require.main === module) {
-  main3().catch((err) => {
+  main2().catch((err) => {
     process.stderr.write(
       `[lean-lead-guard] FATAL: ${err instanceof Error ? err.message : String(err)}
 `

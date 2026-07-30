@@ -41,6 +41,7 @@ import {
 } from "../../src/modules/documents";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
+const CONTENT_HASH_PATTERN = new RegExp("^sha256" + ":[0-9a-f]{64}$");
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -133,7 +134,7 @@ describe("BF-01 forged projection authority", () => {
     expect(decision.authority).toBe("canonical_record");
     expect(decision.gate_signal).toBe("advance");
     expect(decision.disposition).toBe("succeeded");
-    expect(decision.content_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(decision.content_hash).toMatch(CONTENT_HASH_PATTERN);
     expect(decision.refusals).toEqual([]);
   });
 });
@@ -322,7 +323,7 @@ describe("BF-02 hostile-value validation", () => {
     const second = documentContentHash(record);
     expect(first.ok).toBe(true);
     expect(first.hash).toBe(second.hash);
-    expect(first.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(first.hash).toMatch(CONTENT_HASH_PATTERN);
     // The canonical form contains no raw lone surrogate, so the UTF-8 encoding
     // step cannot silently substitute U+FFFD and move the hash.
     const canonical = canonicalDocumentJson(validateDocumentRecord(record).record!);
@@ -839,7 +840,7 @@ describe("DC-07 machine decisions", () => {
 // ---------------------------------------------------------------------------
 
 describe("DC-08 service boundaries", () => {
-  it("the shipped documents module imports nothing outside its own tree", () => {
+  it("the shipped documents module uses only its declared boundary dependencies", () => {
     const files = DOCUMENTS_MODULE_SOURCE_FILES.map((relative) => ({
       path: relative,
       text: fs.readFileSync(path.join(REPO_ROOT, relative), "utf8"),
@@ -848,6 +849,25 @@ describe("DC-08 service boundaries", () => {
     const report = evaluateDocumentServiceBoundary(files);
     expect(report.violations).toEqual([]);
     expect(report.ok).toBe(true);
+  });
+
+  it("allows only the exact policy-required js-yaml parser package", () => {
+    const report = evaluateDocumentServiceBoundary([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        text:
+          'import * as yaml from "js-yaml";\n' +
+          'import { load } from "js-yaml/lib/loader";\n',
+      },
+    ]);
+    expect(report.violations).toEqual([
+      {
+        path: "src/modules/documents/workflows/x.ts",
+        line: 2,
+        specifier: "js-yaml/lib/loader",
+        reason: "external_package_import",
+      },
+    ]);
   });
 
   it("detects a host-internal import", () => {

@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { parseYaml } from "../../state";
 
 export const STRUCTURAL_BASENAMES = new Set([
   "index.md", "readme.md", "log.md", "query.md", "transfer-manifest.md",
@@ -17,9 +18,10 @@ export function splitFrontmatter(content: string): FmSplit {
 }
 export function fmValue(lines: string[] | null, key: string): string | null {
   if (!lines) return null;
-  const match = lines.find((line) => line.match(new RegExp(`^\\s*${key}\\s*:`)));
-  if (!match) return null;
-  return match.slice(match.indexOf(":") + 1).trim().replace(/^['"]|['"]$/g, "") || null;
+  const parsed = parseYaml(lines.join("\n"));
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const value = (parsed as Record<string, unknown>)[key];
+  return value === undefined || value === null ? null : String(value);
 }
 export function isProvenance(relInWiki: string, lines: string[] | null): boolean {
   const segments = relInWiki.split(path.sep).slice(0, -1).map((value) => value.toLowerCase());

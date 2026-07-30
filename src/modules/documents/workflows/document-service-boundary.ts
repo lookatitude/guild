@@ -4,8 +4,8 @@
  * DC-08 — artifact/document/knowledge service boundaries.
  *
  * The documents service may depend only on public module entrypoints
- * (`src/modules/<id>/index.ts`) of an explicit allowlist, plus Node builtins.
- * It may never reach into host internals.
+ * (`src/modules/<id>/index.ts`) and exact external parser packages from explicit
+ * allowlists, plus Node builtins. It may never reach into host internals.
  *
  * Review note F-01 observed that a regex evaluator recognising only quoted
  * literal `import` specifiers is not a standalone proof: the forms it cannot
@@ -35,7 +35,7 @@
  * What this does not prove: it is a syntactic evaluator, not a resolver. A
  * module that reaches the filesystem through some other runtime capability is
  * outside what any import scan can see, which is why the shipped surface is
- * also kept to self-module and `node:` edges.
+ * also kept to self-module, `node:`, and explicitly named parser-package edges.
  */
 
 export const DOCUMENTS_MODULE_ID = "documents" as const;
@@ -44,6 +44,11 @@ export const DOCUMENTS_MODULE_ID = "documents" as const;
 export const DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES = Object.freeze([
   "lifecycle",
   "telemetry",
+]);
+
+/** Exact external parser packages this service is permitted to import. */
+export const DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES = Object.freeze([
+  "js-yaml",
 ]);
 
 export type BoundaryViolationReason =
@@ -76,6 +81,7 @@ export interface DocumentBoundaryReport {
 export interface BoundaryOptions {
   selfModule?: string;
   allowedModules?: readonly string[];
+  allowedExternalPackages?: readonly string[];
 }
 
 /**
@@ -266,10 +272,13 @@ function classify(
   fromFile: string,
   specifier: string,
   selfModule: string,
-  allowed: readonly string[]
+  allowed: readonly string[],
+  allowedExternalPackages: readonly string[]
 ): BoundaryViolationReason | null {
   if (specifier.startsWith("node:")) return null;
-  if (!specifier.startsWith(".")) return "external_package_import";
+  if (!specifier.startsWith(".")) {
+    return allowedExternalPackages.includes(specifier) ? null : "external_package_import";
+  }
 
   const resolved = resolveRelative(fromFile, specifier);
   const selfPrefix = `src/modules/${selfModule}/`;
@@ -304,6 +313,8 @@ export function evaluateDocumentServiceBoundary(
 ): DocumentBoundaryReport {
   const selfModule = options.selfModule ?? DOCUMENTS_MODULE_ID;
   const allowed = options.allowedModules ?? DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES;
+  const allowedExternalPackages =
+    options.allowedExternalPackages ?? DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES;
   const violations: DocumentBoundaryViolation[] = [];
 
   for (const file of files) {
@@ -335,7 +346,13 @@ export function evaluateDocumentServiceBoundary(
         continue;
       }
       const specifier = match[1] ?? "";
-      const reason = classify(file.path, specifier, selfModule, allowed);
+      const reason = classify(
+        file.path,
+        specifier,
+        selfModule,
+        allowed,
+        allowedExternalPackages
+      );
       if (reason !== null) report(keyword, specifier, reason);
     }
 
@@ -371,7 +388,13 @@ export function evaluateDocumentServiceBoundary(
           continue;
         }
         const specifier = call[1] ?? "";
-        const reason = classify(file.path, specifier, selfModule, allowed);
+        const reason = classify(
+          file.path,
+          specifier,
+          selfModule,
+          allowed,
+          allowedExternalPackages
+        );
         // The aliasing is already reported; only the edge it reaches is added.
         if (reason !== null) report(site, specifier, reason);
       }

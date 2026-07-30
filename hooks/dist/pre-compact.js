@@ -3071,8 +3071,8 @@ __export(pre_compact_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_compact_exports);
-var fs7 = __toESM(require("node:fs"));
-var path9 = __toESM(require("node:path"));
+var fs8 = __toESM(require("node:fs"));
+var path10 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -3105,13 +3105,13 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/reanchor.ts
-var fs6 = __toESM(require("node:fs"));
-var path8 = __toESM(require("node:path"));
+var fs7 = __toESM(require("node:fs"));
+var path9 = __toESM(require("node:path"));
 var yaml2 = __toESM(require_js_yaml());
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 var fsNode = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var path8 = __toESM(require("path"));
 
 // ../src/modules/config/workflows/config-defaults.ts
 var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
@@ -3874,6 +3874,22 @@ var AUTH_PROBE_SET = new Set(AUTH_PROBES);
 
 // ../src/modules/host-runtime/workflows/host-id-namespace.ts
 var HOST_ID_SET2 = new Set(HOST_IDS);
+var LEGACY_HOST_ALIASES = {
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app",
+  codex: "codex-cli",
+  "codex-plugin": "codex-cli",
+  agents: "agents-file",
+  ".agents": "agents-file",
+  pi: "pi-cli",
+  antigravity: "antigravity-cli",
+  "antigravity-2": "antigravity-cli"
+};
+function normalizeHostId(value) {
+  const s = value.trim();
+  if (HOST_ID_SET2.has(s)) return s;
+  return LEGACY_HOST_ALIASES[s] ?? null;
+}
 
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
 var RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
@@ -3930,6 +3946,632 @@ var PROVIDER_REGISTRY = [
   { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
 ];
 
+// ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
+var import_node_crypto = require("node:crypto");
+var HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
+var HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
+var HOST_CAPABILITY_IDS = [
+  "host.artifacts.direct_filesystem",
+  "host.artifacts.file_bus",
+  "host.bootstrap.context_injection",
+  "host.bootstrap.skill_autoload",
+  "host.bootstrap.wrapper_injection",
+  "host.commands.command_files",
+  "host.commands.slash_commands",
+  "host.dispatch.selectable",
+  "host.hooks.post_tool_use",
+  "host.hooks.pre_compact",
+  "host.hooks.pre_tool_use",
+  "host.hooks.session_start",
+  "host.hooks.stop",
+  "host.hooks.subagent_stop",
+  "host.hooks.task_completed",
+  "host.hooks.task_created",
+  "host.hooks.teammate_idle",
+  "host.hooks.user_prompt_submit",
+  "host.interaction.native_questions",
+  "host.mcp.http",
+  "host.mcp.stdio",
+  "host.models.tier_map",
+  "host.package.install",
+  "host.package.render",
+  "host.package.update",
+  "host.permissions.ask",
+  "host.permissions.deny",
+  "host.result_adapter",
+  "host.sessions.resume_by_id",
+  "host.structured_output.native_json"
+];
+var CAPABILITY_READERS = {
+  "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
+  "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
+  "host.bootstrap.context_injection": (entry) => {
+    const injection = entry.capabilities.bootstrap.context_injection;
+    return typeof injection === "string" && injection.length > 0 && injection !== "none";
+  },
+  "host.bootstrap.skill_autoload": (entry) => entry.capabilities.bootstrap.skill_autoload,
+  "host.bootstrap.wrapper_injection": (entry) => entry.capabilities.bootstrap.wrapper_injection,
+  "host.commands.command_files": (entry) => entry.capabilities.commands.command_files !== "none",
+  "host.commands.slash_commands": (entry) => entry.capabilities.commands.slash_commands,
+  "host.dispatch.selectable": (entry) => entry.dispatch_selectable,
+  "host.hooks.post_tool_use": (entry) => entry.capabilities.hooks.post_tool_use,
+  "host.hooks.pre_compact": (entry) => entry.capabilities.hooks.pre_compact,
+  "host.hooks.pre_tool_use": (entry) => entry.capabilities.hooks.pre_tool_use,
+  "host.hooks.session_start": (entry) => entry.capabilities.hooks.session_start,
+  "host.hooks.stop": (entry) => entry.capabilities.hooks.stop,
+  "host.hooks.subagent_stop": (entry) => entry.capabilities.hooks.subagent_stop,
+  "host.hooks.task_completed": (entry) => entry.capabilities.hooks.task_completed,
+  "host.hooks.task_created": (entry) => entry.capabilities.hooks.task_created,
+  "host.hooks.teammate_idle": (entry) => entry.capabilities.hooks.teammate_idle,
+  "host.hooks.user_prompt_submit": (entry) => entry.capabilities.hooks.user_prompt_submit,
+  "host.interaction.native_questions": (entry) => entry.capabilities.interaction.native_questions,
+  "host.mcp.http": (entry) => entry.capabilities.mcp.http,
+  "host.mcp.stdio": (entry) => entry.capabilities.mcp.stdio,
+  "host.models.tier_map": (entry) => {
+    const models = entry.capabilities.models;
+    return Boolean(models.cheap.model || models.mid.model || models.powerful.model);
+  },
+  // `installability` is the REGISTRY column, and it is the one that decides
+  // whether an install is proven. A renderer that exists but was never installed
+  // is `target`, which is render-capable and install-INCAPABLE — collapsing the
+  // two is precisely the optimistic default this snapshot exists to prevent.
+  "host.package.install": (entry) => entry.installability === "native" && entry.capabilities.package.installable,
+  "host.package.render": (entry) => entry.installability !== "none",
+  "host.package.update": (entry) => entry.capabilities.package.update.apply !== "none",
+  "host.permissions.ask": (entry) => entry.capabilities.permissions.ask,
+  "host.permissions.deny": (entry) => entry.capabilities.permissions.deny,
+  "host.result_adapter": (entry) => entry.result_adapter,
+  "host.sessions.resume_by_id": (entry) => entry.capabilities.sessions.resume_by_id,
+  "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
+};
+var UNKNOWN_HOST_VERSION = "unknown";
+function deepFreeze(value) {
+  if (value === null || typeof value !== "object") return value;
+  if (Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const key of Object.keys(value)) {
+    deepFreeze(value[key]);
+  }
+  return value;
+}
+function canonicalJson(value) {
+  if (value === null) return "null";
+  const kind = typeof value;
+  if (kind === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
+  if (kind === "boolean" || kind === "string") return JSON.stringify(value);
+  if (kind === "undefined" || kind === "function" || kind === "symbol") return "null";
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  const record = value;
+  const parts = [];
+  for (const key of Object.keys(record).sort()) {
+    if (record[key] === void 0) continue;
+    parts.push(`${JSON.stringify(key)}:${canonicalJson(record[key])}`);
+  }
+  return `{${parts.join(",")}}`;
+}
+function snapshotHash(hostId, hostVersion, facts) {
+  const digest = (0, import_node_crypto.createHash)("sha256").update(
+    canonicalJson({
+      schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
+      host_id: hostId,
+      host_version: hostVersion,
+      capabilities: facts.map((fact) => ({
+        capability_id: fact.capability_id,
+        supported: fact.supported,
+        authenticated: fact.authenticated
+      }))
+    })
+  ).digest("hex");
+  return `sha256:${digest}`;
+}
+function authenticatedFor(entry, supported, observation) {
+  if (!supported) return false;
+  if (observation === "unauthenticated") return false;
+  if (!entry.detection.requires_auth) return true;
+  return observation === "authenticated";
+}
+function buildFacts(entry, observation) {
+  return HOST_CAPABILITY_IDS.map((capabilityId) => {
+    const supported = CAPABILITY_READERS[capabilityId](entry);
+    return {
+      capability_id: capabilityId,
+      supported,
+      authenticated: authenticatedFor(entry, supported, observation)
+    };
+  });
+}
+function unsupportedResult(request) {
+  return deepFreeze({
+    schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
+    disposition: "unsupported",
+    reason_code: "capability_absent",
+    host: request.host,
+    host_id: null,
+    run_id: request.runId,
+    snapshot: null,
+    unsupported_capability_ids: [...HOST_CAPABILITY_IDS],
+    assertions: [
+      "an unrecognized host has no capability truth to snapshot",
+      "no snapshot is minted and no capability is assumed present",
+      "no fallback is implied and no side effect occurs"
+    ]
+  });
+}
+function createHostCapabilitySnapshotStore() {
+  const minted = /* @__PURE__ */ new Map();
+  function keyFor(runId, hostId) {
+    return `${runId}\0${hostId}`;
+  }
+  return {
+    capture(request) {
+      const hostId = normalizeHostId(String(request.host ?? ""));
+      const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
+      if (!hostId || !entry) return unsupportedResult(request);
+      const hostVersion = request.hostVersion ?? UNKNOWN_HOST_VERSION;
+      const observation = request.authentication ?? "not_observed";
+      const inputHash = canonicalJson({ host_id: hostId, host_version: hostVersion, authentication: observation });
+      const key = keyFor(request.runId, hostId);
+      const existing = minted.get(key);
+      if (existing !== void 0) {
+        if (existing.inputHash === inputHash) return existing.result;
+        return deepFreeze({
+          schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
+          disposition: "refused",
+          reason_code: "capability_snapshot_mismatch",
+          host: request.host,
+          host_id: hostId,
+          run_id: request.runId,
+          snapshot: null,
+          unsupported_capability_ids: [],
+          assertions: [
+            "exactly one capability snapshot binds a run",
+            "the bound snapshot is returned unchanged and is not replaced",
+            "no second snapshot is minted and no side effect occurs"
+          ]
+        });
+      }
+      const facts = buildFacts(entry, observation);
+      const snapshot = deepFreeze({
+        schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
+        snapshot_hash: snapshotHash(hostId, hostVersion, facts),
+        host_id: hostId,
+        host_version: hostVersion,
+        capabilities: facts
+      });
+      const result = deepFreeze({
+        schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
+        disposition: "succeeded",
+        reason_code: null,
+        host: request.host,
+        host_id: hostId,
+        run_id: request.runId,
+        snapshot,
+        unsupported_capability_ids: facts.filter((fact) => !fact.supported).map((fact) => fact.capability_id),
+        assertions: [
+          "every declared capability id carries an explicit fact",
+          "an unsupported capability is reported, never defaulted to supported",
+          "the snapshot is immutable and bound to exactly one host and run"
+        ]
+      });
+      minted.set(key, { result, inputHash });
+      return result;
+    },
+    release(runId) {
+      const prefix = `${runId}\0`;
+      const doomed = [];
+      minted.forEach((_stored, key) => {
+        if (key.startsWith(prefix)) doomed.push(key);
+      });
+      doomed.forEach((key) => minted.delete(key));
+    },
+    size() {
+      return minted.size;
+    }
+  };
+}
+var DEFAULT_STORE = createHostCapabilitySnapshotStore();
+
+// ../src/modules/host-runtime/workflows/host-event-normalizer.ts
+var HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
+var CLAUDE_NATIVE_EVENT_BINDINGS = Object.freeze([
+  Object.freeze({
+    native_event: "PostToolUse",
+    normalized_event: "tool.after",
+    rationale: "fires after a tool call completes"
+  }),
+  Object.freeze({
+    native_event: "PreCompact",
+    normalized_event: "context.compact",
+    rationale: "fires before the host compacts its context window"
+  }),
+  Object.freeze({
+    native_event: "PreToolUse",
+    normalized_event: "tool.before",
+    rationale: "fires before a tool call is admitted"
+  }),
+  Object.freeze({
+    native_event: "SessionStart",
+    normalized_event: "session.start",
+    rationale: "fires once when the host session opens"
+  }),
+  Object.freeze({
+    native_event: "Stop",
+    normalized_event: "run.stop",
+    rationale: "Guild's state model is run-centric, so the host's session stop is the run stop the core names"
+  }),
+  Object.freeze({
+    native_event: "SubagentStop",
+    normalized_event: null,
+    rationale: "a subagent finishing is not a task collection: the normative vocabulary has no subagent lifecycle name, and reusing the task-collection name would report a collection that never happened. Declared unmapped rather than approximated."
+  }),
+  Object.freeze({
+    native_event: "TaskCompleted",
+    normalized_event: "task.collect",
+    rationale: "the shipped task-completion producer the normative vocabulary was chosen to keep distinct"
+  }),
+  Object.freeze({
+    native_event: "TaskCreated",
+    normalized_event: "task.dispatch",
+    rationale: "the shipped task-creation producer the normative vocabulary was chosen to keep distinct"
+  }),
+  Object.freeze({
+    native_event: "TeammateIdle",
+    normalized_event: null,
+    rationale: "teammate idleness is a scheduling signal, not a lifecycle transition; the normative vocabulary declares no image for it. Declared unmapped rather than approximated."
+  }),
+  Object.freeze({
+    native_event: "UserPromptSubmit",
+    normalized_event: "prompt.submit",
+    rationale: "fires when the operator submits a prompt"
+  })
+]);
+var WRAPPER_NATIVE_EVENT_BINDINGS = Object.freeze([
+  Object.freeze({
+    native_event: "guild.wrapper.context_compact",
+    normalized_event: "context.compact",
+    rationale: "the wrapper reports a context reduction it performed on the host's behalf"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.prompt_submit",
+    normalized_event: "prompt.submit",
+    rationale: "the wrapper hands the host an operator prompt"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.run_resume",
+    normalized_event: "run.resume",
+    rationale: "the wrapper re-enters an existing run"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.run_stop",
+    normalized_event: "run.stop",
+    rationale: "the wrapper observes the host process closing the run"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.session_start",
+    normalized_event: "session.start",
+    rationale: "the wrapper opens the host process for this run"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.task_collect",
+    normalized_event: "task.collect",
+    rationale: "the wrapper collects a finished task run"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.task_dispatch",
+    normalized_event: "task.dispatch",
+    rationale: "the wrapper dispatches a task run onto the host"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.tool_after",
+    normalized_event: "tool.after",
+    rationale: "the wrapper observes a completed tool call"
+  }),
+  Object.freeze({
+    native_event: "guild.wrapper.tool_before",
+    normalized_event: "tool.before",
+    rationale: "the wrapper observes a tool call about to run"
+  })
+]);
+var NATIVE_BINDINGS_BY_FAMILY = Object.freeze({
+  claude: CLAUDE_NATIVE_EVENT_BINDINGS
+});
+function advertisesNativeHooks(entry) {
+  return Object.values(entry.capabilities.hooks).some(Boolean);
+}
+var NO_SOURCE = Object.freeze({
+  schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+  host_id: null,
+  kind: "none",
+  bindings: Object.freeze([])
+});
+function hostEventSource(host) {
+  const hostId = normalizeHostId(String(host ?? ""));
+  const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
+  if (!hostId || !entry) return NO_SOURCE;
+  const familyBindings = NATIVE_BINDINGS_BY_FAMILY[entry.family];
+  if (advertisesNativeHooks(entry) && familyBindings !== void 0) {
+    return Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: hostId,
+      kind: "native_hooks",
+      bindings: familyBindings
+    });
+  }
+  if (entry.surface_kind === "app") {
+    return Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: hostId,
+      kind: "none",
+      bindings: Object.freeze([])
+    });
+  }
+  if (entry.surface_kind === "file" || entry.adapter_binding === "agents-file") {
+    return Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: hostId,
+      kind: "instruction_file",
+      bindings: Object.freeze([])
+    });
+  }
+  return Object.freeze({
+    schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+    host_id: hostId,
+    kind: "wrapper",
+    bindings: WRAPPER_NATIVE_EVENT_BINDINGS
+  });
+}
+
+// ../src/modules/host-runtime/workflows/host-adapter-boundary.ts
+var HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
+var HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
+var HOST_ADAPTER_OWNERSHIP_SCHEMA = "guild.host_adapter_ownership.v1";
+var HOST_ADAPTER_REASON_CODES = Object.freeze([
+  "boundary_membership_mismatch",
+  "capability_absent",
+  "capability_snapshot_mismatch",
+  "execution_failed",
+  "unknown_event"
+]);
+var HOST_ADAPTER_OWNED_CONCERNS = [
+  "host_identity_resolution",
+  "host_entry_point_binding",
+  "host_capability_snapshot",
+  "host_native_event_normalization"
+];
+var HOST_ADAPTER_NOT_OWNED_CONCERNS = [
+  "lifecycle_state",
+  "gate_policy",
+  "artifact_semantics",
+  "document_rendering",
+  "transport_execution"
+];
+var CONCERN_OWNERS = Object.freeze({
+  host_identity_resolution: "host-adapters",
+  host_entry_point_binding: "host-adapters",
+  host_capability_snapshot: "host-adapters",
+  host_native_event_normalization: "host-adapters",
+  lifecycle_state: "host-neutral-core",
+  gate_policy: "host-neutral-core",
+  artifact_semantics: "artifact-document-services",
+  document_rendering: "artifact-document-services",
+  transport_execution: "execution-transports"
+});
+var OWNERSHIP = Object.freeze({
+  schema_version: HOST_ADAPTER_OWNERSHIP_SCHEMA,
+  boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
+  owned: Object.freeze([...HOST_ADAPTER_OWNED_CONCERNS]),
+  not_owned: Object.freeze([...HOST_ADAPTER_NOT_OWNED_CONCERNS]),
+  owners: CONCERN_OWNERS
+});
+var DEFAULT_INSTRUCTION_FILE = "AGENTS.md";
+function entryPointFor(hostId) {
+  const row = HOST_REGISTRY_ROWS[hostId];
+  const subcommand = row.detection.subcommand ?? null;
+  const kind = row.surface_kind === "app" ? "app_surface" : row.surface_kind === "file" || row.adapter_binding === "agents-file" ? "instruction_file" : subcommand ? "cli_subcommand" : "cli_binary";
+  return Object.freeze({
+    schema_version: HOST_ENTRY_POINT_SCHEMA,
+    host_id: hostId,
+    kind,
+    surface_kind: row.surface_kind,
+    adapter_binding: row.adapter_binding,
+    bin: row.detection.bin,
+    subcommand,
+    instruction_file: row.detection.marker?.agents_placement ?? (kind === "instruction_file" ? DEFAULT_INSTRUCTION_FILE : null),
+    requires_auth: row.detection.requires_auth,
+    auth_probe: row.detection.auth_probe,
+    event_source: hostEventSource(hostId).kind,
+    dispatch_selectable: row.dispatch_selectable
+  });
+}
+var HOST_ENTRY_POINTS = Object.freeze(
+  HOST_IDS.reduce(
+    (accumulator, hostId) => {
+      accumulator[hostId] = entryPointFor(hostId);
+      return accumulator;
+    },
+    {}
+  )
+);
+var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
+
+// ../src/modules/security/workflows/scrubbed-write.ts
+var fs6 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
+var crypto = __toESM(require("node:crypto"));
+
+// ../src/modules/security/workflows/redact-log.ts
+var TOKEN_REDACTED = "[REDACTED_TOKEN]";
+var PATH_REDACTED = "[REDACTED]";
+var KV_REDACTED = "[REDACTED]";
+var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
+var TRUNCATION_SUFFIX = "... [TRUNCATED]";
+var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+var TOKEN_SHAPE_PATTERNS = [
+  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
+  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
+  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
+  /\bghp_[A-Za-z0-9]{36}\b/g,
+  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
+  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+];
+function redactTokenShapes(input) {
+  let out = input;
+  for (const re of TOKEN_SHAPE_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
+  }
+  return out;
+}
+var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
+function redactHomeDirPaths(input) {
+  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
+    return `${root}/${dir}/${PATH_REDACTED}`;
+  });
+}
+var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
+function redactKeyValueSecrets(input) {
+  return input.replace(
+    KV_SECRET_PATTERN,
+    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
+  );
+}
+var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+var MAX_PATH_TOKEN_LEN = 512;
+function allWordsWordish(words) {
+  let opaqueBudget = 1;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    let upper = 0;
+    let lower = 0;
+    let digits = 0;
+    for (const ch of word) {
+      if (ch >= "a" && ch <= "z") lower++;
+      else if (ch >= "A" && ch <= "Z") upper++;
+      else digits++;
+    }
+    if (lower === 0) {
+      if (word.length > 8) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+    } else if (upper > 3 || digits > 4) {
+      return false;
+    }
+  }
+  return true;
+}
+function isRelativePathToken(candidate, fullInput, matchIndex) {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
+  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
+    return false;
+  }
+  let end = matchIndex + candidate.length;
+  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
+  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
+    return false;
+  }
+  const token = fullInput.slice(start, end);
+  if (token.length > MAX_PATH_TOKEN_LEN) return false;
+  if (!PATH_SHAPE.test(token)) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
+}
+function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
+  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
+    return true;
+  }
+  const lookBackStart = Math.max(0, matchIndex - 16);
+  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
+  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
+    return true;
+  }
+  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
+    return true;
+  }
+  return false;
+}
+var HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
+function redactHighEntropy(input) {
+  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
+    if (isWhitelistedHighEntropy(match, input, offset)) {
+      return match;
+    }
+    return HIGH_ENTROPY_REDACTED;
+  });
+}
+function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
+  const byteLen = Buffer.byteLength(input, "utf8");
+  if (byteLen <= cap) return input;
+  const buf = Buffer.from(input, "utf8");
+  const truncated = buf.slice(0, cap).toString("utf8");
+  const cleaned = truncated.replace(/\uFFFD+$/u, "");
+  return cleaned + TRUNCATION_SUFFIX;
+}
+function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
+  if (typeof input !== "string") return input;
+  let out = redactTokenShapes(input);
+  out = redactHomeDirPaths(out);
+  out = redactKeyValueSecrets(out);
+  out = redactHighEntropy(out);
+  out = truncateToCap(out, cap);
+  return out;
+}
+var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
+  "command_redacted",
+  "result_excerpt_redacted",
+  "payload_excerpt_redacted",
+  "prompt_excerpt",
+  "assumption_text",
+  "result"
+]);
+function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
+  const out = { ...event };
+  for (const [k, v] of Object.entries(out)) {
+    if (REDACTABLE_FIELDS.has(k) && typeof v === "string") {
+      out[k] = redactField(v, cap);
+    }
+  }
+  return out;
+}
+
+// ../src/modules/security/workflows/secrets.ts
+function applySecretsPolicy(value, policy, opts) {
+  if (typeof value !== "string") {
+    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
+  }
+  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
+  const failures = [];
+  for (const pat of policy.redaction_patterns) {
+    let re;
+    try {
+      re = new RegExp(pat, "g");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    try {
+      out = out.replace(re, "[REDACTED]");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { value: out, ok: failures.length === 0, failures };
+}
+
+// ../src/modules/security/workflows/config.ts
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+
 // ../src/modules/kernel/workflows/yaml-loader.ts
 var path2 = __toESM(require("node:path"));
 function pluginLocalScriptsRoots() {
@@ -3969,18 +4611,32 @@ function loadYamlApi() {
   );
 }
 
-// ../src/modules/config/workflows/settings-reader.ts
-var yaml = loadYamlApi();
-var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
-var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
-var DISPATCH_HOST_IDS = new Set(
-  HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
-);
+// ../src/modules/state/workflows/guild-root.ts
+var fs2 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function resolveGuildRoot2(startDir) {
+  const resolvedStart = path3.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs2.existsSync(path3.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path3.join(current, ".guild");
+      try {
+        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path3.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
 
 // ../src/modules/migrations/workflows/index-migrate.ts
 var import_node_child_process = require("node:child_process");
-var fs2 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+var fs3 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
@@ -3988,19 +4644,19 @@ function openDatabase(dbPath) {
   return db;
 }
 var CURRENT_SCHEMA_VERSION = 3;
-function resolveGuildRoot2(cwd) {
+function resolveGuildRoot3(cwd) {
   try {
     const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
       cwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const abs = path3.isAbsolute(raw) ? raw : path3.resolve(cwd, raw);
-    const root = path3.dirname(abs);
-    if (fs2.existsSync(root)) return root;
+    const abs = path4.isAbsolute(raw) ? raw : path4.resolve(cwd, raw);
+    const root = path4.dirname(abs);
+    if (fs3.existsSync(root)) return root;
   } catch {
   }
-  return path3.resolve(cwd);
+  return path4.resolve(cwd);
 }
 var MIGRATIONS = [
   // ── v1: core tables ───────────────────────────────────────────────────────
@@ -4168,7 +4824,7 @@ function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
   try {
-    fs2.mkdirSync(path3.dirname(dbPath), { recursive: true });
+    fs3.mkdirSync(path4.dirname(dbPath), { recursive: true });
     db = openDatabase(dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA synchronous = NORMAL");
@@ -4232,8 +4888,8 @@ function runIndexMigrateCli() {
     if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
   }
   if (!dbPath) {
-    const guildRoot = resolveGuildRoot2(cwd);
-    dbPath = path3.join(guildRoot, ".guild", "index.sqlite");
+    const guildRoot = resolveGuildRoot3(cwd);
+    dbPath = path4.join(guildRoot, ".guild", "index.sqlite");
   }
   const result = runMigrations(dbPath);
   if (result.ok) {
@@ -4251,183 +4907,7 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
   runIndexMigrateCli();
 }
 
-// lib/security/scrubbed-write.ts
-var fs5 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
-var crypto = __toESM(require("node:crypto"));
-
-// lib/v1.4/redact-log.ts
-var TOKEN_REDACTED = "[REDACTED_TOKEN]";
-var PATH_REDACTED = "[REDACTED]";
-var KV_REDACTED = "[REDACTED]";
-var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
-var TRUNCATION_SUFFIX = "... [TRUNCATED]";
-var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
-];
-function redactTokenShapes(input) {
-  let out = input;
-  for (const re of TOKEN_SHAPE_PATTERNS) {
-    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
-  }
-  return out;
-}
-var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
-function redactHomeDirPaths(input) {
-  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
-    return `${root}/${dir}/${PATH_REDACTED}`;
-  });
-}
-var KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
-function redactKeyValueSecrets(input) {
-  return input.replace(
-    KV_SECRET_PATTERN,
-    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
-  );
-}
-var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
-var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
-var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
-var MAX_PATH_TOKEN_LEN = 512;
-function allWordsWordish(words) {
-  let opaqueBudget = 1;
-  for (const word of words) {
-    if (word.length === 0 || word.length >= 20) return false;
-    let upper = 0;
-    let lower = 0;
-    let digits = 0;
-    for (const ch of word) {
-      if (ch >= "a" && ch <= "z") lower++;
-      else if (ch >= "A" && ch <= "Z") upper++;
-      else digits++;
-    }
-    if (lower === 0) {
-      if (word.length > 8) return false;
-      if (word.length > 2 && --opaqueBudget < 0) return false;
-    } else if (upper > 3 || digits > 4) {
-      return false;
-    }
-  }
-  return true;
-}
-function isRelativePathToken(candidate, fullInput, matchIndex) {
-  if (candidate.includes("+") || candidate.includes("=")) return false;
-  let start = matchIndex;
-  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
-  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
-  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
-    return false;
-  }
-  let end = matchIndex + candidate.length;
-  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
-  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
-  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
-    return false;
-  }
-  const token = fullInput.slice(start, end);
-  if (token.length > MAX_PATH_TOKEN_LEN) return false;
-  if (!PATH_SHAPE.test(token)) return false;
-  const slashCount = token.split("/").length - 1;
-  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
-  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
-}
-function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
-  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
-    return true;
-  }
-  const lookBackStart = Math.max(0, matchIndex - 16);
-  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
-  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
-    return true;
-  }
-  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
-    return true;
-  }
-  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
-    return true;
-  }
-  return false;
-}
-var HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
-function redactHighEntropy(input) {
-  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
-    if (isWhitelistedHighEntropy(match, input, offset)) {
-      return match;
-    }
-    return HIGH_ENTROPY_REDACTED;
-  });
-}
-function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
-  const byteLen = Buffer.byteLength(input, "utf8");
-  if (byteLen <= cap) return input;
-  const buf = Buffer.from(input, "utf8");
-  const truncated = buf.slice(0, cap).toString("utf8");
-  const cleaned = truncated.replace(/\uFFFD+$/u, "");
-  return cleaned + TRUNCATION_SUFFIX;
-}
-function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
-  if (typeof input !== "string") return input;
-  let out = redactTokenShapes(input);
-  out = redactHomeDirPaths(out);
-  out = redactKeyValueSecrets(out);
-  out = redactHighEntropy(out);
-  out = truncateToCap(out, cap);
-  return out;
-}
-var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
-  "command_redacted",
-  "result_excerpt_redacted",
-  "payload_excerpt_redacted",
-  "prompt_excerpt",
-  "assumption_text",
-  "result"
-]);
-function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
-  const out = { ...event };
-  for (const [k, v] of Object.entries(out)) {
-    if (REDACTABLE_FIELDS.has(k) && typeof v === "string") {
-      out[k] = redactField(v, cap);
-    }
-  }
-  return out;
-}
-
-// lib/security/secrets.ts
-function applySecretsPolicy(value, policy, opts) {
-  if (typeof value !== "string") {
-    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
-  }
-  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
-  const failures = [];
-  for (const pat of policy.redaction_patterns) {
-    let re;
-    try {
-      re = new RegExp(pat, "g");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
-      continue;
-    }
-    try {
-      out = out.replace(re, "[REDACTED]");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  return { value: out, ok: failures.length === 0, failures };
-}
-
-// lib/security/config.ts
-var fs3 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
+// ../src/modules/security/workflows/config.ts
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -4502,10 +4982,10 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path4.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path5.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs3.readFileSync(settingsPath, "utf8");
+    raw = fs4.readFileSync(settingsPath, "utf8");
   } catch {
     return securityDefaults();
   }
@@ -4518,9 +4998,9 @@ function readSecurityConfig(cwd) {
   return parseSecurityConfig(parsed);
 }
 
-// lib/security/events.ts
-var fs4 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+// ../src/modules/security/workflows/events.ts
+var fs5 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
 var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-cli",
@@ -4534,7 +5014,7 @@ var KNOWN_GUILD_HOST_KINDS = [
   "claude-ai-connector"
 ];
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
-var LEGACY_HOST_ALIASES = {
+var LEGACY_HOST_ALIASES2 = {
   claude: "claude-code-cli",
   "claude-code-desktop": "claude-code-app",
   codex: "codex-cli",
@@ -4548,7 +5028,7 @@ var LEGACY_HOST_ALIASES = {
 function normalizeSecurityHostId(value) {
   const s = value.trim();
   if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
-  return LEGACY_HOST_ALIASES[s] ?? null;
+  return LEGACY_HOST_ALIASES2[s] ?? null;
 }
 function resolveHostResolution(env) {
   const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
@@ -4585,9 +5065,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir2, record) {
   try {
-    const logsDir = path5.join(runDir2, "logs");
-    fs4.mkdirSync(logsDir, { recursive: true });
-    fs4.appendFileSync(path5.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    const logsDir = path6.join(runDir2, "logs");
+    fs5.mkdirSync(logsDir, { recursive: true });
+    fs5.appendFileSync(path6.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -4598,14 +5078,14 @@ function appendSecurityEvent(runDir2, record) {
   }
 }
 
-// lib/security/scrubbed-write.ts
+// ../src/modules/security/workflows/scrubbed-write.ts
 function guildRootFromRunDir(runDir2) {
-  return path6.resolve(runDir2, "../../..");
+  return path7.resolve(runDir2, "../../..");
 }
 function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId) {
   try {
-    const approvalDir = path6.join(runDir2, "agent-bus", "approvals");
-    fs5.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path7.join(runDir2, "agent-bus", "approvals");
+    fs6.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-scrub-blocked.json`;
@@ -4614,7 +5094,7 @@ function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId) {
       ts,
       run_id: runId,
       tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path6.basename(outPath)}`,
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path7.basename(outPath)}`,
       permission_mode: "blocked",
       surface
     };
@@ -4627,7 +5107,7 @@ function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId) {
       content = scrubResult.value;
     } catch {
     }
-    fs5.writeFileSync(path6.join(approvalDir, fileName), content, "utf8");
+    fs6.writeFileSync(path7.join(approvalDir, fileName), content, "utf8");
   } catch {
   }
 }
@@ -4649,8 +5129,8 @@ function scrubbedWrite(outPath, content, opts) {
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
-      fs5.mkdirSync(path6.dirname(outPath), { recursive: true });
-      fs5.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs6.mkdirSync(path7.dirname(outPath), { recursive: true });
+      fs6.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
@@ -4666,12 +5146,12 @@ function scrubbedWrite(outPath, content, opts) {
   }
   if (failMode === "open") {
     process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path6.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path7.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
 `
     );
     try {
-      fs5.mkdirSync(path6.dirname(outPath), { recursive: true });
-      fs5.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs6.mkdirSync(path7.dirname(outPath), { recursive: true });
+      fs6.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
@@ -4686,7 +5166,7 @@ function scrubbedWrite(outPath, content, opts) {
         event_type: "secret_scrub_blocked",
         decision: "degraded",
         tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path6.basename(outPath)}. Built-in-redacted content written.`,
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path7.basename(outPath)}. Built-in-redacted content written.`,
         permission_mode: "degraded"
       });
       appendSecurityEvent(opts.runDir, evt);
@@ -4709,7 +5189,7 @@ function scrubbedWrite(outPath, content, opts) {
       event_type: "secret_scrub_blocked",
       decision: "blocked",
       tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path6.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path7.basename(outPath)} \u2014 write blocked (fail-closed).`,
       permission_mode: "blocked"
     });
     appendSecurityEvent(opts.runDir, evt);
@@ -4719,12 +5199,20 @@ function scrubbedWrite(outPath, content, opts) {
   return { written: false, blocked: true };
 }
 
+// ../src/modules/config/workflows/settings-reader.ts
+var yaml = loadYamlApi();
+var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
+var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
+var DISPATCH_HOST_IDS = new Set(
+  HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+);
+
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 function runDir(root, runId) {
-  return path7.join(root, ".guild", "runs", runId);
+  return path8.join(root, ".guild", "runs", runId);
 }
 function resolvedSettingsPath(root, runId) {
-  return path7.join(runDir(root, runId), "resolved-settings.json");
+  return path8.join(runDir(root, runId), "resolved-settings.json");
 }
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
@@ -4737,9 +5225,9 @@ function validateRunId(runId) {
   return true;
 }
 function assertContained(target, base, label) {
-  const resolvedTarget = path7.resolve(target);
-  const resolvedBase = path7.resolve(base);
-  if (!resolvedTarget.startsWith(resolvedBase + path7.sep)) {
+  const resolvedTarget = path8.resolve(target);
+  const resolvedBase = path8.resolve(base);
+  if (!resolvedTarget.startsWith(resolvedBase + path8.sep)) {
     throw new Error(
       `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" escapes runs base "${resolvedBase}"`
     );
@@ -4748,7 +5236,7 @@ function assertContained(target, base, label) {
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path7.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path8.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -4767,15 +5255,15 @@ function realProvenanceFsSeam() {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs8 = fsSeam ?? realProvenanceFsSeam();
+  const fs9 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path7.resolve(cwd, ".guild", "runs");
+  const runsBase = path8.resolve(cwd, ".guild", "runs");
   try {
     assertContained(filePath, runsBase, "readResolvedSettingsSnapshot");
   } catch {
     return null;
   }
-  const raw = fs8.readFile(filePath);
+  const raw = fs9.readFile(filePath);
   if (raw === null) return null;
   try {
     return JSON.parse(raw);
@@ -4810,19 +5298,19 @@ function resolveActiveRunId(guildRoot) {
   if (typeof envRunId === "string" && envRunId.trim().length > 0) {
     return envRunId.trim();
   }
-  const sentinel = path8.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinel = path9.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs6.readFileSync(sentinel, "utf8").trim();
+    const value = fs7.readFileSync(sentinel, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
   }
 }
 function readRunYamlFacts(guildRoot, runId) {
-  const runYamlPath = path8.join(guildRoot, ".guild", "runs", runId, "run.yaml");
+  const runYamlPath = path9.join(guildRoot, ".guild", "runs", runId, "run.yaml");
   let raw;
   try {
-    raw = fs6.readFileSync(runYamlPath, "utf8");
+    raw = fs7.readFileSync(runYamlPath, "utf8");
   } catch {
     return null;
   }
@@ -4883,16 +5371,16 @@ function reanchorGraceMs() {
   return DEFAULT_REANCHOR_GRACE_MS;
 }
 function newestRunSignalMs(guildRoot, runId) {
-  const dir = path8.join(guildRoot, ".guild", "runs", runId);
+  const dir = path9.join(guildRoot, ".guild", "runs", runId);
   const candidates = [
-    path8.join(dir, "run.yaml"),
-    path8.join(dir, "events.ndjson"),
-    path8.join(dir, "provenance.json")
+    path9.join(dir, "run.yaml"),
+    path9.join(dir, "events.ndjson"),
+    path9.join(dir, "provenance.json")
   ];
   for (const sub of ["logs", "handoffs", "in-progress"]) {
     try {
-      for (const name of fs6.readdirSync(path8.join(dir, sub))) {
-        candidates.push(path8.join(dir, sub, name));
+      for (const name of fs7.readdirSync(path9.join(dir, sub))) {
+        candidates.push(path9.join(dir, sub, name));
       }
     } catch {
     }
@@ -4900,7 +5388,7 @@ function newestRunSignalMs(guildRoot, runId) {
   let newest = 0;
   for (const p of candidates) {
     try {
-      newest = Math.max(newest, fs6.statSync(p).mtimeMs);
+      newest = Math.max(newest, fs7.statSync(p).mtimeMs);
     } catch {
     }
   }
@@ -4979,7 +5467,7 @@ function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstruct
   });
 }
 
-// lib/v1.4/log-jsonl-schema.ts
+// ../src/modules/lifecycle/workflows/event-log-schema.ts
 var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function isSafeRunId(id) {
@@ -5005,12 +5493,12 @@ function validateEventIds(event) {
   }
 }
 
-// lib/v1.4/log-jsonl-writer.ts
+// ../src/modules/lifecycle/workflows/event-log-writer.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
 
-// lib/v1.4/v1.4-lock.ts
+// ../src/modules/lifecycle/workflows/stable-lock.ts
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");
 function stableLockPath(runDir2) {
@@ -5020,11 +5508,11 @@ function exclusionSentinelPath(runDir2) {
   return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir2) {
-  const path10 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path10), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path10)) return;
+  const path11 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path11), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path11)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path10, "wx");
+    const fd = (0, import_node_fs.openSync)(path11, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -5076,7 +5564,7 @@ function withStableLock(runDir2, fn, opts = {}) {
   }
 }
 
-// lib/trace-v2.ts
+// ../src/modules/lifecycle/workflows/trace-v2.ts
 var crypto2 = __toESM(require("crypto"));
 var SIDECAR_MAX_BYTES2 = 16 * 1024;
 function genSpanId(runId, eventType, ts, actorId) {
@@ -5112,7 +5600,7 @@ function pruneUndefined(obj) {
   return out;
 }
 
-// lib/v1.4/log-jsonl-writer.ts
+// ../src/modules/lifecycle/workflows/event-log-writer.ts
 function liveLogPath(runDir2) {
   return (0, import_node_path2.join)(runDir2, "logs", "v1.4-events.jsonl");
 }
@@ -5137,9 +5625,9 @@ function appendEvent(runDir2, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path10 = laneFallbackPath(runDir2, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path10), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path10, "a");
+    const path11 = laneFallbackPath(runDir2, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path11), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path11, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -5210,7 +5698,7 @@ function rotateLocked(runDir2) {
   );
 }
 
-// lib/v1.4/log-jsonl-sidecar.ts
+// ../src/modules/lifecycle/workflows/event-log-sidecar.ts
 var SIDECAR_MAX_BYTES3 = 1024 * 1024;
 
 // lib/lane-attribution.ts
@@ -5231,11 +5719,11 @@ function resolveLaneAttribution(env = process.env) {
 
 // pre-compact.ts
 async function readStdin() {
-  return new Promise((resolve6) => {
+  return new Promise((resolve7) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve6(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve6(""));
+    process.stdin.on("end", () => resolve7(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve7(""));
   });
 }
 function payloadExcerpt(payload) {
@@ -5248,9 +5736,9 @@ function payloadExcerpt(payload) {
   }
 }
 function readCurrentRunId(guildRoot) {
-  const sentinelPath = path9.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinelPath = path10.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs7.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs8.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -5301,7 +5789,7 @@ async function main() {
     );
     return;
   }
-  const runDir2 = process.env["GUILD_RUN_DIR"] ?? path9.join(guildRoot, ".guild", "runs", runId);
+  const runDir2 = process.env["GUILD_RUN_DIR"] ?? path10.join(guildRoot, ".guild", "runs", runId);
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   const event = {
     ts,
