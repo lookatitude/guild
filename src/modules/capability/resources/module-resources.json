@@ -8,14 +8,14 @@
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
       "resource_path": "resources/scripts/capability-adopt.ts",
-      "sha256": "f0e08c66a5c747fe3a0784b6cf58f4b97ff8719051000ce1aad95eb3a6f57a11"
+      "sha256": "640a554121cc59b8695d227db854d8bcf09f8725f24d8d1013b026c7e1baedb6"
     },
     {
       "category": "scripts",
       "id": "lib/capability/adoption-migrate",
       "source_path": "scripts/lib/capability/adoption-migrate.ts",
       "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
-      "sha256": "af99c349d79e4a8f10d69dea1ddbe07c4d1be36f4627aa0962a9c2bc6e096e60"
+      "sha256": "aa4b2263ba8c6f4008d72423e8a93c159dfac0095e35313948c9f262eb9830c7"
     },
     {
       "category": "scripts",

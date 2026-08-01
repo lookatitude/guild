@@ -287,6 +287,51 @@ function toPosixRel(abs: string, root: string): string | null {
 }
 
 /** Read a regular file's bytes, refusing symlinks. `null` on any problem. */
+/**
+ * Prove `abs` resolves INSIDE `root`, following every symlink on the way.
+ *
+ * CODEX round 2: the round-1 symlink fix was LITERAL-ONLY. It lstat-ed the LEAF
+ * (`.guild/agents/qa.md`) and refused a symlinked file — but if `.guild/agents`
+ * itself is a symlink to a directory outside the project, the leaf does not exist,
+ * `mkdirSync(…, {recursive:true})` succeeds because the directory already does,
+ * and `writeFileSync` lands the adopted template outside the project. The same
+ * escape, one level up.
+ *
+ * Containment is therefore proven on the deepest ANCESTOR that actually exists,
+ * via `realpathSync` — which resolves every intermediate link — rather than on the
+ * final component. `path.resolve` alone cannot do this: it is pure string algebra
+ * and knows nothing about links.
+ *
+ * Returns null when the path is contained, or a reason string when it is not.
+ */
+function escapesProjectRoot(abs: string, root: string): string | null {
+  let realRoot: string;
+  try {
+    realRoot = fs.realpathSync(root);
+  } catch {
+    return `project root ${root} does not resolve`;
+  }
+  // Walk up to the deepest existing ancestor; everything below it will be created
+  // by us, inside whatever that ancestor really is.
+  let probe = abs;
+  for (;;) {
+    if (fs.existsSync(probe)) break;
+    const parent = path.dirname(probe);
+    if (parent === probe) return `no existing ancestor of ${abs}`;
+    probe = parent;
+  }
+  let realProbe: string;
+  try {
+    realProbe = fs.realpathSync(probe);
+  } catch {
+    return `${probe} does not resolve`;
+  }
+  if (realProbe !== realRoot && !realProbe.startsWith(realRoot + path.sep)) {
+    return `${abs} resolves outside the project root (${realProbe})`;
+  }
+  return null;
+}
+
 function readRegularFile(abs: string): Buffer | null {
   try {
     const st = fs.lstatSync(abs);
@@ -1205,6 +1250,12 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
           `${w.relTarget} exists and is not a regular file (${st.isSymbolicLink() ? "symlink" : "special file"}); refusing to write through it`,
         );
       }
+      // CODEX round 2: the leaf check above is not enough on its own — a symlinked
+      // PARENT (`.guild/agents` → somewhere else) leaves the leaf non-existent, so
+      // nothing above fires and the write escapes the project anyway. Containment
+      // is proven through every intermediate link.
+      const escape = escapesProjectRoot(w.absTarget, projRoot);
+      if (escape !== null) throw new Error(`refusing to write ${w.relTarget}: ${escape}`);
       fs.mkdirSync(path.dirname(w.absTarget), { recursive: true });
       fs.writeFileSync(w.absTarget, w.bytes, { flag: "w" });
       done.push(w);
@@ -1580,6 +1631,18 @@ export function rollbackAdoption(opts: unknown): AdoptionRollbackOutcome {
   if (digest === null) return { status: "refused", reason: "could not compute the manifest commitment" };
 
   const restoredIds = [...new Set(targets.map((t) => t.from.id))].sort();
+
+  // CODEX round 2, same class as the write path: a DELETE that escapes the project
+  // is worse than a write that does. Containment is proven before anything is
+  // unlinked, and an escaping path aborts the whole rollback rather than being
+  // skipped — a rollback that silently declines to undo part of itself would leave
+  // the manifest claiming a reversal that did not happen.
+  for (const r of removals) {
+    const escape = escapesProjectRoot(r.abs, projRoot);
+    if (escape !== null) {
+      return { status: "refused", reason: `refusing to remove ${r.rel}: ${escape}` };
+    }
+  }
 
   if (!dryRun) {
     for (const r of removals) {

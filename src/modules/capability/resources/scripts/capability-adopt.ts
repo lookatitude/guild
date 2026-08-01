@@ -120,7 +120,7 @@ function main(argv: readonly string[]): number {
       for (const e of catalog.entries) {
         process.stdout.write(`  ${e.kind}\t${e.id}\t${e.deprecation}\t${e.content_hash.slice(0, 12)}…\n`);
       }
-      const required = requiredAssetIdsForG5(catalog);
+      const required = requiredAssetIdsForG5(catalog, { pluginRoot });
       process.stdout.write(
         required.status === "ok"
           ? `G5 required_asset_ids: ${required.ids.length}\n`

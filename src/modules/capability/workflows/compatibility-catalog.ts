@@ -681,7 +681,33 @@ export function compatibilityUsageForRead(request: unknown): CompatibilityUsageE
  */
 export function requiredAssetIdsForG5(
   catalog: unknown,
+  opts: unknown,
 ): { readonly status: "ok"; readonly ids: readonly string[] } | { readonly status: "refused"; readonly detail: string } {
+  // CODEX round 2: recomputing the counts proved the catalog's SHAPE, not its
+  // TRUTH — any well-formed invention of 15 + 58 entries passed, so a fabricated
+  // catalog still yielded a required set naming assets that do not exist while the
+  // real 73 went unmeasured. The same false clean, one level deeper.
+  //
+  // The set is therefore re-derived against the REAL plugin tree: every entry must
+  // exist at its stated path under `pluginRoot` and its bytes must hash to the
+  // stated `content_hash`, and the catalog's id set must equal the tree's. That is
+  // the difference between "this object is well-formed" and "these are the assets
+  // the gate is about to authorize deleting".
+  //
+  // `pluginRoot` is REQUIRED, not optional. An optional trust anchor is one callers
+  // omit, and the omitted path is exactly the vulnerable one.
+  const o = readOptions(opts, ["pluginRoot"]);
+  if (o === null) {
+    return { status: "refused", detail: "options rejected (proxy/accessor/symbol/unknown key)" };
+  }
+  const pluginRoot = o["pluginRoot"];
+  if (typeof pluginRoot !== "string" || pluginRoot.length === 0 || CONTROL_CHARS.test(pluginRoot)) {
+    return {
+      status: "refused",
+      detail: "pluginRoot is required — a G5 required set must be verified against the real shipped tree",
+    };
+  }
+
   const c = readOptions(catalog, [
     "schema_version",
     "entries",
@@ -699,6 +725,7 @@ export function requiredAssetIdsForG5(
 
   const ids: string[] = [];
   const seen = new Set<string>();
+  const byId = new Map<string, CompatibilityCatalogEntry>();
   let templates = 0;
   let skills = 0;
   for (const item of raw) {
@@ -717,6 +744,7 @@ export function requiredAssetIdsForG5(
       return { status: "refused", detail: `catalog contains a duplicate asset id: ${e.id}` };
     }
     seen.add(e.id);
+    byId.set(e.id, e);
     ids.push(e.id);
     if (e.kind === "shipped_template") templates += 1;
     else skills += 1;
@@ -744,6 +772,38 @@ export function requiredAssetIdsForG5(
   }
   if (c["census_matches"] !== true) {
     return { status: "refused", detail: "catalog does not claim a matching census" };
+  }
+
+  // ── The trust anchor: the catalog must describe the REAL tree ──
+  //
+  // Re-enumerated from disk, then compared as a SET of (id → content_hash). A
+  // catalog that names an asset the tree does not have, omits one the tree does,
+  // or states the wrong bytes for one, is refused. Rebuilding is cheap next to
+  // authorizing the deletion of 73 files on a lie.
+  const truth = buildCompatibilityCatalog({ pluginRoot });
+  if (!truth.census_matches) {
+    return {
+      status: "refused",
+      detail: `the shipped tree at ${pluginRoot} does not itself enumerate cleanly (${truth.problems.length} problem(s)); a G5 required set cannot be anchored to it`,
+    };
+  }
+  const truthById = new Map(truth.entries.map((e) => [e.id, e] as const));
+  for (const [id, entry] of byId) {
+    const real = truthById.get(id);
+    if (real === undefined) {
+      return { status: "refused", detail: `catalog names "${id}", which the shipped tree does not contain` };
+    }
+    if (real.content_hash !== entry.content_hash || real.path !== entry.path || real.kind !== entry.kind) {
+      return {
+        status: "refused",
+        detail: `catalog entry "${id}" does not match the shipped asset (path/kind/content_hash disagree)`,
+      };
+    }
+  }
+  for (const id of truthById.keys()) {
+    if (!byId.has(id)) {
+      return { status: "refused", detail: `the shipped tree contains "${id}", which the catalog omits` };
+    }
   }
 
   ids.sort();

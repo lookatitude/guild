@@ -679,3 +679,73 @@ describe("D6 — codex round 1 regressions", () => {
     expect(apply({ decisions: [{ kind: "agent", id: "qa", disposition: 1n }] }).status).toBe("refused");
   });
 });
+
+describe("D6 — codex round 2 regressions (literal-only fixes)", () => {
+  function apply(over: Record<string, unknown> = {}): Flat {
+    return flat(
+      applyAdoptionPlan({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        report: report(),
+        decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
+        runId: "run-20260801-120000-adopt",
+        authorizedBy: "cap-loc-D06",
+        adoptedAt: AT,
+        ...over,
+      }),
+    );
+  }
+
+  it("R2 refuses a write through a symlinked PARENT DIRECTORY", () => {
+    // Round 1's fix lstat-ed the LEAF, so a symlinked `.guild/agents` left the leaf
+    // non-existent, `mkdirSync(recursive)` succeeded because the directory already
+    // did, and the adopted template landed outside the project anyway — the same
+    // escape one level up.
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-outside-"));
+    fs.mkdirSync(path.join(tmp, ".guild"), { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(tmp, ".guild/agents"), "dir");
+
+    const out = apply();
+    expect(out.status).toBe("refused");
+    expect(String(out.reason)).toMatch(/outside the project root/);
+    expect(fs.readdirSync(outsideDir)).toEqual([]);
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  it("R2 refuses a ROLLBACK removal that would escape the project root", () => {
+    // A delete that escapes is worse than a write that does.
+    const adopted = apply();
+    expect(adopted.status).toBe("applied");
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-outside-"));
+    const adoptedBytes = fs.readFileSync(path.join(tmp, ".guild/agents/qa.md"));
+    fs.rmSync(path.join(tmp, ".guild/agents"), { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, "qa.md"), adoptedBytes);
+    fs.symlinkSync(outsideDir, path.join(tmp, ".guild/agents"), "dir");
+
+    const out = flat(
+      rollbackAdoption({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        runId: "run-20260801-130000-rollback",
+        authorizedBy: "cap-loc-D03",
+        adoptedAt: "2026-08-01T13:00:00Z",
+        reason: "escape probe",
+      }),
+    );
+    expect(out.status).toBe("refused");
+    expect(String(out.reason)).toMatch(/outside the project root/);
+    expect(fs.existsSync(path.join(outsideDir, "qa.md"))).toBe(true);
+    fs.rmSync(path.join(tmp, ".guild/agents"));
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  // ANTI-VACUITY partner: an ordinary adoption still works, so the two rows above
+  // are not passing because containment refuses everything.
+  it("R2 an ordinary in-project adoption is still permitted", () => {
+    expect(apply().status).toBe("applied");
+    expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(true);
+  });
+});
