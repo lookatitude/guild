@@ -4684,6 +4684,30 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
   out = truncateToCap(out, cap);
   return out;
 }
+var REDACTABLE_FIELD_NAMES = Object.freeze([
+  "command_redacted",
+  "result_excerpt_redacted",
+  "payload_excerpt_redacted",
+  "prompt_excerpt",
+  "assumption_text",
+  "result"
+]);
+function sealSet(values) {
+  const set = new Set(values);
+  const refuse = (op) => () => {
+    throw new TypeError(`REDACTABLE_FIELDS is sealed: ${op} would silently narrow redaction coverage`);
+  };
+  for (const method of ["add", "delete", "clear"]) {
+    Object.defineProperty(set, method, {
+      value: refuse(method),
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }
+  return Object.freeze(set);
+}
+var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES);
 
 // ../src/modules/security/workflows/secrets.ts
 function applySecretsPolicy(value, policy, opts) {

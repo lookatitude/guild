@@ -1832,7 +1832,22 @@ var init_injection_guard = __esm({
 });
 
 // ../src/modules/security/workflows/redact-log.ts
-var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS;
+function sealSet(values) {
+  const set = new Set(values);
+  const refuse = (op) => () => {
+    throw new TypeError(`REDACTABLE_FIELDS is sealed: ${op} would silently narrow redaction coverage`);
+  };
+  for (const method of ["add", "delete", "clear"]) {
+    Object.defineProperty(set, method, {
+      value: refuse(method),
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }
+  return Object.freeze(set);
+}
+var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
 var init_redact_log = __esm({
   "../src/modules/security/workflows/redact-log.ts"() {
     FIELD_SIZE_CAP_BYTES = 4 * 1024;
@@ -1854,6 +1869,15 @@ var init_redact_log = __esm({
       ".aws",
       ".gnupg"
     ]);
+    REDACTABLE_FIELD_NAMES = Object.freeze([
+      "command_redacted",
+      "result_excerpt_redacted",
+      "payload_excerpt_redacted",
+      "prompt_excerpt",
+      "assumption_text",
+      "result"
+    ]);
+    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES);
   }
 });
 

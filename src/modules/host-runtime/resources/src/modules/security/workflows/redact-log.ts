@@ -387,14 +387,48 @@ export function redactField(
  * Set of JSONL field names that carry redactable free-text content.
  * Used by the JSONL writer's pre-serialize sweep.
  */
-export const REDACTABLE_FIELDS: ReadonlySet<string> = new Set([
+/**
+ * SEALED SET (adversarial review, #18).
+ *
+ * `ReadonlySet<string>` is a COMPILE-TIME type. At runtime this is an ordinary `Set`
+ * with a working `delete`, and `Object.freeze(set)` does NOT freeze Set membership —
+ * freeze only seals own properties, while entries live in an internal slot. So the
+ * freeze sweep's whole technique is inapplicable here, and the type annotation bought
+ * nothing.
+ *
+ * Reproduced against shipped code: `REDACTABLE_FIELDS.delete("result")` made
+ * `redactEventFields` return an API token VERBATIM instead of redacting it — the
+ * redactor still ran, still reported success, and simply stopped covering that field.
+ *
+ * Sealing it means neutering the mutators on the instance, which is the only thing that
+ * actually stops the attack. The frozen source array is the declaration of record.
+ */
+const REDACTABLE_FIELD_NAMES = Object.freeze([
   "command_redacted",
   "result_excerpt_redacted",
   "payload_excerpt_redacted",
   "prompt_excerpt",
   "assumption_text",
   "result",
-]);
+] as const);
+
+function sealSet<T>(values: readonly T[]): ReadonlySet<T> {
+  const set = new Set<T>(values);
+  const refuse = (op: string) => () => {
+    throw new TypeError(`REDACTABLE_FIELDS is sealed: ${op} would silently narrow redaction coverage`);
+  };
+  for (const method of ["add", "delete", "clear"] as const) {
+    Object.defineProperty(set, method, {
+      value: refuse(method),
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+  }
+  return Object.freeze(set);
+}
+
+export const REDACTABLE_FIELDS: ReadonlySet<string> = sealSet(REDACTABLE_FIELD_NAMES);
 
 /**
  * Apply field-level redaction to every redactable string in `event`.
