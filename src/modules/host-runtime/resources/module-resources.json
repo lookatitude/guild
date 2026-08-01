@@ -429,7 +429,7 @@
       "id": "projection:src/modules/config/workflows/settings-reader.ts",
       "source_path": "src/modules/config/workflows/settings-reader.ts",
       "resource_path": "resources/src/modules/config/workflows/settings-reader.ts",
-      "sha256": "fd80127891327dc74122ce3c56bb42853047d6accc1e60f7b150ba9ec08d9940",
+      "sha256": "bf8433d1037982c42313adee18fc22217938fdeebc5404c8451bd0c85c61608e",
       "projection_dependency": true
     },
     {

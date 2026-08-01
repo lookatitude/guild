@@ -5903,7 +5903,7 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs4, path5, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, VALID_CAPABILITY_KEYS;
+var fs4, path5, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
 var init_settings_reader = __esm({
   "../src/modules/config/workflows/settings-reader.ts"() {
     fs4 = __toESM(require("fs"));
@@ -5954,6 +5954,35 @@ var init_settings_reader = __esm({
       "lean_lead",
       "lifecycle_gate"
       // rf-wi-01 (G1)
+    ]);
+    RESOLVER_TIER1_KEYS = /* @__PURE__ */ new Set([
+      "rigor",
+      "auto_approve",
+      "review",
+      "host",
+      "host_mode",
+      "roles",
+      "host_profiles",
+      "initiative_default",
+      "index",
+      "record_status_runs",
+      "codex_skip_enforcement",
+      "agent_mode",
+      "workspace",
+      "models",
+      "security",
+      "secrets_policy",
+      "mcp",
+      "capability",
+      // S5 (cap-loc-D04) — capability localization policy
+      "statusline",
+      // R-009
+      "adversarial_review_provider",
+      // R-008
+      "loops",
+      "loop_cap",
+      "codex_cap",
+      "defaults"
     ]);
     VALID_CAPABILITY_KEYS = /* @__PURE__ */ new Set([
       "resolver_mode",
@@ -6303,6 +6332,7 @@ var init_telemetry = __esm({
 // ../src/modules/config/workflows/settings-resolver.ts
 var settings_resolver_exports = {};
 __export(settings_resolver_exports, {
+  RESOLVER_TIER1_KEYS: () => RESOLVER_TIER1_KEYS,
   deepMerge: () => deepMerge,
   initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
   isPlainObject: () => isPlainObject2,

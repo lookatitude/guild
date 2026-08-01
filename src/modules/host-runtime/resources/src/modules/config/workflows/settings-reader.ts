@@ -430,7 +430,18 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "update",                         // plugin-update-lifecycle AC-6
   "lean_lead", "lifecycle_gate",    // rf-wi-01 (G1)
 ]);
-const TIER1_KEYS = new Set([
+/**
+ * The resolver's OWN closed top-level key set.
+ *
+ * EXPORTED so a test can assert it agrees with CONFIG_SCHEMA's top-level keys. This is
+ * a C5-style dual home WITHOUT a sync script: two hand-maintained copies of the config
+ * surface, and they drifted silently — S5's `capability` block was registered in the
+ * schema, the CLI loader, the UI metadata and the persist matrix, but NOT here, so it
+ * resolved to the shipped default no matter what a project configured. Config that
+ * cannot be read is config that does not exist. `config-schema-resolver-parity.test.ts`
+ * is the guard that stops the next key being inert the same way.
+ */
+export const RESOLVER_TIER1_KEYS: ReadonlySet<string> = new Set([
   "rigor", "auto_approve", "review", "host", "host_mode", "roles", "host_profiles", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace",
   "models", "security", "secrets_policy", "mcp",
