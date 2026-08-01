@@ -749,3 +749,76 @@ describe("D6 — codex round 2 regressions (literal-only fixes)", () => {
     expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The CLI surface
+// ---------------------------------------------------------------------------
+//
+// The suites above call the library directly, so they cannot catch a verb that
+// forgets to pass a required argument. An end-to-end adopt → rollback through the
+// actual command found exactly that (`rollback` omitted `pluginRoot` and refused
+// every invocation), which is why this walks the CLI rather than the library.
+
+describe("D6 — the capability-adopt command, end to end", () => {
+  it("report → adopt → rollback completes through the real verbs", () => {
+    const { capabilityAdoptMain } = require("../capability-adopt") as {
+      capabilityAdoptMain: (argv: readonly string[]) => number;
+    };
+    const base = ["--project-id", "demo", "--project-root", tmp, "--plugin-root", PLUGIN_ROOT];
+
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    // Silence the command's own output; the assertions are on exit codes and disk.
+    (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+      out.push(s);
+      return true;
+    };
+    try {
+      expect(capabilityAdoptMain(["report", ...base])).toBe(0);
+      // The read-only verb really is read-only, through the CLI too.
+      expect(fs.existsSync(path.join(tmp, ADOPTION_MANIFEST_RELPATH))).toBe(false);
+
+      const plan = path.join(tmp, "plan.json");
+      fs.writeFileSync(
+        plan,
+        JSON.stringify({ decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }] }),
+      );
+      expect(
+        capabilityAdoptMain([
+          "adopt",
+          ...base,
+          "--decisions",
+          plan,
+          "--run-id",
+          "run-a",
+          "--authorized-by",
+          "cap-loc-D06",
+          "--adopted-at",
+          AT,
+        ]),
+      ).toBe(0);
+      expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(true);
+
+      expect(
+        capabilityAdoptMain([
+          "rollback",
+          ...base,
+          "--run-id",
+          "run-b",
+          "--authorized-by",
+          "cap-loc-D03",
+          "--adopted-at",
+          "2026-08-01T13:00:00Z",
+          "--reason",
+          "smoke",
+        ]),
+      ).toBe(0);
+      expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(false);
+
+      const manifest = readAdoptionManifest(tmp)!;
+      expect(manifest.entries.map((e) => e.reason)).toEqual(["migrated", "rolled_back"]);
+    } finally {
+      (process.stdout as unknown as { write: typeof write }).write = write;
+    }
+  });
+});

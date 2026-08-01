@@ -222,6 +222,11 @@ function main(argv: readonly string[]): number {
       seqRaw === null ? undefined : seqRaw.split(",").map((s) => Number(s.trim()));
 
     const outcome = rollbackAdoption({
+      // Required: a reversal entry must rebuild the ORIGINAL identity, which means
+      // re-reading the shipped bytes. Omitting it here made the `rollback` verb
+      // refuse every invocation — caught by an end-to-end adopt+rollback smoke that
+      // the unit suites could not, because they call the library directly.
+      pluginRoot,
       projectRoot,
       projectId,
       runId,
