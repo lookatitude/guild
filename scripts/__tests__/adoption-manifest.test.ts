@@ -51,7 +51,7 @@ function loc(id: string, hash = "f") {
   return {
     id,
     project_id: "plugin",
-    historical_path: `/Users/miguelp/Projects/guild/.claude/agents/${id}.md`,
+    historical_path: `/plugin/.guild/agents/${id}.md`,
     content_hash: H(hash),
     home: "project-guild" as const,
   };
@@ -179,8 +179,12 @@ describe("XB — non-canonical locators are REJECTED, never normalized", () => {
   it("XB.2 dedup is sound BY CONSTRUCTION — only one spelling validates", () => {
     const canonical = "/Users/miguelp/Projects/guild/.claude/agents/x.md";
     const alias = "/Users/miguelp/Projects/guild/.claude/./agents/x.md";
-    expect(validateLegacyLocator({ ...loc("x"), historical_path: canonical })).not.toBeNull();
-    expect(validateLegacyLocator({ ...loc("x"), historical_path: alias })).toBeNull();
+    // `home` rides with the path override: since the declared layer is validated
+    // against the path, a `.claude` spelling must declare `dot-claude-agents` or the
+    // fixture is a contradiction rather than a canonicalization case.
+    const claude = { ...loc("x"), home: "dot-claude-agents" as const };
+    expect(validateLegacyLocator({ ...claude, historical_path: canonical })).not.toBeNull();
+    expect(validateLegacyLocator({ ...claude, historical_path: alias })).toBeNull();
   });
 
   it("XB.3 two spellings of one file cannot BOTH enter the manifest", () => {

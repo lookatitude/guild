@@ -51,7 +51,7 @@ function loc(id: string, hash = "f") {
   return {
     id,
     project_id: "plugin",
-    historical_path: `/Users/miguelp/Projects/guild/.claude/agents/${id}.md`,
+    historical_path: `/plugin/.guild/agents/${id}.md`,
     content_hash: H(hash),
     home: "project-guild" as const,
   };
@@ -154,7 +154,7 @@ describe("#2 — absence of a hash is not agreement", () => {
       // Same id, NO recorded hash — previously a wildcard that hijacked the chain
       // and resolved a historical run to WRONG's bytes.
       {
-        from: { project_id: "plugin", id: "B", historical_path: "/g/other/B.md", content_hash: null, home: "project-guild" },
+        from: { project_id: "plugin", id: "B", historical_path: "/g/.guild/other/B.md", content_hash: null, home: "project-guild" },
         to: ref("WRONG"),
       },
     ]);
@@ -166,7 +166,7 @@ describe("#2 — absence of a hash is not agreement", () => {
   it("a supplied query hash is not satisfied by an entry with a null hash", () => {
     const m = chain([
       {
-        from: { project_id: "plugin", id: "A", historical_path: "/g/A.md", content_hash: null, home: "project-guild" },
+        from: { project_id: "plugin", id: "A", historical_path: "/g/.guild/A.md", content_hash: null, home: "project-guild" },
         to: ref("B"),
       },
     ]);

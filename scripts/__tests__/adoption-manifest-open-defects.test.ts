@@ -34,6 +34,7 @@ import {
   DEFINITION_LAYERS,
   MAX_SOURCE_COMMIT,
   PROJECT_DEFINITION_REF_SCHEMA,
+  layerAgreesWithPath,
   validateProjectDefinitionRefV1,
   type ProjectDefinitionRefV1,
 } from "../lib/core/contracts/project-definition-ref";
@@ -70,7 +71,7 @@ function loc(id: string, hash: string, path?: string) {
   return {
     id,
     project_id: "plugin",
-    historical_path: path ?? `/old/${id}.md`,
+    historical_path: path ?? `/plugin/.guild/agents/${id}.md`,
     content_hash: H(hash),
     home: "project-guild" as const,
   };
@@ -564,18 +565,29 @@ describe("D4 — liveness and traversal agree about what an identity IS", () => 
    * agreement; only this one encoded the superseded tuple.
    */
   it("a differing HOME now DOES split identity — and both halves agree about it", () => {
+    // Path DERIVED from the declared layer: since the declared-vs-derived fix, a
+    // fixture that spells the two independently is a contradiction, not a fixture.
     const inLayer = (id: string, hash: string, home: LegacyHome) => ({
       project_id: "plugin",
       id,
-      historical_path: `/old/${id}.md`,
+      historical_path: `/plugin/${
+        home === "dot-claude-agents" ? ".claude" : home === "plugin-shipped" ? "shipped" : ".guild"
+      }/agents/${id}.md`,
       content_hash: H(hash),
       home,
     });
     const m = chain([
-      { from: inLayer("A", "a", "dot-claude-agents"), to: { ...ref("B", "b"), layer: "dot-claude-agents" as const } },
+      {
+        from: inLayer("A", "a", "dot-claude-agents"),
+        to: { ...ref("B", "b"), layer: "dot-claude-agents" as const, relative_path: ".claude/agents/B.md" },
+      },
       rb(1, {
-        from: { ...loc("B", "b"), home: "dot-claude-agents" as const },
-        to: { ...ref("A", "a"), layer: "dot-claude-agents" as const },
+        from: {
+          ...loc("B", "b"),
+          home: "dot-claude-agents" as const,
+          historical_path: "/plugin/.claude/agents/B.md",
+        },
+        to: { ...ref("A", "a"), layer: "dot-claude-agents" as const, relative_path: ".claude/agents/A.md" },
       }),
       { from: inLayer("A", "a", "plugin-shipped"), to: ref("C", "c") },
     ]);
@@ -2287,10 +2299,15 @@ describe("#27 — a location-bearing identity, and the wrong-bytes path it close
 
 
 describe("#27b — the layer completes identity: a move WITHIN a root", () => {
+  // PATHS ARE DERIVED FROM THE DECLARED LAYER, because since the declared-vs-derived
+  // fix a fixture that spells them independently is a CONTRADICTION, not a fixture.
+  // Seven assertions here were written that way and the validator caught every one.
+  const marker = (l: LegacyHome) =>
+    l === "dot-claude-agents" ? ".claude" : l === "plugin-shipped" ? "shipped" : ".guild";
   const at = (id: string, hash: string, project: string, home: LegacyHome) => ({
     project_id: project,
     id,
-    historical_path: `/${project}/${home}/${id}.md`,
+    historical_path: `/${project}/${marker(home)}/agents/${id}.md`,
     content_hash: H(hash),
     home,
   });
@@ -2299,7 +2316,12 @@ describe("#27b — the layer completes identity: a move WITHIN a root", () => {
     hash: string,
     project: string,
     layer: LegacyHome
-  ): ProjectDefinitionRefV1 => ({ ...ref(id, hash), project_id: project, layer });
+  ): ProjectDefinitionRefV1 => ({
+    ...ref(id, hash),
+    project_id: project,
+    layer,
+    relative_path: `${marker(layer)}/agents/${id}.md`,
+  });
 
   /**
    * CAP-LOC-D09'S OWN SHAPE, and the round-7 P1 it was rejected by.
@@ -2470,7 +2492,14 @@ describe("#27b — the layer completes identity: a move WITHIN a root", () => {
     expect(validateProjectDefinitionRefV1(noLayer)).toBeNull();
     expect(validateProjectDefinitionRefV1({ ...ref("A", "a"), layer: "invented" })).toBeNull();
     for (const l of DEFINITION_LAYERS) {
-      expect(validateProjectDefinitionRefV1({ ...ref("A", "a"), layer: l })).not.toBeNull();
+      // path derived from the layer — a fixed path would contradict two of the four
+      expect(
+        validateProjectDefinitionRefV1({
+          ...ref("A", "a"),
+          layer: l,
+          relative_path: `${marker(l)}/agents/A.md`,
+        })
+      ).not.toBeNull();
     }
   });
 
@@ -2478,5 +2507,116 @@ describe("#27b — the layer completes identity: a move WITHIN a root", () => {
     // Two copies is how D4's identity disagreement happened; asserted so a future
     // edit cannot quietly fork them again.
     expect([...LEGACY_HOMES]).toEqual([...DEFINITION_LAYERS]);
+  });
+});
+
+
+describe("#27c — a DECLARED layer must agree with the path it describes", () => {
+  /**
+   * MY OWN SWEEP CAUGHT THIS BLOCK'S ABSENCE, and that is worth recording. I added the
+   * agreement rule, made every fixture comply with it, and wrote NO test for it — so
+   * all five of its guards swept green. Making the world consistent with a rule is not
+   * testing the rule; only an input that VIOLATES it is.
+   *
+   * THE EXPLOIT it closes, from codex round 8 (#2). I had documented `layer` as
+   * declared data, not derived from the path, and recorded a self-inconsistent ref as
+   * valid-but-odd. It is not odd — it recreates the wrong-bytes class:
+   *
+   *     1  A -> X   declared layer `project-guild`, path `.claude/agents/X.md`
+   *     2  X (home project-guild, path .guild/agents/X.md) -> Y
+   *     validated; resolving A returned Y on trail [1,2] instead of stopping at X.
+   *
+   * Two entries describing DIFFERENT files chained anyway, because identity used the
+   * declared layer while the path said otherwise. A declared component that can
+   * contradict a derived one is not a component, it is a second opinion.
+   */
+  const R = (id: string, hash: string, layer: LegacyHome, path: string): ProjectDefinitionRefV1 => ({
+    ...ref(id, hash),
+    layer,
+    relative_path: path,
+  });
+  const L = (id: string, hash: string, home: LegacyHome, path: string) => ({
+    project_id: "plugin",
+    id,
+    historical_path: path,
+    content_hash: H(hash),
+    home,
+  });
+
+  it("THE EXPLOIT: the wrong-lineage chain no longer validates", () => {
+    const m = chain([
+      { from: L("A", "a", "project-guild", "/plugin/.guild/A.md"), to: R("X", "3", "project-guild", ".claude/agents/X.md") },
+      { from: L("X", "3", "project-guild", "/plugin/.guild/agents/X.md"), to: R("Y", "e", "project-guild", ".guild/agents/Y.md") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).ref).toBeNull();
+  });
+
+  // ── the S2 successor side ────────────────────────────────────────────────
+
+  it.each([
+    ["project-guild claimed for a .claude path", "project-guild", ".claude/agents/X.md"],
+    ["umbrella-guild claimed for a .claude path", "umbrella-guild", ".claude/agents/X.md"],
+    ["plugin-shipped claimed for a .claude path", "plugin-shipped", ".claude/agents/X.md"],
+    ["dot-claude-agents claimed for a .guild path", "dot-claude-agents", ".guild/agents/X.md"],
+    ["plugin-shipped claimed for a .guild path", "plugin-shipped", ".guild/agents/X.md"],
+  ])("S2 refuses a contradiction — %s", (_label, layer, path) => {
+    expect(validateProjectDefinitionRefV1(R("X", "3", layer as LegacyHome, path))).toBeNull();
+  });
+
+  it.each([
+    ["dot-claude-agents with a .claude path", "dot-claude-agents", ".claude/agents/X.md"],
+    ["project-guild with a .guild path", "project-guild", ".guild/agents/X.md"],
+    ["umbrella-guild with a .guild path", "umbrella-guild", ".guild/agents/X.md"],
+  ])("…and accepts agreement — %s", (_label, layer, path) => {
+    expect(validateProjectDefinitionRefV1(R("X", "3", layer as LegacyHome, path))).not.toBeNull();
+  });
+
+  it.each(DEFINITION_LAYERS)(
+    "an UNMARKED path constrains nothing — %s",
+    (layer) => {
+      // The rule refuses CONTRADICTION, not silence. A first draft forced the
+      // unmarked case to `plugin-shipped`, which invents a constraint rather than
+      // validating a declaration; an unmarked path makes no claim to contradict.
+      expect(
+        validateProjectDefinitionRefV1(R("X", "3", layer as LegacyHome, "agents/X.md"))
+      ).not.toBeNull();
+    }
+  );
+
+  it("a path carrying BOTH markers proves nothing and fails closed", () => {
+    expect(
+      validateProjectDefinitionRefV1(R("X", "3", "project-guild", ".guild/.claude/X.md"))
+    ).toBeNull();
+    expect(
+      validateProjectDefinitionRefV1(R("X", "3", "dot-claude-agents", ".guild/.claude/X.md"))
+    ).toBeNull();
+  });
+
+  // ── the S3 legacy side, through the SAME function ────────────────────────
+
+  it.each([
+    ["project-guild claimed for a .claude path", "project-guild", "/plugin/.claude/agents/X.md"],
+    ["dot-claude-agents claimed for a .guild path", "dot-claude-agents", "/plugin/.guild/agents/X.md"],
+    ["plugin-shipped claimed for a .guild path", "plugin-shipped", "/plugin/.guild/agents/X.md"],
+  ])("S3 refuses the same contradiction on the LEGACY side — %s", (_label, home, path) => {
+    expect(validateLegacyLocator(L("X", "3", home as LegacyHome, path))).toBeNull();
+  });
+
+  it("…and accepts agreement, and is unconstrained on an unmarked path", () => {
+    expect(
+      validateLegacyLocator(L("X", "3", "dot-claude-agents", "/plugin/.claude/agents/X.md"))
+    ).not.toBeNull();
+    expect(validateLegacyLocator(L("X", "3", "umbrella-guild", "/plugin/agents/X.md"))).not.toBeNull();
+  });
+
+  it("ONE function serves both sides — the marker is a SEGMENT, not a prefix", () => {
+    // S2 paths are project-RELATIVE and S3's are ABSOLUTE, so a prefix test would
+    // have needed two rules — and two copies of an identity rule is how D4 happened.
+    expect(layerAgreesWithPath("dot-claude-agents", ".claude/agents/x.md")).toBe(true);
+    expect(layerAgreesWithPath("dot-claude-agents", "/Users/me/proj/.claude/agents/x.md")).toBe(true);
+    expect(layerAgreesWithPath("project-guild", "/Users/me/proj/.claude/agents/x.md")).toBe(false);
+    // …and a directory merely NAMED like a marker is not one
+    expect(layerAgreesWithPath("plugin-shipped", "docs/dot-claude/x.md")).toBe(true);
   });
 });

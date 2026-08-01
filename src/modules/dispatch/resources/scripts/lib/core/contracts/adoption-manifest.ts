@@ -100,6 +100,7 @@ import { types as nodeTypes } from "util";
 
 import {
   DEFINITION_LAYERS,
+  layerAgreesWithPath,
   validateProjectDefinitionRefV1,
   type DefinitionLayer,
   type ProjectDefinitionRefV1,
@@ -547,6 +548,11 @@ function validateLegacyLocatorInner(obj: unknown): LegacyLocator | null {
     if (typeof hashP.value !== "string" || !CONTENT_HASH_RE.test(hashP.value)) return null;
   }
   if (typeof homeP.value !== "string" || !LEGACY_HOME_SET.has(homeP.value)) return null;
+  // THE SAME RULE ON THE LEGACY SIDE, through the SAME function. `home` is identity-
+  // bearing now, so a declared `home` that contradicts `historical_path` is the exact
+  // second-opinion hole the successor side had — one class, closed on both ends
+  // rather than at the site where it was demonstrated.
+  if (!layerAgreesWithPath(homeP.value, pathP.value as string)) return null;
 
   return {
     project_id: projP.value,

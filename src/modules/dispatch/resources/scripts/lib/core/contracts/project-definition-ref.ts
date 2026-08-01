@@ -108,6 +108,51 @@ export type DefinitionLayer = (typeof DEFINITION_LAYERS)[number];
 
 const DEFINITION_LAYER_SET: ReadonlySet<string> = new Set<string>(DEFINITION_LAYERS);
 
+/**
+ * Does a DECLARED layer agree with the path it claims to describe?
+ *
+ * THE LIMITATION I DOCUMENTED AS ACCEPTABLE WAS EXPLOITABLE. I wrote that `layer` is
+ * declared data, not derived from the path, and recorded a self-inconsistent ref as
+ * valid-but-odd rather than invent a consistency rule. It is not odd — it recreates
+ * the WRONG-BYTES class the whole amendment existed to close:
+ *
+ *     1  A -> X   declared layer `project-guild`, path `.claude/agents/X.md`
+ *     2  X (home project-guild, path .guild/agents/X.md) -> Y
+ *     validates; resolving A returns Y on trail [1,2] instead of stopping at X.
+ *
+ * The two entries describe DIFFERENT files and chain anyway, because identity used
+ * the declared layer while the path said something else. A declared component that
+ * can contradict a derived one is not a component, it is a second opinion.
+ *
+ * DERIVING the layer outright was the other option and is NOT possible: `.guild/`
+ * maps to `project-guild` OR `umbrella-guild` depending on which root, and the path
+ * alone cannot say which. So the declaration stays and is VALIDATED against what the
+ * path can actually prove — many-to-one, refusing only genuine disagreement.
+ *
+ * Deliberately NOT a prefix test: this is used for S2's project-RELATIVE paths and
+ * for S3's ABSOLUTE `historical_path` (`/Users/…/.claude/agents/x.md`), so it asks
+ * which marker SEGMENT the path contains. ONE function serves both sides, because
+ * two copies of an identity rule is precisely how D4 happened.
+ *
+ * A path containing BOTH markers is refused: it proves nothing, and fail-closed is
+ * the house rule.
+ */
+export function layerAgreesWithPath(layer: string, path: string): boolean {
+  const segments = path.split("/");
+  const hasClaude = segments.includes(".claude");
+  const hasGuild = segments.includes(".guild");
+  if (hasClaude && hasGuild) return false; // both markers — proves nothing, fail closed
+  if (hasClaude) return layer === "dot-claude-agents";
+  if (hasGuild) return layer === "project-guild" || layer === "umbrella-guild";
+  // NO MARKER ⇒ NO CONSTRAINT, and this is the difference between validating a
+  // declaration and inventing one. A first draft forced the unmarked case to
+  // `plugin-shipped`; that refuses paths the marker cannot speak to, which is a rule
+  // I would have made up rather than a disagreement I detected. The exploit is a
+  // CONTRADICTION between two statements about one file, so only a contradiction is
+  // refused. An unmarked path makes no claim to contradict.
+  return true;
+}
+
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
 /**
@@ -698,6 +743,12 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
     if (profileHashProp.value !== null) return null;
     if (typeHashProp.value !== null) return null;
   }
+
+  // THE DECLARED LAYER MUST AGREE WITH THE PATH IT DESCRIBES. See
+  // `layerAgreesWithPath`: without this the declaration is a second opinion, and a
+  // ref declaring `project-guild` for a `.claude/agents/` path chains into another
+  // definition's lineage and resolves to the WRONG BYTES.
+  if (!layerAgreesWithPath(layerProp.value, pathProp.value as string)) return null;
 
   const skills = sanitizeSkillArr(skillsProp.value);
   if (skills === null) return null;
