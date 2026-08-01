@@ -58,33 +58,36 @@ export const CAPABILITY_AUTO_CREATE_POLICIES = ["never", "on_approval"] as const
 export type CapabilityAutoCreatePolicy = (typeof CAPABILITY_AUTO_CREATE_POLICIES)[number];
 
 /**
- * Shipped default for `capability.resolver_mode`.
- *
- * ── WHY `legacy` AND NOT D04's `observe` ────────────────────────────────────
- * S5 §"Hard precondition (from D04)" is explicit: *"Do not ship the `observe`
- * default until F7 (candidate surfacing in `/guild:status`) lands. An `observe`
- * install that emits candidates nobody surfaces is a silent no-op — worse than no
- * default."* F7 has not landed, so shipping `observe` today would create exactly
- * the vacuous behavior the precondition forbids: profiling would run, candidates
- * would accumulate, and no surface would ever show them to a human.
- *
- * `legacy` is the honest value for a codebase that has no localization machinery
- * wired yet — it says "this project resolves the way it always has", which is true.
- *
- * ── FLIPPING IT ─────────────────────────────────────────────────────────────
- * When F7 lands, change this ONE constant to `"observe"`. Nothing else moves:
- * DEFAULTS reads it, CONFIG_SCHEMA derives from DEFAULTS, and the conformance
- * test `capability-config.test.ts` already carries the post-F7 expectation in a
- * test named for the flip, so the change is one line plus one expectation.
- */
-export const CAPABILITY_RESOLVER_MODE_DEFAULT: CapabilityResolverMode = "legacy";
-
-/**
- * D04's intended default once F7 (candidate surfacing) lands. Exported so the flip
- * is a documented, testable transition rather than a remembered intention — see
- * CAPABILITY_RESOLVER_MODE_DEFAULT.
+ * D04's intended default, now REACHED. Kept as a distinct name rather than folded
+ * away: it records WHY the default is what it is, and it is what
+ * `CAPABILITY_RESOLVER_MODE_DEFAULT` is defined as, so the two cannot drift apart
+ * into a silent disagreement about which value F7 unlocked.
  */
 export const CAPABILITY_RESOLVER_MODE_AFTER_F7: CapabilityResolverMode = "observe";
+
+/**
+ * Shipped default for `capability.resolver_mode`.
+ *
+ * ── F7 HAS LANDED, SO THIS IS `observe` ─────────────────────────────────────
+ * S5 §"Hard precondition (from D04)" was explicit: *"Do not ship the `observe`
+ * default until F7 (candidate surfacing in `/guild:status`) lands. An `observe`
+ * install that emits candidates nobody surfaces is a silent no-op — worse than no
+ * default."* That precondition is what held this constant at `legacy`.
+ *
+ * F7 is now closed. `scripts/lib/capability/candidate-surface.ts` reads the newest
+ * emitted profile and renders a candidate block, `commands/status.md` prints it,
+ * and `capability-candidate-surface.test.ts` proves the round trip from a REAL
+ * emission through to the rendered text. Candidates therefore reach a human, so
+ * `observe` — "profile and propose, change nothing" — is now the honest default
+ * rather than a silent accumulator.
+ *
+ * ── WHAT WOULD REVERT IT ────────────────────────────────────────────────────
+ * Removing the surfacing path. If `/guild:status` ever stops printing the
+ * candidate block, this constant must go back to `legacy` in the same change —
+ * the default and the surface are one decision, not two.
+ */
+export const CAPABILITY_RESOLVER_MODE_DEFAULT: CapabilityResolverMode =
+  CAPABILITY_RESOLVER_MODE_AFTER_F7;
 
 /**
  * Inclusive bounds for `capability.suggestion_budget` (D04/F10: fixed at 4, not
@@ -296,10 +299,10 @@ export const DEFAULTS = {
      * gate criteria the initiative evaluates, and a mode change is a deliberate
      * write.
      *
-     * DEFAULT IS `legacy`, NOT `observe` — see CAPABILITY_RESOLVER_MODE_DEFAULT in
-     * capability-config.ts for the F7 precondition governing the flip to D04's
-     * intended `observe`. Never silently defaulted: an unset value resolves with
-     * provenance `default`, so `config show --sources` shows it was never chosen.
+     * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
+     * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
+     * silently defaulted: an unset value resolves with provenance `default`, so
+     * `config show --sources` shows it was never chosen.
      */
     resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
     /**

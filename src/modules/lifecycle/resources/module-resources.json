@@ -71,7 +71,7 @@
       "id": "status",
       "source_path": "commands/status.md",
       "resource_path": "resources/commands/status.md",
-      "sha256": "0b596798041bc42d4ee2365b14b54e41855470ae9d1150e102c2d526531a58c1"
+      "sha256": "5841bc2754be80f7ced96f6d7bdb57e8f01a3d010eb217bcb9f5f75964a8fdd4"
     },
     {
       "category": "hooks",
