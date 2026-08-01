@@ -14,6 +14,7 @@
 
 import {
   ADOPTION_MANIFEST_SCHEMA,
+  MAX_ENTRIES,
   entryDigest,
   resolveHistorical,
   validateAdoptionManifestV1,
@@ -21,7 +22,9 @@ import {
   type AdoptionManifestV1,
 } from "../lib/core/contracts/adoption-manifest";
 import {
+  MAX_SKILLS,
   PROJECT_DEFINITION_REF_SCHEMA,
+  validateProjectDefinitionRefV1,
   type ProjectDefinitionRefV1,
 } from "../lib/core/contracts/project-definition-ref";
 
@@ -594,5 +597,116 @@ describe("D4 — liveness and traversal agree about what an identity IS", () => 
     expect(
       resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).ref?.id
     ).toBe("C");
+  });
+});
+
+// ── Defect 5 — the bound must precede the enumeration it bounds ─────────────
+
+describe("D5 — a collection bound is paid BEFORE the pre-check work, not after", () => {
+  /**
+   * PRISTINE-TIP BEHAVIOUR (reproduced, dense arrays, mean of 3 runs):
+   *
+   *     n         entries reject   skills reject
+   *     250,000        111.8 ms        112.8 ms
+   *     500,000        361.2 ms        273.9 ms
+   *   1,000,000        728.2 ms        541.0 ms
+   *   2,000,000      1,636.5 ms      1,392.4 ms
+   *   4,000,000      2,374.9 ms      1,909.9 ms
+   *
+   * Linear in the INPUT, against caps of 4,096 and 256. `arrayLength()` and
+   * `sanitizeSkillArr()` both materialised every own property name — an n-element
+   * string array the caller had not allocated — and only then was the cap consulted.
+   * The round-4 fix moved that cost one step earlier without eliminating it: a
+   * rejection cost as much as an acceptance, which is what a collection bound exists
+   * to prevent.
+   *
+   * These are TIMING assertions, unusual here and deliberate: the fix changes cost,
+   * not outcome, so nothing else can observe it. The thresholds sit ~15x below the
+   * measured pristine numbers so ordinary machine noise cannot flip them, and the
+   * behavioural assertions beside them pin that the bound still means the same thing.
+   */
+  const DENSE = 4_000_000;
+  /** ~15x headroom under the 2,374.9 ms / 1,909.9 ms measured on the pristine tip. */
+  const CEILING_MS = 150;
+
+  const timeMs = (f: () => unknown): number => {
+    f(); // warm
+    const t = process.hrtime.bigint();
+    f();
+    return Number(process.hrtime.bigint() - t) / 1e6;
+  };
+
+  it("rejects a 4,000,000-entry array in O(1), not O(n)", () => {
+    const entries = new Array(DENSE).fill(null);
+    const m = { schema_version: ADOPTION_MANIFEST_SCHEMA, project_id: "plugin", entries };
+    let out: unknown;
+    const ms = timeMs(() => (out = validateAdoptionManifestV1(m)));
+    expect(out).toBeNull(); // still rejected — cost changed, outcome did not
+    expect(ms).toBeLessThan(CEILING_MS);
+  });
+
+  it("rejects a 4,000,000-skill bundle in O(1), not O(n)", () => {
+    const r = { ...ref("A", "a"), skills: new Array(DENSE).fill(null) };
+    let out: unknown;
+    const ms = timeMs(() => (out = validateProjectDefinitionRefV1(r)));
+    expect(out).toBeNull();
+    expect(ms).toBeLessThan(CEILING_MS);
+  });
+
+  it("the bound still rejects at exactly cap+1 and accepts at the cap (entries)", () => {
+    // The cheap length check must not become the ONLY check, or an array whose
+    // `length` lies about its contents would slip past.
+    const under = [];
+    for (let i = 0; i < MAX_ENTRIES; i++) under.push({ from: loc(`r${i}`, "1"), to: ref(`r${i + 1}`, "1") });
+    expect(validateAdoptionManifestV1(chain(under))).not.toBeNull();
+    under.push({ from: loc(`r${MAX_ENTRIES}`, "1"), to: ref(`r${MAX_ENTRIES + 1}`, "1") });
+    expect(validateAdoptionManifestV1(chain(under))).toBeNull();
+  });
+
+  it("the bound still rejects at exactly cap+1 and accepts at the cap (skills)", () => {
+    const skill = (i: number) => ({
+      id: `s${i}`,
+      relative_path: `.guild/skills/s${i}/SKILL.md`,
+      content_hash: H("a"),
+    });
+    const at = Array.from({ length: MAX_SKILLS }, (_v, i) => skill(i));
+    expect(validateProjectDefinitionRefV1({ ...ref("A", "a"), skills: at })).not.toBeNull();
+    expect(
+      validateProjectDefinitionRefV1({ ...ref("A", "a"), skills: [...at, skill(MAX_SKILLS)] })
+    ).toBeNull();
+  });
+
+  it("a SPARSE oversized array is rejected too — by a different guard, and that is fine", () => {
+    // Checked because the early exit must not create a gap, NOT because the length
+    // bound is what catches it: `new Array(n)` is rejected by the hole check in the
+    // index loop either way. Recorded so nobody reads this as evidence that the
+    // length bound is outcome-load-bearing in `sanitizeSkillArr` — it is not, and
+    // the timing assertions above are the only thing that pins it there.
+    const entries = new Array(MAX_ENTRIES + 1);
+    expect(
+      validateAdoptionManifestV1({
+        schema_version: ADOPTION_MANIFEST_SCHEMA,
+        project_id: "plugin",
+        entries,
+      })
+    ).toBeNull();
+    expect(
+      validateProjectDefinitionRefV1({ ...ref("A", "a"), skills: new Array(MAX_SKILLS + 1) })
+    ).toBeNull();
+  });
+
+  it("and an in-bounds array carrying EXTRA named own keys is still rejected", () => {
+    // The key-count/shape scan is what catches this, and it must survive the new
+    // early exit — the length bound says nothing about out-of-band properties.
+    const entries: unknown[] = [];
+    (entries as unknown as Record<string, unknown>).__proto__x = "smuggled";
+    Object.defineProperty(entries, "extra", { value: 1, enumerable: true, configurable: true });
+    expect(
+      validateAdoptionManifestV1({
+        schema_version: ADOPTION_MANIFEST_SCHEMA,
+        project_id: "plugin",
+        entries,
+      })
+    ).toBeNull();
   });
 });

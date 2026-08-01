@@ -307,19 +307,40 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   ) {
     return null;
   }
-  // THE COLLECTION BOUND, and it is ONE check rather than two.
+  // THE COLLECTION BOUND, IN TWO PARTS THAT BOUND DIFFERENT THINGS.
   //
-  // A separate `lenDesc.value > MAX_SKILLS` line was written first, then removed: a
-  // genuine JSON array has exactly its indices plus `length`, so bounding the own-key
-  // count bounds the length too, and the anti-vacuity sweep showed the length line
-  // could be deleted without reddening anything. One guard that provably fires beats
-  // two where only one does.
+  // The `length` line was written first, then DELETED as redundant: a genuine JSON
+  // array has exactly its indices plus `length`, so the own-key count bounds the
+  // length too, and the anti-vacuity sweep showed nothing reddened without it. That
+  // reasoning was sound about OUTCOMES and wrong about COST — which is exactly the
+  // gap the sweep cannot see, since it only proves a guard changes an answer.
   //
-  // Counting KEYS rather than `length` is also what makes the bound real: `length`
-  // alone does not bound the WORK, because an array with `length: 1` can still carry
-  // a million NAMED own properties that the scan below walks (codex round: the bound
-  // "does not bound the property-validation work it claims to contain"). Names are
-  // materialised ONCE here and reused.
+  // Restored, ahead of the enumeration, because `getOwnPropertyNames` materialises
+  // one string per own property BEFORE any cap is consulted. Measured on the
+  // pristine tip, rejecting a dense array against a cap of 256:
+  //
+  //   250k → 112.8ms · 500k → 273.9ms · 1M → 541.0ms · 2M → 1392.4ms · 4M → 1909.9ms
+  //
+  // Linear in the INPUT. A rejection cost as much as an acceptance, which is what a
+  // collection bound exists to prevent (codex round 5, #5).
+  //
+  // AND IT IS STILL OUTCOME-REDUNDANT — said plainly, because the deleted comment's
+  // mistake was not its reasoning but its scope. Every oversized shape is rejected
+  // without this line too: a dense one by the key count below, a sparse or partly
+  // sparse one by the hole check in the index loop. Weakening this line reddens the
+  // TIMING assertion and nothing else, and that is the whole point of keeping it.
+  // A guard whose only observable effect is cost is still a guard; it just needs a
+  // cost test, which is why D5's coverage is timed rather than behavioural.
+  if (lenDesc.value > MAX_SKILLS) return null;
+  //
+  // Counting KEYS as well is what bounds the rest: `length` alone does not bound the
+  // WORK, because an array with `length: 1` can still carry a million NAMED own
+  // properties that the scan below walks (an earlier codex round: the bound "does
+  // not bound the property-validation work it claims to contain"). Names are
+  // materialised ONCE here and reused. The residual — one `getOwnPropertyNames` over
+  // properties the caller already allocated — is unavoidable without an early-exit
+  // own-key enumerator, and cannot arise from `JSON.parse`, this contract's actual
+  // input path.
   const ownNames = Object.getOwnPropertyNames(v);
   if (ownNames.length > MAX_SKILLS + 1) return null;
 

@@ -269,8 +269,31 @@ function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): bool
   return true;
 }
 
-/** A genuine, unpolluted array. Returns its snapshotted length, or null. */
-function arrayLength(v: unknown): number | null {
+/**
+ * A genuine, unpolluted array of at most `max` elements. Returns its snapshotted
+ * length, or null.
+ *
+ * `max` IS A PARAMETER, NOT A LATER CHECK BY THE CALLER (codex round 5, #5). The
+ * bound used to be applied after this function returned, so `getOwnPropertyNames`
+ * had already materialised one string per own property — an n-element array the
+ * caller never allocated — before anything asked how big n was. Measured on the
+ * pristine tip, rejecting a dense array against a cap of 4096:
+ *
+ *   250k → 111.8ms · 500k → 361.2ms · 1M → 728.2ms · 2M → 1636.5ms · 4M → 2374.9ms
+ *
+ * Linear in the INPUT, which is precisely what a collection bound exists to stop:
+ * a rejection cost as much as an acceptance. The round-4 fix moved that cost one
+ * step earlier without eliminating it. It is now O(1) for the oversized case.
+ *
+ * WHAT REMAINS, stated rather than claimed closed: an object whose `length` is
+ * small but which carries a huge number of own NAMED properties still costs one
+ * `getOwnPropertyNames`. There is no early-exit own-key enumerator in JS, so this
+ * cannot be bounded without one — and such an object cannot come from `JSON.parse`,
+ * which is this contract's actual input path (a parsed array has only index keys
+ * plus `length`). The residual is one name array over properties the caller already
+ * allocated, with no amplification beyond that.
+ */
+function arrayLength(v: unknown, max: number): number | null {
   if (!Array.isArray(v)) return null;
   if (nodeTypes.isProxy(v)) return null;
   if (Object.getPrototypeOf(v) !== Array.prototype) return null;
@@ -285,6 +308,12 @@ function arrayLength(v: unknown): number | null {
   ) {
     return null;
   }
+  // THE BOUND, BEFORE THE ENUMERATION IT BOUNDS — and it is now the ONLY place the
+  // entry cap is applied, the caller's later `len > MAX_ENTRIES` line having been
+  // removed as the duplicate it became. So unlike its sibling in
+  // `project-definition-ref.ts` this one is load-bearing for OUTCOME as well as
+  // cost: weakening it accepts a 4097-entry log.
+  if (lenDesc.value > max) return null;
   const len = lenDesc.value;
   for (const k of Object.getOwnPropertyNames(v)) {
     if (k === "length") continue;
@@ -593,11 +622,11 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
   if (projP.kind !== "data" || entriesP.kind !== "data") return null;
   if (!isCleanScalar(projP.value, MAX_ID) || !TOKEN_RE.test(projP.value)) return null;
 
-  const len = arrayLength(entriesP.value);
+  // The cap is passed IN, so it is consulted before the own-property enumeration
+  // rather than after it — see `arrayLength`. An oversized log costs O(1) to
+  // reject, not a full pass over the caller's array.
+  const len = arrayLength(entriesP.value, MAX_ENTRIES);
   if (len === null) return null;
-  // BEFORE the per-entry loop: an oversized log must not cost a full validation
-  // pass to reject.
-  if (len > MAX_ENTRIES) return null;
 
   const raw = entriesP.value as unknown[];
   const entries: AdoptionEntry[] = [];
