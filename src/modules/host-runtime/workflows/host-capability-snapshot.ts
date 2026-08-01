@@ -35,6 +35,23 @@
  *      whose row requires no auth has nothing to authenticate, so it is
  *      authenticated by the same declared fact — never by optimism.
  *
+ * NAME DISAMBIGUATION (gap-audit C8). Three near-identical schema names exist and
+ * are routinely confused for each other — an external audit read this one as a
+ * typo for the others. They are three DIFFERENT artifacts:
+ *
+ *   guild.host_capabilities.v1         static design-time capability MATRIX row,
+ *                                      authored per host; `host-capabilities-schema.ts`.
+ *   guild.host_capability.v1           the per-host runtime MANIFEST probed onto disk
+ *                                      at `.guild/hosts/<host-id>/capability.json`;
+ *                                      `host-capability-manifest.ts`.
+ *   guild.host_capability_snapshot.v1  THIS FILE — the per-(run_id, host_id) IMMUTABLE
+ *                                      snapshot a single run is bound to, frozen from
+ *                                      the registry row plus supplied observations.
+ *
+ * Matrix = what a host is declared to do. Manifest = what this installation found.
+ * Snapshot = what THIS RUN is bound to and cannot change under it. Do not "correct"
+ * one name to another; all three are live contract identifiers.
+ *
  * Pure library module; there is no CLI entrypoint. Reached through the
  * host-runtime module's public index.
  */

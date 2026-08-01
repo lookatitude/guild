@@ -677,7 +677,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-capability-snapshot.ts",
       "source_path": "src/modules/host-runtime/workflows/host-capability-snapshot.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-capability-snapshot.ts",
-      "sha256": "7e82bcf22fd231c358a8010edbf42abd11c5c6293e3b642c5b51090076a6b7c4",
+      "sha256": "31c7fb9ae927a36745853cb5cd4e57ef17cb060a4a97dfbfed5b0c4875e805b5",
       "projection_dependency": true
     },
     {
