@@ -694,12 +694,26 @@ describe("A3.6 — many-to-one legal, one-to-many ambiguous", () => {
     );
   });
 
-  it("a FORK is ambiguous, never a guess", () => {
+  it("a FORK is UNREPRESENTABLE — rejected at write time, not adjudicated at read time", () => {
+    // RENAMED AND RE-POINTED (codex round 6, #4). As "a FORK is ambiguous, never a
+    // guess" this looked like read-time fork coverage and was VACUOUS: the liveness
+    // rule rejects the manifest outright (`A` is adopted away at 1 and never
+    // restored), so `resolveHistorical` returned `ambiguous` with an EMPTY trail from
+    // the validation boundary and fork traversal never ran.
+    //
+    // That is not a gap in the contract — it is the contract. The liveness rule
+    // exists precisely so the fork cannot be represented, which is why no read-time
+    // discriminator survives in the resolver. The assertion now names the mechanism
+    // it actually exercises, and checks the manifest is refused rather than inferring
+    // it from a status that has two possible causes.
     const m = chain([
       { from: loc("A"), to: ref("B") },
       { from: loc("A"), to: ref("C") },
     ]);
-    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+    expect(validateAdoptionManifestV1(m)).toBeNull(); // the real, non-vacuous claim
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("ambiguous");
+    expect(r.trail).toEqual([]); // …from the validation boundary, as stated above
   });
 });
 

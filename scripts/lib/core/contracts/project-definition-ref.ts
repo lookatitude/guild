@@ -304,18 +304,23 @@ function isIdentityToken(v: unknown, max: number): v is string {
 const SKILL_BODY_FILENAME = "SKILL.md";
 
 /**
- * A commit-ish: a sha, a tag, or `git describe` output (codex round 5, #3).
+ * Characters `git check-ref-format` forbids in a ref name.
  *
- * D6 claimed "every scalar is BOUNDED and SHAPE-CHECKED" and this one was only
- * bounded — `"not a commit"`, `"../../not-a-ref"` and arbitrary emoji prose all
- * validated. Deliberately NOT `IDENTITY_TOKEN_RE`: a git ref legitimately contains
- * `/` (`refs/tags/v2.5.0`), which is why the token shape was withheld here in the
- * first place. This grammar admits every real spelling — a sha, `refs/tags/v2.5.0`,
- * `release-<tag>-1-g02bcf9f` — while excluding whitespace, control characters and
- * traversal-shaped prose. `..` is rejected anywhere, matching Rule 5's treatment of
- * every other path-like scalar in this file.
+ * MY FIRST GRAMMAR WAS A GUESS AND IT WAS WRONG IN BOTH DIRECTIONS (codex round 6,
+ * #2). `/^[A-Za-z0-9][A-Za-z0-9._\/+-]*$/` REJECTED the real tags
+ * `refs/tags/release@2026` and `refs/tags/rélease-v1`, and ACCEPTED the invalid
+ * `refs/tags/release..v1`, `refs//tags/v1`, `refs/tags/v1.lock`, `refs/tags/v1/` and
+ * `refs/tags/.hidden`. An allowlist invented from the examples in front of me is
+ * exactly the narrow-rule habit this file punishes — the D6 claim "every scalar is
+ * SHAPE-CHECKED" does not license inventing the shape.
+ *
+ * The rule is now git's own, expressed the way git expresses it: a DENYLIST of what
+ * a ref name may not contain, rather than a guess at what it may. Non-ASCII tags are
+ * legal (git allows them) and the five invalid spellings above are not, without this
+ * contract pretending to own a grammar it does not.
  */
-const COMMITISH_RE = /^[A-Za-z0-9][A-Za-z0-9._/+-]*$/;
+// eslint-disable-next-line no-control-regex
+const REF_FORBIDDEN_CHARS = /[\u0000-\u0020\u007f~^:?*\[\\]/;
 
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
 
@@ -412,10 +417,22 @@ function validatePinnedSkillRefInner(obj: unknown): PinnedSkillRef | null {
   // it received the pinned skill DEFINITION. Owning-directory alone was half the
   // binding — the same instance-not-class shape as the round-4 tombstone. Both
   // layouts this contract documents end in the canonical body filename.
+  //
+  // AND THE ROOT (codex round 6, #1). `<id>/SKILL.md` alone still let
+  // `docs/tdd/SKILL.md`, `.guild/agents/tdd/SKILL.md` and `tmp/tdd/SKILL.md` carry
+  // arbitrary bytes under the trusted `tdd` identity. The binding is only a binding
+  // when all THREE components are fixed — root, owning directory, body filename —
+  // and I closed them one round at a time, which is the instance-not-class habit
+  // this file keeps punishing.
   const segments = pathProp.value.split("/");
   if (segments.length < 2) return null;
   if (segments[segments.length - 1] !== SKILL_BODY_FILENAME) return null;
   if (segments[segments.length - 2] !== idProp.value) return null;
+  // Exactly the two layouts this contract documents: a project's
+  // `.guild/skills/<id>/SKILL.md` and the plugin's tiered `skills/<tier>/<id>/SKILL.md`.
+  const underProjectSkills = segments[0] === ".guild" && segments[1] === "skills";
+  const underPluginSkills = segments[0] === "skills";
+  if (!underProjectSkills && !underPluginSkills) return null;
 
   return {
     id: idProp.value,
@@ -607,8 +624,17 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   // accepted — an absent commit must be stated, not implied.
   if (commitProp.value !== null) {
     if (!isBoundedScalar(commitProp.value, MAX_SOURCE_COMMIT)) return null;
-    if (!COMMITISH_RE.test(commitProp.value)) return null;
-    if (commitProp.value.split("/").includes("..")) return null;
+    const commit = commitProp.value;
+    if (REF_FORBIDDEN_CHARS.test(commit)) return null;
+    // `..` ANYWHERE, not merely as a whole segment — the previous `split("/")` form
+    // caught `refs/../x`, let `release..v1` through, and claimed to do both.
+    if (commit.includes("..")) return null;
+    if (commit.includes("//")) return null;
+    if (commit.startsWith("/") || commit.endsWith("/")) return null;
+    if (commit.startsWith(".") || commit.includes("/.")) return null;
+    if (commit.endsWith(".")) return null;
+    if (commit.endsWith(".lock") || commit.includes(".lock/")) return null;
+    if (commit === "@" || commit.includes("@{")) return null;
   }
 
   // Identity hashes are raw sha256 hex (the shape hashSpecialistProfile emits —

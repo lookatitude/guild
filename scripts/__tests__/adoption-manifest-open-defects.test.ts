@@ -322,81 +322,28 @@ describe("D2 — a rollback's cycle exemption cannot be borrowed by another line
     expect(r.ref?.id).toBe("B");
   });
 
-  it("an origin that PRE-DATES the log stamps 0, and no rollback can claim it", () => {
-    // `U` is never any entry's destination, so nothing in the log introduced it and
-    // `originSequence` is 0 — which is not a real sequence and matches no
-    // `reverses_sequence` (the entry validator floors those at 1).
-    const m = chain([
-      { from: loc("U", "1"), to: ref("N", "2") },
-      { from: loc("N", "2"), to: ref("Z", "4") },
-      rb(2, { from: loc("Z", "4"), to: ref("N", "2") }),
-    ]);
-    expect(validateAdoptionManifestV1(m)).not.toBeNull();
-    // entry 3 reverses 2, which IS on U's trail — authorized, resolves.
-    expect(resolveHistorical(m, { kind: "agent", id: "U", content_hash: H("1") }).status).toBe(
-      "resolved"
-    );
-  });
-
-  // ── the other direction: an AUTHORIZED rollback keeps its exemption ──────
-  // Without these the rule could be satisfied by answering `ambiguous` always,
-  // which is exactly how an earlier read-time rule on this file went wrong.
-
-  it("the plain forward-append rollback still resolves — A→B→A' is a chain", () => {
-    const m = chain([
-      { from: loc("A", "a"), to: ref("B", "b") },
-      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
-    ]);
-    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") });
-    expect(r.status).toBe("resolved");
-    expect(r.trail).toEqual([1, 2]);
-  });
-
-  it("re-adoption after a rollback still resolves", () => {
-    const m = chain([
-      { from: loc("A", "a"), to: ref("B", "b") },
-      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
-      { from: loc("A", "a"), to: ref("B", "b") },
-    ]);
-    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).status).toBe(
-      "resolved"
-    );
-  });
-
   /**
-   * THE REGRESSION THIS RULE IS SHAPED AROUND, pinned so nobody tightens it into
-   * "a walk may only FOLLOW a rollback it traversed the target of".
+   * A TEST WAS DELETED HERE, and the reason is recorded because deleting coverage
+   * needs more justification than adding it.
    *
-   * `A→B(1), B→C(2), C→B(3 rb 2), B→A(4 rb 1)` queried at B: entry 4 reverses
-   * sequence 1, which a walk starting at B never traversed — yet B's bytes really
-   * did go back to A, and the honest answer is A. FOLLOWING is about where the
-   * bytes went; the EXEMPTION is a claim of authority. Only the second is gated.
+   * It claimed "an origin that PRE-DATES the log stamps 0, and no rollback can claim
+   * it". Codex round 6 (#4) proved it VACUOUS — forcing `originStamp()` to return 2
+   * left it green, because its rollback was already authorized through
+   * `trail.includes(2)` and the stamp was never consulted. My rewrite of it was worse:
+   * the fixture I built to isolate the stamp did not validate at all.
+   *
+   * The claim is in fact UNOBSERVABLE, which is why no fixture isolates it: a
+   * pre-dating origin stamps 0, and `reverses_sequence` is floored at 1 by the entry
+   * validator, so the two can never be equal and no input distinguishes a 0 stamp
+   * from any other unmatched value. It is dead-by-construction in the same sense as
+   * the post-loop return in `resolveHistoricalInner` — and the house rule is to delete
+   * an untestable assertion rather than ship it looking like evidence.
+   *
+   * The half of the rule that IS observable — a rollback of the entry that INTRODUCED
+   * the walk's origin is authorized — is pinned by the test above and by the
+   * pre-existing D19-R1.1, both of which redden when the `originSequence` term is
+   * dropped.
    */
-  it("a foreign rollback may still be FOLLOWED — only its exemption is withheld", () => {
-    const m = chain([
-      { from: loc("A", "a"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("C", "c") },
-      rb(2, { from: loc("C", "c"), to: ref("B", "b") }),
-      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
-    ]);
-    const r = resolveHistorical(m, { kind: "agent", id: "B", content_hash: H("b") });
-    expect(r.status).toBe("resolved");
-    expect(r.ref?.id).toBe("A");
-    expect(r.trail).toEqual([2, 3, 4]);
-  });
-
-  it("and the same manifest queried at its true origin resolves as before", () => {
-    const m = chain([
-      { from: loc("A", "a"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("C", "c") },
-      rb(2, { from: loc("C", "c"), to: ref("B", "b") }),
-      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
-    ]);
-    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") });
-    expect(r.status).toBe("resolved");
-    expect(r.ref?.id).toBe("A");
-    expect(r.trail).toEqual([1, 2, 3, 4]);
-  });
 });
 
 // ── Defect 3 — a REMOVAL is final ──────────────────────────────────────────
@@ -780,12 +727,15 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
   });
 
   it.each(Object.keys(SKILL_SCALAR_BOUNDS))("skills[].%s rejects an 8 MiB value", (field) => {
-    expect(
-      validateProjectDefinitionRefV1({
-        ...validRef(),
-        skills: [{ ...validSkill(), [field]: HUGE }],
-      })
-    ).toBeNull();
+    // `id` and `relative_path` are BOUND to each other, so overriding one alone made
+    // the locator invalid for the other's reason and the bound was never consulted
+    // (codex round 6, #4). Oversizing `id` therefore oversizes its path with it, and
+    // each case now fails for the bound it names.
+    const skill =
+      field === "id"
+        ? { ...validSkill(), id: HUGE, relative_path: `.guild/skills/${HUGE}/SKILL.md` }
+        : { ...validSkill(), [field]: HUGE };
+    expect(validateProjectDefinitionRefV1({ ...validRef(), skills: [skill] })).toBeNull();
   });
 
   // ── the bound is EXACT, not merely "not 8 MiB" ──────────────────────────
@@ -822,9 +772,11 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
     // name its own directory, so a bound test that varied one and pinned the other
     // would now be testing an impossible shape rather than the bound.
     const idAt = "s".repeat(MAX_DEFINITION_ID);
-    const tail = `${idAt}/SKILL.md`;
-    const prefixLen = MAX_RELATIVE_PATH - tail.length - 1;
-    const pathAt = `${"d".repeat(prefixLen)}/${tail}`;
+    // Under a DOCUMENTED skills root since codex round 6 #1 — the locator's root is
+    // bound too, so padding has to live inside the tree rather than replace it.
+    const head = ".guild/skills/";
+    const tail = `/${idAt}/SKILL.md`;
+    const pathAt = `${head}${"d".repeat(MAX_RELATIVE_PATH - head.length - tail.length)}${tail}`;
     expect(pathAt.length).toBe(MAX_RELATIVE_PATH);
     expect(
       validateProjectDefinitionRefV1({
@@ -835,7 +787,7 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
     expect(
       validateProjectDefinitionRefV1({
         ...validRef(),
-        skills: [{ ...validSkill(), id: idAt, relative_path: `d${pathAt}` }],
+        skills: [{ ...validSkill(), id: idAt, relative_path: `${head}d${pathAt.slice(head.length)}` }],
       })
     ).toBeNull();
     const idOver = "s".repeat(MAX_DEFINITION_ID + 1);
@@ -1172,9 +1124,22 @@ describe("D6-R1 — S2 identities are TOKEN-shaped, and the commit bound fits re
     ["parent traversal", "../outside"],
     ["nested traversal", "../../secret"],
     ["path separator", "a/b"],
+    ["leading dash", "-flag"],
+    ["leading dot", ".hidden"],
+    ["space", "a b"],
   ])("skills[].id rejects a non-token identity — %s", (_label, bad) => {
+    // THE PATH IS BUILT FROM THE ID, and that is the whole point (codex round 6, #3).
+    // These fixtures used to vary `id` while pinning `.guild/skills/s1/SKILL.md`, so
+    // they failed the owning-directory binding and NEVER reached token validation:
+    // codex replaced `isIdentityToken` with a bare bounded-string check and all 359
+    // assertions still passed. Building the path from the id is what makes the
+    // directory binding satisfiable, so the token rule is the only thing left to
+    // reject them.
     expect(
-      validateProjectDefinitionRefV1({ ...validRef(), skills: [{ ...validSkill(), id: bad }] })
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [{ ...validSkill(), id: bad, relative_path: `.guild/skills/${bad}/SKILL.md` }],
+      })
     ).toBeNull();
   });
 
@@ -1793,5 +1758,78 @@ describe("R5 — codex round 5: both halves of every hash/no-hash pairing", () =
     expect(
       validateProjectDefinitionRefV1({ ...validRef(), source_commit: good })
     ).not.toBeNull();
+  });
+});
+
+
+describe("R6 — codex round 6: the locator's ROOT, and git's own ref rules", () => {
+  const validRef = () => ref("A", "a");
+  const sk = (id: string, path: string) => ({ id, relative_path: path, content_hash: H("a") });
+
+  /**
+   * R6 #1 (P1). `<id>/SKILL.md` was still only two of the three components. A
+   * binding is a binding when ROOT, owning DIRECTORY and BODY FILENAME are all
+   * fixed; I closed them one round at a time, which is the instance-not-class habit
+   * this file keeps punishing.
+   */
+  it.each([
+    ["docs tree", "docs/tdd/SKILL.md"],
+    ["agents tree", ".guild/agents/tdd/SKILL.md"],
+    ["scratch tree", "tmp/tdd/SKILL.md"],
+    ["bare", "tdd/SKILL.md"],
+  ])("R6#1 a skill locator outside a skills root is rejected — %s", (_label, path) => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), skills: [sk("tdd", path)] })).toBeNull();
+  });
+
+  it.each([
+    ["project layout", ".guild/skills/tdd/SKILL.md"],
+    ["plugin tiered layout", "skills/meta/tdd/SKILL.md"],
+  ])("R6#1 …and both documented roots still validate — %s", (_label, path) => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [sk("tdd", path)] })
+    ).not.toBeNull();
+  });
+
+  /**
+   * R6 #2 (P2). My round-5 grammar was an allowlist invented from the examples in
+   * front of me, and it disagreed with `git check-ref-format` in BOTH directions —
+   * rejecting real tags and accepting invalid ones. The rule is now git's own,
+   * expressed as git expresses it: a denylist of what a ref name may not contain.
+   */
+  it.each([
+    ["at-sign tag", "refs/tags/release@2026"],
+    ["non-ASCII tag", "refs/tags/rélease-v1"],
+    ["abbreviated sha", "abc1234"],
+    ["full sha", "a".repeat(40)],
+    ["qualified ref", "refs/tags/v2.5.0"],
+    ["describe output", "release-2.5.0-1-g02bcf9f"],
+    ["prerelease tag", "v2.5.0-beta.1"],
+  ])("R6#2 a REAL git ref is accepted — %s", (_label, good) => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), source_commit: good })
+    ).not.toBeNull();
+  });
+
+  it.each([
+    ["double dot anywhere", "refs/tags/release..v1"],
+    ["empty segment", "refs//tags/v1"],
+    ["lock suffix", "refs/tags/v1.lock"],
+    ["trailing slash", "refs/tags/v1/"],
+    ["dot-leading segment", "refs/tags/.hidden"],
+    ["leading dot", ".hidden"],
+    ["trailing dot", "refs/tags/v1."],
+    ["forbidden caret", "refs/tags/v1^"],
+    ["forbidden tilde", "refs/tags/v1~1"],
+    ["forbidden colon", "refs/tags/v1:x"],
+    ["forbidden question", "refs/tags/v1?"],
+    ["forbidden asterisk", "refs/tags/v1*"],
+    ["forbidden bracket", "refs/tags/v1[x]"],
+    ["forbidden backslash", "refs\\tags\\v1"],
+    ["reflog syntax", "HEAD@{1}"],
+    ["bare at", "@"],
+    ["whitespace prose", "not a commit"],
+    ["traversal prose", "../../not-a-ref"],
+  ])("R6#2 …and an INVALID ref is rejected — %s", (_label, bad) => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: bad })).toBeNull();
   });
 });
