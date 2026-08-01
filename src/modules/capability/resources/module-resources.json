@@ -19,6 +19,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/capability/context-manager-contract",
+      "source_path": "scripts/lib/capability/context-manager-contract.ts",
+      "resource_path": "resources/scripts/lib/capability/context-manager-contract.ts",
+      "sha256": "089d0d55243b9f74dfbe9980fe75a2958a2ce506c7ae2ef895c7b832e126c304"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/rank",
       "source_path": "scripts/lib/capability/rank.ts",
       "resource_path": "resources/scripts/lib/capability/rank.ts",

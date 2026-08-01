@@ -1495,6 +1495,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/context-manager-contract",
+      "source_path": "scripts/lib/capability/context-manager-contract.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/rank",
       "source_path": "scripts/lib/capability/rank.ts",
       "kind": "lib"
