@@ -59,8 +59,18 @@ export const COMPATIBILITY_USAGE_DISPOSITION = "degraded" as const;
 // The closed vocabularies
 // ---------------------------------------------------------------------------
 
+// EVERY exported vocabulary is Object.freeze'd, not merely `readonly`. TypeScript's
+// readonly is erased at compile time: the emitted array is mutable, so a caller could
+// `BENIGN_COMPATIBILITY_READ_REASONS.push("rollback")` and silently exclude rollback
+// reads from the G5 count — a FALSE CLEAN on a deletion gate. The predicates below
+// read from PRIVATE frozen Sets built once at module load, so even a successful
+// mutation of an exported array cannot change a verdict.
+
 /** Which legacy surface was read. */
-export const COMPATIBILITY_ASSET_KINDS = ["shipped_template", "shipped_domain_skill"] as const;
+export const COMPATIBILITY_ASSET_KINDS = Object.freeze([
+  "shipped_template",
+  "shipped_domain_skill",
+] as const);
 export type CompatibilityAssetKind = (typeof COMPATIBILITY_ASSET_KINDS)[number];
 
 /**
@@ -76,13 +86,13 @@ export type CompatibilityAssetKind = (typeof COMPATIBILITY_ASSET_KINDS)[number];
  * A naive total of all reads therefore NEVER reaches zero and G5 could never pass.
  * The G5 input is the DEPENDENCE subset — see `isDependenceRead`.
  */
-export const COMPATIBILITY_READ_REASONS = [
+export const COMPATIBILITY_READ_REASONS = Object.freeze([
   "no_project_definition",
   "explicit_legacy_mode",
   "rollback",
   "mint_source",
   "shadow_comparison",
-] as const;
+] as const);
 export type CompatibilityReadReason = (typeof COMPATIBILITY_READ_REASONS)[number];
 
 /**
@@ -92,13 +102,32 @@ export type CompatibilityReadReason = (typeof COMPATIBILITY_READ_REASONS)[number
  * must be added to `BENIGN_COMPATIBILITY_READ_REASONS` deliberately, rather than a
  * forgotten one silently suppressing the gate.
  */
-export const BENIGN_COMPATIBILITY_READ_REASONS: readonly CompatibilityReadReason[] = [
-  "mint_source",
-  "shadow_comparison",
-];
+export const BENIGN_COMPATIBILITY_READ_REASONS: readonly CompatibilityReadReason[] =
+  Object.freeze(["mint_source", "shadow_comparison"] as const);
 
 export const DEPENDENCE_COMPATIBILITY_READ_REASONS: readonly CompatibilityReadReason[] =
-  COMPATIBILITY_READ_REASONS.filter((r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r));
+  Object.freeze(
+    COMPATIBILITY_READ_REASONS.filter(
+      (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r),
+    ) as CompatibilityReadReason[],
+  );
+
+/**
+ * PRIVATE frozen lookup sets, snapshotted at module load. The exported arrays exist
+ * for readers; THESE decide verdicts. Mutating an export cannot reach them.
+ */
+const BENIGN_REASON_SET: ReadonlySet<string> = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
+const READ_REASON_SET: ReadonlySet<string> = new Set(COMPATIBILITY_READ_REASONS);
+const ASSET_KIND_SET: ReadonlySet<string> = new Set(COMPATIBILITY_ASSET_KINDS);
+const RESOLVER_MODE_SET: ReadonlySet<string> = new Set(CAPABILITY_RESOLVER_MODES);
+
+/** Canonical SHA-256 hex. A hash that cannot be a hash proves nothing about bytes read. */
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+/** A count that is trustworthy: a non-negative safe integer. NaN/negative/float are not. */
+function isCount(v: unknown): v is number {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+}
 
 // ---------------------------------------------------------------------------
 // The outcome payload
@@ -199,14 +228,17 @@ export function parseCompatibilityUsageV1(value: unknown): CompatibilityUsageV1 
     if (!isPlainDataObject(value)) return null;
     // Symbol-keyed data is rejected fail-closed rather than silently dropped.
     if (Object.getOwnPropertySymbols(value).length > 0) return null;
-    for (const key of Object.keys(value)) {
+    // getOwnPropertyNames, NOT Object.keys: an unknown NON-ENUMERABLE own property is
+    // still an own property, and a closed key set that only inspects enumerable keys
+    // is not closed at all.
+    for (const key of Object.getOwnPropertyNames(value)) {
       if (!COMPATIBILITY_USAGE_KEYS.includes(key)) return null;
     }
 
     if (ownValue(value, "schema_version") !== COMPATIBILITY_USAGE_SCHEMA) return null;
 
     const assetKind = ownValue(value, "asset_kind");
-    if (!COMPATIBILITY_ASSET_KINDS.includes(assetKind as CompatibilityAssetKind)) return null;
+    if (typeof assetKind !== "string" || !ASSET_KIND_SET.has(assetKind)) return null;
 
     const assetId = ownValue(value, "asset_id");
     if (!isNonEmptyStr(assetId)) return null;
@@ -215,14 +247,16 @@ export function parseCompatibilityUsageV1(value: unknown): CompatibilityUsageV1 
     if (!isNonEmptyStr(assetPath)) return null;
 
     // S8 invariant 4: mandatory, so a rollup can distinguish versions of one asset.
+    // Shape-checked, not merely non-empty: the field's entire purpose is to prove WHICH
+    // bytes were consumed, and "x" proves nothing.
     const contentHash = ownValue(value, "content_hash");
-    if (!isNonEmptyStr(contentHash)) return null;
+    if (!isNonEmptyStr(contentHash) || !SHA256_HEX.test(contentHash)) return null;
 
     const reason = ownValue(value, "reason");
-    if (!COMPATIBILITY_READ_REASONS.includes(reason as CompatibilityReadReason)) return null;
+    if (typeof reason !== "string" || !READ_REASON_SET.has(reason)) return null;
 
     const resolverMode = ownValue(value, "resolver_mode");
-    if (!CAPABILITY_RESOLVER_MODES.includes(resolverMode as CapabilityResolverMode)) return null;
+    if (typeof resolverMode !== "string" || !RESOLVER_MODE_SET.has(resolverMode)) return null;
 
     // S8 invariant 3: an explicit boolean set at the emission point. Not optional and
     // not coerced — "missing" must never read as "not synthetic", which would pull a
@@ -268,7 +302,9 @@ export function isCompatibilityUsageV1(value: unknown): value is CompatibilityUs
  */
 export function isDependenceRead(record: CompatibilityUsageV1): boolean {
   if (record.synthetic) return false;
-  return !BENIGN_COMPATIBILITY_READ_REASONS.includes(record.reason);
+  // Reads the PRIVATE frozen set, so mutating the exported array cannot suppress a
+  // dependence read and manufacture a clean gate.
+  return !BENIGN_REASON_SET.has(record.reason);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +317,19 @@ export interface CompatibilityUsageRollup {
   /** Per asset, the count of DEPENDENCE reads. */
   readonly by_asset: Readonly<Record<string, number>>;
   readonly total_dependence_reads: number;
+  /**
+   * Assets for which at least one VALID record was seen in this window — regardless of
+   * reason or `synthetic`. This is INSTRUMENTATION COVERAGE, deliberately separate from
+   * `by_asset`.
+   *
+   * The distinction is the difference between a real gate and a false-clean one.
+   * `by_asset` is seeded to 0 for every known asset so an unread asset is visible; if
+   * coverage were derived from ITS keys, an asset that was never instrumented at all
+   * would look identical to one that was instrumented and simply never depended on, and
+   * two EMPTY rollups would pass G5 and mark all 73 assets removable. Coverage must come
+   * from observations that actually happened.
+   */
+  readonly observed_asset_ids: readonly string[];
   /** Assets with zero dependence reads across the whole window. */
   readonly removable: readonly string[];
   /**
@@ -302,8 +351,7 @@ export interface CompatibilityUsageRollupInput {
    * REQUIRED, and deliberately not derived from `records`: deriving it would make
    * `removable` mean "assets we happened to see", so an asset that was never
    * instrumented at all would silently never appear and never be reported as
-   * removable OR as a coverage gap. Supplying the universe is what lets
-   * `coverage_gaps` exist.
+   * removable OR as a coverage gap.
    */
   readonly known_asset_ids: readonly string[];
   /** Unreadable-record count from the journal. Not optional — see `unreadable`. */
@@ -315,7 +363,8 @@ export interface CompatibilityUsageRollupInput {
  *
  * `removable` lists assets with zero DEPENDENCE reads — benign `mint_source` /
  * `shadow_comparison` reads and every `synthetic` read are excluded, which is the
- * whole reason a real project can ever reach zero.
+ * whole reason a real project can ever reach zero. The returned object is FROZEN so a
+ * caller cannot mutate a verdict input after it has been computed.
  */
 export function rollupCompatibilityUsage(
   input: CompatibilityUsageRollupInput,
@@ -323,8 +372,12 @@ export function rollupCompatibilityUsage(
   const byAsset: Record<string, number> = {};
   for (const id of input.known_asset_ids) byAsset[id] = 0;
 
+  const observed = new Set<string>();
   let total = 0;
   for (const record of input.records) {
+    // Coverage counts ANY valid record — a synthetic or benign read still proves the
+    // emission point fired for that asset.
+    observed.add(record.asset_id);
     if (!isDependenceRead(record)) continue;
     byAsset[record.asset_id] = (byAsset[record.asset_id] ?? 0) + 1;
     total += 1;
@@ -332,14 +385,15 @@ export function rollupCompatibilityUsage(
 
   const removable = input.known_asset_ids.filter((id) => (byAsset[id] ?? 0) === 0).sort();
 
-  return {
+  return Object.freeze({
     window_start_release: input.window_start_release,
     window_end_release: input.window_end_release,
-    by_asset: byAsset,
+    by_asset: Object.freeze(byAsset),
     total_dependence_reads: total,
-    removable,
+    observed_asset_ids: Object.freeze([...observed].sort()),
+    removable: Object.freeze(removable),
     unreadable: input.unreadable,
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -360,26 +414,40 @@ export interface G5Input {
   /** One rollup per release in the window, oldest first. */
   readonly rollups: readonly CompatibilityUsageRollup[];
   /**
-   * Every asset id that MUST be instrumented (the 73). An id that appears in no
-   * rollup's `by_asset` was never instrumented, which produces a FALSE zero —
-   * S8 invariant 5, and the difference between a real gate and a vacuous one.
+   * Every asset id that MUST be instrumented (the 73). An id observed in NO rollup was
+   * never instrumented, which produces a FALSE zero — S8 invariant 5, and the
+   * difference between a real gate and a vacuous one.
    */
   readonly required_asset_ids: readonly string[];
 }
 
 /**
- * Evaluate G5. Fail-closed on every axis: the gate passes only when it can PROVE
- * zero dependence, not when it merely fails to observe any.
+ * Evaluate G5. Fail-closed on every axis: the gate passes only when it can PROVE zero
+ * dependence, not when it merely fails to observe any.
  *
- * Blocking conditions, all independently checkable:
- *   1. fewer than 2 releases of evidence — a window that short is a schedule, not a measurement
- *   2. any dependence read in the window
- *   3. `unreadable > 0` in ANY release — the journal's own rule is that an absent
- *      observation is never success; a partially-readable journal is not evidence of zero
- *   4. a required asset that appears in NO rollup — never instrumented, so its zero is fake
+ * Every check below exists because its absence is a way to get a FALSE CLEAN on a
+ * gate whose output is "delete these 73 files":
+ *
+ *   1. an EMPTY required set — a gate over nothing must never pass
+ *   2. fewer than 2 releases — that short a window is a schedule, not a measurement
+ *   3. DUPLICATE release identifiers — passing the same rollup twice must not
+ *      masquerade as two independent releases of evidence
+ *   4. any count that is not a non-negative safe integer — NaN fails every `> 0`
+ *      comparison, and negatives let a sum cancel a real positive to zero
+ *   5. `unreadable > 0` in ANY release, checked PER RELEASE rather than on a sum, so
+ *      +1/-1 cannot cancel. An absent observation is never cleanliness
+ *   6. any dependence read, counted from `by_asset` itself and cross-checked against
+ *      the reported total, so a hand-built or mutated rollup claiming
+ *      `total_dependence_reads: 0` over `by_asset: {x: 1}` is caught
+ *   7. a required asset OBSERVED in no rollup — never instrumented, so its zero is fake
  */
 export function evaluateG5(input: G5Input): G5Verdict {
   const blockers: string[] = [];
+
+  const required = [...new Set(input.required_asset_ids)];
+  if (required.length === 0) {
+    blockers.push("empty required_asset_ids — a removal gate over zero assets cannot pass");
+  }
 
   if (input.rollups.length < G5_MIN_CLEAN_RELEASES) {
     blockers.push(
@@ -387,24 +455,56 @@ export function evaluateG5(input: G5Input): G5Verdict {
     );
   }
 
-  const totalDependence = input.rollups.reduce((sum, r) => sum + r.total_dependence_reads, 0);
-  if (totalDependence > 0) {
-    blockers.push(`${totalDependence} dependence read(s) in the window`);
-  }
-
-  const totalUnreadable = input.rollups.reduce((sum, r) => sum + r.unreadable, 0);
-  if (totalUnreadable > 0) {
-    // An absent observation is NEVER cleanliness (the journal's central rule).
+  const windowIds = input.rollups.map((r) => `${r.window_start_release}..${r.window_end_release}`);
+  if (new Set(windowIds).size !== windowIds.length) {
     blockers.push(
-      `${totalUnreadable} unreadable record(s) — a partially-readable journal is not evidence of zero usage`,
+      "duplicate release windows — the same evidence submitted twice is one release, not two",
     );
   }
 
+  let totalDependence = 0;
+  for (const [i, rollup] of input.rollups.entries()) {
+    const label = windowIds[i];
+
+    if (!isCount(rollup.unreadable)) {
+      blockers.push(`release ${label}: unreadable is not a valid count (${String(rollup.unreadable)})`);
+    } else if (rollup.unreadable > 0) {
+      blockers.push(
+        `release ${label}: ${rollup.unreadable} unreadable record(s) — a partially-readable journal is not evidence of zero usage`,
+      );
+    }
+
+    // Count from by_asset, then cross-check the reported total. Trusting the summary
+    // alone lets a forged or mutated rollup declare itself clean.
+    let derived = 0;
+    for (const [assetId, count] of Object.entries(rollup.by_asset)) {
+      if (!isCount(count)) {
+        blockers.push(`release ${label}: by_asset[${assetId}] is not a valid count (${String(count)})`);
+        continue;
+      }
+      derived += count;
+    }
+    if (!isCount(rollup.total_dependence_reads)) {
+      blockers.push(
+        `release ${label}: total_dependence_reads is not a valid count (${String(rollup.total_dependence_reads)})`,
+      );
+    } else if (rollup.total_dependence_reads !== derived) {
+      blockers.push(
+        `release ${label}: total_dependence_reads ${rollup.total_dependence_reads} disagrees with by_asset sum ${derived}`,
+      );
+    }
+    if (derived > 0) {
+      blockers.push(`release ${label}: ${derived} dependence read(s)`);
+    }
+    totalDependence += derived;
+  }
+  void totalDependence;
+
   const observed = new Set<string>();
   for (const rollup of input.rollups) {
-    for (const id of Object.keys(rollup.by_asset)) observed.add(id);
+    for (const id of rollup.observed_asset_ids) observed.add(id);
   }
-  const uninstrumented = input.required_asset_ids.filter((id) => !observed.has(id)).sort();
+  const uninstrumented = required.filter((id) => !observed.has(id)).sort();
   if (uninstrumented.length > 0) {
     blockers.push(
       `${uninstrumented.length} required asset(s) never instrumented (a false zero): ${uninstrumented.join(", ")}`,
@@ -414,7 +514,7 @@ export function evaluateG5(input: G5Input): G5Verdict {
   const passed = blockers.length === 0;
   // `removable` is only meaningful on a passing gate — an asset "removable" under a
   // torn journal is exactly the false-clean claim this contract exists to prevent.
-  const removable = passed ? [...input.required_asset_ids].sort() : [];
+  const removable = passed ? [...required].sort() : [];
 
-  return { passed, blockers, removable };
+  return Object.freeze({ passed, blockers: Object.freeze(blockers), removable: Object.freeze(removable) });
 }

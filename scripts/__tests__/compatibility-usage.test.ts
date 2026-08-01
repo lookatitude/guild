@@ -303,34 +303,40 @@ describe("S8 — the rollup", () => {
 
 describe("S8 — the G5 gate is fail-closed on every axis", () => {
   const REQUIRED = ["a", "b"];
-  const clean = (over: Partial<ReturnType<typeof rollupCompatibilityUsage>> = {}) => ({
+  // A clean release: both required assets OBSERVED (instrumentation fired) with zero
+  // dependence. `seq` varies the window id so two clean releases are two RELEASES.
+  const clean = (
+    seq = 0,
+    over: Partial<ReturnType<typeof rollupCompatibilityUsage>> = {},
+  ) => ({
     ...rollupCompatibilityUsage({
-      window_start_release: "2.5.0",
-      window_end_release: "2.6.0",
+      window_start_release: `2.${5 + seq}.0`,
+      window_end_release: `2.${6 + seq}.0`,
       known_asset_ids: REQUIRED,
       unreadable: 0,
-      records: [],
+      records: REQUIRED.map((id) => usage({ asset_id: id, reason: "mint_source" })),
     }),
     ...over,
   });
 
   it("PASSES on two clean, fully-instrumented releases", () => {
-    const verdict = evaluateG5({ rollups: [clean(), clean()], required_asset_ids: REQUIRED });
+    const verdict = evaluateG5({ rollups: [clean(0), clean(1)], required_asset_ids: REQUIRED });
+    expect(verdict.blockers).toEqual([]);
     expect(verdict.passed).toBe(true);
     expect(verdict.blockers).toEqual([]);
     expect(verdict.removable).toEqual(["a", "b"]);
   });
 
   it("BLOCKS on a window shorter than two releases — a schedule is not a measurement", () => {
-    const verdict = evaluateG5({ rollups: [clean()], required_asset_ids: REQUIRED });
+    const verdict = evaluateG5({ rollups: [clean(0)], required_asset_ids: REQUIRED });
     expect(verdict.passed).toBe(false);
     expect(verdict.blockers.join(" ")).toMatch(/insufficient window/);
     expect(verdict.removable).toEqual([]);
   });
 
   it("BLOCKS on any dependence read in the window", () => {
-    const dirty = clean({ total_dependence_reads: 1, by_asset: { a: 1, b: 0 } });
-    const verdict = evaluateG5({ rollups: [clean(), dirty], required_asset_ids: REQUIRED });
+    const dirty = clean(1, { total_dependence_reads: 1, by_asset: { a: 1, b: 0 } });
+    const verdict = evaluateG5({ rollups: [clean(0), dirty], required_asset_ids: REQUIRED });
     expect(verdict.passed).toBe(false);
     expect(verdict.blockers.join(" ")).toMatch(/1 dependence read/);
   });
@@ -339,8 +345,8 @@ describe("S8 — the G5 gate is fail-closed on every axis", () => {
     // Zero dependence reads AND unreadable records is not evidence of zero usage;
     // it is evidence we cannot tell. This is the anti-vacuity guard that makes the
     // gate trustworthy.
-    const torn = clean({ unreadable: 2 });
-    const verdict = evaluateG5({ rollups: [clean(), torn], required_asset_ids: REQUIRED });
+    const torn = clean(1, { unreadable: 2 });
+    const verdict = evaluateG5({ rollups: [clean(0), torn], required_asset_ids: REQUIRED });
     expect(verdict.passed).toBe(false);
     expect(verdict.blockers.join(" ")).toMatch(/unreadable record/);
     expect(verdict.removable).toEqual([]);
@@ -348,15 +354,16 @@ describe("S8 — the G5 gate is fail-closed on every axis", () => {
 
   it("BLOCKS when a required asset was never instrumented — its zero is FALSE", () => {
     // S8 invariant 5: a partially instrumented set produces a false zero.
-    const partial = rollupCompatibilityUsage({
-      window_start_release: "2.5.0",
-      window_end_release: "2.6.0",
-      known_asset_ids: ["a"], // "b" never instrumented
-      unreadable: 0,
-      records: [],
-    });
+    const partial = (seq: number) =>
+      rollupCompatibilityUsage({
+        window_start_release: `2.${5 + seq}.0`,
+        window_end_release: `2.${6 + seq}.0`,
+        known_asset_ids: ["a"], // "b" never instrumented
+        unreadable: 0,
+        records: [usage({ asset_id: "a", reason: "mint_source" })],
+      });
     const verdict = evaluateG5({
-      rollups: [partial, partial],
+      rollups: [partial(0), partial(1)],
       required_asset_ids: ["a", "b"],
     });
     expect(verdict.passed).toBe(false);
@@ -374,13 +381,13 @@ describe("S8 — the G5 gate is fail-closed on every axis", () => {
     });
     const verdict = evaluateG5({ rollups: [bad], required_asset_ids: ["a", "b"] });
     expect(verdict.passed).toBe(false);
-    // window + dependence + unreadable + uninstrumented
-    expect(verdict.blockers).toHaveLength(4);
+    // window + unreadable + dependence + uninstrumented — all at once, not just the first.
+    expect(verdict.blockers.length).toBeGreaterThanOrEqual(4);
   });
 
   it("never reports removable assets on a blocked gate", () => {
     const verdict = evaluateG5({
-      rollups: [clean({ unreadable: 1 }), clean()],
+      rollups: [clean(0, { unreadable: 1 }), clean(1)],
       required_asset_ids: REQUIRED,
     });
     expect(verdict.passed).toBe(false);
@@ -403,5 +410,199 @@ describe("S8 — vocabulary shape", () => {
         "shadow_comparison",
       ].sort(),
     );
+  });
+});
+
+// ===========================================================================
+// CODEX ADVERSARIAL ROUND — 8 defects an independent reviewer found, all of
+// which were paths to a FALSE CLEAN on a gate whose output is "delete 73 files".
+// ===========================================================================
+
+describe("S8 codex-round — the vacuous coverage check (P0, the worst one)", () => {
+  // rollupCompatibilityUsage SEEDS by_asset with every known id at 0 so an unread asset
+  // stays visible. evaluateG5 then used those keys as proof of instrumentation — so an
+  // asset that was NEVER INSTRUMENTED looked identical to one instrumented and never
+  // depended on. Two EMPTY rollups passed and marked all 73 assets removable.
+  const REQUIRED = ["a", "b"];
+  const empty = (seq: number) =>
+    rollupCompatibilityUsage({
+      window_start_release: `2.${5 + seq}.0`,
+      window_end_release: `2.${6 + seq}.0`,
+      known_asset_ids: REQUIRED,
+      unreadable: 0,
+      records: [], // nothing ever emitted
+    });
+
+  it("two EMPTY releases do NOT pass — zero observations is not zero usage", () => {
+    const verdict = evaluateG5({ rollups: [empty(0), empty(1)], required_asset_ids: REQUIRED });
+    expect(verdict.passed).toBe(false);
+    expect(verdict.blockers.join(" ")).toMatch(/never instrumented/);
+    expect(verdict.removable).toEqual([]);
+  });
+
+  it("coverage comes from observations, NOT from seeded by_asset keys", () => {
+    const r = empty(0);
+    // by_asset is seeded (so an unread asset is visible)...
+    expect(Object.keys(r.by_asset).sort()).toEqual(["a", "b"]);
+    // ...but nothing was observed, and THAT is what the gate reads.
+    expect(r.observed_asset_ids).toEqual([]);
+  });
+
+  it("a synthetic or benign read still proves the emission point FIRED", () => {
+    const r = rollupCompatibilityUsage({
+      window_start_release: "2.5.0",
+      window_end_release: "2.6.0",
+      known_asset_ids: REQUIRED,
+      unreadable: 0,
+      records: [
+        usage({ asset_id: "a", reason: "mint_source" }),
+        usage({ asset_id: "b", synthetic: true }),
+      ],
+    });
+    expect(r.observed_asset_ids).toEqual(["a", "b"]);
+    expect(r.total_dependence_reads).toBe(0); // neither counts as dependence
+  });
+});
+
+describe("S8 codex-round — frozen vocabularies (P0)", () => {
+  it("the exported reason arrays are FROZEN, not merely readonly", () => {
+    // TypeScript's readonly is erased at compile time. Without Object.freeze a caller
+    // could push "rollback" into the benign list and silently exclude rollback reads.
+    expect(Object.isFrozen(COMPATIBILITY_READ_REASONS)).toBe(true);
+    expect(Object.isFrozen(BENIGN_COMPATIBILITY_READ_REASONS)).toBe(true);
+    expect(Object.isFrozen(DEPENDENCE_COMPATIBILITY_READ_REASONS)).toBe(true);
+    expect(Object.isFrozen(COMPATIBILITY_ASSET_KINDS)).toBe(true);
+  });
+
+  it("mutating an exported vocabulary cannot change a verdict", () => {
+    // Even if a caller defeats the freeze (non-strict mode swallows the throw), the
+    // predicate reads a PRIVATE set snapshotted at module load.
+    try {
+      (BENIGN_COMPATIBILITY_READ_REASONS as CompatibilityReadReason[]).push("rollback");
+    } catch {
+      /* frozen — the expected path */
+    }
+    expect(isDependenceRead(usage({ reason: "rollback" }))).toBe(true);
+  });
+
+  it("the rollup it returns is frozen (a verdict input cannot be edited after the fact)", () => {
+    const r = rollupCompatibilityUsage({
+      window_start_release: "2.5.0",
+      window_end_release: "2.6.0",
+      known_asset_ids: ["a"],
+      unreadable: 0,
+      records: [],
+    });
+    expect(Object.isFrozen(r)).toBe(true);
+    expect(Object.isFrozen(r.by_asset)).toBe(true);
+  });
+});
+
+describe("S8 codex-round — forged and malformed counts (P1)", () => {
+  const REQUIRED = ["a"];
+  const base = (over: Record<string, unknown>) =>
+    ({
+      window_start_release: "2.5.0",
+      window_end_release: "2.6.0",
+      by_asset: { a: 0 },
+      total_dependence_reads: 0,
+      observed_asset_ids: ["a"],
+      removable: ["a"],
+      unreadable: 0,
+      ...over,
+    }) as unknown as Parameters<typeof evaluateG5>[0]["rollups"][number];
+
+  it("a rollup claiming total 0 over by_asset {a:1} is CAUGHT", () => {
+    // The gate counts from by_asset and cross-checks the summary, so a hand-built or
+    // mutated rollup cannot declare itself clean.
+    const forged = base({ by_asset: { a: 1 }, total_dependence_reads: 0 });
+    const v = evaluateG5({ rollups: [forged, base({ window_end_release: "2.7.0" })], required_asset_ids: REQUIRED });
+    expect(v.passed).toBe(false);
+    expect(v.blockers.join(" ")).toMatch(/disagrees with by_asset sum/);
+  });
+
+  it("NaN unreadable BLOCKS — NaN > 0 is false, so a naive check would pass it", () => {
+    const v = evaluateG5({
+      rollups: [base({ unreadable: Number.NaN }), base({ window_end_release: "2.7.0" })],
+      required_asset_ids: REQUIRED,
+    });
+    expect(v.passed).toBe(false);
+    expect(v.blockers.join(" ")).toMatch(/unreadable is not a valid count/);
+  });
+
+  it("a NEGATIVE unreadable cannot cancel a real one across releases", () => {
+    // Summing before testing let +1 and -1 cancel to zero. The check is PER RELEASE.
+    const v = evaluateG5({
+      rollups: [
+        base({ unreadable: 1 }),
+        base({ window_end_release: "2.7.0", unreadable: -1 }),
+      ],
+      required_asset_ids: REQUIRED,
+    });
+    expect(v.passed).toBe(false);
+    expect(v.blockers.join(" ")).toMatch(/unreadable/);
+  });
+
+  it("a negative by_asset count is rejected rather than offsetting a real read", () => {
+    const v = evaluateG5({
+      rollups: [
+        base({ by_asset: { a: -5 }, total_dependence_reads: -5 }),
+        base({ window_end_release: "2.7.0" }),
+      ],
+      required_asset_ids: REQUIRED,
+    });
+    expect(v.passed).toBe(false);
+    expect(v.blockers.join(" ")).toMatch(/not a valid count/);
+  });
+});
+
+describe("S8 codex-round — window integrity and the required universe (P0/P1)", () => {
+  const REQUIRED = ["a"];
+  const rollup = (start: string, end: string) =>
+    rollupCompatibilityUsage({
+      window_start_release: start,
+      window_end_release: end,
+      known_asset_ids: REQUIRED,
+      unreadable: 0,
+      records: [usage({ asset_id: "a", reason: "mint_source" })],
+    });
+
+  it("the SAME release submitted twice is not two releases of evidence", () => {
+    const r = rollup("2.5.0", "2.6.0");
+    const v = evaluateG5({ rollups: [r, r], required_asset_ids: REQUIRED });
+    expect(v.passed).toBe(false);
+    expect(v.blockers.join(" ")).toMatch(/duplicate release windows/);
+  });
+
+  it("two DISTINCT releases do pass (the check above is not just always-false)", () => {
+    const v = evaluateG5({
+      rollups: [rollup("2.5.0", "2.6.0"), rollup("2.6.0", "2.7.0")],
+      required_asset_ids: REQUIRED,
+    });
+    expect(v.passed).toBe(true);
+  });
+
+  it("an EMPTY required set cannot pass — a gate over nothing proves nothing", () => {
+    const v = evaluateG5({
+      rollups: [rollup("2.5.0", "2.6.0"), rollup("2.6.0", "2.7.0")],
+      required_asset_ids: [],
+    });
+    expect(v.passed).toBe(false);
+    expect(v.blockers.join(" ")).toMatch(/empty required_asset_ids/);
+  });
+});
+
+describe("S8 codex-round — validator closure (P1/P2)", () => {
+  it("a NON-ENUMERABLE unknown own property is rejected (Object.keys missed it)", () => {
+    const hostile = { ...usage() } as Record<string, unknown>;
+    Object.defineProperty(hostile, "backdoor", { value: 1, enumerable: false });
+    expect(parseCompatibilityUsageV1(hostile)).toBeNull();
+  });
+
+  it("content_hash must be canonical SHA-256 hex — 'x' proves nothing about bytes", () => {
+    expect(parseCompatibilityUsageV1(usage({ content_hash: "x" }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ content_hash: "A".repeat(64) }))).toBeNull(); // upper-case
+    expect(parseCompatibilityUsageV1(usage({ content_hash: "a".repeat(63) }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ content_hash: "a".repeat(64) }))).not.toBeNull();
   });
 });

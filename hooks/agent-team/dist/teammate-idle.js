@@ -3102,6 +3102,13 @@ var path7 = __toESM(require("path"));
 // ../src/modules/config/workflows/config-defaults.ts
 var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
+var CAPABILITY_RESOLVER_MODES = [
+  "legacy",
+  "observe",
+  "shadow",
+  "project-local",
+  "strict"
+];
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS = {
@@ -4752,18 +4759,27 @@ var DISPATCH_HOST_IDS = new Set(
 );
 
 // ../src/modules/capability/workflows/compatibility-usage.ts
-var COMPATIBILITY_READ_REASONS = [
+var COMPATIBILITY_ASSET_KINDS = Object.freeze([
+  "shipped_template",
+  "shipped_domain_skill"
+]);
+var COMPATIBILITY_READ_REASONS = Object.freeze([
   "no_project_definition",
   "explicit_legacy_mode",
   "rollback",
   "mint_source",
   "shadow_comparison"
-];
-var BENIGN_COMPATIBILITY_READ_REASONS = [
-  "mint_source",
-  "shadow_comparison"
-];
-var DEPENDENCE_COMPATIBILITY_READ_REASONS = COMPATIBILITY_READ_REASONS.filter((r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r));
+]);
+var BENIGN_COMPATIBILITY_READ_REASONS = Object.freeze(["mint_source", "shadow_comparison"]);
+var DEPENDENCE_COMPATIBILITY_READ_REASONS = Object.freeze(
+  COMPATIBILITY_READ_REASONS.filter(
+    (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r)
+  )
+);
+var BENIGN_REASON_SET = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
+var READ_REASON_SET = new Set(COMPATIBILITY_READ_REASONS);
+var ASSET_KIND_SET = new Set(COMPATIBILITY_ASSET_KINDS);
+var RESOLVER_MODE_SET = new Set(CAPABILITY_RESOLVER_MODES);
 
 // ../src/modules/capability/workflows/role-model-schema.ts
 var ROLES = ["host", "advisory", "adversarial"];
