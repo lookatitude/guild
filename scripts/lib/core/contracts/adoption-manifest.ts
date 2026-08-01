@@ -786,11 +786,25 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
   // Each adoption is keyed by its DESTINATION identity, which is exactly where a
   // rollback of it must depart from, so a lineage's stack contains only its own
   // outstanding adoptions.
-  const undoStacks = new Map<string, number[]>();
-  const pushAdoption = (key: string, seq: number): void => {
-    const st = undoStacks.get(key);
-    if (st === undefined) undoStacks.set(key, [seq]);
-    else st.push(seq);
+  /**
+   * Per destination identity, a STACK OF ERAS; each era is the list of adoptions
+   * outstanding on that identity during that era, innermost era last.
+   *
+   * A flat list was wrong (D1's first rule) and DESTRUCTIVELY clearing it on reuse
+   * was wrong too (codex round 2, #1) — see `departed` below for both.
+   */
+  const undoStacks = new Map<string, number[][]>();
+  /** The era currently in force for `key`, or undefined if nothing rides it. */
+  const currentEra = (key: string): number[] | undefined => {
+    const eras = undoStacks.get(key);
+    return eras === undefined || eras.length === 0 ? undefined : eras[eras.length - 1];
+  };
+  const pushAdoption = (key: string, seq: number, newEra: boolean): void => {
+    const eras = undoStacks.get(key);
+    if (eras === undefined) undoStacks.set(key, [[seq]]);
+    else if (newEra) eras.push([seq]);
+    else if (eras.length === 0) eras.push([seq]);
+    else eras[eras.length - 1].push(seq);
   };
   /**
    * Identities adopted away and not since restored — the ERA boundary marker.
@@ -807,11 +821,26 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
    * lineage rides this destination", which is the property D1 actually claims.
    *
    * So an identity that is adopted away and later RE-CREATED by a fresh adoption
-   * begins a new era, and the previous era's adoptions are dropped: they can no
-   * longer be unwound through it, because what stands there now is not what they
-   * landed on. A ROLLBACK landing on it restores the SAME era and keeps the stack —
-   * and that distinction is exactly what preserves sequential rollback of a
-   * multi-step migration (`A→X, X→Y, Y→X rb, X→A rb`), which a blanket clear breaks.
+   * begins a NEW ERA: the adoptions of the era beneath cannot be unwound through it,
+   * because what stands there now is not what they landed on. A ROLLBACK landing on
+   * it restores the SAME era instead — and that distinction is exactly what preserves
+   * sequential rollback of a multi-step migration (`A→X, X→Y, Y→X rb, X→A rb`), which
+   * a blanket clear breaks.
+   *
+   * SUSPENDED, NOT DESTROYED (codex round 2, #1). The first version of this rule
+   * DELETED the stale stack, and that was the fifth wrong rule on this file — it lost
+   * an era a later rollback legitimately restores. Reproduced before rewriting:
+   *
+   *   A→X(1), X→Y(2), B→X(3), X→B(4 rb 3), Y→X(5 rb 2), X→A(6 rb 1)
+   *
+   * is strict LIFO with no collapse anywhere: 3 occupies the vacated X, 4 undoes it,
+   * 5 restores X's ORIGINAL era, and 6 then unwinds 1. Prefixes 1-5 validated and the
+   * whole history did not, because `undoStacks.delete(X)` at 3 had destroyed `[1]`.
+   *
+   * Hence a STACK of eras. A fresh adoption onto a departed identity PUSHES an era;
+   * exhausting an era POPS it, bringing the suspended era back into force. Nothing is
+   * ever discarded, so "which adoptions ride this identity right now" stays answerable
+   * at every depth.
    */
   const departed = new Set<string>();
   for (const entry of entries) {
@@ -821,9 +850,9 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // unwind. A removal has no destination, so there is nothing to return to.
       if (entry.to !== null) {
         const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash);
-        // ERA BOUNDARY: a fresh adoption onto a departed identity re-creates it.
-        if (departed.has(toKey)) undoStacks.delete(toKey);
-        pushAdoption(toKey, entry.sequence);
+        // ERA BOUNDARY: a fresh adoption onto a departed identity re-creates it, and
+        // SUSPENDS the era beneath rather than destroying it.
+        pushAdoption(toKey, entry.sequence, departed.has(toKey));
         departed.delete(toKey);
       }
       departed.add(fromKey);
@@ -908,10 +937,14 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     // un-collapsing one participant is ever genuinely needed it wants its own reason
     // and its own edge shape — a `split` that names WHICH source it releases — not a
     // hole here.
-    const lineage = undoStacks.get(fromKey);
+    const lineage = currentEra(fromKey);
     if (lineage === undefined || lineage[lineage.length - 1] !== target.sequence) return null;
-    if (lineage.length !== 1) return null; // another lineage still rides this destination
+    if (lineage.length !== 1) return null; // another lineage still rides this era
     lineage.pop();
+    // An exhausted era is over: pop it so the era SUSPENDED beneath comes back into
+    // force. This is what makes a suspended era restorable rather than lost.
+    const eras = undoStacks.get(fromKey);
+    if (eras !== undefined && eras.length > 0 && eras[eras.length - 1].length === 0) eras.pop();
     // This rollback departs its source and RESTORES its destination into the era
     // that destination already had — never a new one, so no stack is cleared here.
     departed.add(fromKey);

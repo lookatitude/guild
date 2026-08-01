@@ -818,8 +818,14 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
   });
 
   it("skills[].id and skills[].relative_path are exact at their bounds too", () => {
+    // The path is built FROM the id: since codex round 2 #3 a pinned skill's id must
+    // name its own directory, so a bound test that varied one and pinned the other
+    // would now be testing an impossible shape rather than the bound.
     const idAt = "s".repeat(MAX_DEFINITION_ID);
-    const pathAt = "d/".repeat((MAX_RELATIVE_PATH - 4) / 2) + "a.md";
+    const tail = `${idAt}/SKILL.md`;
+    const prefixLen = MAX_RELATIVE_PATH - tail.length - 1;
+    const pathAt = `${"d".repeat(prefixLen)}/${tail}`;
+    expect(pathAt.length).toBe(MAX_RELATIVE_PATH);
     expect(
       validateProjectDefinitionRefV1({
         ...validRef(),
@@ -827,7 +833,17 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
       })
     ).not.toBeNull();
     expect(
-      validateProjectDefinitionRefV1({ ...validRef(), skills: [{ ...validSkill(), id: idAt + "s" }] })
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [{ ...validSkill(), id: idAt, relative_path: `d${pathAt}` }],
+      })
+    ).toBeNull();
+    const idOver = "s".repeat(MAX_DEFINITION_ID + 1);
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [{ ...validSkill(), id: idOver, relative_path: `.guild/skills/${idOver}/SKILL.md` }],
+      })
     ).toBeNull();
   });
 
@@ -1170,7 +1186,11 @@ describe("D6-R1 — S2 identities are TOKEN-shaped, and the commit bound fits re
   ])("…and every REAL identity shape still validates — %s", (_label, good) => {
     expect(validateProjectDefinitionRefV1({ ...validRef(), id: good })).not.toBeNull();
     expect(
-      validateProjectDefinitionRefV1({ ...validRef(), skills: [{ ...validSkill(), id: good }] })
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        // path built from the id — the two are bound since codex round 2 #3
+        skills: [{ ...validSkill(), id: good, relative_path: `.guild/skills/${good}/SKILL.md` }],
+      })
     ).not.toBeNull();
   });
 
@@ -1203,6 +1223,183 @@ describe("D6-R1 — S2 identities are TOKEN-shaped, and the commit bound fits re
     // `refs/tags/v1` and `feature/x-1-gabc1234` are ordinary values.
     expect(
       validateProjectDefinitionRefV1({ ...validRef(), source_commit: "refs/tags/v2.5.0" })
+    ).not.toBeNull();
+  });
+});
+
+
+describe("D1-R2 — an era is SUSPENDED by reuse, never destroyed", () => {
+  /**
+   * FOUND BY CODEX AGAINST MY OWN ERA FIX — the fifth wrong rule on this file, and
+   * reproduced before rewriting:
+   *
+   *   A→X(1), X→Y(2), B→X(3), X→B(4 rb 3), Y→X(5 rb 2), X→A(6 rb 1)
+   *     prefixes 1-5 valid; the whole history REJECTED; resolving A -> ambiguous
+   *
+   * This is strict LIFO with no collapse anywhere: 3 occupies the vacated X, 4 undoes
+   * it, 5 restores X's ORIGINAL era, 6 unwinds 1. My first era rule DELETED X's stack
+   * at 3, so by 6 there was nothing left to pop. "Drop the stale era" was right about
+   * which era is in force and wrong about what happens to the one underneath.
+   *
+   * FIX: a STACK of eras. Reuse PUSHES; exhausting an era POPS it and the suspended
+   * era comes back into force. Nothing is discarded, so "what rides this identity
+   * right now" stays answerable at every depth.
+   */
+  it("accepts the suspend-and-restore history my first era rule rejected", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("X", "3"), to: ref("Y", "e") },
+          { from: loc("B", "b"), to: ref("X", "3") },
+          rb(3, { from: loc("X", "3"), to: ref("B", "b") }),
+          rb(2, { from: loc("Y", "e"), to: ref("X", "3") }),
+          rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("…and resolves the original lineage through it", () => {
+    const m = chain([
+      { from: loc("A", "a"), to: ref("X", "3") },
+      { from: loc("X", "3"), to: ref("Y", "e") },
+      { from: loc("B", "b"), to: ref("X", "3") },
+      rb(3, { from: loc("X", "3"), to: ref("B", "b") }),
+      rb(2, { from: loc("Y", "e"), to: ref("X", "3") }),
+      rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).status).toBe(
+      "resolved"
+    );
+  });
+
+  it("nesting deeper still unwinds — three eras of one identity", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("X", "3"), to: ref("Y", "e") },
+          { from: loc("B", "b"), to: ref("X", "3") },
+          { from: loc("X", "3"), to: ref("Z", "4") },
+          { from: loc("C", "c"), to: ref("X", "3") },
+          rb(5, { from: loc("X", "3"), to: ref("C", "c") }),
+          rb(4, { from: loc("Z", "4"), to: ref("X", "3") }),
+          rb(3, { from: loc("X", "3"), to: ref("B", "b") }),
+          rb(2, { from: loc("Y", "e"), to: ref("X", "3") }),
+          rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("but a SUSPENDED era's sequence still cannot be reached past the era above it", () => {
+    // Suspension is not a bypass: while era 2 is in force, naming era 1's sequence
+    // finds a different current top and is rejected. The LIFO discipline holds
+    // across the boundary rather than being tunnelled through it.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("X", "3"), to: ref("Y", "e") },
+          { from: loc("B", "b"), to: ref("X", "3") },
+          rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("and D1's partial un-collapse is STILL rejected within one era", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("U", "1"), to: ref("X", "3") },
+          { from: loc("N", "2"), to: ref("X", "3") },
+          rb(2, { from: loc("X", "3"), to: ref("N", "2") }),
+        ])
+      )
+    ).toBeNull();
+  });
+});
+
+describe("D6-R2 — a pinned skill's declared id is bound to the bytes it names", () => {
+  /**
+   * CODEX ROUND 2, #3 (P1), reproduced first. Both of these VALIDATED:
+   *
+   *   { id: "read-only-review",
+   *     relative_path: ".guild/skills/deploy-production/SKILL.md", content_hash: … }
+   *
+   *   two DISTINCT ids naming the SAME `relative_path`
+   *
+   * `PinnedSkillRef.id` is documented as "the `.guild/skills/<id>/` directory name",
+   * but id and path were checked independently — so a consumer selecting
+   * `read-only-review` was handed the deploy skill's pinned bytes under a trusted
+   * name. This is the same category as D3: an invariant the doc states and the
+   * validator did not keep.
+   *
+   * The dedup gap is the same defect from the other side: the bundle rejected
+   * duplicate IDS ("ambiguous about which bytes ride") while accepting duplicate
+   * LOCATORS, which is ambiguous about exactly the same thing.
+   */
+  const validRef = () => ref("A", "a");
+  const skill = (id: string, path?: string) => ({
+    id,
+    relative_path: path ?? `.guild/skills/${id}/SKILL.md`,
+    content_hash: H("a"),
+  });
+
+  it("rejects a skill whose id does not name its own directory", () => {
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [skill("read-only-review", ".guild/skills/deploy-production/SKILL.md")],
+      })
+    ).toBeNull();
+  });
+
+  it("rejects two distinct ids naming the SAME locator — via the binding, not a second guard", () => {
+    // Recorded precisely, because it changed what shipped. A separate duplicate-path
+    // guard was written for this and then DELETED: once each id must name its own
+    // directory, two entries sharing a path share that directory and therefore share
+    // an id, which the duplicate-ID rule already rejects. The sweep proved it —
+    // weakening the locator guard reddened nothing — so it was an untestable guard,
+    // of the class this task removes rather than ships.
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [skill("s1"), { ...skill("s2"), relative_path: ".guild/skills/s1/SKILL.md" }],
+      })
+    ).toBeNull();
+  });
+
+  it("still rejects duplicate ids, as before", () => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [skill("s1"), skill("s1")] })
+    ).toBeNull();
+  });
+
+  it.each([
+    [".guild project layout", "s1", ".guild/skills/s1/SKILL.md"],
+    ["plugin tiered layout", "tdd", "skills/meta/tdd/SKILL.md"],
+    ["long real slug", "cross-host-runtime-boundary-review", ".guild/skills/cross-host-runtime-boundary-review/SKILL.md"],
+  ])("accepts every real layout — %s", (_label, id, path) => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [skill(id, path)] })
+    ).not.toBeNull();
+  });
+
+  it("rejects a path with no directory at all to own the id", () => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [skill("s1", "SKILL.md")] })
+    ).toBeNull();
+  });
+
+  it("a bundle of several distinct, well-formed skills still validates", () => {
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [skill("s1"), skill("s2"), skill("s3")],
+      })
     ).not.toBeNull();
   });
 });

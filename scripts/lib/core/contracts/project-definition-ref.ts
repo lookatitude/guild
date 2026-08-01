@@ -348,6 +348,28 @@ function validatePinnedSkillRefInner(obj: unknown): PinnedSkillRef | null {
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
+  // THE DECLARED ID MUST NAME THE BYTES IT CLAIMS (codex round 2, #3).
+  //
+  // `id` is documented above as "the `.guild/skills/<id>/` directory name", but id
+  // and path were validated INDEPENDENTLY, so this passed:
+  //
+  //   { id: "read-only-review",
+  //     relative_path: ".guild/skills/deploy-production/SKILL.md", … }
+  //
+  // A consumer selecting `read-only-review` was handed the deploy skill's pinned
+  // bytes under a trusted name. That is the same category as S3's removal
+  // limitation: an invariant the documentation states and the validator did not
+  // keep, which is worse than an undocumented one because it is what readers plan
+  // against.
+  //
+  // The rule is the OWNING DIRECTORY, not a fixed prefix, so it holds for both real
+  // layouts — a project's `.guild/skills/<id>/SKILL.md` and the plugin's tiered
+  // `skills/<tier>/<id>/SKILL.md` — without this envelope having to know either.
+  // A path with no directory to own the id cannot satisfy it, and is refused.
+  const segments = pathProp.value.split("/");
+  if (segments.length < 2) return null;
+  if (segments[segments.length - 2] !== idProp.value) return null;
+
   return {
     id: idProp.value,
     relative_path: pathProp.value,
@@ -460,6 +482,12 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
     const skill = validatePinnedSkillRefInner(desc.value);
     if (skill === null) return null;
     if (seen.has(skill.id)) return null; // duplicate id ⇒ ambiguous bundle
+    // TWO IDS ON ONE LOCATOR — the same ambiguity from the other side (codex round 2,
+    // #3) — needs NO separate guard, and the one written here was DELETED rather than
+    // shipped untested. Since `validatePinnedSkillRefInner` now requires each id to
+    // name its own owning directory, two entries sharing a `relative_path` share that
+    // directory and therefore share an id, which the line above already rejects. The
+    // anti-vacuity sweep confirmed it: weakening the locator check reddened nothing.
     seen.add(skill.id);
     out.push(skill);
   }

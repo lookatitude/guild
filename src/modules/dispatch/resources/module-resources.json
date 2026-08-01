@@ -15,14 +15,14 @@
       "id": "lib/core/contracts/adoption-manifest",
       "source_path": "scripts/lib/core/contracts/adoption-manifest.ts",
       "resource_path": "resources/scripts/lib/core/contracts/adoption-manifest.ts",
-      "sha256": "7619932b10bb6a9b30b16ff53b16c5f6c8c1a9ef8379b0a5c7e38998025ef4c5"
+      "sha256": "bf65205c8f710506e876fb54573444b1eaaa683303320ec44a37f634a125fd8b"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/project-definition-ref",
       "source_path": "scripts/lib/core/contracts/project-definition-ref.ts",
       "resource_path": "resources/scripts/lib/core/contracts/project-definition-ref.ts",
-      "sha256": "89283f881057af987ef92a251d16447273982d70feea9c6f609a08083600d322"
+      "sha256": "83e953d0f8db7c2f6ea115d23530596cd37e8acdb7be906ad5c383a9fde72816"
     },
     {
       "category": "scripts",
