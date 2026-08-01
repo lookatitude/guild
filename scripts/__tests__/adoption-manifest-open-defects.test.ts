@@ -390,3 +390,98 @@ describe("D2 — a rollback's cycle exemption cannot be borrowed by another line
     expect(r.trail).toEqual([1, 2, 3, 4]);
   });
 });
+
+// ── Defect 3 — a REMOVAL is final ──────────────────────────────────────────
+
+describe("D3 — a removed identity cannot be re-created by an ordinary migration", () => {
+  /**
+   * PRISTINE-TIP BEHAVIOUR (reproduced): `A→null(1 removed)`, `B→A(2)`, `A→C(3)`
+   * VALIDATED. Every entry with a non-null destination ran `deadIds.delete(toKey)`,
+   * so an ordinary `migrated` entry resurrected `A` and entry 3 then adopted it
+   * away again.
+   *
+   * That made the file's stated KNOWN LIMITATION — "a `removed` identity cannot be
+   * re-created and re-adopted, because nothing restores it… If that history is ever
+   * needed it wants an explicit `restored` reason, not a hole here" — a claim the
+   * code did not keep. A comment that a validator contradicts is worse than no
+   * comment: it is the thing readers plan against.
+   */
+  it("REJECTS the resurrect-then-re-adopt the pristine tip accepted", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "dropped in D09" },
+          { from: loc("B", "b"), to: ref("A", "a") },
+          { from: loc("A", "a"), to: ref("C", "c") },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("REJECTS at the LANDING, not two entries later — the class, not the instance", () => {
+    // The re-adoption is only how the pristine tip's hole became visible. Landing on
+    // a removed identity at all is what re-creates it, so that is where it rejects —
+    // whatever the entry's reason, and whether or not anything later uses it.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "dropped in D09" },
+          { from: loc("B", "b"), to: ref("A", "a") },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it.each([
+    ["migrated", { reason: "migrated" as const, detail: null }],
+    ["rehomed", { reason: "rehomed" as const, detail: null }],
+    ["renamed", { reason: "renamed" as const, detail: null }],
+    ["collapsed", { reason: "collapsed" as const, detail: "merged" }],
+  ])("no reason smuggles a resurrection through — %s", (_label, over) => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "dropped in D09" },
+          { from: loc("B", "b"), to: ref("A", "a"), ...over },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("removal keys on BYTES too — a different-bytes A is a different identity", () => {
+    // The liveness identity is (kind, id, content_hash). Removing `A@a` says nothing
+    // about `A@b`, exactly as it says nothing about `B`. Over-broad rejection would
+    // be its own defect, so the boundary is asserted, not assumed.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "dropped in D09" },
+          { from: loc("B", "b"), to: ref("A", "b") },
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("an ordinary removal, and a removal beside unrelated traffic, still validate", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "dropped in D09" },
+          { from: loc("B", "b"), to: ref("C", "c") },
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("and the removal still reads back as `removed`, never `not_found`", () => {
+    const m = chain([
+      { from: loc("A", "a"), to: null, reason: "removed", detail: "dropped in D09" },
+      { from: loc("B", "b"), to: ref("C", "c") },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") })).toEqual({
+      status: "removed",
+      ref: null,
+      trail: [1],
+    });
+  });
+});

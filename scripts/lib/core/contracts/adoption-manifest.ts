@@ -652,12 +652,27 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
   // were each wrong in a different way (one broke re-adoption, one resolved to the
   // WRONG BYTES, one mis-scoped identity) — the state is better removed than judged.
   //
-  // KNOWN LIMITATION, stated rather than discovered later: a `removed` identity
-  // cannot be re-created and re-adopted, because nothing restores it. If that
-  // history is ever needed it wants an explicit `restored` reason, not a hole here.
+  // KNOWN LIMITATION, stated rather than discovered later, and now ENFORCED rather
+  // than merely asserted (codex round 5, #3): a `removed` identity cannot be
+  // re-created and re-adopted, because nothing restores it. If that history is ever
+  // needed it wants an explicit `restored` reason, not a hole here.
+  //
+  // It was a claim the code did not keep. Reproduced against the pristine tip:
+  // `A→null(1 removed)`, `B→A(2)`, `A→C(3)` VALIDATED, because every entry with a
+  // non-null destination ran `deadIds.delete(toKey)` — so an ordinary `migrated`
+  // entry resurrected `A`, and entry 3 adopted it away again. A comment a validator
+  // contradicts is worse than no comment: it is the thing readers plan against.
+  //
+  // `removedIds` is therefore a SEPARATE, MONOTONIC set. `deadIds` is revocable by
+  // design (that is what makes re-adoption expressible); removal is not, so the two
+  // facts cannot share one set. The check sits at the LANDING — the moment an entry
+  // would re-create the identity — not at the later re-adoption that made the hole
+  // visible, so no `reason` can smuggle a resurrection through.
   {
     const liveIds = new Set<string>();
     const deadIds = new Set<string>();
+    /** Identities a `removed` entry retired. NEVER revoked — the whole point. */
+    const removedIds = new Set<string>();
     // CODEX (merged round) #1: this keyed on (kind, id) only, so `A@h1` and `A@h2`
     // were ONE identity — and combined with the blanket resurrect below, the fork
     // this rule exists to forbid stayed representable. The liveness identity must
@@ -679,6 +694,11 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // constraining the destination costs more than it buys.
       if (entry.to !== null) {
         const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash);
+        // A removal is FINAL. Landing on a retired identity re-creates it, whatever
+        // the reason claims to be doing, so that is where it rejects. Note this keys
+        // on BYTES like everything else: retiring `A@h1` says nothing about `A@h2`,
+        // which is a different definition that merely shares an id.
+        if (removedIds.has(toKey)) return null;
         liveIds.add(toKey);
         // CODEX (merged round) #1 was really TWO issues, and only one of them was
         // here. The fork survived because `identityOf` ignored BYTES, so `A@h1` and
@@ -697,6 +717,10 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // The source is now adopted away.
       deadIds.add(fromKey);
       liveIds.delete(fromKey);
+      // …and if it was REMOVED, it is retired for good. `deadIds` alone cannot carry
+      // this: a later entry's `to` legitimately revokes death, and must never
+      // legitimately revoke removal.
+      if (entry.to === null) removedIds.add(fromKey);
     }
   }
 
