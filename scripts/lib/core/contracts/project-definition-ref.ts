@@ -210,10 +210,33 @@ export const MAX_SKILLS = 256;
 export const MAX_PROJECT_ID = 128;
 /** Role slug or skill name — the same budget S3 gives a legacy id. */
 export const MAX_DEFINITION_ID = 128;
-/** Matches S3's `MAX_PATH`, so one path cannot be legal on one side and not the other. */
+/**
+ * RATIONALE CORRECTED (codex round 1 on this fix, #5). This said "matches S3's
+ * `MAX_PATH`, so one path cannot be legal on one side and not the other" — which is
+ * not a thing equal caps can achieve here. S3's `historical_path` is ABSOLUTE and
+ * this field is RELATIVE; they are DIFFERENT fields describing different strings,
+ * and an absolute spelling of the same file is necessarily longer. Equal numbers
+ * never made them consistent.
+ *
+ * The cap stands on this file's own stated policy instead: "deliberately stricter
+ * than the filesystem — the envelope is a CONTRACT". This locates a definition
+ * inside a project root (`.guild/agents/<slug>.md`), not an arbitrary deep tree, so
+ * 1024 is far above any real value while bounding the byte budget the composed
+ * ceiling below multiplies. It is a policy number, not a derived one, and a deep
+ * monorepo path beyond it is knowingly unrepresentable.
+ */
 export const MAX_RELATIVE_PATH = 1024;
-/** A commit-ish: a sha, a tag, a describe string. Never a document. */
-export const MAX_SOURCE_COMMIT = 128;
+/**
+ * A commit-ish: a sha, a tag, a `git describe` string. Never a document.
+ *
+ * WAS 128, AND THAT REJECTED THE DOCUMENTED INPUT (codex round 1 on this fix, #4).
+ * A real `git describe --tags --long` over a 126-character tag is 137 characters —
+ * `<tag>-<n>-g<abbrev>` — so the bound refused a value the field's own doc promises
+ * to accept. A bound that rejects the documented input is a defect in the bound.
+ * 512 clears any realistic tag-plus-describe suffix (git ref components are
+ * conventionally under 255) while staying orders of magnitude below a body.
+ */
+export const MAX_SOURCE_COMMIT = 512;
 
 /**
  * Rule 6's universal shape gate, spelled exactly as `adoption-manifest.ts` spells
@@ -228,6 +251,30 @@ const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 /** A bounded, control-free, non-empty scalar. */
 function isBoundedScalar(v: unknown, max: number): v is string {
   return typeof v === "string" && v.length > 0 && v.length <= max && !CONTROL_RE.test(v);
+}
+
+/**
+ * An IDENTITY token — spelled exactly as `adoption-manifest.ts` spells `TOKEN_RE`.
+ *
+ * BOUNDING WITHOUT SHAPE-CHECKING WAS HALF OF RULE 6 (codex round 1 on this fix,
+ * #3). `id: "../outside"` and a pinned skill `id: "../../secret"` both validated:
+ * these fields are documented as a role slug and a `.guild/skills/<id>/` directory
+ * name, and a path-shaped value masquerades as a locator.
+ *
+ * The sharper consequence is a SEAM DEFECT. S3's legacy locator and its query both
+ * require this shape, so a path-shaped S2 id could be a destination once and then
+ * never legally become a later `from` identity — one identity, legal on one side of
+ * the adoption manifest and illegal on the other. That is exactly the disagreement
+ * D4 removed inside S3, reappearing across the S2/S3 boundary.
+ *
+ * NOT applied to `source_commit`: a git ref legitimately contains `/`
+ * (`refs/tags/v2.5.0`), and over-tightening it would be its own defect.
+ */
+const IDENTITY_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** A bounded, control-free, TOKEN-shaped identity. */
+function isIdentityToken(v: unknown, max: number): v is string {
+  return isBoundedScalar(v, max) && IDENTITY_TOKEN_RE.test(v);
 }
 
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
@@ -297,7 +344,7 @@ function validatePinnedSkillRefInner(obj: unknown): PinnedSkillRef | null {
   const hashProp = ownDataProp(obj, "content_hash");
   if (idProp.kind !== "data" || pathProp.kind !== "data" || hashProp.kind !== "data") return null;
 
-  if (!isBoundedScalar(idProp.value, MAX_DEFINITION_ID)) return null;
+  if (!isIdentityToken(idProp.value, MAX_DEFINITION_ID)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
@@ -449,10 +496,10 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (typeHashProp.kind !== "data") return null;
   if (skillsProp.kind !== "data") return null;
 
-  if (!isBoundedScalar(projectProp.value, MAX_PROJECT_ID)) return null;
+  if (!isIdentityToken(projectProp.value, MAX_PROJECT_ID)) return null;
   if (typeof kindProp.value !== "string" || !DEFINITION_KIND_SET.has(kindProp.value)) return null;
   const kind = kindProp.value as DefinitionKind;
-  if (!isBoundedScalar(idProp.value, MAX_DEFINITION_ID)) return null;
+  if (!isIdentityToken(idProp.value, MAX_DEFINITION_ID)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
