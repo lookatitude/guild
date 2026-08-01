@@ -33,7 +33,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
-var UPDATE_COMMANDS, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES;
+var UPDATE_COMMANDS, INJECTION_SUPPORT, INJECTION_SUPPORT_SET, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES, REQUIRED_HOOK_EVENTS;
 var init_host_capabilities_schema = __esm({
   "../src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
     UPDATE_COMMANDS = {
@@ -41,6 +41,8 @@ var init_host_capabilities_schema = __esm({
       self_update: "guild-run update",
       reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
     };
+    INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+    INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
     CLAUDE_CAPABILITIES = {
       schema_version: "guild.host_capabilities.v1",
       host_kind: "claude",
@@ -61,6 +63,20 @@ var init_host_capabilities_schema = __esm({
       commands: { slash_commands: true, command_files: "markdown" },
       skills: { native_skills: true, skill_dir: ".claude/skills" },
       agents: { native_agents: true, agent_format: "claude-md" },
+      injection: {
+        // No injection probe has EVER run on any host — the capability is unbuilt (S7
+        // landed the transport half only). A dispatch surface exists, so "target".
+        definition_injection: false,
+        definition_injection_support: "target",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "target",
+        dynamic_registration: false,
+        dynamic_registration_support: "target",
+        fallback: "prompt_text",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
       hooks: {
         // All ten events are bound in the live hooks/hooks.json (verified).
         session_start: true,
@@ -172,6 +188,20 @@ var init_host_capabilities_schema = __esm({
       // Verified (per-host-packaging).
       agents: { native_agents: false, agent_format: null },
       // Verified (per-host-packaging flags agents unsupported).
+      injection: {
+        // No injection probe has EVER run on any host — the capability is unbuilt (S7
+        // landed the transport half only). A dispatch surface exists, so "target".
+        definition_injection: false,
+        definition_injection_support: "target",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "target",
+        dynamic_registration: false,
+        dynamic_registration_support: "absent",
+        fallback: "prompt_text",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
       hooks: {
         // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
         // Claude-equivalent hooks" claim was empirically false. Codex accepts a
@@ -306,6 +336,19 @@ var init_host_capabilities_schema = __esm({
       commands: { slash_commands: false, command_files: "none" },
       skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
       agents: { native_agents: false, agent_format: null },
+      injection: {
+        // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+        definition_injection: false,
+        definition_injection_support: "absent",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "absent",
+        dynamic_registration: false,
+        dynamic_registration_support: "absent",
+        fallback: "none",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
       hooks: NO_HOOKS,
       permissions: {
         deny: false,
@@ -354,11 +397,23 @@ var init_host_capabilities_schema = __esm({
         powerful: { model: null }
       }
     };
+    REQUIRED_HOOK_EVENTS = Object.freeze([
+      "session_start",
+      "user_prompt_submit",
+      "pre_tool_use",
+      "post_tool_use",
+      "stop",
+      "pre_compact",
+      "subagent_stop",
+      "task_created",
+      "task_completed",
+      "teammate_idle"
+    ]);
   }
 });
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
-function inferredCaps(host_kind, family, surface_kind = "cli") {
+function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
     host_kind,
@@ -385,6 +440,38 @@ function inferredCaps(host_kind, family, surface_kind = "cli") {
     commands: { slash_commands: false, command_files: "none" },
     skills: { native_skills: false, skill_dir: null },
     agents: { native_agents: false, agent_format: null },
+    // cap-loc-D11 — injection facts derived STRUCTURALLY from the surface kind.
+    // A `cli` surface has somewhere to dispatch a lane, so injection is an
+    // unproven TARGET. An `app` or `file` surface has no pane to dispatch into
+    // (see the AGENTS_FILE / kiro / qoder / trae rows: `dispatch_selectable:
+    // false`), so there is nothing to inject INTO — `absent`, and nothing to
+    // degrade to either. That is a structural fact, not pessimism.
+    //
+    // NO ROW STARTS `verified`: injection is unbuilt, so no probe of it has ever
+    // run on any host. A row flips only on a real probe receipt (E3 / cap-loc-D12).
+    injection: dispatch_selectable ? {
+      definition_injection: false,
+      definition_injection_support: "target",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "target",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "prompt_text",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    } : {
+      definition_injection: false,
+      definition_injection_support: "absent",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "absent",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "none",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    },
     hooks: {
       session_start: false,
       user_prompt_submit: false,
@@ -437,7 +524,7 @@ var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE
 var init_host_registry_schema = __esm({
   "../src/modules/host-runtime/workflows/host-registry-schema.ts"() {
     init_host_capabilities_schema();
-    HOST_IDS = [
+    HOST_IDS = Object.freeze([
       // keep CLI/file (5)
       "claude-code-cli",
       "codex-cli",
@@ -459,8 +546,8 @@ var init_host_registry_schema = __esm({
       "kiro",
       "qoder",
       "trae"
-    ];
-    HOST_FAMILIES = [
+    ]);
+    HOST_FAMILIES = Object.freeze([
       "claude",
       "codex",
       "agents",
@@ -470,15 +557,15 @@ var init_host_registry_schema = __esm({
       "copilot",
       "opencode",
       "rovo"
-    ];
-    AUTH_PROBES = [
+    ]);
+    AUTH_PROBES = Object.freeze([
       "codex_stored_or_env",
       "none",
       "cursor_stored",
       "gh_auth",
       "opencode_stored_or_env",
       "acli_stored"
-    ];
+    ]);
     CLAUDE_ENTRY = {
       schema_version: "guild.host_registry.v1",
       host_id: "claude-code-cli",
@@ -861,8 +948,8 @@ var RUNGS, ADAPTER_SURFACES, RUNG_SET, SURFACE_SET;
 var init_adapter_fallback_ladders = __esm({
   "../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"() {
     init_host_registry_schema();
-    RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
-    ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"];
+    RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
+    ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
     RUNG_SET = new Set(RUNGS);
     SURFACE_SET = new Set(ADAPTER_SURFACES);
   }
@@ -997,11 +1084,24 @@ var init_provider_detect = __esm({
 });
 
 // ../src/modules/host-runtime/workflows/host-adapter-contract.ts
+var HOST_ADAPTER_OPERATIONS;
 var init_host_adapter_contract = __esm({
   "../src/modules/host-runtime/workflows/host-adapter-contract.ts"() {
     init_host_registry_schema();
     init_host_id_namespace();
     init_adapter_fallback_ladders();
+    HOST_ADAPTER_OPERATIONS = Object.freeze([
+      "capabilities",
+      "bootstrap",
+      "preflight",
+      "dispatch",
+      "collect",
+      "renderCommandSurface",
+      "renderPackage",
+      "renderPermissionDecision",
+      "resolveModelParams",
+      "memory"
+    ]);
   }
 });
 
@@ -1158,7 +1258,7 @@ var init_host_capability_snapshot = __esm({
     init_host_registry_schema();
     HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
     HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
-    HOST_CAPABILITY_IDS = [
+    HOST_CAPABILITY_IDS = Object.freeze([
       "host.artifacts.direct_filesystem",
       "host.artifacts.file_bus",
       "host.bootstrap.context_injection",
@@ -1189,7 +1289,7 @@ var init_host_capability_snapshot = __esm({
       "host.result_adapter",
       "host.sessions.resume_by_id",
       "host.structured_output.native_json"
-    ];
+    ]);
     CAPABILITY_READERS = {
       "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
       "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
@@ -1432,19 +1532,19 @@ var init_host_adapter_boundary = __esm({
       "execution_failed",
       "unknown_event"
     ]);
-    HOST_ADAPTER_OWNED_CONCERNS = [
+    HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
       "host_identity_resolution",
       "host_entry_point_binding",
       "host_capability_snapshot",
       "host_native_event_normalization"
-    ];
-    HOST_ADAPTER_NOT_OWNED_CONCERNS = [
+    ]);
+    HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
       "lifecycle_state",
       "gate_policy",
       "artifact_semantics",
       "document_rendering",
       "transport_execution"
-    ];
+    ]);
     CONCERN_OWNERS = Object.freeze({
       host_identity_resolution: "host-adapters",
       host_entry_point_binding: "host-adapters",
@@ -1508,10 +1608,28 @@ var init_injection_guard = __esm({
 });
 
 // ../src/modules/security/workflows/redact-log.ts
-var FIELD_SIZE_CAP_BYTES;
+var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS;
 var init_redact_log = __esm({
   "../src/modules/security/workflows/redact-log.ts"() {
     FIELD_SIZE_CAP_BYTES = 4 * 1024;
+    TOKEN_SHAPE_PATTERNS = Object.freeze([
+      /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
+      /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
+      /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
+      /\bghp_[A-Za-z0-9]{36}\b/g,
+      /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
+      /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
+      /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
+      /\bAKIA[0-9A-Z]{16}\b/g,
+      /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+    ]);
+    SENSITIVE_HOME_DIRS = Object.freeze([
+      ".claude",
+      ".codex",
+      ".ssh",
+      ".aws",
+      ".gnupg"
+    ]);
   }
 });
 
@@ -1549,8 +1667,17 @@ var init_dependency_graph_reader = __esm({
 });
 
 // ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES;
 var init_module_manifest = __esm({
   "../src/modules/kernel/workflows/module-manifest.ts"() {
+    OWNED_INVENTORY_CATEGORIES = Object.freeze([
+      "commands",
+      "skills",
+      "agents",
+      "hooks",
+      "mcp_servers",
+      "scripts"
+    ]);
   }
 });
 
@@ -4996,7 +5123,7 @@ var init_events = __esm({
   "../src/modules/security/workflows/events.ts"() {
     init_state();
     init_redact_log();
-    KNOWN_GUILD_HOST_KINDS = [
+    KNOWN_GUILD_HOST_KINDS = Object.freeze([
       "claude-code-cli",
       "codex-cli",
       "pi-cli",
@@ -5006,7 +5133,7 @@ var init_events = __esm({
       "claude-code-web",
       "codex-app",
       "claude-ai-connector"
-    ];
+    ]);
     KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
   }
 });
@@ -5047,7 +5174,7 @@ function roleSlugDedupKey(slug) {
 var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_DEFAULT, CAPABILITY_SUGGESTION_BUDGET_MIN, CAPABILITY_SUGGESTION_BUDGET_MAX, CAPABILITY_ROLE_SLUG_MAX_LEN, ROLE_SLUG, CONTROL_CHARS, DEFAULTS;
 var init_config_defaults = __esm({
   "../src/modules/config/workflows/config-defaults.ts"() {
-    DEFAULT_ESCALATION_MARKERS = [
+    DEFAULT_ESCALATION_MARKERS = Object.freeze([
       "I'm not sure",
       "unclear",
       "cannot determine",
@@ -5055,7 +5182,7 @@ var init_config_defaults = __esm({
       "ambiguous",
       "uncertain",
       "not enough information"
-    ];
+    ]);
     NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
       "initiative_default",
       // OD-1: attach-to-wrong-initiative risk
@@ -5064,14 +5191,14 @@ var init_config_defaults = __esm({
     ]);
     LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
     SIDECAR_MAX_BYTES = 1024 * 1024;
-    CAPABILITY_RESOLVER_MODES = [
+    CAPABILITY_RESOLVER_MODES = Object.freeze([
       "legacy",
       "observe",
       "shadow",
       "project-local",
       "strict"
-    ];
-    CAPABILITY_AUTO_CREATE_POLICIES = ["never", "on_approval"];
+    ]);
+    CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
     CAPABILITY_RESOLVER_MODE_DEFAULT = "legacy";
     CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
     CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
@@ -6241,14 +6368,14 @@ function makeConfigResolutionEvent(fields) {
 var GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
 var init_guild_trace_events = __esm({
   "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
-    GUILD_TRACE_SCHEMA_VERSIONS = [
+    GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
       "guild.trace.dispatch.v1",
       "guild.trace.recall.v1",
       "guild.trace.recall_decision.v1",
       "guild.trace.config_resolution.v1",
       "guild.trace.security_decision.v1",
       "guild.trace.degradation.v1"
-    ];
+    ]);
     DISPATCH_BACKENDS = ["agent", "tmux", "remote", "unknown"];
     RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
     SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
@@ -6298,9 +6425,56 @@ var init_guild_trace_emit = __esm({
 });
 
 // ../src/modules/telemetry/workflows/receipt-journal.ts
+var RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES;
 var init_receipt_journal = __esm({
   "../src/modules/telemetry/workflows/receipt-journal.ts"() {
     init_state();
+    RECEIPT_DISPOSITIONS = Object.freeze([
+      "succeeded",
+      "refused",
+      "unsupported",
+      "failed",
+      "degraded"
+    ]);
+    OBSERVATION_STATES = Object.freeze([
+      "checked_clean",
+      "not_applicable",
+      "not_observed",
+      "observation_failed"
+    ]);
+    RECEIPT_EVENT_NAMES = Object.freeze([
+      "session.start",
+      "prompt.submit",
+      "tool.before",
+      "tool.after",
+      "context.compact",
+      "task.dispatch",
+      "task.collect",
+      "run.resume",
+      "run.stop",
+      "package.render",
+      "package.install",
+      "package.activate",
+      "package.update",
+      "runtime.verify",
+      "receipt.append",
+      "receipt.reconcile",
+      "migration.shadow",
+      "migration.cutover",
+      "migration.rollback"
+    ]);
+    RECEIPT_OUTCOME_TYPES = Object.freeze([
+      "guild.lifecycle_outcome.v1",
+      "guild.normalized_event_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.capability_outcome.v1",
+      "guild.policy_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.reconciliation_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.version_compatibility_outcome.v1"
+    ]);
   }
 });
 
@@ -6312,9 +6486,18 @@ var init_receipt_reconcile = __esm({
 });
 
 // ../src/modules/telemetry/workflows/debug-bundle.ts
+var DEBUG_BUNDLE_SECTION_KINDS;
 var init_debug_bundle = __esm({
   "../src/modules/telemetry/workflows/debug-bundle.ts"() {
     init_receipt_journal();
+    DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
+      "capability_snapshot",
+      "normalized_event",
+      "policy_decision",
+      "transport_attempt",
+      "artifact",
+      "conformance"
+    ]);
   }
 });
 

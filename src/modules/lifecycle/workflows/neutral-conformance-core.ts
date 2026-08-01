@@ -660,7 +660,7 @@ const NEUTRAL_SEMVER_PATTERN = new RegExp(
 const NEUTRAL_JOURNAL_ID_PATTERN = new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{2,}$");
 
 /** Evidence freshness. `unknown` is not a soft `fresh`. */
-export const NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS = ["fresh", "stale", "unknown"] as const;
+export const NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS = Object.freeze(["fresh", "stale", "unknown"] as const);
 export type NeutralEvidenceFreshnessVerdict = (typeof NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS)[number];
 
 /**

@@ -78,17 +78,17 @@ export {
  * (The ADR §RE-6 example says "failed" but the writer uses "aborted" — this
  * module follows the shipped writer as the single source of truth.)
  */
-export const PROGRAM_STATUSES = ["active", "completed", "paused", "aborted"] as const;
+export const PROGRAM_STATUSES = Object.freeze(["active", "completed", "paused", "aborted"] as const);
 
 /**
  * Known wave-level status values (closed set).
  * Matches the shipped WaveStatus union in write-run-manifest.ts:
  *   "pending" | "active" | "completed" | "failed"
  */
-export const WAVE_STATUSES = ["pending", "active", "completed", "failed"] as const;
+export const WAVE_STATUSES = Object.freeze(["pending", "active", "completed", "failed"] as const);
 
 /** Required top-level keys on guild.run_manifest.v1. */
-export const MANIFEST_REQUIRED_KEYS = [
+export const MANIFEST_REQUIRED_KEYS = Object.freeze([
   "schema_version",
   "slug",
   "status",
@@ -96,16 +96,16 @@ export const MANIFEST_REQUIRED_KEYS = [
   "updated_at",
   "current_wave",
   "waves",
-] as const;
+] as const);
 
 /** Required keys on each wave record. */
-export const WAVE_REQUIRED_KEYS = [
+export const WAVE_REQUIRED_KEYS = Object.freeze([
   "wave_index",
   "status",
   "run_id",
   "started_at",
   "completed_at",
-] as const;
+] as const);
 
 export interface ValidationResult {
   valid: boolean;

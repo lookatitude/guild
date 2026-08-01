@@ -302,14 +302,14 @@ export type GuildTraceEvent =
   | GuildTraceDegradationV1;
 
 /** All valid schema_version tokens. */
-export const GUILD_TRACE_SCHEMA_VERSIONS = [
+export const GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
   "guild.trace.dispatch.v1",
   "guild.trace.recall.v1",
   "guild.trace.recall_decision.v1",
   "guild.trace.config_resolution.v1",
   "guild.trace.security_decision.v1",
   "guild.trace.degradation.v1",
-] as const;
+] as const);
 
 export type GuildTraceSchemaVersion = (typeof GUILD_TRACE_SCHEMA_VERSIONS)[number];
 

@@ -13,10 +13,10 @@
 export const INITIATIVE_SCHEMA = "guild.initiative.v1";
 
 // ── The four separate status axes (closed enums) ──────────────────────────────
-export const DEFINITION_STATUS = ["incomplete", "assumed", "complete"] as const;
-export const EXECUTION_STATUS = ["not_started", "active", "blocked", "done"] as const;
-export const RELEASE_STATUS = ["not_released", "release_candidate", "released", "rollback_required"] as const;
-export const DOCUMENTATION_STATUS = ["not_assessed", "no_update_required", "update_required", "updated", "stale"] as const;
+export const DEFINITION_STATUS = Object.freeze(["incomplete", "assumed", "complete"] as const);
+export const EXECUTION_STATUS = Object.freeze(["not_started", "active", "blocked", "done"] as const);
+export const RELEASE_STATUS = Object.freeze(["not_released", "release_candidate", "released", "rollback_required"] as const);
+export const DOCUMENTATION_STATUS = Object.freeze(["not_assessed", "no_update_required", "update_required", "updated", "stale"] as const);
 
 export type DefinitionStatus = (typeof DEFINITION_STATUS)[number];
 export type ExecutionStatus = (typeof EXECUTION_STATUS)[number];
@@ -24,10 +24,10 @@ export type ReleaseStatus = (typeof RELEASE_STATUS)[number];
 export type DocumentationStatus = (typeof DOCUMENTATION_STATUS)[number];
 
 /** Derived human-facing status — computed from the axes, never set independently. */
-export const DERIVED_STATUS = [
+export const DERIVED_STATUS = Object.freeze([
   "proposed", "defining", "ready", "in_progress", "review",
   "release_ready", "released", "docs_update_pending", "closed", "paused", "cancelled",
-] as const;
+] as const);
 export type DerivedStatus = (typeof DERIVED_STATUS)[number];
 
 export interface InitiativeAxes {
@@ -121,10 +121,10 @@ export function validateInitiativeManifest(obj: unknown): { valid: boolean; erro
 
 // ── Definition ledger (item 11) ───────────────────────────────────────────────
 
-export const DEFINITION_CATEGORIES = [
+export const DEFINITION_CATEGORIES = Object.freeze([
   "goal", "outcome", "scope", "non_goal", "acceptance", "constraint", "risk", "assumption", "open_question",
-] as const;
-export const DEFINITION_ITEM_STATUS = ["defined", "needs_definition", "assumed", "superseded"] as const;
+] as const);
+export const DEFINITION_ITEM_STATUS = Object.freeze(["defined", "needs_definition", "assumed", "superseded"] as const);
 export type DefinitionCategory = (typeof DEFINITION_CATEGORIES)[number];
 export type DefinitionItemStatus = (typeof DEFINITION_ITEM_STATUS)[number];
 

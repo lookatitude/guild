@@ -22,14 +22,14 @@ export type OwnedInventoryCategory =
   | "mcp_servers"
   | "scripts";
 
-export const OWNED_INVENTORY_CATEGORIES: readonly OwnedInventoryCategory[] = [
+export const OWNED_INVENTORY_CATEGORIES: readonly OwnedInventoryCategory[] = Object.freeze([
   "commands",
   "skills",
   "agents",
   "hooks",
   "mcp_servers",
   "scripts",
-];
+]);
 
 export interface ModuleOwns {
   commands?: string[];

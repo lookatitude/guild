@@ -65,7 +65,7 @@ export interface DiscoveryRule {
   note?: string;
 }
 
-export const DISCOVERY_RULES: DiscoveryRule[] = [
+export const DISCOVERY_RULES: readonly DiscoveryRule[] = Object.freeze([
   {
     category: "commands",
     globs: ["commands/*.md"],
@@ -120,12 +120,12 @@ export const DISCOVERY_RULES: DiscoveryRule[] = [
     enforced: false,
     note: "Full docs/ tree is inventoried (FU-5). Still non-enforced: docs are a coverage/curation surface, not a load-bearing package input, so a missing doc is not an SC-7 fail-fixture.",
   },
-];
+]);
 
 /** Categories whose coverage is enforced with an L6 fail-fixture (SC-7a). */
-export const COVERAGE_ENFORCED_CATEGORIES: InventoryCategory[] = DISCOVERY_RULES.filter(
+export const COVERAGE_ENFORCED_CATEGORIES: readonly InventoryCategory[] = Object.freeze(DISCOVERY_RULES.filter(
   (r) => r.enforced
-).map((r) => r.category);
+).map((r) => r.category));
 
 // ---------------------------------------------------------------------------
 // (a) COVERAGE — discovery == inventory

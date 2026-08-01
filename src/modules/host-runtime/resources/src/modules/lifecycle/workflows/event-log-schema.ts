@@ -30,7 +30,7 @@ export type LoopLayer = "L1" | "L2" | "L3" | "L4" | "security-review";
  * Closed enum for `tool_call.tool`. 17 values per schema doc §7. Validators
  * reject other values; future tools require a schema bump.
  */
-export const TOOL_CALL_TOOL_VALUES = [
+export const TOOL_CALL_TOOL_VALUES = Object.freeze([
   "Read",
   "Write",
   "Edit",
@@ -48,14 +48,14 @@ export const TOOL_CALL_TOOL_VALUES = [
   "NotebookEdit",
   "BashOutput",
   "KillShell",
-] as const;
+] as const);
 export type ToolCallTool = (typeof TOOL_CALL_TOOL_VALUES)[number];
 
 /**
  * The 12 canonical Claude Code hook events per schema doc §8. Validators
  * reject other values; future hooks require a schema bump.
  */
-export const HOOK_EVENT_NAMES = [
+export const HOOK_EVENT_NAMES = Object.freeze([
   "SessionStart",
   "SessionEnd",
   "UserPromptSubmit",
@@ -68,7 +68,7 @@ export const HOOK_EVENT_NAMES = [
   "TaskCreated",
   "TaskCompleted",
   "TeammateIdle",
-] as const;
+] as const);
 export type HookEventName = (typeof HOOK_EVENT_NAMES)[number];
 
 export interface PhaseStartEvent {

@@ -43,7 +43,7 @@ import * as path from "path";
  *     → terminating → terminated
  *          (alt terminal: failed | cancelled | timed_out | rejected)
  */
-export const TASK_CELL_STATES = [
+export const TASK_CELL_STATES = Object.freeze([
   "declared",
   "instantiated",
   "ready",
@@ -59,18 +59,18 @@ export const TASK_CELL_STATES = [
   "cancelled",
   "timed_out",
   "rejected",
-] as const;
+] as const);
 
 export type TaskCellState = (typeof TASK_CELL_STATES)[number];
 
 /** D4 — terminal states are IMMUTABLE. A retry mints a new attempt; it never revives one of these. */
-export const TERMINAL_STATES = [
+export const TERMINAL_STATES = Object.freeze([
   "terminated",
   "failed",
   "cancelled",
   "timed_out",
   "rejected",
-] as const;
+] as const);
 
 export type TerminalState = (typeof TERMINAL_STATES)[number];
 
@@ -774,11 +774,11 @@ export interface HandoffValidationV1 {
 }
 
 /** Resolved decision 3 — the acceptance authorities, on a mandatory deterministic floor. */
-export const ACCEPTANCE_AUTHORITIES = [
+export const ACCEPTANCE_AUTHORITIES = Object.freeze([
   "deterministic_floor",
   "team_lead",
   "reviewer_cell",
-] as const;
+] as const);
 
 export type AcceptanceAuthority = (typeof ACCEPTANCE_AUTHORITIES)[number];
 

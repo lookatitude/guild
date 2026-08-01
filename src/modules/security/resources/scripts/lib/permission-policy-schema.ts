@@ -33,19 +33,19 @@
 // ---------------------------------------------------------------------------
 
 /** Host autonomy modes (host tool/edit/sandbox). Mirrors PermissionMode in host-capabilities-schema. */
-export const HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const;
+export const HOST_MODES = Object.freeze(["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const);
 export type HostMode = (typeof HOST_MODES)[number];
 
 /** Guild lifecycle-gate autonomy. */
-export const GUILD_GATES = ["ask", "auto-safe", "ask-on-block", "never-auto"] as const;
+export const GUILD_GATES = Object.freeze(["ask", "auto-safe", "ask-on-block", "never-auto"] as const);
 export type GuildGate = (typeof GUILD_GATES)[number];
 
 /** Lifecycle phases the policy is scoped over. */
-export const PHASES = ["init", "ideate", "plan", "build", "qa", "ops"] as const;
+export const PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"] as const);
 export type Phase = (typeof PHASES)[number];
 
 /** Guild gate TYPES — the kinds of gate `guild_gates` may (or may not) permit. */
-export const GATE_TYPES = ["plan", "qa", "release", "ops", "security", "destructive"] as const;
+export const GATE_TYPES = Object.freeze(["plan", "qa", "release", "ops", "security", "destructive"] as const);
 export type GateType = (typeof GATE_TYPES)[number];
 
 /**
@@ -56,7 +56,7 @@ export type GateType = (typeof GATE_TYPES)[number];
  * only value that actually honors a host bypass. (P1-L0 audit fix: was "honor", the
  * real value is "allow" — flagged by the security-auditor's independent verification.)
  */
-export const BYPASS_POLICIES = ["audit", "allow", "deny"] as const;
+export const BYPASS_POLICIES = Object.freeze(["audit", "allow", "deny"] as const);
 export type BypassPolicy = (typeof BYPASS_POLICIES)[number];
 
 // ---------------------------------------------------------------------------

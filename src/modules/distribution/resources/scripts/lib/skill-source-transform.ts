@@ -530,13 +530,13 @@ export function renderSkillToStaging(
 // ---------------------------------------------------------------------------
 
 /** The five invocation-driving skills with a committed SKILL.md (F-5: using-guild excluded). */
-export const WAVE2_SKILL_IDS = [
+export const WAVE2_SKILL_IDS = Object.freeze([
   "review-broker",
   "execute-plan",
   "systematic-debug",
   "tdd",
   "verify-done",
-] as const;
+] as const);
 
 interface CliArgs {
   registryPath: string;

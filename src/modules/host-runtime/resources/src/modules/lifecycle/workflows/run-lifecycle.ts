@@ -472,7 +472,7 @@ function flipRunStatus(env: RunLifecycleEnv, root: string, runId: string, status
 // appendPhase (and the T1 team-file builders) so a bad phase can never become a
 // phases_log entry or a `<slug>.<phase>.yaml` filename segment. Shared constant —
 // every lane that touches a phase token imports it (G-plan MAJOR-3 / §6.9).
-export const CANONICAL_PHASES = ["init", "ideate", "plan", "build", "qa", "ops"] as const;
+export const CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"] as const);
 export type CanonicalPhase = (typeof CANONICAL_PHASES)[number];
 
 /** True iff `p` is one of the six canonical lifecycle phases. */

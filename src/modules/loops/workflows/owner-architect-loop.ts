@@ -103,13 +103,13 @@ export const OWNER_ARCHITECT_CAP_MAX = 256 as const;
  * Closed set of finding severity levels (mirrors the security-review and
  * review-broker severity vocabulary).
  */
-export const FINDING_SEVERITIES = [
+export const FINDING_SEVERITIES = Object.freeze([
   "info",
   "low",
   "medium",
   "high",
   "critical",
-] as const;
+] as const);
 
 export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
 
@@ -119,11 +119,11 @@ export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
  * Possible escalation outcomes when the round cap is hit.
  * Mirrors the 09 §Loop control doc: "force-pass / extend-cap / rework".
  */
-export const ESCALATION_OUTCOMES = [
+export const ESCALATION_OUTCOMES = Object.freeze([
   "force-pass",
   "extend-cap",
   "rework",
-] as const;
+] as const);
 
 export type EscalationOutcome = (typeof ESCALATION_OUTCOMES)[number];
 

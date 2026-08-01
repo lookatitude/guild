@@ -317,7 +317,7 @@ export interface SmokeCase {
   expect: Intake;
 }
 
-export const INTAKE_SMOKE_FIXTURE: SmokeCase[] = [
+export const INTAKE_SMOKE_FIXTURE: readonly SmokeCase[] = Object.freeze([
   // ── PINNED canonical AC30 bare-idea positives (standalone trigger, no co-occurrence) ──
   { prompt: "I have an idea for X", expect: "product_loop" },
   { prompt: "I have an idea for a budgeting app", expect: "product_loop" },
@@ -352,13 +352,13 @@ export const INTAKE_SMOKE_FIXTURE: SmokeCase[] = [
   { prompt: "I would like to build a tool for debugging flaky tests", expect: "other" },
   // ↓ extra: covers cli / cron / daemon / refactor vetoes
   { prompt: "Refactor the CLI so the cron daemon reads its config from disk", expect: "other" },
-];
+]);
 
 /**
  * Run the inline smoke set; returns precision/recall + any mismatches. Used by
  * the smoke test and available for ad-hoc verification. Not the gating eval.
  */
-export function runIntakeSmoke(fixture: SmokeCase[] = INTAKE_SMOKE_FIXTURE): {
+export function runIntakeSmoke(fixture: readonly SmokeCase[] = INTAKE_SMOKE_FIXTURE): {
   precision: number;
   recall: number;
   mismatches: Array<{ prompt: string; expect: Intake; got: Intake }>;

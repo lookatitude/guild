@@ -15,7 +15,7 @@
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "e1dc9055c45f9caccb006b656f7ea6d0d4a60f6ea41d0705bf7a60016eb8eed2"
+      "sha256": "e3bbcdf9ee7fae64e7911c02fa1511835c367627669f5324be062d6de79b01df"
     },
     {
       "category": "scripts",
@@ -29,7 +29,7 @@
       "id": "lib/config-reconcile-contract",
       "source_path": "scripts/lib/config-reconcile-contract.ts",
       "resource_path": "resources/scripts/lib/config-reconcile-contract.ts",
-      "sha256": "ba89d4e00de764ddb6df3cf84c2f7d67232a620b6b67c69b81c280a797029d0e"
+      "sha256": "7d7abdaffd9a8ccde5417879629ccc7bf6674bce2e3f02d27e9d87c73bbcf177"
     },
     {
       "category": "scripts",

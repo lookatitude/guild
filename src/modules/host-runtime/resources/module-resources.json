@@ -8,7 +8,7 @@
       "id": "desktop-app-smoke",
       "source_path": "scripts/desktop-app-smoke.ts",
       "resource_path": "resources/scripts/desktop-app-smoke.ts",
-      "sha256": "6d7bf596ab79613a5919d5961152b705699d6aa5c8a849ca9eeab30f880db33d"
+      "sha256": "8e1869eeaecc5181ced330de21fc40b62317948dad7fd3513230ef139b001ccb"
     },
     {
       "category": "scripts",
@@ -176,7 +176,7 @@
       "id": "lib/host-public-state",
       "source_path": "scripts/lib/host-public-state.ts",
       "resource_path": "resources/scripts/lib/host-public-state.ts",
-      "sha256": "3c06bca97a31cca31bf1f7c39540fea5c82004a7d4074bab66dd539bbd938498"
+      "sha256": "e1c44f1d0219def8efbea766b2c4dbe1c85c9642d428526374e2d5717fb740db"
     },
     {
       "category": "scripts",
@@ -246,7 +246,7 @@
       "id": "lib/support-matrix",
       "source_path": "scripts/lib/support-matrix.ts",
       "resource_path": "resources/scripts/lib/support-matrix.ts",
-      "sha256": "23e9c8655a65cd6133b0cf0785ad5e15a7d4f66d6f9b8ca41bf0d1f043d802e7"
+      "sha256": "a94fb5307ce27a4d262d6688e559f0803e240ed6a98eabd65dae892d40d18245"
     },
     {
       "category": "scripts",
@@ -301,7 +301,7 @@
       "id": "projection:scripts/lib/permission-policy-schema.ts",
       "source_path": "scripts/lib/permission-policy-schema.ts",
       "resource_path": "resources/scripts/lib/permission-policy-schema.ts",
-      "sha256": "56917bbaae7ca2625e3d5949bd201c28f3a2d2e4c1e0568368b5a12a3b82836d",
+      "sha256": "70e63b922247708e708341553e9c87d949de7950345778c5c1fbf60cd3c1a9ff",
       "projection_dependency": true
     },
     {
@@ -365,7 +365,7 @@
       "id": "projection:src/modules/capability/workflows/role-model-schema.ts",
       "source_path": "src/modules/capability/workflows/role-model-schema.ts",
       "resource_path": "resources/src/modules/capability/workflows/role-model-schema.ts",
-      "sha256": "846402ef5e04362ac0bc568552c726459eed4a3c48fb2b82347b21aee65ce9a5",
+      "sha256": "d69cd1bf36a288ca207d96cc0073c922c53802f081e082afefe628f16192434e",
       "projection_dependency": true
     },
     {
@@ -413,7 +413,7 @@
       "id": "projection:src/modules/config/workflows/config-defaults.ts",
       "source_path": "src/modules/config/workflows/config-defaults.ts",
       "resource_path": "resources/src/modules/config/workflows/config-defaults.ts",
-      "sha256": "e92a5db1ca5b14528ae4f409a586556247a2b9827b74ce5da98af69da96c0f65",
+      "sha256": "f7486a8be99019a63235ff2da64db72811c5cf28e1f1ad4ba3a7cc3696d6ef8c",
       "projection_dependency": true
     },
     {
@@ -509,7 +509,7 @@
       "id": "projection:src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "source_path": "src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
-      "sha256": "92cb28d53275269d8a315162647d72bd42a545cc611f31455049896aa9127952",
+      "sha256": "a8873c00b8eccfda9d43d1f9b542bc2f7c4e6cdf5d17f54538b2b283146c6a18",
       "projection_dependency": true
     },
     {
@@ -645,7 +645,7 @@
       "id": "projection:src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
       "source_path": "src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
-      "sha256": "8a76600c9c7ae37dbb38342fbf779fed590b4fd7d5d72de9fd4e1dc5a45a5aed",
+      "sha256": "481815fae8af8f8ef89d534858be6bdf246f38b8f727b4ff039cd47015c99205",
       "projection_dependency": true
     },
     {
@@ -653,7 +653,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-adapter-boundary.ts",
       "source_path": "src/modules/host-runtime/workflows/host-adapter-boundary.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-adapter-boundary.ts",
-      "sha256": "7ebfbcedb50363115a7d82301897e4d1c6f912cc4d21e12358f64b05057c8ec2",
+      "sha256": "6a7eee26d040dad2c9c493513e501e11d227cc8367732f39a72be05edf32ff33",
       "projection_dependency": true
     },
     {
@@ -661,7 +661,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-adapter-contract.ts",
       "source_path": "src/modules/host-runtime/workflows/host-adapter-contract.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-adapter-contract.ts",
-      "sha256": "1380e9d7f0c51f0dc6989c9cd348e489ed55dcf521156f1f9328f90b78ce65c4",
+      "sha256": "2ef92d78b123f9274be99208a9bd74e594682bf56e7fb244a7604af842ad7f98",
       "projection_dependency": true
     },
     {
@@ -685,7 +685,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-capability-snapshot.ts",
       "source_path": "src/modules/host-runtime/workflows/host-capability-snapshot.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-capability-snapshot.ts",
-      "sha256": "31c7fb9ae927a36745853cb5cd4e57ef17cb060a4a97dfbfed5b0c4875e805b5",
+      "sha256": "1d2e0f6de7b5953aa809cccb8456b68a279b81a1f19f2eaee016f1c5e4ddb07a",
       "projection_dependency": true
     },
     {
@@ -717,7 +717,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-registry-schema.ts",
       "source_path": "src/modules/host-runtime/workflows/host-registry-schema.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-registry-schema.ts",
-      "sha256": "aa1b7b225d8ad66d0d08188cab7d1abddfff9880cfe52d1a18c3c3a6752fc4b0",
+      "sha256": "19a79c6c5d3b35bfe1f7399ac4278124e13d822bf3b04d7d7a816d31af0ac08e",
       "projection_dependency": true
     },
     {
@@ -765,7 +765,7 @@
       "id": "projection:src/modules/kernel/workflows/module-manifest.ts",
       "source_path": "src/modules/kernel/workflows/module-manifest.ts",
       "resource_path": "resources/src/modules/kernel/workflows/module-manifest.ts",
-      "sha256": "7c102e6c73028135def92f5fcc2a1c2ccda9b673e2d220f8dede19fdc0ed4c87",
+      "sha256": "402c930edd75d7f7e742d181ea72080da18fa6a420a44e41c8462e77b31d99f0",
       "projection_dependency": true
     },
     {
@@ -821,7 +821,7 @@
       "id": "projection:src/modules/knowledge/workflows/wiki-frontmatter-contract.ts",
       "source_path": "src/modules/knowledge/workflows/wiki-frontmatter-contract.ts",
       "resource_path": "resources/src/modules/knowledge/workflows/wiki-frontmatter-contract.ts",
-      "sha256": "9ab6a64514b1c208a0a0e753dfb300dd6462fa7e14a2c063f8322467fa660f97",
+      "sha256": "39a351b2e0d8160f616057352ee5ca22e3de81f040a17c9c8284def6eab519f0",
       "projection_dependency": true
     },
     {
@@ -885,7 +885,7 @@
       "id": "projection:src/modules/lifecycle/workflows/event-log-schema.ts",
       "source_path": "src/modules/lifecycle/workflows/event-log-schema.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/event-log-schema.ts",
-      "sha256": "673307a669d465892e7aa890d31808d17eeb11a0eda120306c7d66af5ae009c1",
+      "sha256": "8807d96baf75aa20a48d773da7fd7f5b0336a680f1196dd3c744ceb88af728a3",
       "projection_dependency": true
     },
     {
@@ -925,7 +925,7 @@
       "id": "projection:src/modules/lifecycle/workflows/neutral-conformance-core.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-conformance-core.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-conformance-core.ts",
-      "sha256": "a70f1e1bc7b131c9f8e9346b33e98fed1101d08c4fe304bdd221c496758bce2a",
+      "sha256": "96e0e0278d67375ed4d56cca463411817bd09a9266104ffdffd269f1bb87464c",
       "projection_dependency": true
     },
     {
@@ -933,7 +933,7 @@
       "id": "projection:src/modules/lifecycle/workflows/neutral-core-boundary.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-core-boundary.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-core-boundary.ts",
-      "sha256": "8bb680b5afea820469608f8af47872a1ebc651ee6bb3f9af6091765adb64c7d0",
+      "sha256": "f5cddd3068222beb66c706bd5f0b40f7e2c5454b602d242b0486fddb117ef0b0",
       "projection_dependency": true
     },
     {
@@ -949,7 +949,7 @@
       "id": "projection:src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts",
-      "sha256": "178fb1b3328debc8ac07a3b7e714e2c02254828f26b4f353470ac7a840816bde",
+      "sha256": "dee56c051c7a0ea0d97b7feae5dd777b144480856909235cec067504ca9945a8",
       "projection_dependency": true
     },
     {
@@ -957,7 +957,7 @@
       "id": "projection:src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
-      "sha256": "01b3783260cb6853364eb1ed41b70e814062f8e9b3ef39bf7a67843c097a5bd3",
+      "sha256": "41db7f98fb0c4022bbe2c3f38f7751d4e4b882275851708167547adcc0e4f358",
       "projection_dependency": true
     },
     {
@@ -981,7 +981,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "919b400b747f94156f716bb08aa257b1b52142ff981e444b56c6f36eaddc4a89",
+      "sha256": "da91fd20f1cc96a3ba1f6938148a87a1de972d2f0508cb35b714d8512af7e20f",
       "projection_dependency": true
     },
     {
@@ -989,7 +989,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-manifest-wiring.ts",
       "source_path": "src/modules/lifecycle/workflows/run-manifest-wiring.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-manifest-wiring.ts",
-      "sha256": "0cd06bb310395cf7c6df4a588d3ecf0b18a6d48779d793987e218d9bdda033dd",
+      "sha256": "237ff32a401795a1deaa29acba27184ff472021d67d6b6967b42ddc1f1047f98",
       "projection_dependency": true
     },
     {
@@ -1085,7 +1085,7 @@
       "id": "projection:src/modules/review/resources/scripts/lib/advisory-record.ts",
       "source_path": "src/modules/review/resources/scripts/lib/advisory-record.ts",
       "resource_path": "resources/src/modules/review/resources/scripts/lib/advisory-record.ts",
-      "sha256": "a8e0219a783684fe771f9673298bb29a7fefe4cbfb6686beb0d2231251aa4cca",
+      "sha256": "f8f5db946463285a634eee9105604790c1f8b075f27ab797a82f0daae3801688",
       "projection_dependency": true
     },
     {
@@ -1109,7 +1109,7 @@
       "id": "projection:src/modules/review/workflows/review-progress.ts",
       "source_path": "src/modules/review/workflows/review-progress.ts",
       "resource_path": "resources/src/modules/review/workflows/review-progress.ts",
-      "sha256": "9cba4078752739fa6698d3f021d959722bf074b6c7d98f73f98fdf2a4e91b483",
+      "sha256": "96e739c61664f9b5af72e182133bc607c2ff1ac8d66100decf630705a4d5fad7",
       "projection_dependency": true
     },
     {
@@ -1133,7 +1133,7 @@
       "id": "projection:src/modules/security/workflows/events.ts",
       "source_path": "src/modules/security/workflows/events.ts",
       "resource_path": "resources/src/modules/security/workflows/events.ts",
-      "sha256": "a03bfe0051461e1e8f1495e3b105b2f9157722a91b1fad9c9821ce1e9f747e3f",
+      "sha256": "d4c836f1a37637f4983d35968fabcbd22bf91ef11bdd9b9d37711fed7f6481c0",
       "projection_dependency": true
     },
     {
@@ -1149,7 +1149,7 @@
       "id": "projection:src/modules/security/workflows/redact-log.ts",
       "source_path": "src/modules/security/workflows/redact-log.ts",
       "resource_path": "resources/src/modules/security/workflows/redact-log.ts",
-      "sha256": "ad71acc73ec3362bab8dc2962e694901295aeb08f742f53020b69996a70aa4d2",
+      "sha256": "d39e0ac21eebf816668558130b6e714327404bb986c14aab9662e2cabae3b05b",
       "projection_dependency": true
     },
     {
@@ -1285,7 +1285,7 @@
       "id": "projection:src/modules/telemetry/workflows/debug-bundle.ts",
       "source_path": "src/modules/telemetry/workflows/debug-bundle.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/debug-bundle.ts",
-      "sha256": "2c18ac4179111a5a98a102ca1051fa0e40b231aab0b7a276f4ec3e2865cd28ab",
+      "sha256": "7ee259ec8d9233304bcbaee2a32f08b89a434804a7178c45c5f14525abd9a9d2",
       "projection_dependency": true
     },
     {
@@ -1301,7 +1301,7 @@
       "id": "projection:src/modules/telemetry/workflows/guild-trace-events.ts",
       "source_path": "src/modules/telemetry/workflows/guild-trace-events.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/guild-trace-events.ts",
-      "sha256": "3c1e01acd6d8f5e89ebd0ee8c15c26923e1fbb9ed3c4a1ed9aed68a0e5b9097b",
+      "sha256": "98587951b469ea1aaedf67f5885f6581545fce8719b21eba23b9df99812393f9",
       "projection_dependency": true
     },
     {
@@ -1309,7 +1309,7 @@
       "id": "projection:src/modules/telemetry/workflows/receipt-journal.ts",
       "source_path": "src/modules/telemetry/workflows/receipt-journal.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/receipt-journal.ts",
-      "sha256": "e2832b04cd24861177c261a34e652c065ea69948ee3ca5f02ea8049e5f692020",
+      "sha256": "d6282d9e147917affda8a892b35a212832e7da53039f468c9f3f4cae7c9d7170",
       "projection_dependency": true
     },
     {

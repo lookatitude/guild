@@ -43,7 +43,7 @@
  * adding a category is a schema-version bump, not an additive change, because the
  * coverage contract (SC-7a) iterates exactly these keys.
  */
-export const INVENTORY_CATEGORIES = [
+export const INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
   "agents",
@@ -52,7 +52,7 @@ export const INVENTORY_CATEGORIES = [
   "scripts",
   "schemas",
   "docs",
-] as const;
+] as const);
 
 export type InventoryCategory = (typeof INVENTORY_CATEGORIES)[number];
 

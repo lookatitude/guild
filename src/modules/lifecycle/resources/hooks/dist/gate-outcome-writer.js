@@ -3109,8 +3109,25 @@ function resolveGuildRoot(startCwd) {
 var path4 = __toESM(require("path"));
 
 // ../src/modules/config/workflows/config-defaults.ts
+var DEFAULT_ESCALATION_MARKERS = Object.freeze([
+  "I'm not sure",
+  "unclear",
+  "cannot determine",
+  "I don't know",
+  "ambiguous",
+  "uncertain",
+  "not enough information"
+]);
 var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
+var CAPABILITY_RESOLVER_MODES = Object.freeze([
+  "legacy",
+  "observe",
+  "shadow",
+  "project-local",
+  "strict"
+]);
+var CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS = {
@@ -3118,6 +3135,8 @@ var UPDATE_COMMANDS = {
   self_update: "guild-run update",
   reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
 };
+var INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+var INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
 var CLAUDE_CAPABILITIES = {
   schema_version: "guild.host_capabilities.v1",
   host_kind: "claude",
@@ -3138,6 +3157,20 @@ var CLAUDE_CAPABILITIES = {
   commands: { slash_commands: true, command_files: "markdown" },
   skills: { native_skills: true, skill_dir: ".claude/skills" },
   agents: { native_agents: true, agent_format: "claude-md" },
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "target",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: {
     // All ten events are bound in the live hooks/hooks.json (verified).
     session_start: true,
@@ -3249,6 +3282,20 @@ var CODEX_CAPABILITIES = {
   // Verified (per-host-packaging).
   agents: { native_agents: false, agent_format: null },
   // Verified (per-host-packaging flags agents unsupported).
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: {
     // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
     // Claude-equivalent hooks" claim was empirically false. Codex accepts a
@@ -3383,6 +3430,19 @@ var AGENTS_FILE_CAPABILITIES = {
   commands: { slash_commands: false, command_files: "none" },
   skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
   agents: { native_agents: false, agent_format: null },
+  injection: {
+    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+    definition_injection: false,
+    definition_injection_support: "absent",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "absent",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "none",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: NO_HOOKS,
   permissions: {
     deny: false,
@@ -3431,9 +3491,21 @@ var AGENTS_FILE_CAPABILITIES = {
     powerful: { model: null }
   }
 };
+var REQUIRED_HOOK_EVENTS = Object.freeze([
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+  "post_tool_use",
+  "stop",
+  "pre_compact",
+  "subagent_stop",
+  "task_created",
+  "task_completed",
+  "teammate_idle"
+]);
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
-var HOST_IDS = [
+var HOST_IDS = Object.freeze([
   // keep CLI/file (5)
   "claude-code-cli",
   "codex-cli",
@@ -3455,8 +3527,8 @@ var HOST_IDS = [
   "kiro",
   "qoder",
   "trae"
-];
-var HOST_FAMILIES = [
+]);
+var HOST_FAMILIES = Object.freeze([
   "claude",
   "codex",
   "agents",
@@ -3466,15 +3538,15 @@ var HOST_FAMILIES = [
   "copilot",
   "opencode",
   "rovo"
-];
-var AUTH_PROBES = [
+]);
+var AUTH_PROBES = Object.freeze([
   "codex_stored_or_env",
   "none",
   "cursor_stored",
   "gh_auth",
   "opencode_stored_or_env",
   "acli_stored"
-];
+]);
 var CLAUDE_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-cli",
@@ -3505,7 +3577,7 @@ var CODEX_ENTRY = {
   provenance: "verified"
   // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
 };
-function inferredCaps(host_kind, family, surface_kind = "cli") {
+function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
     host_kind,
@@ -3532,6 +3604,38 @@ function inferredCaps(host_kind, family, surface_kind = "cli") {
     commands: { slash_commands: false, command_files: "none" },
     skills: { native_skills: false, skill_dir: null },
     agents: { native_agents: false, agent_format: null },
+    // cap-loc-D11 — injection facts derived STRUCTURALLY from the surface kind.
+    // A `cli` surface has somewhere to dispatch a lane, so injection is an
+    // unproven TARGET. An `app` or `file` surface has no pane to dispatch into
+    // (see the AGENTS_FILE / kiro / qoder / trae rows: `dispatch_selectable:
+    // false`), so there is nothing to inject INTO — `absent`, and nothing to
+    // degrade to either. That is a structural fact, not pessimism.
+    //
+    // NO ROW STARTS `verified`: injection is unbuilt, so no probe of it has ever
+    // run on any host. A row flips only on a real probe receipt (E3 / cap-loc-D12).
+    injection: dispatch_selectable ? {
+      definition_injection: false,
+      definition_injection_support: "target",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "target",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "prompt_text",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    } : {
+      definition_injection: false,
+      definition_injection_support: "absent",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "absent",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "none",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    },
     hooks: {
       session_start: false,
       user_prompt_submit: false,
@@ -3920,8 +4024,8 @@ function normalizeHostId(value) {
 }
 
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
-var RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
-var ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"];
+var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
+var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
 var RUNG_SET = new Set(RUNGS);
 var SURFACE_SET = new Set(ADAPTER_SURFACES);
 
@@ -3974,11 +4078,25 @@ var PROVIDER_REGISTRY = [
   { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
 ];
 
+// ../src/modules/host-runtime/workflows/host-adapter-contract.ts
+var HOST_ADAPTER_OPERATIONS = Object.freeze([
+  "capabilities",
+  "bootstrap",
+  "preflight",
+  "dispatch",
+  "collect",
+  "renderCommandSurface",
+  "renderPackage",
+  "renderPermissionDecision",
+  "resolveModelParams",
+  "memory"
+]);
+
 // ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
 var import_node_crypto = require("node:crypto");
 var HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
 var HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
-var HOST_CAPABILITY_IDS = [
+var HOST_CAPABILITY_IDS = Object.freeze([
   "host.artifacts.direct_filesystem",
   "host.artifacts.file_bus",
   "host.bootstrap.context_injection",
@@ -4009,7 +4127,7 @@ var HOST_CAPABILITY_IDS = [
   "host.result_adapter",
   "host.sessions.resume_by_id",
   "host.structured_output.native_json"
-];
+]);
 var CAPABILITY_READERS = {
   "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
   "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
@@ -4360,19 +4478,19 @@ var HOST_ADAPTER_REASON_CODES = Object.freeze([
   "execution_failed",
   "unknown_event"
 ]);
-var HOST_ADAPTER_OWNED_CONCERNS = [
+var HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
   "host_identity_resolution",
   "host_entry_point_binding",
   "host_capability_snapshot",
   "host_native_event_normalization"
-];
-var HOST_ADAPTER_NOT_OWNED_CONCERNS = [
+]);
+var HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
   "lifecycle_state",
   "gate_policy",
   "artifact_semantics",
   "document_rendering",
   "transport_execution"
-];
+]);
 var CONCERN_OWNERS = Object.freeze({
   host_identity_resolution: "host-adapters",
   host_entry_point_binding: "host-adapters",
@@ -4424,6 +4542,34 @@ var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
 
 // ../src/modules/security/workflows/redact-log.ts
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
+  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
+  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
+  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
+  /\bghp_[A-Za-z0-9]{36}\b/g,
+  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
+  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
+  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+]);
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
+
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
 
 // ../src/modules/kernel/workflows/yaml-loader.ts
 var path2 = __toESM(require("node:path"));
@@ -4739,7 +4885,7 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
 }
 
 // ../src/modules/security/workflows/events.ts
-var KNOWN_GUILD_HOST_KINDS = [
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -4749,7 +4895,7 @@ var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-web",
   "codex-app",
   "claude-ai-connector"
-];
+]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 
 // ../src/modules/config/workflows/settings-reader.ts
@@ -4759,6 +4905,74 @@ var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
 var DISPATCH_HOST_IDS = new Set(
   HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
 );
+
+// ../src/modules/telemetry/workflows/guild-trace-events.ts
+var GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
+  "guild.trace.dispatch.v1",
+  "guild.trace.recall.v1",
+  "guild.trace.recall_decision.v1",
+  "guild.trace.config_resolution.v1",
+  "guild.trace.security_decision.v1",
+  "guild.trace.degradation.v1"
+]);
+
+// ../src/modules/telemetry/workflows/receipt-journal.ts
+var RECEIPT_DISPOSITIONS = Object.freeze([
+  "succeeded",
+  "refused",
+  "unsupported",
+  "failed",
+  "degraded"
+]);
+var OBSERVATION_STATES = Object.freeze([
+  "checked_clean",
+  "not_applicable",
+  "not_observed",
+  "observation_failed"
+]);
+var RECEIPT_EVENT_NAMES = Object.freeze([
+  "session.start",
+  "prompt.submit",
+  "tool.before",
+  "tool.after",
+  "context.compact",
+  "task.dispatch",
+  "task.collect",
+  "run.resume",
+  "run.stop",
+  "package.render",
+  "package.install",
+  "package.activate",
+  "package.update",
+  "runtime.verify",
+  "receipt.append",
+  "receipt.reconcile",
+  "migration.shadow",
+  "migration.cutover",
+  "migration.rollback"
+]);
+var RECEIPT_OUTCOME_TYPES = Object.freeze([
+  "guild.lifecycle_outcome.v1",
+  "guild.normalized_event_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.capability_outcome.v1",
+  "guild.policy_outcome.v1",
+  "guild.receipt_outcome.v1",
+  "guild.reconciliation_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.version_compatibility_outcome.v1"
+]);
+
+// ../src/modules/telemetry/workflows/debug-bundle.ts
+var DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
+  "capability_snapshot",
+  "normalized_event",
+  "policy_decision",
+  "transport_attempt",
+  "artifact",
+  "conformance"
+]);
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 function runDir(root, runId) {
@@ -4775,6 +4989,7 @@ function yamlScalar(v) {
   if (/^[^\s#:][^#]*$/.test(v) && !v.includes(": ") && !/[:#]$/.test(v)) return v;
   return JSON.stringify(v);
 }
+var CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
 var GATE_TOKEN = /^[a-z][a-z0-9-]{0,63}$/;
 function writeGateBlock(raw, gate, rec) {
   const lines = raw.split("\n");

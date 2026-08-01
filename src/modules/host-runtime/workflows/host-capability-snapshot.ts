@@ -84,7 +84,7 @@ export const HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_sna
  * consumer read "absent" as "fine", which is the exact confusion BR-07 forbids.
  * Every id maps to a pure reader over the frozen registry row below.
  */
-export const HOST_CAPABILITY_IDS = [
+export const HOST_CAPABILITY_IDS = Object.freeze([
   "host.artifacts.direct_filesystem",
   "host.artifacts.file_bus",
   "host.bootstrap.context_injection",
@@ -115,7 +115,7 @@ export const HOST_CAPABILITY_IDS = [
   "host.result_adapter",
   "host.sessions.resume_by_id",
   "host.structured_output.native_json",
-] as const;
+] as const);
 
 export type HostCapabilityId = (typeof HOST_CAPABILITY_IDS)[number];
 

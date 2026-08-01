@@ -78,6 +78,16 @@ function emitClaudeHookEvent(raw) {
 var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
 
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
 // ../src/modules/state/workflows/guild-root.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
@@ -472,7 +482,7 @@ var KV_REDACTED = "[REDACTED]";
 var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
 var TRUNCATION_SUFFIX = "... [TRUNCATED]";
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = [
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
   /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
   /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
   /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
@@ -482,7 +492,7 @@ var TOKEN_SHAPE_PATTERNS = [
   /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
-];
+]);
 function redactTokenShapes(input) {
   let out = input;
   for (const re of TOKEN_SHAPE_PATTERNS) {
@@ -490,6 +500,13 @@ function redactTokenShapes(input) {
   }
   return out;
 }
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
 var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
 function redactHomeDirPaths(input) {
   return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
@@ -626,7 +643,7 @@ function resolveTelemetryField(scrub, policy) {
 var fs5 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
-var KNOWN_GUILD_HOST_KINDS = [
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -636,7 +653,7 @@ var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-web",
   "codex-app",
   "claude-ai-connector"
-];
+]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 var LEGACY_HOST_ALIASES = {
   claude: "claude-code-cli",

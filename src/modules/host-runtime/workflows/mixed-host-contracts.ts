@@ -148,7 +148,7 @@ export interface TmuxTeam {
  * Note: "errored" is a `guild.agent_bus_event.v1` event kind, NOT a run-state
  * status — it is not included here (dispatch-execution.md §6).
  */
-export const LANE_STATUS_VALUES = [
+export const LANE_STATUS_VALUES = Object.freeze([
   /** Lane has been dispatched but has not yet started executing. */
   "pending",
   /** Lane is actively executing (heartbeat / tool calls in flight). */
@@ -161,7 +161,7 @@ export const LANE_STATUS_VALUES = [
   "dead",
   /** Lane was skipped (upstream dependency failed or user-overridden). */
   "skipped",
-] as const;
+] as const);
 
 export type LaneStatusValue = (typeof LANE_STATUS_VALUES)[number];
 

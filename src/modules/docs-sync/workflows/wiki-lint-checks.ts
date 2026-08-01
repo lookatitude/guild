@@ -63,10 +63,10 @@ interface Finding {
 // check is INERT until that block exists — so a repo that has not opted into the
 // taxonomy gets zero new findings. The canonical 9-value `concern` enum is the
 // default scaffold below; `domain` + `status` sets are repo-authored.
-export const DEFAULT_CONCERN_ENUM = [
+export const DEFAULT_CONCERN_ENUM = Object.freeze([
   "architecture", "security", "performance", "reliability", "data",
   "api", "ux", "build", "ops",
-] as const;
+] as const);
 
 export interface LabelTaxonomy {
   domain: Set<string>;

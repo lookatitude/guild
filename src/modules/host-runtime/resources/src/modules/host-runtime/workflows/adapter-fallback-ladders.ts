@@ -20,11 +20,11 @@ import { HOST_IDS, type HostId } from "./host-registry-schema";
 // ---------------------------------------------------------------------------
 
 /** The minimum-loss ladder, strongest -> weakest. Lower index = less loss. */
-export const RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"] as const;
+export const RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"] as const);
 export type Rung = (typeof RUNGS)[number];
 
 /** The four adapter surfaces P1 fills. */
-export const ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"] as const;
+export const ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"] as const);
 export type AdapterSurface = (typeof ADAPTER_SURFACES)[number];
 
 /** Loss rank for a rung (0 = native/no-loss ... 4 = degraded/total-loss). */

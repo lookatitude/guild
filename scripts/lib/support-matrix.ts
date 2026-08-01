@@ -33,23 +33,23 @@ import {
 
 export const SUPPORT_MATRIX_SCHEMA = "guild.support_matrix.v1";
 
-export const SUPPORT_STATES = [
+export const SUPPORT_STATES = Object.freeze([
   "verified",
   "degraded",
   "unavailable",
   "enqueue_only",
   "manual_instruction",
-] as const;
+] as const);
 export type SupportState = (typeof SUPPORT_STATES)[number];
 
-export const FORBIDDEN_FINAL_STATES = [
+export const FORBIDDEN_FINAL_STATES = Object.freeze([
   "contract-only",
   "target",
   "detect-only",
   "deferred",
-] as const;
+] as const);
 
-export const MATRIX_OPERATIONS = [
+export const MATRIX_OPERATIONS = Object.freeze([
   "capability",
   "command_surface",
   "permission_decision",
@@ -60,10 +60,10 @@ export const MATRIX_OPERATIONS = [
   "hook_normalization",
   "review_progress",
   "install_or_app_refusal",
-] as const;
+] as const);
 export type MatrixOperation = (typeof MATRIX_OPERATIONS)[number];
 
-export const LIFECYCLE_PHASES = [
+export const LIFECYCLE_PHASES = Object.freeze([
   "idea",
   "research",
   "brainstorm",
@@ -73,7 +73,7 @@ export const LIFECYCLE_PHASES = [
   "qa",
   "review",
   "ops",
-] as const;
+] as const);
 export type LifecyclePhase = (typeof LIFECYCLE_PHASES)[number];
 
 export interface SupportCell {

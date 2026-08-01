@@ -73,33 +73,33 @@ export const NEUTRAL_CONTRACT_VERSION = 1;
 // ---------------------------------------------------------------------------
 
 /** The six canonical lifecycle phases. */
-export const NEUTRAL_LIFECYCLE_PHASES = ["init", "ideate", "plan", "build", "qa", "ops"] as const;
+export const NEUTRAL_LIFECYCLE_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"] as const);
 export type NeutralLifecyclePhase = (typeof NEUTRAL_LIFECYCLE_PHASES)[number];
 
 /** Terminal dispositions. Exactly one per typed outcome. */
-export const NEUTRAL_DISPOSITIONS = [
+export const NEUTRAL_DISPOSITIONS = Object.freeze([
   "succeeded",
   "refused",
   "unsupported",
   "failed",
   "degraded",
-] as const;
+] as const);
 export type NeutralDisposition = (typeof NEUTRAL_DISPOSITIONS)[number];
 
 /**
  * Observation states. BR-07: an absent or untrustworthy observation MUST NOT be
  * read as success, cleanliness, support, or conformance.
  */
-export const NEUTRAL_OBSERVATION_STATES = [
+export const NEUTRAL_OBSERVATION_STATES = Object.freeze([
   "checked_clean",
   "not_applicable",
   "not_observed",
   "observation_failed",
-] as const;
+] as const);
 export type NeutralObservationState = (typeof NEUTRAL_OBSERVATION_STATES)[number];
 
 /** The ten typed outcome envelopes. */
-export const NEUTRAL_OUTCOME_TYPES = [
+export const NEUTRAL_OUTCOME_TYPES = Object.freeze([
   "guild.lifecycle_outcome.v1",
   "guild.normalized_event_outcome.v1",
   "guild.support_transition_outcome.v1",
@@ -110,7 +110,7 @@ export const NEUTRAL_OUTCOME_TYPES = [
   "guild.boundary_outcome.v1",
   "guild.migration_outcome.v1",
   "guild.version_compatibility_outcome.v1",
-] as const;
+] as const);
 export type NeutralOutcomeType = (typeof NEUTRAL_OUTCOME_TYPES)[number];
 
 /**
@@ -120,7 +120,7 @@ export type NeutralOutcomeType = (typeof NEUTRAL_OUTCOME_TYPES)[number];
  * vocabulary is core-owned — their DURABILITY, ordering, and reconciliation
  * semantics belong to W1/MH-06 and are not implemented by this core.
  */
-export const NEUTRAL_EVENT_NAMES = [
+export const NEUTRAL_EVENT_NAMES = Object.freeze([
   "session.start",
   "prompt.submit",
   "tool.before",
@@ -140,31 +140,31 @@ export const NEUTRAL_EVENT_NAMES = [
   "migration.shadow",
   "migration.cutover",
   "migration.rollback",
-] as const;
+] as const);
 export type NeutralEventName = (typeof NEUTRAL_EVENT_NAMES)[number];
 
 /** The six orthogonal support-evidence dimensions. Never collapse them. */
-export const NEUTRAL_SUPPORT_STATES = [
+export const NEUTRAL_SUPPORT_STATES = Object.freeze([
   "recognized",
   "rendered",
   "installed",
   "activated",
   "updated",
   "conformant",
-] as const;
+] as const);
 export type NeutralSupportState = (typeof NEUTRAL_SUPPORT_STATES)[number];
 
 /** Per-dimension status. `not_evaluated` is not a soft `satisfied`. */
-export const NEUTRAL_SUPPORT_STATUS_VALUES = [
+export const NEUTRAL_SUPPORT_STATUS_VALUES = Object.freeze([
   "not_evaluated",
   "unsupported",
   "failed",
   "satisfied",
-] as const;
+] as const);
 export type NeutralSupportStatus = (typeof NEUTRAL_SUPPORT_STATUS_VALUES)[number];
 
 /** Conformance scenario categories. */
-export const NEUTRAL_SCENARIO_CATEGORIES = [
+export const NEUTRAL_SCENARIO_CATEGORIES = Object.freeze([
   "lifecycle",
   "normalized_event",
   "support_state",
@@ -173,7 +173,7 @@ export const NEUTRAL_SCENARIO_CATEGORIES = [
   "module_boundary",
   "strangler_migration",
   "version_drift",
-] as const;
+] as const);
 export type NeutralScenarioCategory = (typeof NEUTRAL_SCENARIO_CATEGORIES)[number];
 
 /**
@@ -182,7 +182,7 @@ export type NeutralScenarioCategory = (typeof NEUTRAL_SCENARIO_CATEGORIES)[numbe
  * no) from FAILED (it was tried and could not be trusted). There is deliberately
  * no undifferentiated `supported` / `ok` code.
  */
-export const NEUTRAL_REASON_CODES = [
+export const NEUTRAL_REASON_CODES = Object.freeze([
   // lifecycle + gate
   "gate_unsatisfied",
   "unknown_event",
@@ -288,7 +288,7 @@ export const NEUTRAL_REASON_CODES = [
   // ALIAS is any later use of a value that flowed from one.
   "boundary_capability_reach",
   "boundary_capability_alias",
-] as const;
+] as const);
 export type NeutralReasonCode = (typeof NEUTRAL_REASON_CODES)[number];
 
 // ---------------------------------------------------------------------------
@@ -668,11 +668,11 @@ export function neutralOutcome(input: NeutralOutcomeInput): NeutralOutcome {
 // ---------------------------------------------------------------------------
 
 /** How a superseded (v1) event name relates to the normative (v2) vocabulary. */
-export const NEUTRAL_EVENT_COMPATIBILITY_KINDS = [
+export const NEUTRAL_EVENT_COMPATIBILITY_KINDS = Object.freeze([
   "unchanged",
   "renamed",
   "ambiguous_split",
-] as const;
+] as const);
 export type NeutralEventCompatibilityKind = (typeof NEUTRAL_EVENT_COMPATIBILITY_KINDS)[number];
 
 export interface NeutralEventCompatibilityRule {
@@ -689,7 +689,7 @@ export interface NeutralEventCompatibilityRule {
  * function: `task.transition` has two normative images and therefore NO lossless
  * mapping, which is recorded as `ambiguous_split` rather than resolved by guess.
  */
-export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibilityRule[] = [
+export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibilityRule[] = Object.freeze([
   { from: "session.start", to: "session.start", kind: "unchanged", candidates: [] },
   { from: "prompt.submit", to: "prompt.submit", kind: "unchanged", candidates: [] },
   { from: "context.compact", to: "context.compact", kind: "unchanged", candidates: [] },
@@ -703,10 +703,10 @@ export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibili
     kind: "ambiguous_split",
     candidates: ["task.dispatch", "task.collect"],
   },
-];
+]);
 
 /** The superseded 8-name list, exactly as `guild.normalized_event.v1` declared it. */
-export const NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = [
+export const NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = Object.freeze([
   "session.start",
   "session.resume",
   "prompt.submit",
@@ -715,19 +715,19 @@ export const NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = [
   "context.compact",
   "task.transition",
   "session.stop",
-] as const;
+] as const);
 
 /**
  * v2 names with NO v1 preimage at all. A name reachable only as an ambiguous
  * `candidate` (`task.dispatch`, `task.collect`) is deliberately NOT counted as
  * introduced: it has a v1 preimage, just not an invertible one.
  */
-export const NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2: readonly string[] = NEUTRAL_EVENT_NAMES.filter(
+export const NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2: readonly string[] = Object.freeze(NEUTRAL_EVENT_NAMES.filter(
   (name) =>
     !NEUTRAL_EVENT_COMPATIBILITY_RULES.some(
       (rule) => rule.to === name || rule.candidates.indexOf(name) !== -1
     )
-);
+));
 
 /**
  * The shared normative block. This object is mirrored BYTE-FOR-BYTE by the

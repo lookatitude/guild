@@ -51,7 +51,7 @@ export const STRUCTURAL_EDGE_TYPES = new Set([
 ]);
 
 /** Ordered key list of the 25-feature structural profile (goals.md §2.1). */
-export const STRUCTURAL_PROFILE_KEYS = [
+export const STRUCTURAL_PROFILE_KEYS = Object.freeze([
   // size (3)
   "loc", "sloc", "comment_lines",
   // control flow (12)
@@ -66,7 +66,7 @@ export const STRUCTURAL_PROFILE_KEYS = [
   "param_count", "call_count", "assignment_count", "decl_count",
   // aggregate + Halstead-lite (3)
   "branch_count", "distinct_identifiers", "token_count",
-] as const;
+] as const);
 
 export type StructuralProfile = Record<(typeof STRUCTURAL_PROFILE_KEYS)[number], number>;
 

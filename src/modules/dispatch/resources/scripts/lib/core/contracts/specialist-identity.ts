@@ -64,7 +64,7 @@ export const SPECIALIST_PROFILE_SCHEMA = "guild.specialist_profile.v1" as const;
  * SAME three-value union, re-declared as neither owns the other; the compile-time
  * assertion below fails if they ever drift apart.
  */
-export const MODEL_TIERS = ["cheap", "mid", "powerful"] as const;
+export const MODEL_TIERS = Object.freeze(["cheap", "mid", "powerful"] as const);
 type _ModelTierEqA = ModelTier extends (typeof MODEL_TIERS)[number] ? true : never;
 type _ModelTierEqB = (typeof MODEL_TIERS)[number] extends ModelTier ? true : never;
 type _TierEqA = Tier extends ModelTier ? true : never;

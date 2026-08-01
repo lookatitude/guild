@@ -17,7 +17,7 @@
 export const LEARNING_CANDIDATE_SCHEMA = "guild.learning_candidate.v1";
 
 /** Closed 7-value candidate type. */
-export const LEARNING_CANDIDATE_TYPES = [
+export const LEARNING_CANDIDATE_TYPES = Object.freeze([
   "fact",
   "decision",
   "assumption",
@@ -25,7 +25,7 @@ export const LEARNING_CANDIDATE_TYPES = [
   "standard",
   "skill_improvement",
   "eval_fixture",
-] as const;
+] as const);
 export type LearningCandidateType = (typeof LEARNING_CANDIDATE_TYPES)[number];
 
 export type Confidence = "high" | "medium" | "low";

@@ -92,22 +92,22 @@ export const PROJECT_CAPABILITY_PROFILE_SCHEMA = "guild.project_capability_profi
 export const DEFAULT_SUGGESTION_BUDGET = 4;
 
 /** The five resolver modes (S5 / decision cap-loc-D04). Recorded, never inferred. */
-export const RESOLVER_MODES = ["legacy", "observe", "shadow", "project-local", "strict"] as const;
+export const RESOLVER_MODES = Object.freeze(["legacy", "observe", "shadow", "project-local", "strict"] as const);
 export type ResolverMode = (typeof RESOLVER_MODES)[number];
 const RESOLVER_MODE_SET: ReadonlySet<string> = new Set<string>(RESOLVER_MODES);
 
 /** Confidence grades. Closed. */
-export const CONFIDENCE_GRADES = ["high", "medium", "low"] as const;
+export const CONFIDENCE_GRADES = Object.freeze(["high", "medium", "low"] as const);
 export type Confidence = (typeof CONFIDENCE_GRADES)[number];
 const CONFIDENCE_SET: ReadonlySet<string> = new Set<string>(CONFIDENCE_GRADES);
 
 /** What a human is being asked to do with a candidate. Closed. */
-export const CANDIDATE_ACTIONS = ["propose", "observe", "defer"] as const;
+export const CANDIDATE_ACTIONS = Object.freeze(["propose", "observe", "defer"] as const);
 export type CandidateAction = (typeof CANDIDATE_ACTIONS)[number];
 const CANDIDATE_ACTION_SET: ReadonlySet<string> = new Set<string>(CANDIDATE_ACTIONS);
 
 /** A candidate is an agent or a skill. Nothing else. */
-export const CANDIDATE_KINDS = ["agent", "skill"] as const;
+export const CANDIDATE_KINDS = Object.freeze(["agent", "skill"] as const);
 export type CandidateKind = (typeof CANDIDATE_KINDS)[number];
 const CANDIDATE_KIND_SET: ReadonlySet<string> = new Set<string>(CANDIDATE_KINDS);
 
@@ -118,18 +118,18 @@ const CANDIDATE_KIND_SET: ReadonlySet<string> = new Set<string>(CANDIDATE_KINDS)
  * is load-bearing: a `MethodFact`'s `occurrence_count` is a claim about how often
  * something happened, so it must cite history and not code (A1.11).
  */
-export const EVIDENCE_SOURCES = [
+export const EVIDENCE_SOURCES = Object.freeze([
   "codebase_map",
   "knowledge_graph",
   "run",
   "reflection",
   "roster",
-] as const;
+] as const);
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
 const EVIDENCE_SOURCE_SET: ReadonlySet<string> = new Set<string>(EVIDENCE_SOURCES);
 
 /** The subset of sources that may back a `MethodFact.occurrence_count` (A1.11). */
-export const HISTORICAL_EVIDENCE_SOURCES = ["run", "reflection"] as const;
+export const HISTORICAL_EVIDENCE_SOURCES = Object.freeze(["run", "reflection"] as const);
 const HISTORICAL_SOURCE_SET: ReadonlySet<string> = new Set<string>(HISTORICAL_EVIDENCE_SOURCES);
 
 // ── Shapes ───────────────────────────────────────────────────────────────────

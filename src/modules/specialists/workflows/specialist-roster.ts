@@ -13,9 +13,9 @@
  * canonical enumeration consumers use at runtime is scripts/lib/roster.ts.
  */
 
-export const MACHINERY_AGENT_IDS = ["advisor", "developer"] as const;
+export const MACHINERY_AGENT_IDS = Object.freeze(["advisor", "developer"] as const);
 
-export const SPECIALIST_TEMPLATE_IDS = [
+export const SPECIALIST_TEMPLATE_IDS = Object.freeze([
   "architect",
   "backend",
   "copywriter",
@@ -31,9 +31,9 @@ export const SPECIALIST_TEMPLATE_IDS = [
   "seo",
   "social-media",
   "technical-writer",
-] as const;
+] as const);
 
-export const SPECIALIST_SKILL_PREFIXES = [
+export const SPECIALIST_SKILL_PREFIXES = Object.freeze([
   "architect-",
   "backend-",
   "copywriter-",
@@ -49,7 +49,7 @@ export const SPECIALIST_SKILL_PREFIXES = [
   "seo-",
   "social-media-",
   "technical-writer-",
-] as const;
+] as const);
 
 export type MachineryAgentId = (typeof MACHINERY_AGENT_IDS)[number];
 export type SpecialistTemplateId = (typeof SPECIALIST_TEMPLATE_IDS)[number];

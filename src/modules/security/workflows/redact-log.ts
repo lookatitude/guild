@@ -64,7 +64,26 @@ export const FIELD_SIZE_CAP_BYTES = 4 * 1024; // 4 KiB
  * list. The schema doc §"Redaction policy" #1 names the prefix list
  * (sk-, eyJ, Bearer, ghp_, etc.) — this is the canonical implementation.
  */
-export const TOKEN_SHAPE_PATTERNS: readonly RegExp[] = [
+/**
+ * ARRAY-FROZEN, ELEMENTS DELIBERATELY NOT FROZEN — the one justified exception in the
+ * registry-freeze sweep (#18).
+ *
+ * Freezing the ARRAY closes the hole that matters: no caller can add a pattern (to make
+ * the redactor match something it shouldn't) or remove one (to make a real secret pass
+ * through unredacted).
+ *
+ * Deep-freezing the ELEMENTS would BREAK REDACTION. Every pattern here carries the `g`
+ * flag, and `.exec()`/`.test()` on a global RegExp WRITE `lastIndex` as they scan. On a
+ * frozen RegExp that write throws `TypeError: Cannot assign to read only property
+ * 'lastIndex'` in strict mode — verified, not assumed — so a deep freeze would turn the
+ * secrets redactor from "scrubs the log" into "throws on the first line".
+ *
+ * This is why the freeze rail reports object-element registries as their own population
+ * rather than folding them into a single count: a green "array frozen" over mutable
+ * elements is a half-truth, and the honest answer here is "array closed, elements must
+ * stay mutable, and here is the reason".
+ */
+export const TOKEN_SHAPE_PATTERNS: readonly RegExp[] = Object.freeze([
   /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
   /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
   /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
@@ -74,7 +93,7 @@ export const TOKEN_SHAPE_PATTERNS: readonly RegExp[] = [
   /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
-] as const;
+] as const);
 
 /** Apply group 1 — token-shape redaction. */
 export function redactTokenShapes(input: string): string {
@@ -98,13 +117,13 @@ export function redactTokenShapes(input: string): string {
  * Sensitive directory names matched as path components. The leading dot
  * is mandatory; e.g., `.claude` matches but `claude` does not.
  */
-export const SENSITIVE_HOME_DIRS = [
+export const SENSITIVE_HOME_DIRS = Object.freeze([
   ".claude",
   ".codex",
   ".ssh",
   ".aws",
   ".gnupg",
-] as const;
+] as const);
 
 /**
  * Home-dir match regex. Captures:

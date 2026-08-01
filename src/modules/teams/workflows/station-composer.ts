@@ -57,7 +57,7 @@ import { type RosterAgentEntry, type RosterResolution } from "../../specialists"
  * strict superset of any 8-station reading — no station is left uncomposable); the
  * exact station enumeration is flagged for the lead to pin in G6b.
  */
-export const STATIONS = [
+export const STATIONS = Object.freeze([
   "init",
   "ideate",
   "plan",
@@ -67,7 +67,7 @@ export const STATIONS = [
   "research",
   "definition",
   "learn",
-] as const;
+] as const);
 
 export type StationId = (typeof STATIONS)[number];
 

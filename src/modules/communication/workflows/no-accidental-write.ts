@@ -86,14 +86,14 @@ export type ProtectedSurface =
  * A settings.json in the diff that contains NONE of these keys has drifted;
  * a partial config with at least one is accepted (users may omit optional keys).
  */
-export const SETTINGS_JSON_REQUIRED_KEYS: readonly string[] = [
+export const SETTINGS_JSON_REQUIRED_KEYS: readonly string[] = Object.freeze([
   "rigor",
   "auto_approve",
   "review",
   "host",
   "agent_mode",
   "defaults",
-];
+]);
 
 /**
  * The full known top-level settings.json key-set (mirrors read-guild-config.ts TIER1).
@@ -115,40 +115,40 @@ export const SETTINGS_JSON_KNOWN_KEYS: ReadonlySet<string> = new Set([
  * Required keys in .guild/workspace.json (category 4 — machine-only state, JSON).
  * schema_version = "guild.workspace.v1" is the canonical discriminator.
  */
-export const WORKSPACE_JSON_REQUIRED_KEYS: readonly string[] = [
+export const WORKSPACE_JSON_REQUIRED_KEYS: readonly string[] = Object.freeze([
   "schema_version",
-];
+]);
 
 /**
  * Required keys in .guild/runs/<id>/provenance.json (category 4 — machine-only, JSON).
  * schema_version must equal "guild.provenance.v1".
  */
-export const PROVENANCE_JSON_REQUIRED_KEYS: readonly string[] = [
+export const PROVENANCE_JSON_REQUIRED_KEYS: readonly string[] = Object.freeze([
   "schema_version",
   "run_id",
-];
+]);
 
 /**
  * Required fields on every non-blank line of a trace JSONL file (category 5 — JSONL).
  * ts = ISO timestamp; event = event type name.
  */
-export const TRACE_JSONL_REQUIRED_KEYS: readonly string[] = [
+export const TRACE_JSONL_REQUIRED_KEYS: readonly string[] = Object.freeze([
   "ts",
   "event",
-];
+]);
 
 /**
  * Required frontmatter keys in docs/knowledge .md files (category 2 — Markdown + YAML).
  * Pinned from communication-format-policy.md frontmatter on 2026-06-03.
  * A page that has frontmatter (starts with ---) must carry all of these.
  */
-export const DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS: readonly string[] = [
+export const DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS: readonly string[] = Object.freeze([
   "type",
   "owner",
   "created_at",
   "updated_at",
   "sensitivity",
-];
+]);
 
 // ── Known provenance schema_version values ────────────────────────────────
 

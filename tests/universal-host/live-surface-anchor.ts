@@ -282,10 +282,10 @@ export const RATIFIED_CLAUDE_PLUGIN_FILES: readonly string[] = Object.freeze([
 /** The `version` sentinel used to mask version fields before hashing a manifest. */
 const VERSION_SENTINEL = "\u0000VERSION\u0000";
 
-export const VERSION_EXEMPT_MANIFESTS = [
+export const VERSION_EXEMPT_MANIFESTS = Object.freeze([
   ".claude-plugin/plugin.json",
   ".claude-plugin/marketplace.json",
-] as const;
+] as const);
 
 export function git(args: string[], env?: NodeJS.ProcessEnv): string {
   return execFileSync("git", args, {
