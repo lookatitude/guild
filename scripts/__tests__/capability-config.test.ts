@@ -20,7 +20,7 @@ import {
   CAPABILITY_SUGGESTION_BUDGET_MAX,
   CAPABILITY_SUGGESTION_BUDGET_MIN,
   DEFAULTS,
-} from "../../src/modules/config/workflows/config-defaults";
+} from "../lib/shared/config-defaults";
 import { CONFIG_SCHEMA, getFieldSpec, isSecuritySensitiveKey } from "../lib/config-schema";
 import { coerceCapabilityBlock, validateCapability } from "../lib/core/config-cli";
 import { mayReconcileWrite } from "../lib/config-reconcile-contract";

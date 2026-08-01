@@ -21,12 +21,14 @@ import {
   type ConfigValueType,
 } from "./config-reconcile-contract";
 import { DEFAULTS } from "../read-guild-config";
-// S5: the capability vocabularies live beside the DEFAULTS they describe (same
-// module, config), so the enum members and the shipped default cannot drift apart.
+// S5: the capability vocabularies live beside the DEFAULTS they describe, so the
+// enum members and the shipped default cannot drift apart. Imported through the
+// CANONICAL shared entrypoint (R-DIST canonicality rail forbids reaching past it
+// into src/modules/**, which would fork the shared module).
 import {
   CAPABILITY_AUTO_CREATE_POLICIES,
   CAPABILITY_RESOLVER_MODES,
-} from "../../src/modules/config/workflows/config-defaults";
+} from "./shared/config-defaults";
 
 /**
  * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).

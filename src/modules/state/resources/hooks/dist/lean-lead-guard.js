@@ -34,7 +34,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // ../src/modules/config/workflows/config-defaults.ts
-var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, DEFAULTS;
+var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, CAPABILITY_RESOLVER_MODE_DEFAULT, DEFAULTS;
 var init_config_defaults = __esm({
   "../src/modules/config/workflows/config-defaults.ts"() {
     DEFAULT_ESCALATION_MARKERS = [
@@ -54,6 +54,7 @@ var init_config_defaults = __esm({
     ]);
     LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
     SIDECAR_MAX_BYTES = 1024 * 1024;
+    CAPABILITY_RESOLVER_MODE_DEFAULT = "legacy";
     DEFAULTS = {
       rigor: "standard",
       auto_approve: [],
@@ -140,6 +141,50 @@ var init_config_defaults = __esm({
         stdio_available: true,
         http_available: false,
         bridge_package: null
+      },
+      /**
+       * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+       * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+       * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+       *
+       * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+       * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+       * What a lane may DO stays with `capability_scope` and the permission keys.
+       *
+       * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+       * already emits unconditionally — capability ownership is per project by
+       * definition (the umbrella and each child answer "what roles do I need"
+       * independently, and D03 has the four repos migrating at different rates). Per
+       * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+       * out with zero generator change, and adding it would touch every existing key.
+       */
+      capability: {
+        /**
+         * Which resolver mode this project is in on D03's migration ladder. Config
+         * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+         * gate criteria the initiative evaluates, and a mode change is a deliberate
+         * write.
+         *
+         * DEFAULT IS `legacy`, NOT `observe` — see CAPABILITY_RESOLVER_MODE_DEFAULT in
+         * capability-config.ts for the F7 precondition governing the flip to D04's
+         * intended `observe`. Never silently defaulted: an unset value resolves with
+         * provenance `default`, so `config show --sources` shows it was never chosen.
+         */
+        resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+        /**
+         * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+         * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+         * the two cannot disagree. 0 is legal: "profile but never propose".
+         */
+        suggestion_budget: 4,
+        /**
+         * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+         * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+         * Learn proposes.
+         */
+        starter_roles: [],
+        /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+        auto_create_policy: "on_approval"
       },
       statusline: false,
       adversarial_review_provider: "auto",
@@ -6311,6 +6356,20 @@ function validateRunId(runId) {
 
 // ../src/modules/lifecycle/workflows/runstart-preflight.ts
 init_host_runtime();
+
+// ../src/modules/capability/workflows/compatibility-usage.ts
+var COMPATIBILITY_READ_REASONS = [
+  "no_project_definition",
+  "explicit_legacy_mode",
+  "rollback",
+  "mint_source",
+  "shadow_comparison"
+];
+var BENIGN_COMPATIBILITY_READ_REASONS = [
+  "mint_source",
+  "shadow_comparison"
+];
+var DEPENDENCE_COMPATIBILITY_READ_REASONS = COMPATIBILITY_READ_REASONS.filter((r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r));
 
 // ../src/modules/capability/workflows/rank.ts
 init_host_runtime();

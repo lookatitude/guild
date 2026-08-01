@@ -4747,6 +4747,20 @@ var DISPATCH_HOST_IDS = new Set(
   HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
 );
 
+// ../src/modules/capability/workflows/compatibility-usage.ts
+var COMPATIBILITY_READ_REASONS = [
+  "no_project_definition",
+  "explicit_legacy_mode",
+  "rollback",
+  "mint_source",
+  "shadow_comparison"
+];
+var BENIGN_COMPATIBILITY_READ_REASONS = [
+  "mint_source",
+  "shadow_comparison"
+];
+var DEPENDENCE_COMPATIBILITY_READ_REASONS = COMPATIBILITY_READ_REASONS.filter((r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r));
+
 // ../src/modules/capability/workflows/role-model-schema.ts
 var ROLES = ["host", "advisory", "adversarial"];
 var ROLE_STRENGTHS = ["strong", "weak"];

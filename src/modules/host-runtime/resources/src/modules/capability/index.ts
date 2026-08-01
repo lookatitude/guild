@@ -1,3 +1,4 @@
+export * from "./workflows/compatibility-usage";
 export * from "./workflows/rank";
 export * from "./workflows/role-model-schema";
 export * from "./workflows/role-resolver";

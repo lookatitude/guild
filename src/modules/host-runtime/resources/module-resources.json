@@ -341,7 +341,15 @@
       "id": "projection:src/modules/capability/index.ts",
       "source_path": "src/modules/capability/index.ts",
       "resource_path": "resources/src/modules/capability/index.ts",
-      "sha256": "08b1d4e07acbbdb7f48c58da90317cf5534825b21dd8594a398804e533be6a71",
+      "sha256": "6274cfcc9d65bcc50a7cc84e76feada1c403b04958c4994ea876903f2c9ffbe3",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/compatibility-usage.ts",
+      "source_path": "src/modules/capability/workflows/compatibility-usage.ts",
+      "resource_path": "resources/src/modules/capability/workflows/compatibility-usage.ts",
+      "sha256": "a2df840d8723bac22ce784a385644f2638afd51d626331ba5465fea432f029e4",
       "projection_dependency": true
     },
     {

@@ -1490,6 +1490,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/compatibility-usage",
+      "source_path": "scripts/lib/capability/compatibility-usage.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/rank",
       "source_path": "scripts/lib/capability/rank.ts",
       "kind": "lib"

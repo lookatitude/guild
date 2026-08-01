@@ -43,7 +43,7 @@
       "id": "lib/config-schema",
       "source_path": "scripts/lib/config-schema.ts",
       "resource_path": "resources/scripts/lib/config-schema.ts",
-      "sha256": "b73eb1983d6d99b8f4e6fa6b948d621b6b41e9304aff0da1839df16ace5dfe4c"
+      "sha256": "9e4d8552da044acbff0175aab59acfb8cd95045effaa5b5526e087052a58f3ea"
     },
     {
       "category": "scripts",
