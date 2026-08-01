@@ -307,16 +307,28 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   ) {
     return null;
   }
-  // BEFORE the per-item loop: an oversized bundle must not cost a full validation
-  // pass to reject. This is the rung an outer `MAX_ENTRIES` bound cannot reach.
-  if (lenDesc.value > MAX_SKILLS) return null;
+  // THE COLLECTION BOUND, and it is ONE check rather than two.
+  //
+  // A separate `lenDesc.value > MAX_SKILLS` line was written first, then removed: a
+  // genuine JSON array has exactly its indices plus `length`, so bounding the own-key
+  // count bounds the length too, and the anti-vacuity sweep showed the length line
+  // could be deleted without reddening anything. One guard that provably fires beats
+  // two where only one does.
+  //
+  // Counting KEYS rather than `length` is also what makes the bound real: `length`
+  // alone does not bound the WORK, because an array with `length: 1` can still carry
+  // a million NAMED own properties that the scan below walks (codex round: the bound
+  // "does not bound the property-validation work it claims to contain"). Names are
+  // materialised ONCE here and reused.
+  const ownNames = Object.getOwnPropertyNames(v);
+  if (ownNames.length > MAX_SKILLS + 1) return null;
 
   // CODEX-REVIEW FIX (adversarial round 1): reject EXTRA own string keys. A
   // genuine JSON-parsed array has exactly the index keys plus `length`. An array
   // carrying `__proto__`, `constructor`, or any non-index own property is
   // smuggling data the index scan below would never see — and normalizing it away
   // is repair, not validation. Fail closed instead.
-  for (const k of Object.getOwnPropertyNames(v)) {
+  for (const k of ownNames) {
     if (k === "length") continue;
     // Canonical array index: a non-negative integer whose string form round-trips
     // (rejects "01", "1.0", "-1", " 1", "1e2", and every non-index name).

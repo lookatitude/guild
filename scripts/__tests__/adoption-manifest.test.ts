@@ -1195,3 +1195,108 @@ describe("D19-R1.2 — NESTED rollbacks unwind LIFO and must stay representable"
     expect(validateAdoptionManifestV1(m)).toBeNull();
   });
 });
+
+
+// ── D19-R4 — codex round 4 on the merged fixes ─────────────────────────────
+
+describe("D19-R4.1 — the undo stack is PER LINEAGE, not global", () => {
+  it("accepts a rollback of one lineage while another lineage is more recent", () => {
+    // A single global stack made unrelated roles contend: entry 2 belongs to a
+    // completely different lineage, yet sat on top and blocked entry 3's rollback of
+    // entry 1. Real manifests interleave constantly — D07/D09/D10 move dozens of
+    // roles — so this rejected the ORDINARY case, not an exotic one.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("X", "7"), to: ref("Y", "8") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+  });
+
+  it("still rejects a stale rollback within its OWN lineage", () => {
+    // Per-lineage scoping must not become per-lineage amnesia: inside one lineage
+    // LIFO still holds, so the stale re-reversal stays rejected.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("X", "7"), to: ref("Y", "8") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 AGAIN — 4 is outstanding in this lineage",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+});
+
+describe("D19-R4.2 — a rollback cannot reverse an adoption with UNRECORDED source bytes", () => {
+  it("rejects a rollback landing on arbitrary bytes when the target source hash is null", () => {
+    // The landing check was conditional on the target having recorded a hash, so a
+    // null-sourced adoption let its rollback claim ANY replacement bytes — and then
+    // collect the read-time cycle exemption on a reversal it never demonstrated.
+    // Absence is not agreement, the same rule traversal and `identityOf` already use.
+    const m = chain([
+      { from: { ...at("A", "1"), content_hash: null }, to: ref("B", "1") },
+      {
+        from: at("B", "1"),
+        to: ref("A", "9"), // arbitrary bytes — nothing proves this is a reversal
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("rejects a rollback landing on the WRONG bytes when the target DID record them", () => {
+    // Isolates the landing-bytes equality itself: the target's source hash is
+    // present, so the check is doing real work rather than firing on a null.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "1") },
+      {
+        from: at("B", "1"),
+        to: ref("A", "9"), // right id, WRONG bytes
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("CONTRAST — with the source bytes recorded, the same reversal is legal", () => {
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "1") },
+      {
+        from: at("B", "1"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+  });
+});

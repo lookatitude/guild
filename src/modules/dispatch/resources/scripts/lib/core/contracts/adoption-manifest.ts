@@ -723,12 +723,29 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
   // different top and is rejected. Saying so matters because the traversal guard's
   // comment asserted that property while nothing enforced it; it is now proven
   // end-to-end by the D19.2 / D19-R1.2 rejection tests, not by prose.
-  const undoStack: number[] = [];
+  //
+  // THE STACK IS PER LINEAGE, NOT GLOBAL. A single global stack made unrelated
+  // lineages contend: `A->B(1)`, `X->Y(2)`, `B->A(3 rb 1)` was REJECTED because
+  // sequence 2 sat on top, though it belongs to a completely different role. Real
+  // manifests interleave constantly — D07/D09/D10 move dozens of roles — so that
+  // would have rejected the ordinary case. Found by the codex round on this file.
+  //
+  // Each adoption is keyed by its DESTINATION identity, which is exactly where a
+  // rollback of it must depart from, so a lineage's stack contains only its own
+  // outstanding adoptions.
+  const undoStacks = new Map<string, number[]>();
+  const pushAdoption = (key: string, seq: number): void => {
+    const st = undoStacks.get(key);
+    if (st === undefined) undoStacks.set(key, [seq]);
+    else st.push(seq);
+  };
   for (const entry of entries) {
     if (entry.reason !== "rolled_back") {
       // An adoption with a destination is an outstanding effect a later rollback may
       // unwind. A removal has no destination, so there is nothing to return to.
-      if (entry.to !== null) undoStack.push(entry.sequence);
+      if (entry.to !== null) {
+        pushAdoption(identityOf(entry.to.kind, entry.to.id, entry.to.content_hash), entry.sequence);
+      }
       continue;
     }
     const target = entries[(entry.reverses_sequence as number) - 1];
@@ -752,17 +769,31 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     // and validate. A reversal must also LAND back on the target's source identity.
     if (entry.to === null) return null; // a rollback always has a destination
     if (entry.to.id !== target.from.id) return null;
-    if (target.from.content_hash !== null && entry.to.content_hash !== target.from.content_hash) {
-      return null;
-    }
+    // The rollback must land on the target's SOURCE BYTES. When the target recorded
+    // none, that is unprovable — and skipping the check let a rollback claim ARBITRARY
+    // replacement bytes and then collect the read-time cycle exemption on a reversal
+    // it never demonstrated. Absence is not agreement: the same rule traversal already
+    // applies to a null hash, and the same rule `identityOf` encodes by treating null
+    // as distinct from every recorded hash. An adoption whose legacy bytes were
+    // unrecoverable therefore cannot be rolled back — fail-closed, and stated rather
+    // than discovered later.
+    // A validated `to` ALWAYS carries a real hash, so when the target recorded none
+    // this inequality is unconditionally true and the rollback is rejected — which
+    // is the intended rule (an adoption whose legacy bytes were unrecoverable cannot
+    // be rolled back, because the reversal is unprovable; absence is not agreement,
+    // exactly as traversal and `identityOf` already treat a null hash). An explicit
+    // `target.from.content_hash === null` line was written to say so, and deleted
+    // when the sweep proved it unreachable behind this one.
+    if (entry.to.content_hash !== target.from.content_hash) return null;
 
-    // LIFO — pop the top, and it must be the named target. An EMPTY stack needs no
-    // separate check: `undoStack[-1]` is `undefined`, which never equals a validated
-    // sequence, so "nothing outstanding" rejects through the same line. An explicit
-    // emptiness guard was written, shown redundant by the anti-vacuity sweep, and
-    // removed rather than shipped untested.
-    if (undoStack[undoStack.length - 1] !== target.sequence) return null;
-    undoStack.pop();
+    // LIFO within THIS lineage — pop its top, and it must be the named target. An
+    // absent or empty stack needs no separate check: the lookup yields `undefined`,
+    // which never equals a validated sequence, so "nothing outstanding here" rejects
+    // through the same line. An explicit emptiness guard was written, shown redundant
+    // by the anti-vacuity sweep, and removed rather than shipped untested.
+    const lineage = undoStacks.get(identityOf(entry.kind, entry.from.id, entry.from.content_hash));
+    if (lineage === undefined || lineage[lineage.length - 1] !== target.sequence) return null;
+    lineage.pop();
   }
 
   return {
@@ -993,8 +1024,11 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
    * Each identity therefore carries the SEQUENCE that introduced it, and a rollback
    * of target T drops exactly those introduced at or after `T.sequence`. Identities
    * older than the reversed era survive, because the rollback did not undo them.
-   * The origin is stamped 0 and is only ever dropped by a rollback of... nothing,
-   * which cannot exist.
+   * The ORIGIN is stamped by when the log actually introduced it (see
+   * `originStamp`), NOT by a hard-coded 0 — an earlier version of this comment said
+   * 0 and claimed the origin could never be dropped, and both halves stopped being
+   * true when that changed. An origin that pre-dates the log stamps 0 and is indeed
+   * undroppable; one the log introduced can be rewound past, which is the point.
    */
   const visitedIdentities = new Map<string, number>();
   /**
