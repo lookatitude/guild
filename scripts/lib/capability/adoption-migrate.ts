@@ -429,6 +429,37 @@ function referencedIds(text: string, ids: ReadonlySet<string>): Set<string> {
 }
 
 /**
+ * Catalog ids a definition file DECLARES as dependencies, from its frontmatter
+ * `skills:` / `external_skills:` lists only.
+ *
+ * The prose is deliberately not read. A specialist definition's `description`
+ * carries DO-NOT-TRIGGER boundary guidance that names sibling roles, and treating
+ * those as dependencies made an adopted `qa` appear to depend on architect,
+ * backend, devops, marketing, mobile, researcher and security. A boundary note is
+ * the opposite of a dependency — it says "this is NOT mine".
+ */
+function declaredSkillRefs(text: string, catalogIds: ReadonlySet<string>): Set<string> {
+  const out = new Set<string>();
+  const fm = parseFrontmatter(text);
+  if (fm === null) return out;
+  for (const key of ["skills", "external_skills"]) {
+    const v = (fm as Record<string, unknown>)[key];
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (typeof item === "string" && catalogIds.has(item.trim())) out.add(item.trim());
+      }
+    } else if (typeof v === "string") {
+      // The comma-separated flow spelling shipped agents use for `tools:`.
+      for (const part of v.split(",")) {
+        const id = part.trim();
+        if (catalogIds.has(id)) out.add(id);
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Role names a team file DECLARES as `definition_source: shipped`.
  *
  * Deliberately a narrow, shape-driven read of the one structure that carries the
@@ -575,7 +606,27 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
         continue;
       }
       const text = bytes.toString("utf8");
-      for (const id of referencedIds(text, catalogIds)) {
+
+      // WHERE the ids are read from depends on the site, and this distinction is
+      // load-bearing.
+      //
+      // A definition file's FRONTMATTER is structured — `skills:` is a real
+      // dependency list. Its PROSE is not: a shipped template's `description`
+      // names half the roster in its DO-NOT-TRIGGER boundary guidance ("DO NOT
+      // TRIGGER for: system design (architect …), app code (backend …), CI/CD
+      // (devops …)"). Scanning the whole file therefore reported architect,
+      // backend, devops, marketing, mobile, researcher and security as
+      // dependencies of `qa` — seven templates a migration would copy for no
+      // reason, found by re-running the report over an adopted project.
+      //
+      // So: definition files are read through their frontmatter skill lists ONLY.
+      // Plans and receipts stay a whole-text scan, because prose is the only
+      // signal they have and a plan naming a role genuinely is a reference.
+      const ids =
+        site === "project_agent_frontmatter" || site === "project_skill_frontmatter"
+          ? declaredSkillRefs(text, catalogIds)
+          : referencedIds(text, catalogIds);
+      for (const id of ids) {
         addRef(id, rel, site);
       }
       // CODEX #5: `unresolvable_references` was DEAD CODE. The scan only recognized
@@ -658,14 +709,29 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
     if (localBytes !== null) {
       existingLocalPath = toPosixRel(localAbs, projRoot);
       existingLocalHash = sha256Prefixed(localBytes);
-      // Byte-compared, never assumed. "A local file exists" and "the local file is
-      // the shipped file" are different situations with different right answers:
-      // the first is a genuine conflict, the second is an already-done adoption.
-      conflicts.push(
-        sourceHash !== null && existingLocalHash === sourceHash
-          ? "local_definition_identical"
-          : "local_definition_differs",
-      );
+      // An ADOPTED COPY is not a divergence. It carries `adopted_source_hash` in
+      // its own frontmatter, so when that names the bytes currently shipped, this
+      // file IS the shipped definition plus its provenance stamp.
+      //
+      // Without this, re-running the report over an already-migrated project
+      // reported every adopted role as `local_definition_differs` — technically
+      // true (the stamp changes the bytes) and completely misleading: it reads as
+      // "someone hand-edited this", which is the one conflict that tells an
+      // operator to stop and merge.
+      const stampedFrom = adoptedSourceHash(localBytes.toString("utf8"));
+      if (stampedFrom !== null && sourceHash !== null && stampedFrom === sourceHash) {
+        conflicts.push("local_definition_identical");
+      } else {
+        // Byte-compared, never assumed. "A local file exists" and "the local file
+        // is the shipped file" are different situations with different right
+        // answers: the first is a genuine conflict, the second an already-done
+        // adoption.
+        conflicts.push(
+          sourceHash !== null && existingLocalHash === sourceHash
+            ? "local_definition_identical"
+            : "local_definition_differs",
+        );
+      }
     }
     if (adoptedIds.has(id)) conflicts.push("already_adopted");
 
@@ -859,6 +925,18 @@ function stampProvenance(
     `adopted_authorized_by: ${args.authorizedBy}`,
   ];
   return `---${eol}${lines.join(eol)}${eol}` + raw.slice(3 + eol.length);
+}
+
+/**
+ * The `sha256:<hex>` an adopted copy records as the source it came from, or null
+ * when this file is not an adopted copy. Shape-checked, so a hand-written value
+ * that is not a hash cannot masquerade as provenance.
+ */
+function adoptedSourceHash(raw: string): string | null {
+  const fm = parseFrontmatter(raw);
+  if (fm === null) return null;
+  const v = (fm as Record<string, unknown>)["adopted_source_hash"];
+  return typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v) ? v : null;
 }
 
 /** The source's own declared version, or "1" when it does not carry one. */

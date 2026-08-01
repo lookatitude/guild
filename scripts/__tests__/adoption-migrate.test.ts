@@ -903,3 +903,79 @@ describe("D6 — codex round 3 regressions (rollback mutation phase)", () => {
     expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(false);
   });
 });
+
+describe("D6 — re-running the report over an already-migrated project", () => {
+  function adoptQa(): void {
+    const out = flat(
+      applyAdoptionPlan({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        report: report(),
+        decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
+        runId: "run-a",
+        authorizedBy: "cap-loc-D06",
+        adoptedAt: AT,
+      }),
+    );
+    if (out.status !== "applied") throw new Error(`adopt failed: ${String(out.reason)}`);
+  }
+
+  it("reads a definition's DECLARED skills, not the roles named in its prose", () => {
+    // A shipped template's `description` carries DO-NOT-TRIGGER boundary guidance
+    // naming half the roster ("DO NOT TRIGGER for: system design (architect …),
+    // app code (backend …), CI/CD (devops …)"). Scanning the whole file reported
+    // architect, backend, devops, marketing, mobile, researcher and security as
+    // dependencies of `qa` — seven templates a migration would copy for no reason.
+    // A boundary note is the OPPOSITE of a dependency.
+    adoptQa();
+    const ids = (report().items as Array<Record<string, unknown>>).map((i) => i.id);
+
+    // The four skills `qa` actually declares in its frontmatter `skills:` list.
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "qa",
+        "qa-test-strategy",
+        "qa-property-based-tests",
+        "qa-snapshot-tests",
+        "qa-flaky-test-hunter",
+      ]),
+    );
+    // …and none of the roles its DO-NOT-TRIGGER prose merely mentions.
+    for (const prose of ["architect", "backend", "devops", "marketing", "mobile", "researcher", "security"]) {
+      expect(ids).not.toContain(prose);
+    }
+  });
+
+  it("does not report an ADOPTED COPY as a hand-edited divergence", () => {
+    // The copy differs from its source by exactly the provenance stamp, so a naive
+    // byte compare called it `local_definition_differs` — which reads as "someone
+    // hand-edited this", the one conflict that tells an operator to stop and merge.
+    adoptQa();
+    const qa = (report().items as Array<Record<string, unknown>>).find((i) => i.id === "qa")!;
+    expect(qa.conflicts).toContain("local_definition_identical");
+    expect(qa.conflicts).toContain("already_adopted");
+    expect(qa.conflicts).not.toContain("local_definition_differs");
+  });
+
+  // ANTI-VACUITY: a genuinely hand-edited file must STILL be flagged, or the row
+  // above is just "never report a divergence".
+  it("still flags a genuinely hand-edited local definition", () => {
+    write(".guild/agents/qa.md", "---\nname: qa\n---\n\nhand-edited, no stamp\n");
+    const qa = (report().items as Array<Record<string, unknown>>).find((i) => i.id === "qa")!;
+    expect(qa.conflicts).toContain("local_definition_differs");
+  });
+
+  it("flags a copy whose stamp names bytes the shipped asset no longer has", () => {
+    // A stale stamp is not provenance for the CURRENT source — the shipped asset
+    // moved on, so this copy really is out of date and must not read as identical.
+    adoptQa();
+    const p = path.join(tmp, ".guild/agents/qa.md");
+    fs.writeFileSync(
+      p,
+      fs.readFileSync(p, "utf8").replace(/adopted_source_hash: sha256:[0-9a-f]{64}/, `adopted_source_hash: sha256:${"0".repeat(64)}`),
+    );
+    const qa = (report().items as Array<Record<string, unknown>>).find((i) => i.id === "qa")!;
+    expect(qa.conflicts).toContain("local_definition_differs");
+  });
+});
