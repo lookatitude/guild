@@ -178,6 +178,17 @@ Every merge to a channel branch ships to its followers immediately, so both are
 PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
 `.guild/wiki/standards/release-discipline.md`.
 
+**The channel must be legible from the manifest** (gap-audit B5, decision
+cap-loc-D12). `next` carries a **prerelease identifier** on the *next* target
+version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.5.0-beta.1`), bumped when beta
+picks up a materially new surface; `main` carries the bare release triple.
+Without this, `next` and `main` can report the same `"version"` while dozens of
+commits apart, and a user cannot determine which runtime they have from the
+version alone — which is exactly what happened at `2.4.0`. Under SemVer §11 a
+prerelease sorts *below* the same triple, so `2.5.0-beta.1` is correctly ahead
+of `2.4.0` and behind an eventual `2.5.0`; `check:channel-integrity` enforces
+the ordering. The release cut's version-bump commit drops the identifier.
+
 Day-to-day workflow (features, fixes, docs — everything non-release):
 1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.
 2. Commit + push the branch.
