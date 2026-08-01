@@ -85,7 +85,7 @@
       "id": "guild-learn",
       "source_path": "skills/knowledge/learn/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn/SKILL.md",
-      "sha256": "a3080841e61f888faad62def80283ffb2b9c4c530516292efb3772d50a1d6dd5"
+      "sha256": "acb35682c700a2fa7f3d0b91cd4bcd529658ddf439a947a00b59d5d1c8293920"
     },
     {
       "category": "skills",
@@ -106,7 +106,7 @@
       "id": "guild-learn-graph",
       "source_path": "skills/knowledge/learn-graph/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-graph/SKILL.md",
-      "sha256": "90f34a16377557b5ad03f89c8e656932aa98c3caf1a7f97ac36fe21f7a845046"
+      "sha256": "9da7d08925a7efdcdd790ebe794e6ff3e6e969ecfe99353d4d462c28e8bd9414"
     },
     {
       "category": "skills",
@@ -127,7 +127,7 @@
       "id": "guild-learn-map",
       "source_path": "skills/knowledge/learn-map/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-map/SKILL.md",
-      "sha256": "6b34fe3b8c4c779fc35c11887ad19f1346d8c331d2d0d8ef5ebc3d5ed61dbc4d"
+      "sha256": "9818bd209d68f2e2f93faf0e00aff9e7b5247db6fa4cd0b87f20f6bcbf7e2373"
     },
     {
       "category": "skills",

@@ -36,6 +36,13 @@ that is the bounded `kg-query` retrieval path (wired into
 index is a **derived projection over `.guild/wiki/` (canonical) + the repo**,
 rebuildable and deletable with zero data loss.
 
+**`/guild:learn map` emits NO capability proposals.** The
+`guild.project_capability_profile.v1` emission (D1) belongs to the FULL Learn
+pipeline (`guild:learn` step 12b), not to the cheap-scan tier. The cheap scan has
+not built the evidence a candidate must cite — proposing a role from a file
+inventory alone is exactly the "invented professions" failure the sparse-project
+guard (`cap-loc-D04`) exists to prevent. Map maps; it does not propose.
+
 # Required inputs
 
 - The consuming repo root (resolved worktree-safe to the **main** repo root;
