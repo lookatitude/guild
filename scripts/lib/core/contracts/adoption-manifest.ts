@@ -629,10 +629,15 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
   {
     const liveIds = new Set<string>();
     const deadIds = new Set<string>();
-    const identityOf = (kind: string, id: string) => `${kind}\u0000${id}`;
+    // CODEX (merged round) #1: this keyed on (kind, id) only, so `A@h1` and `A@h2`
+    // were ONE identity — and combined with the blanket resurrect below, the fork
+    // this rule exists to forbid stayed representable. The liveness identity must
+    // include the BYTES, exactly like traversal's.
+    const identityOf = (kind: string, id: string, hash: string | null) =>
+      `${kind}\u0000${id}\u0000${hash ?? ""}`;
 
     for (const entry of entries) {
-      const fromKey = identityOf(entry.kind, entry.from.id);
+      const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash);
 
       // `from` must be live. An identity is live until adopted away; the first
       // time we see it as a source it is live by default (it pre-dates the log).
@@ -647,8 +652,19 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // Constraining the SOURCE is enough to make the fork unrepresentable, and
       // constraining the destination costs more than it buys.
       if (entry.to !== null) {
-        const toKey = identityOf(entry.to.kind, entry.to.id);
+        const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash);
         liveIds.add(toKey);
+        // CODEX (merged round) #1 was really TWO issues, and only one of them was
+        // here. The fork survived because `identityOf` ignored BYTES, so `A@h1` and
+        // `A@h2` were one identity and `B->A@h2` resurrected `A@h1`. With the key now
+        // byte-aware that path is closed: in `A@h1->B`, `B->A@h2`, `A@h1->C`, entry 2
+        // lands on A@h2 and leaves A@h1 dead, so entry 3 is rejected.
+        //
+        // Restricting restoration to rollbacks ALSO closed it, but over-broadly: it
+        // rejected a legitimate re-creation (`B` adopted away, then landed on again
+        // by a later migration), which broke a two-round-trip chain. An identity is
+        // live wherever an entry places it — the SOURCE constraint is what forbids
+        // the fork, and it is sufficient on its own.
         deadIds.delete(toKey);
       }
 
@@ -890,6 +906,27 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // pile of sameness checks (source hash, destination path, whole locator) to stop
     // conflicts masquerading as re-adoptions. Removing the state beat judging it —
     // the whole discriminator is gone, not merely corrected.
+    // The liveness rule removes the FORK, but not the case where a query names an
+    // identity loosely: a hash-less query for "A" can match `A@h1->B` and `A@h2->B`,
+    // which are two genuinely different sources the caller has not distinguished.
+    // Multiple matches are one history ONLY if they share the whole source locator.
+    if (matches.length > 1) {
+      const head = matches[0].from;
+      const oneSource = matches.every(
+        (x) =>
+          x.from.id === head.id &&
+          x.from.content_hash === head.content_hash &&
+          x.from.historical_path === head.historical_path &&
+          x.from.home === head.home
+      );
+      if (!oneSource) {
+        return {
+          status: "ambiguous",
+          ref: null,
+          trail: [...trail, ...matches.map((x) => x.sequence)],
+        };
+      }
+    }
     const entry = matches.reduce((a, b) => (a.sequence <= b.sequence ? a : b));
 
     trail.push(entry.sequence);
