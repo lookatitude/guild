@@ -885,3 +885,104 @@ describe("CODEX ROUND 4 — regressions for the reported counterexamples", () =>
     fs.rmSync(outside, { recursive: true, force: true });
   });
 });
+
+
+describe("CODEX ROUND 5 — regressions for the non-race findings", () => {
+  it("finding B — a SHORT write is not treated as a complete one", () => {
+    // writeSync may return fewer bytes than given. Ignoring the count fsynced and
+    // renamed the PREFIX into place while reporting success — reproduced with a
+    // one-byte write leaving `profile.json` containing "{".
+    mk(".guild/agents/backend.md", "# backend\n");
+    const realWriteSync = fs.writeSync;
+    let first = true;
+    const spy = jest.spyOn(fs, "writeSync").mockImplementation(((fd: never, buf: never, off: never, len: never) => {
+      if (first) {
+        first = false;
+        return realWriteSync(fd, buf as Buffer, off as number, 1); // short
+      }
+      return realWriteSync(fd, buf as Buffer, off as number, len as number);
+    }) as typeof fs.writeSync);
+
+    let r;
+    try {
+      r = emit();
+    } finally {
+      spy.mockRestore();
+    }
+    // Either the loop completed every byte, or it refused — never a truncated
+    // file reported as emitted.
+    if (r.status === "emitted") {
+      const onDisk = readCapabilityProfile(tmp, RUN_ID);
+      expect(onDisk).not.toBeNull();
+      expect(onDisk!.mutation_performed).toBe(false);
+    } else {
+      expect(fs.existsSync(path.join(tmp, profileRelPath(RUN_ID)))).toBe(false);
+    }
+  });
+
+  it("finding B — cleanup never deletes a temp this call did not create", () => {
+    // An EEXIST failure meant the temp belonged to someone else; the cleanup
+    // deleted it anyway — the error path destroying a file the success path
+    // never owned.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const dir = path.join(tmp, ".guild/runs", RUN_ID, "capability");
+    fs.mkdirSync(dir, { recursive: true });
+    const squatted = path.join(dir, `profile.json.tmp-${process.pid}`);
+    fs.writeFileSync(squatted, "do-not-delete");
+
+    const r = emit();
+    expect(r.status).toBe("refused");
+    expect(fs.existsSync(squatted)).toBe(true);
+    expect(fs.readFileSync(squatted, "utf8")).toBe("do-not-delete");
+  });
+
+  it("finding E — an UNREADABLE prior profile is refused, never destroyed", () => {
+    // readPriorProfile returned null for both "absent" and "present but unsafe",
+    // so an oversized destination was destroyed by the rename and the refusal
+    // still claimed "rolled back".
+    mk(".guild/agents/backend.md", "# backend\n");
+    const dir = path.join(tmp, ".guild/runs", RUN_ID, "capability");
+    fs.mkdirSync(dir, { recursive: true });
+    const abs = path.join(tmp, profileRelPath(RUN_ID));
+    const big = "x".repeat(300 * 1024);
+    fs.writeFileSync(abs, big);
+
+    const r = emit();
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") {
+      expect(r.code).toBe("write_failed");
+      expect(r.detail).toMatch(/size bound|cannot be restored/);
+    }
+    // Still there, byte-identical — not destroyed by an emission that refused.
+    expect(fs.readFileSync(abs, "utf8")).toBe(big);
+  });
+
+  it("finding A — a SYMLINKED PROJECT ROOT does not block a legitimate write", () => {
+    // With /tmp/alias -> /tmp/real as the root and a destination that did not yet
+    // exist, the climb reached the root symlink and refused a valid write.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const alias = path.join(os.tmpdir(), `alias-${process.pid}-${Date.now()}`);
+    fs.symlinkSync(tmp, alias);
+    try {
+      const r = emitCapabilityProfile({
+        projectRoot: alias,
+        runId: RUN_ID,
+        projectId: "fx-empty",
+        generatedAt: "2026-08-01T12:00:00Z",
+        sourceCommit: null,
+        resolverMode: "observe",
+        suggestionBudget: 4,
+        facts: EMPTY_FACTS,
+      });
+      expect(r.status).toBe("emitted");
+    } finally {
+      fs.rmSync(alias, { force: true });
+    }
+  });
+
+  it("ANTI-VACUITY: an ordinary emission is unaffected by all of the above", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    expect(emit().status).toBe("emitted");
+    expect(readCapabilityProfile(tmp, RUN_ID)).not.toBeNull();
+  });
+});

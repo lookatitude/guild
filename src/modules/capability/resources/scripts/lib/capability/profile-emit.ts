@@ -300,13 +300,27 @@ export interface TreeHashes {
  * The binding is the REALPATH of the project root plus the run id, so a baseline
  * is only usable for the project and run it was taken in.
  *
- * ── WHAT THIS STILL CANNOT PROVE, STATED PLAINLY ────────────────────────────
- * CAPTURE TIME. A caller that snapshots at Learn step 8 instead of step 1 and
- * passes it here gets `"run"` for a window that began at step 8. Nothing in a
- * filesystem hash can prove when it was taken, so `mutation_window: "run"` means
- * "the CALLER asserts this baseline is from run start", while `"emission"` is the
- * only value this module establishes unaided. That asymmetry is the honest
- * reading of the field and belongs with the field, not in a reviewer's memory.
+ * ── EXACTLY WHAT THE BINDING DOES AND DOES NOT PREVENT ──────────────────────
+ * It is UNKEYED metadata the caller supplies, so be precise about its value:
+ *
+ *   PREVENTS  reusing a baseline OBJECT captured elsewhere — a foreign or stale
+ *             baseline passed as-is is refused, which is the realistic mistake
+ *             (wrong variable, copied fixture, replayed run).
+ *
+ *   DOES NOT  stop a caller who RECOMPUTES the binding. `bound_root` is just
+ *   PREVENT   sha256 of a path the caller already knows, so foreign hashes can be
+ *             re-bound to the current project and will be accepted. Reported and
+ *             reproduced. Making this unforgeable would need a secret this module
+ *             does not have and could not keep.
+ *
+ *   DOES NOT  establish CAPTURE TIME. A caller snapshotting at Learn step 8 gets
+ *   PREVENT   `"run"` for a window that began at step 8.
+ *
+ * So `mutation_window: "run"` means "the CALLER asserts this baseline is from run
+ * start in this project", and `"emission"` is the only value this module
+ * establishes unaided. The binding raises the floor from "any valid-shaped triple"
+ * to "a deliberate assertion about this project and run" — worth having, and not
+ * worth mistaking for authentication.
  */
 export interface BoundBaseline extends TreeHashes {
   /** sha256 of the realpath'd project root — binds the baseline to ONE project. */
@@ -595,6 +609,17 @@ function captureEmitOptions(opts: unknown): CapturedOptions | null {
 function isContainedRealPath(projectRoot: string, abs: string): boolean {
   try {
     const rootReal = fs.realpathSync(projectRoot);
+    // The climb must never treat the PROJECT ROOT ITSELF as a disqualifying
+    // symlink. Reported: with `/tmp/alias -> /tmp/real` as the project root and a
+    // destination that did not exist yet, the climb reached the root symlink and
+    // refused a perfectly legitimate write. The root is resolved separately, so
+    // its own link-ness is already accounted for.
+    let rootProbe: string;
+    try {
+      rootProbe = fs.realpathSync(path.resolve(projectRoot));
+    } catch {
+      return false;
+    }
     let probe = abs;
     // Climb to the deepest ancestor that EXISTS AS A PATH ENTRY.
     //
@@ -614,8 +639,17 @@ function isContainedRealPath(projectRoot: string, abs: string): boolean {
       }
       if (st !== null) {
         // A symlink anywhere on the resolved path — including a dangling one at
-        // the leaf — means this path is not the path it appears to be.
-        if (st.isSymbolicLink()) return false;
+        // the leaf — means this path is not the path it appears to be. The one
+        // exception is the project root itself (see rootProbe above).
+        if (st.isSymbolicLink()) {
+          let probeReal: string;
+          try {
+            probeReal = fs.realpathSync(probe);
+          } catch {
+            return false;
+          }
+          if (probeReal !== rootProbe) return false;
+        }
         break;
       }
       const parent = path.dirname(probe);
@@ -645,14 +679,32 @@ const MAX_PRIOR_PROFILE_BYTES = 256 * 1024;
  * Type-checked with `lstat` (regular file only: never a FIFO, device or symlink)
  * and size-checked before any read.
  */
-function readPriorProfile(abs: string): Buffer | null {
+type PriorProfile =
+  | { kind: "absent" }
+  | { kind: "bytes"; bytes: Buffer }
+  | { kind: "unreadable"; why: string };
+
+function readPriorProfile(abs: string): PriorProfile {
+  let st: fs.Stats;
   try {
-    const st = fs.lstatSync(abs);
-    if (!st.isFile()) return null; // FIFO / device / symlink / directory
-    if (st.size > MAX_PRIOR_PROFILE_BYTES) return null;
-    return fs.readFileSync(abs);
+    st = fs.lstatSync(abs);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return { kind: "absent" };
+    return { kind: "unreadable", why: "could not stat the existing profile" };
+  }
+  // PRESENT BUT NOT SAFE TO READ is its own state, and conflating it with
+  // "absent" was a real defect: an oversized or FIFO destination returned null,
+  // the atomic rename then DESTROYED it, and a rollback reported "rolled back"
+  // while the previous profile was simply gone. Absent is never success — and
+  // neither is unreadable.
+  if (!st.isFile()) return { kind: "unreadable", why: "existing profile is not a regular file" };
+  if (st.size > MAX_PRIOR_PROFILE_BYTES) {
+    return { kind: "unreadable", why: "existing profile exceeds the size bound" };
+  }
+  try {
+    return { kind: "bytes", bytes: fs.readFileSync(abs) };
   } catch {
-    return null;
+    return { kind: "unreadable", why: "existing profile could not be read" };
   }
 }
 
@@ -673,22 +725,44 @@ function readPriorProfile(abs: string): Buffer | null {
 function writeFileAtomicNoFollow(abs: string, bytes: Buffer): boolean {
   const tmp = `${abs}.tmp-${process.pid}`;
   let fd: number | null = null;
+  let created = false;
   try {
     // O_EXCL: the temp must not already exist, so it cannot be a planted symlink.
     // O_NOFOLLOW: refuse even if it is one.
-    fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
-    fs.writeSync(fd, bytes);
+    fd = fs.openSync(
+      tmp,
+      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
+      0o600
+    );
+    created = true;
+
+    // A SHORT WRITE IS NOT A WRITE. `writeSync` may return fewer bytes than it
+    // was given (a quota boundary is the easy way to see it), and ignoring the
+    // count meant the prefix was fsynced and renamed into place while the
+    // emitter reported success — reproduced with a one-byte write leaving
+    // `profile.json` containing "{". Loop until every byte lands.
+    let off = 0;
+    while (off < bytes.length) {
+      const n = fs.writeSync(fd, bytes, off, bytes.length - off);
+      if (n <= 0) return false; // no progress — refuse rather than spin
+      off += n;
+    }
+
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = null;
     fs.renameSync(tmp, abs);
+    created = false; // renamed away; nothing left to clean up
     return true;
   } catch {
     return false;
   } finally {
     try {
       if (fd !== null) fs.closeSync(fd);
-      if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
+      // ONLY remove a temp THIS CALL created. Reported: an EEXIST failure meant
+      // the temp belonged to someone else, and the cleanup deleted it anyway —
+      // the error path destroying a file the success path never owned.
+      if (created) fs.rmSync(tmp, { force: true });
     } catch {
       /* best effort cleanup */
     }
@@ -949,7 +1023,7 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
     }
 
     const abs = path.join(root, rel);
-    let priorBytes: Buffer | null = null;
+    let prior: PriorProfile = { kind: "absent" };
     try {
       // ── PHYSICAL containment, CHECKED TWICE — and both checks are load-bearing ──
       //
@@ -996,7 +1070,17 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       // Capture the previous bytes so a post-write refusal RESTORES rather than
       // destroys a profile that was valid a moment ago. Type- and size-checked:
       // a FIFO here blocked the read forever.
-      priorBytes = readPriorProfile(abs);
+      prior = readPriorProfile(abs);
+      if (prior.kind === "unreadable") {
+        // REFUSE rather than overwrite something we could not preserve. The
+        // rename would destroy it and no rollback could put it back, so the
+        // honest move is not to touch it — and to say why.
+        return {
+          status: "refused",
+          code: "write_failed",
+          detail: `${prior.why} — refusing to overwrite what cannot be restored`,
+        };
+      }
       if (!writeFileAtomicNoFollow(abs, Buffer.from(`${JSON.stringify(validated, null, 2)}\n`, "utf8"))) {
         return { status: "refused", code: "write_failed", detail: `could not write "${rel}"` };
       }
@@ -1018,11 +1102,11 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       let rolledBack = false;
       if (isContainedRealPath(root, abs)) {
         try {
-          if (priorBytes === null) {
+          if (prior.kind === "absent") {
             fs.rmSync(abs, { force: true });
             rolledBack = true;
-          } else {
-            rolledBack = writeFileAtomicNoFollow(abs, priorBytes);
+          } else if (prior.kind === "bytes") {
+            rolledBack = writeFileAtomicNoFollow(abs, prior.bytes);
           }
         } catch {
           rolledBack = false;
