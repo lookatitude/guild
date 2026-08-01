@@ -298,8 +298,28 @@ function canonicalize(value: unknown): unknown {
  * inside N+1's digest, and so on to the tip. There is no edit that repairs itself.
  */
 export function entryDigest(entry: AdoptionEntry): string {
-  return crypto.createHash("sha256").update(JSON.stringify(canonicalize(entry)), "utf8").digest("hex");
+  // CODEX #4: this is an EXPORTED boundary, and a compile-time type is not a
+  // runtime guarantee. `canonicalize` + `JSON.stringify` will happily traverse a
+  // Proxy, fire a throwing getter, recurse a cyclic object, or hit a bigint — any
+  // of which escapes the file-wide NEVER-throws contract. Validate first, exactly
+  // as `manifestCommitment` does, and return a sentinel rather than throwing.
+  //
+  // The sentinel is a fixed non-hex string, so it can never collide with a real
+  // digest and any chain built on it fails `DIGEST_RE` immediately.
+  try {
+    const valid = validateAdoptionEntry(entry);
+    if (valid === null) return INVALID_DIGEST;
+    return crypto
+      .createHash("sha256")
+      .update(JSON.stringify(canonicalize(valid)), "utf8")
+      .digest("hex");
+  } catch {
+    return INVALID_DIGEST;
+  }
 }
+
+/** Never matches DIGEST_RE, so a chain built on an invalid entry cannot validate. */
+export const INVALID_DIGEST = "invalid-entry";
 
 /**
  * The result of computing a manifest's external commitment.
@@ -746,13 +766,68 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
         ? { status: "not_found", ref: null, trail } // NEVER a fallback to live content
         : { status: "ambiguous", ref: null, trail }; // dead end mid-chain
     }
+    // MULTIPLE FORWARD MATCHES. Three prior attempts at this branch were wrong in
+    // three different ways, so the reasoning is written out rather than implied.
+    //
+    //   v1 "ambiguous always"     broke re-adoption: A->B, B->A, A->B is an ordinary
+    //                             D03 history and the manifest answered "nothing".
+    //   v2 "same destination ->    RESOLVED TO THE WRONG BYTES. A->B(1), B->C(2),
+    //       take the EARLIEST"     A->B(3): 1 and 3 share a destination, so it took 1,
+    //                             walked into 2, and returned C — while the LATEST
+    //                             history (3) says B. Optimising the trail for
+    //                             "complete provenance" cost correctness.
+    //   v3 (this)                 take the LATEST match. In an append-only log later
+    //                             supersedes earlier — the same rule forward-only
+    //                             already rests on — so the newest edge from an
+    //                             identity IS its current history. Correct on the
+    //                             round trip, the re-adoption, and the duplicate edge.
+    //
+    // Two things must ALSO hold before multiplicity is treated as one history, or a
+    // conflict can be disguised as a re-adoption:
+    //   - every match must share the SAME SOURCE identity, hash included. With a
+    //     hash-less query the predicate treats the hash as a wildcard, so A@h1->B
+    //     and A@h2->B would otherwise look like one source. They are two.
+    //   - every match must share the SAME DESTINATION REFERENCE — id, kind, hash AND
+    //     project-relative path. Equal bytes at different paths are different
+    //     locators, and this function promises to resolve a REFERENCE, not a digest.
+    let entry = matches[matches.length - 1];
     if (matches.length > 1) {
-      // One-to-many: a fork has no single correct answer, and guessing would
-      // silently pick the wrong bytes. Report it.
-      return { status: "ambiguous", ref: null, trail: [...trail, ...matches.map((x) => x.sequence)] };
+      // CODEX r5: id + hash was not enough. `A(/p1,h)->B`, `B->C`, `A(/p2,h)->B`
+      // passed both sameness checks, so a PATHLESS query took the latest edge and
+      // returned B while a `/p1`-qualified query followed the first and returned C —
+      // the same manifest answering two different things depending on how you asked.
+      // A source locator is the WHOLE locator; two paths are two sources.
+      const sameSource = matches.every(
+        (x) =>
+          x.from.id === matches[0].from.id &&
+          x.from.content_hash === matches[0].from.content_hash &&
+          x.from.historical_path === matches[0].from.historical_path &&
+          x.from.home === matches[0].from.home
+      );
+      const first = matches[0].to;
+      const sameDestination = matches.every((x) => {
+        if (x.to === null || first === null) return x.to === first;
+        return (
+          x.to.kind === first.kind &&
+          x.to.id === first.id &&
+          x.to.content_hash === first.content_hash &&
+          x.to.project_id === first.project_id &&
+          x.to.relative_path === first.relative_path
+        );
+      });
+      if (!sameSource || !sameDestination) {
+        return {
+          status: "ambiguous",
+          ref: null,
+          trail: [...trail, ...matches.map((x) => x.sequence)],
+        };
+      }
+      // LATEST wins. The trail is shorter than a full walk would be; that is the
+      // correct trade — the receipt records what was CONSULTED to reach the answer,
+      // and consulting superseded edges would misreport the current history.
+      entry = matches.reduce((a, b) => (a.sequence >= b.sequence ? a : b));
     }
 
-    const entry = matches[0];
     trail.push(entry.sequence);
     minSequence = entry.sequence;
 

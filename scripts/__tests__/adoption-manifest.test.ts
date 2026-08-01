@@ -540,3 +540,182 @@ describe("hardening — fail-closed, never throws", () => {
     expect(validateAdoptionManifestV1(m)).toBeNull();
   });
 });
+
+
+// ── CYCLE / ROUND-TRIP SEMANTICS (the D3 close-out) ────────────────────────
+//
+// My suite previously had ZERO cycle tests. I had one in the draft I discarded,
+// dropped it in the rewrite, and never re-added it — a coverage regression that
+// survived four codex rounds, because the FIX was reviewed and the TEST was not.
+//
+// These assert BOTH DIRECTIONS, so the rule cannot be satisfied by always
+// answering one way: a legitimate round trip / re-adoption must RESOLVE, and a
+// genuine destination conflict must be AMBIGUOUS.
+
+describe("cycle + round-trip semantics", () => {
+  const A = (h: string) => loc("A", h);
+
+  it("TERMINATION is structural — forward-only bounds the walk, no visited-set needed", () => {
+    // A tight A->B->A loop. minSequence strictly increases, so an entry can never
+    // be revisited and the walk is bounded by entry count. An identity-visited set
+    // would add nothing here — and would BREAK the re-adoption case below.
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "f") },
+    ]);
+    const t0 = Date.now();
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(Date.now() - t0).toBeLessThan(1000);
+    expect(r.status).toBe("resolved");
+  });
+
+  it("DIRECTION 1 — round trip to DIFFERENT bytes resolves to the rollback destination", () => {
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "e") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("A");
+    expect(r.ref?.content_hash).toBe(H("e"));
+    expect(r.trail).toEqual([1, 2]);
+  });
+
+  it("DIRECTION 1b — round trip to IDENTICAL bytes ALSO resolves (not ambiguous)", () => {
+    // The spec-author call: landing back on byte-identical content is an ordinary
+    // rollback, not a cycle. A resolves to where A now lives, which is A.
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "f") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.content_hash).toBe(H("f"));
+  });
+
+  it("DIRECTION 2 — RE-ADOPTION after a round trip resolves to the LATEST edge", () => {
+    // adopt -> roll back -> re-adopt. Entries 1 and 3 both start from A, so the old
+    // multiplicity check called this a fork and answered "nothing" for a history
+    // D03 is explicitly designed to record.
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "f") },
+      { from: A("f"), to: ref("B", "b") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("B");
+    // The trail is [3], NOT [1,2,3]. An earlier version took the EARLIEST match to
+    // record "complete provenance" — and that resolved to the WRONG BYTES on
+    // A->B(1), B->C(2), A->B(3): it took 1, walked into 2, and returned C while the
+    // latest history said B. The receipt records what was CONSULTED to reach the
+    // answer; consulting superseded edges would misreport the current history.
+    expect(r.trail).toEqual([3]);
+  });
+
+  it("REGRESSION (codex r4 #1) — a duplicate edge must not steer resolution to the wrong bytes", () => {
+    // A->B(1), B->C(2), A->B(3). Entries 1 and 3 share a destination, so the
+    // earliest-match version selected 1, followed 2, and returned C. The latest
+    // history (3) says B, and B is the answer.
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("C", "c") },
+      { from: A("f"), to: ref("B", "b") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("B"); // NOT "C"
+    expect(r.trail).toEqual([3]);
+  });
+
+  it("REGRESSION (codex r4 #2) — different SOURCE hashes are two identities, not one", () => {
+    // With a hash-less query the predicate treats from.content_hash as a wildcard,
+    // so A@h1->B and A@h2->B would look like one re-adopted source. They are two.
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: A("e"), to: ref("B", "b") },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+  });
+
+  it("REGRESSION (codex r5) — same id+hash at DIFFERENT source paths are two sources", () => {
+    // A(/p1,h)->B, B->C, A(/p2,h)->B. Without the full-locator check a pathless
+    // query returned B and a /p1-qualified query returned C — one manifest, two
+    // answers, depending only on how you asked.
+    const m = chain([
+      { from: { id: "A", historical_path: "/g/p1/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("C", "c") },
+      { from: { id: "A", historical_path: "/g/p2/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+  });
+
+  it("REGRESSION (codex r4 #3) — same bytes at DIFFERENT paths are different locators", () => {
+    // This function resolves a REFERENCE, not a digest. Equal content at two paths
+    // must not collapse into one destination.
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "f") },
+      { from: A("f"), to: { ...ref("B", "b"), relative_path: ".guild/agents/B-moved.md" } },
+    ]);
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") }).status
+    ).toBe("ambiguous");
+  });
+
+  it("REGRESSION (codex r4 #4) — entryDigest never throws on a hostile entry", () => {
+    const hostile = new Proxy(rawEntry({ sequence: 1 }), {
+      get() {
+        throw new Error("boom");
+      },
+    });
+    expect(() => entryDigest(hostile)).not.toThrow();
+    // The sentinel can never collide with a real digest, so a chain built on it fails.
+    expect(entryDigest(hostile)).toBe("invalid-entry");
+  });
+
+  it("DIRECTION 3 — a genuine DESTINATION CONFLICT is still ambiguous", () => {
+    // Same source bytes adopted to two DIFFERENT successors. No principled pick
+    // exists, so guessing would silently resolve to the wrong bytes.
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: A("f"), to: ref("C", "c") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(r.status).toBe("ambiguous");
+    expect(r.ref).toBeNull();
+    expect(r.trail).toEqual([1, 2]); // both conflicting entries named in the receipt
+  });
+
+  it("THE DISCRIMINATOR IS THE DESTINATION, not the multiplicity", () => {
+    // Both manifests have two entries starting from A. Only the destinations differ.
+    // If multiplicity alone decided, these would answer the same — and one would be wrong.
+    const sameDest = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "f") },
+      { from: A("f"), to: ref("B", "b") },
+    ]);
+    const diffDest = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: A("f"), to: ref("C", "c") },
+    ]);
+    expect(resolveHistorical(sameDest, { kind: "agent", id: "A", content_hash: H("f") }).status).toBe(
+      "resolved"
+    );
+    expect(resolveHistorical(diffDest, { kind: "agent", id: "A", content_hash: H("f") }).status).toBe(
+      "ambiguous"
+    );
+  });
+
+  it("a longer legitimate chain with two round trips still resolves", () => {
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "f") },
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("A", "f") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(r.status).toBe("resolved");
+    expect(r.trail.length).toBeGreaterThanOrEqual(2);
+  });
+});
