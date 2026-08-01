@@ -49,6 +49,7 @@ function ref(id: string, hash = "a"): ProjectDefinitionRefV1 {
 function loc(id: string, hash = "f") {
   return {
     id,
+    project_id: "plugin",
     historical_path: `/Users/miguelp/Projects/guild/.claude/agents/${id}.md`,
     content_hash: H(hash),
     home: "dot-claude-agents" as const,
@@ -329,7 +330,7 @@ function rollbackManifest(): AdoptionManifestV1 {
   return chain([
     { from: loc("A"), to: to1 },
     {
-      from: { id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: to1.content_hash, home: "project-guild" },
+      from: { project_id: "plugin", id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: to1.content_hash, home: "project-guild" },
       // A GENUINE rollback returns to the target's SOURCE identity — same id AND
       // same bytes. Codex round 2 (#3) tightened the validator to require this;
       // the old fixture returned to a DIFFERENT hash, which is not a reversal.
@@ -348,7 +349,7 @@ describe("A3.7 — chains, including forward-append rollback", () => {
     const m = chain([
       { from: loc("A"), to: b },
       {
-        from: { id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: b.content_hash, home: "project-guild" },
+        from: { project_id: "plugin", id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: b.content_hash, home: "project-guild" },
         to: ref("C"),
       },
     ]);
@@ -414,7 +415,7 @@ describe("traversal matches IDENTITY, not bare ids", () => {
       { from: loc("A"), to: b },
       // An unrelated later adoption of a DIFFERENT "B" (different bytes).
       {
-        from: { id: "B", historical_path: "/g/other/B.md", content_hash: H("9"), home: "project-guild" },
+        from: { project_id: "plugin", id: "B", historical_path: "/g/other/B.md", content_hash: H("9"), home: "project-guild" },
         to: ref("WRONG"),
       },
     ]);
@@ -512,6 +513,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
         kind: "skill", // ← entry 1 was an agent adoption
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -537,6 +539,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
       {
         from: {
           id: "Z", // ← not B: never picks up where entry 1 left off
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/Z.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -565,6 +568,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
       {
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -667,6 +671,7 @@ describe("A3.9b — a PROVEN rollback is an AUTHORIZED return, never a cycle", (
       {
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -814,7 +819,7 @@ describe("cycle + round-trip semantics", () => {
    * cycle guard treats it as a closed loop, which is the point of the exemption.
    */
   const rollbackOf = (seq: number, fromRef: ProjectDefinitionRefV1, toId: string, toHash: string) => ({
-    from: { id: fromRef.id, historical_path: `/g/${fromRef.id}.md`, content_hash: fromRef.content_hash, home: "project-guild" as const },
+    from: { project_id: "plugin", id: fromRef.id, historical_path: `/g/${fromRef.id}.md`, content_hash: fromRef.content_hash, home: "project-guild" as const },
     to: ref(toId, toHash),
     reason: "rolled_back" as const,
     detail: `reverses sequence ${seq}`,
@@ -912,7 +917,7 @@ describe("cycle + round-trip semantics", () => {
     // Rewritten to be neither: an intervening rollback makes the manifest genuinely
     // valid, and the assertion is now D4's rule, checked from both query shapes.
     const m = chain([
-      { from: { id: "A", historical_path: "/g/p1/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
+      { from: { project_id: "plugin", id: "A", historical_path: "/g/p1/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
       {
         from: loc("B", "b"),
         to: ref("A", "f"),
@@ -921,7 +926,7 @@ describe("cycle + round-trip semantics", () => {
         reverses_sequence: 1,
         authorized_by: "cap-loc-D03",
       },
-      { from: { id: "A", historical_path: "/g/p2/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("C", "c") },
+      { from: { project_id: "plugin", id: "A", historical_path: "/g/p2/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("C", "c") },
     ]);
     expect(validateAdoptionManifestV1(m)).not.toBeNull(); // …genuinely valid now
     const pathless = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
@@ -932,6 +937,7 @@ describe("cycle + round-trip semantics", () => {
       kind: "agent",
       id: "A",
       content_hash: H("f"),
+      project_id: "plugin",
       historical_path: "/g/p1/A.md",
     });
     expect(qualified.status).toBe("resolved");

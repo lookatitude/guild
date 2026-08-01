@@ -49,6 +49,7 @@ function ref(id: string, hash = "a"): ProjectDefinitionRefV1 {
 function loc(id: string, hash = "f") {
   return {
     id,
+    project_id: "plugin",
     historical_path: `/Users/miguelp/Projects/guild/.claude/agents/${id}.md`,
     content_hash: H(hash),
     home: "dot-claude-agents" as const,
@@ -152,7 +153,7 @@ describe("#2 — absence of a hash is not agreement", () => {
       // Same id, NO recorded hash — previously a wildcard that hijacked the chain
       // and resolved a historical run to WRONG's bytes.
       {
-        from: { id: "B", historical_path: "/g/other/B.md", content_hash: null, home: "project-guild" },
+        from: { project_id: "plugin", id: "B", historical_path: "/g/other/B.md", content_hash: null, home: "project-guild" },
         to: ref("WRONG"),
       },
     ]);
@@ -164,7 +165,7 @@ describe("#2 — absence of a hash is not agreement", () => {
   it("a supplied query hash is not satisfied by an entry with a null hash", () => {
     const m = chain([
       {
-        from: { id: "A", historical_path: "/g/A.md", content_hash: null, home: "project-guild" },
+        from: { project_id: "plugin", id: "A", historical_path: "/g/A.md", content_hash: null, home: "project-guild" },
         to: ref("B"),
       },
     ]);
@@ -184,6 +185,7 @@ describe("#3 — a rollback proves reversal, not just its starting point", () =>
       {
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: b.content_hash,
           home: "project-guild",

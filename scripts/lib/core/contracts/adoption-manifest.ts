@@ -52,7 +52,24 @@
  * 4. TRAVERSAL MATCHES IDENTITY, NOT BARE IDS. A later, unrelated definition
  *    reusing a successor's id must not hijack the chain — that would resolve a
  *    historical run to the WRONG BYTES, the exact R11 failure this file prevents.
- *    Hops are matched on `(kind, id)` AND the predecessor's byte identity.
+ *    Hops are matched on `(kind, id)`, the predecessor's BYTE identity, AND the
+ *    PROJECT ROOT it lives in.
+ *
+ *    THE ROOT WAS ADDED BY AMENDMENT (task #27), and the reason is that the first
+ *    three components were not enough to keep this very promise. In a manifest for
+ *    `umbrella`, `umbrella/A@a → sub-one/X@3` followed by an unrelated
+ *    `umbrella/X@3 → sub-two/Y@e` validated, and resolving `A` returned
+ *    `sub-two/Y` — a later definition sharing a successor's id AND bytes hijacked
+ *    the chain, because identity could not say WHERE anything lived. `from` now
+ *    carries `project_id`, pairing with the successor's own, so both ends of a hop
+ *    are comparable in one vocabulary.
+ *
+ *    The schema was frozen but UNMERGED and UNCONSUMED, so the amendment cost
+ *    nothing a release would have made expensive; shipping a frozen contract with a
+ *    known wrong-bytes path would have been the worse trade. The alternative —
+ *    refusing any multi-hop continuation whose root continuity cannot be proven —
+ *    was rejected: it trades a wrong answer for NO answer, and D06 contemplates
+ *    exactly those cross-root histories.
  *
  * ── THE THREE STANDING DEFECT CLASSES (spec README rules 4-6) ───────────────
  *
@@ -201,6 +218,29 @@ function isCanonicalPath(v: unknown, opts: { allowAbsolute: boolean }): v is str
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
 export interface LegacyLocator {
+  /**
+   * WHICH PROJECT ROOT this historical definition belonged to — the identity
+   * component the schema was amended to add (task #27).
+   *
+   * Without it, identity was (kind, id, bytes) and traversal could not tell two
+   * byte-identical definitions in different roots apart. Reproduced: in a manifest
+   * for `umbrella`, the chain `umbrella/A@a → sub-one/X@3` plus an unrelated
+   * `umbrella/X@3 → sub-two/Y@e` validated, and resolving `A` returned
+   * `sub-two/Y` — the WRONG BYTES, which is exactly the R11 failure this file
+   * exists to prevent. A contract that resolves to the wrong bytes is not
+   * preserving its own reason to exist.
+   *
+   * It pairs with `ProjectDefinitionRefV1.project_id` on the successor side, so the
+   * two ends of a hop are comparable in ONE vocabulary. `home` stays what it always
+   * was — descriptive metadata about the owning LAYER — and is deliberately not
+   * identity-bearing: it has four fixed values and cannot name a root.
+   *
+   * REQUIRED, not nullable. An optional root would reintroduce exactly the hole it
+   * closes: absent would either wildcard (the defect) or match nothing (breaking
+   * legitimate chains). This contract is unconsumed, so there is no migration cost
+   * to paying for the honest shape now.
+   */
+  project_id: string;
   /** The id the old world used. Token-shaped, never path-shaped (Rule 6). */
   id: string;
   /** The path as historical records cite it — CANONICAL, but may be absolute. */
@@ -449,7 +489,7 @@ export function verifyAgainstTip(manifest: unknown, expected: string | null): bo
 
 // ── Validators (fail-closed: typed | null, NEVER throw) ──────────────────────
 
-const LOCATOR_KEYS = ["id", "historical_path", "content_hash", "home"] as const;
+const LOCATOR_KEYS = ["project_id", "id", "historical_path", "content_hash", "home"] as const;
 
 const ENTRY_KEYS = [
   "sequence",
@@ -471,14 +511,21 @@ function validateLegacyLocatorInner(obj: unknown): LegacyLocator | null {
   if (!isPlainDataObject(obj)) return null;
   if (!hasExactKeys(obj, LOCATOR_KEYS)) return null;
 
+  const projP = ownDataProp(obj, "project_id");
   const idP = ownDataProp(obj, "id");
   const pathP = ownDataProp(obj, "historical_path");
   const hashP = ownDataProp(obj, "content_hash");
   const homeP = ownDataProp(obj, "home");
+  if (projP.kind !== "data") return null;
   if (idP.kind !== "data") return null;
   if (pathP.kind !== "data") return null;
   if (hashP.kind !== "data") return null;
   if (homeP.kind !== "data") return null;
+
+  // The root is token-shaped exactly like the manifest's own `project_id` and S2's,
+  // so one root name cannot be spelled two ways across the three contracts.
+  if (!isCleanScalar(projP.value, MAX_ID)) return null;
+  if (!TOKEN_RE.test(projP.value)) return null;
 
   // Rule 6: an id is a TOKEN — bounded, control-free, and NOT path-shaped, so it
   // can never smuggle a body or masquerade as a locator.
@@ -494,6 +541,7 @@ function validateLegacyLocatorInner(obj: unknown): LegacyLocator | null {
   if (typeof homeP.value !== "string" || !LEGACY_HOME_SET.has(homeP.value)) return null;
 
   return {
+    project_id: projP.value,
     id: idP.value,
     historical_path: pathP.value,
     content_hash: hashP.value as string | null,
@@ -559,7 +607,8 @@ function validateAdoptionEntryInner(obj: unknown): AdoptionEntry | null {
     if (to.kind !== kindP.value) return null;
     // AN ADOPTION MUST GO SOMEWHERE — the successor cannot BE the source (defect 9,
     // reported by the resolver lane). See `isUnstampedAdoption` for the full case.
-    if (identityOf(kindP.value, from.id, from.content_hash) === identityOf(to.kind, to.id, to.content_hash)) {
+    if (identityOf(kindP.value, from.id, from.content_hash, from.project_id) ===
+      identityOf(to.kind, to.id, to.content_hash, to.project_id)) {
       return null;
     }
   }
@@ -684,8 +733,8 @@ export function isUnstampedAdoption(entry: unknown): boolean {
     const to = validateProjectDefinitionRefV1(toP.value);
     if (to === null) return false;
     return (
-      identityOf(kindP.value, from.id, from.content_hash) ===
-      identityOf(to.kind, to.id, to.content_hash)
+      identityOf(kindP.value, from.id, from.content_hash, from.project_id) ===
+      identityOf(to.kind, to.id, to.content_hash, to.project_id)
     );
   } catch {
     return false;
@@ -698,8 +747,8 @@ export function isUnstampedAdoption(entry: unknown): boolean {
  * definition" means — they did once, and the fork survived it (merged codex #1).
  * A null hash is its own value, distinct from any recorded hash.
  */
-function identityOf(kind: string, id: string, hash: string | null): string {
-  return `${kind}\u0000${id}\u0000${hash ?? ""}`;
+function identityOf(kind: string, id: string, hash: string | null, projectId: string): string {
+  return `${kind}\u0000${id}\u0000${hash ?? ""}\u0000${projectId}`;
 }
 
 function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | null {
@@ -803,7 +852,7 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     // this rule exists to forbid stayed representable. The liveness identity must
     // include the BYTES, exactly like traversal's.
     for (const entry of entries) {
-      const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash);
+      const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash, entry.from.project_id);
 
       // `from` must be live. An identity is live until adopted away; the first
       // time we see it as a source it is live by default (it pre-dates the log).
@@ -815,7 +864,7 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // hash-less removal tombstones the whole (kind, id)" was true on the landing
       // side and false on the source side — the reported instance fixed, the class
       // left open, which is the failure this task exists to stop repeating.
-      if (removedAnyHash.has(`${entry.kind}\u0000${entry.from.id}`)) return null;
+      if (removedAnyHash.has(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}`)) return null;
       // …AND THE MIRROR OF IT (codex round 5, #1). The rule above covers "the removal
       // did not know its bytes"; this covers "the LATER ENTRY does not know its
       // bytes". `A@a→null(removed)`, `A@null→C(2)` validated, because `A@null` is a
@@ -826,7 +875,7 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // hashes actually differ, still passes.
       if (
         entry.from.content_hash === null &&
-        removedKnownHash.has(`${entry.kind}\u0000${entry.from.id}`)
+        removedKnownHash.has(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}`)
       ) {
         return null;
       }
@@ -840,7 +889,7 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // Constraining the SOURCE is enough to make the fork unrepresentable, and
       // constraining the destination costs more than it buys.
       if (entry.to !== null) {
-        const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash);
+        const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id);
         // A removal is FINAL. Landing on a retired identity re-creates it, whatever
         // the reason claims to be doing, so that is where it rejects. Note this keys
         // on BYTES like everything else: retiring `A@h1` says nothing about `A@h2`,
@@ -855,7 +904,7 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
         // tombstones the whole (kind, id). This is the same rule the rollback proof
         // already applies to a null target hash, and that `identityOf` encodes by
         // treating null as distinct from every recorded hash.
-        if (removedAnyHash.has(`${entry.to.kind}\u0000${entry.to.id}`)) return null;
+        if (removedAnyHash.has(`${entry.to.kind}\u0000${entry.to.id}\u0000${entry.to.project_id}`)) return null;
         liveIds.add(toKey);
         // CODEX (merged round) #1 was really TWO issues, and only one of them was
         // here. The fork survived because `identityOf` ignored BYTES, so `A@h1` and
@@ -881,9 +930,9 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
         removedIds.add(fromKey);
         // A hash-less removal cannot say WHICH bytes it retired, so it retires the id.
         if (entry.from.content_hash === null) {
-          removedAnyHash.add(`${entry.kind}\u0000${entry.from.id}`);
+          removedAnyHash.add(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}`);
         } else {
-          removedKnownHash.add(`${entry.kind}\u0000${entry.from.id}`);
+          removedKnownHash.add(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}`);
         }
       }
     }
@@ -980,12 +1029,12 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
    */
   const departed = new Set<string>();
   for (const entry of entries) {
-    const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash);
+    const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash, entry.from.project_id);
     if (entry.reason !== "rolled_back") {
       // An adoption with a destination is an outstanding effect a later rollback may
       // unwind. A removal has no destination, so there is nothing to return to.
       if (entry.to !== null) {
-        const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash);
+        const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id);
         // ERA BOUNDARY: a fresh adoption onto a departed identity re-creates it, and
         // SUSPENDS the era beneath rather than destroying it.
         pushAdoption(toKey, entry.sequence, departed.has(toKey));
@@ -1009,12 +1058,31 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     if (target.to === null) return null; // a removal has nothing to roll back to
     if (entry.kind !== target.kind) return null;
     if (entry.from.id !== target.to.id) return null;
+    // NO `entry.from.project_id === target.to.project_id` LINE HERE, and it is not an
+    // omission — one was written and DELETED as provably redundant, rather than
+    // shipped untested. The LIFO pop below looks up `currentEra(fromKey)` with a
+    // root-bearing identity and requires the top to be `target.sequence`; an entry
+    // pushes exactly once, under its OWN `to` identity, so `target.sequence` exists
+    // in no other stack. The pop therefore cannot succeed unless the departing
+    // identity — root included — already equals `target.to`. Confirmed by sweep:
+    // weakening that line changed no outcome, including on a fixture built
+    // specifically to isolate it.
+    //
+    // Its mirror on the LANDING side below is NOT redundant, and the difference is
+    // measured rather than assumed.
     if (target.to.content_hash !== entry.from.content_hash) return null;
     // CODEX #3: the previous check proved only where the rollback STARTED, so
     // `A → B` followed by `B → C` could be labelled "rolled_back" against entry 1
     // and validate. A reversal must also LAND back on the target's source identity.
     if (entry.to === null) return null; // a rollback always has a destination
     if (entry.to.id !== target.from.id) return null;
+    // LOAD-BEARING, unlike its departure-side mirror. The R3 landing rule below only
+    // requires the restored identity to be DEPARTED, and another entry can have
+    // departed a same-id, same-bytes definition in a DIFFERENT root — so without this
+    // line, `umbrella/A@a → sub-one/B@b(1)`, `website/A@a → sub-one/C@c(2)`,
+    // `sub-one/B@b → website/A@a (3 rb 1)` validates and unwinds entry 1 into the
+    // WRONG ROOT. Verified by sweeping this line alone against that fixture.
+    if (entry.to.project_id !== target.from.project_id) return null; // back to the ROOT it left
     // The rollback must land on the target's SOURCE BYTES. When the target recorded
     // none, that is unprovable — and skipping the check let a rollback claim ARBITRARY
     // replacement bytes and then collect the read-time cycle exemption on a reversal
@@ -1102,14 +1170,14 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     // multi-step sequential rollback, and the suspend-and-restore history all land on
     // identities that departed and were never re-created.
     if (entry.to !== null) {
-      const restoreKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash);
+      const restoreKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id);
       if (!departed.has(restoreKey)) return null;
     }
     // This rollback departs its source and RESTORES its destination into the era
     // that destination already had — never a new one, so no stack is cleared here.
     departed.add(fromKey);
     if (entry.to !== null) {
-      departed.delete(identityOf(entry.to.kind, entry.to.id, entry.to.content_hash));
+      departed.delete(identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id));
     }
   }
 
@@ -1156,6 +1224,17 @@ export interface AdoptionResolution {
 export interface HistoricalQuery {
   kind: "agent" | "skill";
   id: string;
+  /**
+   * Which project root the historical definition belonged to. OPTIONAL and
+   * DISAMBIGUATING, exactly like `content_hash`: supply it and only that root's
+   * lineage matches; omit it and the root becomes known from the first matched
+   * entry, so an un-pinned query still resolves when the id is unambiguous.
+   *
+   * It has to exist for the amended identity to be pinnable at all — a caller
+   * holding a receipt from `sub-one` had no way to say so, which is half of why the
+   * cross-project conflation was invisible from the outside.
+   */
+  project_id?: string;
   /** Optional, and DISAMBIGUATING when present. */
   historical_path?: string;
   /** Optional byte identity of the old definition. */
@@ -1211,8 +1290,8 @@ export function resolveHistorical(
  * fires. `\u0000` cannot occur in a validated id or a `sha256:<hex>`, so no two
  * distinct positions collide.
  */
-function identityKey(kind: string, id: string, contentHash: string): string {
-  return `${kind}\u0000${id}\u0000${contentHash}`;
+function identityKey(kind: string, id: string, contentHash: string, projectId: string): string {
+  return `${kind}\u0000${id}\u0000${contentHash}\u0000${projectId}`;
 }
 
 function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionResolution {
@@ -1220,7 +1299,7 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
 
   // ── QUERY FIRST, own-data only, closed key set ──
   if (!isPlainDataObject(query)) return NO_ANSWER;
-  const QUERY_KEYS = ["kind", "id", "historical_path", "content_hash"];
+  const QUERY_KEYS = ["kind", "id", "project_id", "historical_path", "content_hash"];
   // SYMBOLS FIRST (codex round 5, #7). `getOwnPropertyNames` does not see symbol
   // keys, so `{kind, id, [Symbol("payload")]: huge}` sailed through a check whose
   // entire job is "closed key set". The query was the ONLY closed shape here
@@ -1233,14 +1312,23 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   }
   const qKind = ownDataProp(query, "kind");
   const qId = ownDataProp(query, "id");
+  const qProject = ownDataProp(query, "project_id");
   const qPath = ownDataProp(query, "historical_path");
   const qHash = ownDataProp(query, "content_hash");
   if (qKind.kind !== "data" || qId.kind !== "data") return NO_ANSWER;
   if (qPath.kind === "accessor" || qHash.kind === "accessor") return NO_ANSWER;
+  if (qProject.kind === "accessor") return NO_ANSWER;
   if (qKind.value !== "agent" && qKind.value !== "skill") return NO_ANSWER;
   if (!isCleanScalar(qId.value, MAX_ID) || !TOKEN_RE.test(qId.value)) return NO_ANSWER;
   const snapPath = qPath.kind === "data" ? qPath.value : undefined;
   if (snapPath !== undefined && !isCanonicalPath(snapPath, { allowAbsolute: true })) {
+    return NO_ANSWER;
+  }
+  const snapProject = qProject.kind === "data" ? qProject.value : undefined;
+  if (
+    snapProject !== undefined &&
+    (!isCleanScalar(snapProject, MAX_ID) || !TOKEN_RE.test(snapProject))
+  ) {
     return NO_ANSWER;
   }
   const snapHash = qHash.kind === "data" ? qHash.value : undefined;
@@ -1306,7 +1394,7 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   const introducedAt = new Map<string, number[]>();
   for (const e of m.entries) {
     if (e.to === null) continue;
-    const k = identityKey(e.to.kind, e.to.id, e.to.content_hash);
+    const k = identityKey(e.to.kind, e.to.id, e.to.content_hash, e.to.project_id);
     const seqs = introducedAt.get(k);
     if (seqs === undefined) introducedAt.set(k, [e.sequence]);
     else seqs.push(e.sequence);
@@ -1374,6 +1462,8 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   let currentKind: "agent" | "skill" = qKind.value;
   let currentId: string = qId.value;
   let currentHash: string | undefined = snapHash as string | undefined;
+  /** The root the lineage currently sits in; becomes known at the first hop if unpinned. */
+  let currentProject: string | undefined = snapProject as string | undefined;
   let firstHopPath: string | undefined = snapPath as string | undefined;
   let minSequence = 0;
   /**
@@ -1400,6 +1490,14 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
       // hash cannot match it: absence is not agreement.
       if (currentHash !== undefined) {
         if (e.from.content_hash !== currentHash) return false;
+      }
+      // THE ROOT, on exactly the same terms as the bytes (task #27). After the first
+      // hop `currentProject` is the successor's own `project_id`, so a later entry
+      // departing an identically-named, identically-hashed definition in a DIFFERENT
+      // root is not a continuation of this chain. That is the whole wrong-bytes fix:
+      // `umbrella/A@a → sub-one/X@3` no longer chains into `umbrella/X@3 → sub-two/Y`.
+      if (currentProject !== undefined) {
+        if (e.from.project_id !== currentProject) return false;
       }
       // A supplied path disambiguates the FIRST hop only; later hops are reached
       // through the successor's identity, not through history's spelling.
@@ -1454,9 +1552,10 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // is for, and what a path was never able to mean.
     if (matches.length > 1) {
       const head = matches[0].from;
-      const headKey = identityOf(currentKind, head.id, head.content_hash);
+      const headKey = identityOf(currentKind, head.id, head.content_hash, head.project_id);
       const oneSource = matches.every(
-        (x) => identityOf(currentKind, x.from.id, x.from.content_hash) === headKey
+        (x) =>
+          identityOf(currentKind, x.from.id, x.from.content_hash, x.from.project_id) === headKey
       );
       if (!oneSource) {
         return {
@@ -1478,8 +1577,11 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
       // Seed the ORIGIN now that the first hop is known. The caller may have pinned
       // the bytes; otherwise the first entry's `from` is where they become known.
       const originHash = currentHash ?? entry.from.content_hash;
+      // The root is recovered here for the same reason the bytes are: an un-pinned
+      // caller only learns where the lineage started once the first hop is chosen.
+      const originProject = currentProject ?? entry.from.project_id;
       if (originHash !== null && originHash !== undefined) {
-        const k = identityKey(currentKind, currentId, originHash);
+        const k = identityKey(currentKind, currentId, originHash, originProject);
         // The SAME stamp feeds the cycle guard and the rollback-authority set, so
         // "which entry put this walk where it started" has exactly one answer. 0 ⇒
         // the origin pre-dates the log, and no rollback can claim to have unwound it.
@@ -1514,7 +1616,7 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     //
     // Checked BEFORE the `hasNext` lookahead: a loop is a loop whether or not it
     // continues.
-    const nextIdentity = identityKey(next.kind, next.id, next.content_hash);
+    const nextIdentity = identityKey(next.kind, next.id, next.content_hash, next.project_id);
     // A proven rollback REWINDS the lineage, so the era it undid stops counting as
     // occupied — a later RE-ADOPTION is new history, not a loop. Exempting only the
     // rollback EDGE (and not the era) left `A->B, B->A rollback, A->B` tripping on
@@ -1576,7 +1678,10 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
         // CODEX #2: same wildcard, second site. `next.content_hash` is always
         // known (it comes from a validated ref), so an entry with a null hash is
         // NOT a continuation of this chain.
-        e.from.content_hash === next.content_hash
+        e.from.content_hash === next.content_hash &&
+        // …and the same root. `next.project_id` always exists (a validated ref), so
+        // an entry departing another root is NOT a continuation of this chain.
+        e.from.project_id === next.project_id
     );
     if (!hasNext) {
       return { status: "resolved", ref: deepFreeze(next), trail };
@@ -1584,6 +1689,7 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     currentKind = next.kind as "agent" | "skill";
     currentId = next.id;
     currentHash = next.content_hash;
+    currentProject = next.project_id;
     firstHopPath = undefined;
   }
 

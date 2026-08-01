@@ -20,8 +20,10 @@ import {
   resolveHistorical,
   validateAdoptionEntry,
   validateAdoptionManifestV1,
+  validateLegacyLocator,
   type AdoptionEntry,
   type AdoptionManifestV1,
+  type LegacyHome,
 } from "../lib/core/contracts/adoption-manifest";
 import {
   MAX_DEFINITION_ID,
@@ -64,6 +66,7 @@ function ref(id: string, hash: string): ProjectDefinitionRefV1 {
 function loc(id: string, hash: string, path?: string) {
   return {
     id,
+    project_id: "plugin",
     historical_path: path ?? `/old/${id}.md`,
     content_hash: H(hash),
     home: "dot-claude-agents" as const,
@@ -507,6 +510,7 @@ describe("D4 — liveness and traversal agree about what an identity IS", () => 
       kind: "agent",
       id: "A",
       content_hash: H("a"),
+      project_id: "plugin",
       historical_path: "/h/p1.md",
     });
     expect(withPath.status).toBe("resolved");
@@ -546,6 +550,7 @@ describe("D4 — liveness and traversal agree about what an identity IS", () => 
       {
         from: {
           id: "A",
+          project_id: "plugin",
           historical_path: "/old/A.md",
           content_hash: H("a"),
           home: "dot-claude-agents" as const,
@@ -556,6 +561,7 @@ describe("D4 — liveness and traversal agree about what an identity IS", () => 
       {
         from: {
           id: "A",
+          project_id: "plugin",
           historical_path: "/old/A.md",
           content_hash: H("a"),
           home: "plugin-shipped" as const,
@@ -1880,17 +1886,25 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
    * has no home/layer field at all) and is the SAME decision as the cross-project
    * conflation gap. Both are escalated together; this rule is the honest interim.
    */
-  const umbrella = (id: string, hash: string) => ({
+  // RENAMED AFTER THE #27 AMENDMENT, because the old name became a lie. These
+  // fixtures share the "plugin" root with their `ref()` successors, so they are TRUE
+  // SELF-ADOPTIONS, not rehomes. Once identity carries the project root, a genuine
+  // rehome (different root, identical id and bytes) is a legal, resolvable history —
+  // asserted in the #27 block. Leaving this called `umbrella` while its root said
+  // "plugin" would have left every assertion here quietly testing something else,
+  // which is the vacuity failure this suite has been burned by twice.
+  const sameRoot = (id: string, hash: string) => ({
+    project_id: "plugin",
     id,
-    historical_path: `/umbrella/.guild/agents/${id}.md`,
+    historical_path: `/plugin/.guild/agents/${id}.md`,
     content_hash: H(hash),
-    home: "umbrella-guild" as const,
+    home: "project-guild" as const,
   });
 
-  it("REFUSES a verbatim rehome — same kind, id and bytes on both sides", () => {
+  it("REFUSES a verbatim SELF-adoption — same kind, root, id and bytes", () => {
     expect(
       validateAdoptionManifestV1(
-        chain([{ from: umbrella("architect", "a"), to: ref("architect", "a"), reason: "rehomed" }])
+        chain([{ from: sameRoot("architect", "a"), to: ref("architect", "a"), reason: "rehomed" }])
       )
     ).toBeNull();
   });
@@ -1898,7 +1912,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
   it("…at the ENTRY validator, so a producer meets it immediately", () => {
     expect(
       validateAdoptionEntry(
-        rawD9({ from: umbrella("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
+        rawD9({ from: sameRoot("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
       )
     ).toBeNull();
   });
@@ -1909,7 +1923,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
       expect(
         validateAdoptionEntry(
           rawD9({
-            from: umbrella("architect", "a"),
+            from: sameRoot("architect", "a"),
             to: ref("architect", "a"),
             reason: reason as AdoptionEntry["reason"],
             detail: "note",
@@ -1926,7 +1940,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
     // ask this and learn that the adoption must stamp provenance.
     expect(
       isUnstampedAdoption(
-        rawD9({ from: umbrella("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
+        rawD9({ from: sameRoot("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
       )
     ).toBe(true);
   });
@@ -1934,7 +1948,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
   // ── the STAMPED adoption — the shape that must keep working ──────────────
 
   const stamped = () => ({
-    from: umbrella("architect", "a"),
+    from: sameRoot("architect", "a"),
     to: ref("architect", "b"), // provenance stamped ⇒ different bytes ⇒ distinct identity
     reason: "rehomed" as const,
   });
@@ -1950,7 +1964,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
         chain([
           stamped(),
           {
-            from: { ...umbrella("architect", "b"), home: "project-guild" as const },
+            from: { ...sameRoot("architect", "b"), home: "project-guild" as const },
             to: ref("architect2", "c"),
           },
         ])
@@ -1967,7 +1981,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
     // (bytes changed) is an ordinary adoption and must stay legal.
     expect(
       validateAdoptionManifestV1(
-        chain([{ from: umbrella("architect", "a"), to: ref("architect", "b") }])
+        chain([{ from: sameRoot("architect", "a"), to: ref("architect", "b") }])
       )
     ).not.toBeNull();
   });
@@ -1975,7 +1989,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
   it("a same-BYTES adoption under a DIFFERENT id is untouched too", () => {
     expect(
       validateAdoptionManifestV1(
-        chain([{ from: umbrella("architect", "a"), to: ref("architect-renamed", "a") }])
+        chain([{ from: sameRoot("architect", "a"), to: ref("architect-renamed", "a") }])
       )
     ).not.toBeNull();
   });
@@ -1992,8 +2006,8 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
   it("a bare-id query is ambiguous ONLY when the id really has two distinct sources", () => {
     // Two sources = same id, DIFFERENT bytes. Pinning `content_hash` disambiguates.
     const two = chain([
-      { from: umbrella("A", "a"), to: ref("B", "b") },
-      { from: umbrella("A", "c"), to: ref("D", "d") },
+      { from: sameRoot("A", "a"), to: ref("B", "b") },
+      { from: sameRoot("A", "c"), to: ref("D", "d") },
     ]);
     expect(validateAdoptionManifestV1(two)).not.toBeNull();
     expect(resolveHistorical(two, { kind: "agent", id: "A" }).status).toBe("ambiguous");
@@ -2005,11 +2019,267 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
     // Worth pinning because the two are easy to conflate: identical bytes across a
     // rollback are a re-adoption, not two sources, and a bare-id query resolves.
     const readopt = chain([
-      { from: umbrella("A", "a"), to: ref("B", "b") },
-      rb(1, { from: umbrella("B", "b"), to: ref("A", "a") }),
-      { from: umbrella("A", "a"), to: ref("C", "c") },
+      { from: sameRoot("A", "a"), to: ref("B", "b") },
+      rb(1, { from: sameRoot("B", "b"), to: ref("A", "a") }),
+      { from: sameRoot("A", "a"), to: ref("C", "c") },
     ]);
     expect(validateAdoptionManifestV1(readopt)).not.toBeNull();
     expect(resolveHistorical(readopt, { kind: "agent", id: "A" }).status).toBe("resolved");
+  });
+});
+
+
+// ── Task #27 — the schema amendment: identity carries the project root ──────
+
+describe("#27 — a location-bearing identity, and the wrong-bytes path it closes", () => {
+  const at = (id: string, hash: string, project: string, home: LegacyHome = "umbrella-guild") => ({
+    project_id: project,
+    id,
+    historical_path: `/${project}/.guild/agents/${id}.md`,
+    content_hash: H(hash),
+    home,
+  });
+  const inProject = (id: string, hash: string, project: string): ProjectDefinitionRefV1 => ({
+    ...ref(id, hash),
+    project_id: project,
+  });
+  const umbrellaChain = (parts: Array<Partial<AdoptionEntry>>): AdoptionManifestV1 => ({
+    ...chain(parts),
+    project_id: "umbrella",
+  });
+
+  /**
+   * THE REPRODUCED P1 THE RULING WAS MADE ON. Before the amendment this validated
+   * and resolving `A` returned `sub-two/Y` on trail [1,2] — the WRONG BYTES, which
+   * is the R11 failure this contract exists to prevent. Entry 2 departs the UMBRELLA's
+   * own `X`, a different definition that merely shares an id and bytes with the
+   * `sub-one/X` entry 1 created.
+   */
+  const crossProject = () =>
+    umbrellaChain([
+      { from: at("A", "a", "umbrella"), to: inProject("X", "3", "sub-one") },
+      { from: at("X", "3", "umbrella"), to: inProject("Y", "e", "sub-two") },
+    ]);
+
+  it("resolves to the SUB-ONE successor, not the umbrella lineage's", () => {
+    const m = crossProject();
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") });
+    expect(r.ref?.id).toBe("X");
+    expect(r.ref?.project_id).toBe("sub-one");
+    expect(r.trail).toEqual([1]); // …and it STOPS there, rather than chaining on
+  });
+
+  /**
+   * THE HISTORY THE IN-SCHEMA ALTERNATIVE WOULD HAVE BROKEN, pinned because the
+   * ruling turned that alternative down explicitly: rejecting any multi-hop
+   * continuation whose project continuity cannot be proven trades a wrong answer for
+   * NO answer, and D06 contemplates these histories. When the roots line up, the
+   * chain must still resolve all the way through.
+   */
+  it("a LEGITIMATE cross-project multi-hop still resolves end to end", () => {
+    const m = umbrellaChain([
+      { from: at("A", "a", "umbrella"), to: inProject("X", "3", "sub-one") },
+      { from: at("X", "3", "sub-one"), to: inProject("Y", "e", "sub-two") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") });
+    expect(r.ref?.id).toBe("Y");
+    expect(r.ref?.project_id).toBe("sub-two");
+    expect(r.trail).toEqual([1, 2]);
+  });
+
+  // ── the query can finally PIN the root ───────────────────────────────────
+
+  it("a query pinning the RIGHT root resolves; the WRONG root is not_found", () => {
+    const m = crossProject();
+    expect(resolveHistorical(m, { kind: "agent", id: "A", project_id: "umbrella" }).ref?.id).toBe(
+      "X"
+    );
+    expect(resolveHistorical(m, { kind: "agent", id: "A", project_id: "sub-two" }).status).toBe(
+      "not_found"
+    );
+  });
+
+  it("the root is OPTIONAL — omitting it still resolves an unambiguous id", () => {
+    // Same contract as `content_hash`: disambiguating when present, recovered from
+    // the first matched entry when absent.
+    expect(resolveHistorical(crossProject(), { kind: "agent", id: "A" }).ref?.project_id).toBe(
+      "sub-one"
+    );
+  });
+
+  it("…and a bare id spanning TWO ROOTS is ambiguous, pinnable by root", () => {
+    const m = umbrellaChain([
+      { from: at("A", "a", "umbrella"), to: inProject("B", "b", "sub-one") },
+      { from: at("A", "a", "website"), to: inProject("C", "c", "sub-two") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).status).toBe(
+      "ambiguous"
+    );
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a"), project_id: "umbrella" })
+        .ref?.id
+    ).toBe("B");
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a"), project_id: "website" })
+        .ref?.id
+    ).toBe("C");
+  });
+
+  it("a malformed or non-token query root is rejected, like every other scalar", () => {
+    for (const bad of ["../other", "a b", "", 42, { }]) {
+      expect(
+        resolveHistorical(crossProject(), { kind: "agent", id: "A", project_id: bad }).status
+      ).toBe("ambiguous");
+    }
+  });
+
+  // ── the locator's own root is validated like every other scalar ──────────
+
+  it("the locator REQUIRES a token-shaped root", () => {
+    expect(validateLegacyLocator({ ...at("A", "a", "umbrella"), project_id: "../escape" })).toBeNull();
+    expect(validateLegacyLocator({ ...at("A", "a", "umbrella"), project_id: "" })).toBeNull();
+    const { project_id: _drop, ...withoutRoot } = at("A", "a", "umbrella");
+    expect(validateLegacyLocator(withoutRoot)).toBeNull(); // closed key set
+    expect(validateLegacyLocator(at("A", "a", "umbrella"))).not.toBeNull();
+  });
+
+  // ── the same amendment closes D9's rehome ───────────────────────────────
+
+  /**
+   * D9 was reported as "a same-id, same-bytes REHOME is unrepresentable", and the
+   * interim fix refused it because `from` and `to` were literally one identity. With
+   * the root in the identity they are two, so the rehome is now an ordinary,
+   * resolvable history — the refusal self-retired exactly as the D9 comment predicted
+   * and as the experiment there measured.
+   */
+  it("D9's rehome is now REPRESENTABLE — different root, identical id and bytes", () => {
+    const m = umbrellaChain([
+      {
+        from: at("architect", "a", "umbrella", "umbrella-guild"),
+        to: inProject("architect", "a", "plugin"),
+        reason: "rehomed",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, {
+      kind: "agent",
+      id: "architect",
+      content_hash: H("a"),
+      project_id: "umbrella",
+    });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.project_id).toBe("plugin");
+  });
+
+  it("…and it can be CONTINUED and ROLLED BACK, which it could not before", () => {
+    const rehome = {
+      from: at("architect", "a", "umbrella", "umbrella-guild"),
+      to: inProject("architect", "a", "plugin"),
+      reason: "rehomed" as const,
+    };
+    expect(
+      validateAdoptionManifestV1(
+        umbrellaChain([
+          rehome,
+          { from: at("architect", "a", "plugin", "project-guild"), to: inProject("arch2", "b", "plugin") },
+        ])
+      )
+    ).not.toBeNull();
+    expect(
+      validateAdoptionManifestV1(
+        umbrellaChain([
+          rehome,
+          rb(1, {
+            from: at("architect", "a", "plugin", "project-guild"),
+            to: inProject("architect", "a", "umbrella"),
+          }),
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("but a TRUE self-adoption — same root, same id, same bytes — is still refused", () => {
+    const m = umbrellaChain([
+      {
+        from: at("architect", "a", "plugin", "project-guild"),
+        to: inProject("architect", "a", "plugin"),
+        reason: "rehomed",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  // ── the rollback proof matches roots at BOTH ends ────────────────────────
+
+  it("a rollback cannot depart a root its target never landed in", () => {
+    // Rejected by the ROOT-BEARING undo stack, not by a dedicated comparison — an
+    // explicit departure-root line was written for this and deleted as provably
+    // redundant (see the contract). Kept as a behaviour pin, labelled so nobody
+    // reads it as coverage of a guard that no longer exists.
+    expect(
+      validateAdoptionManifestV1(
+        umbrellaChain([
+          { from: at("A", "a", "umbrella"), to: inProject("B", "b", "sub-one") },
+          rb(1, { from: at("B", "b", "sub-two"), to: inProject("A", "a", "umbrella") }),
+        ])
+      )
+    ).toBeNull();
+  });
+
+  /**
+   * THE DISCRIMINATING FIXTURE for the landing-root rule, and my first attempt at
+   * this test was VACUOUS — the simple wrong-root rollback is already rejected by
+   * the R3 "landing must be departed" rule, so sweeping the root line changed
+   * nothing and the test proved nothing.
+   *
+   * This one makes that alternative guard PASS: entry 2 departs `website/A@a`, so
+   * the identity entry 3 lands on IS departed. Only the landing-root comparison can
+   * reject it. Sweeping that one line makes this manifest validate — an entry 1
+   * unwound into the wrong root.
+   */
+  it("…and must land back in the root its target LEFT, even when that root is departed", () => {
+    expect(
+      validateAdoptionManifestV1(
+        umbrellaChain([
+          { from: at("A", "a", "umbrella"), to: inProject("B", "b", "sub-one") },
+          { from: at("A", "a", "website"), to: inProject("C", "c", "sub-one") },
+          rb(1, { from: at("B", "b", "sub-one"), to: inProject("A", "a", "website") }),
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("…and the correctly-rooted rollback validates", () => {
+    expect(
+      validateAdoptionManifestV1(
+        umbrellaChain([
+          { from: at("A", "a", "umbrella"), to: inProject("B", "b", "sub-one") },
+          rb(1, { from: at("B", "b", "sub-one"), to: inProject("A", "a", "umbrella") }),
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("a removal retires an identity in ONE root, not the same id everywhere", () => {
+    expect(
+      validateAdoptionManifestV1(
+        umbrellaChain([
+          { from: at("A", "a", "umbrella"), to: null, reason: "removed", detail: "gone" },
+          { from: at("A", "a", "website"), to: inProject("C", "c", "sub-one") },
+        ])
+      )
+    ).not.toBeNull();
+    // …while the SAME root stays retired
+    expect(
+      validateAdoptionManifestV1(
+        umbrellaChain([
+          { from: at("A", "a", "umbrella"), to: null, reason: "removed", detail: "gone" },
+          { from: at("A", "a", "umbrella"), to: inProject("C", "c", "sub-one") },
+        ])
+      )
+    ).toBeNull();
   });
 });
