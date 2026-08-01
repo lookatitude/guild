@@ -5,7 +5,7 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Classifies user intent and routes requests into lifecycle, initiative, knowledge, or review paths.",
-  "depends_on": ["lifecycle", "initiatives", "review"],
+  "depends_on": ["initiatives", "kernel", "lifecycle", "review"],
   "owns": {
     "scripts": ["lib/classify-intake"]
   }

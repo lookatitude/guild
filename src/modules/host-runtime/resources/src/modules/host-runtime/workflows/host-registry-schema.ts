@@ -33,6 +33,8 @@
  * L11 (adapters), Ltest (RED→GREEN).
  */
 
+import { deepFreeze } from "../../kernel";
+
 import { UPDATE_COMMANDS,
   GuildHostCapabilitiesV1,
   validateHostCapabilitiesV1,
@@ -708,7 +710,7 @@ const TRAE_ENTRY: HostRegistryEntry = {
 };
 
 /** The registry rows, keyed by host_id. The single design-time SoT for L7 (16 hosts). */
-export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
+export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = deepFreeze({
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
   "pi-cli": PI_ENTRY,
@@ -725,7 +727,7 @@ export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
   kiro: KIRO_ENTRY,
   qoder: QODER_ENTRY,
   trae: TRAE_ENTRY,
-};
+});
 
 // ---------------------------------------------------------------------------
 // Validation

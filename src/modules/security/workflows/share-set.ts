@@ -16,16 +16,17 @@
  */
 
 import * as path from "path";
+import { sealSet } from "../../kernel";
 
 /** Per-run summary artifacts that are always shared-scrubbed (matched by basename). */
-export const SHARED_SCRUBBED_NAMES = new Set([
+export const SHARED_SCRUBBED_NAMES = sealSet([
   "verify.md",
   "review.md",
   "provenance.json",
   "summary.md",
   "run.yaml",
   "run-state.json",
-]);
+], "SHARED_SCRUBBED_NAMES");
 
 /** A handoff receipt: handoffs/<...>.md (run-relative path). */
 export function isHandoffFile(rel: string): boolean {

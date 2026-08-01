@@ -48,6 +48,8 @@
 
 // ── Public types ────────────────────────────────────────────────────────────
 
+import { deepFreeze } from "../../kernel";
+
 export type Intake = "product_loop" | "other";
 
 /**
@@ -317,7 +319,7 @@ export interface SmokeCase {
   expect: Intake;
 }
 
-export const INTAKE_SMOKE_FIXTURE: readonly SmokeCase[] = Object.freeze([
+export const INTAKE_SMOKE_FIXTURE: readonly SmokeCase[] = deepFreeze([
   // ── PINNED canonical AC30 bare-idea positives (standalone trigger, no co-occurrence) ──
   { prompt: "I have an idea for X", expect: "product_loop" },
   { prompt: "I have an idea for a budgeting app", expect: "product_loop" },

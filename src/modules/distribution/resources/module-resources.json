@@ -50,7 +50,7 @@
       "id": "check-entrypoint-packaging",
       "source_path": "scripts/check-entrypoint-packaging.ts",
       "resource_path": "resources/scripts/check-entrypoint-packaging.ts",
-      "sha256": "9b334ed148f0fda88ff7ecc6f00e9d9df2c899cf50be00e28656ab6ebbf8e975"
+      "sha256": "c7bf4739bbfebf84782416efa57369cec7b5e54926b42363d48ddbba23d115f8"
     },
     {
       "category": "scripts",

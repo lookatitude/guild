@@ -43,6 +43,8 @@
  * adding a category is a schema-version bump, not an additive change, because the
  * coverage contract (SC-7a) iterates exactly these keys.
  */
+import { sealSet } from "../../kernel";
+
 export const INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
@@ -248,13 +250,13 @@ export interface ValidationResult {
 }
 
 /** All top-level keys allowed in guild.inventory.v1 (strict — extras rejected). */
-export const ALLOWED_INVENTORY_KEYS = new Set<string>([
+export const ALLOWED_INVENTORY_KEYS = sealSet([
   "schema_version",
   "generated_at",
   "plugin_version",
   "manifest",
   ...INVENTORY_CATEGORIES,
-]);
+], "ALLOWED_INVENTORY_KEYS");
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim() !== "";

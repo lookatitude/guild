@@ -78,7 +78,7 @@
       "id": "learn/k-stage-staleness",
       "source_path": "scripts/learn/k-stage-staleness.ts",
       "resource_path": "resources/scripts/learn/k-stage-staleness.ts",
-      "sha256": "3bd4b9abc2abff3ea140273737e736af2bd1a9fbfbd447db06e6ee45306316a0"
+      "sha256": "19193edc49b8d2c63512c4c9ae31aed4bae38850000ad93c9125a3ef3558218b"
     },
     {
       "category": "scripts",
@@ -155,14 +155,14 @@
       "id": "learn/lib/ignore",
       "source_path": "scripts/learn/lib/ignore.ts",
       "resource_path": "resources/scripts/learn/lib/ignore.ts",
-      "sha256": "ad1cfb5ff160de0a4586c435dfdf3a8be8b3b3dbe201357f1a3101bbd91b74a0"
+      "sha256": "d4e6a7976fc855ea12c9307919be50fb46ce5d9aa0d64ba1e6056b7632308cf1"
     },
     {
       "category": "scripts",
       "id": "learn/lib/impact",
       "source_path": "scripts/learn/lib/impact.ts",
       "resource_path": "resources/scripts/learn/lib/impact.ts",
-      "sha256": "31d09d27dc8b127f7f976273e32448338d28c74526a4f645f8358b3122077678"
+      "sha256": "974f243c0ad97ccd825483e9aedf16c63b18e1a9ae98ca2a3685993b947d643e"
     },
     {
       "category": "scripts",
@@ -232,7 +232,7 @@
       "id": "learn/lib/schema",
       "source_path": "scripts/learn/lib/schema.ts",
       "resource_path": "resources/scripts/learn/lib/schema.ts",
-      "sha256": "8b37fd279a53dda4718416623ecdfab0a9307bb0957324d0a7f251ce27171365"
+      "sha256": "3e4ee11661045c1b4f06b14c4d658292c2cfd0034a081d7a014833c24a99ce47"
     },
     {
       "category": "scripts",
@@ -246,7 +246,7 @@
       "id": "learn/lib/structural",
       "source_path": "scripts/learn/lib/structural.ts",
       "resource_path": "resources/scripts/learn/lib/structural.ts",
-      "sha256": "ea52741fa4fbc2a704e4f9b988cdecb15aee1c52253b99fedd30b83590cb22bc"
+      "sha256": "017c8c749ab85588106af9f81256b063f6ae617283666384a4c83b81f634028c"
     },
     {
       "category": "scripts",

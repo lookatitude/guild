@@ -30,9 +30,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// node_modules/js-yaml/lib/common.js
+// ../../../hooks/node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
-  "node_modules/js-yaml/lib/common.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/common.js"(exports2, module2) {
     "use strict";
     function isNothing(subject) {
       return typeof subject === "undefined" || subject === null;
@@ -74,9 +74,9 @@ var require_common = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/exception.js
+// ../../../hooks/node_modules/js-yaml/lib/exception.js
 var require_exception = __commonJS({
-  "node_modules/js-yaml/lib/exception.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/exception.js"(exports2, module2) {
     "use strict";
     function formatError(exception, compact) {
       let where = "";
@@ -112,9 +112,9 @@ var require_exception = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/snippet.js
+// ../../../hooks/node_modules/js-yaml/lib/snippet.js
 var require_snippet = __commonJS({
-  "node_modules/js-yaml/lib/snippet.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/snippet.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     function getLine(buffer, lineStart, lineEnd, position, maxLineLength) {
@@ -192,9 +192,9 @@ var require_snippet = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type.js
+// ../../../hooks/node_modules/js-yaml/lib/type.js
 var require_type = __commonJS({
-  "node_modules/js-yaml/lib/type.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type.js"(exports2, module2) {
     "use strict";
     var YAMLException = require_exception();
     var TYPE_CONSTRUCTOR_OPTIONS = [
@@ -256,9 +256,9 @@ var require_type = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema.js
+// ../../../hooks/node_modules/js-yaml/lib/schema.js
 var require_schema = __commonJS({
-  "node_modules/js-yaml/lib/schema.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema.js"(exports2, module2) {
     "use strict";
     var YAMLException = require_exception();
     var Type = require_type();
@@ -345,9 +345,9 @@ var require_schema = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/str.js
+// ../../../hooks/node_modules/js-yaml/lib/type/str.js
 var require_str = __commonJS({
-  "node_modules/js-yaml/lib/type/str.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/str.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:str", {
@@ -359,9 +359,9 @@ var require_str = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/seq.js
+// ../../../hooks/node_modules/js-yaml/lib/type/seq.js
 var require_seq = __commonJS({
-  "node_modules/js-yaml/lib/type/seq.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/seq.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:seq", {
@@ -373,9 +373,9 @@ var require_seq = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/map.js
+// ../../../hooks/node_modules/js-yaml/lib/type/map.js
 var require_map = __commonJS({
-  "node_modules/js-yaml/lib/type/map.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/map.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:map", {
@@ -387,9 +387,9 @@ var require_map = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/failsafe.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/failsafe.js
 var require_failsafe = __commonJS({
-  "node_modules/js-yaml/lib/schema/failsafe.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/failsafe.js"(exports2, module2) {
     "use strict";
     var Schema = require_schema();
     module2.exports = new Schema({
@@ -402,9 +402,9 @@ var require_failsafe = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/null.js
+// ../../../hooks/node_modules/js-yaml/lib/type/null.js
 var require_null = __commonJS({
-  "node_modules/js-yaml/lib/type/null.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/null.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlNull(data) {
@@ -445,9 +445,9 @@ var require_null = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/bool.js
+// ../../../hooks/node_modules/js-yaml/lib/type/bool.js
 var require_bool = __commonJS({
-  "node_modules/js-yaml/lib/type/bool.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/bool.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlBoolean(data) {
@@ -482,9 +482,9 @@ var require_bool = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/int.js
+// ../../../hooks/node_modules/js-yaml/lib/type/int.js
 var require_int = __commonJS({
-  "node_modules/js-yaml/lib/type/int.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/int.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var Type = require_type();
@@ -598,9 +598,9 @@ var require_int = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/float.js
+// ../../../hooks/node_modules/js-yaml/lib/type/float.js
 var require_float = __commonJS({
-  "node_modules/js-yaml/lib/type/float.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/float.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var Type = require_type();
@@ -683,9 +683,9 @@ var require_float = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/json.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/json.js
 var require_json = __commonJS({
-  "node_modules/js-yaml/lib/schema/json.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/json.js"(exports2, module2) {
     "use strict";
     module2.exports = require_failsafe().extend({
       implicit: [
@@ -698,17 +698,17 @@ var require_json = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/core.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/core.js
 var require_core = __commonJS({
-  "node_modules/js-yaml/lib/schema/core.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/core.js"(exports2, module2) {
     "use strict";
     module2.exports = require_json();
   }
 });
 
-// node_modules/js-yaml/lib/type/timestamp.js
+// ../../../hooks/node_modules/js-yaml/lib/type/timestamp.js
 var require_timestamp = __commonJS({
-  "node_modules/js-yaml/lib/type/timestamp.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/timestamp.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var YAML_DATE_REGEXP = new RegExp(
@@ -768,9 +768,9 @@ var require_timestamp = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/merge.js
+// ../../../hooks/node_modules/js-yaml/lib/type/merge.js
 var require_merge = __commonJS({
-  "node_modules/js-yaml/lib/type/merge.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/merge.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlMerge(data) {
@@ -783,9 +783,9 @@ var require_merge = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/binary.js
+// ../../../hooks/node_modules/js-yaml/lib/type/binary.js
 var require_binary = __commonJS({
-  "node_modules/js-yaml/lib/type/binary.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/binary.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var BASE64_MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r";
@@ -875,9 +875,9 @@ var require_binary = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/omap.js
+// ../../../hooks/node_modules/js-yaml/lib/type/omap.js
 var require_omap = __commonJS({
-  "node_modules/js-yaml/lib/type/omap.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/omap.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -914,9 +914,9 @@ var require_omap = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/pairs.js
+// ../../../hooks/node_modules/js-yaml/lib/type/pairs.js
 var require_pairs = __commonJS({
-  "node_modules/js-yaml/lib/type/pairs.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/pairs.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _toString = Object.prototype.toString;
@@ -952,9 +952,9 @@ var require_pairs = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/set.js
+// ../../../hooks/node_modules/js-yaml/lib/type/set.js
 var require_set = __commonJS({
-  "node_modules/js-yaml/lib/type/set.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/set.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -979,9 +979,9 @@ var require_set = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/default.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/default.js
 var require_default = __commonJS({
-  "node_modules/js-yaml/lib/schema/default.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/default.js"(exports2, module2) {
     "use strict";
     module2.exports = require_core().extend({
       implicit: [
@@ -998,9 +998,9 @@ var require_default = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/loader.js
+// ../../../hooks/node_modules/js-yaml/lib/loader.js
 var require_loader = __commonJS({
-  "node_modules/js-yaml/lib/loader.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/loader.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var YAMLException = require_exception();
@@ -2370,9 +2370,9 @@ var require_loader = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/dumper.js
+// ../../../hooks/node_modules/js-yaml/lib/dumper.js
 var require_dumper = __commonJS({
-  "node_modules/js-yaml/lib/dumper.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/dumper.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var YAMLException = require_exception();
@@ -3023,9 +3023,9 @@ var require_dumper = __commonJS({
   }
 });
 
-// node_modules/js-yaml/index.js
+// ../../../hooks/node_modules/js-yaml/index.js
 var require_js_yaml = __commonJS({
-  "node_modules/js-yaml/index.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/index.js"(exports2, module2) {
     "use strict";
     var loader = require_loader();
     var dumper = require_dumper();
@@ -3113,6 +3113,138 @@ var crypto2 = __toESM(require("crypto"));
 var fsNode = __toESM(require("fs"));
 var path8 = __toESM(require("path"));
 
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/yaml-loader.ts
+var path2 = __toESM(require("node:path"));
+function pluginLocalScriptsRoots() {
+  return [
+    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "..", "..", "scripts"),
+    // Bundled hook layout: hooks/dist -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "scripts"),
+    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "..", "scripts")
+  ];
+}
+function tryScriptsRoot(scriptsRoot) {
+  try {
+    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+  } catch {
+    return null;
+  }
+}
+function loadYamlApi() {
+  const tried = [];
+  for (const scriptsRoot of pluginLocalScriptsRoots()) {
+    tried.push(scriptsRoot);
+    const api2 = tryScriptsRoot(scriptsRoot);
+    if (api2) return api2;
+  }
+  try {
+    return require_js_yaml();
+  } catch {
+  }
+  const cwdRoot = path2.resolve(process.cwd(), "scripts");
+  tried.push(cwdRoot);
+  const api = tryScriptsRoot(cwdRoot);
+  if (api) return api;
+  throw new Error(
+    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
+  );
+}
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+function neuterMutators(target, methods, label) {
+  for (const method of methods) {
+    const refuse = () => {
+      throw new TypeError(
+        `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+      );
+    };
+    Object.defineProperty(target, method, {
+      value: refuse,
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }
+}
+function sealSet(values, label = "this Set") {
+  const set = new Set(values);
+  neuterMutators(set, ["add", "delete", "clear"], label);
+  return Object.freeze(set);
+}
+function isSealedCollection(value) {
+  if (!(value instanceof Set) && !(value instanceof Map)) return false;
+  const methods = value instanceof Set ? ["add", "delete", "clear"] : ["set", "delete", "clear"];
+  return methods.every((method) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, method);
+    return descriptor !== void 0 && descriptor.writable === false && descriptor.configurable === false;
+  });
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set) {
+      if (!isSealedCollection(obj)) {
+        neuterMutators(obj, ["add", "delete", "clear"], "a nested Set");
+      }
+      Object.freeze(obj);
+      for (const entry of obj) walk(entry);
+      return;
+    }
+    if (obj instanceof Map) {
+      if (!isSealedCollection(obj)) {
+        neuterMutators(obj, ["set", "delete", "clear"], "a nested Map");
+      }
+      Object.freeze(obj);
+      for (const [key, entry] of obj) {
+        walk(key);
+        walk(entry);
+      }
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
 // ../src/modules/config/workflows/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = Object.freeze([
   "I'm not sure",
@@ -3123,6 +3255,12 @@ var DEFAULT_ESCALATION_MARKERS = Object.freeze([
   "uncertain",
   "not enough information"
 ]);
+var NON_INHERITABLE_KEYS = sealSet([
+  "initiative_default",
+  // OD-1: attach-to-wrong-initiative risk
+  "workspace"
+  // workspace.mode is root-detection-only
+], "NON_INHERITABLE_KEYS");
 var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
 var CAPABILITY_RESOLVER_MODES = Object.freeze([
@@ -3133,6 +3271,186 @@ var CAPABILITY_RESOLVER_MODES = Object.freeze([
   "strict"
 ]);
 var CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
+var CAPABILITY_RESOLVER_MODE_DEFAULT = "legacy";
+var DEFAULTS = deepFreeze({
+  rigor: "standard",
+  auto_approve: [],
+  review: "local",
+  host: "auto",
+  /**
+   * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+   * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+   * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+   * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+   * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+   * this top-level placement (sibling of the `host` dispatch selector) is the registered
+   * replacement. One of only three keys ever legitimately null-typed at the top level.
+   */
+  host_mode: null,
+  roles: { host: null, advisory: null, adversarial: null },
+  host_profiles: {},
+  initiative_default: null,
+  index: "auto",
+  record_status_runs: true,
+  codex_skip_enforcement: "warn",
+  agent_mode: "auto",
+  workspace: { mode: "auto" },
+  models: {
+    enabled: true,
+    // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+    // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+    // own contract, stated in the module doc comment above, is to stay free of
+    // internal runtime imports so core settings code can load it before the
+    // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+    // roster (host-registry-schema.ts) enumerated by hand; a jest test
+    // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+    // stay in sync so this can never silently drift again the way it had (7 of
+    // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+    // non-null model — every other host's registry row carries `models.<tier>.model:
+    // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+    // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+    // equivalent this static scaffold mirrors).
+    tiers: {
+      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+      mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+      powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
+    },
+    scoreWeights: {
+      workType: 0,
+      blastRadius: 1,
+      dependsOn: 1,
+      security: 1,
+      priorEscalation: 1
+    },
+    thresholds: { mid: 1, powerful: 3 },
+    advisorRounds: 2,
+    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+    recallBeforeRead: true,
+    recallScoreThreshold: 0.4,
+    structuredOutputRequired: true,
+    cacheTTL: { coordinator: "1h", leaf: "5m" },
+    importanceGate: 3,
+    compositeRecall: true,
+    importanceAtIngest: true,
+    ingestSimilarityGate: 0.8,
+    shortOutputThreshold: {},
+    knowledge: {
+      maxDepth: 8,
+      maxBranching: 12,
+      minTopicImportance: 0.4,
+      relMinConf: 0.5,
+      maxFiles: 3e3,
+      maxTokens: 1e6,
+      batchSize: 20
+    }
+  },
+  security: {
+    bypass_permissions_policy: "audit"
+  },
+  secrets_policy: {
+    env_allowlist: [],
+    redaction_patterns: [],
+    fail_mode_durable: "closed",
+    fail_mode_telemetry: "open"
+  },
+  mcp: {
+    tool_description_hashes: {},
+    stdio_available: true,
+    http_available: false,
+    bridge_package: null
+  },
+  /**
+   * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+   * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+   * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+   *
+   * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+   * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+   * What a lane may DO stays with `capability_scope` and the permission keys.
+   *
+   * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+   * already emits unconditionally — capability ownership is per project by
+   * definition (the umbrella and each child answer "what roles do I need"
+   * independently, and D03 has the four repos migrating at different rates). Per
+   * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+   * out with zero generator change, and adding it would touch every existing key.
+   */
+  capability: {
+    /**
+     * Which resolver mode this project is in on D03's migration ladder. Config
+     * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+     * gate criteria the initiative evaluates, and a mode change is a deliberate
+     * write.
+     *
+     * DEFAULT IS `legacy`, NOT `observe` — see CAPABILITY_RESOLVER_MODE_DEFAULT in
+     * capability-config.ts for the F7 precondition governing the flip to D04's
+     * intended `observe`. Never silently defaulted: an unset value resolves with
+     * provenance `default`, so `config show --sources` shows it was never chosen.
+     */
+    resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+    /**
+     * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+     * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+     * the two cannot disagree. 0 is legal: "profile but never propose".
+     */
+    suggestion_budget: 4,
+    /**
+     * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+     * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+     * Learn proposes.
+     */
+    starter_roles: [],
+    /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+    auto_create_policy: "on_approval"
+  },
+  statusline: false,
+  adversarial_review_provider: "auto",
+  loops: null,
+  loop_cap: 16,
+  codex_cap: 5,
+  defaults: {
+    auto_learn: false,
+    adversarial: "on",
+    team: { size: null, always_include: [] },
+    review_workflow: "standard",
+    skill_policy: "standard",
+    gates: { auto_approve: [] },
+    wiki: { share_mode: "team", autopromote: false },
+    quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+    reporting: "standard",
+    index: {
+      enabled: true,
+      kg_node_threshold: 2e3,
+      kg_size_threshold_mb: 1,
+      links_edge_threshold: 2e3,
+      runs_threshold: 20,
+      wiki_file_threshold: 500
+    },
+    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+    retry: { max_attempts: 1, backoff: "exponential" },
+    resume: { enabled: true },
+    heartbeat_timeout_ms: 6e5,
+    capability_manifest_ttl_s: 3600,
+    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+    // the SessionStart signal; `auto` additionally stages the host apply path;
+    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+    update: { mode: "notify", cadence_hours: 24 },
+    allowed_tools: [],
+    /**
+     * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+     * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+     * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+     * "Inline shortcut under high autonomy").
+     */
+    lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+    /**
+     * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+     * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+     * activity count before the lifecycle gate advisory fires.
+     */
+    lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS = {
@@ -3987,7 +4305,7 @@ var TRAE_ENTRY = {
   capabilities: inferredCaps("trae", "agents", "file"),
   provenance: "inferred"
 };
-var HOST_REGISTRY_ROWS = {
+var HOST_REGISTRY_ROWS = deepFreeze({
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
   "pi-cli": PI_ENTRY,
@@ -4004,7 +4322,7 @@ var HOST_REGISTRY_ROWS = {
   kiro: KIRO_ENTRY,
   qoder: QODER_ENTRY,
   trae: TRAE_ENTRY
-};
+});
 var HOST_ID_SET = new Set(HOST_IDS);
 var FAMILY_SET = new Set(HOST_FAMILIES);
 var AUTH_PROBE_SET = new Set(AUTH_PROBES);
@@ -4031,11 +4349,30 @@ function normalizeHostId(value) {
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
 var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
 var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+var INFERRED_HOSTS = sealSet([
+  "agents-file",
+  "pi-cli",
+  "antigravity-cli",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  "kiro",
+  "qoder",
+  "trae"
+], "INFERRED_HOSTS");
 var RUNG_SET = new Set(RUNGS);
 var SURFACE_SET = new Set(ADAPTER_SURFACES);
 
 // ../src/modules/host-runtime/workflows/host-profiles-validate.ts
 var KNOWN_HOST_IDS = new Set(HOST_IDS);
+var VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
+var VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
 
 // ../src/modules/host-runtime/workflows/host-registry.ts
 function deriveCapabilityRow(row) {
@@ -4176,15 +4513,6 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function deepFreeze(value) {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value)) {
-    deepFreeze(value[key]);
-  }
-  return value;
-}
 function canonicalJson(value) {
   if (value === null) return "null";
   const kind = typeof value;
@@ -4545,6 +4873,9 @@ var HOST_ENTRY_POINTS = Object.freeze(
 );
 var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
 
+// ../src/modules/security/workflows/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+
 // ../src/modules/security/workflows/scrubbed-write.ts
 var fs6 = __toESM(require("node:fs"));
 var path7 = __toESM(require("node:path"));
@@ -4692,7 +5023,7 @@ var REDACTABLE_FIELD_NAMES = Object.freeze([
   "assumption_text",
   "result"
 ]);
-function sealSet(values) {
+function sealSet2(values) {
   const set = new Set(values);
   const refuse = (op) => () => {
     throw new TypeError(`REDACTABLE_FIELDS is sealed: ${op} would silently narrow redaction coverage`);
@@ -4707,7 +5038,7 @@ function sealSet(values) {
   }
   return Object.freeze(set);
 }
-var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES);
+var REDACTABLE_FIELDS = sealSet2(REDACTABLE_FIELD_NAMES);
 
 // ../src/modules/security/workflows/secrets.ts
 function applySecretsPolicy(value, policy, opts) {
@@ -4737,54 +5068,20 @@ function applySecretsPolicy(value, policy, opts) {
 var fs4 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 
-// ../src/modules/kernel/workflows/module-manifest.ts
-var OWNED_INVENTORY_CATEGORIES = Object.freeze([
-  "commands",
-  "skills",
-  "agents",
-  "hooks",
-  "mcp_servers",
-  "scripts"
-]);
-
-// ../src/modules/kernel/workflows/yaml-loader.ts
-var path2 = __toESM(require("node:path"));
-function pluginLocalScriptsRoots() {
-  return [
-    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "..", "..", "scripts"),
-    // Bundled hook layout: hooks/dist -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "scripts"),
-    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "..", "scripts")
-  ];
-}
-function tryScriptsRoot(scriptsRoot) {
-  try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
-  } catch {
-    return null;
-  }
-}
-function loadYamlApi() {
-  const tried = [];
-  for (const scriptsRoot of pluginLocalScriptsRoots()) {
-    tried.push(scriptsRoot);
-    const api2 = tryScriptsRoot(scriptsRoot);
-    if (api2) return api2;
-  }
-  try {
-    return require_js_yaml();
-  } catch {
-  }
-  const cwdRoot = path2.resolve(process.cwd(), "scripts");
-  tried.push(cwdRoot);
-  const api = tryScriptsRoot(cwdRoot);
-  if (api) return api;
-  throw new Error(
-    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
-  );
-}
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
 
 // ../src/modules/state/workflows/frontmatter.ts
 var loadedYaml = null;
@@ -5115,6 +5412,15 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
   runIndexMigrateCli();
 }
 
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
 // ../src/modules/security/workflows/config.ts
 function securityDefaults() {
   return {
@@ -5407,6 +5713,16 @@ function scrubbedWrite(outPath, content, opts) {
   return { written: false, blocked: true };
 }
 
+// ../src/modules/security/workflows/share-set.ts
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+
 // ../src/modules/config/workflows/settings-reader.ts
 var yaml = loadYamlApi();
 var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
@@ -5414,6 +5730,35 @@ var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
 var DISPATCH_HOST_IDS = new Set(
   HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
 );
+var RESOLVER_TIER1_KEYS = sealSet([
+  "rigor",
+  "auto_approve",
+  "review",
+  "host",
+  "host_mode",
+  "roles",
+  "host_profiles",
+  "initiative_default",
+  "index",
+  "record_status_runs",
+  "codex_skip_enforcement",
+  "agent_mode",
+  "workspace",
+  "models",
+  "security",
+  "secrets_policy",
+  "mcp",
+  "capability",
+  // S5 (cap-loc-D04) — capability localization policy
+  "statusline",
+  // R-009
+  "adversarial_review_provider",
+  // R-008
+  "loops",
+  "loop_cap",
+  "codex_cap",
+  "defaults"
+], "RESOLVER_TIER1_KEYS");
 
 // ../src/modules/telemetry/workflows/guild-trace-events.ts
 var GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
@@ -6683,6 +7028,27 @@ if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-check
 
 // lib/heartbeat.ts
 var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+
+// lib/handoff-v2.ts
+var ALLOWED_INJECTION_CLEAN_VALUES = sealSet([
+  "clean",
+  "flagged",
+  "unverified"
+], "ALLOWED_INJECTION_CLEAN_VALUES");
+var ALLOWED_TOP_LEVEL_KEYS = sealSet([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes",
+  "injection_clean"
+  // HK-08 additive-optional
+], "ALLOWED_TOP_LEVEL_KEYS");
 
 // lib/run-trace.ts
 function runDir2(root, runId) {

@@ -602,19 +602,46 @@ export interface NeutralOutcomeInput {
   readonly facts?: Readonly<Record<string, unknown>>;
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
-
-/** Freeze a value and everything it transitively owns. Exported for core reuse. */
+/**
+ * Freeze a value and everything it transitively owns. Exported for core reuse.
+ *
+ * DELIBERATELY DUPLICATED from `src/modules/kernel/workflows/sealed-collections.ts`, and
+ * deliberately WEAKER than it. This file is a declared member of the IMPORT-CLOSED
+ * neutral core: zero imports, and — per `neutral-core-boundary.ts` — no ambient binding
+ * outside `NEUTRAL_PURE_INTRINSIC_ROOTS`. That rules out `WeakSet`, `Reflect`,
+ * `Object.defineProperty` and `Object.getOwnPropertyDescriptor`, so this copy CANNOT seal
+ * a Set or Map (sealing means neutering `add`/`delete`/`clear` as non-writable own
+ * properties, which needs `defineProperty`). The trade is deliberate: the core keeps its
+ * mechanically-checked capability closure, and the rail enforces the consequence — NO Set
+ * or Map may be reachable from a neutral-core export, because freezing one would close
+ * nothing while `Object.isFrozen` reported success.
+ *
+ * The previous implementation guarded recursion with `Object.isFrozen(value)` and bailed
+ * out on the first frozen node. That is backwards: a SHALLOW-frozen node reports
+ * `isFrozen === true`, so the walk stopped at the boundary and left its children — the
+ * mutable half — untouched, which is the very defect it existed to prevent. Recursion is
+ * now guarded by a `Set` of visited objects (an intrinsic the core IS allowed) and the
+ * walk keeps descending through already-frozen nodes.
+ */
 export function neutralFreeze<T>(value: T): T {
-  return deepFreeze(value);
+  const seen = new Set<unknown>();
+  const walk = (node: unknown): void => {
+    if (node === null || typeof node !== "object") return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof RegExp) {
+      // Freezing a global/sticky pattern makes `.exec()`/`.test()` throw on the
+      // `lastIndex` write; freezing any other pattern is always safe.
+      if (!node.global && !node.sticky) Object.freeze(node);
+      return;
+    }
+    Object.freeze(node);
+    for (const key of Object.keys(node as Record<string, unknown>)) {
+      walk((node as Record<string, unknown>)[key]);
+    }
+  };
+  walk(value);
+  return value;
 }
 
 /**
@@ -648,7 +675,7 @@ export function neutralOutcome(input: NeutralOutcomeInput): NeutralOutcome {
     }
   }
 
-  return deepFreeze({
+  return neutralFreeze({
     schema_version: NEUTRAL_CONTRACTS_SCHEMA_VERSION,
     type: input.type,
     disposition: input.disposition,
@@ -689,7 +716,7 @@ export interface NeutralEventCompatibilityRule {
  * function: `task.transition` has two normative images and therefore NO lossless
  * mapping, which is recorded as `ambiguous_split` rather than resolved by guess.
  */
-export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibilityRule[] = Object.freeze([
+export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibilityRule[] = neutralFreeze([
   { from: "session.start", to: "session.start", kind: "unchanged", candidates: [] },
   { from: "prompt.submit", to: "prompt.submit", kind: "unchanged", candidates: [] },
   { from: "context.compact", to: "context.compact", kind: "unchanged", candidates: [] },

@@ -36,6 +36,7 @@
  */
 
 import { validateHandoffV2 } from "./handoff-v2";
+import { sealSet, deepFreeze } from "../../kernel";
 import { parseReviewResult } from "./review-result";
 import {
   validatePhaseResultV1,
@@ -80,7 +81,7 @@ export interface ResultContractEntry {
  * a host emitting one is normalized the moment its producer lands — no
  * fail-closed "unknown contract" gap. All six are valid normalizer targets.
  */
-export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = Object.freeze([
+export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
   {
     wire_schema_version: "guild.handoff.v2",
     status: "exists",
@@ -139,9 +140,7 @@ export const RESULT_CONTRACTS: readonly ResultContractEntry[] = Object.freeze([
 ]);
 
 /** The set of wire schema_version strings a Phase-1 normalizer is allowed to target. */
-export const PHASE1_NORMALIZER_TARGETS: ReadonlySet<string> = new Set(
-  EXISTING_CONTRACTS.map((c) => c.wire_schema_version)
-);
+export const PHASE1_NORMALIZER_TARGETS: ReadonlySet<string> = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
 
 // ---------------------------------------------------------------------------
 // Bound validators (by reference — NOT redefined here)

@@ -55,7 +55,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { loadYamlApi } from "../../kernel";
+import { loadYamlApi, sealSet } from "../../kernel";
 
 const yaml = loadYamlApi();
 
@@ -104,12 +104,12 @@ export const SETTINGS_JSON_REQUIRED_KEYS: readonly string[] = Object.freeze([
  * always allowed. New legitimate keys must be added here on purpose — that addition
  * is itself a deliberate schema-change checkpoint.
  */
-export const SETTINGS_JSON_KNOWN_KEYS: ReadonlySet<string> = new Set([
+export const SETTINGS_JSON_KNOWN_KEYS: ReadonlySet<string> = sealSet([
   "rigor", "auto_approve", "review", "host", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace", "models",
   "security", "secrets_policy", "mcp",
   "loops", "loop_cap", "codex_cap", "defaults",
-]);
+], "SETTINGS_JSON_KNOWN_KEYS");
 
 /**
  * Required keys in .guild/workspace.json (category 4 — machine-only state, JSON).

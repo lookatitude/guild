@@ -33,6 +33,8 @@
 // ---------------------------------------------------------------------------
 
 /** Host autonomy modes (host tool/edit/sandbox). Mirrors PermissionMode in host-capabilities-schema. */
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+
 export const HOST_MODES = Object.freeze(["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const);
 export type HostMode = (typeof HOST_MODES)[number];
 
@@ -130,7 +132,7 @@ export function gateRequired(
 // ---------------------------------------------------------------------------
 
 /** Gate types that are NEVER autonomous regardless of any mode/gate config (rail 1). */
-export const NEVER_AUTONOMOUS_GATES = new Set<GateType>(["ops", "destructive"]);
+export const NEVER_AUTONOMOUS_GATES = sealSet(["ops", "destructive"], "NEVER_AUTONOMOUS_GATES");
 
 /**
  * The always-ask hard set (rail 3): gate types that ALWAYS require a human gate,
@@ -138,7 +140,7 @@ export const NEVER_AUTONOMOUS_GATES = new Set<GateType>(["ops", "destructive"]);
  * backstop that makes the conservative `gatesPermittedToSkip` safe to widen later:
  * a widened config can never pierce this set.
  */
-export const ALWAYS_ASK_HARD_SET = new Set<GateType>(["release", "security", "ops", "destructive"]);
+export const ALWAYS_ASK_HARD_SET = sealSet(["release", "security", "ops", "destructive"], "ALWAYS_ASK_HARD_SET");
 
 /** Result of evaluating the safety rails for a cell. */
 export interface SafetyRailEvaluation {

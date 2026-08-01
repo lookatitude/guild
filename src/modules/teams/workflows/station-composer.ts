@@ -33,6 +33,7 @@
  */
 
 import { types as nodeTypes } from "util";
+import { deepFreeze } from "../../kernel";
 
 import {
   type CellFanout,
@@ -375,7 +376,7 @@ export interface ImpliedRule {
 
 const DOC = ".guild/wiki/entities/team-composition.md";
 
-export const IMPLIED_RULES: readonly ImpliedRule[] = Object.freeze([
+export const IMPLIED_RULES: readonly ImpliedRule[] = deepFreeze([
   {
     id: "multi_component",
     signal: "multi_component",
@@ -526,7 +527,7 @@ const OPS_ADVISORY_PANEL: AdvisoryPanelPolicy = Object.freeze({
  *
  * Rows 7-9 (research/definition/learn) EXTEND the doc — sensible defaults, flagged.
  */
-export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = Object.freeze({
+export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = deepFreeze({
   init: {
     station: "init",
     default_roster: Object.freeze(["researcher", "technical-writer"]),

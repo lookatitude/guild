@@ -15,14 +15,14 @@
       "id": "SessionStart:detect-guild-version.js",
       "source_path": "hooks/dist/detect-guild-version.js",
       "resource_path": "resources/hooks/dist/detect-guild-version.js",
-      "sha256": "5622a54fac5d873ae1465734f5cc8c0eab36549484295a48d335b3c24dfc198a"
+      "sha256": "b5b9b6640957ae3ac4fd9ed75572aad920d3eb284c9c6ae4e515752f03bb3a2c"
     },
     {
       "category": "hooks",
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "9142073c815233ea0c262936f944670ff1de0398ab93379c35be562cac77bf56"
+      "sha256": "2a53246aaf27a7f762a861cc1263d0f1ebc645549ed1440f52d201282459be42"
     },
     {
       "category": "hooks",

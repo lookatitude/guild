@@ -14,6 +14,7 @@
  */
 
 import { HOST_IDS, type HostId } from "./host-registry-schema";
+import { sealSet } from "../../kernel";
 
 // ---------------------------------------------------------------------------
 // Rungs + surfaces
@@ -130,7 +131,7 @@ export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>>
  * The hosts with at least one still-INFERRED rung (not fully live-verified).
  * Remove a host here once ALL its cells are live-verified.
  */
-export const INFERRED_HOSTS = new Set<HostId>([
+export const INFERRED_HOSTS = sealSet([
   "agents-file",
   "pi-cli",
   "antigravity-cli",
@@ -146,7 +147,7 @@ export const INFERRED_HOSTS = new Set<HostId>([
   "kiro",
   "qoder",
   "trae",
-]);
+], "INFERRED_HOSTS");
 
 export function isHostInferred(host: HostId): boolean {
   return INFERRED_HOSTS.has(host);

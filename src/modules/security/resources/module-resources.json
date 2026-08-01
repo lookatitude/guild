@@ -8,14 +8,14 @@
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "resource_path": "resources/hooks/dist/post-tool-use.js",
-      "sha256": "642cffc3e73f416a1ab77629801102e15f2844b694ec176199c0e1032b1be1fd"
+      "sha256": "aea230186fa89fb71b2aafedd5ff3bea1693751adada5431d6d2235219eac24b"
     },
     {
       "category": "hooks",
       "id": "PreToolUse:pre-tool-use.js",
       "source_path": "hooks/dist/pre-tool-use.js",
       "resource_path": "resources/hooks/dist/pre-tool-use.js",
-      "sha256": "3a7f52d146de3fc871e0b0f3180db26ef07c5dfef8b54f1c4d247968fae2704b"
+      "sha256": "3635419b3d417dd04c20793a2c4570d27fd62fa23fd9b108026bc5048ebad73b"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "lib/permission-policy-schema",
       "source_path": "scripts/lib/permission-policy-schema.ts",
       "resource_path": "resources/scripts/lib/permission-policy-schema.ts",
-      "sha256": "70e63b922247708e708341553e9c87d949de7950345778c5c1fbf60cd3c1a9ff"
+      "sha256": "48c0f12546eb3999caa21d63507fd7db648756981a9fbfe954c260cb23b8d2f5"
     },
     {
       "category": "scripts",

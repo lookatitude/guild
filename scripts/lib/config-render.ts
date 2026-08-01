@@ -35,6 +35,7 @@
  */
 
 import * as path from "path";
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
 import {
   HostId,
   HOST_IDS,
@@ -66,10 +67,10 @@ export type ConfigSource =
   | "cli";
 
 /** The local (gitignored) layers — values from these never enter a SHARED host output. */
-export const LOCAL_SOURCES: ReadonlySet<ConfigSource> = new Set<ConfigSource>([
+export const LOCAL_SOURCES: ReadonlySet<ConfigSource> = sealSet([
   "workspace-local",
   "project-local",
-]);
+], "LOCAL_SOURCES");
 
 // ---------------------------------------------------------------------------
 // Input

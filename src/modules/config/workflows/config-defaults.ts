@@ -9,6 +9,8 @@
  */
 
 /** Default escalation marker phrases for the cost auto-scorer. */
+import { sealSet, deepFreeze } from "../../kernel";
+
 export const DEFAULT_ESCALATION_MARKERS: readonly string[] = Object.freeze([
   "I'm not sure",
   "unclear",
@@ -20,10 +22,10 @@ export const DEFAULT_ESCALATION_MARKERS: readonly string[] = Object.freeze([
 ]);
 
 /** Keys excluded from workspace-to-child inheritance (OD-1 + detection-only). */
-export const NON_INHERITABLE_KEYS: ReadonlySet<string> = new Set<string>([
+export const NON_INHERITABLE_KEYS: ReadonlySet<string> = sealSet([
   "initiative_default", // OD-1: attach-to-wrong-initiative risk
   "workspace",          // workspace.mode is root-detection-only
-]);
+], "NON_INHERITABLE_KEYS");
 
 /** Default rotation threshold for JSONL log files — 10 MiB. */
 export const LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
@@ -186,7 +188,7 @@ export function isValidCapabilityValue(key: string, value: unknown): boolean | u
  * Keep this file free of internal runtime imports: config defaults must remain
  * usable by both core settings code paths without pulling host/runtime layers upward.
  */
-export const DEFAULTS = {
+export const DEFAULTS = deepFreeze({
   rigor: "standard",
   auto_approve: [],
   review: "local",
@@ -364,4 +366,4 @@ export const DEFAULTS = {
      */
     lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
   },
-} as const;
+} as const);

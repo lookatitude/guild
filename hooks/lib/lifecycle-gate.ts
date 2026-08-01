@@ -169,7 +169,7 @@ const EXECUTION_PHASES = new Set(["execute", "review", "verify", "reflect"]);
  * (`guild:evolve-skill` — which the forensic session DID invoke mid-drift) are
  * deliberately absent: neither re-enters the gated flow.
  */
-export const LIFECYCLE_SKILLS: readonly string[] = [
+export const LIFECYCLE_SKILLS: readonly string[] = Object.freeze([
   "guild:brainstorm",
   "guild:ideate",
   "guild:team-compose",
@@ -185,7 +185,7 @@ export const LIFECYCLE_SKILLS: readonly string[] = [
   "guild:guild-operations",
   "guild:reflect",
   "guild:resume",
-];
+]);
 
 const LIFECYCLE_SKILL_SET = new Set(LIFECYCLE_SKILLS);
 

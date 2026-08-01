@@ -36,6 +36,8 @@
 // Schema constant + result shape
 // ---------------------------------------------------------------------------
 
+import { deepFreeze } from "../../kernel";
+
 export const DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1" as const;
 
 /** Max length for a single-line reference reason (bulk-content guard, F-7). */
@@ -232,7 +234,7 @@ export function isDependencyGraphV1(value: unknown): value is DependencyGraphV1 
 // ---------------------------------------------------------------------------
 
 /** A valid `guild.dependency_graph.v1` sample (≥3 child repos, one edge). */
-export const DEPENDENCY_GRAPH_V1_EXAMPLE: DependencyGraphV1 = {
+export const DEPENDENCY_GRAPH_V1_EXAMPLE: DependencyGraphV1 = deepFreeze({
   schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
   nodes: [
     { id: "guild-plugin", path: "plugin" },
@@ -243,7 +245,7 @@ export const DEPENDENCY_GRAPH_V1_EXAMPLE: DependencyGraphV1 = {
     { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
     { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" },
   ],
-};
+});
 
 // ---------------------------------------------------------------------------
 // Import-pure self-check (NO process IO at module scope — F8-F11). LW1-8 may call it.

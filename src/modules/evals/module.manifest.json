@@ -5,7 +5,7 @@
   "kind": "operator",
   "implementation_mode": "workflow-backed",
   "description": "Owns benchmark-oriented artifacts, test matrix definitions, replay, and validation helpers used by gates.",
-  "depends_on": ["state"],
+  "depends_on": ["kernel", "state"],
   "owns": {
     "scripts": [
       "lib/benchmark-guild-artifacts",

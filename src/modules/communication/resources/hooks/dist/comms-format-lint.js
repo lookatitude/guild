@@ -25,9 +25,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/js-yaml/lib/common.js
+// ../../../hooks/node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
-  "node_modules/js-yaml/lib/common.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/common.js"(exports2, module2) {
     "use strict";
     function isNothing(subject) {
       return typeof subject === "undefined" || subject === null;
@@ -69,9 +69,9 @@ var require_common = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/exception.js
+// ../../../hooks/node_modules/js-yaml/lib/exception.js
 var require_exception = __commonJS({
-  "node_modules/js-yaml/lib/exception.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/exception.js"(exports2, module2) {
     "use strict";
     function formatError(exception, compact) {
       let where = "";
@@ -107,9 +107,9 @@ var require_exception = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/snippet.js
+// ../../../hooks/node_modules/js-yaml/lib/snippet.js
 var require_snippet = __commonJS({
-  "node_modules/js-yaml/lib/snippet.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/snippet.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     function getLine(buffer, lineStart, lineEnd, position, maxLineLength) {
@@ -187,9 +187,9 @@ var require_snippet = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type.js
+// ../../../hooks/node_modules/js-yaml/lib/type.js
 var require_type = __commonJS({
-  "node_modules/js-yaml/lib/type.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type.js"(exports2, module2) {
     "use strict";
     var YAMLException = require_exception();
     var TYPE_CONSTRUCTOR_OPTIONS = [
@@ -251,9 +251,9 @@ var require_type = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema.js
+// ../../../hooks/node_modules/js-yaml/lib/schema.js
 var require_schema = __commonJS({
-  "node_modules/js-yaml/lib/schema.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema.js"(exports2, module2) {
     "use strict";
     var YAMLException = require_exception();
     var Type = require_type();
@@ -340,9 +340,9 @@ var require_schema = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/str.js
+// ../../../hooks/node_modules/js-yaml/lib/type/str.js
 var require_str = __commonJS({
-  "node_modules/js-yaml/lib/type/str.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/str.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:str", {
@@ -354,9 +354,9 @@ var require_str = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/seq.js
+// ../../../hooks/node_modules/js-yaml/lib/type/seq.js
 var require_seq = __commonJS({
-  "node_modules/js-yaml/lib/type/seq.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/seq.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:seq", {
@@ -368,9 +368,9 @@ var require_seq = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/map.js
+// ../../../hooks/node_modules/js-yaml/lib/type/map.js
 var require_map = __commonJS({
-  "node_modules/js-yaml/lib/type/map.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/map.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:map", {
@@ -382,9 +382,9 @@ var require_map = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/failsafe.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/failsafe.js
 var require_failsafe = __commonJS({
-  "node_modules/js-yaml/lib/schema/failsafe.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/failsafe.js"(exports2, module2) {
     "use strict";
     var Schema = require_schema();
     module2.exports = new Schema({
@@ -397,9 +397,9 @@ var require_failsafe = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/null.js
+// ../../../hooks/node_modules/js-yaml/lib/type/null.js
 var require_null = __commonJS({
-  "node_modules/js-yaml/lib/type/null.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/null.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlNull(data) {
@@ -440,9 +440,9 @@ var require_null = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/bool.js
+// ../../../hooks/node_modules/js-yaml/lib/type/bool.js
 var require_bool = __commonJS({
-  "node_modules/js-yaml/lib/type/bool.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/bool.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlBoolean(data) {
@@ -477,9 +477,9 @@ var require_bool = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/int.js
+// ../../../hooks/node_modules/js-yaml/lib/type/int.js
 var require_int = __commonJS({
-  "node_modules/js-yaml/lib/type/int.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/int.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var Type = require_type();
@@ -593,9 +593,9 @@ var require_int = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/float.js
+// ../../../hooks/node_modules/js-yaml/lib/type/float.js
 var require_float = __commonJS({
-  "node_modules/js-yaml/lib/type/float.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/float.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var Type = require_type();
@@ -678,9 +678,9 @@ var require_float = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/json.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/json.js
 var require_json = __commonJS({
-  "node_modules/js-yaml/lib/schema/json.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/json.js"(exports2, module2) {
     "use strict";
     module2.exports = require_failsafe().extend({
       implicit: [
@@ -693,17 +693,17 @@ var require_json = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/core.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/core.js
 var require_core = __commonJS({
-  "node_modules/js-yaml/lib/schema/core.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/core.js"(exports2, module2) {
     "use strict";
     module2.exports = require_json();
   }
 });
 
-// node_modules/js-yaml/lib/type/timestamp.js
+// ../../../hooks/node_modules/js-yaml/lib/type/timestamp.js
 var require_timestamp = __commonJS({
-  "node_modules/js-yaml/lib/type/timestamp.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/timestamp.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var YAML_DATE_REGEXP = new RegExp(
@@ -763,9 +763,9 @@ var require_timestamp = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/merge.js
+// ../../../hooks/node_modules/js-yaml/lib/type/merge.js
 var require_merge = __commonJS({
-  "node_modules/js-yaml/lib/type/merge.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/merge.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlMerge(data) {
@@ -778,9 +778,9 @@ var require_merge = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/binary.js
+// ../../../hooks/node_modules/js-yaml/lib/type/binary.js
 var require_binary = __commonJS({
-  "node_modules/js-yaml/lib/type/binary.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/binary.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var BASE64_MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r";
@@ -870,9 +870,9 @@ var require_binary = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/omap.js
+// ../../../hooks/node_modules/js-yaml/lib/type/omap.js
 var require_omap = __commonJS({
-  "node_modules/js-yaml/lib/type/omap.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/omap.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -909,9 +909,9 @@ var require_omap = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/pairs.js
+// ../../../hooks/node_modules/js-yaml/lib/type/pairs.js
 var require_pairs = __commonJS({
-  "node_modules/js-yaml/lib/type/pairs.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/pairs.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _toString = Object.prototype.toString;
@@ -947,9 +947,9 @@ var require_pairs = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/set.js
+// ../../../hooks/node_modules/js-yaml/lib/type/set.js
 var require_set = __commonJS({
-  "node_modules/js-yaml/lib/type/set.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/type/set.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -974,9 +974,9 @@ var require_set = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/default.js
+// ../../../hooks/node_modules/js-yaml/lib/schema/default.js
 var require_default = __commonJS({
-  "node_modules/js-yaml/lib/schema/default.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/schema/default.js"(exports2, module2) {
     "use strict";
     module2.exports = require_core().extend({
       implicit: [
@@ -993,9 +993,9 @@ var require_default = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/loader.js
+// ../../../hooks/node_modules/js-yaml/lib/loader.js
 var require_loader = __commonJS({
-  "node_modules/js-yaml/lib/loader.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/loader.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var YAMLException = require_exception();
@@ -2365,9 +2365,9 @@ var require_loader = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/dumper.js
+// ../../../hooks/node_modules/js-yaml/lib/dumper.js
 var require_dumper = __commonJS({
-  "node_modules/js-yaml/lib/dumper.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/lib/dumper.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var YAMLException = require_exception();
@@ -3018,9 +3018,9 @@ var require_dumper = __commonJS({
   }
 });
 
-// node_modules/js-yaml/index.js
+// ../../../hooks/node_modules/js-yaml/index.js
 var require_js_yaml = __commonJS({
-  "node_modules/js-yaml/index.js"(exports2, module2) {
+  "../../../hooks/node_modules/js-yaml/index.js"(exports2, module2) {
     "use strict";
     var loader = require_loader();
     var dumper = require_dumper();
@@ -3071,6 +3071,138 @@ var path4 = __toESM(require("path"));
 var fs2 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/yaml-loader.ts
+var path = __toESM(require("node:path"));
+function pluginLocalScriptsRoots() {
+  return [
+    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
+    path.resolve(__dirname, "..", "..", "..", "..", "scripts"),
+    // Bundled hook layout: hooks/dist -> plugin/scripts.
+    path.resolve(__dirname, "..", "..", "scripts"),
+    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
+    path.resolve(__dirname, "..", "..", "..", "scripts")
+  ];
+}
+function tryScriptsRoot(scriptsRoot) {
+  try {
+    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+  } catch {
+    return null;
+  }
+}
+function loadYamlApi() {
+  const tried = [];
+  for (const scriptsRoot of pluginLocalScriptsRoots()) {
+    tried.push(scriptsRoot);
+    const api2 = tryScriptsRoot(scriptsRoot);
+    if (api2) return api2;
+  }
+  try {
+    return require_js_yaml();
+  } catch {
+  }
+  const cwdRoot = path.resolve(process.cwd(), "scripts");
+  tried.push(cwdRoot);
+  const api = tryScriptsRoot(cwdRoot);
+  if (api) return api;
+  throw new Error(
+    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
+  );
+}
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+function neuterMutators(target, methods, label) {
+  for (const method of methods) {
+    const refuse = () => {
+      throw new TypeError(
+        `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+      );
+    };
+    Object.defineProperty(target, method, {
+      value: refuse,
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }
+}
+function sealSet(values, label = "this Set") {
+  const set = new Set(values);
+  neuterMutators(set, ["add", "delete", "clear"], label);
+  return Object.freeze(set);
+}
+function isSealedCollection(value) {
+  if (!(value instanceof Set) && !(value instanceof Map)) return false;
+  const methods = value instanceof Set ? ["add", "delete", "clear"] : ["set", "delete", "clear"];
+  return methods.every((method) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, method);
+    return descriptor !== void 0 && descriptor.writable === false && descriptor.configurable === false;
+  });
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set) {
+      if (!isSealedCollection(obj)) {
+        neuterMutators(obj, ["add", "delete", "clear"], "a nested Set");
+      }
+      Object.freeze(obj);
+      for (const entry of obj) walk(entry);
+      return;
+    }
+    if (obj instanceof Map) {
+      if (!isSealedCollection(obj)) {
+        neuterMutators(obj, ["set", "delete", "clear"], "a nested Map");
+      }
+      Object.freeze(obj);
+      for (const [key, entry] of obj) {
+        walk(key);
+        walk(entry);
+      }
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
 // ../src/modules/distribution/workflows/inventory-schema.ts
 var INVENTORY_CATEGORIES = Object.freeze([
   "commands",
@@ -3082,13 +3214,13 @@ var INVENTORY_CATEGORIES = Object.freeze([
   "schemas",
   "docs"
 ]);
-var ALLOWED_INVENTORY_KEYS = /* @__PURE__ */ new Set([
+var ALLOWED_INVENTORY_KEYS = sealSet([
   "schema_version",
   "generated_at",
   "plugin_version",
   "manifest",
   ...INVENTORY_CATEGORIES
-]);
+], "ALLOWED_INVENTORY_KEYS");
 function isNonEmptyString(v) {
   return typeof v === "string" && v.trim() !== "";
 }
@@ -3185,54 +3317,20 @@ function validateInventoryV1(value) {
   return { valid: errors.length === 0, errors };
 }
 
-// ../src/modules/kernel/workflows/module-manifest.ts
-var OWNED_INVENTORY_CATEGORIES = Object.freeze([
-  "commands",
-  "skills",
-  "agents",
-  "hooks",
-  "mcp_servers",
-  "scripts"
-]);
-
-// ../src/modules/kernel/workflows/yaml-loader.ts
-var path = __toESM(require("node:path"));
-function pluginLocalScriptsRoots() {
-  return [
-    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "..", "..", "scripts"),
-    // Bundled hook layout: hooks/dist -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "scripts"),
-    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "..", "scripts")
-  ];
-}
-function tryScriptsRoot(scriptsRoot) {
-  try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
-  } catch {
-    return null;
-  }
-}
-function loadYamlApi() {
-  const tried = [];
-  for (const scriptsRoot of pluginLocalScriptsRoots()) {
-    tried.push(scriptsRoot);
-    const api2 = tryScriptsRoot(scriptsRoot);
-    if (api2) return api2;
-  }
-  try {
-    return require_js_yaml();
-  } catch {
-  }
-  const cwdRoot = path.resolve(process.cwd(), "scripts");
-  tried.push(cwdRoot);
-  const api = tryScriptsRoot(cwdRoot);
-  if (api) return api;
-  throw new Error(
-    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
-  );
-}
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
 
 // ../src/modules/state/workflows/frontmatter.ts
 function readScalarField(content, key) {
@@ -3525,8 +3623,17 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
   runIndexMigrateCli();
 }
 
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
 // ../src/modules/distribution/workflows/parity-contract.ts
-var DISCOVERY_RULES = Object.freeze([
+var DISCOVERY_RULES = deepFreeze([
   {
     category: "commands",
     globs: ["commands/*.md"],
@@ -3627,8 +3734,8 @@ function checkCoverage(discovered, inventory) {
 }
 
 // ../src/modules/distribution/workflows/handoff-v2.ts
-var ALLOWED_INJECTION_CLEAN_VALUES = /* @__PURE__ */ new Set(["clean", "flagged", "unverified"]);
-var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+var ALLOWED_INJECTION_CLEAN_VALUES = sealSet(["clean", "flagged", "unverified"], "ALLOWED_INJECTION_CLEAN_VALUES");
+var ALLOWED_TOP_LEVEL_KEYS = sealSet([
   "schema_version",
   "task_id",
   "tier",
@@ -3640,10 +3747,10 @@ var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "learnings",
   "notes",
   "injection_clean"
-]);
+], "ALLOWED_TOP_LEVEL_KEYS");
 
 // ../src/modules/distribution/workflows/result-contracts.ts
-var EXISTING_CONTRACTS = Object.freeze([
+var EXISTING_CONTRACTS = deepFreeze([
   {
     wire_schema_version: "guild.handoff.v2",
     status: "exists",
@@ -3694,9 +3801,7 @@ var RESULT_CONTRACTS = Object.freeze([
   ...EXISTING_CONTRACTS,
   ...DEFERRED_CONTRACTS
 ]);
-var PHASE1_NORMALIZER_TARGETS = new Set(
-  EXISTING_CONTRACTS.map((c) => c.wire_schema_version)
-);
+var PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
 
 // ../src/modules/distribution/workflows/build-inventory.ts
 var PLUGIN_ROOT = path3.resolve(__dirname, "../../../..");
@@ -4057,7 +4162,7 @@ var EQUIVALENCE_SURFACES = Object.freeze([
   "mcp_json",
   "script_refs"
 ]);
-var INTENTIONAL_EXCLUSIONS = Object.freeze([
+var INTENTIONAL_EXCLUSIONS = deepFreeze([
   {
     path: "hooks_json.SessionStart (using-guild additionalContext injection)",
     reason: "L5b deliberately changes Claude SessionStart from bootstrap.sh plain-stdout banners to hookSpecificOutput.additionalContext injection \u2014 a chosen format change, NOT zero-delta (spec SC-8).",
@@ -4074,6 +4179,12 @@ var INTENTIONAL_EXCLUSIONS = Object.freeze([
     verified_by: "normalizeJson() sorts arrays of path-strings for these manifest fields (see SORTED_MANIFEST_ARRAYS) so order deltas are not failures."
   }
 ]);
+var PROVENANCE_FIELDS = sealSet([
+  "_rendered_at",
+  "_source_version",
+  "generated_at"
+], "PROVENANCE_FIELDS");
+var SORTED_MANIFEST_ARRAYS = sealSet(["skills", "commands", "agents"], "SORTED_MANIFEST_ARRAYS");
 
 // ../src/modules/distribution/workflows/release-distribution-contract.ts
 var OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
@@ -4083,6 +4194,9 @@ var ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
   Object.freeze({ path: "review/G-lane:MH-08/result-12-r2.json", sha256: "5141b2b45caee0e47ca21dd853db22f8d885161935b19049c2392036710d0bd4" }),
   Object.freeze({ path: "validation/mh-08-r12-review-r2-lead-validation.json", sha256: "0f8054585bd4aeae1780e49c67cf6e65efe7023aeafceeed6fe336090c0fc27e" })
 ]);
+
+// ../src/modules/distribution/workflows/surface-manifest.ts
+var SURFACE_KINDS = Object.freeze(["skill", "command", "agent"]);
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS = {
@@ -4937,7 +5051,7 @@ var TRAE_ENTRY = {
   capabilities: inferredCaps("trae", "agents", "file"),
   provenance: "inferred"
 };
-var HOST_REGISTRY_ROWS = {
+var HOST_REGISTRY_ROWS = deepFreeze({
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
   "pi-cli": PI_ENTRY,
@@ -4954,7 +5068,7 @@ var HOST_REGISTRY_ROWS = {
   kiro: KIRO_ENTRY,
   qoder: QODER_ENTRY,
   trae: TRAE_ENTRY
-};
+});
 var HOST_ID_SET = new Set(HOST_IDS);
 var FAMILY_SET = new Set(HOST_FAMILIES);
 var AUTH_PROBE_SET = new Set(AUTH_PROBES);
@@ -4981,11 +5095,30 @@ function normalizeHostId(value) {
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
 var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
 var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+var INFERRED_HOSTS = sealSet([
+  "agents-file",
+  "pi-cli",
+  "antigravity-cli",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  "kiro",
+  "qoder",
+  "trae"
+], "INFERRED_HOSTS");
 var RUNG_SET = new Set(RUNGS);
 var SURFACE_SET = new Set(ADAPTER_SURFACES);
 
 // ../src/modules/host-runtime/workflows/host-profiles-validate.ts
 var KNOWN_HOST_IDS = new Set(HOST_IDS);
+var VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
+var VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
 
 // ../src/modules/host-runtime/workflows/host-registry.ts
 function deriveCapabilityRow(row) {
@@ -5126,15 +5259,6 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function deepFreeze(value) {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value)) {
-    deepFreeze(value[key]);
-  }
-  return value;
-}
 function canonicalJson(value) {
   if (value === null) return "null";
   const kind = typeof value;
@@ -5497,7 +5621,7 @@ var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
 
 // ../src/modules/distribution/workflows/verify-installer.ts
 var BUILD_ONCE_SNIPPET = "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>";
-var INSTALLER_HOST_EXPECTATIONS = Object.freeze([
+var INSTALLER_HOST_EXPECTATIONS = deepFreeze([
   // ── keep/CLI+file ───────────────────────────────────────────────────────────
   {
     host: "claude-code-cli",

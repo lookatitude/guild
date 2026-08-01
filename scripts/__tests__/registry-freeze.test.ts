@@ -239,8 +239,23 @@ describe("registry freeze — RUNTIME verification over the module public indexe
    * never silently skipped — a silent skip is how a rail quietly stops testing anything.
    * A module that starts failing to import and is not on this list FAILS the rail.
    */
-  const KNOWN_UNIMPORTABLE: Record<string, string> = {
-    "docs-sync": "TS2308 — three workflows each export `main`; ambiguous re-export. Pre-existing at bc3596d.",
+  const KNOWN_UNIMPORTABLE: Record<string, { match: RegExp; why: string }> = {
+    "docs-sync": {
+      // BYPASS CLOSED (task #22): this used to accept ANY error from a listed module, so
+      // an unrelated NEW failure in docs-sync would have been waved through under the
+      // pre-existing TS2308's name. The error text is part of the contract now.
+      match: /TS2308.*has already exported a member named 'main'/,
+      why: "TS2308 — three workflows each export `main`; ambiguous re-export. Pre-existing at bc3596d.",
+    },
+  };
+
+  /**
+   * BYPASS CLOSED (task #22): a module with no `index.ts` used to be skipped with a bare
+   * `continue`, so deleting an entrypoint silently removed a module from the rail. Any
+   * module not named here now FAILS.
+   */
+  const MODULES_WITHOUT_INDEX: Record<string, string> = {
+    dashboard: "resource-only module (implementation_mode: resource-only); ships no workflow code.",
   };
 
   const results: { module: string; checked: number; unfrozen: string[] }[] = [];
@@ -248,18 +263,25 @@ describe("registry freeze — RUNTIME verification over the module public indexe
 
   for (const mod of moduleDirs) {
     const indexPath = path.join(REPO, "src", "modules", mod, "index.ts");
-    if (!fs.existsSync(indexPath)) continue;
 
     it(`module "${mod}" exports no unfrozen array at runtime`, () => {
+      if (!fs.existsSync(indexPath)) {
+        expect(MODULES_WITHOUT_INDEX[mod] ?? `UNDOCUMENTED missing index: ${mod}`).toBe(
+          MODULES_WITHOUT_INDEX[mod],
+        );
+        return;
+      }
       let mods: Record<string, unknown>;
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         mods = require(indexPath) as Record<string, unknown>;
       } catch (err) {
+        const message = (err as Error).message.split("\n")[0];
         const known = KNOWN_UNIMPORTABLE[mod];
         // An UNEXPECTED import failure is a rail failure, not a skip: otherwise the
-        // runtime half silently shrinks to nothing while still reporting green.
-        expect(known ? `known: ${mod}` : `${mod}: ${(err as Error).message.split("\n")[0]}`).toBe(
+        // runtime half silently shrinks to nothing while still reporting green. Both the
+        // module AND the exact failure must be documented.
+        expect(known && known.match.test(message) ? `known: ${mod}` : `${mod}: ${message}`).toBe(
           `known: ${mod}`,
         );
         unimportable.push(mod);
@@ -277,17 +299,20 @@ describe("registry freeze — RUNTIME verification over the module public indexe
     });
   }
 
-  it("REPORTS EVIDENCE STRENGTH — runtime-verified vs spelling-only", () => {
+  it("REPORTS EVIDENCE STRENGTH — counts only, the SPLIT lives in the joined rail", () => {
     const runtimeChecked = results.reduce((n, r) => n + r.checked, 0);
-    const spellingOnly = registries.length - runtimeChecked;
-    // Stated explicitly so nobody reads a green rail as stronger evidence than it is:
-    // the runtime half proves frozenness; the static half proves only that the source
-    // says Object.freeze.
+    // RETRACTED (task #22): this used to publish "N verified at runtime, M by spelling
+    // only" with M computed as `registries.length - runtimeChecked`. That subtraction is
+    // unsound — the two populations were never joined on identity, some runtime-checked
+    // arrays are not in the static scan at all, and namespace objects were never
+    // traversed — so the difference did not describe any enumerable set. Both raw counts
+    // are still useful; the SUBSTANTIABLE split is in closed-collection-freeze.test.ts,
+    // which joins static declaration sites to runtime exports on (module, name).
     // eslint-disable-next-line no-console
     console.log(
-      `[registry-freeze] evidence: ${runtimeChecked} verified FROZEN AT RUNTIME ` +
-        `(module public indexes), ${spellingOnly} verified BY SPELLING ONLY ` +
-        `(scripts/hooks tail + non-index module internals)`,
+      `[registry-freeze] ${registries.length} as-const registries matched statically; ` +
+        `${runtimeChecked} arrays checked frozen at runtime across module indexes. ` +
+        `These are two DIFFERENT populations — see closed-collection-freeze.test.ts for the joined split.`,
     );
     if (unimportable.length > 0) {
       // eslint-disable-next-line no-console

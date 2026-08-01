@@ -16,6 +16,7 @@
  */
 
 import * as fs from "fs";
+import { deepFreeze } from "../../src/modules/kernel/workflows/sealed-collections";
 import * as path from "path";
 import { spawnSync } from "child_process";
 // Canonical single-source share-set membership (re-arch WAVE 1) — the former
@@ -228,7 +229,7 @@ export function findPackageReceiptLeaks(repoPath: string, trackedOnlyMode = fals
 // fixture .guild/ can live directly under fixtures/ OR nested below it.
 // Exported so the exemption-parity test (scripts/dot-guild/__tests__/exemption-parity.test.ts)
 // can assert directly against the SAME array — no hand-copied mirror to drift.
-export const FIXTURE_EXEMPT_PATTERNS = [
+export const FIXTURE_EXEMPT_PATTERNS = deepFreeze([
   /\/benchmark\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
   /\/mcp-servers\/guild-memory\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
   /\/mcp-servers\/guild-telemetry\/fixtures(?:-v14|-alt-cwd)?\/(?:[^/]+\/)*\.guild(\/|$)/,
@@ -241,7 +242,7 @@ export const FIXTURE_EXEMPT_PATTERNS = [
   // glob of many, but the same optional-`/plugin` shape as the tests/ patterns above
   // (workspace layout has a `/plugin` segment; the plugin-repo-root CI checkout does not).
   /(?:\/plugin)?\/hooks\/__tests__\/fixtures\/golden-full-learn-run\/(?:[^/]+\/)*\.guild(\/|$)/,
-];
+]);
 
 // FU-F: ONE .guild/ per project (= git repo) root. Walk the workspace, classify
 // every .guild/ directory as repo-root / fixture-exempt / leak. Surface leaks

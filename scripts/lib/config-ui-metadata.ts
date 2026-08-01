@@ -96,13 +96,13 @@ export const DEFAULT_CONFIRMATION_FOR_SAFETY_CLASS: Readonly<Record<SafetyClass,
   security_sensitive: "strongest",
 } as const;
 
-export const CONFIRMATION_ORDER: readonly ConfirmationStrength[] = [
+export const CONFIRMATION_ORDER: readonly ConfirmationStrength[] = Object.freeze([
   "none",
   "normal",
   "advanced",
   "danger",
   "strongest",
-];
+]);
 
 function confirmationRank(c: ConfirmationStrength): number {
   return CONFIRMATION_ORDER.indexOf(c);

@@ -33,6 +33,7 @@
  */
 
 import type { GuildInventoryV1, InventoryCategory } from "./inventory-schema";
+import { deepFreeze } from "../../kernel";
 import { INVENTORY_CATEGORIES } from "./inventory-schema";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +66,7 @@ export interface DiscoveryRule {
   note?: string;
 }
 
-export const DISCOVERY_RULES: readonly DiscoveryRule[] = Object.freeze([
+export const DISCOVERY_RULES: readonly DiscoveryRule[] = deepFreeze([
   {
     category: "commands",
     globs: ["commands/*.md"],

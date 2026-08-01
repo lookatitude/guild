@@ -7,6 +7,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { deepFreeze } from "../../kernel";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -55,7 +56,7 @@ interface VerifyOptions {
 const BUILD_ONCE_SNIPPET =
   "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>";
 
-export const INSTALLER_HOST_EXPECTATIONS: readonly InstallerHostExpectation[] = Object.freeze([
+export const INSTALLER_HOST_EXPECTATIONS: readonly InstallerHostExpectation[] = deepFreeze([
   // ── keep/CLI+file ───────────────────────────────────────────────────────────
   {
     host: "claude-code-cli",

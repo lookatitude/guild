@@ -66,6 +66,99 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+function neuterMutators(target, methods, label) {
+  for (const method of methods) {
+    const refuse = () => {
+      throw new TypeError(
+        `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+      );
+    };
+    Object.defineProperty(target, method, {
+      value: refuse,
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }
+}
+function sealSet(values, label = "this Set") {
+  const set = new Set(values);
+  neuterMutators(set, ["add", "delete", "clear"], label);
+  return Object.freeze(set);
+}
+function isSealedCollection(value) {
+  if (!(value instanceof Set) && !(value instanceof Map)) return false;
+  const methods = value instanceof Set ? ["add", "delete", "clear"] : ["set", "delete", "clear"];
+  return methods.every((method) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, method);
+    return descriptor !== void 0 && descriptor.writable === false && descriptor.configurable === false;
+  });
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set) {
+      if (!isSealedCollection(obj)) {
+        neuterMutators(obj, ["add", "delete", "clear"], "a nested Set");
+      }
+      Object.freeze(obj);
+      for (const entry of obj) walk(entry);
+      return;
+    }
+    if (obj instanceof Map) {
+      if (!isSealedCollection(obj)) {
+        neuterMutators(obj, ["set", "delete", "clear"], "a nested Map");
+      }
+      Object.freeze(obj);
+      for (const [key, entry] of obj) {
+        walk(key);
+        walk(entry);
+      }
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
 // ../src/modules/lifecycle/workflows/event-log-schema.ts
 var TOOL_CALL_TOOL_VALUES = Object.freeze([
   "Read",
@@ -100,6 +193,20 @@ var HOOK_EVENT_NAMES = Object.freeze([
   "TaskCompleted",
   "TeammateIdle"
 ]);
+var EVENT_TYPES = sealSet([
+  "phase_start",
+  "phase_end",
+  "specialist_dispatch",
+  "specialist_receipt",
+  "loop_round_start",
+  "loop_round_end",
+  "tool_call",
+  "hook_event",
+  "gate_decision",
+  "assumption_logged",
+  "escalation",
+  "codex_review_round"
+], "EVENT_TYPES");
 var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function isSafeRunId(id) {
@@ -129,6 +236,9 @@ function validateEventIds(event) {
 var import_node_fs2 = require("node:fs");
 var import_node_path2 = require("node:path");
 var import_node_zlib = require("node:zlib");
+
+// ../src/modules/security/workflows/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
 
 // ../src/modules/security/workflows/scrubbed-write.ts
 var fs6 = __toESM(require("node:fs"));
@@ -277,7 +387,7 @@ var REDACTABLE_FIELD_NAMES = Object.freeze([
   "assumption_text",
   "result"
 ]);
-function sealSet(values) {
+function sealSet2(values) {
   const set = new Set(values);
   const refuse = (op) => () => {
     throw new TypeError(`REDACTABLE_FIELDS is sealed: ${op} would silently narrow redaction coverage`);
@@ -292,7 +402,7 @@ function sealSet(values) {
   }
   return Object.freeze(set);
 }
-var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES);
+var REDACTABLE_FIELDS = sealSet2(REDACTABLE_FIELD_NAMES);
 function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   const out = { ...event };
   for (const [k, v] of Object.entries(out)) {
@@ -331,15 +441,20 @@ function applySecretsPolicy(value, policy, opts) {
 var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
 
-// ../src/modules/kernel/workflows/module-manifest.ts
-var OWNED_INVENTORY_CATEGORIES = Object.freeze([
-  "commands",
-  "skills",
-  "agents",
-  "hooks",
-  "mcp_servers",
-  "scripts"
-]);
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
 
 // ../src/modules/state/workflows/guild-root.ts
 var fs2 = __toESM(require("node:fs"));
@@ -637,6 +752,15 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
   runIndexMigrateCli();
 }
 
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
 // ../src/modules/security/workflows/config.ts
 function securityDefaults() {
   return {
@@ -928,6 +1052,16 @@ function scrubbedWrite(outPath, content, opts) {
   writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
   return { written: false, blocked: true };
 }
+
+// ../src/modules/security/workflows/share-set.ts
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
 
 // ../src/modules/lifecycle/workflows/stable-lock.ts
 var import_node_fs = require("node:fs");

@@ -238,7 +238,7 @@ export interface ReconcileResult {
  * caller supplies); L0 ships a structural default below.
  */
 export function reconcile(
-  schema: ConfigFieldSpec[],
+  schema: readonly ConfigFieldSpec[],
   current: Record<string, MaterializedField>,
   mode: ReconcileMode,
   now: string,

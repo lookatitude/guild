@@ -14,6 +14,8 @@
 // Event types — exhaustive union per schema doc §"Event types" (12)
 // ──────────────────────────────────────────────────────────────────────────
 
+import { sealSet } from "../../kernel";
+
 export type Phase =
   | "brainstorm"
   | "team-compose"
@@ -217,7 +219,7 @@ export type JsonlEvent =
   | CodexReviewRoundEvent;
 
 /** Set of valid `event` field values. The validator uses this. */
-export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = new Set([
+export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = sealSet([
   "phase_start",
   "phase_end",
   "specialist_dispatch",
@@ -230,7 +232,7 @@ export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = new Set([
   "assumption_logged",
   "escalation",
   "codex_review_round",
-]);
+], "EVENT_TYPES");
 
 export const RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 export const LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;

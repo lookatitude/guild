@@ -58,6 +58,12 @@
 
 import { createHash } from "node:crypto";
 
+// The local deepFreeze this file used to carry guarded recursion with
+// `Object.isFrozen`, so it stopped at any SHALLOW-frozen node and left that node's
+// children mutable — the exact defect it existed to prevent. The kernel primitive
+// uses a WeakSet visited-guard and seals Sets/Maps instead of merely freezing them.
+import { deepFreeze } from "../../kernel";
+
 import { normalizeHostId } from "./host-id-namespace";
 import { HOST_REGISTRY_ROWS, type HostId, type HostRegistryEntry } from "./host-registry-schema";
 // TYPE-ONLY. The adapter boundary binds to the core's vocabulary at COMPILE time
@@ -232,15 +238,6 @@ export interface HostCapabilitySnapshotResult {
 
 const UNKNOWN_HOST_VERSION = "unknown";
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
 
 /** Canonical JSON: sorted keys, dropped `undefined`, significant array order. */
 function canonicalJson(value: unknown): string {

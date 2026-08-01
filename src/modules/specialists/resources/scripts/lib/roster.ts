@@ -32,6 +32,7 @@
  */
 
 import * as fs from "fs";
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
 import * as path from "path";
 // The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
 // goes through it — this file only DUMPS YAML directly.
@@ -56,7 +57,7 @@ export type RosterSource = "shipped" | "project" | "template";
  * template under templates/specialists/, minted into the consuming repo's
  * .guild/agents/ before it can join a team.
  */
-export const AUGMENTING_AGENT_IDS = new Set(["advisor", "developer"]);
+export const AUGMENTING_AGENT_IDS = sealSet(["advisor", "developer"], "AUGMENTING_AGENT_IDS");
 
 export const SPECIALIST_TEMPLATE_VERSION = "guild.specialist_template.v1";
 
