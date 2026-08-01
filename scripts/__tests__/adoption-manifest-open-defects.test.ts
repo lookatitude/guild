@@ -16,6 +16,7 @@ import {
   ADOPTION_MANIFEST_SCHEMA,
   MAX_ENTRIES,
   entryDigest,
+  LEGACY_HOMES,
   isUnstampedAdoption,
   resolveHistorical,
   validateAdoptionEntry,
@@ -30,6 +31,7 @@ import {
   MAX_PROJECT_ID,
   MAX_RELATIVE_PATH,
   MAX_SKILLS,
+  DEFINITION_LAYERS,
   MAX_SOURCE_COMMIT,
   PROJECT_DEFINITION_REF_SCHEMA,
   validateProjectDefinitionRefV1,
@@ -51,6 +53,7 @@ const IDENT = (c: string) => c.repeat(64);
 function ref(id: string, hash: string): ProjectDefinitionRefV1 {
   return {
     schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+    layer: "project-guild" as const,
     project_id: "plugin",
     kind: "agent",
     id,
@@ -69,7 +72,7 @@ function loc(id: string, hash: string, path?: string) {
     project_id: "plugin",
     historical_path: path ?? `/old/${id}.md`,
     content_hash: H(hash),
-    home: "dot-claude-agents" as const,
+    home: "project-guild" as const,
   };
 }
 
@@ -541,38 +544,54 @@ describe("D4 — liveness and traversal agree about what an identity IS", () => 
       "C"
     );
   });
-
-  it("a differing HOME alone no longer splits one identity either", () => {
-    // `home` was the other half of the disagreement. Same id, same bytes, recorded
-    // from two legacy homes — one definition that two records spell differently,
-    // which is precisely what this manifest exists to reconcile.
+  /**
+   * SUPERSEDED BY THE #27 AMENDMENT, and recorded rather than quietly flipped.
+   *
+   * This asserted that a differing `home` does NOT split one identity — the correct
+   * reading of D4 AT THE TIME, because the schema could not compare layers: `from`
+   * carried `home` and `to` had nothing to match it against, so traversal was made to
+   * agree with the coarser tuple liveness already used.
+   *
+   * The second half of #27 gave `ProjectDefinitionRefV1` a `layer`, so the two ends
+   * of a hop ARE comparable and the owning layer IS identity-bearing. A definition in
+   * `dot-claude-agents` and one in `plugin-shipped` are two placements, not one —
+   * which is exactly what makes cap-loc-D09's `.claude/agents → .guild/agents` move
+   * expressible instead of refused.
+   *
+   * D4'S ACTUAL RULE SURVIVES UNCHANGED: liveness and traversal must agree about what
+   * an identity IS. What changed is the agreed definition, in both places at once,
+   * through the single `identityOf` they share. The assertions above still pin that
+   * agreement; only this one encoded the superseded tuple.
+   */
+  it("a differing HOME now DOES split identity — and both halves agree about it", () => {
+    const inLayer = (id: string, hash: string, home: LegacyHome) => ({
+      project_id: "plugin",
+      id,
+      historical_path: `/old/${id}.md`,
+      content_hash: H(hash),
+      home,
+    });
     const m = chain([
-      {
-        from: {
-          id: "A",
-          project_id: "plugin",
-          historical_path: "/old/A.md",
-          content_hash: H("a"),
-          home: "dot-claude-agents" as const,
-        },
-        to: ref("B", "b"),
-      },
-      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
-      {
-        from: {
-          id: "A",
-          project_id: "plugin",
-          historical_path: "/old/A.md",
-          content_hash: H("a"),
-          home: "plugin-shipped" as const,
-        },
-        to: ref("C", "c"),
-      },
+      { from: inLayer("A", "a", "dot-claude-agents"), to: { ...ref("B", "b"), layer: "dot-claude-agents" as const } },
+      rb(1, {
+        from: { ...loc("B", "b"), home: "dot-claude-agents" as const },
+        to: { ...ref("A", "a"), layer: "dot-claude-agents" as const },
+      }),
+      { from: inLayer("A", "a", "plugin-shipped"), to: ref("C", "c") },
     ]);
+    // Two placements of A, so entry 3 departs an identity entry 1 never touched —
+    // no fork, and the manifest is valid.
     expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    // …and the read side agrees: pinning the layer picks that placement's lineage.
     expect(
-      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).ref?.id
+      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a"), layer: "plugin-shipped" })
+        .ref?.id
     ).toBe("C");
+    // A bare query spanning both placements is ambiguous, exactly as it is for two
+    // roots or two byte-identities. One rule, three location-and-bytes components.
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).status).toBe(
+      "ambiguous"
+    );
   });
 });
 
@@ -725,6 +744,7 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
   const REF_NON_SCALAR: Record<string, string> = {
     schema_version: "frozen literal - one legal value",
     kind: "closed vocabulary - DEFINITION_KINDS",
+    layer: "closed vocabulary - DEFINITION_LAYERS",
     skills: "collection - bounded by MAX_SKILLS, elements bounded below",
   };
 
@@ -1144,10 +1164,12 @@ describe("D6-R1 — S2 identities are TOKEN-shaped, and the commit bound fits re
     expect(validateProjectDefinitionRefV1({ ...validRef(), id: bad })).toBeNull();
   });
 
+  // ONLY THE ROWS THAT DISCRIMINATE (codex round 7, #4). `../outside`, `../../secret`
+  // and `a/b` were removed: with the path built from the id they are rejected by path
+  // validation or the owning-directory binding first, and stayed GREEN when
+  // `isIdentityToken` was replaced by a bare bounded-string check. Verified by running
+  // exactly that mutation — these three now redden, and those three did not.
   it.each([
-    ["parent traversal", "../outside"],
-    ["nested traversal", "../../secret"],
-    ["path separator", "a/b"],
     ["leading dash", "-flag"],
     ["leading dot", ".hidden"],
     ["space", "a b"],
@@ -1917,7 +1939,12 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
     ).toBeNull();
   });
 
-  it.each(["migrated", "collapsed", "rehomed", "renamed", "rolled_back"])(
+  // `rolled_back` is DELIBERATELY ABSENT from this list (codex round 7, #4). Its row
+  // carried `reverses_sequence: null`, which the IFF rule rejects on its own, so the
+  // row stayed green with the self-adoption guard deleted — it proved nothing about
+  // the rule it named. A `rolled_back` entry is covered where it can actually
+  // discriminate: the rollback-proof tests, which give it a real target.
+  it.each(["migrated", "collapsed", "rehomed", "renamed"])(
     "…whatever the reason claims to be doing — %s",
     (reason) => {
       expect(
@@ -1927,7 +1954,6 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
             to: ref("architect", "a"),
             reason: reason as AdoptionEntry["reason"],
             detail: "note",
-            reverses_sequence: reason === "rolled_back" ? null : null,
           })
         )
       ).toBeNull();
@@ -2032,17 +2058,19 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
 // ── Task #27 — the schema amendment: identity carries the project root ──────
 
 describe("#27 — a location-bearing identity, and the wrong-bytes path it closes", () => {
-  const at = (id: string, hash: string, project: string, home: LegacyHome = "umbrella-guild") => ({
+  const at = (id: string, hash: string, project: string, home: LegacyHome = "project-guild") => ({
     project_id: project,
     id,
     historical_path: `/${project}/.guild/agents/${id}.md`,
     content_hash: H(hash),
     home,
   });
-  const inProject = (id: string, hash: string, project: string): ProjectDefinitionRefV1 => ({
-    ...ref(id, hash),
-    project_id: project,
-  });
+  const inProject = (
+    id: string,
+    hash: string,
+    project: string,
+    layer: LegacyHome = "project-guild"
+  ): ProjectDefinitionRefV1 => ({ ...ref(id, hash), project_id: project, layer });
   const umbrellaChain = (parts: Array<Partial<AdoptionEntry>>): AdoptionManifestV1 => ({
     ...chain(parts),
     project_id: "umbrella",
@@ -2192,9 +2220,10 @@ describe("#27 — a location-bearing identity, and the wrong-bytes path it close
       validateAdoptionManifestV1(
         umbrellaChain([
           rehome,
+          // the rollback must land back on the target's ROOT *and* LAYER
           rb(1, {
             from: at("architect", "a", "plugin", "project-guild"),
-            to: inProject("architect", "a", "umbrella"),
+            to: inProject("architect", "a", "umbrella", "umbrella-guild"),
           }),
         ])
       )
@@ -2281,5 +2310,201 @@ describe("#27 — a location-bearing identity, and the wrong-bytes path it close
         ])
       )
     ).toBeNull();
+  });
+});
+
+
+describe("#27b — the layer completes identity: a move WITHIN a root", () => {
+  const at = (id: string, hash: string, project: string, home: LegacyHome) => ({
+    project_id: project,
+    id,
+    historical_path: `/${project}/${home}/${id}.md`,
+    content_hash: H(hash),
+    home,
+  });
+  const placed = (
+    id: string,
+    hash: string,
+    project: string,
+    layer: LegacyHome
+  ): ProjectDefinitionRefV1 => ({ ...ref(id, hash), project_id: project, layer });
+
+  /**
+   * CAP-LOC-D09'S OWN SHAPE, and the round-7 P1 it was rejected by.
+   *
+   * `.claude/agents/architect.md` -> `.guild/agents/architect.md`, same root, same
+   * id, same bytes. The root-only amendment could not see it: both ends had one
+   * identity, so my D9 self-adoption refusal fired and a legitimate history — the
+   * ordinary reason this manifest exists — was refused.
+   *
+   * With the layer in identity the two ends are two placements, the refusal
+   * correctly stops firing, and the move resolves.
+   */
+  const d09Move = () => ({
+    from: at("architect", "a", "plugin", "dot-claude-agents"),
+    to: placed("architect", "a", "plugin", "project-guild"),
+    reason: "rehomed" as const,
+  });
+
+  it("the .claude/agents -> .guild/agents move VALIDATES", () => {
+    expect(validateAdoptionManifestV1(chain([d09Move()]))).not.toBeNull();
+  });
+
+  it("…and RESOLVES to its new placement", () => {
+    const r = resolveHistorical(chain([d09Move()]), {
+      kind: "agent",
+      id: "architect",
+      content_hash: H("a"),
+      layer: "dot-claude-agents",
+    });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.layer).toBe("project-guild");
+  });
+
+  it("…and is no longer seen as an unstamped self-adoption", () => {
+    expect(isUnstampedAdoption(chain([d09Move()]).entries[0])).toBe(false);
+  });
+
+  it("…and can be CONTINUED and ROLLED BACK", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          d09Move(),
+          {
+            from: at("architect", "a", "plugin", "project-guild"),
+            to: placed("architect2", "b", "plugin", "project-guild"),
+          },
+        ])
+      )
+    ).not.toBeNull();
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          d09Move(),
+          rb(1, {
+            from: at("architect", "a", "plugin", "project-guild"),
+            to: placed("architect", "a", "plugin", "dot-claude-agents"),
+          }),
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("a TRUE self-adoption — same root AND layer — is still refused", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          {
+            from: at("architect", "a", "plugin", "project-guild"),
+            to: placed("architect", "a", "plugin", "project-guild"),
+            reason: "rehomed",
+          },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  // ── the layer behaves exactly like the root, one tier down ───────────────
+
+  it("a walk does not cross a LAYER boundary", () => {
+    // The layer twin of the wrong-bytes case: entry 2 departs the same id and bytes
+    // in a DIFFERENT layer, so it is not a continuation of entry 1's chain.
+    const m = chain([
+      { from: at("A", "a", "plugin", "umbrella-guild"), to: placed("X", "3", "plugin", "project-guild") },
+      { from: at("X", "3", "plugin", "plugin-shipped"), to: placed("Y", "e", "plugin", "project-guild") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") });
+    expect(r.ref?.id).toBe("X");
+    expect(r.trail).toEqual([1]);
+  });
+
+  it("…and a matching layer still chains", () => {
+    const m = chain([
+      { from: at("A", "a", "plugin", "umbrella-guild"), to: placed("X", "3", "plugin", "project-guild") },
+      { from: at("X", "3", "plugin", "project-guild"), to: placed("Y", "e", "plugin", "project-guild") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") });
+    expect(r.ref?.id).toBe("Y");
+    expect(r.trail).toEqual([1, 2]);
+  });
+
+  it("the query can pin the layer, and a wrong pin is not_found", () => {
+    const m = chain([d09Move()]);
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "architect", layer: "dot-claude-agents" }).status
+    ).toBe("resolved");
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "architect", layer: "plugin-shipped" }).status
+    ).toBe("not_found");
+  });
+
+  it("a non-vocabulary layer on the query is rejected", () => {
+    expect(
+      resolveHistorical(chain([d09Move()]), {
+        kind: "agent",
+        id: "architect",
+        layer: "not-a-layer" as unknown as LegacyHome,
+      }).status
+    ).toBe("ambiguous");
+  });
+
+  /**
+   * DISCRIMINATING, and my first version was NOT — the same mistake I made on the
+   * root twin. A plain wrong-layer rollback is already rejected by the R3 "landing
+   * must be departed" rule, so sweeping the layer line changed nothing.
+   *
+   * Here entry 2 departs the same id and bytes in `umbrella-guild`, so the placement
+   * entry 3 lands on IS departed and that rule passes. Only the landing-LAYER
+   * comparison can reject it; sweeping that one line makes this validate.
+   */
+  it("a rollback must land back in the LAYER its target left, even when that layer is departed", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: at("A", "a", "plugin", "dot-claude-agents"), to: placed("B", "b", "plugin", "project-guild") },
+          { from: at("A", "a", "plugin", "umbrella-guild"), to: placed("C", "c", "plugin", "project-guild") },
+          rb(1, {
+            from: at("B", "b", "plugin", "project-guild"),
+            // target left `dot-claude-agents`; landing in `umbrella-guild` is wrong
+            to: placed("A", "a", "plugin", "umbrella-guild"),
+          }),
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("a removal retires a placement, not the id across every layer", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: at("A", "a", "plugin", "dot-claude-agents"), to: null, reason: "removed", detail: "gone" },
+          { from: at("A", "a", "plugin", "plugin-shipped"), to: placed("C", "c", "plugin", "project-guild") },
+        ])
+      )
+    ).not.toBeNull();
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: at("A", "a", "plugin", "dot-claude-agents"), to: null, reason: "removed", detail: "gone" },
+          { from: at("A", "a", "plugin", "dot-claude-agents"), to: placed("C", "c", "plugin", "project-guild") },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("S2 requires the layer, from the closed vocabulary", () => {
+    const { layer: _drop, ...noLayer } = ref("A", "a");
+    expect(validateProjectDefinitionRefV1(noLayer)).toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...ref("A", "a"), layer: "invented" })).toBeNull();
+    for (const l of DEFINITION_LAYERS) {
+      expect(validateProjectDefinitionRefV1({ ...ref("A", "a"), layer: l })).not.toBeNull();
+    }
+  });
+
+  it("ONE vocabulary, two names — S3 re-exports S2's rather than declaring a twin", () => {
+    // Two copies is how D4's identity disagreement happened; asserted so a future
+    // edit cannot quietly fork them again.
+    expect([...LEGACY_HOMES]).toEqual([...DEFINITION_LAYERS]);
   });
 });

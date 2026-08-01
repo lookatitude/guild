@@ -34,6 +34,7 @@ const IDENT = (c: string) => c.repeat(64);
 function ref(id: string, hash = "a"): ProjectDefinitionRefV1 {
   return {
     schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+    layer: "project-guild" as const,
     project_id: "plugin",
     kind: "agent",
     id,
@@ -52,7 +53,7 @@ function loc(id: string, hash = "f") {
     project_id: "plugin",
     historical_path: `/Users/miguelp/Projects/guild/.claude/agents/${id}.md`,
     content_hash: H(hash),
-    home: "dot-claude-agents" as const,
+    home: "project-guild" as const,
   };
 }
 

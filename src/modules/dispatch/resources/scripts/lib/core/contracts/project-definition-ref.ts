@@ -75,6 +75,39 @@ export type DefinitionKind = (typeof DEFINITION_KINDS)[number];
 
 const DEFINITION_KIND_SET: ReadonlySet<string> = new Set<string>(DEFINITION_KINDS);
 
+/**
+ * THE OWNING LAYER — which tier of the workspace holds these bytes.
+ *
+ * Added by the two-contract amendment (task #27, second half). S3's identity gained
+ * the project ROOT and that closed cross-project conflation, but it could not see a
+ * move WITHIN a root — and `.claude/agents/<role>.md → .guild/agents/<role>.md` is
+ * exactly cap-loc-D09's own shape, the ordinary reason this manifest exists. With
+ * only the root in identity, that move has identical identities on both sides, so it
+ * was refused as a self-adoption: a legitimate history rejected.
+ *
+ * THIS VOCABULARY LIVES HERE, in the LOCATOR contract, and S3 re-exports it. S3
+ * already imports this file, so defining it once is the only way the two ends of a
+ * hop can be compared at all — `from.home` and `to.layer` are now the same four
+ * values rather than two vocabularies that happen to overlap. That is the D4 lesson
+ * applied before it can bite: two sites, one definition.
+ *
+ * IT IS DECLARED DATA, NOT DERIVED FROM `relative_path`, and deliberately so. `home`
+ * has never been required to agree with `historical_path` on the S3 side, and
+ * inventing a layer↔path consistency rule here would be a new rule of exactly the
+ * kind this surface keeps getting wrong. KNOWN LIMITATION, stated rather than
+ * discovered later: nothing stops a producer declaring `project-guild` for a path
+ * under `.claude/`, and such a ref is self-inconsistent but valid.
+ */
+export const DEFINITION_LAYERS = [
+  "plugin-shipped",
+  "dot-claude-agents",
+  "project-guild",
+  "umbrella-guild",
+] as const;
+export type DefinitionLayer = (typeof DEFINITION_LAYERS)[number];
+
+const DEFINITION_LAYER_SET: ReadonlySet<string> = new Set<string>(DEFINITION_LAYERS);
+
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
 /**
@@ -103,6 +136,12 @@ export interface ProjectDefinitionRefV1 {
 
   /** Which project root `relative_path` resolves against (e.g. "plugin"). */
   project_id: string;
+  /**
+   * Which owning LAYER holds these bytes. Pairs with `LegacyLocator.home` so a hop's
+   * two ends are comparable, and completes the location half of identity: the root
+   * says WHICH PROJECT, this says WHICH TIER OF IT.
+   */
+  layer: DefinitionLayer;
   kind: DefinitionKind;
   /** Role slug or skill name. For `kind:"agent"` this matches SpecialistProfileV1.profile_id. */
   id: string;
@@ -370,6 +409,7 @@ const PINNED_SKILL_KEYS = ["id", "relative_path", "content_hash"] as const;
 const REF_KEYS = [
   "schema_version",
   "project_id",
+  "layer",
   "kind",
   "id",
   "relative_path",
@@ -591,6 +631,7 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (schemaProp.kind !== "data" || schemaProp.value !== PROJECT_DEFINITION_REF_SCHEMA) return null;
 
   const projectProp = ownDataProp(obj, "project_id");
+  const layerProp = ownDataProp(obj, "layer");
   const kindProp = ownDataProp(obj, "kind");
   const idProp = ownDataProp(obj, "id");
   const pathProp = ownDataProp(obj, "relative_path");
@@ -604,6 +645,7 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   // array does not narrow the individual consts, and narrowing is what keeps the
   // `.value` reads type-safe below.
   if (projectProp.kind !== "data") return null; // absent or accessor → reject
+  if (layerProp.kind !== "data") return null;
   if (kindProp.kind !== "data") return null;
   if (idProp.kind !== "data") return null;
   if (pathProp.kind !== "data") return null;
@@ -614,6 +656,9 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (skillsProp.kind !== "data") return null;
 
   if (!isIdentityToken(projectProp.value, MAX_PROJECT_ID)) return null;
+  if (typeof layerProp.value !== "string" || !DEFINITION_LAYER_SET.has(layerProp.value)) {
+    return null;
+  }
   if (typeof kindProp.value !== "string" || !DEFINITION_KIND_SET.has(kindProp.value)) return null;
   const kind = kindProp.value as DefinitionKind;
   if (!isIdentityToken(idProp.value, MAX_DEFINITION_ID)) return null;
@@ -660,6 +705,7 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   return {
     schema_version: PROJECT_DEFINITION_REF_SCHEMA,
     project_id: projectProp.value,
+    layer: layerProp.value as DefinitionLayer,
     kind,
     id: idProp.value,
     relative_path: pathProp.value,

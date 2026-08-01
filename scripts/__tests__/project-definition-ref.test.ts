@@ -35,6 +35,7 @@ const IDENT_T = "d".repeat(64);
 function agentRef(over: Partial<ProjectDefinitionRefV1> = {}): ProjectDefinitionRefV1 {
   return {
     schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+    layer: "project-guild" as const,
     project_id: "plugin",
     kind: "agent",
     id: "plugin-runtime-architect",
