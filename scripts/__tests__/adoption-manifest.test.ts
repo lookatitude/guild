@@ -14,6 +14,7 @@
 import {
   ADOPTION_MANIFEST_SCHEMA,
   ADOPTION_REASONS,
+  MAX_ENTRIES,
   entryDigest,
   resolveHistorical,
   validateAdoptionEntry,
@@ -977,5 +978,173 @@ describe("cycle + round-trip semantics", () => {
     const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
     expect(r.status).toBe("resolved");
     expect(r.trail.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── D19 — the three defects left open by 230be9c ────────────────────────────
+//
+// Written to FAIL against 230be9c, each naming the exact history it mis-handles.
+
+/** A locator pinned to `id` at bytes `h`. */
+const at = (id: string, h: string) => ({ ...loc(id, h) });
+
+describe("D19.1 — a rollback rewinds ONLY its own era, not the whole ancestry", () => {
+  it("A->B, B->C, C->B(rb 2), B->A closes a loop back to the ORIGIN and is ambiguous", () => {
+    // The rollback at 3 undoes entry 2 (B->C). It therefore rewinds the lineage to
+    // the state just before 2 — where B was current and A was already an ancestor.
+    // A blanket `visitedIdentities.clear()` also forgets A, so entry 4's return to
+    // the ORIGIN bytes reads as fresh history and resolves. The origin is not
+    // inside the reversed era, so the rollback has no authority to forget it.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("B", "2"), to: ref("C", "3") },
+      {
+        from: at("C", "3"),
+        to: ref("B", "2"),
+        reason: "rolled_back",
+        detail: "reverses 2",
+        reverses_sequence: 2,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("B", "2"), to: ref("A", "1") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull(); // the history is legal…
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("ambiguous"); // …but it closes a loop
+  });
+
+  it("an identity introduced BEFORE the reversed era survives the rewind", () => {
+    // Isolates the STAMPING rule, and it takes a rollback-of-a-rollback to do it.
+    //
+    // B is introduced at 1, and re-introduced at 3 by a rollback (the only way to
+    // revisit an identity without tripping the cycle guard on the spot). Entry 4
+    // then reverses entry 3, so the rewind boundary is exactly 3 — the sequence
+    // that RE-introduced B, not the one that first did.
+    //
+    // Stamping each identity with the EARLIEST sequence that introduced it keeps B
+    // at 1, safely older than the boundary, so entry 5's return to B is caught as a
+    // loop. Stamping with the latest marks B as born at 3, the rewind drops it, and
+    // entry 5 resolves onto bytes the lineage already occupied.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("B", "2"), to: ref("C", "3") },
+      {
+        from: at("C", "3"),
+        to: ref("B", "2"),
+        reason: "rolled_back",
+        detail: "reverses 2",
+        reverses_sequence: 2,
+        authorized_by: "cap-loc-D03",
+      },
+      {
+        from: at("B", "2"),
+        to: ref("C", "3"),
+        reason: "rolled_back",
+        detail: "reverses 3 — a rollback of a rollback (S3 invariant 5)",
+        reverses_sequence: 3,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("C", "3"), to: ref("B", "2") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+  });
+
+  it("CONTRAST — re-adoption after a rollback is still fresh history and resolves", () => {
+    // The pair that stops the rewind from over-correcting back into a blanket rule.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("B");
+  });
+});
+
+describe("D19.2 — a rollback proof must be UNIQUE and OPERATIVE", () => {
+  it("rejects a SECOND rollback of an already-reversed entry", () => {
+    // The resolver's comment claims the validator proves "no entry is reversed
+    // twice". It did not. Entry 4 reverses entry 1 again — already undone by 2 —
+    // and a stale proof like this obtains the read-time cycle exemption.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 AGAIN — stale; the operative adoption is 3",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("CONTRAST — reversing the OPERATIVE adoption is legal", () => {
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 3 — the operative adoption",
+        reverses_sequence: 3,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+  });
+});
+
+describe("D19.3 — the COLLECTION is bounded, not just its scalars", () => {
+  it("rejects a manifest with more entries than the cap", () => {
+    // The containment ladder, one level out: per-scalar caps do not bound the
+    // array, so smuggling reopens as chunking and a long chain costs quadratic
+    // work per resolve.
+    const partials = [];
+    for (let i = 0; i < MAX_ENTRIES + 1; i++) {
+      partials.push({ from: at(`r${i}`, "1"), to: ref(`r${i + 1}`, "1") });
+    }
+    expect(validateAdoptionManifestV1(chain(partials))).toBeNull();
+  });
+
+  it("accepts a chain AT the cap, and resolves it without quadratic blow-up", () => {
+    const partials = [];
+    for (let i = 0; i < MAX_ENTRIES; i++) {
+      partials.push({ from: at(`r${i}`, "1"), to: ref(`r${i + 1}`, "1") });
+    }
+    const m = chain(partials);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "r0" });
+    expect(r.status).toBe("resolved");
+    expect(r.trail.length).toBe(MAX_ENTRIES);
   });
 });

@@ -131,6 +131,22 @@ const MAX_RUN_ID = 128;
 const MAX_AUTHORIZED_BY = 128;
 const MAX_TIMESTAMP = 64;
 
+/**
+ * The COLLECTION bound — the containment ladder one level out.
+ *
+ * Per-scalar caps bound each field but say nothing about how many fields there
+ * are, so smuggling simply reopens as CHUNKING: a caller barred from one oversized
+ * `detail` supplies ten thousand small ones. The array itself must be bounded, and
+ * bounded BEFORE any per-entry work, or the rejection costs as much as acceptance.
+ *
+ * It is also the traversal bound. Resolution walks at most one entry per hop, so an
+ * unbounded log is unbounded work per query.
+ *
+ * 4096 is far above any real adoption history (D07/D09/D10 together move dozens of
+ * roles, not thousands) and far below a denial-of-service quantity.
+ */
+export const MAX_ENTRIES = 4096;
+
 /** `sha256:` + 64 lowercase hex, matching S2's byte-hash spelling. */
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
 /** Bare 64-hex — the digest spelling used by the chain. */
@@ -555,6 +571,16 @@ export function validateAdoptionEntry(obj: unknown): AdoptionEntry | null {
   }
 }
 
+/**
+ * The liveness/reversal identity: kind + id + BYTES. Shared by the liveness rule
+ * and the rollback proof so the two can never disagree about what "the same
+ * definition" means — they did once, and the fork survived it (merged codex #1).
+ * A null hash is its own value, distinct from any recorded hash.
+ */
+function identityOf(kind: string, id: string, hash: string | null): string {
+  return `${kind}\u0000${id}\u0000${hash ?? ""}`;
+}
+
 function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | null {
   if (!isPlainDataObject(obj)) return null;
   if (!hasExactKeys(obj, MANIFEST_KEYS)) return null;
@@ -569,6 +595,9 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
 
   const len = arrayLength(entriesP.value);
   if (len === null) return null;
+  // BEFORE the per-entry loop: an oversized log must not cost a full validation
+  // pass to reject.
+  if (len > MAX_ENTRIES) return null;
 
   const raw = entriesP.value as unknown[];
   const entries: AdoptionEntry[] = [];
@@ -633,9 +662,6 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     // were ONE identity — and combined with the blanket resurrect below, the fork
     // this rule exists to forbid stayed representable. The liveness identity must
     // include the BYTES, exactly like traversal's.
-    const identityOf = (kind: string, id: string, hash: string | null) =>
-      `${kind}\u0000${id}\u0000${hash ?? ""}`;
-
     for (const entry of entries) {
       const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash);
 
@@ -675,6 +701,26 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
   }
 
   // Cross-entry rollback proof, now that every entry is in hand.
+  //
+  // Two properties beyond "it reverses its target", both previously ASSERTED IN A
+  // COMMENT AND NOT ENFORCED (the traversal guard's comment claimed "no entry is
+  // reversed twice" while nothing checked it — the claim is now true):
+  //
+  //   OPERATIVE the referenced entry must be the one that actually established the
+  //             state being undone — the LATEST edge before this rollback that
+  //             landed on the rollback's source identity. Reversing a stale edge
+  //             lets a rollback claim authority it does not have, which at read
+  //             time buys the cycle exemption.
+  //
+  // "NO ENTRY IS REVERSED TWICE" is a CONSEQUENCE of this, not a separate check —
+  // and saying so is the point, because the traversal guard's comment asserted it
+  // while nothing enforced it. A second rollback of an already-undone entry must
+  // depart from that entry's destination identity, which the first rollback left
+  // dead; either liveness rejects it, or some later edge re-landed there and IS the
+  // operative target, so OPERATIVE rejects it. An explicit uniqueness check was
+  // written, found unreachable by the anti-vacuity sweep, and DELETED rather than
+  // shipped as a second untested guard. The property is proven end-to-end by
+  // D19.2's rejection test, not asserted in prose.
   for (const entry of entries) {
     if (entry.reason !== "rolled_back") continue;
     const target = entries[(entry.reverses_sequence as number) - 1];
@@ -701,6 +747,26 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     if (target.from.content_hash !== null && entry.to.content_hash !== target.from.content_hash) {
       return null;
     }
+
+    // OPERATIVE — the target must be the edge whose effect this rollback undoes,
+    // i.e. the LATEST entry before this one that landed on this rollback's source
+    // identity. If a later edge landed there, THAT is what is being undone, and
+    // naming the earlier one is a stale claim.
+    //
+    // Concretely, in `A->B(1)`, `B->A(2 rb 1)`, `A->B(3)`, `B->A(4 rb 1)`: entry 4
+    // undoes entry 3, not entry 1. Before this check entry 4 validated and then
+    // collected the read-time cycle exemption on a reversal that had already
+    // happened.
+    const fromIdentity = identityOf(entry.kind, entry.from.id, entry.from.content_hash);
+    let operative: number | null = null;
+    for (const prior of entries) {
+      if (prior.sequence >= entry.sequence) break; // entries are in sequence order
+      if (prior.to === null) continue;
+      if (identityOf(prior.to.kind, prior.to.id, prior.to.content_hash) === fromIdentity) {
+        operative = prior.sequence; // keep the LATEST such edge
+      }
+    }
+    if (operative !== null && operative !== target.sequence) return null;
   }
 
   return {
@@ -835,6 +901,28 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   // A manifest that does not validate yields NO answer — never a partial walk.
   if (m === null) return NO_ANSWER;
 
+  /**
+   * PER-HOP COST (D19.3). Both the forward-match filter and the `hasNext`
+   * lookahead scanned the WHOLE array on every hop, so a valid chain of length n
+   * cost O(n^2) per resolve — the bound on the collection caps the damage, but the
+   * scan is the reason the cap has to be low. Indexing once by the source identity
+   * an entry departs FROM makes each hop proportional to the entries that actually
+   * share that identity, which is one in the overwhelmingly common case.
+   *
+   * Keyed on (kind, from.id) rather than the full identity because a hash-less
+   * query must still find its candidates; the byte check stays in the filter.
+   */
+  const byFromId = new Map<string, AdoptionEntry[]>();
+  for (const e of m.entries) {
+    const key = `${e.kind}\u0000${e.from.id}`;
+    const bucket = byFromId.get(key);
+    if (bucket === undefined) byFromId.set(key, [e]);
+    else bucket.push(e);
+  }
+  /** Entries departing from (kind, id), in sequence order. Never null. */
+  const departingFrom = (kind: string, id: string): AdoptionEntry[] =>
+    byFromId.get(`${kind}\u0000${id}`) ?? [];
+
   const trail: number[] = [];
   /**
    * IDENTITY-CYCLE GUARD.
@@ -850,8 +938,24 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
    * rollback to DIFFERENT bytes (`A@h1 → B@h2 → A@h3`) is legal and must resolve,
    * while a return to IDENTICAL bytes is a closed loop. Both directions are
    * asserted, so the rule cannot be satisfied by always answering `ambiguous`.
+   *
+   * REWIND, NOT CLEAR (D19.1). A rollback undoes ONE era — the span its target
+   * opened — so it may forget only what that era introduced. A blanket clear also
+   * forgot every ANCESTOR, including the walk's origin, so `A->B, B->C, C->B(rb 2),
+   * B->A` returned `resolved` on a closed loop: the origin had been erased by a
+   * rollback that had no authority over it.
+   *
+   * Each identity therefore carries the SEQUENCE that introduced it, and a rollback
+   * of target T drops exactly those introduced at or after `T.sequence`. Identities
+   * older than the reversed era survive, because the rollback did not undo them.
+   * The origin is stamped 0 and is only ever dropped by a rollback of... nothing,
+   * which cannot exist.
    */
-  const visitedIdentities = new Set<string>();
+  const visitedIdentities = new Map<string, number>();
+  /** Record an identity, keeping the EARLIEST sequence that introduced it. */
+  const seeIdentity = (key: string, seq: number): void => {
+    if (!visitedIdentities.has(key)) visitedIdentities.set(key, seq);
+  };
   let currentKind: "agent" | "skill" = qKind.value;
   let currentId: string = qId.value;
   let currentHash: string | undefined = snapHash as string | undefined;
@@ -861,14 +965,12 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   // Seed the ORIGIN position when the caller pinned it. Without a seed, a two-link
   // round trip back to the starting bytes has nothing to compare against.
   if (currentHash !== undefined) {
-    visitedIdentities.add(identityKey(currentKind, currentId, currentHash));
+    seeIdentity(identityKey(currentKind, currentId, currentHash), 0);
   }
 
   for (let step = 0; step <= m.entries.length; step++) {
-    const matches = m.entries.filter((e) => {
+    const matches = departingFrom(currentKind, currentId).filter((e) => {
       if (e.sequence <= minSequence) return false; // never walk backwards in time
-      if (e.kind !== currentKind) return false;
-      if (e.from.id !== currentId) return false;
       // Byte identity when BOTH sides recorded one — this is what stops an
       // id-reusing later definition from hijacking the chain.
       // CODEX #2: `content_hash === null` was a WILDCARD — `A → B@hash1` followed
@@ -936,7 +1038,7 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // `from` is the only place the ORIGIN bytes become known. Recovering them here
     // extends the cycle guard to the common un-pinned query.
     if (step === 0 && currentHash === undefined && entry.from.content_hash !== null) {
-      visitedIdentities.add(identityKey(entry.kind, entry.from.id, entry.from.content_hash));
+      seeIdentity(identityKey(entry.kind, entry.from.id, entry.from.content_hash), 0);
     }
 
     if (entry.to === null) return { status: "removed", ref: null, trail };
@@ -956,8 +1058,10 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     //
     // The distinction is AUTHORIZATION, not geometry. A rollback is an authorized
     // return: the validator has already proven it references a real, strictly
-    // earlier entry, that it genuinely reverses it in both directions, and that no
-    // entry is reversed twice. An UNLABELLED edge back to an occupied position has
+    // earlier entry, that it genuinely reverses it in both directions, and that the
+    // entry it names is the OPERATIVE one (from which "no entry is reversed twice"
+    // follows). That last clause used to be asserted here and enforced nowhere.
+    // An UNLABELLED edge back to an occupied position has
     // proven none of that — it is a corrupt or mislabelled loop with an
     // indeterminate endpoint, and that is what `ambiguous` is for.
     //
@@ -971,16 +1075,20 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // a different guard. Found by repo-prep while checking this guard against the
     // liveness rule; their patch, their reasoning.
     if (entry.reason === "rolled_back") {
-      visitedIdentities.clear();
+      // Rewind to the era boundary: forget only what the reversed entry's era
+      // introduced. `reverses_sequence` is non-null here (the validator proves it
+      // IFF `rolled_back`) and names a real, unique, operative target.
+      const boundary = entry.reverses_sequence as number;
+      for (const [key, seq] of visitedIdentities) {
+        if (seq >= boundary) visitedIdentities.delete(key);
+      }
     } else if (visitedIdentities.has(nextIdentity)) {
       return { status: "ambiguous", ref: null, trail };
     }
-    visitedIdentities.add(nextIdentity);
-    const hasNext = m.entries.some(
+    seeIdentity(nextIdentity, entry.sequence);
+    const hasNext = departingFrom(next.kind, next.id).some(
       (e) =>
         e.sequence > minSequence &&
-        e.kind === next.kind &&
-        e.from.id === next.id &&
         // CODEX #2: same wildcard, second site. `next.content_hash` is always
         // known (it comes from a validated ref), so an entry with a null hash is
         // NOT a continuation of this chain.
