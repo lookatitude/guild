@@ -1539,3 +1539,137 @@ describe("D1-R3 / D3-R3 / D6-R3 — codex round 3, all reproduced against my own
     expect(validateProjectDefinitionRefV1({ ...validRef(), relative_path: at })).not.toBeNull();
   });
 });
+
+
+describe("R4 — codex round 4: the tombstone's source side, and bounds before EVERY enumeration", () => {
+  const validRef = () => ref("A", "a");
+
+  /**
+   * R4 #1 (P1). My round-3 tombstone was checked only against `to`, so this
+   * validated and resolving `A@a` answered `resolved → C` on trail [2]:
+   *
+   *   A@null→removed(1), A@a→C(2)
+   *
+   * `A@a` had never been SEEN as dead, so default liveness presumed it live and it
+   * departed straight out of the log. The claim "a hash-less removal tombstones the
+   * whole (kind, id)" was true on the landing side and false on the source side —
+   * the reported instance fixed and the CLASS left open, which is exactly the
+   * failure this task exists to stop repeating. Now checked on both sides.
+   */
+  const removedNull = () => ({
+    from: { ...loc("A", "a"), content_hash: null },
+    to: null,
+    reason: "removed" as const,
+    detail: "bytes unrecoverable",
+  });
+
+  it("R4#1 a tombstoned id cannot depart as a SOURCE either", () => {
+    expect(
+      validateAdoptionManifestV1(chain([removedNull(), { from: loc("A", "a"), to: ref("C", "c") }]))
+    ).toBeNull();
+  });
+
+  it("R4#1 …for any bytes, and the query no longer resolves through it", () => {
+    for (const h of ["a", "b", "c"]) {
+      const m = chain([removedNull(), { from: loc("A", h), to: ref("C", "c") }]);
+      expect(validateAdoptionManifestV1(m)).toBeNull();
+      expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H(h) }).status).toBe(
+        "ambiguous"
+      );
+    }
+  });
+
+  it("R4#1 …and both sides agree: landing is still barred too", () => {
+    expect(
+      validateAdoptionManifestV1(chain([removedNull(), { from: loc("B", "b"), to: ref("A", "a") }]))
+    ).toBeNull();
+  });
+
+  it("R4#1 a KNOWN-bytes removal still bars only those bytes, on both sides", () => {
+    // The widening applies only where the evidence is missing — asserted from the
+    // source side as well, since that is the side that was wrong.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "gone" },
+          { from: loc("A", "b"), to: ref("C", "c") },
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  /**
+   * R4 #4 (P2). D5 moved the cap ahead of `getOwnPropertyNames` and left it BEHIND
+   * `getOwnPropertySymbols`, which is an enumeration too. An oversized array carrying
+   * 100,000 symbol keys took 160.6ms (entries) / 131.1ms (skills) to reject, against
+   * ~0.5ms for the same arrays without symbols. Bounding one enumeration and leaving
+   * the other ahead of the bound is not a bound.
+   */
+  /**
+   * A RATIO, not an absolute threshold — and the first version of this test was
+   * VACUOUS, which is worth recording. It asserted "< 40ms" while a 100,000-symbol
+   * scan costs ~12ms on this machine, so it passed with the guard weakened. Codex's
+   * 160.6ms/131.1ms were measured on different hardware, and pinning cost to a
+   * machine-specific constant pins nothing portable.
+   *
+   * The ratio is self-calibrating: with the cap ahead of BOTH enumerations, rejecting
+   * a symbol-laden oversized array costs the same as rejecting a bare one, so the
+   * ratio is ~1. With the symbol scan ahead of the cap it is ~50x on any machine,
+   * because the numerator grows with the symbol count and the denominator does not.
+   */
+  const MAX_SYMBOL_COST_RATIO = 6;
+  const SYMBOLS = 300_000;
+  const withSymbols = (n: number, symbols: number): unknown[] => {
+    const a = new Array(n).fill(null);
+    for (let i = 0; i < symbols; i++) {
+      (a as unknown as Record<symbol, unknown>)[Symbol(`k${i}`)] = 1;
+    }
+    return a;
+  };
+  const timeMs = (f: () => unknown): number => {
+    f();
+    const t = process.hrtime.bigint();
+    f();
+    return Number(process.hrtime.bigint() - t) / 1e6;
+  };
+
+  it("R4#4 symbols do not make an oversized ENTRIES array cost more to reject", () => {
+    const mk = (entries: unknown[]) => ({
+      schema_version: ADOPTION_MANIFEST_SCHEMA,
+      project_id: "plugin",
+      entries,
+    });
+    const laden = mk(withSymbols(MAX_ENTRIES + 1, SYMBOLS));
+    const bare = mk(withSymbols(MAX_ENTRIES + 1, 0));
+    expect(validateAdoptionManifestV1(laden)).toBeNull();
+    expect(validateAdoptionManifestV1(bare)).toBeNull();
+    const ladenMs = timeMs(() => validateAdoptionManifestV1(laden));
+    const bareMs = timeMs(() => validateAdoptionManifestV1(bare));
+    expect(ladenMs / Math.max(bareMs, 0.01)).toBeLessThan(MAX_SYMBOL_COST_RATIO);
+  });
+
+  it("R4#4 symbols do not make an oversized SKILLS array cost more to reject", () => {
+    const laden = { ...validRef(), skills: withSymbols(MAX_SKILLS + 1, SYMBOLS) };
+    const bare = { ...validRef(), skills: withSymbols(MAX_SKILLS + 1, 0) };
+    expect(validateProjectDefinitionRefV1(laden)).toBeNull();
+    expect(validateProjectDefinitionRefV1(bare)).toBeNull();
+    const ladenMs = timeMs(() => validateProjectDefinitionRefV1(laden));
+    const bareMs = timeMs(() => validateProjectDefinitionRefV1(bare));
+    expect(ladenMs / Math.max(bareMs, 0.01)).toBeLessThan(MAX_SYMBOL_COST_RATIO);
+  });
+
+  it("R4#4 …and an IN-BOUNDS array with a symbol key is still rejected outright", () => {
+    // The cap running first must not let a symbol-carrying array through when it is
+    // small enough to pass the count — the shape rule still has to fire.
+    const skills = withSymbols(0, 1);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), skills })).toBeNull();
+    const entries = withSymbols(0, 1);
+    expect(
+      validateAdoptionManifestV1({
+        schema_version: ADOPTION_MANIFEST_SCHEMA,
+        project_id: "plugin",
+        entries,
+      })
+    ).toBeNull();
+  });
+});

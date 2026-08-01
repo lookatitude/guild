@@ -425,7 +425,6 @@ export function validatePinnedSkillRef(obj: unknown): PinnedSkillRef | null {
 function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   if (!Array.isArray(v)) return null;
   if (nodeTypes.isProxy(v)) return null;
-  if (Object.getOwnPropertySymbols(v).length > 0) return null;
 
   // CODEX-REVIEW FIX (adversarial round 1): the array's own PROTOTYPE must be
   // exactly `Array.prototype`. Without this, an array built on a polluted or
@@ -471,6 +470,11 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   // A guard whose only observable effect is cost is still a guard; it just needs a
   // cost test, which is why D5's coverage is timed rather than behavioural.
   if (lenDesc.value > MAX_SKILLS) return null;
+  // AFTER the cap: `getOwnPropertySymbols` is an enumeration like any other, and
+  // running it first cost 131.1ms to reject an oversized array carrying 100,000
+  // symbol keys where the same array without them cost ~0.5ms (codex round 4, #4).
+  // Bounding one enumeration and leaving the other ahead of the bound is not a bound.
+  if (Object.getOwnPropertySymbols(v).length > 0) return null;
   //
   // Counting KEYS as well is what bounds the rest: `length` alone does not bound the
   // WORK, because an array with `length: 1` can still carry a million NAMED own
@@ -521,9 +525,17 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
     // compared strings too, so the deletion stands; what was wrong was calling the
     // dedup complete. It is complete at the STRING level, which is the level this
     // contract operates at by design (Rule 5 rejects alias spellings rather than
-    // normalising them, and case-folding is normalisation). Resolving a path to a real
-    // inode belongs to the artifact service that reads the bytes and verifies the
-    // hash — where a case alias surfaces as a hash mismatch, not a silent swap.
+    // normalising them, and case-folding is normalisation).
+    //
+    // AND THE DELEGATION MUST BE STATED AS A REQUIREMENT, NOT AS A CONSEQUENCE (codex
+    // round 4, #3). A previous version of this comment claimed a case alias "surfaces
+    // as a hash mismatch" in the artifact service. It does NOT: on a case-insensitive
+    // filesystem both spellings read the SAME inode, so both hashes verify and there
+    // is no mismatch to catch. Hash verification proves the bytes match what the ref
+    // declared, and nothing about whether two locators are one file. Deduplicating
+    // RESOLVED locators (inode identity, symlink containment) is therefore an
+    // obligation this envelope places ON the artifact service, not a property it
+    // inherits from it.
     seen.add(skill.id);
     out.push(skill);
   }

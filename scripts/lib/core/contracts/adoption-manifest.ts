@@ -297,7 +297,12 @@ function arrayLength(v: unknown, max: number): number | null {
   if (!Array.isArray(v)) return null;
   if (nodeTypes.isProxy(v)) return null;
   if (Object.getPrototypeOf(v) !== Array.prototype) return null;
-  if (Object.getOwnPropertySymbols(v).length > 0) return null;
+  // `length` FIRST, and the cap immediately after it — see the bound below. The
+  // symbol scan used to run ahead of both, and `getOwnPropertySymbols` is an
+  // enumeration too: an oversized array carrying 100,000 symbol keys cost 160.6ms to
+  // reject where the same array without them cost ~0.5ms (codex round 4, #4). Moving
+  // the cap ahead of `getOwnPropertyNames` but not ahead of this left the defect
+  // intact through a second door.
   const lenDesc = Object.getOwnPropertyDescriptor(v, "length");
   if (
     !lenDesc ||
@@ -314,6 +319,7 @@ function arrayLength(v: unknown, max: number): number | null {
   // `project-definition-ref.ts` this one is load-bearing for OUTCOME as well as
   // cost: weakening it accepts a 4097-entry log.
   if (lenDesc.value > max) return null;
+  if (Object.getOwnPropertySymbols(v).length > 0) return null;
   const len = lenDesc.value;
   for (const k of Object.getOwnPropertyNames(v)) {
     if (k === "length") continue;
@@ -714,6 +720,14 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // `from` must be live. An identity is live until adopted away; the first
       // time we see it as a source it is live by default (it pre-dates the log).
       if (deadIds.has(fromKey)) return null;
+      // …EXCEPT THAT DEFAULT LIVENESS IS EXACTLY WHERE THE TOMBSTONE LEAKED (codex
+      // round 4, #1). The hash-less tombstone was checked only against `to`, so
+      // `A@null→removed(1)`, `A@a→C(2)` validated: `A@a` had never been SEEN as dead,
+      // so it was presumed live and departed straight out of the log. The claim "a
+      // hash-less removal tombstones the whole (kind, id)" was true on the landing
+      // side and false on the source side — the reported instance fixed, the class
+      // left open, which is the failure this task exists to stop repeating.
+      if (removedAnyHash.has(`${entry.kind}\u0000${entry.from.id}`)) return null;
 
       // NOTE — there is deliberately NO liveness rule on `to`. Two tempting ones
       // were tried and both rejected LEGITIMATE histories:
