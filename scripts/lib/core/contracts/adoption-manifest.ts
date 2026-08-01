@@ -1169,15 +1169,31 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // The liveness rule removes the FORK, but not the case where a query names an
     // identity loosely: a hash-less query for "A" can match `A@h1->B` and `A@h2->B`,
     // which are two genuinely different sources the caller has not distinguished.
-    // Multiple matches are one history ONLY if they share the whole source locator.
+    // Multiple matches are one history ONLY if they are one IDENTITY.
+    //
+    // AND IDENTITY HAS EXACTLY ONE DEFINITION HERE (codex round 5, #4). This used to
+    // compare the whole source LOCATOR — `historical_path` and `home` as well — while
+    // liveness compared `identityOf` = (kind, id, bytes). Reproduced against the
+    // pristine tip: `A@h/p1→B(1)`, `B→A@h(2 rb 1)`, `A@h/p2→C(3)` VALIDATED, because
+    // the write side called those one identity and let the rollback restore it — yet
+    // a query pinned to `A@h` without a path answered `ambiguous`, because the read
+    // side re-litigated the question with a stricter rule.
+    //
+    // Two claims broke at once: the file's identity definition, and the doc on
+    // `historical_path` ("Optional, and DISAMBIGUATING when present") — a field is
+    // not optional if omitting it changes a `resolved` into an `ambiguous`. The two
+    // sites now share `identityOf`, so they cannot drift again; that is the same
+    // consolidation the merged codex round made when they disagreed before.
+    //
+    // What this does NOT relax: differing BYTES are still two sources, because bytes
+    // are IN the identity. `A@h1` and `A@h2` under a hash-less query stay ambiguous,
+    // and pinning `content_hash` still disambiguates them — which is what that field
+    // is for, and what a path was never able to mean.
     if (matches.length > 1) {
       const head = matches[0].from;
+      const headKey = identityOf(currentKind, head.id, head.content_hash);
       const oneSource = matches.every(
-        (x) =>
-          x.from.id === head.id &&
-          x.from.content_hash === head.content_hash &&
-          x.from.historical_path === head.historical_path &&
-          x.from.home === head.home
+        (x) => identityOf(currentKind, x.from.id, x.from.content_hash) === headKey
       );
       if (!oneSource) {
         return {

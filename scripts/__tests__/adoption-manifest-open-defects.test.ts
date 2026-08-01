@@ -485,3 +485,114 @@ describe("D3 — a removed identity cannot be re-created by an ordinary migratio
     });
   });
 });
+
+// ── Defect 4 — ONE definition of identity ──────────────────────────────────
+
+describe("D4 — liveness and traversal agree about what an identity IS", () => {
+  /**
+   * PRISTINE-TIP BEHAVIOUR (reproduced): `A@h/p1→B(1)`, `B→A@h(2 rb 1)`,
+   * `A@h/p2→C(3)` VALIDATED — the liveness rule keys on (kind, id, bytes), so both
+   * `A` entries are ONE identity and entry 2's rollback restored it. Yet a query
+   * pinned to `A@h` with NO path answered `ambiguous`, because `oneSource`
+   * additionally demanded equal `historical_path` and `home`.
+   *
+   * Two contradictions at once. The file says identity is (kind, id, bytes) and
+   * that `historical_path` is "Optional, and DISAMBIGUATING when present" — but a
+   * caller who supplied the full documented identity and omitted the optional field
+   * got no answer. And the write side had already decided these were one lineage;
+   * the read side re-litigated it with a different rule.
+   *
+   * `identityOf` is now the single answer, used by liveness, by the rollback proof
+   * and by this check — the same consolidation the merged codex round applied when
+   * liveness and traversal disagreed before.
+   */
+  const twoPathsOneIdentity = () =>
+    chain([
+      { from: loc("A", "a", "/h/p1.md"), to: ref("B", "b") },
+      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
+      { from: loc("A", "a", "/h/p2.md"), to: ref("C", "c") },
+    ]);
+
+  it("the manifest validates — the write side already called these one identity", () => {
+    expect(validateAdoptionManifestV1(twoPathsOneIdentity())).not.toBeNull();
+  });
+
+  it("a query supplying the FULL documented identity now resolves", () => {
+    const r = resolveHistorical(twoPathsOneIdentity(), {
+      kind: "agent",
+      id: "A",
+      content_hash: H("a"),
+    });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("C");
+  });
+
+  it("and agrees with the same query PLUS the optional disambiguator", () => {
+    // "Optional disambiguation" must mean the answer does not depend on supplying
+    // it. Before, `historical_path` was load-bearing and the doc was wrong.
+    const withPath = resolveHistorical(twoPathsOneIdentity(), {
+      kind: "agent",
+      id: "A",
+      content_hash: H("a"),
+      historical_path: "/h/p1.md",
+    });
+    expect(withPath.status).toBe("resolved");
+    expect(withPath.ref?.id).toBe("C");
+  });
+
+  it("DIFFERENT BYTES are still two sources, and still ambiguous", () => {
+    // The check `oneSource` exists for a real case and must keep catching it: a
+    // hash-less query for "A" spanning `A@a` and `A@b` names two genuinely
+    // different definitions the caller has not distinguished.
+    const m = chain([
+      { from: loc("A", "a"), to: ref("B", "b") },
+      { from: loc("A", "b"), to: ref("C", "c") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+  });
+
+  it("…and pinning the bytes disambiguates it, which is what the field is for", () => {
+    const m = chain([
+      { from: loc("A", "a"), to: ref("B", "b") },
+      { from: loc("A", "b"), to: ref("C", "c") },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).ref?.id).toBe(
+      "B"
+    );
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("b") }).ref?.id).toBe(
+      "C"
+    );
+  });
+
+  it("a differing HOME alone no longer splits one identity either", () => {
+    // `home` was the other half of the disagreement. Same id, same bytes, recorded
+    // from two legacy homes — one definition that two records spell differently,
+    // which is precisely what this manifest exists to reconcile.
+    const m = chain([
+      {
+        from: {
+          id: "A",
+          historical_path: "/old/A.md",
+          content_hash: H("a"),
+          home: "dot-claude-agents" as const,
+        },
+        to: ref("B", "b"),
+      },
+      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
+      {
+        from: {
+          id: "A",
+          historical_path: "/old/A.md",
+          content_hash: H("a"),
+          home: "plugin-shipped" as const,
+        },
+        to: ref("C", "c"),
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") }).ref?.id
+    ).toBe("C");
+  });
+});
