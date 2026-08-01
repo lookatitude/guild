@@ -199,13 +199,22 @@ export const MAX_SKILLS = 256;
  * build, not a silent hole. That is the only way this rung stops being re-missed;
  * it has now been missed twice.
  *
- * THE COMPOSED CEILING, computed once so nobody has to re-derive it. A pinned skill
- * is ≤ ~1.2 KiB (id + path + hash); a ref is ≤ ~1.6 KiB + 256 × 1.2 KiB ≈ 314 KiB;
- * an S3 entry is ≤ ~3.5 KiB + one ref ≈ 318 KiB; 4,096 entries ≈ 1.3 GiB. That is a
- * CEILING ON ACCEPTED PAYLOAD, reachable only by a caller who has already
+ * THE COMPOSED CEILING, computed once so nobody has to re-derive it, and stated in
+ * the units it is actually measured in. THE BOUNDS IN THIS FILE ARE UTF-8 BYTES
+ * (`isBoundedScalar` uses `Buffer.byteLength`). A pinned skill is ≤ ~1.2 KiB
+ * (id + path + hash); a ref is ≤ ~1.6 KiB + 256 × 1.2 KiB ≈ 314 KiB.
+ *
+ * S3's OWN scalars are a different measure and are NOT changed here: `isCleanScalar`
+ * in `adoption-manifest.ts` bounds UTF-16 CODE UNITS, so its `detail` (2,048) can
+ * reach ~6 KiB of UTF-8 and its `historical_path` (1,024) ~3 KiB. An S3 entry is
+ * therefore ≤ ~10 KiB + one ref ≈ 324 KiB, and 4,096 entries ≈ 1.3 GiB.
+ *
+ * That is a CEILING ON ACCEPTED PAYLOAD, reachable only by a caller who has already
  * materialised 1.3 GiB of parsed JSON — the validator adds no amplification on top.
  * Tightening it further is a `MAX_SKILLS` / `MAX_ENTRIES` decision, not a per-scalar
  * one, and is deliberately not taken here: both counts are frozen contract surface.
+ * Converting S3's scalars to bytes is likewise left alone — `detail` is free text
+ * where non-ASCII is legitimate, and narrowing it is a contract change, not a fix.
  */
 export const MAX_PROJECT_ID = 128;
 /** Role slug or skill name — the same budget S3 gives a legacy id. */
@@ -248,9 +257,23 @@ export const MAX_SOURCE_COMMIT = 512;
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 
-/** A bounded, control-free, non-empty scalar. */
+/**
+ * A bounded, control-free, non-empty scalar. The bound is in UTF-8 BYTES.
+ *
+ * `string.length` IS UTF-16 CODE UNITS, NOT BYTES (codex round 3, #4). The first
+ * version of these bounds used it while the surrounding documentation promised byte
+ * limits and a byte ceiling: a 1,023-code-unit path of `é` was accepted at 2,041
+ * UTF-8 bytes, so every figure derived from the caps understated the real payload by
+ * up to 3x. Either the check or the claim had to change; the claim was the useful
+ * one, so the check moved to `Buffer.byteLength`.
+ *
+ * For the ASCII values these fields actually hold — token ids, `.guild/...` paths,
+ * shas and tags — the two measures are identical, so nothing legitimate narrows.
+ */
 function isBoundedScalar(v: unknown, max: number): v is string {
-  return typeof v === "string" && v.length > 0 && v.length <= max && !CONTROL_RE.test(v);
+  if (typeof v !== "string" || v.length === 0) return false;
+  if (CONTROL_RE.test(v)) return false;
+  return Buffer.byteLength(v, "utf8") <= max;
 }
 
 /**
@@ -485,9 +508,22 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
     // TWO IDS ON ONE LOCATOR — the same ambiguity from the other side (codex round 2,
     // #3) — needs NO separate guard, and the one written here was DELETED rather than
     // shipped untested. Since `validatePinnedSkillRefInner` now requires each id to
-    // name its own owning directory, two entries sharing a `relative_path` share that
-    // directory and therefore share an id, which the line above already rejects. The
-    // anti-vacuity sweep confirmed it: weakening the locator check reddened nothing.
+    // name its own owning directory, two entries sharing an IDENTICAL `relative_path`
+    // string share that directory and therefore share an id, which the line above
+    // already rejects. The anti-vacuity sweep confirmed it: weakening the locator
+    // check reddened nothing.
+    //
+    // THE CLAIM IS SCOPED TO EXACT STRINGS, and the first version of this comment
+    // over-reached (codex round 3, #2). `id:"tdd"` at `skills/meta/tdd/SKILL.md` and
+    // `id:"TDD"` at `skills/meta/TDD/SKILL.md` both validate and, on a
+    // case-insensitive filesystem, name the same directory — two different ids owning
+    // one real location. The deleted guard would not have caught that either, since it
+    // compared strings too, so the deletion stands; what was wrong was calling the
+    // dedup complete. It is complete at the STRING level, which is the level this
+    // contract operates at by design (Rule 5 rejects alias spellings rather than
+    // normalising them, and case-folding is normalisation). Resolving a path to a real
+    // inode belongs to the artifact service that reads the bytes and verifies the
+    // hash — where a case alias surfaces as a hash mismatch, not a silent swap.
     seen.add(skill.id);
     out.push(skill);
   }

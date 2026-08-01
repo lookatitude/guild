@@ -1403,3 +1403,139 @@ describe("D6-R2 — a pinned skill's declared id is bound to the bytes it names"
     ).not.toBeNull();
   });
 });
+
+
+describe("D1-R3 / D3-R3 / D6-R3 — codex round 3, all reproduced against my own fixes", () => {
+  const validRef = () => ref("A", "a");
+
+  /**
+   * R3 #1 (P1). D1 guards the DEPARTURE side of a rollback; the LANDING side was
+   * unguarded. Reproduced: `A→X(1), B→A(2), X→A(3 rb 1), A→B(4 rb 2)` VALIDATED and
+   * resolving A answered `resolved → B` on trail [1,3,4], when A's own rollback
+   * should have left it at A. Entry 2 re-created `A`, so entry 3 restored it on top
+   * of a live occupant and entry 4 then passed `length === 1` while performing
+   * exactly the partial un-collapse D1 forbids.
+   */
+  it("R3#1 rejects a rollback restoring an identity something else already rides", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("B", "b"), to: ref("A", "a") },
+          rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+          rb(2, { from: loc("A", "a"), to: ref("B", "b") }),
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("R3#1 …and it is rejected at entry 3, where the collision happens", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("B", "b"), to: ref("A", "a") },
+          rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      "plain forward-append rollback",
+      [
+        { from: loc("A", "a"), to: ref("B", "b") },
+        rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
+      ],
+    ],
+    [
+      "sequential rollback of a multi-step migration",
+      [
+        { from: loc("A", "a"), to: ref("B", "b") },
+        { from: loc("B", "b"), to: ref("C", "c") },
+        rb(2, { from: loc("C", "c"), to: ref("B", "b") }),
+        rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
+      ],
+    ],
+    [
+      "suspend-and-restore across eras",
+      [
+        { from: loc("A", "a"), to: ref("X", "3") },
+        { from: loc("X", "3"), to: ref("Y", "e") },
+        { from: loc("B", "b"), to: ref("X", "3") },
+        rb(3, { from: loc("X", "3"), to: ref("B", "b") }),
+        rb(2, { from: loc("Y", "e"), to: ref("X", "3") }),
+        rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+      ],
+    ],
+  ])("R3#1 leaves the legitimate landings alone — %s", (_label, parts) => {
+    expect(validateAdoptionManifestV1(chain(parts as Array<Partial<AdoptionEntry>>))).not.toBeNull();
+  });
+
+  /**
+   * R3 #3 (P1). `A@null→removed(1), B→A@a(2)` VALIDATED: the tombstone was keyed on
+   * `A@null` and the landing was `A@a`. If A's unrecoverable bytes WERE `a`, that
+   * re-created exactly the removed definition. Absence of evidence is not evidence
+   * of different bytes — the rule this file already applies to a null target hash in
+   * the rollback proof.
+   */
+  it("R3#3 a hash-less removal tombstones the whole id", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: { ...loc("A", "a"), content_hash: null }, to: null, reason: "removed", detail: "bytes unrecoverable" },
+          { from: loc("B", "b"), to: ref("A", "a") },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("R3#3 …for ANY bytes, not just the one that happened to be tried", () => {
+    for (const h of ["a", "b", "c"]) {
+      expect(
+        validateAdoptionManifestV1(
+          chain([
+            { from: { ...loc("A", "a"), content_hash: null }, to: null, reason: "removed", detail: "bytes unrecoverable" },
+            { from: loc("B", "b"), to: ref("A", h) },
+          ])
+        )
+      ).toBeNull();
+    }
+  });
+
+  it("R3#3 …while a KNOWN-bytes removal still retires only those bytes", () => {
+    // The conservative widening applies ONLY where the evidence is missing.
+    // Over-widening it would be its own defect.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "gone" },
+          { from: loc("B", "b"), to: ref("A", "b") },
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  /**
+   * R3 #4 (P2). `isBoundedScalar` used `string.length` — UTF-16 CODE UNITS — while
+   * the surrounding documentation promised byte limits and a byte ceiling. A
+   * 1,023-code-unit path of `é` was accepted at 2,041 UTF-8 bytes.
+   */
+  it("R3#4 the bound is UTF-8 BYTES, not code units", () => {
+    const accented = "é".repeat(MAX_RELATIVE_PATH - 6) + "/a.md";
+    expect(accented.length).toBeLessThanOrEqual(MAX_RELATIVE_PATH);
+    expect(Buffer.byteLength(accented, "utf8")).toBeGreaterThan(MAX_RELATIVE_PATH);
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), relative_path: accented })
+    ).toBeNull();
+  });
+
+  it("R3#4 …and an ASCII value at exactly the cap is unaffected", () => {
+    // The two measures coincide for the values these fields really hold, so nothing
+    // legitimate narrowed.
+    const at = "d".repeat(MAX_RELATIVE_PATH - 5) + "/a.md";
+    expect(Buffer.byteLength(at, "utf8")).toBe(MAX_RELATIVE_PATH);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), relative_path: at })).not.toBeNull();
+  });
+});

@@ -702,6 +702,8 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     const deadIds = new Set<string>();
     /** Identities a `removed` entry retired. NEVER revoked — the whole point. */
     const removedIds = new Set<string>();
+    /** (kind,id) retired by a removal whose BYTES were unrecoverable. Also never revoked. */
+    const removedAnyHash = new Set<string>();
     // CODEX (merged round) #1: this keyed on (kind, id) only, so `A@h1` and `A@h2`
     // were ONE identity — and combined with the blanket resurrect below, the fork
     // this rule exists to forbid stayed representable. The liveness identity must
@@ -728,6 +730,16 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
         // on BYTES like everything else: retiring `A@h1` says nothing about `A@h2`,
         // which is a different definition that merely shares an id.
         if (removedIds.has(toKey)) return null;
+        // …AND ABSENCE IS NOT EVIDENCE OF DIFFERENT BYTES (codex round 3, #3). When a
+        // removal could not recover the bytes it retired, `A@null→removed(1)` followed
+        // by `B→A@a(2)` slipped past, because the tombstone was keyed on `A@null` and
+        // the landing was `A@a`. If A's unrecoverable bytes WERE `a`, that re-created
+        // exactly the removed definition with no `restored` reason. "Unknown hash" is
+        // absence of evidence, so finality is conservative: a hash-less removal
+        // tombstones the whole (kind, id). This is the same rule the rollback proof
+        // already applies to a null target hash, and that `identityOf` encodes by
+        // treating null as distinct from every recorded hash.
+        if (removedAnyHash.has(`${entry.to.kind}\u0000${entry.to.id}`)) return null;
         liveIds.add(toKey);
         // CODEX (merged round) #1 was really TWO issues, and only one of them was
         // here. The fork survived because `identityOf` ignored BYTES, so `A@h1` and
@@ -749,7 +761,13 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // …and if it was REMOVED, it is retired for good. `deadIds` alone cannot carry
       // this: a later entry's `to` legitimately revokes death, and must never
       // legitimately revoke removal.
-      if (entry.to === null) removedIds.add(fromKey);
+      if (entry.to === null) {
+        removedIds.add(fromKey);
+        // A hash-less removal cannot say WHICH bytes it retired, so it retires the id.
+        if (entry.from.content_hash === null) {
+          removedAnyHash.add(`${entry.kind}\u0000${entry.from.id}`);
+        }
+      }
     }
   }
 
@@ -945,6 +963,30 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     // force. This is what makes a suspended era restorable rather than lost.
     const eras = undoStacks.get(fromKey);
     if (eras !== undefined && eras.length > 0 && eras[eras.length - 1].length === 0) eras.pop();
+    // A ROLLBACK MAY ONLY RESTORE AN IDENTITY THAT IS ACTUALLY GONE (codex round 3,
+    // #1). D1 guards the DEPARTURE side — no partial un-collapse out of a shared
+    // destination — and this is the same rule on the LANDING side, which was
+    // unguarded. Reproduced:
+    //
+    //   A→X(1), B→A(2), X→A(3 rb 1), A→B(4 rb 2)
+    //
+    // validated, and resolving A answered `resolved → B` on trail [1,3,4] when A's
+    // own rollback should have left it at A. Entry 2 had already re-created `A`, so
+    // entry 3 restored `A` on top of a live occupant; the era recorded only sequence
+    // 2, and entry 4 then passed `length === 1` while performing exactly the partial
+    // un-collapse D1 exists to forbid.
+    //
+    // Departure is not merely a precondition, it is the definition of a restoration:
+    // a rollback's `to` is its target's `from`, which necessarily departed when the
+    // target was applied. So this can only fail when something re-created that
+    // identity in between — which is precisely the collision. It does NOT touch the
+    // ordinary cases, where the landing identity is still gone: `A→B, B→A rb`, the
+    // multi-step sequential rollback, and the suspend-and-restore history all land on
+    // identities that departed and were never re-created.
+    if (entry.to !== null) {
+      const restoreKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash);
+      if (!departed.has(restoreKey)) return null;
+    }
     // This rollback departs its source and RESTORES its destination into the era
     // that destination already had — never a new one, so no stack is cleared here.
     departed.add(fromKey);
