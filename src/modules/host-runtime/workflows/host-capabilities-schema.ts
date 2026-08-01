@@ -229,7 +229,7 @@ export const PROBE_RECEIPT_PATH_RE =
  *                NOT present it as supported
  *   "absent"   — no mechanism at all (typically: no dispatch surface)
  */
-export const INJECTION_SUPPORT = ["verified", "target", "absent"] as const;
+export const INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"] as const);
 const INJECTION_SUPPORT_SET: ReadonlySet<string> = new Set<string>(INJECTION_SUPPORT);
 export type InjectionSupport = (typeof INJECTION_SUPPORT)[number];
 
@@ -733,7 +733,7 @@ export interface ValidationResult {
 const TOOL_STRENGTHS = new Set<string>(["native", "bridge", "emulated", "none"]);
 
 /** The ten hook events every capability row must advertise (matches HooksCaps). */
-export const REQUIRED_HOOK_EVENTS = [
+export const REQUIRED_HOOK_EVENTS = Object.freeze([
   "session_start",
   "user_prompt_submit",
   "pre_tool_use",
@@ -744,7 +744,7 @@ export const REQUIRED_HOOK_EVENTS = [
   "task_created",
   "task_completed",
   "teammate_idle",
-] as const;
+] as const);
 
 /**
  * Validator for a `guild.host_capabilities.v1` row. Checks the discriminator,

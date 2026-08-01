@@ -70,7 +70,7 @@ import { types as nodeTypes } from "util";
 export const PROJECT_DEFINITION_REF_SCHEMA = "guild.project_definition_ref.v1" as const;
 
 /** The closed `kind` set. An agent definition or a skill body — nothing else. */
-export const DEFINITION_KINDS = ["agent", "skill"] as const;
+export const DEFINITION_KINDS = Object.freeze(["agent", "skill"] as const);
 export type DefinitionKind = (typeof DEFINITION_KINDS)[number];
 
 const DEFINITION_KIND_SET: ReadonlySet<string> = new Set<string>(DEFINITION_KINDS);
@@ -437,14 +437,14 @@ export function isProjectDefinitionRefV1(value: unknown): boolean {
 // ── Verification helper (pure — the artifact service supplies the bytes) ─────
 
 /** Why a ref failed to verify. Maps 1:1 onto frozen EXECUTION_REASON_CODES. */
-export const REF_VERIFICATION_FAILURES = [
+export const REF_VERIFICATION_FAILURES = Object.freeze([
   /** The ref itself is malformed → transport `invalid_request`. */
   "invalid_ref",
   /** Bytes were supplied but their hash does not match → transport `invalid_request`. */
   "hash_mismatch",
   /** The definition could not be read at `relative_path` → transport `capability_absent`. */
   "bytes_absent",
-] as const;
+] as const);
 export type RefVerificationFailure = (typeof REF_VERIFICATION_FAILURES)[number];
 
 export interface RefVerification {

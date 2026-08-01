@@ -71,7 +71,7 @@ export function isExecutionContractCompatible(major: unknown): boolean {
  * answers ALL SEVEN — a port that cannot perform one answers `unsupported`, which
  * is an explicit typed outcome, never a missing method or a thrown error.
  */
-export const EXECUTION_OPERATIONS = [
+export const EXECUTION_OPERATIONS = Object.freeze([
   "spawn",
   "send",
   "wait",
@@ -79,17 +79,17 @@ export const EXECUTION_OPERATIONS = [
   "close",
   "connect",
   "probe",
-] as const;
+] as const);
 export type ExecutionOperation = (typeof EXECUTION_OPERATIONS)[number];
 
 /** The closed outcome set: success, failure, cancellation, timeout, unsupported. */
-export const EXECUTION_OUTCOME_STATUSES = [
+export const EXECUTION_OUTCOME_STATUSES = Object.freeze([
   "succeeded",
   "failed",
   "cancelled",
   "timed_out",
   "unsupported",
-] as const;
+] as const);
 export type ExecutionOutcomeStatus = (typeof EXECUTION_OUTCOME_STATUSES)[number];
 
 /**
@@ -102,7 +102,7 @@ export type ExecutionOutcomeStatus = (typeof EXECUTION_OUTCOME_STATUSES)[number]
  * There is deliberately NO policy code here. Policy denial belongs to the neutral
  * core (BR-04); a transport that could emit one would be deciding gate policy.
  */
-export const EXECUTION_REASON_CODES = [
+export const EXECUTION_REASON_CODES = Object.freeze([
   "operation_unsupported",
   "transport_unavailable",
   "capability_absent",
@@ -117,7 +117,7 @@ export const EXECUTION_REASON_CODES = [
   "remote_unreachable",
   "cancelled_by_caller",
   "deadline_exceeded",
-] as const;
+] as const);
 export type ExecutionReasonCode = (typeof EXECUTION_REASON_CODES)[number];
 
 /**
@@ -126,14 +126,14 @@ export type ExecutionReasonCode = (typeof EXECUTION_REASON_CODES)[number];
  * substrate. `pane` covers BOTH the bespoke PaneAdapters and the generic
  * wrapped-CLI adapter — one bounded adapter, not one branch per host.
  */
-export const EXECUTION_TRANSPORT_IDS = [
+export const EXECUTION_TRANSPORT_IDS = Object.freeze([
   "pane",
   "in-process",
   "serial",
   "tmux",
   "remote",
   "runtime",
-] as const;
+] as const);
 export type ExecutionTransportId = (typeof EXECUTION_TRANSPORT_IDS)[number];
 
 function includes(list: readonly string[], value: unknown): boolean {
@@ -841,7 +841,7 @@ export interface TeamDispatchTarget {
   readonly scope: "session" | "window";
 }
 
-export const TEAM_DISPATCH_SCOPES = ["session", "window"] as const;
+export const TEAM_DISPATCH_SCOPES = Object.freeze(["session", "window"] as const);
 
 export function isTeamDispatchScope(value: unknown): value is "session" | "window" {
   return includes(TEAM_DISPATCH_SCOPES, value);
@@ -951,7 +951,7 @@ export function isTeamLaunchRequestLike(value: unknown): value is TeamLaunchRequ
 // core and generic launchers"). The launcher now only READS host facts through the
 // probe below and reports what this table decided.
 
-export const EXECUTION_DISPATCH_MODES = ["team", "agent", "subagent"] as const;
+export const EXECUTION_DISPATCH_MODES = Object.freeze(["team", "agent", "subagent"] as const);
 export type ExecutionDispatchMode = (typeof EXECUTION_DISPATCH_MODES)[number];
 
 /**
