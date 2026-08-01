@@ -15,7 +15,7 @@
       "id": "lib/capability/adoption-migrate",
       "source_path": "scripts/lib/capability/adoption-migrate.ts",
       "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
-      "sha256": "0226c5376987cb65a64f9d271d68ba5c3aa05a846c8ced5fed0d807810104c59"
+      "sha256": "af99c349d79e4a8f10d69dea1ddbe07c4d1be36f4627aa0962a9c2bc6e096e60"
     },
     {
       "category": "scripts",

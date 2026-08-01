@@ -436,3 +436,94 @@ describe("D4 — mode transitions are typed, never clamped", () => {
     ).toBe("rejected");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Codex adversarial round 1 — regression rows
+// ---------------------------------------------------------------------------
+//
+// Each row below reproduces a defect Codex found with a concrete counterexample.
+// They exist so the same input can never pass again.
+
+describe("D4 — codex round 1 regressions", () => {
+  it("#7 refuses a mint read in any mode that forbids capability writes", () => {
+    // Was: `resolveCapability` refused the mint while `classifyCompatibilityRead`
+    // classified it BENIGN, so `compatibilityUsageForRead` recorded an impossible
+    // read as `mint_source` and excluded it from the G5 dependence count.
+    for (const mode of ["legacy", "observe"] as CapabilityResolverMode[]) {
+      expect(resolverModePolicy(mode)!.capability_writes_permitted).toBe(false);
+      const c = classify(mode, "mint");
+      expect(c.status).toBe("refused");
+      expect(c.failure).toBe("write_not_permitted_in_mode");
+      // …and the resolver agrees, which is the point: one question, one answer.
+      const out = resolveCapability(req({ mode, intent: "mint" }));
+      if (out.status !== "unresolved") throw new Error("expected unresolved");
+      expect(out.failure).toBe("write_not_permitted_in_mode");
+    }
+    // Where writes ARE permitted the mint is still benign — the fix must not make
+    // the gate unreachable by counting legitimate minting as dependence.
+    for (const mode of ["shadow", "project-local"] as CapabilityResolverMode[]) {
+      const c = classify(mode, "mint");
+      expect(c.status).toBe("classified");
+      expect(c.counts_as_dependence).toBe(false);
+    }
+  });
+
+  it("#8 a verdict cannot be changed by mutating the exported ladder", () => {
+    // Was: ranking read the imported `CAPABILITY_RESOLVER_MODES`, so `.reverse()`
+    // flipped `legacy → observe` from an advance into a regress — a migration step
+    // recorded as a rollback.
+    const before = planModeTransition({ from: "legacy", to: "observe", reason: "phase 1" });
+    const snapshot = [...CAPABILITY_RESOLVER_MODES];
+    try {
+      (CAPABILITY_RESOLVER_MODES as unknown as string[]).reverse();
+    } catch {
+      /* frozen upstream is also an acceptable outcome */
+    }
+    try {
+      const after = planModeTransition({ from: "legacy", to: "observe", reason: "phase 1" });
+      expect(after).toEqual(before);
+      expect(resolverModeRank("legacy")).toBe(0);
+    } finally {
+      // Restore, so a mutation here cannot leak into another test in this file.
+      const arr = CAPABILITY_RESOLVER_MODES as unknown as string[];
+      if (arr[0] !== snapshot[0]) arr.reverse();
+    }
+  });
+
+  it("#11 a shadow_compare answer never authorizes a side effect", () => {
+    const out = resolveCapability(req({ mode: "shadow", intent: "shadow_compare" }));
+    if (out.status !== "resolved") throw new Error("expected resolved");
+    expect(out.source).toBe("compatibility");
+    // Was: true, derived from legacy authority alone — a comparison-only answer a
+    // caller could act on, which is the exact side effect shadow mode withholds.
+    expect(out.side_effects_permitted).toBe(false);
+  });
+
+  it("#12 rejects Windows trailing-dot/space path aliases", () => {
+    // `qa.md ` and `qa.md` open the SAME file on Windows: a second spelling of one
+    // referent, which rejecting non-canonical paths exists to prevent.
+    for (const bad of [".guild/agents/qa.md ", ".guild/agents/qa.md.", ".guild/agents /qa.md"]) {
+      const out = resolveCapability(req({ mode: "project-local", project_definition: bad }));
+      if (out.status !== "unresolved") throw new Error(`expected unresolved for ${JSON.stringify(bad)}`);
+      expect(out.failure).toBe("invalid_request");
+    }
+    // Case is deliberately NOT folded — `SKILL.md` is a legitimate spelling.
+    expect(
+      resolveCapability(req({ mode: "project-local", project_definition: ".guild/skills/x/SKILL.md" })).status,
+    ).toBe("resolved");
+  });
+
+  it("#13 never throws on a BigInt or a cyclic value", () => {
+    // Was: every `detail` used JSON.stringify, which throws on a BigInt — so the
+    // ERROR path was the one path that could crash a module claiming it never does.
+    expect(() => resolveCapability(req({ mode: 1n }))).not.toThrow();
+    expect(resolveCapability(req({ mode: 1n })).status).toBe("unresolved");
+    expect(() => resolveCapability(req({ capability_id: 1n }))).not.toThrow();
+    expect(() => resolveCapability(req({ intent: 1n }))).not.toThrow();
+    expect(() => planModeTransition({ from: 1n, to: "observe", reason: "x" })).not.toThrow();
+
+    const cyclic: Record<string, unknown> = {};
+    cyclic["self"] = cyclic;
+    expect(() => resolveCapability(req({ capability_id: cyclic }))).not.toThrow();
+  });
+});

@@ -349,7 +349,7 @@
       "id": "projection:src/modules/capability/workflows/compatibility-catalog.ts",
       "source_path": "src/modules/capability/workflows/compatibility-catalog.ts",
       "resource_path": "resources/src/modules/capability/workflows/compatibility-catalog.ts",
-      "sha256": "c04111762fd4462053c1372c0eedd4e9fb611c31a7e2f8f98787b08a8e1f70ae",
+      "sha256": "6dbcc13c0a0e9ce80462284400df8987bc3e606c075c407bd5db9e8b01676650",
       "projection_dependency": true
     },
     {
@@ -373,7 +373,7 @@
       "id": "projection:src/modules/capability/workflows/resolver-mode.ts",
       "source_path": "src/modules/capability/workflows/resolver-mode.ts",
       "resource_path": "resources/src/modules/capability/workflows/resolver-mode.ts",
-      "sha256": "a744715070291ac219c535aabb1344d82d5f77cbcdcbb71194a3dc8887d50d57",
+      "sha256": "46c28999043c5e50a5a1cf0d1d5752cd43a06d052eeb554d93fa896aa5e21ab0",
       "projection_dependency": true
     },
     {

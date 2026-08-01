@@ -81,6 +81,29 @@ const MAX_SCALAR_LEN = 1024;
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
+/**
+ * Describe an untrusted value for an error message WITHOUT throwing.
+ *
+ * CODEX #13: every `detail` string used `JSON.stringify(value)`, which THROWS on a
+ * BigInt ("Do not know how to serialize a BigInt") and on a cyclic object. The
+ * error path was therefore the one path that could crash — the module claims it
+ * never throws, and the claim was false for exactly the inputs a hostile caller
+ * would try. Bounded too, so a rejected 10MB string cannot ride out in the reason.
+ */
+function describe(v: unknown): string {
+  try {
+    if (typeof v === "bigint") return `${v}n`;
+    if (typeof v === "string") return v.length > 120 ? `"${v.slice(0, 117)}..."` : `"${v}"`;
+    if (typeof v === "symbol") return "Symbol()";
+    if (typeof v === "function") return "[function]";
+    if (v === null) return "null";
+    if (typeof v === "object") return Array.isArray(v) ? "[array]" : "[object]";
+    return String(v);
+  } catch {
+    return "[unprintable]";
+  }
+}
+
 /** Canonical id spelling. One referent, one spelling — never normalized. */
 const CANONICAL_ID = /^[a-z0-9][a-z0-9._-]*$/;
 
@@ -111,7 +134,17 @@ function isCanonicalRelPath(v: unknown): v is string {
   for (const seg of v.split("/")) {
     if (seg.length === 0) return false; // `//` or leading/trailing empty
     if (seg === "." || seg === "..") return false; // alias spellings
+    // CODEX #12: Windows silently strips a trailing dot or space from a path
+    // segment, so `qa.md ` and `qa.md` open the SAME file while both validate
+    // here — a second spelling of one referent, which is exactly what rejecting
+    // non-canonical paths exists to prevent.
+    if (/[. ]$/.test(seg)) return false;
   }
+  // NOT case-folded, deliberately. `SKILL.md` is a legitimate canonical spelling,
+  // so lower-casing paths would reject real files. The case-alias risk on a
+  // case-insensitive filesystem is carried by the CAPABILITY ID instead, which IS
+  // required lower-case (`CANONICAL_ID`) and is what every count and grouping keys
+  // on — two paths differing only by case cannot reach one capability id.
   return true;
 }
 
@@ -334,9 +367,12 @@ const MODE_POLICIES: ReadonlyMap<CapabilityResolverMode, ResolverModePolicy> = n
 export const RESOLVER_MODE_POLICIES: Readonly<
   Record<CapabilityResolverMode, ResolverModePolicy>
 > = Object.freeze(
-  Object.fromEntries(
-    CAPABILITY_RESOLVER_MODES.map((m) => [m, MODE_POLICIES.get(m)!]),
-  ) as Record<CapabilityResolverMode, ResolverModePolicy>,
+  // Built from the PRIVATE policy map's own keys, NOT from the mutable exported
+  // ladder — same reasoning as MODE_RANK below (CODEX #8).
+  Object.fromEntries([...MODE_POLICIES].map(([m, p]) => [m, p])) as Record<
+    CapabilityResolverMode,
+    ResolverModePolicy
+  >,
 );
 
 /** The policy for a mode, or null if the value is not a member of the ladder. */
@@ -346,12 +382,28 @@ export function resolverModePolicy(mode: unknown): ResolverModePolicy | null {
 }
 
 /**
+ * PRIVATE ladder snapshot, taken once at module load.
+ *
+ * CODEX #8: ranking read the IMPORTED `CAPABILITY_RESOLVER_MODES` directly, and
+ * that array is `as const` — compile-time only. A consumer could call
+ * `CAPABILITY_RESOLVER_MODES.reverse()` and the identical `legacy → observe`
+ * transition would flip from `advance` to `regress`, i.e. a migration step would
+ * be recorded as a rollback. A verdict must never be reachable from a mutable
+ * export, so the order is snapshotted into this private index map and every
+ * ranking reads it.
+ */
+const MODE_RANK: ReadonlyMap<string, number> = new Map(
+  [...MODE_POLICIES.keys()].map((m, i) => [m as string, i] as const),
+);
+
+/**
  * Ladder position, or `-1`. The ONLY ranking anyone should use — a consumer
- * comparing migration progress must never re-derive the order from a set.
+ * comparing migration progress must never re-derive the order from a set, and
+ * must never read the exported array, which is mutable at runtime.
  */
 export function resolverModeRank(mode: unknown): number {
   if (typeof mode !== "string") return -1;
-  return CAPABILITY_RESOLVER_MODES.indexOf(mode as CapabilityResolverMode);
+  return MODE_RANK.get(mode) ?? -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +536,7 @@ export function classifyCompatibilityRead(request: unknown): CompatibilityReadCl
     return {
       status: "refused" as const,
       failure: "unknown_mode",
-      detail: `not a resolver mode: ${JSON.stringify(opts["mode"])}`,
+      detail: `not a resolver mode: ${describe(opts["mode"])}`,
     };
   }
   const intent = opts["intent"];
@@ -492,7 +544,7 @@ export function classifyCompatibilityRead(request: unknown): CompatibilityReadCl
     return {
       status: "refused" as const,
       failure: "invalid_request",
-      detail: `not a resolution intent: ${JSON.stringify(intent)}`,
+      detail: `not a resolution intent: ${describe(intent)}`,
     };
   }
   const typedIntent = intent as CapabilityResolutionIntent;
@@ -511,6 +563,20 @@ export function classifyCompatibilityRead(request: unknown): CompatibilityReadCl
       detail: `mode ${policy.mode} does not permit a compatibility read for intent ${typedIntent}`,
     };
   }
+  // CODEX #7: a mint is a WRITE, and `resolveCapability` already refuses it wherever
+  // `capability_writes_permitted` is false. This function did not — so the SAME
+  // (mode, intent) pair was REFUSED by the resolver and CLASSIFIED BENIGN by the
+  // emitter. `compatibilityUsageForRead` takes this path, so a mint that can never
+  // legitimately happen under `legacy`/`observe` was recorded as a benign
+  // `mint_source` read and excluded from the G5 dependence count. One question gets
+  // one answer: the write check lives here too.
+  if (typedIntent === "mint" && !policy.capability_writes_permitted) {
+    return {
+      status: "refused" as const,
+      failure: "write_not_permitted_in_mode",
+      detail: `mode ${policy.mode} does not permit capability writes, so a "mint" read cannot occur`,
+    };
+  }
 
   // `dispatch` is the only intent whose reason depends on the MODE rather than on
   // the intent alone, because "why is this legacy asset being read" is genuinely a
@@ -527,7 +593,7 @@ export function classifyCompatibilityRead(request: unknown): CompatibilityReadCl
     return {
       status: "refused" as const,
       failure: "invalid_request",
-      detail: `classified reason ${JSON.stringify(reason)} is not a guild.compatibility_usage.v1 reason`,
+      detail: `classified reason ${describe(reason)} is not a guild.compatibility_usage.v1 reason`,
     };
   }
 
@@ -645,7 +711,7 @@ export function resolveCapability(request: unknown): CapabilityResolutionOutcome
     // that silently resolved to `legacy` would put a project on the legacy path
     // while `config show` reports the typo — the operator would have no way to
     // see which world they are in.
-    return unresolved("unknown_mode", `not a resolver mode: ${JSON.stringify(opts["mode"])}`);
+    return unresolved("unknown_mode", `not a resolver mode: ${describe(opts["mode"])}`);
   }
   const mode = policy.mode;
 
@@ -664,7 +730,7 @@ export function resolveCapability(request: unknown): CapabilityResolutionOutcome
     // double-counted.
     return unresolved(
       "invalid_request",
-      `capability_id is not a canonical id: ${JSON.stringify(capabilityId)}`,
+      `capability_id is not a canonical id: ${describe(capabilityId)}`,
       { mode, kind },
     );
   }
@@ -674,7 +740,7 @@ export function resolveCapability(request: unknown): CapabilityResolutionOutcome
     typeof intentRaw !== "string" ||
     !CAPABILITY_RESOLUTION_INTENTS.includes(intentRaw as CapabilityResolutionIntent)
   ) {
-    return unresolved("invalid_request", `not a resolution intent: ${JSON.stringify(intentRaw)}`, {
+    return unresolved("invalid_request", `not a resolution intent: ${describe(intentRaw)}`, {
       mode,
       kind,
       capability_id: capabilityId,
@@ -689,7 +755,7 @@ export function resolveCapability(request: unknown): CapabilityResolutionOutcome
   else {
     return unresolved(
       "invalid_request",
-      `project_definition is not a canonical relative path: ${JSON.stringify(projectDefRaw)}`,
+      `project_definition is not a canonical relative path: ${describe(projectDefRaw)}`,
       { mode, kind, capability_id: capabilityId },
     );
   }
@@ -701,7 +767,7 @@ export function resolveCapability(request: unknown): CapabilityResolutionOutcome
   else {
     return unresolved(
       "invalid_request",
-      `compatibility_asset is not a canonical relative path: ${JSON.stringify(compatRaw)}`,
+      `compatibility_asset is not a canonical relative path: ${describe(compatRaw)}`,
       { mode, kind, capability_id: capabilityId },
     );
   }
@@ -769,7 +835,11 @@ export function resolveCapability(request: unknown): CapabilityResolutionOutcome
     source: "compatibility" as const,
     path: compatAsset,
     authority: policy.authority,
-    side_effects_permitted: policy.authority === "legacy",
+    // CODEX #11: derived from authority ALONE, this returned `true` for a
+    // `shadow_compare` read — a comparison-only answer a caller could act on,
+    // which is exactly the side effect shadow mode exists to withhold. A
+    // comparison never authorizes action, in any mode.
+    side_effects_permitted: intent !== "shadow_compare" && policy.authority === "legacy",
     compatibility_read: Object.freeze({
       reason: classification.reason,
       counts_as_dependence: classification.counts_as_dependence,
@@ -856,7 +926,7 @@ export function planModeTransition(request: unknown): ModeTransitionOutcome {
   if (fromPolicy === null) {
     return rejectedTransition(
       "unknown_mode",
-      `"from" is not a resolver mode: ${JSON.stringify(opts["from"])}`,
+      `"from" is not a resolver mode: ${describe(opts["from"])}`,
       null,
       null,
     );
@@ -865,7 +935,7 @@ export function planModeTransition(request: unknown): ModeTransitionOutcome {
   if (toPolicy === null) {
     return rejectedTransition(
       "unknown_mode",
-      `"to" is not a resolver mode: ${JSON.stringify(opts["to"])}`,
+      `"to" is not a resolver mode: ${describe(opts["to"])}`,
       fromPolicy.mode,
       null,
     );

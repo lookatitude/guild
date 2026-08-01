@@ -70,6 +70,7 @@ import { types as nodeTypes } from "util";
 import {
   ADOPTION_MANIFEST_SCHEMA,
   entryDigest,
+  manifestCommitment,
   validateAdoptionManifestV1,
   type AdoptionEntry,
   type AdoptionManifestV1,
@@ -88,12 +89,24 @@ import {
   specialistTypeFromTemplateFrontmatter,
 } from "../core/contracts/specialist-identity";
 import { parseFrontmatter } from "../frontmatter";
+import { AUGMENTING_AGENT_IDS } from "../roster";
 
 import {
+  COMPATIBILITY_CATALOG_SCHEMA,
   buildCompatibilityCatalog,
-  type CompatibilityCatalog,
+  readCatalogEntry,
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
+
+/** The catalog envelope key set, for the nested-object snapshot (CODEX #10). */
+const CATALOG_KEYS = [
+  "schema_version",
+  "entries",
+  "template_count",
+  "domain_skill_count",
+  "census_matches",
+  "problems",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Identity
@@ -158,6 +171,25 @@ const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const RFC3339 =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 
+/**
+ * Describe an untrusted value for an error message WITHOUT throwing.
+ * CODEX #13: `JSON.stringify` throws on a BigInt and on a cyclic object, so the
+ * error path was the one path that could crash a module claiming it never throws.
+ */
+function describe(v: unknown): string {
+  try {
+    if (typeof v === "bigint") return `${v}n`;
+    if (typeof v === "string") return v.length > 120 ? `"${v.slice(0, 117)}..."` : `"${v}"`;
+    if (typeof v === "symbol") return "Symbol()";
+    if (typeof v === "function") return "[function]";
+    if (v === null) return "null";
+    if (typeof v === "object") return Array.isArray(v) ? "[array]" : "[object]";
+    return String(v);
+  } catch {
+    return "[unprintable]";
+  }
+}
+
 function isCanonicalId(v: unknown): v is string {
   return (
     typeof v === "string" &&
@@ -166,6 +198,26 @@ function isCanonicalId(v: unknown): v is string {
     !CONTROL_CHARS.test(v) &&
     CANONICAL_ID.test(v)
   );
+}
+
+/**
+ * A CANONICAL project-relative path. Non-canonical spellings are REJECTED, never
+ * repaired: two spellings of one file would let a single legacy id appear to map
+ * onto two different successors, and inventing a canonical spelling silently
+ * decides what the operator meant.
+ */
+function isCanonicalRelPath(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_SCALAR_LEN) return false;
+  if (CONTROL_CHARS.test(v)) return false;
+  if (v.includes("\\")) return false; // one separator convention only
+  if (/^[A-Za-z]:/.test(v)) return false; // Windows drive absolute
+  if (v.startsWith("/")) return false; // must be relative
+  if (v.endsWith("/")) return false; // a directory is not a definition
+  for (const seg of v.split("/")) {
+    if (seg.length === 0) return false; // "//" or a leading/trailing empty segment
+    if (seg === "." || seg === "..") return false; // alias spellings
+  }
+  return true;
 }
 
 function isToken(v: unknown, max = MAX_ID_LEN): v is string {
@@ -331,6 +383,34 @@ function referencedIds(text: string, ids: ReadonlySet<string>): Set<string> {
   return found;
 }
 
+/**
+ * Role names a team file DECLARES as `definition_source: shipped`.
+ *
+ * Deliberately a narrow, shape-driven read of the one structure that carries the
+ * claim — a `specialists:` entry pairing `name:` with `definition_source: shipped`.
+ * It is not a YAML parser and does not try to be: its only job is to notice a role
+ * a team file BELIEVES the plugin ships, so that a role the catalog does not
+ * contain becomes visible instead of vanishing. A role this misses is simply not
+ * flagged; a role it invented would be worse, so the match is anchored and
+ * conservative.
+ */
+function shippedRoleNames(text: string): Set<string> {
+  const out = new Set<string>();
+  let pendingName: string | null = null;
+  for (const line of text.split(/\r?\n/)) {
+    const name = /^\s*-?\s*name:\s*["']?([A-Za-z0-9][A-Za-z0-9._-]*)["']?\s*$/.exec(line);
+    if (name !== null) {
+      pendingName = name[1];
+      continue;
+    }
+    if (/^\s*definition_source:\s*["']?shipped["']?\s*$/.test(line) && pendingName !== null) {
+      out.add(pendingName);
+      pendingName = null;
+    }
+  }
+  return out;
+}
+
 const REPORT_KEYS = ["pluginRoot", "projectRoot", "projectId", "catalog"] as const;
 
 function emptyReport(projectId: string, problem: string): AdoptionReport {
@@ -367,7 +447,7 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
 
   const projectIdRaw = o["projectId"];
   if (!isToken(projectIdRaw)) {
-    return emptyReport("", `projectId is not a token: ${JSON.stringify(projectIdRaw)}`);
+    return emptyReport("", `projectId is not a token: ${describe(projectIdRaw)}`);
   }
   const projectId = projectIdRaw;
 
@@ -383,31 +463,53 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
   const projRoot = path.resolve(projectRoot);
 
   // The catalog may be supplied (so a caller can pin a deprecation state) or built.
-  let catalog: CompatibilityCatalog;
+  //
+  // CODEX #10: the supplied catalog was cast and then read with plain property
+  // access — `catalog.entries`, `catalog.problems`, `catalog.census_matches` — so a
+  // Proxy on it executed its traps DURING validation, could throw straight out of a
+  // function that claims never to throw, and could return a different value on each
+  // of those three reads. The outer `readOptions` snapshot protected the options
+  // bag but not the object NESTED inside it. It is snapshotted here, once, before
+  // anything about it is inspected.
+  let catalogSnap: Record<string, unknown> | null;
   const suppliedCatalog = o["catalog"];
   if (suppliedCatalog === undefined || suppliedCatalog === null) {
-    catalog = buildCompatibilityCatalog({ pluginRoot: pRoot });
+    catalogSnap = readOptions(buildCompatibilityCatalog({ pluginRoot: pRoot }), CATALOG_KEYS);
   } else {
-    catalog = suppliedCatalog as CompatibilityCatalog;
+    catalogSnap = readOptions(suppliedCatalog, CATALOG_KEYS);
   }
-  const catalogEntries = readArray((catalog as { entries?: unknown }).entries);
+  if (catalogSnap === null || catalogSnap["schema_version"] !== COMPATIBILITY_CATALOG_SCHEMA) {
+    return emptyReport(projectId, "catalog is not a guild.compatibility_catalog.v1");
+  }
+
+  const catalogEntries = readArray(catalogSnap["entries"]);
   if (catalogEntries === null) {
     return emptyReport(projectId, "catalog.entries is not a dense plain array");
   }
 
-  const problems: string[] = [...(catalog.problems ?? [])];
+  const catalogProblems = readArray(catalogSnap["problems"]);
+  if (catalogProblems === null) {
+    return emptyReport(projectId, "catalog.problems is not a dense plain array");
+  }
+  const problems: string[] = catalogProblems.map((x) => (typeof x === "string" ? x : describe(x)));
+  const censusMatches = catalogSnap["census_matches"] === true;
 
   const byId = new Map<string, CompatibilityCatalogEntry>();
   for (const raw of catalogEntries) {
-    const e = readOptions(raw, ["kind", "id", "path", "content_hash", "deprecation", "deprecated_by"]);
-    if (e === null || !isCanonicalId(e["id"])) {
+    // FULLY validated through the catalog module's own reader, and stored as the
+    // FRESH copy it returns — not the caller's object, which could be mutated
+    // after validation.
+    const e = readCatalogEntry(raw);
+    if (e === null) {
       return emptyReport(projectId, "catalog contains a malformed entry");
     }
-    byId.set(e["id"], raw as CompatibilityCatalogEntry);
+    byId.set(e.id, e);
   }
   const catalogIds: ReadonlySet<string> = new Set(byId.keys());
 
   // ── Gather references ──
+  /** Roles a team file CLAIMS are shipped but the catalog does not contain (CODEX #5). */
+  const danglingShipped = new Set<string>();
   const refs = new Map<string, LegacyReference[]>();
   const addRef = (id: string, at: string, site: ReferenceSite): void => {
     const list = refs.get(id);
@@ -427,8 +529,31 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
         problems.push(`unreadable ${site}: ${rel}`);
         continue;
       }
-      for (const id of referencedIds(bytes.toString("utf8"), catalogIds)) {
+      const text = bytes.toString("utf8");
+      for (const id of referencedIds(text, catalogIds)) {
         addRef(id, rel, site);
+      }
+      // CODEX #5: `unresolvable_references` was DEAD CODE. The scan only recognized
+      // ids the catalog already contains, so `byId.get(id) === undefined` could
+      // never fire and a team file naming a shipped role that no longer exists
+      // produced an empty report with no problems — the single loudest breakage a
+      // migration must surface, reported as "nothing to do".
+      //
+      // A team file states its own claim (`definition_source: shipped`), so a role
+      // named there but absent from the catalog is detectable WITHOUT knowing the
+      // catalog first. That is the only site with a machine-readable claim, which is
+      // why the detection is scoped to it rather than guessed at from prose.
+      if (site === "team_file") {
+        for (const name of shippedRoleNames(text)) {
+          // MACHINERY agents (advisor, developer) are shipped, stay shipped, and are
+          // deliberately NOT part of the 73-asset compatibility surface — the plugin
+          // registers them as agents rather than offering them as templates. They
+          // are `definition_source: shipped` forever and correctly absent from the
+          // catalog, so flagging them would make every real team file look broken.
+          // Read from roster.ts's own set rather than re-listing the two names here.
+          if (AUGMENTING_AGENT_IDS.has(name)) continue;
+          if (!catalogIds.has(name)) danglingShipped.add(name);
+        }
       }
     }
   };
@@ -534,8 +659,12 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
     schema_version: ADOPTION_REPORT_SCHEMA,
     project_id: projectId,
     items: Object.freeze(items),
-    catalog_census_matches: catalog.census_matches === true,
-    unresolvable_references: Object.freeze(unresolvable.sort()),
+    catalog_census_matches: censusMatches,
+    unresolvable_references: Object.freeze(
+      // Ids referenced but absent from the catalog, PLUS roles a team file claims
+      // are shipped that the catalog does not contain (CODEX #5).
+      [...new Set([...unresolvable, ...danglingShipped])].sort(),
+    ),
     problems: Object.freeze(problems),
     read_only: true as const,
   });
@@ -587,6 +716,17 @@ export type AdoptionApplyOutcome =
       readonly written: readonly string[];
       /** Ids left on the compatibility surface. Each is future G5 dependence. */
       readonly compatibility_only: readonly string[];
+      /**
+       * Report items the plan said NOTHING about, sorted.
+       *
+       * CODEX #6: a plan need not cover the whole report — incremental adoption is
+       * exactly what per-item dispositions are for — but silence was previously
+       * indistinguishable from completion, so a one-decision plan against a
+       * ten-item report reported unqualified success. These are the ids still on
+       * the legacy path because nobody decided, as distinct from
+       * `compatibility_only`, where somebody decided to leave them there.
+       */
+      readonly undecided: readonly string[];
       readonly entries_appended: number;
       /** The manifest's external commitment AFTER the append. */
       readonly manifest_digest: string;
@@ -761,6 +901,37 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
     // another project would write a manifest whose refs point nowhere.
     return { status: "refused", reason: "report.project_id does not match projectId" };
   }
+  // CODEX #6: acting on a scan that reported problems, named unresolvable
+  // references, or failed its census means adopting against an incomplete picture
+  // of the project — and the report is the operator's evidence for the whole plan.
+  // Refuse rather than apply decisions built on it.
+  const reportProblems = readArray(reportOpts["problems"]);
+  if (reportProblems === null) {
+    return { status: "refused", reason: "report.problems is not a dense plain array" };
+  }
+  if (reportProblems.length > 0) {
+    return {
+      status: "refused",
+      reason: `report carries ${reportProblems.length} problem(s); resolve them and re-run the report before adopting`,
+    };
+  }
+  const reportUnresolvable = readArray(reportOpts["unresolvable_references"]);
+  if (reportUnresolvable === null) {
+    return { status: "refused", reason: "report.unresolvable_references is not a dense plain array" };
+  }
+  if (reportUnresolvable.length > 0) {
+    return {
+      status: "refused",
+      reason: `report names ${reportUnresolvable.length} unresolvable reference(s); a project citing assets that do not exist must be fixed before adopting`,
+    };
+  }
+  if (reportOpts["catalog_census_matches"] !== true) {
+    return {
+      status: "refused",
+      reason: "report was built from a catalog whose census does not match the shipped surface",
+    };
+  }
+
   const reportItems = readArray(reportOpts["items"]);
   if (reportItems === null) return { status: "refused", reason: "report.items is not a dense plain array" };
   const itemById = new Map<string, AdoptionReportItem>();
@@ -779,6 +950,8 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
     readonly absTarget: string;
     readonly relTarget: string;
     readonly bytes: Buffer;
+    /** True when the target already held these exact bytes — a re-run, not a create. */
+    readonly preExisting: boolean;
   }
   const writes: PlannedWrite[] = [];
   const compatibilityOnly: string[] = [];
@@ -804,7 +977,7 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
 
     const disposition = d["disposition"];
     if (typeof disposition !== "string" || !DISPOSITION_SET.has(disposition)) {
-      return { status: "refused", reason: `not an adoption disposition: ${JSON.stringify(disposition)}` };
+      return { status: "refused", reason: `not an adoption disposition: ${describe(disposition)}` };
     }
 
     const item = itemById.get(key);
@@ -836,8 +1009,16 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
 
     if (disposition === "substitute") {
       const subPath = d["substitute_path"];
-      if (typeof subPath !== "string" || subPath.length === 0 || subPath.startsWith("/") || subPath.includes("..")) {
-        return { status: "refused", reason: `substitute for "${id}" requires a project-relative substitute_path` };
+      // CANONICAL, not merely "relative". `.guild/./agents/x.md` and
+      // `.guild/agents/x.md` name one file; accepting both would let one legacy id
+      // map onto what looks like two different successors. The ref validator would
+      // reject the non-canonical spelling later anyway — rejecting it HERE is what
+      // makes the refusal say which field was wrong.
+      if (!isCanonicalRelPath(subPath)) {
+        return {
+          status: "refused",
+          reason: `substitute for "${id}" requires a CANONICAL project-relative substitute_path (no ".", "..", "//", backslashes, or leading slash)`,
+        };
       }
       const subIdRaw = d["substitute_id"];
       if (subIdRaw !== undefined) {
@@ -906,7 +1087,12 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
           reason: `${successorRelPath} already exists with different bytes; resolve it or choose compatibility_only for "${id}"`,
         };
       }
-      writes.push({ absTarget, relTarget: successorRelPath, bytes: successorBytes });
+      writes.push({
+        absTarget,
+        relTarget: successorRelPath,
+        bytes: successorBytes,
+        preExisting: existing !== null,
+      });
     }
 
     if (DETAIL_REQUIRED_REASONS.has(reason) && detail === null) {
@@ -947,6 +1133,16 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
     });
   }
 
+  /** Report items no decision mentioned — visible incompleteness (CODEX #6). */
+  // Reads the ITEM's own id rather than re-parsing the composite map key: the key
+  // is an implementation detail, and splitting it back apart is the kind of string
+  // surgery that silently yields `undefined` the moment the separator changes.
+  const undecidedIds = (): string[] =>
+    [...itemById.entries()]
+      .filter(([k]) => !seenDecisions.has(k))
+      .map(([, item]) => item.id)
+      .sort();
+
   // ── Chain the entries onto the existing manifest ──
   const existing = readAdoptionManifest(projRoot);
   const manifestAbs = path.join(projRoot, ADOPTION_MANIFEST_RELPATH);
@@ -980,24 +1176,65 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
       manifest_path: ADOPTION_MANIFEST_RELPATH,
       written: Object.freeze(writes.map((w) => w.relTarget).sort()),
       compatibility_only: Object.freeze(compatibilityOnly.sort()),
+      undecided: Object.freeze(undecidedIds()),
       entries_appended: pendingEntries.length,
       manifest_digest: commitment,
     };
   }
 
-  // ── Write. Every check has passed; nothing below may fail on policy. ──
-  for (const w of writes) {
-    fs.mkdirSync(path.dirname(w.absTarget), { recursive: true });
-    fs.writeFileSync(w.absTarget, w.bytes);
+  // ── Write. Every POLICY check has passed; what remains can still fail on I/O. ──
+  //
+  // CODEX #3: this loop was unguarded, so a failing `mkdirSync` (e.g. a regular
+  // file already occupying `.guild/skills/<id>`) threw EEXIST straight out of the
+  // function AFTER the first file had been written and BEFORE the manifest existed
+  // — a half-applied migration with no record of itself, directly contradicting
+  // "refuses rather than partially applies". Every write is now undone on failure
+  // and the whole call reports `refused`.
+  const done: PlannedWrite[] = [];
+  try {
+    for (const w of writes) {
+      // CODEX #1 (CRITICAL): `readRegularFile` returns null for a SYMLINK, so the
+      // earlier existence check read a symlinked target as "absent" while
+      // `writeFileSync` follows it — `.guild/agents/qa.md` pointing anywhere on
+      // disk was silently overwritten with the adopted template, outside the
+      // project entirely. Re-checked here, immediately before the write, and any
+      // non-regular-file occupant is a refusal rather than a target.
+      const st = fs.existsSync(w.absTarget) ? fs.lstatSync(w.absTarget) : null;
+      if (st !== null && !st.isFile()) {
+        throw new Error(
+          `${w.relTarget} exists and is not a regular file (${st.isSymbolicLink() ? "symlink" : "special file"}); refusing to write through it`,
+        );
+      }
+      fs.mkdirSync(path.dirname(w.absTarget), { recursive: true });
+      fs.writeFileSync(w.absTarget, w.bytes, { flag: "w" });
+      done.push(w);
+    }
+    fs.mkdirSync(path.dirname(manifestAbs), { recursive: true });
+    fs.writeFileSync(manifestAbs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
+  } catch (err) {
+    // Undo, newest first. Only files this call CREATED are removed — `preExisting`
+    // was captured during planning, so a re-run over an already-adopted tree does
+    // not delete the copy the previous run legitimately made.
+    for (const w of [...done].reverse()) {
+      if (w.preExisting) continue;
+      try {
+        fs.rmSync(w.absTarget);
+      } catch {
+        /* best effort: the reported refusal already tells the operator to check the tree */
+      }
+    }
+    return {
+      status: "refused",
+      reason: `write failed and was rolled back: ${(err as Error).message}`,
+    };
   }
-  fs.mkdirSync(path.dirname(manifestAbs), { recursive: true });
-  fs.writeFileSync(manifestAbs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
 
   return {
     status: "applied",
     manifest_path: ADOPTION_MANIFEST_RELPATH,
     written: Object.freeze(writes.map((w) => w.relTarget).sort()),
     compatibility_only: Object.freeze(compatibilityOnly.sort()),
+    undecided: Object.freeze(undecidedIds()),
     entries_appended: pendingEntries.length,
     manifest_digest: commitment,
   };
@@ -1020,22 +1257,18 @@ function chainEntries(
   return out;
 }
 
-/** The external commitment, or null when the manifest cannot produce one. */
+/**
+ * The external commitment, or null when the manifest cannot produce one.
+ *
+ * DELEGATES to the contract's own `manifestCommitment` rather than re-deriving the
+ * digest here. An independent re-implementation would agree today and drift the
+ * first time the contract changes its domain separator or its committed fields —
+ * and a commitment that disagrees with the verifier is worse than none, because
+ * `verifyAgainstTip` would reject a manifest this writer just produced.
+ */
 function manifestDigestOf(manifest: AdoptionManifestV1): string | null {
-  const last = manifest.entries[manifest.entries.length - 1];
-  const tip = last === undefined ? "" : entryDigest(last);
-  return crypto
-    .createHash("sha256")
-    .update(
-      `guild.adoption_manifest.v1/commitment ${JSON.stringify([
-        manifest.schema_version,
-        manifest.project_id,
-        manifest.entries.length,
-        tip,
-      ])}`,
-      "utf8",
-    )
-    .digest("hex");
+  const c = manifestCommitment(manifest);
+  return c.ok ? c.digest : null;
 }
 
 /**
@@ -1239,17 +1472,29 @@ export function rollbackAdoption(opts: unknown): AdoptionRollbackOutcome {
       };
     }
 
-    const abs = path.join(projRoot, target.to.relative_path);
-    const bytes = readRegularFile(abs);
-    if (bytes !== null) {
-      if (sha256Prefixed(bytes) === target.to.content_hash) {
-        removals.push({ abs, rel: target.to.relative_path });
-      } else {
-        // Edited since adoption. LEFT IN PLACE and reported via `kept`, because
-        // destroying hand-edited work is never the right way to undo a copy — and
-        // R11 says a rollback must not destroy evidence.
-        kept.push(target.to.relative_path);
+    // CODEX #2: removal was driven by hash equality alone, which proves the file is
+    // UNCHANGED, not that the migration CREATED it. A `substitute` writes nothing —
+    // it maps a legacy id onto a definition the operator already authored — so
+    // rolling one back deleted that hand-authored file. Only `migrated` entries
+    // (adopt_as_is / refine) ever created a file, so only they may remove one.
+    if (target.reason === "migrated") {
+      const abs = path.join(projRoot, target.to.relative_path);
+      const bytes = readRegularFile(abs);
+      if (bytes !== null) {
+        if (sha256Prefixed(bytes) === target.to.content_hash) {
+          removals.push({ abs, rel: target.to.relative_path });
+        } else {
+          // Edited since adoption. LEFT IN PLACE and reported via `kept`, because
+          // destroying hand-edited work is never the right way to undo a copy — and
+          // R11 says a rollback must not destroy evidence.
+          kept.push(target.to.relative_path);
+        }
       }
+    } else {
+      // rehomed / renamed / collapsed: the successor pre-dated the migration. The
+      // manifest entry is reversed, the FILE is untouched, and it is reported so the
+      // operator can see the rollback deliberately left something behind.
+      kept.push(target.to.relative_path);
     }
 
     // Rebuild the ORIGINAL identity as a ref. Its `content_hash` must equal the

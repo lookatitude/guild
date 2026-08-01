@@ -517,3 +517,165 @@ describe("D6 — one-command rollback", () => {
     expect(res.trail.length).toBe(3);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Codex adversarial round 1 — regression rows
+// ---------------------------------------------------------------------------
+
+describe("D6 — codex round 1 regressions", () => {
+  const decisions = [
+    { kind: "agent", id: "qa", disposition: "adopt_as_is" },
+    { kind: "skill", id: "qa-test-strategy", disposition: "adopt_as_is" },
+  ];
+
+  function apply(over: Record<string, unknown> = {}): Flat {
+    return flat(
+      applyAdoptionPlan({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        report: report(),
+        decisions,
+        runId: "run-20260801-120000-adopt",
+        authorizedBy: "cap-loc-D06",
+        adoptedAt: AT,
+        ...over,
+      }),
+    );
+  }
+
+  it("#1 (CRITICAL) refuses to write through a symlinked target", () => {
+    // `readRegularFile` returns null for a symlink, so the existence check read the
+    // target as ABSENT while `writeFileSync` follows it — an arbitrary file outside
+    // the project was overwritten with the adopted template, and the call reported
+    // `applied`.
+    const victimDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-victim-"));
+    const victim = path.join(victimDir, "victim.md");
+    fs.writeFileSync(victim, "PRECIOUS\n", "utf8");
+    fs.mkdirSync(path.join(tmp, ".guild/agents"), { recursive: true });
+    fs.symlinkSync(victim, path.join(tmp, ".guild/agents/qa.md"));
+
+    const out = apply({ decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }] });
+    expect(out.status).toBe("refused");
+    expect(fs.readFileSync(victim, "utf8")).toBe("PRECIOUS\n");
+    expect(fs.lstatSync(path.join(tmp, ".guild/agents/qa.md")).isSymbolicLink()).toBe(true);
+    fs.rmSync(victimDir, { recursive: true, force: true });
+  });
+
+  it("#2 rollback does NOT delete a pre-existing substitute target", () => {
+    // Hash equality proves "unchanged", not "created by the migration". A
+    // `substitute` writes nothing, so rolling one back used to delete the operator's
+    // own hand-authored file.
+    write(".guild/agents/quality.md", "---\nname: quality\n---\n\nhand-authored\n");
+    const adopted = apply({
+      decisions: [
+        {
+          kind: "agent",
+          id: "qa",
+          disposition: "substitute",
+          substitute_path: ".guild/agents/quality.md",
+          substitute_id: "quality",
+        },
+      ],
+    });
+    expect(adopted.status).toBe("applied");
+
+    const out = flat(
+      rollbackAdoption({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        runId: "run-20260801-130000-rollback",
+        authorizedBy: "cap-loc-D03",
+        adoptedAt: "2026-08-01T13:00:00Z",
+        reason: "substitution regressed",
+      }),
+    );
+    expect(out.status).toBe("rolled_back");
+    expect(out.removed).toEqual([]);
+    expect(out.kept_local_edits).toEqual([".guild/agents/quality.md"]);
+    expect(fs.readFileSync(path.join(tmp, ".guild/agents/quality.md"), "utf8")).toContain("hand-authored");
+  });
+
+  it("#3 a mid-write I/O failure is rolled back, not half-applied", () => {
+    // A regular file where a skill DIRECTORY must go makes the second mkdirSync
+    // fail. Previously that threw EEXIST out of the function after the first file
+    // had been written and before the manifest existed.
+    fs.mkdirSync(path.join(tmp, ".guild/skills"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, ".guild/skills/qa-test-strategy"), "not a directory\n");
+
+    let out: Flat;
+    expect(() => {
+      out = apply();
+    }).not.toThrow();
+    expect(out!.status).toBe("refused");
+    expect(String(out!.reason)).toMatch(/rolled back/);
+    // The first write was undone and no manifest was left behind.
+    expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, ADOPTION_MANIFEST_RELPATH))).toBe(false);
+  });
+
+  it("#5 names a role a team file claims is shipped but the catalog lacks", () => {
+    // Was DEAD CODE: the scan only recognized ids already in the catalog, so a
+    // team file naming a vanished shipped role produced an empty report with no
+    // problems — the loudest breakage a migration must surface, reported as
+    // "nothing to do".
+    write(
+      ".guild/team/ghost.build.yaml",
+      "specialists:\n  - name: ghost-role\n    definition_source: shipped\n",
+    );
+    const r = report();
+    expect(r.unresolvable_references).toContain("ghost-role");
+    // …and machinery agents are NOT flagged: they are shipped forever and are
+    // correctly absent from the 73-asset compatibility surface.
+    expect(r.unresolvable_references).not.toContain("developer");
+    expect(r.unresolvable_references).not.toContain("advisor");
+  });
+
+  it("#6 an incomplete plan reports its own incompleteness", () => {
+    const out = apply({ decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }] });
+    expect(out.status).toBe("applied");
+    // Was: indistinguishable from a complete migration.
+    expect(out.undecided).toEqual(["qa-test-strategy"]);
+  });
+
+  it("#6 refuses to apply a plan built on a report that names an unresolvable reference", () => {
+    write(
+      ".guild/team/ghost.build.yaml",
+      "specialists:\n  - name: ghost-role\n    definition_source: shipped\n",
+    );
+    const out = apply();
+    expect(out.status).toBe("refused");
+    expect(String(out.reason)).toMatch(/unresolvable reference/);
+  });
+
+  it("#10 a Proxy on the nested catalog cannot execute or escape", () => {
+    // The outer options snapshot protected the bag but not the object NESTED in it,
+    // so a throwing `get` trap ran and escaped a function that claims never to throw.
+    const hostile = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("catalog getter ran");
+        },
+      },
+    );
+    let r: Record<string, unknown>;
+    expect(() => {
+      r = buildAdoptionReport({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        catalog: hostile,
+      }) as unknown as Record<string, unknown>;
+    }).not.toThrow();
+    expect((r!.problems as string[]).length).toBe(1);
+    expect(r!.items).toEqual([]);
+  });
+
+  it("#13 never throws on a BigInt", () => {
+    expect(() => buildAdoptionReport({ pluginRoot: PLUGIN_ROOT, projectRoot: tmp, projectId: 1n })).not.toThrow();
+    expect(() => apply({ decisions: [{ kind: "agent", id: "qa", disposition: 1n }] })).not.toThrow();
+    expect(apply({ decisions: [{ kind: "agent", id: "qa", disposition: 1n }] }).status).toBe("refused");
+  });
+});

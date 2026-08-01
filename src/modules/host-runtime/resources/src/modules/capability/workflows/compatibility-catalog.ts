@@ -175,6 +175,28 @@ function toCanonicalRelPath(absPath: string, root: string): string | null {
   return posix;
 }
 
+/** Bare 64-hex sha256 — the catalog's content_hash spelling. */
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+/**
+ * Describe an untrusted value for an error message WITHOUT throwing.
+ * CODEX #13: `JSON.stringify` throws on a BigInt and on a cyclic object, so the
+ * error path was the one path that could crash a module claiming it never throws.
+ */
+function describe(v: unknown): string {
+  try {
+    if (typeof v === "bigint") return `${v}n`;
+    if (typeof v === "string") return v.length > 120 ? `"${v.slice(0, 117)}..."` : `"${v}"`;
+    if (typeof v === "symbol") return "Symbol()";
+    if (typeof v === "function") return "[function]";
+    if (v === null) return "null";
+    if (typeof v === "object") return Array.isArray(v) ? "[array]" : "[object]";
+    return String(v);
+  } catch {
+    return "[unprintable]";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The catalog
 // ---------------------------------------------------------------------------
@@ -252,7 +274,7 @@ export function buildCompatibilityCatalog(opts: unknown): CompatibilityCatalog {
 
   const deprecationRaw = o["deprecation"] ?? "active";
   if (typeof deprecationRaw !== "string" || !DEPRECATION_STATE_SET.has(deprecationRaw)) {
-    return emptyCatalog(`not a deprecation state: ${JSON.stringify(deprecationRaw)}`);
+    return emptyCatalog(`not a deprecation state: ${describe(deprecationRaw)}`);
   }
   const deprecation = deprecationRaw as CompatibilityDeprecationState;
 
@@ -377,6 +399,76 @@ export function buildCompatibilityCatalog(opts: unknown): CompatibilityCatalog {
  * the repo transpiles non-strict, where a boolean discriminant does not narrow and
  * a consumer silently loses the refusal arm.
  */
+const ENTRY_KEYS = [
+  "kind",
+  "id",
+  "path",
+  "content_hash",
+  "deprecation",
+  "deprecated_by",
+] as const;
+
+/**
+ * Validate ONE catalog entry completely, returning a FRESH frozen copy or null.
+ *
+ * CODEX #9: `suggestableAssets` checked only `id` and `deprecation`, so an entry
+ * carrying `kind:"not-a-kind"`, `path:"../../outside"` and a non-hash
+ * `content_hash` was returned to the caller as a usable suggestion — a traversing
+ * path handed out by the very function that decides what may be adopted.
+ * CODEX #4: the same gap let `requiredAssetIdsForG5` accept a forged catalog.
+ * ONE validator now serves both, so the two can never disagree about what a
+ * well-formed entry is.
+ *
+ * Returns a FRESH copy rather than freezing the caller's object: freezing an input
+ * is a side effect on someone else's data, and returning the caller's object keeps
+ * a mutable alias to a value we just validated (a time-of-check/time-of-use gap).
+ */
+export function readCatalogEntry(raw: unknown): CompatibilityCatalogEntry | null {
+  const e = readOptions(raw, ENTRY_KEYS);
+  if (e === null) return null;
+  const kind = e["kind"];
+  if (kind !== "shipped_template" && kind !== "shipped_domain_skill") return null;
+  const id = e["id"];
+  if (!isCanonicalId(id)) return null;
+  const p = e["path"];
+  if (typeof p !== "string" || !isCanonicalCatalogPath(p)) return null;
+  const hash = e["content_hash"];
+  if (typeof hash !== "string" || !SHA256_HEX.test(hash)) return null;
+  const dep = e["deprecation"];
+  if (typeof dep !== "string" || !DEPRECATION_STATE_SET.has(dep)) return null;
+  const by = e["deprecated_by"];
+  if (by !== null && (typeof by !== "string" || by.length === 0 || by.length > MAX_ID_LEN || CONTROL_CHARS.test(by))) {
+    return null;
+  }
+  // The same rule the builder enforces: a non-active marker with no authorizing
+  // record is unattributable, and an unattributable deprecation cannot be argued with.
+  if (dep !== "active" && by === null) return null;
+  return Object.freeze({
+    kind: kind as CompatibilityAssetKind,
+    id,
+    path: p,
+    content_hash: hash,
+    deprecation: dep as CompatibilityDeprecationState,
+    deprecated_by: by as string | null,
+  });
+}
+
+/** A canonical, plugin-relative catalog path. Rejected, never normalized. */
+function isCanonicalCatalogPath(v: string): boolean {
+  if (v.length === 0 || v.length > MAX_SCALAR_LEN) return false;
+  if (CONTROL_CHARS.test(v)) return false;
+  if (v.includes("\\")) return false;
+  if (/^[A-Za-z]:/.test(v)) return false;
+  if (v.startsWith("/")) return false;
+  if (v.endsWith("/")) return false;
+  for (const seg of v.split("/")) {
+    if (seg.length === 0) return false;
+    if (seg === "." || seg === "..") return false;
+    if (/[. ]$/.test(seg)) return false; // Windows trailing-dot/space alias
+  }
+  return true;
+}
+
 export type SuggestableAssets =
   | { readonly status: "ok"; readonly entries: readonly CompatibilityCatalogEntry[] }
   | { readonly status: "refused"; readonly failure: ResolverModeFailure; readonly detail: string };
@@ -441,30 +533,22 @@ export function suggestableAssets(request: unknown): SuggestableAssets {
 
   const out: CompatibilityCatalogEntry[] = [];
   for (const raw of rawEntries) {
-    const e = readOptions(raw, [
-      "kind",
-      "id",
-      "path",
-      "content_hash",
-      "deprecation",
-      "deprecated_by",
-    ]);
-    // A malformed entry REJECTS the whole answer rather than being skipped:
-    // skipping until a well-formed one matches is accept-by-attrition, and here it
-    // would silently shrink the menu without saying so.
-    if (e === null) {
-      return { status: "refused", failure: "invalid_request", detail: "catalog contains a malformed entry" };
-    }
-    if (!isCanonicalId(e["id"])) {
-      return { status: "refused", failure: "invalid_request", detail: `catalog entry id is not canonical: ${String(e["id"])}` };
-    }
-    if (typeof e["deprecation"] !== "string" || !DEPRECATION_STATE_SET.has(e["deprecation"])) {
-      return { status: "refused", failure: "invalid_request", detail: `catalog entry ${String(e["id"])} has an unknown deprecation state` };
+    // FULLY validated (CODEX #9). A malformed entry REJECTS the whole answer
+    // rather than being skipped: skipping until a well-formed one matches is
+    // accept-by-attrition, and here it would silently shrink the menu without
+    // saying so.
+    const entry = readCatalogEntry(raw);
+    if (entry === null) {
+      return {
+        status: "refused",
+        failure: "invalid_request",
+        detail: "catalog contains an entry that is not a well-formed guild.compatibility_catalog.v1 entry",
+      };
     }
     // An un-migrated project may still be offered ACTIVE entries only. A
     // `deprecated` entry is one D03 has already told consumers to stop adopting.
-    if (e["deprecation"] !== "active") continue;
-    out.push(Object.freeze(raw as CompatibilityCatalogEntry));
+    if (entry.deprecation !== "active") continue;
+    out.push(entry);
   }
   return { status: "ok", entries: Object.freeze(out) };
 }
@@ -511,16 +595,18 @@ export function compatibilityUsageForRead(request: unknown): CompatibilityUsageE
     };
   }
 
-  const entry = readOptions(o["entry"], [
-    "kind",
-    "id",
-    "path",
-    "content_hash",
-    "deprecation",
-    "deprecated_by",
-  ]);
+  // FULLY validated (CODEX #9 / #4 share this reader): an entry with a bad kind,
+  // a traversing path, or a non-sha256 content_hash must never become a telemetry
+  // record — the payload it produced would either be rejected downstream as
+  // UNREADABLE (which blocks G5 mysteriously) or, worse, land in the corpus
+  // describing bytes nobody can identify.
+  const entry = readCatalogEntry(o["entry"]);
   if (entry === null) {
-    return { status: "refused", failure: "invalid_request", detail: "entry is not a catalog entry" };
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: "entry is not a well-formed guild.compatibility_catalog.v1 entry",
+    };
   }
 
   const synthetic = o["synthetic"];
@@ -552,10 +638,10 @@ export function compatibilityUsageForRead(request: unknown): CompatibilityUsageE
 
   const candidate = {
     schema_version: COMPATIBILITY_USAGE_SCHEMA,
-    asset_kind: entry["kind"],
-    asset_id: entry["id"],
-    asset_path: entry["path"],
-    content_hash: entry["content_hash"],
+    asset_kind: entry.kind,
+    asset_id: entry.id,
+    asset_path: entry.path,
+    content_hash: entry.content_hash,
     reason: classification.reason,
     resolver_mode: o["mode"],
     synthetic,
@@ -577,10 +663,21 @@ export function compatibilityUsageForRead(request: unknown): CompatibilityUsageE
 /**
  * The `required_asset_ids` a G5 evaluation must be accountable for.
  *
- * Derived from the catalog, and REFUSED when the census does not match: a short
- * required set is the classic false-clean on a deletion gate, because an asset
- * that never appears in the required list can never be reported as
- * "never instrumented".
+ * REFUSED unless the catalog is provably complete. This is the most dangerous
+ * function in the file: its output decides which of the 73 shipped files a
+ * removal gate may clear, and a SHORT required set is the classic false clean —
+ * an asset absent from the required list can never be reported as "never
+ * instrumented", so nobody notices it was never measured.
+ *
+ * CODEX #4: this trusted the catalog's own `census_matches` boolean. That flag is
+ * caller-supplied data on a plain object, so a hand-built catalog carrying ONE
+ * real entry, `template_count: 15`, `domain_skill_count: 58` and
+ * `census_matches: true` produced a one-element required set; two clean rollups
+ * then passed `evaluateG5` with 72 assets entirely outside accountability.
+ *
+ * The counts are therefore RECOMPUTED from fully-validated entries and checked
+ * against the shipped census, the declared counts must agree with the real ones,
+ * and `problems` must be empty. The flag is corroborating evidence now, not proof.
  */
 export function requiredAssetIdsForG5(
   catalog: unknown,
@@ -596,37 +693,59 @@ export function requiredAssetIdsForG5(
   if (c === null || c["schema_version"] !== COMPATIBILITY_CATALOG_SCHEMA) {
     return { status: "refused", detail: "not a guild.compatibility_catalog.v1" };
   }
-  if (c["census_matches"] !== true) {
-    return {
-      status: "refused",
-      detail:
-        "catalog census does not match the shipped surface — refusing to derive a G5 required set from an incomplete enumeration",
-    };
-  }
+
   const raw = readArray(c["entries"]);
   if (raw === null) return { status: "refused", detail: "entries is not a dense plain array" };
+
   const ids: string[] = [];
   const seen = new Set<string>();
+  let templates = 0;
+  let skills = 0;
   for (const item of raw) {
-    const e = readOptions(item, [
-      "kind",
-      "id",
-      "path",
-      "content_hash",
-      "deprecation",
-      "deprecated_by",
-    ]);
-    if (e === null || !isCanonicalId(e["id"])) {
-      return { status: "refused", detail: "catalog contains an entry with a non-canonical id" };
+    // FULLY validated, not merely id-checked — the same reader `suggestableAssets`
+    // uses, so the two can never disagree about what a well-formed entry is.
+    const e = readCatalogEntry(item);
+    if (e === null) {
+      return {
+        status: "refused",
+        detail: "catalog contains an entry that is not a well-formed catalog entry",
+      };
     }
-    // The two kinds share one id namespace in the G5 rollup, so a collision would
+    // The two kinds share ONE id namespace in the G5 rollup, so a collision would
     // let one asset's dependence read mask another's zero.
-    if (seen.has(e["id"])) {
-      return { status: "refused", detail: `catalog contains a duplicate asset id: ${e["id"]}` };
+    if (seen.has(e.id)) {
+      return { status: "refused", detail: `catalog contains a duplicate asset id: ${e.id}` };
     }
-    seen.add(e["id"]);
-    ids.push(e["id"]);
+    seen.add(e.id);
+    ids.push(e.id);
+    if (e.kind === "shipped_template") templates += 1;
+    else skills += 1;
   }
+
+  // RECOMPUTED, never taken on trust (CODEX #4).
+  if (templates !== SHIPPED_TEMPLATE_COUNT || skills !== SHIPPED_DOMAIN_SKILL_COUNT) {
+    return {
+      status: "refused",
+      detail: `catalog holds ${templates} template(s) and ${skills} domain skill(s); the shipped surface is ${SHIPPED_TEMPLATE_COUNT} and ${SHIPPED_DOMAIN_SKILL_COUNT} — refusing to derive a G5 required set from an incomplete enumeration`,
+    };
+  }
+  // A declared count that disagrees with the real one means the catalog is lying
+  // about itself. Refuse rather than quietly preferring the recomputed number.
+  if (c["template_count"] !== templates || c["domain_skill_count"] !== skills) {
+    return { status: "refused", detail: "catalog declares counts that disagree with its own entries" };
+  }
+  const problems = readArray(c["problems"]);
+  if (problems === null) return { status: "refused", detail: "problems is not a dense plain array" };
+  if (problems.length > 0) {
+    return {
+      status: "refused",
+      detail: `catalog reported ${problems.length} problem(s); an incomplete scan is not an accountability set`,
+    };
+  }
+  if (c["census_matches"] !== true) {
+    return { status: "refused", detail: "catalog does not claim a matching census" };
+  }
+
   ids.sort();
   return { status: "ok", ids: Object.freeze(ids) };
 }
