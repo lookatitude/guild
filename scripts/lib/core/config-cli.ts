@@ -62,6 +62,9 @@ import {
   CAPABILITY_RESOLVER_MODES,
   CAPABILITY_SUGGESTION_BUDGET_MAX,
   CAPABILITY_SUGGESTION_BUDGET_MIN,
+  CAPABILITY_ROLE_SLUG_MAX_LEN,
+  isCanonicalRoleSlug,
+  roleSlugDedupKey,
   type CapabilityAutoCreatePolicy,
   type CapabilityResolverMode,
 } from "../shared/config-defaults";
@@ -1180,55 +1183,64 @@ export function validateCapability(c: Record<string, unknown>): string[] {
       );
     }
   }
-  if (c["resolver_mode"] !== undefined && !CAPABILITY_RESOLVER_MODES.includes(c["resolver_mode"] as CapabilityResolverMode)) {
+  // Each field read EXACTLY ONCE into a local. Reading `c["x"]` twice (presence check,
+  // then value check) is the options-object TOCTOU class a sibling lane found: on a
+  // caller-supplied object a getter can answer differently to the two reads, so the
+  // value validated is not the value used.
+  const mode = c["resolver_mode"];
+  if (mode !== undefined && !CAPABILITY_RESOLVER_MODES.includes(mode as CapabilityResolverMode)) {
     rejects.push(
-      `capability.resolver_mode must be one of ${CAPABILITY_RESOLVER_MODES.join("|")} (got ${JSON.stringify(c["resolver_mode"])})`,
+      `capability.resolver_mode must be one of ${CAPABILITY_RESOLVER_MODES.join("|")} (got ${JSON.stringify(mode)})`,
     );
   }
-  if (c["auto_create_policy"] !== undefined && !CAPABILITY_AUTO_CREATE_POLICIES.includes(c["auto_create_policy"] as CapabilityAutoCreatePolicy)) {
+  const policy = c["auto_create_policy"];
+  if (
+    policy !== undefined &&
+    !CAPABILITY_AUTO_CREATE_POLICIES.includes(policy as CapabilityAutoCreatePolicy)
+  ) {
     rejects.push(
-      `capability.auto_create_policy must be one of ${CAPABILITY_AUTO_CREATE_POLICIES.join("|")} (got ${JSON.stringify(c["auto_create_policy"])})`,
+      `capability.auto_create_policy must be one of ${CAPABILITY_AUTO_CREATE_POLICIES.join("|")} (got ${JSON.stringify(policy)})`,
     );
   }
-  if (c["suggestion_budget"] !== undefined) {
-    const b = c["suggestion_budget"];
+  const budget = c["suggestion_budget"];
+  if (budget !== undefined) {
     // F10 pinned the budget at 4. Out-of-range is a REJECT here (repair coerces).
-    if (typeof b !== "number" || !Number.isInteger(b) || b < CAPABILITY_SUGGESTION_BUDGET_MIN || b > CAPABILITY_SUGGESTION_BUDGET_MAX) {
+    if (
+      typeof budget !== "number" ||
+      !Number.isInteger(budget) ||
+      budget < CAPABILITY_SUGGESTION_BUDGET_MIN ||
+      budget > CAPABILITY_SUGGESTION_BUDGET_MAX
+    ) {
       rejects.push(
-        `capability.suggestion_budget must be an integer in [${CAPABILITY_SUGGESTION_BUDGET_MIN}, ${CAPABILITY_SUGGESTION_BUDGET_MAX}] (got ${JSON.stringify(b)})`,
+        `capability.suggestion_budget must be an integer in [${CAPABILITY_SUGGESTION_BUDGET_MIN}, ${CAPABILITY_SUGGESTION_BUDGET_MAX}] (got ${JSON.stringify(budget)})`,
       );
     }
   }
-  if (c["starter_roles"] !== undefined) {
-    const r = c["starter_roles"];
-    if (!Array.isArray(r)) {
-      rejects.push(`capability.starter_roles must be an array of role slugs (got ${JSON.stringify(r)})`);
+  const roles = c["starter_roles"];
+  if (roles !== undefined) {
+    if (!Array.isArray(roles)) {
+      rejects.push(`capability.starter_roles must be an array of role slugs (got ${JSON.stringify(roles)})`);
     } else {
-      // VALIDATE AND COERCE MUST AGREE ON THE SAME INPUT (adversarial-review finding).
-      // The first cut accepted `[" qa ", "qa"]` here and then let coercion silently
-      // rewrite it to `["qa"]` — a value the operator was told was fine and never told
-      // was changed. So the SLUG FORM itself is the contract: already-trimmed, no
-      // inner whitespace, no duplicates. Everything validate accepts, coerce now
-      // leaves byte-identical.
+      // VALIDATE AND COERCE MUST AGREE ON THE SAME INPUT. The slug FORM is the
+      // contract — bounded, lower-case, control-char-free, no whitespace, no
+      // duplicates — enforced through the single shared `isCanonicalRoleSlug` so
+      // validate / repair / resolve cannot drift apart. Dedup is CASE-INSENSITIVE
+      // because the roster is filesystem-backed and `QA.md`/`qa.md` are one file on
+      // macOS. Non-canonical spellings are REJECTED, never repaired.
       const seen = new Set<string>();
-      for (const e of r) {
-        if (typeof e !== "string" || e === "") {
-          rejects.push(`capability.starter_roles entries must be non-empty strings (got ${JSON.stringify(e)})`);
+      for (const e of roles) {
+        if (!isCanonicalRoleSlug(e)) {
+          rejects.push(
+            `capability.starter_roles entry ${JSON.stringify(e)} is not a canonical role slug (lower-case, <= ${CAPABILITY_ROLE_SLUG_MAX_LEN} chars, [a-z0-9._-], no whitespace or control characters)`,
+          );
           continue;
         }
-        if (e !== e.trim()) {
-          rejects.push(`capability.starter_roles entry ${JSON.stringify(e)} has leading/trailing whitespace`);
-          continue;
-        }
-        if (/\s/.test(e)) {
-          rejects.push(`capability.starter_roles entry ${JSON.stringify(e)} is not a slug (contains whitespace)`);
-          continue;
-        }
-        if (seen.has(e)) {
+        const key = roleSlugDedupKey(e);
+        if (seen.has(key)) {
           rejects.push(`capability.starter_roles contains duplicate entry ${JSON.stringify(e)}`);
           continue;
         }
-        seen.add(e);
+        seen.add(key);
       }
     }
   }
@@ -1249,11 +1261,14 @@ export function coerceCapabilityBlock(raw: Record<string, unknown>): CapabilityB
   const base = DEFAULTS.capability;
   const out: CapabilityBlock = { ...base, starter_roles: [...base.starter_roles] };
 
-  if (CAPABILITY_RESOLVER_MODES.includes(raw["resolver_mode"] as CapabilityResolverMode)) {
-    out.resolver_mode = raw["resolver_mode"] as CapabilityResolverMode;
+  // Single read per field — same TOCTOU reasoning as validateCapability.
+  const mode = raw["resolver_mode"];
+  if (CAPABILITY_RESOLVER_MODES.includes(mode as CapabilityResolverMode)) {
+    out.resolver_mode = mode as CapabilityResolverMode;
   }
-  if (CAPABILITY_AUTO_CREATE_POLICIES.includes(raw["auto_create_policy"] as CapabilityAutoCreatePolicy)) {
-    out.auto_create_policy = raw["auto_create_policy"] as CapabilityAutoCreatePolicy;
+  const policy = raw["auto_create_policy"];
+  if (CAPABILITY_AUTO_CREATE_POLICIES.includes(policy as CapabilityAutoCreatePolicy)) {
+    out.auto_create_policy = policy as CapabilityAutoCreatePolicy;
   }
   const b = raw["suggestion_budget"];
   if (typeof b === "number" && Number.isFinite(b)) {
@@ -1264,14 +1279,18 @@ export function coerceCapabilityBlock(raw: Record<string, unknown>): CapabilityB
   }
   const r = raw["starter_roles"];
   if (Array.isArray(r)) {
+    // DROPS non-canonical entries rather than repairing them: validate already
+    // rejected this input, so anything reaching here is being rescued, and inventing
+    // a canonical spelling for a malformed slug would silently change which ROLE the
+    // project asked for. First-seen order is preserved so resolved config is stable.
     const seen = new Set<string>();
     const roles: string[] = [];
     for (const entry of r) {
-      if (typeof entry !== "string") continue;
-      const slug = entry.trim();
-      if (slug === "" || seen.has(slug)) continue;
-      seen.add(slug);
-      roles.push(slug);
+      if (!isCanonicalRoleSlug(entry)) continue;
+      const key = roleSlugDedupKey(entry);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      roles.push(entry);
     }
     out.starter_roles = roles;
   }

@@ -124,6 +124,100 @@ const RESOLVER_MODE_SET: ReadonlySet<string> = new Set(CAPABILITY_RESOLVER_MODES
 /** Canonical SHA-256 hex. A hash that cannot be a hash proves nothing about bytes read. */
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
+/**
+ * Maximum length for any scalar in this contract. Ids, paths and hashes are short by
+ * nature; an unbounded "non-empty string" is a smuggling channel (a sibling lane found
+ * a 12KB agent body riding in a field schema-d as a commit id).
+ */
+const MAX_SCALAR_LEN = 512;
+
+/** Control characters never appear in an id, a path, or a hash. The sharp universal guard. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+/** Slug form for an asset/specialist id — also the CANONICAL spelling (see readCanonicalId). */
+const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/**
+ * A plugin-install-relative path in CANONICAL form. Non-canonical spellings are
+ * REJECTED, never normalized: accept-and-repair would let two spellings of one file
+ * (`skills/x/SKILL.md` vs `skills/./x/SKILL.md`) be treated as one after the fact,
+ * while every count taken BEFORE normalization already double-counted.
+ */
+function isCanonicalRelPath(v: string): boolean {
+  if (v.length === 0 || v.length > MAX_SCALAR_LEN) return false;
+  if (CONTROL_CHARS.test(v)) return false;
+  if (v.includes("\\")) return false;        // backslash separators are a second spelling
+  if (v.startsWith("/")) return false;       // must be relative
+  if (v.includes("//")) return false;        // empty segment
+  const segs = v.split("/");
+  return segs.every((seg) => seg !== "" && seg !== "." && seg !== "..");
+}
+
+/** A bounded, control-char-free string. */
+function isBoundedStr(v: unknown): v is string {
+  return (
+    typeof v === "string" && v.length > 0 && v.length <= MAX_SCALAR_LEN && !CONTROL_CHARS.test(v)
+  );
+}
+
+/** A canonical id: bounded, control-char-free, slug-shaped. One referent, one spelling. */
+function isCanonicalId(v: unknown): v is string {
+  return isBoundedStr(v) && SLUG.test(v);
+}
+
+// ---------------------------------------------------------------------------
+// Strict options reading (cross-lane defect class: options-object TOCTOU)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a caller-supplied OPTIONS object into a plain own-data snapshot, or null.
+ *
+ * Why this exists: hardening the artifact while reading the options bag with plain
+ * property access leaves the window open. A getter (or Proxy) on the options executes
+ * DURING validation, and every field read twice — `if (!isCount(o.unreadable)) … else if
+ * (o.unreadable > 0)` — can return a different value each time. In `evaluateG5` that is
+ * a direct FALSE CLEAN: return 5 to the validity check, 0 to the threshold check, and a
+ * torn journal passes a deletion gate.
+ *
+ * So: reject Proxy, reject a non-Object.prototype/null prototype, reject symbol keys
+ * (getOwnPropertyNames does NOT see them), reject unknown keys, reject accessor
+ * properties, and snapshot every value through its own DATA descriptor exactly once.
+ * After this returns, nothing caller-supplied can execute again.
+ */
+function readOptions(
+  value: unknown,
+  allowedKeys: readonly string[],
+): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (nodeTypes.isProxy(value)) return null;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const out: Record<string, unknown> = Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (!allowedKeys.includes(key)) return null;
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc || !("value" in desc)) return null; // accessor ⇒ reject, never invoke
+    out[key] = desc.value;
+  }
+  return out;
+}
+
+/** Snapshot a caller-supplied array into a fresh dense array of own data values, or null. */
+function readArray(value: unknown): unknown[] | null {
+  if (!Array.isArray(value) || nodeTypes.isProxy(value)) return null;
+  const lenDesc = Object.getOwnPropertyDescriptor(value, "length");
+  if (!lenDesc || !("value" in lenDesc) || !isCount(lenDesc.value)) return null;
+  const out: unknown[] = [];
+  for (let i = 0; i < lenDesc.value; i++) {
+    const d = Object.getOwnPropertyDescriptor(value, i);
+    if (!d || !("value" in d)) return null; // hole or accessor
+    out.push(d.value);
+  }
+  return out;
+}
+
 /** A count that is trustworthy: a non-negative safe integer. NaN/negative/float are not. */
 function isCount(v: unknown): v is number {
   return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
@@ -240,11 +334,14 @@ export function parseCompatibilityUsageV1(value: unknown): CompatibilityUsageV1 
     const assetKind = ownValue(value, "asset_kind");
     if (typeof assetKind !== "string" || !ASSET_KIND_SET.has(assetKind)) return null;
 
+    // CANONICAL id: bounded, control-char-free, slug-shaped. Rejecting non-canonical
+    // spellings is what stops a dependence read hiding under an alias while the
+    // canonical id reports zero — the by_asset grouping key must have ONE spelling.
     const assetId = ownValue(value, "asset_id");
-    if (!isNonEmptyStr(assetId)) return null;
+    if (!isCanonicalId(assetId)) return null;
 
     const assetPath = ownValue(value, "asset_path");
-    if (!isNonEmptyStr(assetPath)) return null;
+    if (!isBoundedStr(assetPath) || !isCanonicalRelPath(assetPath)) return null;
 
     // S8 invariant 4: mandatory, so a rollup can distinguish versions of one asset.
     // Shape-checked, not merely non-empty: the field's entire purpose is to prove WHICH
@@ -269,7 +366,7 @@ export function parseCompatibilityUsageV1(value: unknown): CompatibilityUsageV1 
     const specialistIdRaw = ownValue(value, "specialist_id");
     let specialistId: string | null;
     if (specialistIdRaw === null) specialistId = null;
-    else if (isNonEmptyStr(specialistIdRaw)) specialistId = specialistIdRaw;
+    else if (isCanonicalId(specialistIdRaw)) specialistId = specialistIdRaw;
     else return null;
 
     return Object.freeze({
@@ -337,6 +434,12 @@ export interface CompatibilityUsageRollup {
    * — the caller supplies the journal's own count of unreadable records.
    */
   readonly unreadable: number;
+  /**
+   * Present ONLY on a rollup that could not be computed (rejected options, a malformed
+   * record, a non-canonical id). Its counts are NaN so evaluateG5 blocks; this field
+   * says why, so the block is diagnosable rather than mysterious.
+   */
+  readonly unusable_reason?: string;
 }
 
 export interface CompatibilityUsageRollupInput {
@@ -366,33 +469,89 @@ export interface CompatibilityUsageRollupInput {
  * whole reason a real project can ever reach zero. The returned object is FROZEN so a
  * caller cannot mutate a verdict input after it has been computed.
  */
+const ROLLUP_INPUT_KEYS = [
+  "window_start_release",
+  "window_end_release",
+  "records",
+  "known_asset_ids",
+  "unreadable",
+] as const;
+
+/** A rollup that could not be computed from the given input. Fail-closed, never thrown. */
+function unusableRollup(reason: string): CompatibilityUsageRollup {
+  return Object.freeze({
+    window_start_release: "",
+    window_end_release: "",
+    by_asset: Object.freeze({}),
+    // NaN, deliberately: an unusable rollup must never read as "zero dependence".
+    // evaluateG5 rejects a non-count and blocks, so this cannot become a false clean.
+    total_dependence_reads: Number.NaN,
+    observed_asset_ids: Object.freeze([]),
+    removable: Object.freeze([]),
+    unreadable: Number.NaN,
+    unusable_reason: reason,
+  }) as CompatibilityUsageRollup;
+}
+
 export function rollupCompatibilityUsage(
   input: CompatibilityUsageRollupInput,
 ): CompatibilityUsageRollup {
+  // EVERY option is resolved FIRST, through own-data descriptors, before anything is
+  // inspected or counted. Nothing caller-supplied executes after this point, so no
+  // field can differ between the check that guards it and the read that uses it.
+  const opts = readOptions(input, ROLLUP_INPUT_KEYS);
+  if (opts === null) return unusableRollup("options object rejected (proxy/accessor/unknown key)");
+
+  const startRelease = opts["window_start_release"];
+  const endRelease = opts["window_end_release"];
+  if (!isBoundedStr(startRelease) || !isBoundedStr(endRelease)) {
+    return unusableRollup("window release identifiers must be bounded plain strings");
+  }
+  const unreadable = opts["unreadable"];
+  if (!isCount(unreadable)) return unusableRollup("unreadable must be a non-negative safe integer");
+
+  const knownIds = readArray(opts["known_asset_ids"]);
+  if (knownIds === null) return unusableRollup("known_asset_ids must be a dense plain array");
+  // Canonical AND unique. A duplicate or non-canonical id is REJECTED, never normalized:
+  // two spellings of one asset would let a dependence read land under one key while the
+  // other reports zero — the alias false-zero this gate exists to block.
+  const seenKnown = new Set<string>();
+  for (const id of knownIds) {
+    if (!isCanonicalId(id)) return unusableRollup(`known_asset_ids entry is not a canonical id: ${String(id)}`);
+    if (seenKnown.has(id)) return unusableRollup(`known_asset_ids contains duplicate id: ${id}`);
+    seenKnown.add(id);
+  }
+
+  const records = readArray(opts["records"]);
+  if (records === null) return unusableRollup("records must be a dense plain array");
+
   const byAsset: Record<string, number> = {};
-  for (const id of input.known_asset_ids) byAsset[id] = 0;
+  for (const id of seenKnown) byAsset[id] = 0;
 
   const observed = new Set<string>();
   let total = 0;
-  for (const record of input.records) {
-    // Coverage counts ANY valid record — a synthetic or benign read still proves the
-    // emission point fired for that asset.
+  for (const raw of records) {
+    // Re-validate every record here rather than trusting the caller's typing: this is a
+    // trust boundary, and a malformed entry must REJECT the whole rollup, never be
+    // skipped until a benign one matches (accept-by-attrition).
+    const record = parseCompatibilityUsageV1(raw);
+    if (record === null) return unusableRollup("records contains an entry that is not a valid guild.compatibility_usage.v1");
     observed.add(record.asset_id);
     if (!isDependenceRead(record)) continue;
     byAsset[record.asset_id] = (byAsset[record.asset_id] ?? 0) + 1;
     total += 1;
   }
 
-  const removable = input.known_asset_ids.filter((id) => (byAsset[id] ?? 0) === 0).sort();
+  const removable = [...seenKnown].filter((id) => (byAsset[id] ?? 0) === 0).sort();
 
   return Object.freeze({
-    window_start_release: input.window_start_release,
-    window_end_release: input.window_end_release,
+    window_start_release: startRelease,
+    window_end_release: endRelease,
     by_asset: Object.freeze(byAsset),
     total_dependence_reads: total,
     observed_asset_ids: Object.freeze([...observed].sort()),
     removable: Object.freeze(removable),
-    unreadable: input.unreadable,
+    unreadable,
   });
 }
 
@@ -441,68 +600,131 @@ export interface G5Input {
  *      `total_dependence_reads: 0` over `by_asset: {x: 1}` is caught
  *   7. a required asset OBSERVED in no rollup — never instrumented, so its zero is fake
  */
+const G5_INPUT_KEYS = ["rollups", "required_asset_ids"] as const;
+const ROLLUP_KEYS = [
+  "window_start_release",
+  "window_end_release",
+  "by_asset",
+  "total_dependence_reads",
+  "observed_asset_ids",
+  "removable",
+  "unreadable",
+  "unusable_reason",
+] as const;
+
 export function evaluateG5(input: G5Input): G5Verdict {
   const blockers: string[] = [];
+  const blocked = (reason: string): G5Verdict =>
+    Object.freeze({ passed: false, blockers: Object.freeze([reason]), removable: Object.freeze([]) });
 
-  const required = [...new Set(input.required_asset_ids)];
+  // Resolve the options bag FIRST — before any rollup is inspected.
+  const opts = readOptions(input, G5_INPUT_KEYS);
+  if (opts === null) return blocked("G5 input rejected (proxy/accessor/unknown key)");
+
+  const requiredRaw = readArray(opts["required_asset_ids"]);
+  if (requiredRaw === null) return blocked("required_asset_ids must be a dense plain array");
+  const required: string[] = [];
+  const seenRequired = new Set<string>();
+  for (const id of requiredRaw) {
+    // Canonical + unique, same reasoning as the rollup: one referent, one spelling.
+    if (!isCanonicalId(id)) return blocked(`required_asset_ids entry is not a canonical id: ${String(id)}`);
+    if (seenRequired.has(id)) return blocked(`required_asset_ids contains duplicate id: ${id}`);
+    seenRequired.add(id);
+    required.push(id);
+  }
   if (required.length === 0) {
     blockers.push("empty required_asset_ids — a removal gate over zero assets cannot pass");
   }
 
-  if (input.rollups.length < G5_MIN_CLEAN_RELEASES) {
-    blockers.push(
-      `insufficient window: ${input.rollups.length} release(s) of evidence, need >= ${G5_MIN_CLEAN_RELEASES}`,
-    );
+  const rollupsRaw = readArray(opts["rollups"]);
+  if (rollupsRaw === null) return blocked("rollups must be a dense plain array");
+
+  // SNAPSHOT every rollup's fields once, through own-data descriptors. Previously
+  // `rollup.unreadable` was read twice — once for validity, once for the threshold — so
+  // a getter returning 5 then 0 passed a torn journal. Now each value is read exactly
+  // once and every later check sees that same value.
+  interface Snapshot {
+    label: string;
+    unreadable: unknown;
+    total: unknown;
+    byAsset: Record<string, unknown> | null;
+    observed: unknown[] | null;
+    unusable: unknown;
+  }
+  const snapshots: Snapshot[] = [];
+  for (const raw of rollupsRaw) {
+    const r = readOptions(raw, ROLLUP_KEYS);
+    if (r === null) return blocked("a rollup was rejected (proxy/accessor/unknown key)");
+    const start = r["window_start_release"];
+    const end = r["window_end_release"];
+    if (typeof start !== "string" || typeof end !== "string") {
+      return blocked("a rollup carries a non-string release identifier");
+    }
+    const byAssetRaw = r["by_asset"];
+    const byAsset = readOptionsAsCounts(byAssetRaw);
+    snapshots.push({
+      label: `${start}..${end}`,
+      unreadable: r["unreadable"],
+      total: r["total_dependence_reads"],
+      byAsset,
+      observed: readArray(r["observed_asset_ids"]),
+      unusable: r["unusable_reason"],
+    });
   }
 
-  const windowIds = input.rollups.map((r) => `${r.window_start_release}..${r.window_end_release}`);
-  if (new Set(windowIds).size !== windowIds.length) {
+  if (snapshots.length < G5_MIN_CLEAN_RELEASES) {
     blockers.push(
-      "duplicate release windows — the same evidence submitted twice is one release, not two",
+      `insufficient window: ${snapshots.length} release(s) of evidence, need >= ${G5_MIN_CLEAN_RELEASES}`,
     );
   }
+  const labels = snapshots.map((s) => s.label);
+  if (new Set(labels).size !== labels.length) {
+    blockers.push("duplicate release windows — the same evidence submitted twice is one release, not two");
+  }
 
-  let totalDependence = 0;
-  for (const [i, rollup] of input.rollups.entries()) {
-    const label = windowIds[i];
-
-    if (!isCount(rollup.unreadable)) {
-      blockers.push(`release ${label}: unreadable is not a valid count (${String(rollup.unreadable)})`);
-    } else if (rollup.unreadable > 0) {
+  for (const snap of snapshots) {
+    if (typeof snap.unusable === "string") {
+      blockers.push(`release ${snap.label}: rollup is unusable — ${snap.unusable}`);
+    }
+    if (!isCount(snap.unreadable)) {
+      blockers.push(`release ${snap.label}: unreadable is not a valid count (${String(snap.unreadable)})`);
+    } else if (snap.unreadable > 0) {
       blockers.push(
-        `release ${label}: ${rollup.unreadable} unreadable record(s) — a partially-readable journal is not evidence of zero usage`,
+        `release ${snap.label}: ${snap.unreadable} unreadable record(s) — a partially-readable journal is not evidence of zero usage`,
       );
     }
 
-    // Count from by_asset, then cross-check the reported total. Trusting the summary
-    // alone lets a forged or mutated rollup declare itself clean.
-    let derived = 0;
-    for (const [assetId, count] of Object.entries(rollup.by_asset)) {
-      if (!isCount(count)) {
-        blockers.push(`release ${label}: by_asset[${assetId}] is not a valid count (${String(count)})`);
-        continue;
+    if (snap.byAsset === null) {
+      blockers.push(`release ${snap.label}: by_asset is not a plain own-data object`);
+    } else {
+      let derived = 0;
+      for (const [assetId, count] of Object.entries(snap.byAsset)) {
+        if (!isCount(count)) {
+          blockers.push(`release ${snap.label}: by_asset[${assetId}] is not a valid count (${String(count)})`);
+          continue;
+        }
+        derived += count;
       }
-      derived += count;
+      if (!isCount(snap.total)) {
+        blockers.push(
+          `release ${snap.label}: total_dependence_reads is not a valid count (${String(snap.total)})`,
+        );
+      } else if (snap.total !== derived) {
+        blockers.push(
+          `release ${snap.label}: total_dependence_reads ${snap.total} disagrees with by_asset sum ${derived}`,
+        );
+      }
+      if (derived > 0) blockers.push(`release ${snap.label}: ${derived} dependence read(s)`);
     }
-    if (!isCount(rollup.total_dependence_reads)) {
-      blockers.push(
-        `release ${label}: total_dependence_reads is not a valid count (${String(rollup.total_dependence_reads)})`,
-      );
-    } else if (rollup.total_dependence_reads !== derived) {
-      blockers.push(
-        `release ${label}: total_dependence_reads ${rollup.total_dependence_reads} disagrees with by_asset sum ${derived}`,
-      );
+
+    if (snap.observed === null) {
+      blockers.push(`release ${snap.label}: observed_asset_ids is not a dense plain array`);
     }
-    if (derived > 0) {
-      blockers.push(`release ${label}: ${derived} dependence read(s)`);
-    }
-    totalDependence += derived;
   }
-  void totalDependence;
 
   const observed = new Set<string>();
-  for (const rollup of input.rollups) {
-    for (const id of rollup.observed_asset_ids) observed.add(id);
+  for (const snap of snapshots) {
+    for (const id of snap.observed ?? []) if (typeof id === "string") observed.add(id);
   }
   const uninstrumented = required.filter((id) => !observed.has(id)).sort();
   if (uninstrumented.length > 0) {
@@ -512,9 +734,26 @@ export function evaluateG5(input: G5Input): G5Verdict {
   }
 
   const passed = blockers.length === 0;
-  // `removable` is only meaningful on a passing gate — an asset "removable" under a
-  // torn journal is exactly the false-clean claim this contract exists to prevent.
   const removable = passed ? [...required].sort() : [];
+  return Object.freeze({
+    passed,
+    blockers: Object.freeze(blockers),
+    removable: Object.freeze(removable),
+  });
+}
 
-  return Object.freeze({ passed, blockers: Object.freeze(blockers), removable: Object.freeze(removable) });
+/** Snapshot a by_asset map through own-data descriptors, or null if it is not plain data. */
+function readOptionsAsCounts(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (nodeTypes.isProxy(value)) return null;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const out: Record<string, unknown> = Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc || !("value" in desc)) return null;
+    out[key] = desc.value;
+  }
+  return out;
 }

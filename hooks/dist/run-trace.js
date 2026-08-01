@@ -3128,6 +3128,15 @@ var CAPABILITY_AUTO_CREATE_POLICIES = ["never", "on_approval"];
 var CAPABILITY_RESOLVER_MODE_DEFAULT = "legacy";
 var CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
 var CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
+var CAPABILITY_ROLE_SLUG_MAX_LEN = 64;
+var ROLE_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
+var CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+function isCanonicalRoleSlug(v) {
+  return typeof v === "string" && v.length > 0 && v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN && !CONTROL_CHARS.test(v) && ROLE_SLUG.test(v);
+}
+function roleSlugDedupKey(slug) {
+  return slug.toLowerCase();
+}
 var DEFAULTS = {
   rigor: "standard",
   auto_approve: [],
@@ -6203,11 +6212,11 @@ function coerceCapability(raw) {
     const seen = /* @__PURE__ */ new Set();
     const acc = [];
     for (const entry of roles) {
-      if (typeof entry !== "string") continue;
-      const slug = entry.trim();
-      if (slug === "" || seen.has(slug)) continue;
-      seen.add(slug);
-      acc.push(slug);
+      if (!isCanonicalRoleSlug(entry)) continue;
+      const key = roleSlugDedupKey(entry);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      acc.push(entry);
     }
     out.starter_roles = acc;
   }

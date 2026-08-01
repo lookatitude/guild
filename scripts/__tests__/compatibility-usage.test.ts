@@ -606,3 +606,182 @@ describe("S8 codex-round — validator closure (P1/P2)", () => {
     expect(parseCompatibilityUsageV1(usage({ content_hash: "a".repeat(64) }))).not.toBeNull();
   });
 });
+
+// ===========================================================================
+// CROSS-LANE DEFECT-CLASS SWEEP — three classes found by sibling lanes' codex
+// rounds (S1, S4), audited against S8. All three were PRESENT here.
+// ===========================================================================
+
+describe("S8 defect-class 1 — options-object TOCTOU", () => {
+  // S1's finding: hardening the ARTIFACT while reading the OPTIONS bag with plain
+  // property access leaves the window open. In evaluateG5 this was a direct FALSE
+  // CLEAN — `rollup.unreadable` was read twice (validity, then threshold), so a getter
+  // could answer 5 to the first and 0 to the second and walk a torn journal through a
+  // deletion gate.
+  const REQUIRED = ["a"];
+  const good = (seq: number) =>
+    rollupCompatibilityUsage({
+      window_start_release: `2.${5 + seq}.0`,
+      window_end_release: `2.${6 + seq}.0`,
+      known_asset_ids: REQUIRED,
+      unreadable: 0,
+      records: [usage({ asset_id: "a", reason: "mint_source" })],
+    });
+
+  it("THE FALSE CLEAN: an `unreadable` getter that flips 5 to 0 cannot pass the gate", () => {
+    let reads = 0;
+    const torn = { ...good(1) } as Record<string, unknown>;
+    Object.defineProperty(torn, "unreadable", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? 5 : 0; // valid count, then "not > 0"
+      },
+    });
+    const v = evaluateG5({ rollups: [good(0), torn as never], required_asset_ids: REQUIRED });
+    expect(v.passed).toBe(false);
+    // Rejected at the options boundary — the getter is never invoked at all.
+    expect(reads).toBe(0);
+  });
+
+  it("a getter on the G5 input itself NEVER FIRES", () => {
+    let fired = 0;
+    const hostile = {} as Record<string, unknown>;
+    Object.defineProperty(hostile, "rollups", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        fired += 1;
+        return [good(0), good(1)];
+      },
+    });
+    Object.defineProperty(hostile, "required_asset_ids", {
+      enumerable: true,
+      configurable: true,
+      value: REQUIRED,
+    });
+    expect(evaluateG5(hostile as never).passed).toBe(false);
+    expect(fired).toBe(0);
+  });
+
+  it("a Proxy options bag is rejected", () => {
+    const v = evaluateG5(
+      new Proxy({ rollups: [good(0), good(1)], required_asset_ids: REQUIRED }, {}) as never,
+    );
+    expect(v.passed).toBe(false);
+  });
+
+  it("a SYMBOL key is rejected (getOwnPropertyNames does not see symbols)", () => {
+    const withSym: Record<string | symbol, unknown> = {
+      rollups: [good(0), good(1)],
+      required_asset_ids: REQUIRED,
+    };
+    withSym[Symbol("x")] = 1;
+    expect(evaluateG5(withSym as never).passed).toBe(false);
+  });
+
+  it("an unknown key is rejected", () => {
+    expect(
+      evaluateG5({ rollups: [good(0), good(1)], required_asset_ids: REQUIRED, extra: 1 } as never)
+        .passed,
+    ).toBe(false);
+  });
+
+  it("an exotic prototype is rejected", () => {
+    const inherited = Object.create({ sneaky: true }) as Record<string, unknown>;
+    inherited.rollups = [good(0), good(1)];
+    inherited.required_asset_ids = REQUIRED;
+    expect(evaluateG5(inherited as never).passed).toBe(false);
+  });
+
+  it("ANTI-VACUITY: the legitimate shape still PASSES", () => {
+    // Without this, every assertion above could be satisfied by a gate that always fails.
+    const v = evaluateG5({ rollups: [good(0), good(1)], required_asset_ids: REQUIRED });
+    expect(v.blockers).toEqual([]);
+    expect(v.passed).toBe(true);
+  });
+
+  it("the rollup input is hardened the same way, and a rejection is never a clean zero", () => {
+    const r = rollupCompatibilityUsage(new Proxy({}, {}) as never);
+    expect(r.unusable_reason).toBeDefined();
+    // NaN, not 0 — an unusable rollup must never read as "zero dependence".
+    expect(Number.isNaN(r.total_dependence_reads)).toBe(true);
+    expect(evaluateG5({ rollups: [r, r], required_asset_ids: ["a"] }).passed).toBe(false);
+  });
+});
+
+describe("S8 defect-class 2 — alias dedup on ids and paths", () => {
+  // S1's finding: raw-string dedup lets two spellings of one referent count twice.
+  // Here it is sharper — by_asset GROUPS BY asset_id, so a dependence read under an
+  // alias hides while the canonical id reports zero.
+  it("a non-canonical asset_id is REJECTED, never normalized", () => {
+    expect(parseCompatibilityUsageV1(usage({ asset_id: " qa" }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ asset_id: "qa " }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ asset_id: "a/b" }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ asset_id: "-leading" }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ asset_id: "backend-api-contract" }))).not.toBeNull();
+  });
+
+  it("a non-canonical asset_path spelling is REJECTED (no accept-and-repair)", () => {
+    for (const bad of [
+      "skills/./x/SKILL.md",
+      "skills/../x/SKILL.md",
+      "/skills/x/SKILL.md",
+      "skills//x/SKILL.md",
+      "skills\\x\\SKILL.md",
+    ]) {
+      expect(parseCompatibilityUsageV1(usage({ asset_path: bad }))).toBeNull();
+    }
+    expect(parseCompatibilityUsageV1(usage({ asset_path: "skills/x/SKILL.md" }))).not.toBeNull();
+  });
+
+  it("duplicate known_asset_ids are rejected rather than silently collapsed", () => {
+    const r = rollupCompatibilityUsage({
+      window_start_release: "2.5.0",
+      window_end_release: "2.6.0",
+      known_asset_ids: ["qa", "qa"],
+      unreadable: 0,
+      records: [],
+    });
+    expect(r.unusable_reason).toMatch(/duplicate/);
+  });
+
+  it("duplicate required_asset_ids block the gate", () => {
+    expect(evaluateG5({ rollups: [], required_asset_ids: ["a", "a"] }).passed).toBe(false);
+  });
+});
+
+describe("S8 defect-class 3 — unbounded-scalar smuggling and accept-by-attrition", () => {
+  // S4's finding: a field validated as merely "non-empty string" carried a 12KB agent
+  // body past a schema that had no body field at all.
+  const CTRL = String.fromCharCode(1);
+
+  it("an oversized scalar is rejected", () => {
+    expect(parseCompatibilityUsageV1(usage({ asset_id: "a".repeat(600) }))).toBeNull();
+    expect(
+      parseCompatibilityUsageV1(usage({ asset_path: `skills/${"x".repeat(600)}.md` })),
+    ).toBeNull();
+  });
+
+  it("CONTROL CHARACTERS are rejected — ids and paths never contain newlines", () => {
+    expect(parseCompatibilityUsageV1(usage({ asset_id: "qa\nsmuggled: true" }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ asset_path: `skills/x${CTRL}/SKILL.md` }))).toBeNull();
+    expect(parseCompatibilityUsageV1(usage({ specialist_id: "backend\r\nX" }))).toBeNull();
+  });
+
+  it("ACCEPT-BY-ATTRITION: one malformed record REJECTS the rollup, it is not skipped", () => {
+    // The sub-pattern: iterating a list and `continue`-ing over malformed entries until
+    // a benign one matches. A bad record must sink the whole rollup — otherwise a
+    // corrupt window still reports a clean zero.
+    const r = rollupCompatibilityUsage({
+      window_start_release: "2.5.0",
+      window_end_release: "2.6.0",
+      known_asset_ids: ["a"],
+      unreadable: 0,
+      records: [usage({ asset_id: "a" }), { schema_version: "nope" } as never],
+    });
+    expect(r.unusable_reason).toMatch(/not a valid guild\.compatibility_usage\.v1/);
+    expect(Number.isNaN(r.total_dependence_reads)).toBe(true);
+  });
+});

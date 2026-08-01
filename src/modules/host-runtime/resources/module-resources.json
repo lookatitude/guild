@@ -349,7 +349,7 @@
       "id": "projection:src/modules/capability/workflows/compatibility-usage.ts",
       "source_path": "src/modules/capability/workflows/compatibility-usage.ts",
       "resource_path": "resources/src/modules/capability/workflows/compatibility-usage.ts",
-      "sha256": "cd29b08d42a8b048f111f1b541f8df290cb00cb7fc85db65d89d230cc319ed05",
+      "sha256": "a872a844f1062d6021483de09eab690679d5e43d5d88a2eeb58f20894c7720c3",
       "projection_dependency": true
     },
     {
@@ -413,7 +413,7 @@
       "id": "projection:src/modules/config/workflows/config-defaults.ts",
       "source_path": "src/modules/config/workflows/config-defaults.ts",
       "resource_path": "resources/src/modules/config/workflows/config-defaults.ts",
-      "sha256": "bf5d376d645241117c7f748bf55dcd5fabe45594673e2faf44eaceb87c42067a",
+      "sha256": "e92a5db1ca5b14528ae4f409a586556247a2b9827b74ce5da98af69da96c0f65",
       "projection_dependency": true
     },
     {
@@ -429,7 +429,7 @@
       "id": "projection:src/modules/config/workflows/settings-reader.ts",
       "source_path": "src/modules/config/workflows/settings-reader.ts",
       "resource_path": "resources/src/modules/config/workflows/settings-reader.ts",
-      "sha256": "34f8ae8c67c1f0be004b83140d586dd0cb7715c8e7a3891b1a65742f5c17f6a6",
+      "sha256": "fd80127891327dc74122ce3c56bb42853047d6accc1e60f7b150ba9ec08d9940",
       "projection_dependency": true
     },
     {

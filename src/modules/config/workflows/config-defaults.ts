@@ -95,6 +95,45 @@ export const CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
 export const CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
 
 /**
+ * Maximum length of a role slug. A slug names a file under `.guild/agents/`; an
+ * unbounded "non-empty string" is a smuggling channel (a sibling lane found a 12KB
+ * agent body riding in a field schema-d as a commit id).
+ */
+export const CAPABILITY_ROLE_SLUG_MAX_LEN = 64;
+
+/**
+ * The CANONICAL role-slug form. One referent, one spelling.
+ *
+ * Shape-checked rather than merely "non-empty string": bounded, no control characters
+ * (a slug never contains a newline — that is the sharp universal guard against body
+ * smuggling), and no whitespace or path separators, since the slug names a file.
+ */
+const ROLE_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+export function isCanonicalRoleSlug(v: unknown): v is string {
+  return (
+    typeof v === "string" &&
+    v.length > 0 &&
+    v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN &&
+    !CONTROL_CHARS.test(v) &&
+    ROLE_SLUG.test(v)
+  );
+}
+
+/**
+ * Lower-case, because the roster is FILESYSTEM-BACKED: `.guild/agents/QA.md` and
+ * `.guild/agents/qa.md` are the same file on macOS and Windows. Accepting both
+ * spellings would let one role appear twice in a roster that can only hold it once.
+ * Slugs are therefore required lower-case and deduped case-insensitively — REJECTED
+ * when non-canonical, never silently lower-cased.
+ */
+export function roleSlugDedupKey(slug: string): string {
+  return slug.toLowerCase();
+}
+
+/**
  * SEMANTIC validity of one flattened `capability.*` value, for the reconciler.
  *
  * Returns `undefined` for any non-capability key so the caller falls through to the
@@ -127,11 +166,12 @@ export function isValidCapabilityValue(key: string, value: unknown): boolean | u
       if (!Array.isArray(value)) return false;
       const seen = new Set<string>();
       for (const entry of value) {
-        // Same slug contract validateCapability enforces, so validate / repair /
-        // resolve cannot disagree about what a well-formed roster looks like.
-        if (typeof entry !== "string" || entry === "" || entry !== entry.trim()) return false;
-        if (/\s/.test(entry) || seen.has(entry)) return false;
-        seen.add(entry);
+        // ONE slug contract, shared by validate / repair / resolve, so the three can
+        // never disagree about what a well-formed roster looks like.
+        if (!isCanonicalRoleSlug(entry)) return false;
+        const key = roleSlugDedupKey(entry);
+        if (seen.has(key)) return false;
+        seen.add(key);
       }
       return true;
     }

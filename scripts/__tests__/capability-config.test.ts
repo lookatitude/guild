@@ -21,6 +21,8 @@ import {
   CAPABILITY_SUGGESTION_BUDGET_MIN,
   DEFAULTS,
   isValidCapabilityValue,
+  isCanonicalRoleSlug,
+  roleSlugDedupKey,
 } from "../lib/shared/config-defaults";
 import { CONFIG_SCHEMA, getFieldSpec, isSecuritySensitiveKey } from "../lib/config-schema";
 import { coerceCapabilityBlock, validateCapability } from "../lib/core/config-cli";
@@ -227,11 +229,18 @@ describe("S5 — repair COERCES (the other half; validate rejects, repair rescue
     );
   });
 
-  it("starter_roles are trimmed, blank-stripped and DEDUPED in first-seen order", () => {
-    // S5 invariant 3. Order preservation keeps the resolved config stable across runs.
+  it("non-canonical starter_roles are DROPPED, not repaired; canonical ones dedupe in order", () => {
+    // S5 invariant 3, tightened by the cross-lane alias-dedup finding: a non-canonical
+    // spelling (" qa ") is DROPPED rather than trimmed into "qa". Repairing it would
+    // silently decide WHICH ROLE the project asked for — and validate already rejected
+    // this input, so anything reaching coerce is being rescued, not blessed.
     expect(
       coerceCapabilityBlock({ starter_roles: [" qa ", "backend", "qa", "", "backend", 7] })
         .starter_roles,
+    ).toEqual(["backend", "qa"]);
+    // Order preservation keeps the resolved config stable across runs.
+    expect(
+      coerceCapabilityBlock({ starter_roles: ["qa", "backend"] }).starter_roles,
     ).toEqual(["qa", "backend"]);
   });
 
@@ -572,5 +581,131 @@ describe("S5 codex-round — reconcile repair COERCES capability values (HIGH)",
   it("defers on every non-capability key (undefined ⇒ use the structural check)", () => {
     expect(isValidCapabilityValue("rigor", "deep")).toBeUndefined();
     expect(isValidCapabilityValue("loop_cap", 16)).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// CROSS-LANE DEFECT-CLASS SWEEP — the same three classes, audited against S5.
+// ===========================================================================
+
+describe("S5 defect-class 1 — options-object TOCTOU", () => {
+  // validateCapability / coerceCapabilityBlock previously read each field TWICE
+  // (presence check, then value check). On a caller-supplied object a getter can answer
+  // differently to the two reads, so the value validated is not the value used. Each
+  // field is now read exactly once into a local.
+  it("a getter is read at most once, so validate cannot be tricked by a flip", () => {
+    let reads = 0;
+    const hostile = {} as Record<string, unknown>;
+    Object.defineProperty(hostile, "suggestion_budget", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? 2 : 99; // valid on read 1, absurd on read 2
+      },
+    });
+    const rejects = validateCapability(hostile);
+    expect(reads).toBeLessThanOrEqual(1);
+    expect(rejects).toEqual([]); // it saw 2, and 2 is genuinely valid
+  });
+
+  it("coerce reads each field once too", () => {
+    let reads = 0;
+    const hostile = {} as Record<string, unknown>;
+    Object.defineProperty(hostile, "resolver_mode", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? "shadow" : "strict";
+      },
+    });
+    expect(coerceCapabilityBlock(hostile).resolver_mode).toBe("shadow");
+    expect(reads).toBeLessThanOrEqual(1);
+  });
+
+  it("advanceResolverModeOnApproval reads the never-clobber field once", () => {
+    let reads = 0;
+    const current = { key: "capability.resolver_mode", value: "legacy", last_reconciled_at: null } as Record<
+      string,
+      unknown
+    >;
+    Object.defineProperty(current, "provenance", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? "user" : "default"; // pinned, then not
+      },
+    });
+    const out = advanceResolverModeOnApproval({
+      current: current as never,
+      autoCreatePolicy: "on_approval",
+      target: "project-local",
+      now: "2026-08-01T00:00:00Z",
+    });
+    // It must honor the FIRST answer (user-pinned) and refuse.
+    expect(out.advanced).toBe(false);
+    expect(out.reason).toBe("user_pinned");
+  });
+});
+
+describe("S5 defect-class 2 — alias dedup on role slugs", () => {
+  // The roster is FILESYSTEM-BACKED: `.guild/agents/QA.md` and `.guild/agents/qa.md`
+  // are one file on macOS/Windows, so two spellings would claim one slot.
+  it("an upper-case slug is REJECTED, never lower-cased", () => {
+    expect(validateCapability({ starter_roles: ["QA"] })).toHaveLength(1);
+    expect(isCanonicalRoleSlug("QA")).toBe(false);
+    expect(isCanonicalRoleSlug("qa")).toBe(true);
+  });
+
+  it("case-insensitive duplicates are caught even when each spelling is canonical-ish", () => {
+    // Both rejected as non-canonical, and the dedup key would collide regardless.
+    expect(roleSlugDedupKey("qa")).toBe(roleSlugDedupKey("QA"));
+    expect(validateCapability({ starter_roles: ["qa", "qa"] })).toHaveLength(1);
+  });
+
+  it("a path-shaped slug is rejected (a slug names a file, it is not a path)", () => {
+    expect(validateCapability({ starter_roles: ["a/b"] })).toHaveLength(1);
+    expect(validateCapability({ starter_roles: ["../escape"] })).toHaveLength(1);
+  });
+
+  it("ANTI-VACUITY: ordinary slugs still pass", () => {
+    expect(validateCapability({ starter_roles: ["qa", "backend", "doc-writer", "a.b_c"] })).toEqual([]);
+  });
+});
+
+describe("S5 defect-class 3 — unbounded-scalar smuggling", () => {
+  const CTRL = String.fromCharCode(1);
+
+  it("an oversized slug is rejected", () => {
+    expect(validateCapability({ starter_roles: ["a".repeat(65)] })).toHaveLength(1);
+    expect(validateCapability({ starter_roles: ["a".repeat(64)] })).toEqual([]);
+  });
+
+  it("CONTROL CHARACTERS are rejected — a slug never contains a newline", () => {
+    expect(validateCapability({ starter_roles: ["qa\nsmuggled: true"] })).toHaveLength(1);
+    expect(validateCapability({ starter_roles: [`qa${CTRL}`] })).toHaveLength(1);
+  });
+
+  it("a 12KB body cannot ride in a role slug", () => {
+    // The S4 shape: a field validated as merely "non-empty string" carried an entire
+    // agent body past a schema that had no body field.
+    const body = `---\nname: evil\n---\n${"x".repeat(12000)}`;
+    expect(validateCapability({ starter_roles: [body] })).toHaveLength(1);
+    expect(isValidCapabilityValue("capability.starter_roles", [body])).toBe(false);
+  });
+
+  it("all four validators AGREE on the same slug (no drift between them)", () => {
+    for (const bad of ["QA", " qa", "a b", "a/b", "a".repeat(65), `qa${CTRL}`]) {
+      expect(validateCapability({ starter_roles: [bad] }).length).toBeGreaterThan(0);
+      expect(isValidCapabilityValue("capability.starter_roles", [bad])).toBe(false);
+      expect(coerceCapabilityBlock({ starter_roles: [bad] }).starter_roles).toEqual([]);
+    }
+    for (const ok of ["qa", "backend", "doc-writer"]) {
+      expect(validateCapability({ starter_roles: [ok] })).toEqual([]);
+      expect(isValidCapabilityValue("capability.starter_roles", [ok])).toBe(true);
+      expect(coerceCapabilityBlock({ starter_roles: [ok] }).starter_roles).toEqual([ok]);
+    }
   });
 });

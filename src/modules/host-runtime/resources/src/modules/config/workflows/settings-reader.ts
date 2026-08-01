@@ -57,6 +57,8 @@ import {
   CAPABILITY_RESOLVER_MODES,
   CAPABILITY_SUGGESTION_BUDGET_MAX,
   CAPABILITY_SUGGESTION_BUDGET_MIN,
+  isCanonicalRoleSlug,
+  roleSlugDedupKey,
   type CapabilityAutoCreatePolicy,
   type CapabilityResolverMode,
 } from "./config-defaults";
@@ -483,14 +485,18 @@ function coerceCapability(raw: unknown): CapabilityBlock {
   }
   const roles = r["starter_roles"];
   if (Array.isArray(roles)) {
+    // The SHARED slug contract (isCanonicalRoleSlug), so resolve agrees with validate
+    // and repair. Non-canonical entries are DROPPED, not normalized: inventing a
+    // canonical spelling would silently change which role the project asked for.
+    // Dedup is case-insensitive — the roster is filesystem-backed.
     const seen = new Set<string>();
     const acc: string[] = [];
     for (const entry of roles) {
-      if (typeof entry !== "string") continue;
-      const slug = entry.trim();
-      if (slug === "" || seen.has(slug)) continue;
-      seen.add(slug);
-      acc.push(slug);
+      if (!isCanonicalRoleSlug(entry)) continue;
+      const key = roleSlugDedupKey(entry);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      acc.push(entry);
     }
     out.starter_roles = acc;
   }
