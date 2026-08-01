@@ -531,3 +531,75 @@ describe("CODEX ROUND 2 — regressions for the reported counterexamples", () =>
     expect(surfaceCapabilityCandidates(tmp, { suggestionBudget: 4 }).pending).toHaveLength(1);
   });
 });
+
+
+describe("CODEX ROUND 3 finding G — the guard must not destroy what it protects", () => {
+  const surfaceWith = (over: Record<string, unknown>) =>
+    ({
+      source_run_id: "run-20260801-120000-a",
+      pending: [
+        {
+          run_id: "run-20260801-120000-a",
+          candidate: {
+            id: "c0",
+            kind: "agent",
+            proposed_id: "ok-role",
+            justified_by: ["d1"],
+            action: "observe",
+            defer_reason: "watch for a third occurrence",
+            confidence: "high",
+            owning_layer: "project",
+            ...over,
+          },
+        },
+      ],
+      satisfied: [],
+      empty_reason: null,
+    }) as never;
+
+  it("PROSE containing an em dash renders VERBATIM — it is not an attack", () => {
+    // Reported, and my defect: the single ASCII allowlist replaced
+    // "Needs review — evidence is incomplete." wholesale because of the em dash,
+    // hiding the exact rationale a reviewer needs in order to review.
+    const text = renderCandidateSection(
+      surfaceWith({ defer_reason: "Needs review — evidence is incomplete." })
+    );
+    expect(text).toContain("Needs review — evidence is incomplete.");
+    expect(text).not.toContain("unrenderable");
+  });
+
+  it("prose keeps accented and non-Latin text too", () => {
+    const text = renderCandidateSection(
+      surfaceWith({ defer_reason: "coverage insuffisante ; à revoir — 日本語も" })
+    );
+    expect(text).toContain("coverage insuffisante ; à revoir — 日本語も");
+  });
+
+  it("...but prose that could restructure the LINE is still refused", () => {
+    for (const payload of [
+      "a\u2028b",
+      "a\u2029b",
+      "a\u202Eb",
+      "a\u200Bb",
+      "a\u0009b",
+    ]) {
+      expect(renderCandidateSection(surfaceWith({ defer_reason: payload }))).toContain(
+        "<defer_reason: unrenderable characters>"
+      );
+    }
+  });
+
+  it("over-long PROSE is TRUNCATED and marked, not replaced whole", () => {
+    // Opposite of the id rule, deliberately: a truncated reason is still useful
+    // and visibly marked; a truncated ID could be approved by mistake.
+    const text = renderCandidateSection(surfaceWith({ defer_reason: "z".repeat(500) }));
+    expect(text).toContain("… (truncated)");
+    expect(text).toContain("zzzzzzzzzz");
+  });
+
+  it("an over-long ID is still REPLACED WHOLE, never truncated", () => {
+    const text = renderCandidateSection(surfaceWith({ proposed_id: "a".repeat(500) }));
+    expect(text).toContain("<proposed_id: over 120 chars>");
+    expect(text).not.toContain("aaaaaaaaaa");
+  });
+});

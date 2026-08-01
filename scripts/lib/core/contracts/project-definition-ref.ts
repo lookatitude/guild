@@ -159,6 +159,58 @@ function ownDataProp(
 
 const isNonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
+// ── BOUNDS (rules 6 and 7) ───────────────────────────────────────────────────
+//
+// ⚠️ ADDED AFTER A REPORTED DEFECT. Every scalar below was `isNonEmptyStr` only,
+// so a `guild.project_definition_ref.v1` embedded in another artifact carried
+// unbounded strings and an unbounded `skills` array straight through the
+// enclosing validator. Reproduced through S1's `coverage.covered[].covered_by`:
+// a 5000-character `project_id`, an `id` of `../../etc/passwd`, a
+// `relative_path` containing DEL, and 5000 valid skill entries all validated.
+//
+// A locator envelope with unbounded fields is a body field with a locator's name
+// — the same class as S4's `child_commit`.
+//
+//   project_id / id ......... MAX_REF_ID_LEN     (id is NOT path-shaped)
+//   relative_path ........... MAX_REF_PATH_LEN
+//   source_commit ........... 7-64 hex, or null
+//   skills .................. MAX_PINNED_SKILLS entries
+export const MAX_REF_ID_LEN = 128;
+export const MAX_REF_PATH_LEN = 512;
+export const MAX_PINNED_SKILLS = 64;
+
+// eslint-disable-next-line no-control-regex
+const REF_CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+
+/**
+ * Bounded, control-character-free, and NOT path-shaped — but deliberately
+ * CASE-PRESERVING, unlike S1's `proposed_id`.
+ *
+ * The distinction is real, not an oversight. S1's `proposed_id` PROPOSES creating
+ * `.guild/agents/<id>.md`, so it must have one canonical spelling and lowercase is
+ * enforced there. This envelope LOCATES a definition that ALREADY EXISTS, and a
+ * locator that cannot name a file which exists is broken. Retroactively forbidding
+ * uppercase in an existing-definition locator is a migration, not a hardening, and
+ * belongs with this contract's owner and the adoption manifest that references it.
+ *
+ * What IS fixed here is the reported class: unbounded length, control characters,
+ * path shapes, and `String()` coercion.
+ */
+const REF_ID_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._'-]*$/;
+
+function isBoundedRefId(v: unknown): v is string {
+  return (
+    typeof v === "string" &&
+    v.length > 0 &&
+    v.length <= MAX_REF_ID_LEN &&
+    !REF_CONTROL_CHARS.test(v) &&
+    REF_ID_SHAPE.test(v)
+  );
+}
+
+/** 7-64 lowercase hex, or null. Never coerced — `typeof` is checked first. */
+const REF_COMMITISH_RE = /^[0-9a-f]{7,64}$/;
+
 /** Exactly the closed key set — no extras, no symbols. */
 function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): boolean {
   if (Object.getOwnPropertySymbols(o).length > 0) return false;
@@ -195,8 +247,9 @@ export function isValidContentHash(v: unknown): v is string {
  */
 export function isProjectRelativePath(v: unknown): v is string {
   if (typeof v !== "string" || v.length === 0) return false;
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f]/.test(v)) return false;
+  if (v.length > MAX_REF_PATH_LEN) return false; // a path is not a body field
+  // C0 + DEL + C1. C0 alone left `\u009b` (CSI) usable — reported.
+  if (REF_CONTROL_CHARS.test(v)) return false;
   if (v.includes("\\")) return false; // no backslashes — POSIX separators only
   if (v.startsWith("/")) return false; // absolute
   if (/^[A-Za-z]:/.test(v)) return false; // Windows drive absolute
@@ -236,7 +289,7 @@ function validatePinnedSkillRefInner(obj: unknown): PinnedSkillRef | null {
   const hashProp = ownDataProp(obj, "content_hash");
   if (idProp.kind !== "data" || pathProp.kind !== "data" || hashProp.kind !== "data") return null;
 
-  if (!isNonEmptyStr(idProp.value)) return null;
+  if (!isBoundedRefId(idProp.value)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
@@ -284,12 +337,15 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   // `length` read EXACTLY ONCE through its own DATA descriptor — never `v.length`
   // in the loop guard (a Proxy could shrink it mid-loop to hide a later entry).
   const lenDesc = Object.getOwnPropertyDescriptor(v, "length");
+  // Capped BEFORE the element scan: a bound checked after the work bounds the
+  // result, not the work.
   if (
     !lenDesc ||
     !("value" in lenDesc) ||
     typeof lenDesc.value !== "number" ||
     !Number.isInteger(lenDesc.value) ||
-    lenDesc.value < 0
+    lenDesc.value < 0 ||
+    lenDesc.value > MAX_PINNED_SKILLS
   ) {
     return null;
   }
@@ -352,16 +408,20 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (typeHashProp.kind !== "data") return null;
   if (skillsProp.kind !== "data") return null;
 
-  if (!isNonEmptyStr(projectProp.value)) return null;
+  if (!isBoundedRefId(projectProp.value)) return null;
   if (typeof kindProp.value !== "string" || !DEFINITION_KIND_SET.has(kindProp.value)) return null;
   const kind = kindProp.value as DefinitionKind;
-  if (!isNonEmptyStr(idProp.value)) return null;
+  if (!isBoundedRefId(idProp.value)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
   // `source_commit`: a non-empty string or explicit null. `undefined` is NOT
   // accepted — an absent commit must be stated, not implied.
-  if (commitProp.value !== null && !isNonEmptyStr(commitProp.value)) return null;
+  // NO COERCION, and shape-checked: a commit id that accepts prose accepts a body.
+  if (commitProp.value !== null) {
+    if (typeof commitProp.value !== "string") return null;
+    if (!REF_COMMITISH_RE.test(commitProp.value)) return null;
+  }
 
   // Identity hashes are raw sha256 hex (the shape hashSpecialistProfile emits —
   // NOT the "sha256:"-prefixed form this file uses for byte hashes). They are

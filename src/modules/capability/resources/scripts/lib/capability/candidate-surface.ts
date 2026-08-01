@@ -56,8 +56,16 @@ import {
 const RUNS_DIR = ".guild/runs";
 const PROFILE_LEAF = path.join("capability", "profile.json");
 
-/** Run-directory shape. Bounded and anchored — a run id names a directory. */
-const RUN_DIR_RE = /^run-([0-9]{8})-([0-9]{6})-[a-z0-9][a-z0-9._-]*$/;
+/**
+ * Run-directory shape. Bounded and anchored — a run id names a directory.
+ *
+ * EXPORTED so the emitter validates against the SAME shape. Reported: the emitter
+ * accepted any lowercase slug while discovery accepted only
+ * `run-YYYYMMDD-HHMMSS-slug`, so `--run-id run-x` emitted successfully and then
+ * `candidates` reported `no_profile_found` — a profile written where nothing would
+ * ever look for it. Two shapes for one id is one shape too many.
+ */
+export const RUN_DIR_RE = /^run-([0-9]{8})-([0-9]{6})-[a-z0-9][a-z0-9._-]*$/;
 
 /**
  * The regex alone admits `run-99999999-999999-x`, which sorts AHEAD of every real
@@ -68,7 +76,7 @@ const RUN_DIR_RE = /^run-([0-9]{8})-([0-9]{6})-[a-z0-9][a-z0-9._-]*$/;
  * that is the honest limit of a name-based ordering. Reading mtime would break the
  * no-clock rule and would be no more correct.
  */
-function isRealRunDir(name: string): boolean {
+export function isRealRunDir(name: string): boolean {
   const m = RUN_DIR_RE.exec(name);
   if (m === null) return false;
   const [y, mo, d] = [+m[1].slice(0, 4), +m[1].slice(4, 6), +m[1].slice(6, 8)];
@@ -355,17 +363,44 @@ const EMPTY_TEXT: Readonly<Record<EmptyReason, string>> = Object.freeze({
  * `—` that structure the line.
  */
 /**
- * The CLOSED set a rendered scalar may consist of: letters, digits, and the
- * punctuation an identifier or a short reason needs. Notably ABSENT are the
- * line's own delimiters (`"`, `(`, `)`), every quote variant, and everything
- * outside printable ASCII — which excludes bidi controls, U+2028/2029, zero-width
- * joiners and combining overlays without having to enumerate them.
+ * TWO rendering rules, because ids and prose are not the same kind of text and
+ * one rule for both was wrong in both directions.
+ *
+ * ── IDS: a closed ASCII allowlist, replaced whole on violation ───────────────
+ * An id names something a human may approve into existence, so it must be exact
+ * or absent — never approximated. The allowlist excludes the line's own
+ * delimiters (`"`, `(`, `)`) so a value cannot forge a second candidate line, and
+ * excludes everything outside printable ASCII, which rules out bidi overrides,
+ * U+2028/2029, zero-width joiners and combining overlays without enumerating them.
+ *
+ * ── PROSE: printable text, TRUNCATED on length ──────────────────────────────
+ * REPORTED DEFECT, and mine: the single ASCII rule replaced
+ * `"Needs review — evidence is incomplete."` wholesale, because of the em dash.
+ * That hid the exact rationale a reviewer needs in order to review — the guard
+ * was destroying the thing it was protecting. Prose may contain any printable
+ * character; only the ones that could restructure the LINE are refused (control
+ * characters, bidi, line/paragraph separators, zero-width).
+ *
+ * And prose TRUNCATES rather than being replaced, which is the opposite of the id
+ * rule and deliberately so: a truncated reason is still useful and visibly marked,
+ * whereas a truncated ID could be approved by mistake.
  */
-const RENDERABLE = /^[A-Za-z0-9 ._,:;/@+#=?!'\-]*$/;
+const RENDERABLE_ID = /^[A-Za-z0-9 ._,:/@+#=?!'\-]*$/;
 
-function renderScalar(value: string, field: string): string {
+/** Characters that could restructure the rendered LINE, whatever else they are. */
+const LINE_BREAKING = /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
+
+function renderId(value: string, field: string): string {
   if (value.length > RENDER_FIELD_MAX_LEN) return `<${field}: over ${RENDER_FIELD_MAX_LEN} chars>`;
-  if (!RENDERABLE.test(value)) return `<${field}: unrenderable characters>`;
+  if (!RENDERABLE_ID.test(value)) return `<${field}: unrenderable characters>`;
+  return value;
+}
+
+function renderProse(value: string, field: string): string {
+  if (LINE_BREAKING.test(value)) return `<${field}: unrenderable characters>`;
+  if (value.length > RENDER_FIELD_MAX_LEN) {
+    return `${value.slice(0, RENDER_FIELD_MAX_LEN)}… (truncated)`;
+  }
   return value;
 }
 
@@ -395,12 +430,12 @@ export function renderCandidateSection(surface: CandidateSurface): string {
     const why =
       candidate.defer_reason === null
         ? ""
-        : ` — ${renderScalar(candidate.defer_reason, "defer_reason")}`;
+        : ` — ${renderProse(candidate.defer_reason, "defer_reason")}`;
     lines.push(
       `  • [${candidate.action}] ${candidate.kind} ` +
-        `"${renderScalar(candidate.proposed_id, "proposed_id")}" ` +
+        `"${renderId(candidate.proposed_id, "proposed_id")}" ` +
         `(confidence ${candidate.confidence}, ` +
-        `owner ${renderScalar(candidate.owning_layer, "owning_layer")})${why}`
+        `owner ${renderId(candidate.owning_layer, "owning_layer")})${why}`
     );
   }
   if (surface.satisfied.length > 0) {

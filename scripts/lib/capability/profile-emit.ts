@@ -78,6 +78,7 @@ import {
   PROJECT_CAPABILITY_PROFILE_SCHEMA,
   validateProjectCapabilityProfileV1,
 } from "../core/contracts/project-capability-profile";
+import { isRealRunDir } from "./candidate-surface";
 import { classifyContextManagerWrite } from "./context-manager-contract";
 
 // ── The hash recipe, stated so a shell can reproduce it ──────────────────────
@@ -637,13 +638,21 @@ export const PROFILE_EMITTING_MODES = Object.freeze([
 
 const EMITTING_MODE_SET: ReadonlySet<string> = new Set<string>(PROFILE_EMITTING_MODES);
 
-// A run id names a directory. Bounded, no separators, no control characters —
-// the same shape rules every other identifier in this wave carries (rule 6).
+// A project id: bounded, no separators, no control characters (rule 6).
 const RUN_ID_RE = /^[a-z0-9][a-z0-9._-]*$/;
 const ID_MAX_LEN = 128;
 
 function isSafeId(v: unknown): v is string {
   return typeof v === "string" && v.length > 0 && v.length <= ID_MAX_LEN && RUN_ID_RE.test(v);
+}
+
+/**
+ * A RUN id must additionally match the shape DISCOVERY uses, or the profile is
+ * written where nothing will ever look for it. `isRealRunDir` is imported from
+ * the surface rather than re-stated here so there is exactly one definition.
+ */
+function isSafeRunId(v: unknown): v is string {
+  return isSafeId(v) && isRealRunDir(v);
 }
 
 /**
@@ -674,8 +683,12 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
         detail: `resolver_mode "${o.resolverMode}" does not emit capability profiles`,
       };
     }
-    if (!isSafeId(o.runId)) {
-      return { status: "refused", code: "invalid_run_id", detail: "run id is not a safe slug" };
+    if (!isSafeRunId(o.runId)) {
+      return {
+        status: "refused",
+        code: "invalid_run_id",
+        detail: "run id is not a discoverable run-YYYYMMDD-HHMMSS-<slug>",
+      };
     }
     if (!isSafeId(o.projectId)) {
       return {
@@ -858,7 +871,7 @@ export function readCapabilityProfile(
   opts: { suggestionBudget?: number } = {}
 ): ProjectCapabilityProfileV1 | null {
   try {
-    if (!isSafeId(runId)) return null;
+    if (!isSafeRunId(runId)) return null;
     const abs = path.join(projectRoot, profileRelPath(runId));
     const raw: unknown = JSON.parse(fs.readFileSync(abs, "utf8"));
     return validateProjectCapabilityProfileV1(raw, {

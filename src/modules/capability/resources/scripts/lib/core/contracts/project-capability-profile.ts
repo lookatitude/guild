@@ -364,7 +364,16 @@ function ownDataProp(
 // `evidence_refs.length`, so bounding the array bounds the count by construction.
 // Two independently-chosen limits could disagree; one cannot.
 
-/** ids name files, roles and facts — bounded, and NOT path-shaped (XC.5). */
+/**
+ * A SLUG names something FILESYSTEM-BACKED, so it inherits the canonical
+ * role-slug rules: lowercase and ≤ 64. Reported defect — with uppercase allowed,
+ * `backend` and `Backend` are two spellings that name ONE file on macOS and
+ * Windows, so raw-string dedup would count them as distinct while the filesystem
+ * would not. Lowercase-only makes "one referent, one spelling" true rather than
+ * aspirational.
+ */
+export const MAX_SLUG_LEN = 64;
+/** A NAMESPACED fact id is internal to the artifact, so it may be longer. */
 export const MAX_ID_LEN = 128;
 /** A short human label. */
 export const MAX_LABEL_LEN = 200;
@@ -379,6 +388,49 @@ export const MAX_EVIDENCE_REFS = 64;
 export const MAX_COVERAGE_ENTRIES = 500;
 export const MAX_JUSTIFIED_BY = 32;
 export const MAX_ABSENT = 16;
+
+/**
+ * THE AGGREGATE BUDGET, and the reason the per-level caps above are not enough.
+ *
+ * Reported: the declared caps multiply out to roughly 24.8 MB of accepted profile
+ * (3 fact arrays × 200 × (id + label + 64 refs)), while the consumer that reads
+ * these files refuses anything over 256 KiB. A contract that accepts two orders of
+ * magnitude more than its only reader can load is not bounded in any useful sense
+ * — the per-field caps were "one level behind the next enclosing container" yet
+ * again, this time at the top.
+ *
+ * Set EQUAL to the consumer's limit deliberately, so the two cannot disagree:
+ * `candidate-surface.ts` refuses a larger file, and this refuses a larger object,
+ * and neither can drift into accepting what the other rejects.
+ *
+ * DERIVED BY TRAVERSAL, not by a registration table. The spec README recommends
+ * exactly this ("derive the total rather than enumerate it… safe specifically
+ * because it runs AFTER the closed-key check"): a new string-valued field is
+ * counted automatically, so there is no registration test to forget to update and
+ * no second copy of the accounting to drift.
+ */
+export const MAX_PROFILE_BYTES = 256 * 1024;
+
+/**
+ * Total string bytes in a VALIDATED profile. Runs after the closed-key check, so
+ * the traversal cannot be steered by unknown keys. Depth-capped as a matter of
+ * course — the input is already known-shaped, but an unbounded recursion in a
+ * validator is its own defect.
+ */
+function measuredBytes(value: unknown, depth = 0): number {
+  if (depth > 8) return Number.POSITIVE_INFINITY;
+  if (typeof value === "string") return value.length;
+  if (value === null || typeof value !== "object") return 8; // numbers, booleans
+  let total = 0;
+  if (Array.isArray(value)) {
+    for (const entry of value) total += measuredBytes(entry, depth + 1);
+    return total;
+  }
+  for (const k of Object.getOwnPropertyNames(value)) {
+    total += k.length + measuredBytes((value as Record<string, unknown>)[k], depth + 1);
+  }
+  return total;
+}
 
 /**
  * C0 / C1 / DEL. THE SHARP UNIVERSAL GUARD: an id, label, reason, sha, run id or
@@ -423,13 +475,13 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
  *
  * Both are bounded and control-character-free.
  */
-const SLUG_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const SLUG_SHAPE = /^[a-z0-9][a-z0-9._-]*$/;
 
 function isBoundedSlug(v: unknown): v is string {
   return (
     typeof v === "string" &&
     v.length > 0 &&
-    v.length <= MAX_ID_LEN &&
+    v.length <= MAX_SLUG_LEN &&
     !CONTROL_CHARS.test(v) &&
     SLUG_SHAPE.test(v)
   );
@@ -457,8 +509,31 @@ function isBoundedText(v: unknown, max: number): v is string {
  */
 const COMMITISH_RE = /^[0-9a-f]{7,64}$/;
 
-/** RFC3339, shape-checked. `"yesterday"` is not a timestamp (XC.4). */
-const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+/**
+ * RFC3339, shape-checked AND range-checked (XC.4).
+ *
+ * A shape-only regex accepted `"2026-99-99T99:99:99+99:99"` — reported. A regex
+ * that admits month 99 is checking punctuation, not time. Ranges are checked in
+ * code rather than crammed into the pattern, because an unreadable regex is how
+ * the next range gets forgotten. `:60` seconds is permitted (leap second).
+ */
+const RFC3339_RE =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?([Zz]|[+-]\d{2}:\d{2})$/;
+
+function isRfc3339(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_TIMESTAMP_LEN) return false;
+  const m = RFC3339_RE.exec(v);
+  if (m === null) return false;
+  const [mo, d, h, mi, sec] = [+m[2], +m[3], +m[4], +m[5], +m[6]];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  if (h > 23 || mi > 59 || sec > 60) return false;
+  const offset = m[8];
+  if (offset.length > 1) {
+    const [oh, om] = [+offset.slice(1, 3), +offset.slice(4, 6)];
+    if (oh > 23 || om > 59) return false;
+  }
+  return true;
+}
 
 const isNonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
@@ -484,7 +559,7 @@ function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): bool
  * `length` is read EXACTLY ONCE through its own data descriptor so a Proxy cannot
  * shrink it mid-loop to hide a later entry.
  */
-function readDataArray(v: unknown): unknown[] | null {
+function readDataArray(v: unknown, maxItems?: number): unknown[] | null {
   if (!Array.isArray(v)) return null;
   if (nodeTypes.isProxy(v)) return null;
   if (Object.getOwnPropertySymbols(v).length > 0) return null;
@@ -500,6 +575,11 @@ function readDataArray(v: unknown): unknown[] | null {
   ) {
     return null;
   }
+
+  // CAP BEFORE ENUMERATING. Reported: `Array(1_000_000).fill(null)` was rejected
+  // — after a million descriptor reads and copies, ~1.6s. A bound checked after
+  // the work is a bound on the RESULT, not on the work.
+  if (maxItems !== undefined && lenDesc.value > maxItems) return null;
 
   for (const k of Object.getOwnPropertyNames(v)) {
     if (k === "length") continue;
@@ -530,9 +610,8 @@ function readStrArray(
   v: unknown,
   opts: { unique?: boolean; maxItems: number; maxLen: number; idKind?: "slug" | "namespaced" }
 ): string[] | null {
-  const raw = readDataArray(v);
+  const raw = readDataArray(v, opts.maxItems);
   if (raw === null) return null;
-  if (raw.length > opts.maxItems) return null;
   const out: string[] = [];
   const seen = new Set<string>();
   for (const entry of raw) {
@@ -584,8 +663,7 @@ export function isTreeHash(v: unknown): v is string {
 export function parseEvidenceRef(v: unknown): EvidenceRef | null {
   if (!isNonEmptyStr(v)) return null;
   if (v.length > MAX_REF_LEN) return null; // the whole wire string is bounded
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f]/.test(v)) return null;
+  if (CONTROL_CHARS.test(v)) return null; // C0 + DEL + C1, not C0 alone
 
   const colon = v.indexOf(":");
   if (colon <= 0) return null; // no source, or empty source
@@ -760,6 +838,23 @@ function validateFeedstockInner(obj: unknown): FeedstockBinding | null {
   });
   if (absent === null) return null;
 
+  // A1.9 has TWO halves and only one was checked. Reported: `absent: []` with a
+  // null hash validated (absence silently omitted), a non-null hash with the input
+  // named absent validated (absence falsely asserted), and `absent: ["invented"]`
+  // validated (a name outside the declared feedstock). An absence record that can
+  // disagree with the hashes it describes records nothing.
+  const declared: ReadonlyArray<readonly [string, unknown]> = [
+    ["codebase_map", cm.value],
+    ["knowledge_graph", kg.value],
+    ["roster", roster.value],
+  ];
+  const names = new Set(declared.map(([n]) => n));
+  for (const name of absent) if (!names.has(name)) return null; // closed vocabulary
+  const absentSet = new Set(absent);
+  for (const [name, hash] of declared) {
+    if ((hash === null) !== absentSet.has(name)) return null; // exact correlation
+  }
+
   return {
     codebase_map_hash: cm.value as string | null,
     knowledge_graph_hash: kg.value as string | null,
@@ -900,8 +995,8 @@ function validateCoverageInner(obj: unknown): CoverageVerdict | null {
   if (coveredProp.kind !== "data") return null;
   if (uncoveredProp.kind !== "data" || unmatchedProp.kind !== "data") return null;
 
-  const rawCovered = readDataArray(coveredProp.value);
-  if (rawCovered === null || rawCovered.length > MAX_COVERAGE_ENTRIES) return null;
+  const rawCovered = readDataArray(coveredProp.value, MAX_COVERAGE_ENTRIES);
+  if (rawCovered === null) return null;
   const covered: CoveredEntry[] = [];
   const seenFacts = new Set<string>();
   for (const entry of rawCovered) {
@@ -1128,17 +1223,18 @@ function validateProjectCapabilityProfileV1Inner(
   if (!isBoundedSlug(projectId.value)) return null;
   if (!isBoundedSlug(runId.value)) return null;
   // XC.4 — a timestamp is shape-checked. `"yesterday"` is not a timestamp.
-  if (
-    typeof generatedAt.value !== "string" ||
-    generatedAt.value.length > MAX_TIMESTAMP_LEN ||
-    !RFC3339_RE.test(generatedAt.value)
-  ) {
-    return null;
-  }
+  if (!isRfc3339(generatedAt.value)) return null;
   // XC.3 — a commitish is 7-64 hex. S4 shipped a `child_commit` validated as any
   // non-empty string and it carried a 12 KB agent definition; the same field name
   // gets the same treatment here.
-  if (sourceCommit.value !== null && !COMMITISH_RE.test(String(sourceCommit.value))) return null;
+  // NO COERCION. `String(value)` here fired `toString` on caller data AFTER the
+  // closed-key check — the exact TOCTOU this contract hardens against everywhere
+  // else, and it also let a NUMBER through into a `string | null` field. Reported
+  // with a working reproduction that mutated the artifact mid-validation.
+  if (sourceCommit.value !== null) {
+    if (typeof sourceCommit.value !== "string") return null;
+    if (!COMMITISH_RE.test(sourceCommit.value)) return null;
+  }
 
   if (
     typeof resolverModeProp.value !== "string" ||
@@ -1160,8 +1256,8 @@ function validateProjectCapabilityProfileV1Inner(
   const mutationEvidence = validateMutationEvidenceInner(mutationEvidenceProp.value);
   if (mutationEvidence === null) return null;
 
-  const rawDomains = readDataArray(domainsProp.value);
-  if (rawDomains === null || rawDomains.length > MAX_FACTS) return null;
+  const rawDomains = readDataArray(domainsProp.value, MAX_FACTS);
+  if (rawDomains === null) return null;
   const domains: DomainFact[] = [];
   const domainIds = new Set<string>();
   for (const entry of rawDomains) {
@@ -1172,8 +1268,8 @@ function validateProjectCapabilityProfileV1Inner(
     domains.push(parsed);
   }
 
-  const rawBoundaries = readDataArray(boundariesProp.value);
-  if (rawBoundaries === null || rawBoundaries.length > MAX_FACTS) return null;
+  const rawBoundaries = readDataArray(boundariesProp.value, MAX_FACTS);
+  if (rawBoundaries === null) return null;
   const boundaries: BoundaryFact[] = [];
   const boundaryIds = new Set<string>();
   for (const entry of rawBoundaries) {
@@ -1184,8 +1280,8 @@ function validateProjectCapabilityProfileV1Inner(
     boundaries.push(parsed);
   }
 
-  const rawMethods = readDataArray(methodsProp.value);
-  if (rawMethods === null || rawMethods.length > MAX_FACTS) return null;
+  const rawMethods = readDataArray(methodsProp.value, MAX_FACTS);
+  if (rawMethods === null) return null;
   const repeatedMethods: MethodFact[] = [];
   const methodIds = new Set<string>();
   for (const entry of rawMethods) {
@@ -1199,7 +1295,7 @@ function validateProjectCapabilityProfileV1Inner(
   const coverage = validateCoverageInner(coverageProp.value);
   if (coverage === null) return null;
 
-  const rawCandidates = readDataArray(candidatesProp.value);
+  const rawCandidates = readDataArray(candidatesProp.value, budget);
   if (rawCandidates === null) return null;
 
   // A1.1 — the budget ceiling. Checked BEFORE per-entry validation so an
@@ -1235,7 +1331,7 @@ function validateProjectCapabilityProfileV1Inner(
     if (!knownFactIds.has(factId)) return null;
   }
 
-  return {
+  const result: ProjectCapabilityProfileV1 = {
     schema_version: PROJECT_CAPABILITY_PROFILE_SCHEMA,
     project_id: projectId.value,
     run_id: runId.value,
@@ -1251,6 +1347,13 @@ function validateProjectCapabilityProfileV1Inner(
     mutation_performed: false,
     mutation_evidence: mutationEvidence,
   };
+
+  // THE AGGREGATE BUDGET, measured on the SANITIZED result rather than the input:
+  // the input could still be exotic, the result cannot. See MAX_PROFILE_BYTES for
+  // why per-level caps alone left ~24.8 MB reachable against a 256 KiB reader.
+  if (measuredBytes(result) > MAX_PROFILE_BYTES) return null;
+
+  return result;
 }
 
 /**

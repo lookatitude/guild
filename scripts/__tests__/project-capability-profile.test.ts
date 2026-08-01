@@ -47,6 +47,7 @@ import {
   MAX_JUSTIFIED_BY,
   MAX_LABEL_LEN,
   MAX_PROSE_LEN,
+  MAX_PROFILE_BYTES,
 } from "../lib/core/contracts/project-capability-profile";
 
 import { PROJECT_DEFINITION_REF_SCHEMA } from "../lib/core/contracts/project-definition-ref";
@@ -992,5 +993,129 @@ describe("XC / rule 6 — every free-text scalar is BOUNDED and SHAPE-CHECKED", 
     expect(MAX_JUSTIFIED_BY).toBe(32);
     expect(MAX_ABSENT).toBe(16);
     expect(MAX_COVERAGE_ENTRIES).toBe(500);
+  });
+});
+
+
+describe("CODEX ROUND 3 — regressions for the reported counterexamples", () => {
+  const CSI = String.fromCharCode(0x9b);
+  const DEL = String.fromCharCode(0x7f);
+
+  it("finding 1 — `source_commit` is NOT coerced, and a toString getter never fires", () => {
+    // `String(value)` fired caller code AFTER the closed-key check, mutating the
+    // artifact mid-validation and admitting a NUMBER into a `string | null` field.
+    expect(ok(profile({ source_commit: 1234567 } as never))).toBeNull();
+
+    const p: Record<string, unknown> = profile();
+    let fired = 0;
+    p.source_commit = {
+      toString() {
+        fired += 1;
+        p.smuggled = "after-key-check";
+        return "abcdef0";
+      },
+    };
+    expect(ok(p)).toBeNull();
+    expect(fired).toBe(0);
+    expect(p.smuggled).toBeUndefined();
+  });
+
+  it("finding 2 — the delegated `covered_by` is bounded too", () => {
+    const withRef = (over: Record<string, unknown>) => {
+      const p = profile();
+      Object.assign(p.coverage.covered[0].covered_by, over);
+      return ok(p);
+    };
+    expect(withRef({ project_id: "x".repeat(5000) })).toBeNull();
+    expect(withRef({ id: "../../etc/passwd" })).toBeNull();
+    expect(withRef({ relative_path: `.guild/agents/evil${CSI}.md` })).toBeNull();
+    expect(withRef({ source_commit: "x".repeat(5000) })).toBeNull();
+    expect(
+      withRef({
+        skills: Array.from({ length: 5000 }, (_, i) => ({
+          id: `s${i}`,
+          relative_path: `.guild/skills/s${i}/SKILL.md`,
+          content_hash: `sha256:${"a".repeat(64)}`,
+        })),
+      })
+    ).toBeNull();
+  });
+
+  it("finding 3 — an oversized array is capped BEFORE it is enumerated", () => {
+    // A million-entry array was rejected only after a million descriptor reads.
+    // A bound checked after the work bounds the result, not the work.
+    const p = profile();
+    p.domains = new Array(1_000_000).fill(null);
+    const started = process.hrtime.bigint();
+    expect(ok(p)).toBeNull();
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    expect(elapsedMs).toBeLessThan(150);
+  });
+
+  it("finding 4 — the AGGREGATE budget binds, and agrees with the consumer limit", () => {
+    // Per-level caps multiplied out to ~24.8 MB against a 256 KiB reader.
+    const p = profile();
+    p.domains = Array.from({ length: 100 }, (_, i) => ({
+      id: `domain/d${i}`,
+      label: "x".repeat(MAX_LABEL_LEN),
+      evidence_refs: Array.from(
+        { length: 40 },
+        (_, j) => `codebase_map:${"f".repeat(400)}${i}-${j}.ts`
+      ),
+      confidence: "high",
+    }));
+    expect(ok(p)).toBeNull();
+    expect(MAX_PROFILE_BYTES).toBe(256 * 1024);
+  });
+
+  it("finding 5 — a SLUG is lowercase, so backend and Backend cannot both exist", () => {
+    // On case-insensitive filesystems both name ONE agent file, while raw-string
+    // dedup would treat them as two.
+    const p = profile();
+    p.candidates[0].proposed_id = "Backend";
+    expect(ok(p)).toBeNull();
+    p.candidates[0].proposed_id = "backend";
+    expect(ok(p)).not.toBeNull();
+  });
+
+  it("finding 6 — the timestamp is RANGE-checked, not just punctuation-checked", () => {
+    for (const bad of [
+      "2026-99-99T99:99:99+99:99",
+      "2026-13-01T00:00:00Z",
+      "2026-01-32T00:00:00Z",
+      "2026-01-01T24:00:00Z",
+      "2026-01-01T00:61:00Z",
+      "2026-01-01T00:00:00+24:00",
+    ]) {
+      expect(ok(profile({ generated_at: bad } as never))).toBeNull();
+    }
+    // RFC3339 permits lowercase t/z and a leap second.
+    expect(ok(profile({ generated_at: "2026-01-01t00:00:00z" } as never))).not.toBeNull();
+    expect(ok(profile({ generated_at: "2026-12-31T23:59:60Z" } as never))).not.toBeNull();
+  });
+
+  it("finding 8 — absent is a CLOSED vocabulary that must AGREE with the hashes", () => {
+    const withFeedstock = (over: Record<string, unknown>) => {
+      const p = profile();
+      Object.assign(p.feedstock, over);
+      return ok(p);
+    };
+    expect(withFeedstock({ knowledge_graph_hash: null, absent: [] })).toBeNull();
+    expect(withFeedstock({ knowledge_graph_hash: TREE_A, absent: ["knowledge_graph"] })).toBeNull();
+    expect(withFeedstock({ absent: ["invented_input"] })).toBeNull();
+    expect(
+      withFeedstock({ knowledge_graph_hash: null, absent: ["knowledge_graph"] })
+    ).not.toBeNull();
+  });
+
+  it("finding 9 — the exported ref parser rejects DEL and C1, not just C0", () => {
+    expect(parseEvidenceRef(`run:evil${CSI}2K`)).toBeNull();
+    expect(parseEvidenceRef(`run:evil${DEL}`)).toBeNull();
+    expect(isEvidenceRef(`run:evil${CSI}2K`)).toBe(false);
+    expect(parseEvidenceRef("run:run-20260801-000000-ok")).not.toBeNull();
+  });
+
+  it("ANTI-VACUITY: the reference fixture still validates after all of the above", () => {
+    expect(ok(profile())).not.toBeNull();
   });
 });
