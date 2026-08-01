@@ -1882,142 +1882,135 @@ describe("R6 — codex round 6: the locator's ROOT, and git's own ref rules", ()
 
 
 // ── Defect 9 — a verbatim REHOME is unresolvable, so it must be refused ─────
+// ── Defect 9 — OPEN, and the interim refusal was WITHDRAWN ─────────────────
 
-describe("D9 — an adoption whose successor IS its source is refused, not silently written", () => {
+describe("D9 — a location-only rehome is inexpressible (KNOWN DEFECT, open)", () => {
   /**
-   * REPORTED by the resolver lane, REPRODUCED here before anything changed, and it
-   * is worse than reported. The claim was that a verbatim rehome "dies at liveness";
-   * what actually happens is:
+   * THE HISTORY, kept because a silent revert would lose it.
    *
-   *   from: architect@a (home: umbrella-guild)  ->  to: architect@a (project ref)
-   *     validates:      TRUE
-   *     resolve:        ambiguous, trail [1]      <- written fine, unreadable
-   *     can continue:   false
-   *     can roll back:  false
+   * D9 was reported as "a same-id, same-bytes REHOME is unrepresentable". Reproduced,
+   * it was worse: the entry VALIDATED and then resolved `ambiguous` — a silent
+   * write-then-unreadable. An entry-validator REFUSAL was added on the reasoning that
+   * making it explicit cost nothing that existed.
    *
-   * So the manifest ACCEPTS an entry that provably cannot be read back. The write
-   * side says yes and the read side says `ambiguous`, because `identityOf` ignores
-   * the owning layer: `from` and `to` are literally one identity, so traversal's
-   * cycle guard sees the walk return to where it started.
+   * Two amendments later — the project root, then the owning layer — adversarial
+   * review showed the refusal had become an OVER-REJECTION. It refused
+   * `.claude/agents/<role>.md → .guild/agents/<role>.md`, which is not an edge case in
+   * decision D09 but IS D09, the central migration this initiative exists to enable.
+   * The layer amendment unblocked that exact move; the refusal still rejected the
+   * residual SAME-LAYER class below, so it was WITHDRAWN by operator ruling — a
+   * regression that blocks the initiative's own purpose is worse than a known, named
+   * defect that does not.
    *
-   * That is why the refusal costs NOTHING that exists today — the entry carries no
-   * resolvable information now. It converts a silent write-then-unreadable into an
-   * explicit rejection at the entry validator, where a producer meets it immediately.
-   *
-   * The REAL fix is a location-bearing identity, which needs a schema change (`to`
-   * has no home/layer field at all) and is the SAME decision as the cross-project
-   * conflation gap. Both are escalated together; this rule is the honest interim.
+   * Tried, measured, found to over-reject, withdrawn. These assertions now pin the
+   * DEFECT so its shape is unambiguous to whoever fixes it, and pin that the
+   * over-rejection is gone.
    */
-  // RENAMED AFTER THE #27 AMENDMENT, because the old name became a lie. These
-  // fixtures share the "plugin" root with their `ref()` successors, so they are TRUE
-  // SELF-ADOPTIONS, not rehomes. Once identity carries the project root, a genuine
-  // rehome (different root, identical id and bytes) is a legal, resolvable history —
-  // asserted in the #27 block. Leaving this called `umbrella` while its root said
-  // "plugin" would have left every assertion here quietly testing something else,
-  // which is the vacuity failure this suite has been burned by twice.
-  const sameRoot = (id: string, hash: string) => ({
+  const at = (id: string, hash: string, path: string) => ({
     project_id: "plugin",
     id,
-    historical_path: `/plugin/.guild/agents/${id}.md`,
+    historical_path: path,
     content_hash: H(hash),
     home: "project-guild" as const,
   });
+  const to = (id: string, hash: string, path: string) => ({
+    ...ref(id, hash),
+    relative_path: path,
+    layer: "project-guild" as const,
+  });
 
-  it("REFUSES a verbatim SELF-adoption — same kind, root, id and bytes", () => {
+  /** Same root, same layer, same id, same bytes — only the PATH differs. */
+  const sameLayerMove = () =>
+    chain([
+      {
+        from: at("architect", "a", "/plugin/.guild/agents/archive/architect.md"),
+        to: to("architect", "a", ".guild/agents/architect.md"),
+        reason: "rehomed",
+      },
+    ]);
+
+  it("THE DEFECT: it validates…", () => {
+    // No longer refused — the over-rejection is withdrawn.
+    expect(validateAdoptionManifestV1(sameLayerMove())).not.toBeNull();
+  });
+
+  it("…and then resolves AMBIGUOUS, which is the defect itself", () => {
+    // `identityOf` omits the path, so both ends are one identity and the cycle guard
+    // sees the walk return to where it started. Pinned so a fix is recognisable: this
+    // assertion must flip to `resolved` when identity gains a placement component.
     expect(
-      validateAdoptionManifestV1(
-        chain([{ from: sameRoot("architect", "a"), to: ref("architect", "a"), reason: "rehomed" }])
-      )
-    ).toBeNull();
+      resolveHistorical(sameLayerMove(), {
+        kind: "agent",
+        id: "architect",
+        content_hash: H("a"),
+      }).status
+    ).toBe("ambiguous");
   });
 
-  it("…at the ENTRY validator, so a producer meets it immediately", () => {
-    expect(
-      validateAdoptionEntry(
-        rawD9({ from: sameRoot("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
-      )
-    ).toBeNull();
-  });
-
-  // `rolled_back` is DELIBERATELY ABSENT from this list (codex round 7, #4). Its row
-  // carried `reverses_sequence: null`, which the IFF rule rejects on its own, so the
-  // row stayed green with the self-adoption guard deleted — it proved nothing about
-  // the rule it named. A `rolled_back` entry is covered where it can actually
-  // discriminate: the rollback-proof tests, which give it a real target.
-  it.each(["migrated", "collapsed", "rehomed", "renamed"])(
-    "…whatever the reason claims to be doing — %s",
-    (reason) => {
-      expect(
-        validateAdoptionEntry(
-          rawD9({
-            from: sameRoot("architect", "a"),
-            to: ref("architect", "a"),
-            reason: reason as AdoptionEntry["reason"],
-            detail: "note",
-          })
-        )
-      ).toBeNull();
-    }
-  );
-
-  it("`isUnstampedAdoption` names the reason a producer needs", () => {
-    // The contract returns `null`, never a typed reason, so this predicate is the
-    // only channel through which "why" can travel. A producer that gets `null` can
-    // ask this and learn that the adoption must stamp provenance.
-    expect(
-      isUnstampedAdoption(
-        rawD9({ from: sameRoot("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
-      )
-    ).toBe(true);
-  });
-
-  // ── the STAMPED adoption — the shape that must keep working ──────────────
-
-  const stamped = () => ({
-    from: sameRoot("architect", "a"),
-    to: ref("architect", "b"), // provenance stamped ⇒ different bytes ⇒ distinct identity
-    reason: "rehomed" as const,
-  });
-
-  it("a STAMPED adoption validates, resolves, and continues", () => {
-    const m = chain([stamped()]);
-    expect(validateAdoptionManifestV1(m)).not.toBeNull();
-    const r = resolveHistorical(m, { kind: "agent", id: "architect", content_hash: H("a") });
-    expect(r.status).toBe("resolved");
-    expect(r.ref?.content_hash).toBe(H("b"));
+  it("…and cannot be continued or rolled back", () => {
     expect(
       validateAdoptionManifestV1(
         chain([
-          stamped(),
           {
-            from: { ...sameRoot("architect", "b"), home: "project-guild" as const },
-            to: ref("architect2", "c"),
+            from: at("architect", "a", "/plugin/.guild/agents/archive/architect.md"),
+            to: to("architect", "a", ".guild/agents/architect.md"),
+            reason: "rehomed",
+          },
+          {
+            from: at("architect", "a", "/plugin/.guild/agents/architect.md"),
+            to: to("architect2", "b", ".guild/agents/architect2.md"),
           },
         ])
       )
-    ).not.toBeNull();
+    ).toBeNull();
   });
 
-  it("…and `isUnstampedAdoption` is false for it", () => {
-    expect(isUnstampedAdoption(rawD9(stamped()))).toBe(false);
+  it("`isUnstampedAdoption` is the ADVISORY a producer needs, since nothing rejects it now", () => {
+    // While the shape was refused a producer learned of it from a `null` return. Now
+    // it is accepted and fails only at read time, so this predicate is the only way to
+    // detect it before writing — more useful after the revert, not less.
+    expect(isUnstampedAdoption(sameLayerMove().entries[0])).toBe(true);
   });
 
-  it("a same-ID adoption with DIFFERENT bytes is untouched — only identity matters", () => {
-    // The rule keys on the whole identity, not on the id. A genuine same-id upgrade
-    // (bytes changed) is an ordinary adoption and must stay legal.
+  it("…and false for a STAMPED adoption, which resolves normally", () => {
+    const stamped = chain([
+      {
+        from: at("architect", "a", "/plugin/.guild/agents/archive/architect.md"),
+        to: to("architect", "b", ".guild/agents/architect.md"),
+        reason: "rehomed",
+      },
+    ]);
+    expect(isUnstampedAdoption(stamped.entries[0])).toBe(false);
     expect(
-      validateAdoptionManifestV1(
-        chain([{ from: sameRoot("architect", "a"), to: ref("architect", "b") }])
-      )
-    ).not.toBeNull();
+      resolveHistorical(stamped, { kind: "agent", id: "architect", content_hash: H("a") }).status
+    ).toBe("resolved");
   });
 
-  it("a same-BYTES adoption under a DIFFERENT id is untouched too", () => {
+  it("THE OVER-REJECTION IS GONE: D09's own move validates and resolves", () => {
+    // `.claude/agents → .guild/agents` — a LAYER change, so two identities. This is
+    // what the refusal was rejecting, and what task #8 needs to migrate through.
+    const d09 = chain([
+      {
+        from: {
+          project_id: "plugin",
+          id: "architect",
+          historical_path: "/plugin/.claude/agents/architect.md",
+          content_hash: H("a"),
+          home: "dot-claude-agents" as const,
+        },
+        to: { ...ref("architect", "a"), layer: "project-guild" as const },
+        reason: "rehomed",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(d09)).not.toBeNull();
     expect(
-      validateAdoptionManifestV1(
-        chain([{ from: sameRoot("architect", "a"), to: ref("architect-renamed", "a") }])
-      )
-    ).not.toBeNull();
+      resolveHistorical(d09, {
+        kind: "agent",
+        id: "architect",
+        content_hash: H("a"),
+        layer: "dot-claude-agents",
+      }).status
+    ).toBe("resolved");
   });
 
   it("`isUnstampedAdoption` never throws on hostile input", () => {
@@ -2026,34 +2019,7 @@ describe("D9 — an adoption whose successor IS its source is refused, not silen
       expect(isUnstampedAdoption(hostile)).toBe(false);
     }
   });
-
-  // ── the property the resolver lane asked me to confirm my fixes preserve ──
-
-  it("a bare-id query is ambiguous ONLY when the id really has two distinct sources", () => {
-    // Two sources = same id, DIFFERENT bytes. Pinning `content_hash` disambiguates.
-    const two = chain([
-      { from: sameRoot("A", "a"), to: ref("B", "b") },
-      { from: sameRoot("A", "c"), to: ref("D", "d") },
-    ]);
-    expect(validateAdoptionManifestV1(two)).not.toBeNull();
-    expect(resolveHistorical(two, { kind: "agent", id: "A" }).status).toBe("ambiguous");
-    expect(resolveHistorical(two, { kind: "agent", id: "A", content_hash: H("a") }).ref?.id).toBe("B");
-    expect(resolveHistorical(two, { kind: "agent", id: "A", content_hash: H("c") }).ref?.id).toBe("D");
-  });
-
-  it("…and NOT for adopt→rollback→re-adopt, which is ONE identity and one history", () => {
-    // Worth pinning because the two are easy to conflate: identical bytes across a
-    // rollback are a re-adoption, not two sources, and a bare-id query resolves.
-    const readopt = chain([
-      { from: sameRoot("A", "a"), to: ref("B", "b") },
-      rb(1, { from: sameRoot("B", "b"), to: ref("A", "a") }),
-      { from: sameRoot("A", "a"), to: ref("C", "c") },
-    ]);
-    expect(validateAdoptionManifestV1(readopt)).not.toBeNull();
-    expect(resolveHistorical(readopt, { kind: "agent", id: "A" }).status).toBe("resolved");
-  });
 });
-
 
 // ── Task #27 — the schema amendment: identity carries the project root ──────
 
@@ -2230,7 +2196,10 @@ describe("#27 — a location-bearing identity, and the wrong-bytes path it close
     ).not.toBeNull();
   });
 
-  it("but a TRUE self-adoption — same root, same id, same bytes — is still refused", () => {
+  it("but a TRUE self-adoption is ACCEPTED and unresolvable — D9, still open", () => {
+    // The interim refusal that used to reject this was withdrawn (see the D9 block):
+    // it over-rejected D09's own migration. The defect it mitigated is back in its
+    // original form and named as such.
     const m = umbrellaChain([
       {
         from: at("architect", "a", "plugin", "project-guild"),
@@ -2238,7 +2207,10 @@ describe("#27 — a location-bearing identity, and the wrong-bytes path it close
         reason: "rehomed",
       },
     ]);
-    expect(validateAdoptionManifestV1(m)).toBeNull();
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "architect", content_hash: H("a") }).status
+    ).toBe("ambiguous");
   });
 
   // ── the rollback proof matches roots at BOTH ends ────────────────────────
@@ -2390,18 +2362,18 @@ describe("#27b — the layer completes identity: a move WITHIN a root", () => {
     ).not.toBeNull();
   });
 
-  it("a TRUE self-adoption — same root AND layer — is still refused", () => {
+  it("a TRUE self-adoption is ACCEPTED and unresolvable — D9, still open", () => {
+    const m = chain([
+      {
+        from: at("architect", "a", "plugin", "project-guild"),
+        to: placed("architect", "a", "plugin", "project-guild"),
+        reason: "rehomed",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
     expect(
-      validateAdoptionManifestV1(
-        chain([
-          {
-            from: at("architect", "a", "plugin", "project-guild"),
-            to: placed("architect", "a", "plugin", "project-guild"),
-            reason: "rehomed",
-          },
-        ])
-      )
-    ).toBeNull();
+      resolveHistorical(m, { kind: "agent", id: "architect", content_hash: H("a") }).status
+    ).toBe("ambiguous");
   });
 
   // ── the layer behaves exactly like the root, one tier down ───────────────

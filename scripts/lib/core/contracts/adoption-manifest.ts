@@ -613,12 +613,9 @@ function validateAdoptionEntryInner(obj: unknown): AdoptionEntry | null {
     // The successor's KIND must match the entry's. A `kind:"agent"` adoption whose
     // successor is a skill ref would corrupt identity-matched traversal.
     if (to.kind !== kindP.value) return null;
-    // AN ADOPTION MUST GO SOMEWHERE — the successor cannot BE the source (defect 9,
-    // reported by the resolver lane). See `isUnstampedAdoption` for the full case.
-    if (identityOf(kindP.value, from.id, from.content_hash, from.project_id, from.home) ===
-      identityOf(to.kind, to.id, to.content_hash, to.project_id, to.layer)) {
-      return null;
-    }
+    // NO SELF-ADOPTION REFUSAL HERE — one was added for defect 9 and WITHDRAWN by
+    // operator ruling. `isUnstampedAdoption` documents the whole history and the
+    // known defect that remains.
   }
 
   if (detailP.value !== null && !isCleanScalar(detailP.value, MAX_DETAIL)) return null;
@@ -675,56 +672,45 @@ export function validateAdoptionEntry(obj: unknown): AdoptionEntry | null {
 }
 
 /**
- * Does this entry claim to adopt a definition into ITSELF?
+ * Does this entry's successor sit at the SAME IDENTITY as its source?
  *
- * DEFECT 9 — reported by the resolver lane as "a same-id, same-bytes REHOME is
- * unrepresentable", and reproduced here as something worse. A verbatim rehome
- * (`architect@a` in `umbrella-guild` landing as `architect@a` in a project) does not
- * die at write time at all:
+ * ── KNOWN DEFECT (D9), OPEN. An advisory, NOT a rejection. ──────────────────
  *
- *     validates:      TRUE
- *     resolve:        ambiguous, trail [1]     ← written fine, unreadable
- *     can continue:   false
- *     can roll back:  false
+ * A location-only rehome is INEXPRESSIBLE: it validates and then resolves
+ * `ambiguous`, because `identityOf` is (kind, id, bytes, project, layer) and the two
+ * ends of such a move are one identity, so traversal's cycle guard sees the walk
+ * return to where it started. Reproduced:
  *
- * The manifest ACCEPTED an entry that provably could not be read back, because
- * `identityOf` ignores the owning layer: `from` and `to` were literally one identity,
- * so traversal's cycle guard saw the walk return to where it started. A silent
- * write-then-unreadable is worse than a refusal, and worse than the reported
- * "dies at liveness with a confusing error".
+ *     /plugin/.guild/agents/archive/architect.md -> .guild/agents/architect.md
+ *     same root, same layer, same id, same bytes
+ *     validates: TRUE · resolve: ambiguous · continue: no · roll back: no
  *
- * THE REFUSAL COSTS NOTHING THAT EXISTS TODAY. The entry carries no resolvable
- * information now, so rejecting it removes no capability — it converts a silent hole
- * into an explicit rejection at the ENTRY validator, where a producer meets it
- * immediately instead of discovering it at read time.
+ * THE FULL HISTORY, because a silent revert would lose it. An entry-validator
+ * REFUSAL was added for exactly this, on the reasoning that turning a silent
+ * write-then-unreadable into an explicit rejection costs nothing that exists. Two
+ * amendments later — the project root, then the owning layer — adversarial review
+ * showed the refusal had become an OVER-REJECTION: it refused
+ * `.claude/agents/<role>.md -> .guild/agents/<role>.md`, which is not an edge case in
+ * decision D09 but IS D09, the central migration this initiative exists to enable.
  *
- * THE CONTRACT RULE THIS MAKES EXPLICIT: **an adoption stamps provenance.** A copy
- * must differ from its source — as `mintFromTemplate` already stamps `generated_by`,
- * and as the resolver lane stamps `adopted_from` / `adopted_source_hash` /
- * `adopted_source_version` / `adopted_disposition`. A stamped copy is a distinct
- * identity, so it validates, resolves, and can be continued or rolled back.
+ * The layer amendment unblocked that specific move, but the refusal still rejected the
+ * residual same-layer class above, so it was WITHDRAWN by operator ruling: a
+ * regression that blocks the initiative's own purpose is worse than a known, named,
+ * documented defect that does not. Tried, measured, found to over-reject, withdrawn.
  *
- * WHY THIS IS A PREDICATE AND NOT A TYPED REASON: this contract returns
- * `T | null` and NEVER throws, so there is no channel for a reason code. A producer
- * that gets `null` calls this to learn which rule it broke. That is the closest
- * honest thing to the typed reason the resolver lane asked for, and the limitation is
- * stated rather than papered over.
+ * WHY THE PREDICATE SURVIVED THE REFUSAL. It is now MORE useful, not less. While the
+ * shape was refused, a producer learned of it from a `null` return; now the shape is
+ * ACCEPTED and fails only at read time, so a producer that wants to avoid writing an
+ * unresolvable entry has no other way to detect it. This contract returns `T | null`
+ * and never throws, so a predicate is the only channel available either way.
  *
- * IT SELF-RETIRES, BUT IT IS NOT THE WHOLE FIX — and the difference is measured,
- * not assumed. The rule is expressed in terms of `identityOf`, not "same id and same
- * hash", so if identity ever gains a location component — the schema change that also
- * closes the cross-project conflation gap — a rehome's two sides stop being one
- * identity and this refusal disappears without anyone remembering to remove it.
- *
- * I VERIFIED THAT by giving `identityOf` a location component and re-running the
- * reproduction: the rehome VALIDATES again, exactly as claimed. It still resolved
- * `ambiguous`. Adding location to `identityOf` alone is therefore NOT sufficient to
- * make a rehome resolvable, because the read path does not use `identityOf` — it has
- * its own `identityKey`, plus a `byFromId` bucket index keyed on bare `(kind, id)`,
- * plus a `HistoricalQuery` shape with no placement field for a caller to pin. All
- * four must gain the component together, which is what "it touches every hop of the
- * traversal" actually means in this file. Recorded so that work is not started from
- * the optimistic half of the measurement.
+ * THE REAL FIX IS NOT ANOTHER COMPONENT. Identity has been completed one component per
+ * adversarial round — bytes, then project, then layer — and each round found the next
+ * one missing; the path is the fourth. The `from` side carries an ABSOLUTE
+ * `historical_path` and the `to` side a project-RELATIVE `relative_path`, the same
+ * vocabulary asymmetry the layer amendment just resolved for the third component. The
+ * structural answer is ONE VALIDATED PLACEMENT LOCATOR rather than N independent
+ * scalars, and that is a design decision, deliberately not taken here.
  *
  * Never throws: takes `unknown` and reads through own-data descriptors.
  */
