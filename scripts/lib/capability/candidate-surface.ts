@@ -59,6 +59,37 @@ const PROFILE_LEAF = path.join("capability", "profile.json");
 const RUN_DIR_RE = /^run-[0-9]{8}-[0-9]{6}-[a-z0-9][a-z0-9._-]*$/;
 
 /**
+ * THE CONTAINMENT LADDER (spec README rule 7). Every level, named, or one of them
+ * is unbounded and nobody notices which.
+ *
+ *   run directories scanned ... CANDIDATE_SCAN_LIMIT   (below)
+ *   profile file bytes ........ PROFILE_MAX_BYTES      (checked BEFORE JSON.parse)
+ *   candidates per profile .... capability.suggestion_budget (S1's validator)
+ *   rendered scalar chars ..... RENDER_FIELD_MAX_LEN   (per interpolated field)
+ *   roster entries ............ bounded by the filesystem; read as names only
+ *
+ * ⚠️ WHY THE RENDER CAP EXISTS AT ALL — this is a real hole in the layer below,
+ * not a hypothetical. S1's validator checks `proposed_id`, `defer_reason`,
+ * `owning_layer`, `label` and `rationale` with `isNonEmptyStr` ONLY: no length
+ * bound, no control-character rejection. A profile on disk can therefore carry a
+ * 12 KB `proposed_id`, or one containing an ESC-bracket erase-line sequence, and
+ * still VALIDATE.
+ *
+ * That artifact is then printed to a terminal by `/guild:status`. Without the cap
+ * and the control-character check below, a candidate could erase the
+ * "report-only — nothing is created without approval" line and print its own —
+ * forging, in the operator's own status output, the impression that something was
+ * approved. Rendering is the last boundary before a human reads it, so it gets a
+ * boundary's treatment.
+ *
+ * This does NOT paper over S1: bounding those fields in the contract is the real
+ * fix and belongs to the contract's owner. Until then the display surface refuses
+ * to be a forgery channel.
+ */
+const PROFILE_MAX_BYTES = 256 * 1024;
+const RENDER_FIELD_MAX_LEN = 120;
+
+/**
  * Hard cap on run directories examined, newest first.
  *
  * `/guild:status` runs on every invocation, so an unbounded scan would make the
@@ -92,6 +123,7 @@ export const EMPTY_REASONS = Object.freeze([
   "no_runs_directory",
   "no_profile_found",
   "profile_invalid",
+  "profile_too_large",
   "profile_has_no_candidates",
   "all_candidates_satisfied",
 ] as const);
@@ -183,11 +215,23 @@ export function surfaceCapabilityCandidates(
     if (runIds.length === 0) return empty("no_profile_found");
 
     const runId = runIds[0];
+    const profileAbs = path.join(projectRoot, RUNS_DIR, runId, PROFILE_LEAF);
+
+    // SIZE BEFORE PARSE. `/guild:status` runs on every invocation, so an
+    // unbounded JSON.parse over a file any process could have written is a
+    // denial-of-service on the command itself. Checked by stat, so an oversized
+    // file is never read into memory at all.
+    let bytes: number;
+    try {
+      bytes = fs.statSync(profileAbs).size;
+    } catch {
+      return empty("no_profile_found");
+    }
+    if (bytes > PROFILE_MAX_BYTES) return empty("profile_too_large", runId);
+
     let profile: ProjectCapabilityProfileV1 | null = null;
     try {
-      const raw: unknown = JSON.parse(
-        fs.readFileSync(path.join(projectRoot, RUNS_DIR, runId, PROFILE_LEAF), "utf8")
-      );
+      const raw: unknown = JSON.parse(fs.readFileSync(profileAbs, "utf8"));
       profile = validateProjectCapabilityProfileV1(raw, {
         suggestionBudget: opts.suggestionBudget ?? DEFAULT_SUGGESTION_BUDGET,
       });
@@ -224,9 +268,34 @@ const EMPTY_TEXT: Readonly<Record<EmptyReason, string>> = Object.freeze({
   no_runs_directory: "no runs yet — capability profiling has not run",
   no_profile_found: "no capability profile emitted yet (run /guild:learn)",
   profile_invalid: "the newest capability profile FAILED validation — treat it as absent",
+  profile_too_large: "the newest capability profile exceeds the size bound — not read",
   profile_has_no_candidates: "profiled, no candidates proposed",
   all_candidates_satisfied: "all proposed candidates already exist in the roster",
 });
+
+/**
+ * A scalar that is safe to print on a terminal line, or a REFUSAL MARKER.
+ *
+ * This does not escape and it does not truncate-and-print. Both would be silent
+ * repair of a value that has no business being what it is, and a truncated
+ * `proposed_id` is worse than none — an operator could approve the wrong thing.
+ * A field that fails the check is replaced WHOLE by a visible marker naming the
+ * field, so the line stays readable, the anomaly stays loud, and nothing the
+ * profile carries reaches the terminal unexamined.
+ *
+ * Rejected: any C0/C1 control character or DEL — one rule that covers ESC (the
+ * lead byte of every ANSI sequence), CR (line overwrite), and LF (forging an
+ * extra output line) in one rule, and matches the "an identifier never contains a
+ * control character, a body always does" guard used across this wave.
+ */
+// eslint-disable-next-line no-control-regex
+const UNSAFE_RENDER_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+
+function renderScalar(value: string, field: string): string {
+  if (value.length > RENDER_FIELD_MAX_LEN) return `<${field}: over ${RENDER_FIELD_MAX_LEN} chars>`;
+  if (UNSAFE_RENDER_CHARS.test(value)) return `<${field}: control characters>`;
+  return value;
+}
 
 /**
  * Deterministic plain-text block for `/guild:status`.
@@ -248,10 +317,18 @@ export function renderCandidateSection(surface: CandidateSurface): string {
 
   lines.push(`  from run ${surface.source_run_id ?? "(unknown)"}`);
   for (const { candidate } of surface.pending) {
-    const why = candidate.defer_reason === null ? "" : ` — ${candidate.defer_reason}`;
+    // `action`, `kind` and `confidence` are CLOSED enums in S1 — already safe.
+    // `proposed_id`, `owning_layer` and `defer_reason` are free scalars S1 bounds
+    // only as "non-empty string", so each goes through renderScalar.
+    const why =
+      candidate.defer_reason === null
+        ? ""
+        : ` — ${renderScalar(candidate.defer_reason, "defer_reason")}`;
     lines.push(
-      `  • [${candidate.action}] ${candidate.kind} "${candidate.proposed_id}" ` +
-        `(confidence ${candidate.confidence}, owner ${candidate.owning_layer})${why}`
+      `  • [${candidate.action}] ${candidate.kind} ` +
+        `"${renderScalar(candidate.proposed_id, "proposed_id")}" ` +
+        `(confidence ${candidate.confidence}, ` +
+        `owner ${renderScalar(candidate.owning_layer, "owning_layer")})${why}`
     );
   }
   if (surface.satisfied.length > 0) {

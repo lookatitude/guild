@@ -248,6 +248,86 @@ describe("A1.7 — a real emission mutates nothing", () => {
   });
 });
 
+describe("baselineHashes — widening the window to the WHOLE Learn run", () => {
+  it("a run-start baseline becomes the `before` half", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const baseline = snapshotTreeHashes(tmp);
+    const r = emit({ baselineHashes: baseline });
+    expect(r.status).toBe("emitted");
+    if (r.status !== "emitted") return;
+    expect(r.profile.mutation_evidence.agents_tree_hash_before).toBe(baseline.agents);
+  });
+
+  it("THE POINT: a mutation EARLIER IN THE RUN is caught, which the narrow window misses", () => {
+    // This is the case the caveat in the header is about. Learn writes to the
+    // roster at stage 4; the emitter runs at stage 12b. With no baseline, both
+    // snapshots are taken after the write and agree — a clean-looking profile for
+    // a run that mutated. With the run-start baseline, they disagree.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const runStart = snapshotTreeHashes(tmp);
+
+    mk(".guild/agents/written-mid-run.md", "# smuggled\n"); // an earlier Learn stage
+
+    // Narrow window: emission-only. It reports a clean run — honestly, for the
+    // window it can see, and misleadingly for the run as a whole.
+    expect(emit().status).toBe("emitted");
+
+    // Wide window: the same run, correctly refused.
+    fs.rmSync(path.join(tmp, ".guild/runs"), { recursive: true, force: true });
+    const wide = emit({ baselineHashes: runStart });
+    expect(wide.status).toBe("refused");
+    if (wide.status === "refused") expect(wide.code).toBe("mutation_detected");
+    expect(fs.existsSync(path.join(tmp, profileRelPath(RUN_ID)))).toBe(false);
+  });
+
+  it("OPTIONS-FIRST: a hostile baseline is REJECTED and its getter NEVER fires", () => {
+    // Rule 4. The baseline is the `before` half of the comparison, so a getter
+    // that returned one value here and another on a second read would let a
+    // mutated run produce a matching pair.
+    let fired = 0;
+    const hostile = Object.defineProperty({ skills: "a".repeat(64), registries: "b".repeat(64) }, "agents", {
+      enumerable: true,
+      get() {
+        fired += 1;
+        return "c".repeat(64);
+      },
+    });
+    const r = emit({ baselineHashes: hostile as never });
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("invalid_baseline");
+    expect(fired).toBe(0);
+  });
+
+  it("rejects Proxy, symbol keys, unknown keys, and non-hex values", () => {
+    const good = { agents: "a".repeat(64), skills: "b".repeat(64), registries: "c".repeat(64) };
+    const cases: unknown[] = [
+      new Proxy(good, {}),
+      Object.assign({ [Symbol("x")]: 1 }, good),
+      { ...good, bogus: 1 },
+      { agents: good.agents, skills: good.skills }, // missing key
+      { ...good, agents: "not-a-hash" },
+      { ...good, agents: "A".repeat(64) }, // uppercase — one spelling only
+      Object.assign(Object.create({ inherited: 1 }), good),
+      null,
+      [],
+      "x",
+    ];
+    for (const bad of cases) {
+      const r = emit({ baselineHashes: bad as never });
+      expect(r.status).toBe("refused");
+      if (r.status === "refused") expect(r.code).toBe("invalid_baseline");
+    }
+  });
+
+  it("a malformed baseline REFUSES — it never falls back to the narrow window", () => {
+    // Falling back would silently downgrade the claim the profile makes, which is
+    // the accept-and-repair pattern this codebase forbids everywhere else.
+    mk(".guild/agents/backend.md", "# backend\n");
+    expect(emit({ baselineHashes: { agents: "x" } as never }).status).toBe("refused");
+    expect(fs.existsSync(path.join(tmp, profileRelPath(RUN_ID)))).toBe(false);
+  });
+});
+
 describe("A1.9 — absent feedstock is RECORDED, never silently omitted", () => {
   it("names every missing input", () => {
     const r = emit();

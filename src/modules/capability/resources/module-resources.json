@@ -8,7 +8,7 @@
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "resource_path": "resources/scripts/capability-profile.ts",
-      "sha256": "a9c3935ac92937cd8cf276f1eab74c37208802907ac4df64a6da66b55667c580"
+      "sha256": "a0c72fe27f53c97dde99f7254981d81503ac20e6c5556d6a714f0ea263840de5"
     },
     {
       "category": "scripts",
@@ -22,7 +22,7 @@
       "id": "lib/capability/candidate-surface",
       "source_path": "scripts/lib/capability/candidate-surface.ts",
       "resource_path": "resources/scripts/lib/capability/candidate-surface.ts",
-      "sha256": "d66b44e8000fde5c113ebd8854a2525b2f10a8b1473f4a620553e6fa8b8a5b42"
+      "sha256": "0af139414dc091244826cc5cdc0e0d6c95d45d25244f201b3307ad0be71085bf"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "lib/capability/profile-emit",
       "source_path": "scripts/lib/capability/profile-emit.ts",
       "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
-      "sha256": "d545d05e42fb0e3df30b95c66147408f31dd97abdff59386b457e369570e7e20"
+      "sha256": "561be2d1393f3be6697c4ec454c832919d49d5756a198e6fceba5edf6e0677fd"
     },
     {
       "category": "scripts",

@@ -26,6 +26,7 @@
  *                                                    --project-id <id> --generated-at <rfc3339>
  *                                                    [--facts <file.json>] [--source-commit <sha>]
  *                                                    [--resolver-mode <mode>] [--budget <n>]
+ *                                                    [--baseline <run-start hash-tree --json output>]
  *   npx tsx scripts/capability-profile.ts candidates --cwd <root> [--json]
  *
  * Exit codes
@@ -62,10 +63,33 @@ import { DEFAULT_SUGGESTION_BUDGET } from "./lib/core/contracts/project-capabili
 
 // ── arg parsing ──────────────────────────────────────────────────────────────
 
+/**
+ * Read `--<name> <value>`.
+ *
+ * Returns null when the next token is itself a flag: `--facts --run-id x` means
+ * the user forgot the value, and silently consuming `--run-id` as the filename
+ * would turn a typo into a confusing downstream error about a missing file.
+ * Refusing here makes it a missing-argument error, which is what it is.
+ */
 function flag(argv: string[], name: string): string | null {
   const i = argv.indexOf(`--${name}`);
   if (i === -1 || i + 1 >= argv.length) return null;
-  return argv[i + 1];
+  const value = argv[i + 1];
+  if (value.startsWith("--")) return null;
+  return value;
+}
+
+/**
+ * A non-negative integer, in the ONE spelling a count has.
+ *
+ * `Number()` would accept `"1e3"`, `"0x10"`, `" 4 "`, `"Infinity"` and `""` — five
+ * ways to write a budget that no operator meant to write, each silently becoming
+ * a different number than the text suggests. Same reject-don't-normalize rule the
+ * contracts follow.
+ */
+function parseCount(raw: string): number | null {
+  if (!/^(0|[1-9][0-9]{0,4})$/.test(raw)) return null;
+  return Number(raw);
 }
 
 function has(argv: string[], name: string): boolean {
@@ -138,8 +162,23 @@ function cmdEmit(argv: string[]): void {
     fail("bad_resolver_mode", `"${modeRaw}" is not one of ${CAPABILITY_RESOLVER_MODES.join("|")}`);
   }
   const budgetRaw = flag(argv, "budget");
-  const budget = budgetRaw === null ? DEFAULT_SUGGESTION_BUDGET : Number(budgetRaw);
-  if (!Number.isInteger(budget) || budget < 0) fail("bad_budget", `"${budgetRaw}" is not a count`);
+  const budget = budgetRaw === null ? DEFAULT_SUGGESTION_BUDGET : parseCount(budgetRaw);
+  if (budget === null) fail("bad_budget", `"${budgetRaw}" is not a count`);
+
+  // `--baseline <file>` carries the run-start `hash-tree --json` output, widening
+  // the no-mutation window from the emission to the WHOLE Learn run. Parsed here,
+  // VALIDATED by the emitter (one gate, not two): a malformed baseline must be a
+  // refusal, never a silent fall-back to the narrow window — that would quietly
+  // downgrade the claim the profile makes.
+  const baselineFile = flag(argv, "baseline");
+  let baselineHashes: unknown;
+  if (baselineFile !== null) {
+    try {
+      baselineHashes = JSON.parse(fs.readFileSync(baselineFile, "utf8"));
+    } catch (e) {
+      fail("bad_baseline_file", `${baselineFile}: ${String(e)}`);
+    }
+  }
 
   const result = emitCapabilityProfile({
     projectRoot: root,
@@ -150,6 +189,7 @@ function cmdEmit(argv: string[]): void {
     resolverMode: modeRaw as CapabilityResolverMode,
     suggestionBudget: budget,
     facts: readFacts(flag(argv, "facts")),
+    ...(baselineFile === null ? {} : { baselineHashes: baselineHashes as never }),
   });
 
   if (result.status === "refused") {
@@ -174,9 +214,9 @@ function cmdEmit(argv: string[]): void {
 function cmdCandidates(argv: string[]): void {
   const root = path.resolve(flag(argv, "cwd") ?? process.cwd());
   const budgetRaw = flag(argv, "budget");
-  const surface = surfaceCapabilityCandidates(root, {
-    suggestionBudget: budgetRaw === null ? undefined : Number(budgetRaw),
-  });
+  const budget = budgetRaw === null ? undefined : parseCount(budgetRaw);
+  if (budgetRaw !== null && budget === null) fail("bad_budget", `"${budgetRaw}" is not a count`);
+  const surface = surfaceCapabilityCandidates(root, { suggestionBudget: budget ?? undefined });
   if (has(argv, "json")) {
     process.stdout.write(`${JSON.stringify(surface, null, 2)}\n`);
     return;

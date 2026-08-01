@@ -129,6 +129,7 @@ Implements brief §178-201 ordered flow, SC-A:
     npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts emit \
       --cwd <root> --run-id <id> --project-id <id> --generated-at <rfc3339> \
       [--facts .guild/runs/<run-id>/learn/capability-facts.json] \
+      --baseline .guild/runs/<run-id>/capability/baseline.json \
       --resolver-mode <resolved capability.resolver_mode>
     ```
 
@@ -137,6 +138,21 @@ Implements brief §178-201 ordered flow, SC-A:
     projections before and after, refuses to emit if they differ, and deletes the
     profile if the emission itself moved one. It is a REPORT — `mutation_performed`
     is the literal `false` and no field can express a change made.
+
+    **`--baseline` is what makes the window the WHOLE RUN**, and it is why step 1
+    captures it. Without it the emitter can only bracket its own execution, so a
+    stage that wrote to `.guild/agents/` back at step 8 would be measured across a
+    window in which nothing happened. Capture the baseline at **step 1**, right
+    after `startRun`, before any scan:
+
+    ```bash
+    npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts hash-tree \
+      --cwd <root> --json > .guild/runs/<run-id>/capability/baseline.json
+    ```
+
+    A malformed baseline is a REFUSAL (`invalid_baseline`), never a silent
+    fall-back to the narrow window — falling back would quietly downgrade the
+    claim the emitted profile makes.
 
     Mode behaviour, all one implementation:
     - `capability.resolver_mode: legacy` → **no emission** (typed refusal

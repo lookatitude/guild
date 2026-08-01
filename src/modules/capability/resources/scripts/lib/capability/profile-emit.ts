@@ -21,7 +21,9 @@
  *
  * HOW THE ORDERING MAKES THE PROOF SOUND
  *
- *   1. hash BEFORE          — over `.guild/agents/**`, `.guild/skills/**`, registries
+ *   0. resolve OPTIONS      — own-data descriptor reads, before any filesystem work
+ *   1. hash BEFORE          — over `.guild/agents/**`, `.guild/skills/**`, registries,
+ *                             OR the caller's run-start baseline (see below)
  *   2. derive               — read-only
  *   3. hash AFTER           — same three trees
  *   4. refuse if they differ — a Learn run that mutated CANNOT emit a profile
@@ -33,6 +35,17 @@
  * bug. Steps 1–4 prove the DERIVATION did not mutate; only a post-write re-hash
  * proves the EMISSION did not. A writer that appends to `.guild/agents/registry.yaml`
  * on its way out would sail through steps 1–6.
+ *
+ * HOW WIDE THE WINDOW ACTUALLY IS — the honest caveat
+ *
+ * Derivation happens in the CALLER, so with no `baselineHashes` the compared
+ * window covers the EMISSION only, not the whole Learn run: a stage that wrote to
+ * `.guild/agents/` early and called this at the end would be measured across a
+ * window in which nothing happened. `baselineHashes` (run-start snapshot, passed
+ * by `guild:learn` step 12b) widens the window to the whole run and is what makes
+ * the B1 shell recipe — hash, run Learn, hash — genuinely bracketing. Omitting it
+ * is still valid; the profile then claims only what it can see, which is the
+ * correct fallback rather than a fabricated wider claim.
  *
  * EVERY WRITE GOES THROUGH THE CONTEXT-MANAGER CONTRACT
  *
@@ -51,6 +64,7 @@
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { types as nodeTypes } from "util";
 
 import {
   DEFAULT_SUGGESTION_BUDGET,
@@ -102,6 +116,9 @@ export const HASHED_REGISTRIES = Object.freeze([
   ".guild/skills/registry.yaml",
 ] as const);
 
+/** A tree hash: bare 64 lowercase hex, the same shape S1 enforces. */
+const TREE_HASH_RE = /^[0-9a-f]{64}$/;
+
 const EMPTY_TREE_HASH = createHash("sha256").update("").digest("hex");
 
 function sha256File(abs: string): string | null {
@@ -119,7 +136,13 @@ function sha256File(abs: string): string | null {
  * Symlinks are not followed — a symlinked tree would let the same bytes appear at
  * two paths, and following one out of the root would hash something else entirely.
  */
-function listFiles(absRoot: string, rel = ""): string[] {
+const MAX_TREE_DEPTH = 32;
+
+function listFiles(absRoot: string, rel = "", depth = 0): string[] {
+  // Depth cap: symlinks are skipped so a cycle cannot form through one, but a
+  // deep real tree (or a bind mount) would still recurse without a bound, and
+  // this runs inside `/guild:status`' read path.
+  if (depth > MAX_TREE_DEPTH) return [];
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(absRoot, { withFileTypes: true });
@@ -130,7 +153,7 @@ function listFiles(absRoot: string, rel = ""): string[] {
   for (const e of entries) {
     if (e.isSymbolicLink()) continue;
     const childRel = rel ? `${rel}/${e.name}` : e.name;
-    if (e.isDirectory()) out.push(...listFiles(path.join(absRoot, e.name), childRel));
+    if (e.isDirectory()) out.push(...listFiles(path.join(absRoot, e.name), childRel, depth + 1));
     else if (e.isFile()) out.push(childRel);
   }
   return out.sort();
@@ -248,6 +271,7 @@ export const EMIT_REFUSAL_CODES = Object.freeze([
   "resolver_mode_disabled",
   "invalid_run_id",
   "invalid_project_id",
+  "invalid_baseline",
   "mutation_detected",
   "profile_invalid",
   "write_forbidden",
@@ -291,6 +315,61 @@ export interface EmitProfileOptions {
   /** Resolved `capability.suggestion_budget`. */
   suggestionBudget?: number;
   facts: DerivedFacts;
+  /**
+   * RUN-START tree hashes, widening the no-mutation window to the WHOLE Learn run.
+   *
+   * ── THE LIMITATION THIS EXISTS TO CLOSE, STATED PLAINLY ──────────────────────
+   * Derivation happens in the CALLER, before this function is entered. So without
+   * a baseline, the BEFORE and AFTER snapshots bracket only the emission itself —
+   * a handful of feedstock reads. A Learn stage that wrote to `.guild/agents/`
+   * during stage 4 and then called the emitter at stage 12b would be measured
+   * across a window in which nothing happened, and would emit a profile asserting
+   * a clean run. The check would be real and the claim still wrong.
+   *
+   * Passing hashes captured at RUN START closes that: `before` becomes the run's
+   * actual starting state, so any mutation anywhere in the run lands inside the
+   * compared window. `guild:learn` step 12b passes it; `capability-profile.ts
+   * hash-tree --json` at run start produces it.
+   *
+   * OMITTING IT IS STILL VALID — the emitter then reports honestly on the only
+   * window it can see, rather than pretending to a wider one. The narrower claim
+   * is the correct fallback; a fabricated wider one would not be.
+   */
+  baselineHashes?: TreeHashes;
+}
+
+/**
+ * Validate a caller-supplied baseline, fail-closed.
+ *
+ * Read through own-property DESCRIPTORS with Proxy / prototype / symbol-key /
+ * unknown-key / accessor rejection — the OPTIONS-FIRST rule (spec README rule 4).
+ * This is not ceremony: the baseline is the `before` half of the no-mutation
+ * comparison, so a getter that returned one value here and another on a second
+ * read would let a mutated run produce a matching pair. It is read EXACTLY ONCE
+ * per field, before any filesystem work.
+ *
+ * Returns the sanitized hashes, or `null` for "reject".
+ */
+function resolveBaselineHashes(value: unknown): TreeHashes | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (nodeTypes.isProxy(value)) return null;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+
+  const keys = ["agents", "skills", "registries"] as const;
+  const own = Object.getOwnPropertyNames(value);
+  if (own.length !== keys.length) return null;
+  for (const k of own) if (!(keys as readonly string[]).includes(k)) return null;
+
+  const out: Record<string, string> = {};
+  for (const k of keys) {
+    const desc = Object.getOwnPropertyDescriptor(value, k);
+    if (!desc || !("value" in desc)) return null; // accessor — never fired
+    if (typeof desc.value !== "string" || !TREE_HASH_RE.test(desc.value)) return null;
+    out[k] = desc.value;
+  }
+  return { agents: out.agents, skills: out.skills, registries: out.registries };
 }
 
 /**
@@ -344,10 +423,27 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       };
     }
 
+    // OPTIONS FIRST — the baseline is resolved before any filesystem work, so
+    // nothing caller-supplied can execute between a snapshot and the read it
+    // guards (spec README rule 4).
+    let baseline: TreeHashes | null = null;
+    if (opts.baselineHashes !== undefined) {
+      baseline = resolveBaselineHashes(opts.baselineHashes);
+      if (baseline === null) {
+        return {
+          status: "refused",
+          code: "invalid_baseline",
+          detail: "baselineHashes is not three bare 64-hex tree hashes",
+        };
+      }
+    }
+
     const root = opts.projectRoot;
 
-    // 1 — BEFORE.
-    const before = snapshotTreeHashes(root);
+    // 1 — BEFORE. A caller-supplied run-start baseline widens the compared window
+    //     to the whole Learn run; without one it brackets the emission only, and
+    //     the profile claims no more than that.
+    const before = baseline ?? snapshotTreeHashes(root);
 
     // 2 — read-only derivation happened in the caller; 3 — AFTER.
     const feedstock = snapshotFeedstock(root);

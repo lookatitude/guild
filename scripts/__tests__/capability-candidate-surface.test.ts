@@ -248,6 +248,97 @@ describe("F7 — the rendered block a human actually reads", () => {
   });
 });
 
+describe("F7 — the rendered line is not a FORGERY CHANNEL", () => {
+  /**
+   * The real hole this closes. S1 validates `proposed_id`, `defer_reason` and
+   * `owning_layer` with `isNonEmptyStr` only — no length bound, no control-char
+   * rejection — so a VALID profile can carry an ANSI erase-line sequence. That
+   * profile is then printed by `/guild:status`. Unrendered safely, a candidate
+   * could wipe the "report-only — nothing is created without approval" line and
+   * print its own, forging approval in the operator's own status output.
+   *
+   * These fixtures are written straight to disk (not through the emitter) because
+   * that is exactly the threat model: a profile that ALREADY validates.
+   */
+  const ESC = String.fromCharCode(27);
+
+  function writeRawProfile(candidateOverrides: Record<string, unknown>): void {
+    expect(emitInto("run-20260801-120000-a", factsWith(1)).status).toBe("emitted");
+    const p = path.join(tmp, ".guild/runs/run-20260801-120000-a/capability/profile.json");
+    const profile = JSON.parse(fs.readFileSync(p, "utf8"));
+    Object.assign(profile.candidates[0], candidateOverrides);
+    fs.writeFileSync(p, JSON.stringify(profile, null, 2));
+  }
+
+  it("a control-character `proposed_id` still VALIDATES — proving the hole is real", () => {
+    writeRawProfile({ proposed_id: `evil${ESC}[2K\rAPPROVED` });
+    // If this ever starts returning `profile_invalid`, S1 gained the bound and
+    // this whole block becomes belt-and-braces rather than the only guard.
+    expect(surfaceCapabilityCandidates(tmp).empty_reason).toBeNull();
+  });
+
+  it("...but the RENDERED line carries no control character", () => {
+    writeRawProfile({ proposed_id: `evil${ESC}[2K\rAPPROVED` });
+    const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
+    expect(text).not.toContain(ESC);
+    expect(text).not.toContain("\r");
+    expect(text).toContain("<proposed_id: control characters>");
+    // And the warning the forgery targeted survives.
+    expect(text).toContain("report-only");
+  });
+
+  it("a newline in `defer_reason` cannot forge an extra output line", () => {
+    writeRawProfile({
+      action: "observe",
+      defer_reason: "ok\n  • [propose] agent \"backdoor\" (confidence high, owner project)",
+    });
+    const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
+    expect(text).not.toContain("backdoor");
+    expect(text).toContain("<defer_reason: control characters>");
+  });
+
+  it("an over-long field is REPLACED, not truncated — a truncated id is worse than none", () => {
+    // Truncation would print a plausible-looking id an operator could approve.
+    writeRawProfile({ proposed_id: "a".repeat(5000) });
+    const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
+    expect(text).toContain("<proposed_id: over 120 chars>");
+    expect(text).not.toContain("aaaaaaaaaa");
+    expect(text.split("\n").every((l) => l.length < 300)).toBe(true);
+  });
+
+  it("`owning_layer` gets the same treatment as the other free scalars", () => {
+    writeRawProfile({ owning_layer: `x${ESC}[31m` });
+    expect(renderCandidateSection(surfaceCapabilityCandidates(tmp))).toContain(
+      "<owning_layer: control characters>"
+    );
+  });
+
+  it("a benign field is printed UNCHANGED — the guard is not a blanket mangler", () => {
+    // Anti-vacuity: a check that replaced everything would pass every row above
+    // while destroying the surface's usefulness.
+    expect(emitInto("run-20260801-120000-a", factsWith(1)).status).toBe("emitted");
+    expect(renderCandidateSection(surfaceCapabilityCandidates(tmp))).toContain(
+      '"agent-role-0"'
+    );
+  });
+});
+
+describe("F7 — the containment ladder (rule 7)", () => {
+  it("an oversized profile is REFUSED BY SIZE, before it is ever parsed", () => {
+    expect(emitInto("run-20260801-120000-a", factsWith(1)).status).toBe("emitted");
+    const p = path.join(tmp, ".guild/runs/run-20260801-120000-a/capability/profile.json");
+    fs.writeFileSync(p, `{"pad":"${"x".repeat(300 * 1024)}"}`);
+    const s = surfaceCapabilityCandidates(tmp);
+    expect(s.empty_reason).toBe("profile_too_large");
+    expect(s.source_run_id).toBe("run-20260801-120000-a");
+  });
+
+  it("a normal-sized profile is unaffected by the size bound", () => {
+    expect(emitInto("run-20260801-120000-a", factsWith(2)).status).toBe("emitted");
+    expect(surfaceCapabilityCandidates(tmp).pending).toHaveLength(2);
+  });
+});
+
 describe("D04 — THE F7 FLIP: `observe` is now the shipped default", () => {
   it("the default is `observe`, because F7 landed", () => {
     // cap-loc-D04 §Recommendation.5 gated this on candidate surfacing existing.
