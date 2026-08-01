@@ -3141,33 +3141,43 @@ function freezeRegExpSafely(re) {
   Object.freeze(re);
   return true;
 }
-function neuterMutators(target, methods, label) {
-  for (const method of methods) {
-    const refuse = () => {
-      throw new TypeError(
-        `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
-      );
-    };
-    Object.defineProperty(target, method, {
-      value: refuse,
-      writable: false,
-      configurable: false,
-      enumerable: false
-    });
-  }
+function refuseMutator(label, method) {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+    );
+  };
 }
 function sealSet(values, label = "this Set") {
-  const set = new Set(values);
-  neuterMutators(set, ["add", "delete", "clear"], label);
-  return Object.freeze(set);
+  const inner = new Set(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value) => inner.has(value),
+    keys: () => inner.keys(),
+    values: () => inner.values(),
+    entries: () => inner.entries(),
+    forEach: (callback, thisArg) => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade));
+    },
+    [Symbol.iterator]: () => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear")
+  };
+  return Object.freeze(facade);
 }
 function isSealedCollection(value) {
-  if (!(value instanceof Set) && !(value instanceof Map)) return false;
-  const methods = value instanceof Set ? ["add", "delete", "clear"] : ["set", "delete", "clear"];
-  return methods.every((method) => {
-    const descriptor = Object.getOwnPropertyDescriptor(value, method);
-    return descriptor !== void 0 && descriptor.writable === false && descriptor.configurable === false;
-  });
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues(value) {
+  if (!isSealedCollection(value)) return void 0;
+  return [...value];
 }
 function deepFreeze(value, options = {}) {
   const policy = options.regexps ?? "safe";
@@ -3185,23 +3195,14 @@ function deepFreeze(value, options = {}) {
     if (obj instanceof Date) {
       return;
     }
-    if (obj instanceof Set) {
-      if (!isSealedCollection(obj)) {
-        neuterMutators(obj, ["add", "delete", "clear"], "a nested Set");
-      }
-      Object.freeze(obj);
-      for (const entry of obj) walk(entry);
-      return;
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
     }
-    if (obj instanceof Map) {
-      if (!isSealedCollection(obj)) {
-        neuterMutators(obj, ["set", "delete", "clear"], "a nested Map");
-      }
-      Object.freeze(obj);
-      for (const [key, entry] of obj) {
-        walk(key);
-        walk(entry);
-      }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
       return;
     }
     Object.freeze(obj);
@@ -3214,8 +3215,10 @@ function deepFreeze(value, options = {}) {
   walk(value);
   return value;
 }
+var SEALED_BRAND;
 var init_sealed_collections = __esm({
   "../src/modules/kernel/workflows/sealed-collections.ts"() {
+    SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
   }
 });
 
@@ -4818,24 +4821,10 @@ var init_injection_guard = __esm({
 });
 
 // ../src/modules/security/workflows/redact-log.ts
-function sealSet2(values) {
-  const set = new Set(values);
-  const refuse = (op) => () => {
-    throw new TypeError(`REDACTABLE_FIELDS is sealed: ${op} would silently narrow redaction coverage`);
-  };
-  for (const method of ["add", "delete", "clear"]) {
-    Object.defineProperty(set, method, {
-      value: refuse(method),
-      writable: false,
-      configurable: false,
-      enumerable: false
-    });
-  }
-  return Object.freeze(set);
-}
 var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
 var init_redact_log = __esm({
   "../src/modules/security/workflows/redact-log.ts"() {
+    init_kernel();
     FIELD_SIZE_CAP_BYTES = 4 * 1024;
     TOKEN_SHAPE_PATTERNS = Object.freeze([
       Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
@@ -4863,7 +4852,7 @@ var init_redact_log = __esm({
       "assumption_text",
       "result"
     ]);
-    REDACTABLE_FIELDS = sealSet2(REDACTABLE_FIELD_NAMES);
+    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
   }
 });
 

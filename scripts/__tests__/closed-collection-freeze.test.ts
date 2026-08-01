@@ -49,6 +49,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 
+// The rail uses the shipped predicates on purpose: a private re-implementation could
+// drift from the primitive it is supposed to be checking.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { isSealedCollection, sealedCollectionValues } = require("../../src/modules/kernel/workflows/sealed-collections") as {
+  isSealedCollection: (v: unknown) => boolean;
+  sealedCollectionValues: (v: unknown) => unknown[] | undefined;
+};
+
 const REPO = path.resolve(__dirname, "..", "..");
 const PIN_PATH = path.join(__dirname, "fixtures", "closed-collection-inventory.json");
 
@@ -382,12 +390,20 @@ function walkValue(
   if (obj instanceof Date) return;
 
   if (obj instanceof Set || obj instanceof Map) {
-    const isSet = obj instanceof Set;
-    if (!mutatorsSealed(obj, isSet ? SET_MUTATORS : MAP_MUTATORS)) {
-      result.findings.push({ path: label, kind: isSet ? "unsealed-set" : "unsealed-map" });
-    }
-    const values = isSet ? obj.values() : (obj as Map<unknown, unknown>).values();
+    // ANY branded Set/Map reachable from an export is a finding, however "sealed" it
+    // looks. Neutering the own mutators does NOT close membership: the intrinsics reach
+    // the internal slot directly, and `Set.prototype.delete.call(x, k)` succeeded against
+    // a frozen, fully-neutered instance (round-1 P1). Only the sealSet/sealMap FACADE —
+    // which has no such slot — can be closed, so a real Set/Map here is by definition open.
+    result.findings.push({ path: label, kind: obj instanceof Set ? "unsealed-set" : "unsealed-map" });
+    const values = obj instanceof Set ? obj.values() : (obj as Map<unknown, unknown>).values();
     for (const value of values) walkValue(value, `${label}{}`, seen, result, depth + 1, true);
+    return;
+  }
+
+  const sealedValues = sealedCollectionValues(obj);
+  if (sealedValues !== undefined) {
+    for (const value of sealedValues) walkValue(value, `${label}{}`, seen, result, depth + 1, true);
     return;
   }
 
@@ -400,7 +416,15 @@ function walkValue(
   const proto = Object.getPrototypeOf(obj);
   // Class instances carry behaviour, not vocabulary; freezing them is a different call.
   if (proto !== Object.prototype && proto !== null) return;
-  if (insideCollection && !Object.isFrozen(obj)) {
+  // An object that OWNS a closed collection must itself be frozen, even at the root.
+  // `LEGAL_TRANSITIONS` is a `Record<State, readonly State[]>`: freezing every transition
+  // list while leaving the RECORD writable let `LEGAL_TRANSITIONS.terminated = ["running"]`
+  // reopen a terminal state with every rail green (round-1 P1). The container is as
+  // load-bearing as its contents.
+  const ownsCollection = Object.values(obj as Record<string, unknown>).some(
+    (v) => Array.isArray(v) || v instanceof Set || v instanceof Map || isSealedCollection(v),
+  );
+  if ((insideCollection || ownsCollection) && !Object.isFrozen(obj)) {
     result.findings.push({ path: label, kind: "unfrozen-object" });
   }
   // Namespace objects (an exported object grouping several vocabularies) are traversed —
@@ -582,10 +606,24 @@ describe("closed collections — the exploits, demonstrated against this branch"
       redactEventFields: (event: Record<string, unknown>) => Record<string, unknown>;
     };
     for (const method of SET_MUTATORS) {
+      // The obvious attack: call the method on the value.
       expect(() => {
         (security.REDACTABLE_FIELDS as unknown as Record<string, (v?: unknown) => void>)[method]("result");
       }).toThrow(TypeError);
+      // The attack that DEFEATED the first implementation: reach the intrinsic directly.
+      // Set's mutators act on the receiver's internal slot, so neutered own properties
+      // stopped `x.delete(...)` and nothing else — `Set.prototype.delete.call(x, "result")`
+      // succeeded against a frozen, fully-neutered Set and made an API token echo verbatim.
+      expect(() => {
+        (Set.prototype as unknown as Record<string, (this: unknown, v?: unknown) => void>)[method].call(
+          security.REDACTABLE_FIELDS,
+          "result",
+        );
+      }).toThrow(TypeError);
     }
+    // A sealed vocabulary is NOT a Set. That is the whole fix: no internal slot, nothing
+    // for the intrinsic to reach.
+    expect(security.REDACTABLE_FIELDS instanceof Set).toBe(false);
     expect(security.REDACTABLE_FIELDS.has("result")).toBe(true);
     const redacted = security.redactEventFields({ result: "token ghp_0123456789012345678901234567890123456" });
     expect(String(redacted.result)).not.toContain("ghp_0123456789012345678901234567890123456");
@@ -637,8 +675,15 @@ describe("closed collections — the exploits, demonstrated against this branch"
       LEGAL_TRANSITIONS: Readonly<Record<string, readonly string[]>>;
     };
     expect(dispatch.LEGAL_TRANSITIONS.terminated).toEqual([]);
+    // (a) the transition LIST cannot grow
     expect(() => {
       (dispatch.LEGAL_TRANSITIONS.terminated as string[]).push("running");
+    }).toThrow(TypeError);
+    // (b) and the RECORD cannot be re-pointed at a different list. Freezing every list
+    // while leaving the record writable left `LEGAL_TRANSITIONS.terminated = ["running"]`
+    // wide open, with the state machine reopened and every rail still green.
+    expect(() => {
+      (dispatch.LEGAL_TRANSITIONS as Record<string, readonly string[]>).terminated = Object.freeze(["running"]);
     }).toThrow(TypeError);
     expect(dispatch.LEGAL_TRANSITIONS.terminated).toEqual([]);
   });
@@ -736,6 +781,10 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
   const { neutralFreeze } = require(path.join(REPO, "src", "modules", "lifecycle", "index.ts")) as {
     neutralFreeze: <T>(v: T) => T;
   };
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { sealSet } = require(path.join(REPO, "src", "modules", "kernel", "index.ts")) as {
+    sealSet: <T>(v: Iterable<T>, label?: string) => ReadonlySet<T>;
+  };
 
   const describeFrozen = (root: unknown): string[] => {
     const out: string[] = [];
@@ -781,16 +830,30 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
     }
   });
 
-  it("DOCUMENTS the divergence: only the kernel primitive can seal a Set", () => {
-    const kernelSealed = deepFreeze({ names: new Set(["x"]) }) as { names: Set<string> };
-    expect(() => kernelSealed.names.add("y")).toThrow(TypeError);
+  it("DOCUMENTS the divergence: only the kernel primitive can CLOSE a Set", () => {
+    // The kernel primitive replaces the Set with a frozen FACADE that has no [[SetData]]
+    // slot, so neither the method nor the intrinsic can reach membership.
+    const closed = deepFreeze({ names: sealSet(["x"], "TEST") }) as { names: ReadonlySet<string> };
+    expect(closed.names instanceof Set).toBe(false);
+    expect(() => (closed.names as Set<string>).add("y")).toThrow(TypeError);
+    expect(() => Set.prototype.add.call(closed.names, "y")).toThrow(TypeError);
+    expect(closed.names.has("y")).toBe(false);
 
-    const neutralSealed = neutralFreeze({ names: new Set(["x"]) }) as { names: Set<string> };
-    // NOT a bug — a contract consequence. `Object.isFrozen` says true and membership still
-    // changes, which is precisely the false green this whole rail exists to catch.
-    expect(Object.isFrozen(neutralSealed.names)).toBe(true);
-    neutralSealed.names.add("y");
-    expect(neutralSealed.names.has("y")).toBe(true);
+    // The neutral core cannot call `defineProperty` and cannot build the facade either
+    // (both need bindings outside NEUTRAL_PURE_INTRINSIC_ROOTS), so its copy can only
+    // FREEZE a Set — which closes nothing while `Object.isFrozen` reports success. That is
+    // precisely the false green this rail exists to catch, so the next test makes the
+    // situation unreachable rather than tolerable.
+    const notClosed = neutralFreeze({ names: new Set(["x"]) }) as { names: Set<string> };
+    expect(Object.isFrozen(notClosed.names)).toBe(true);
+    notClosed.names.add("y");
+    expect(notClosed.names.has("y")).toBe(true);
+  });
+
+  it("and the kernel primitive REFUSES to pretend it froze a branded Set", () => {
+    // Silently "freezing" a Set is how the false green gets minted. deepFreeze throws
+    // instead, naming the fix.
+    expect(() => deepFreeze({ raw: new Set([1]) })).toThrow(/sealSet/);
   });
 
   it("so NO Set or Map may be reachable from a neutral-core export", () => {
@@ -807,7 +870,7 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
       if (seen.has(o)) return;
       seen.add(o);
       if (o instanceof Set || o instanceof Map) {
-        if (!mutatorsSealed(o, o instanceof Set ? SET_MUTATORS : MAP_MUTATORS)) offenders.push(label);
+        offenders.push(label); // any branded Set/Map is open by construction
         return;
       }
       if (Array.isArray(o)) { o.forEach((v, i) => walk(v, `${label}[${i}]`, depth + 1)); return; }

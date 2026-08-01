@@ -77,57 +77,109 @@ export function freezeRegExpSafely(re: RegExp): boolean {
   return true;
 }
 
-function neuterMutators(target: object, methods: readonly string[], label: string): void {
-  for (const method of methods) {
-    const refuse = (): never => {
-      throw new TypeError(
-        `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`,
-      );
-    };
-    Object.defineProperty(target, method, {
-      value: refuse,
-      writable: false,
-      configurable: false,
-      enumerable: false,
-    });
-  }
+/**
+ * Marks a value produced by {@link sealSet} / {@link sealMap}. A brand rather than an
+ * `instanceof` check, because the whole point is that these are NOT Set/Map instances.
+ */
+const SEALED_BRAND: unique symbol = Symbol.for("guild.sealed_collection.v1");
+
+function refuseMutator(label: string, method: string): () => never {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`,
+    );
+  };
 }
 
 /**
- * Build a Set whose membership CANNOT change. `add`/`delete`/`clear` are replaced with
- * throwing stubs installed as non-writable, non-configurable own properties, so they can
- * be neither called nor redefined; the instance is then frozen so no other own property
- * can be added either.
+ * Build a read-only view whose membership CANNOT change — a FROZEN FACADE over a private
+ * Set, not a Set.
  *
- * `label` names the consequence in the thrown message — the point of a sealed vocabulary
- * is that a caller who trips it learns WHY, not just that something was readonly.
+ * WHY NOT A NEUTERED Set (adversarial review, task #22 round 1, P1). The obvious
+ * implementation — construct a Set, replace `add`/`delete`/`clear` with throwing stubs as
+ * non-writable, non-configurable own properties, freeze the instance — LOOKS airtight and
+ * is not. Set's mutators operate on the receiver's INTERNAL SLOT, not through its own
+ * properties, so the intrinsic reaches straight past the stubs:
+ *
+ *     Set.prototype.delete.call(REDACTABLE_FIELDS, "result");   // succeeded
+ *     redactEventFields({ result: apiToken }).result            // the token, VERBATIM
+ *
+ * Reproduced against the shipped code. The own-property stubs stop `x.delete(...)` and
+ * nothing else, so a branded Set can never be made immutable — the fix has to remove the
+ * brand. This facade has no [[SetData]] slot, so `Set.prototype.delete.call(facade, ...)`
+ * throws `TypeError: Method Set.prototype.delete called on incompatible receiver`.
+ *
+ * The facade satisfies `ReadonlySet<T>` structurally (`has`, `size`, `keys`, `values`,
+ * `entries`, `forEach`, `Symbol.iterator`), so spreads, `for…of`, and
+ * `new Set([...VOCAB, x])` all keep working. It also keeps NAMED throwing stubs for the
+ * three mutators: a caller who tries learns WHY rather than getting "not a function".
  */
 export function sealSet<T>(values: Iterable<T>, label = "this Set"): ReadonlySet<T> {
-  const set = new Set<T>(values);
-  neuterMutators(set, ["add", "delete", "clear"], label);
-  return Object.freeze(set);
-}
-
-/** The Map counterpart of {@link sealSet}. Neuters `set`/`delete`/`clear`. */
-export function sealMap<K, V>(entries: Iterable<readonly [K, V]>, label = "this Map"): ReadonlyMap<K, V> {
-  const map = new Map<K, V>(entries as Iterable<[K, V]>);
-  neuterMutators(map, ["set", "delete", "clear"], label);
-  return Object.freeze(map);
+  const inner = new Set<T>(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value: T): boolean => inner.has(value),
+    keys: (): SetIterator<T> => inner.keys(),
+    values: (): SetIterator<T> => inner.values(),
+    entries: (): SetIterator<[T, T]> => inner.entries(),
+    forEach: (callback: (value: T, value2: T, set: ReadonlySet<T>) => void, thisArg?: unknown): void => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade as ReadonlySet<T>));
+    },
+    [Symbol.iterator]: (): SetIterator<T> => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear"),
+  };
+  return Object.freeze(facade) as unknown as ReadonlySet<T>;
 }
 
 /**
- * `true` when `value` is a Set/Map whose mutators have been neutered by {@link sealSet} /
- * {@link sealMap}. Structural check only — the rail additionally proves the BEHAVIOUR by
- * calling the mutator and requiring a throw, because a structural check can be satisfied
- * by a stub that does nothing.
+ * The Map counterpart of {@link sealSet}, and a frozen facade for the same reason:
+ * `Map.prototype.set.call(neuteredMap, k, v)` reaches the internal slot regardless of the
+ * own-property stubs.
+ */
+export function sealMap<K, V>(entries: Iterable<readonly [K, V]>, label = "this Map"): ReadonlyMap<K, V> {
+  const inner = new Map<K, V>(entries as Iterable<[K, V]>);
+  const facade = {
+    [SEALED_BRAND]: "map",
+    size: inner.size,
+    has: (key: K): boolean => inner.has(key),
+    get: (key: K): V | undefined => inner.get(key),
+    keys: (): MapIterator<K> => inner.keys(),
+    values: (): MapIterator<V> => inner.values(),
+    entries: (): MapIterator<[K, V]> => inner.entries(),
+    forEach: (callback: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown): void => {
+      inner.forEach((value, key) => callback.call(thisArg, value, key, facade as unknown as ReadonlyMap<K, V>));
+    },
+    [Symbol.iterator]: (): MapIterator<[K, V]> => inner[Symbol.iterator](),
+    set: refuseMutator(label, "set"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear"),
+  };
+  return Object.freeze(facade) as unknown as ReadonlyMap<K, V>;
+}
+
+/**
+ * `true` when `value` is a sealed facade from {@link sealSet} / {@link sealMap}.
+ *
+ * Deliberately returns FALSE for a real `Set`/`Map`, however heavily neutered: a branded
+ * collection carries an internal slot the intrinsics can always reach, so "a Set that
+ * looks sealed" is precisely the false green this predicate must not grant.
  */
 export function isSealedCollection(value: unknown): boolean {
-  if (!(value instanceof Set) && !(value instanceof Map)) return false;
-  const methods = value instanceof Set ? ["add", "delete", "clear"] : ["set", "delete", "clear"];
-  return methods.every((method) => {
-    const descriptor = Object.getOwnPropertyDescriptor(value, method);
-    return descriptor !== undefined && descriptor.writable === false && descriptor.configurable === false;
-  });
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = (value as Record<symbol, unknown>)[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+
+/** The values a sealed facade holds, or `undefined` when `value` is not one. */
+export function sealedCollectionValues(value: unknown): unknown[] | undefined {
+  if (!isSealedCollection(value)) return undefined;
+  return [...(value as Iterable<unknown>)];
 }
 
 /**
@@ -160,23 +212,20 @@ export function deepFreeze<T>(value: T, options: DeepFreezeOptions = {}): T {
       // honest move is to leave it and let the caller not export mutable Dates.
       return;
     }
-    if (obj instanceof Set) {
-      if (!isSealedCollection(obj)) {
-        neuterMutators(obj, ["add", "delete", "clear"], "a nested Set");
-      }
-      Object.freeze(obj);
-      for (const entry of obj) walk(entry);
-      return;
+    if (obj instanceof Set || obj instanceof Map) {
+      // A branded Set/Map CANNOT be closed in place: its mutators reach an internal slot,
+      // so `Set.prototype.delete.call(x, ...)` works no matter what own properties say.
+      // Freezing it would report success and buy nothing, so this REFUSES instead of
+      // pretending. Replace the declaration with `sealSet(...)` / `sealMap(...)`, whose
+      // facade has no such slot. The rail asserts no branded collection stays reachable.
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map — freeze does not close membership " +
+          "and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap().",
+      );
     }
-    if (obj instanceof Map) {
-      if (!isSealedCollection(obj)) {
-        neuterMutators(obj, ["set", "delete", "clear"], "a nested Map");
-      }
-      Object.freeze(obj);
-      for (const [key, entry] of obj) {
-        walk(key);
-        walk(entry);
-      }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== undefined) {
+      for (const entry of sealedValues) walk(entry);
       return;
     }
 

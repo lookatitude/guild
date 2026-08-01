@@ -31,6 +31,8 @@
 // pins the source strings match.
 
 /** Sentinel for token-shape redactions (group 1). */
+import { sealSet } from "../../kernel";
+
 export const TOKEN_REDACTED = "[REDACTED_TOKEN]";
 
 /** Sentinel for home-dir path suffixes (group 2). */
@@ -412,23 +414,8 @@ const REDACTABLE_FIELD_NAMES = Object.freeze([
   "result",
 ] as const);
 
-function sealSet<T>(values: readonly T[]): ReadonlySet<T> {
-  const set = new Set<T>(values);
-  const refuse = (op: string) => () => {
-    throw new TypeError(`REDACTABLE_FIELDS is sealed: ${op} would silently narrow redaction coverage`);
-  };
-  for (const method of ["add", "delete", "clear"] as const) {
-    Object.defineProperty(set, method, {
-      value: refuse(method),
-      writable: false,
-      configurable: false,
-      enumerable: false,
-    });
-  }
-  return Object.freeze(set);
-}
 
-export const REDACTABLE_FIELDS: ReadonlySet<string> = sealSet(REDACTABLE_FIELD_NAMES);
+export const REDACTABLE_FIELDS: ReadonlySet<string> = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
 
 /**
  * Apply field-level redaction to every redactable string in `event`.

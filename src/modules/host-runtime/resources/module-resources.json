@@ -773,7 +773,7 @@
       "id": "projection:src/modules/kernel/workflows/sealed-collections.ts",
       "source_path": "src/modules/kernel/workflows/sealed-collections.ts",
       "resource_path": "resources/src/modules/kernel/workflows/sealed-collections.ts",
-      "sha256": "71994fe36a1e82ccb89d3bab1c8d2dc040809b3ad374086b1d54f7787adf5912",
+      "sha256": "6ab58159d839b3db136f3ca6e8a09702b6844e5f19c9215043c4f2907ac1f7f2",
       "projection_dependency": true
     },
     {
@@ -1157,7 +1157,7 @@
       "id": "projection:src/modules/security/workflows/redact-log.ts",
       "source_path": "src/modules/security/workflows/redact-log.ts",
       "resource_path": "resources/src/modules/security/workflows/redact-log.ts",
-      "sha256": "194410b49b592d1442af3984eec64d1cd118a84110f7a27ea97c813e8fea78fa",
+      "sha256": "762a5a877e182030cd406853fa42ef32d18742eb311373f4126694d3279b7ec6",
       "projection_dependency": true
     },
     {
