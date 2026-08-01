@@ -147,12 +147,24 @@ Implements brief §178-201 ordered flow, SC-A:
 
     ```bash
     npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts hash-tree \
-      --cwd <root> --json > .guild/runs/<run-id>/capability/baseline.json
+      --cwd <root> --json --for-run <run-id> > .guild/runs/<run-id>/capability/baseline.json
     ```
 
-    A malformed baseline is a REFUSAL (`invalid_baseline`), never a silent
-    fall-back to the narrow window — falling back would quietly downgrade the
-    claim the emitted profile makes.
+    **`--for-run <run-id>` is required**, not decorative: it BINDS the baseline to
+    this project root and this run. Without it the emitter refuses the baseline
+    rather than treating an unbound hash triple as a run-start capture — a
+    cross-project baseline was otherwise accepted and reported whole-run coverage
+    it never had.
+
+    A malformed, foreign or wrong-run baseline is a REFUSAL (`invalid_baseline`),
+    never a silent fall-back to the narrow window — falling back would quietly
+    downgrade the claim the emitted profile makes.
+
+    **What the binding cannot prove: CAPTURE TIME.** Capturing at step 8 and
+    passing it here yields `mutation_window: "run"` for a window that began at
+    step 8. `"run"` therefore means "the caller asserts this is from run start";
+    only `"emission"` is established unaided. Capture it at step 1 as written
+    above and the assertion is true.
 
     Mode behaviour, all one implementation:
     - `capability.resolver_mode: legacy` → **no emission** (typed refusal

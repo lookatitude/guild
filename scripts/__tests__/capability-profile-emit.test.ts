@@ -21,6 +21,7 @@ import * as os from "os";
 import * as path from "path";
 
 import {
+  baselineBinding,
   emitCapabilityProfile,
   hashTree,
   profileRelPath,
@@ -81,6 +82,15 @@ const EMPTY_FACTS: DerivedFacts = {
   coverage: { covered: [], uncovered: [], unmatched_roles: [] },
   candidates: [],
 };
+
+/** A baseline BOUND to this tmp project and this run — what the emitter accepts. */
+function boundBaseline(runId: string = RUN_ID) {
+  return {
+    ...snapshotTreeHashes(tmp)!,
+    bound_root: baselineBinding(tmp)!,
+    bound_run_id: runId,
+  };
+}
 
 function emit(over: Partial<Parameters<typeof emitCapabilityProfile>[0]> = {}) {
   return emitCapabilityProfile({
@@ -233,13 +243,16 @@ describe("A1.7 — a real emission mutates nothing", () => {
     // Steps 1-4 prove the derivation was clean; only the post-write re-hash proves
     // the EMISSION was. Without step 7 this case emits a profile that lies.
     mk(".guild/agents/backend.md", "# backend\n");
-    const realWrite = fs.writeFileSync;
-    const spy = jest.spyOn(fs, "writeFileSync").mockImplementation(((p: never, d: never, o: never) => {
-      realWrite(p, d, o);
-      if (String(p).includes("capability/profile.json")) {
-        realWrite(path.join(tmp, ".guild/agents/late.md"), "# late\n", "utf8");
+    // Hooked on `renameSync`, which is the moment the profile LANDS — the write
+    // is atomic (temp + rename), so that is the real path a planted writer would
+    // have to sit on.
+    const realRename = fs.renameSync;
+    const spy = jest.spyOn(fs, "renameSync").mockImplementation(((a: never, b: never) => {
+      realRename(a, b);
+      if (String(b).includes("capability/profile.json")) {
+        fs.writeFileSync(path.join(tmp, ".guild/agents/late.md"), "# late\n", "utf8");
       }
-    }) as typeof fs.writeFileSync);
+    }) as typeof fs.renameSync);
 
     try {
       const r = emit();
@@ -255,7 +268,7 @@ describe("A1.7 — a real emission mutates nothing", () => {
 describe("baselineHashes — widening the window to the WHOLE Learn run", () => {
   it("a run-start baseline becomes the `before` half", () => {
     mk(".guild/agents/backend.md", "# backend\n");
-    const baseline = snapshotTreeHashes(tmp);
+    const baseline = boundBaseline();
     const r = emit({ baselineHashes: baseline });
     expect(r.status).toBe("emitted");
     if (r.status !== "emitted") return;
@@ -268,7 +281,7 @@ describe("baselineHashes — widening the window to the WHOLE Learn run", () => 
     // snapshots are taken after the write and agree — a clean-looking profile for
     // a run that mutated. With the run-start baseline, they disagree.
     mk(".guild/agents/backend.md", "# backend\n");
-    const runStart = snapshotTreeHashes(tmp);
+    const runStart = boundBaseline();
 
     mk(".guild/agents/written-mid-run.md", "# smuggled\n"); // an earlier Learn stage
 
@@ -289,13 +302,22 @@ describe("baselineHashes — widening the window to the WHOLE Learn run", () => 
     // that returned one value here and another on a second read would let a
     // mutated run produce a matching pair.
     let fired = 0;
-    const hostile = Object.defineProperty({ skills: "a".repeat(64), registries: "b".repeat(64) }, "agents", {
-      enumerable: true,
-      get() {
-        fired += 1;
-        return "c".repeat(64);
+    const hostile = Object.defineProperty(
+      {
+        skills: "a".repeat(64),
+        registries: "b".repeat(64),
+        bound_root: "c".repeat(64),
+        bound_run_id: RUN_ID,
       },
-    });
+      "agents",
+      {
+        enumerable: true,
+        get() {
+          fired += 1;
+          return "c".repeat(64);
+        },
+      }
+    );
     const r = emit({ baselineHashes: hostile as never });
     expect(r.status).toBe("refused");
     if (r.status === "refused") expect(r.code).toBe("invalid_baseline");
@@ -303,12 +325,18 @@ describe("baselineHashes — widening the window to the WHOLE Learn run", () => 
   });
 
   it("rejects Proxy, symbol keys, unknown keys, and non-hex values", () => {
-    const good = { agents: "a".repeat(64), skills: "b".repeat(64), registries: "c".repeat(64) };
+    const good = {
+      agents: "a".repeat(64),
+      skills: "b".repeat(64),
+      registries: "c".repeat(64),
+      bound_root: "d".repeat(64),
+      bound_run_id: RUN_ID,
+    };
     const cases: unknown[] = [
       new Proxy(good, {}),
       Object.assign({ [Symbol("x")]: 1 }, good),
       { ...good, bogus: 1 },
-      { agents: good.agents, skills: good.skills }, // missing key
+      { agents: good.agents, skills: good.skills }, // missing keys
       { ...good, agents: "not-a-hash" },
       { ...good, agents: "A".repeat(64) }, // uppercase — one spelling only
       Object.assign(Object.create({ inherited: 1 }), good),
@@ -579,7 +607,7 @@ describe("CODEX ROUND 2 — regressions for the reported counterexamples", () =>
     if (narrow.status === "emitted") expect(narrow.window).toBe("emission");
 
     fs.rmSync(path.join(tmp, ".guild/runs"), { recursive: true, force: true });
-    const wide = emit({ baselineHashes: snapshotTreeHashes(tmp)! });
+    const wide = emit({ baselineHashes: boundBaseline() });
     expect(wide.status).toBe("emitted");
     if (wide.status === "emitted") expect(wide.window).toBe("run");
   });
@@ -637,13 +665,13 @@ describe("CODEX ROUND 2 — regressions for the reported counterexamples", () =>
     const abs = path.join(tmp, profileRelPath(RUN_ID));
     const original = fs.readFileSync(abs, "utf8");
 
-    const realWrite = fs.writeFileSync;
-    const spy = jest.spyOn(fs, "writeFileSync").mockImplementation(((p: never, d: never, o: never) => {
-      realWrite(p, d, o);
-      if (String(p).includes("capability/profile.json")) {
-        realWrite(path.join(tmp, ".guild/agents/late.md"), "# late\n", "utf8");
+    const realRename = fs.renameSync;
+    const spy = jest.spyOn(fs, "renameSync").mockImplementation(((a: never, b: never) => {
+      realRename(a, b);
+      if (String(b).includes("capability/profile.json")) {
+        fs.writeFileSync(path.join(tmp, ".guild/agents/late.md"), "# late\n", "utf8");
       }
-    }) as typeof fs.writeFileSync);
+    }) as typeof fs.renameSync);
     try {
       const r = emit();
       expect(r.status).toBe("refused");
@@ -684,7 +712,7 @@ describe("the mutation window reaches the ARTIFACT, not just the result", () => 
 
   it("a run-start baseline ⇒ the file itself says \"run\"", () => {
     mk(".guild/agents/backend.md", "# backend\n");
-    const r = emit({ baselineHashes: snapshotTreeHashes(tmp)! });
+    const r = emit({ baselineHashes: boundBaseline() });
     expect(r.status).toBe("emitted");
     if (r.status !== "emitted") return;
     expect(r.profile.mutation_window).toBe("run");
@@ -734,5 +762,126 @@ describe("CROSS-LANE CLASS — lexical path checks need a realpath half", () => 
     // A containment check that refused everything would pass both rows above.
     mk(".guild/agents/backend.md", "# backend\n");
     expect(emit().status).toBe("emitted");
+  });
+});
+
+
+describe("CODEX ROUND 4 — regressions for the reported counterexamples", () => {
+  it("finding C — a DANGLING symlink at the leaf no longer escapes", () => {
+    // existsSync FOLLOWS symlinks, so a dangling one read as "does not exist" and
+    // the climb validated its in-root parent instead. Reproduced: the file was
+    // created OUTSIDE the project root and the emitter reported success.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "dangle-"));
+    const target = path.join(outside, "escaped.json");
+    fs.mkdirSync(path.join(tmp, ".guild/runs", RUN_ID, "capability"), { recursive: true });
+    fs.symlinkSync(target, path.join(tmp, profileRelPath(RUN_ID)));
+    expect(fs.existsSync(target)).toBe(false); // dangling
+
+    const r = emit();
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("escapes_project_root");
+    expect(fs.existsSync(target)).toBe(false); // nothing created outside
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("finding A — a baseline from ANOTHER PROJECT is refused", () => {
+    // Reproduced: hashes from project A emitted `mutation_window: "run"` for
+    // project B. Bare hashes carry no provenance; the binding supplies it.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "otherproj-"));
+    fs.mkdirSync(path.join(other, ".guild/agents"), { recursive: true });
+    fs.writeFileSync(path.join(other, ".guild/agents/backend.md"), "# backend\n");
+
+    const foreign = {
+      ...snapshotTreeHashes(other)!,
+      bound_root: baselineBinding(other)!,
+      bound_run_id: RUN_ID,
+    };
+    const r = emit({ baselineHashes: foreign });
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("invalid_baseline");
+    fs.rmSync(other, { recursive: true, force: true });
+  });
+
+  it("finding A — a baseline captured for ANOTHER RUN is refused", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const r = emit({ baselineHashes: boundBaseline("run-20260101-000000-other") });
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("invalid_baseline");
+  });
+
+  it("finding A — an UNBOUND baseline is refused, not silently trusted", () => {
+    // The old shape. It must not be readable as a run-start capture any more.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const r = emit({ baselineHashes: snapshotTreeHashes(tmp) as never });
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("invalid_baseline");
+  });
+
+  it("ANTI-VACUITY: a correctly bound baseline still yields window \"run\"", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const r = emit({ baselineHashes: boundBaseline() });
+    expect(r.status).toBe("emitted");
+    if (r.status === "emitted") expect(r.profile.mutation_window).toBe("run");
+  });
+
+  it("finding E — a failed write cannot destroy the previous profile", () => {
+    // writeFileSync truncates before writing, so a failure part-way left the old
+    // profile empty. The replacement is atomic (temp + rename): either the old
+    // bytes or the new, never a torn file.
+    mk(".guild/agents/backend.md", "# backend\n");
+    expect(emit().status).toBe("emitted");
+    const abs = path.join(tmp, profileRelPath(RUN_ID));
+    const original = fs.readFileSync(abs, "utf8");
+
+    const spy = jest.spyOn(fs, "writeSync").mockImplementation(() => {
+      throw new Error("ENOSPC");
+    });
+    try {
+      const r = emit();
+      expect(r.status).toBe("refused");
+      if (r.status === "refused") expect(r.code).toBe("write_failed");
+    } finally {
+      spy.mockRestore();
+    }
+    // Untouched, not truncated.
+    expect(fs.readFileSync(abs, "utf8")).toBe(original);
+  });
+
+  it("finding G — a FIFO at the destination does not block the backup read", () => {
+    // readFileSync on a FIFO with no writer blocks forever. The backup read is
+    // now type- and size-checked first.
+    mk(".guild/agents/backend.md", "# backend\n");
+    fs.mkdirSync(path.join(tmp, ".guild/runs", RUN_ID, "capability"), { recursive: true });
+    const abs = path.join(tmp, profileRelPath(RUN_ID));
+    try {
+      require("child_process").execFileSync("mkfifo", [abs]);
+    } catch {
+      return; // mkfifo unavailable — skip rather than assert a false pass
+    }
+    // Must return promptly, not hang. Jest would time out if the read blocked.
+    const r = emit();
+    expect(r.status === "emitted" || r.status === "refused").toBe(true);
+  });
+
+  it("finding E — a rollback onto an ESCAPING path is refused, not performed", () => {
+    // The cleanup path was doing exactly what the write path was hardened
+    // against: rmSync/writeFileSync with no fresh containment check.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "rollback-"));
+    const victim = path.join(outside, "victim.txt");
+    fs.writeFileSync(victim, "precious");
+
+    // Land a valid profile first, then redirect the leaf and force a rollback.
+    expect(emit().status).toBe("emitted");
+    const abs = path.join(tmp, profileRelPath(RUN_ID));
+    fs.rmSync(abs);
+    fs.symlinkSync(victim, abs);
+
+    const r = emit();
+    expect(r.status).toBe("refused");
+    expect(fs.readFileSync(victim, "utf8")).toBe("precious"); // untouched
+    fs.rmSync(outside, { recursive: true, force: true });
   });
 });

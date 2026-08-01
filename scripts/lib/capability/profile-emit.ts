@@ -288,6 +288,43 @@ export interface TreeHashes {
 }
 
 /**
+ * A baseline PLUS the identity of what it was captured against.
+ *
+ * ── WHY THE BARE HASHES WERE NOT ENOUGH ─────────────────────────────────────
+ * Reported and reproduced: hashes captured from project A were accepted for an
+ * identically-shaped project B, and the emitter reported
+ * `mutation_window: "run"` — a whole-run no-mutation claim backed by a baseline
+ * from a different project. Bare hashes carry no provenance, so any structurally
+ * valid triple looked like a run-start capture.
+ *
+ * The binding is the REALPATH of the project root plus the run id, so a baseline
+ * is only usable for the project and run it was taken in.
+ *
+ * ── WHAT THIS STILL CANNOT PROVE, STATED PLAINLY ────────────────────────────
+ * CAPTURE TIME. A caller that snapshots at Learn step 8 instead of step 1 and
+ * passes it here gets `"run"` for a window that began at step 8. Nothing in a
+ * filesystem hash can prove when it was taken, so `mutation_window: "run"` means
+ * "the CALLER asserts this baseline is from run start", while `"emission"` is the
+ * only value this module establishes unaided. That asymmetry is the honest
+ * reading of the field and belongs with the field, not in a reviewer's memory.
+ */
+export interface BoundBaseline extends TreeHashes {
+  /** sha256 of the realpath'd project root — binds the baseline to ONE project. */
+  bound_root: string;
+  /** The run this baseline was captured for. */
+  bound_run_id: string;
+}
+
+/** The binding value for a project root, or null when it cannot be resolved. */
+export function baselineBinding(projectRoot: string): string | null {
+  try {
+    return createHash("sha256").update(fs.realpathSync(projectRoot)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The three hashes S1's `mutation_evidence` compares. One call, one snapshot.
  *
  * Returns `null` when ANY of the three could not be computed completely — the
@@ -434,7 +471,7 @@ export interface EmitProfileOptions {
    * window it can see, rather than pretending to a wider one. The narrower claim
    * is the correct fallback; a fabricated wider one would not be.
    */
-  baselineHashes?: TreeHashes;
+  baselineHashes?: BoundBaseline;
 }
 
 /** RFC3339 UTC, shape-checked. `"not-rfc3339"` is not a timestamp (Codex r2, L). */
@@ -559,9 +596,28 @@ function isContainedRealPath(projectRoot: string, abs: string): boolean {
   try {
     const rootReal = fs.realpathSync(projectRoot);
     let probe = abs;
-    // Walk up to the deepest ancestor that exists, then resolve it.
+    // Climb to the deepest ancestor that EXISTS AS A PATH ENTRY.
+    //
+    // `lstatSync`, NOT `existsSync`. Reported defect: `existsSync` FOLLOWS
+    // symlinks, so a DANGLING symlink reads as "does not exist" — the climb then
+    // skipped past it and validated its in-root parent instead. Reproduced with
+    //     .../capability/profile.json -> /tmp/outside/escaped.json
+    // where the target did not yet exist: the check passed and the write created
+    // the file outside the root. `lstatSync` sees the LINK itself, so a dangling
+    // symlink is a present entry and is caught below.
     for (;;) {
-      if (fs.existsSync(probe)) break;
+      let st: fs.Stats | null = null;
+      try {
+        st = fs.lstatSync(probe);
+      } catch {
+        st = null;
+      }
+      if (st !== null) {
+        // A symlink anywhere on the resolved path — including a dangling one at
+        // the leaf — means this path is not the path it appears to be.
+        if (st.isSymbolicLink()) return false;
+        break;
+      }
       const parent = path.dirname(probe);
       if (parent === probe) return false;
       probe = parent;
@@ -571,6 +627,71 @@ function isContainedRealPath(projectRoot: string, abs: string): boolean {
     return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
   } catch {
     return false;
+  }
+}
+
+/**
+ * Largest previous profile this module will read back before overwriting it.
+ * Matches the consumer's file cap. Reported: the backup read had no size or type
+ * check, so a FIFO at the destination blocked `readFileSync` forever and a
+ * multi-gigabyte file caused an unbounded allocation.
+ */
+const MAX_PRIOR_PROFILE_BYTES = 256 * 1024;
+
+/**
+ * Read the existing profile so a post-write refusal can restore it — or return
+ * null when there is nothing safe to read.
+ *
+ * Type-checked with `lstat` (regular file only: never a FIFO, device or symlink)
+ * and size-checked before any read.
+ */
+function readPriorProfile(abs: string): Buffer | null {
+  try {
+    const st = fs.lstatSync(abs);
+    if (!st.isFile()) return null; // FIFO / device / symlink / directory
+    if (st.size > MAX_PRIOR_PROFILE_BYTES) return null;
+    return fs.readFileSync(abs);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write `bytes` to `abs` ATOMICALLY, refusing to follow a symlink at the leaf.
+ *
+ * Two reported defects, one fix:
+ *   - `writeFileSync` truncates before writing, so a failure part-way (ENOSPC)
+ *     left the PREVIOUS profile empty — destroyed by the act of replacing it.
+ *   - the leaf could be swapped for a symlink between the containment check and
+ *     the write, redirecting it outside the root.
+ *
+ * Writing to a temp file in the SAME directory and `rename`-ing over the target
+ * makes the replacement atomic (either the old bytes or the new, never a torn
+ * file), and `O_NOFOLLOW` on the temp's creation refuses a symlink at that final
+ * component. Returns false on any failure rather than throwing.
+ */
+function writeFileAtomicNoFollow(abs: string, bytes: Buffer): boolean {
+  const tmp = `${abs}.tmp-${process.pid}`;
+  let fd: number | null = null;
+  try {
+    // O_EXCL: the temp must not already exist, so it cannot be a planted symlink.
+    // O_NOFOLLOW: refuse even if it is one.
+    fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+    fs.writeSync(fd, bytes);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
+    fs.renameSync(tmp, abs);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try {
+      if (fd !== null) fs.closeSync(fd);
+      if (fs.existsSync(tmp)) fs.rmSync(tmp, { force: true });
+    } catch {
+      /* best effort cleanup */
+    }
   }
 }
 
@@ -586,14 +707,14 @@ function isContainedRealPath(projectRoot: string, abs: string): boolean {
  *
  * Returns the sanitized hashes, or `null` for "reject".
  */
-function resolveBaselineHashes(value: unknown): TreeHashes | null {
+function resolveBaselineHashes(value: unknown): BoundBaseline | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   if (nodeTypes.isProxy(value)) return null;
   const proto = Object.getPrototypeOf(value);
   if (proto !== Object.prototype && proto !== null) return null;
   if (Object.getOwnPropertySymbols(value).length > 0) return null;
 
-  const keys = ["agents", "skills", "registries"] as const;
+  const keys = ["agents", "skills", "registries", "bound_root", "bound_run_id"] as const;
   const own = Object.getOwnPropertyNames(value);
   if (own.length !== keys.length) return null;
   for (const k of own) if (!(keys as readonly string[]).includes(k)) return null;
@@ -602,10 +723,22 @@ function resolveBaselineHashes(value: unknown): TreeHashes | null {
   for (const k of keys) {
     const desc = Object.getOwnPropertyDescriptor(value, k);
     if (!desc || !("value" in desc)) return null; // accessor — never fired
-    if (typeof desc.value !== "string" || !TREE_HASH_RE.test(desc.value)) return null;
+    if (typeof desc.value !== "string") return null;
+    // Hash-shaped fields are hex; `bound_run_id` is a run slug.
+    if (k === "bound_run_id") {
+      if (!isRealRunDir(desc.value)) return null;
+    } else if (!TREE_HASH_RE.test(desc.value)) {
+      return null;
+    }
     out[k] = desc.value;
   }
-  return { agents: out.agents, skills: out.skills, registries: out.registries };
+  return {
+    agents: out.agents,
+    skills: out.skills,
+    registries: out.registries,
+    bound_root: out.bound_root,
+    bound_run_id: out.bound_run_id,
+  };
 }
 
 /**
@@ -694,14 +827,32 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       };
     }
 
-    let baseline: TreeHashes | null = null;
+    let baseline: BoundBaseline | null = null;
     if (o.baselineHashes !== undefined) {
       baseline = resolveBaselineHashes(o.baselineHashes);
       if (baseline === null) {
         return {
           status: "refused",
           code: "invalid_baseline",
-          detail: "baselineHashes is not three bare 64-hex tree hashes",
+          detail: "baselineHashes is not a bound baseline (3 tree hashes + bound_root + bound_run_id)",
+        };
+      }
+      // THE BINDING CHECK. A baseline from another project or another run is a
+      // whole-run claim about something else; reproduced as a cross-project
+      // baseline emitting `mutation_window: "run"`.
+      const binding = baselineBinding(o.projectRoot);
+      if (binding === null || baseline.bound_root !== binding) {
+        return {
+          status: "refused",
+          code: "invalid_baseline",
+          detail: "baseline was captured against a different project root",
+        };
+      }
+      if (baseline.bound_run_id !== o.runId) {
+        return {
+          status: "refused",
+          code: "invalid_baseline",
+          detail: `baseline was captured for run "${baseline.bound_run_id}", not "${o.runId}"`,
         };
       }
     }
@@ -811,8 +962,22 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       //
       // So: check the deepest EXISTING ancestor BEFORE creating anything, then
       // create, then check again now that the real destination exists. The first
-      // check bounds the mkdir; the second bounds the write. Neither substitutes
-      // for the other.
+      // check bounds the mkdir; the second bounds the write.
+      //
+      // ── THE RESIDUAL, STATED RATHER THAN PAPERED OVER ──────────────────────────
+      // A concurrent process that swaps a directory for a symlink BETWEEN a check
+      // and the operation it guards can still win the race; `mkdir -p` has no
+      // atomic no-follow form in Node. That residual is accepted here, for a reason
+      // that is worth writing down rather than assuming: an attacker able to create
+      // symlinks inside `.guild/runs/` already has write access to the directory
+      // this function writes to, so racing it buys nothing they could not do
+      // directly. What the checks DO close completely is the non-race case — a
+      // symlink already present in a checked-out repo — which is the realistic
+      // threat and needs no attacker at all.
+      //
+      // The WRITE itself is not left to that argument: it goes through
+      // `writeFileAtomicNoFollow`, whose O_NOFOLLOW|O_EXCL creation refuses a
+      // symlink at the final component even under a race.
       if (!isContainedRealPath(root, path.dirname(abs))) {
         return {
           status: "refused",
@@ -829,13 +994,12 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
         };
       }
       // Capture the previous bytes so a post-write refusal RESTORES rather than
-      // destroys a profile that was valid a moment ago (Codex round 2, finding 12).
-      try {
-        priorBytes = fs.readFileSync(abs);
-      } catch {
-        priorBytes = null; // no previous profile — nothing to restore
+      // destroys a profile that was valid a moment ago. Type- and size-checked:
+      // a FIFO here blocked the read forever.
+      priorBytes = readPriorProfile(abs);
+      if (!writeFileAtomicNoFollow(abs, Buffer.from(`${JSON.stringify(validated, null, 2)}\n`, "utf8"))) {
+        return { status: "refused", code: "write_failed", detail: `could not write "${rel}"` };
       }
-      fs.writeFileSync(abs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
     } catch (e) {
       return { status: "refused", code: "write_failed", detail: String(e) };
     }
@@ -846,19 +1010,32 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
     // behind an artifact asserting it did not.
     const post = snapshotTreeHashes(root);
     if (post === null || !sameHashes(after, post)) {
-      try {
-        if (priorBytes === null) fs.rmSync(abs, { force: true });
-        else fs.writeFileSync(abs, priorBytes);
-      } catch {
-        /* best effort — the refusal below is the report either way */
+      // ROLLBACK IS ITSELF A WRITE, so it is contained too. Reported: the rollback
+      // called `rmSync`/`writeFileSync` with no fresh check, so swapping the
+      // directory for an outside-pointing symlink and forcing a rollback could
+      // DELETE or OVERWRITE a file outside the project root — the cleanup path
+      // doing exactly what the write path was hardened against.
+      let rolledBack = false;
+      if (isContainedRealPath(root, abs)) {
+        try {
+          if (priorBytes === null) {
+            fs.rmSync(abs, { force: true });
+            rolledBack = true;
+          } else {
+            rolledBack = writeFileAtomicNoFollow(abs, priorBytes);
+          }
+        } catch {
+          rolledBack = false;
+        }
       }
       return {
         status: "refused",
         code: post === null ? "hash_incomplete" : "post_write_mutation",
         detail:
-          post === null
-            ? "post-write hashing was incomplete — profile rolled back"
-            : "profile emission itself changed a hashed tree — profile rolled back",
+          `${post === null ? "post-write hashing was incomplete" : "profile emission itself changed a hashed tree"}` +
+          // Rollback failure is REPORTED, not swallowed: "refused" must not imply
+          // "restored" when the restore did not happen.
+          `${rolledBack ? " — profile rolled back" : " — ROLLBACK FAILED, the profile on disk may be stale"}`,
       };
     }
 

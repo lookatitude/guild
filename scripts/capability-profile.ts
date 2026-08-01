@@ -21,7 +21,7 @@
  * number, a real cross-check.
  *
  * Usage
- *   npx tsx scripts/capability-profile.ts hash-tree  --cwd <root> [--json]
+ *   npx tsx scripts/capability-profile.ts hash-tree  --cwd <root> [--json] [--for-run <run-id>]
  *   npx tsx scripts/capability-profile.ts emit       --cwd <root> --run-id <id>
  *                                                    --project-id <id> --generated-at <rfc3339>
  *                                                    [--facts <file.json>] [--source-commit <sha>]
@@ -51,6 +51,7 @@ import {
   HASHED_REGISTRIES,
   HASHED_TREES,
   TREE_HASH_RECIPE,
+  baselineBinding,
   emitCapabilityProfile,
   snapshotTreeHashes,
   type DerivedFacts,
@@ -157,8 +158,18 @@ function readFacts(file: string | null): DerivedFacts {
 function cmdHashTree(argv: string[]): void {
   const root = path.resolve(flag(argv, "cwd") ?? process.cwd());
   const h = snapshotTreeHashes(root);
+  if (h === null) fail("hash_incomplete", "the agents/skills/registry trees could not be hashed");
   if (has(argv, "json")) {
-    process.stdout.write(`${JSON.stringify(h, null, 2)}\n`);
+    // `--for-run` produces a BOUND baseline the emitter will accept. Without it
+    // the JSON is informational only — the emitter rejects an unbound baseline
+    // rather than silently treating it as a run-start capture.
+    const forRun = flag(argv, "for-run");
+    const binding = baselineBinding(root);
+    const payload =
+      forRun === null || binding === null
+        ? h
+        : { ...h, bound_root: binding, bound_run_id: forRun };
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
     return;
   }
   process.stdout.write(`recipe: ${TREE_HASH_RECIPE}\n`);
