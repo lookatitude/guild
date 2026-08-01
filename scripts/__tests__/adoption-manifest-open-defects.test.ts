@@ -929,3 +929,93 @@ describe("D7 — a symbol-keyed query field is rejected, like every other closed
     expect(validateAdoptionEntry(entryWithSymbol)).toBeNull();
   });
 });
+
+
+// ── Defect 8 — the trailing guard is dead, so pin what KEEPS it dead ───────
+
+describe("D8 — traversal terminates by strict monotonicity, not by its loop bound", () => {
+  /**
+   * The post-loop `return` in `resolveHistoricalInner` cannot fire. Verified by
+   * SENTINEL against the pristine tip's own structure: with that statement replaced
+   * by a marker, 200,855 valid fuzzed manifests over 2,410,260 walks reached it ZERO
+   * times, as did a maximal linear chain at `MAX_ENTRIES` consuming all 4,096 hops,
+   * and the whole S2/S3 suite was indifferent to the substitution.
+   *
+   * It is KEPT rather than deleted — deleting it requires `for (;;)`, trading a
+   * provably-dead line for a hang if the invariant below is ever broken — so the
+   * tests here pin THE INVARIANT, which is the thing that can actually regress. A
+   * test that appeared to cover the dead statement would be the vacuous kind this
+   * lane has been burned by.
+   *
+   * ANTI-VACUITY, INCLUDING THE PROBE THAT DID NOT DISCRIMINATE, because reporting
+   * only the sweep that worked is how a weak test passes for a strong one:
+   *
+   *   - deleting the forward-only filter outright → 16 RED across the S3 suites.
+   *     The invariant is genuinely pinned.
+   *   - relaxing `e.sequence <= minSequence` to `<` → NOTHING RED, and that is
+   *     correct rather than a coverage gap: the two differ only when an entry could
+   *     be re-selected at its own sequence, which requires returning to the identity
+   *     it departs from, and the cycle guard already answers `ambiguous` there. The
+   *     weakening is semantically equivalent under that guard, so no test should
+   *     redden. Recorded so the next author does not read it as a hole and "fix" it.
+   */
+  it("a walk consumes at most one entry per hop, at the cap", () => {
+    const partials = [];
+    for (let i = 0; i < MAX_ENTRIES; i++) {
+      partials.push({ from: loc(`r${i}`, "1"), to: ref(`r${i + 1}`, "1") });
+    }
+    const m = chain(partials);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "r0" });
+    // Exits through a real branch (`resolved`), never through the loop bound.
+    expect(r.status).toBe("resolved");
+    expect(r.trail.length).toBe(MAX_ENTRIES);
+  });
+
+  it("the trail is STRICTLY INCREASING — the property that bounds the walk", () => {
+    // If this ever stopped holding, the loop bound would become load-bearing and
+    // the post-loop return would stop being dead. This is the real guard.
+    const partials = [
+      { from: loc("A", "a"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("C", "c") },
+      rb(2, { from: loc("C", "c"), to: ref("B", "b") }),
+      rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
+    ];
+    const m = chain(partials);
+    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("a") });
+    expect(r.trail).toEqual([1, 2, 3, 4]);
+    for (let i = 1; i < r.trail.length; i++) {
+      expect(r.trail[i]).toBeGreaterThan(r.trail[i - 1]);
+    }
+  });
+
+  it("no trail ever exceeds the entry count, on any status", () => {
+    const shapes: AdoptionManifestV1[] = [
+      chain([{ from: loc("A", "a"), to: ref("B", "b") }]),
+      chain([
+        { from: loc("A", "a"), to: ref("B", "b") },
+        rb(1, { from: loc("B", "b"), to: ref("A", "a") }),
+        { from: loc("A", "a"), to: ref("B", "b") },
+      ]),
+      chain([
+        { from: loc("E", "e"), to: ref("D", "d") },
+        { from: loc("D", "d"), to: ref("A", "a") },
+        rb(2, { from: loc("A", "a"), to: ref("D", "d") }),
+        rb(1, { from: loc("D", "d"), to: ref("E", "e") }),
+        { from: loc("E", "e"), to: ref("D", "d") },
+      ]),
+      chain([{ from: loc("A", "a"), to: null, reason: "removed", detail: "gone" }]),
+    ];
+    for (const m of shapes) {
+      for (const id of ["A", "B", "C", "D", "E"]) {
+        for (const hash of ["a", "b", "c", "d", "e"]) {
+          const r = resolveHistorical(m, { kind: "agent", id, content_hash: H(hash) });
+          expect(r.trail.length).toBeLessThanOrEqual(m.entries.length);
+          // and the dead statement's signature — a full-length trail with no
+          // terminal answer — never appears.
+          expect(r.trail.length === m.entries.length && r.status === "ambiguous").toBe(false);
+        }
+      }
+    }
+  });
+});

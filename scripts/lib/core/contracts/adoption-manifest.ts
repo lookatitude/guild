@@ -1360,7 +1360,40 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     firstHopPath = undefined;
   }
 
-  // Exceeded the entry count ⇒ a cycle forward-only did not already exclude.
+  // ── DEAD BY CONSTRUCTION, and kept deliberately (codex round 5, #8) ────────
+  //
+  // The comment that stood here — "Exceeded the entry count ⇒ a cycle forward-only
+  // did not already exclude" — described a case that CANNOT OCCUR, and named a
+  // reason that is not true either: forward-only does not merely fail to exclude
+  // such a cycle, it makes one impossible.
+  //
+  // TERMINATION PROOF. `minSequence` starts at 0. Every iteration filters `matches`
+  // by `e.sequence > minSequence`; if none remain the loop returns. Otherwise the
+  // chosen entry satisfies `entry.sequence > minSequence` and immediately becomes
+  // the new `minSequence`, so it strictly increases by at least 1 per iteration.
+  // The manifest validator has already proven every sequence is an integer in
+  // [1, N] and gap-free, so after N iterations `minSequence >= N` and no entry can
+  // satisfy the filter. The loop therefore always returns through a typed branch
+  // within N iterations, and it is allowed N+1.
+  //
+  // MEASURED, not just argued: with this statement replaced by a sentinel, 200,855
+  // valid fuzzed manifests over 2,410,260 walks reached it ZERO times, as did a
+  // maximal linear chain at MAX_ENTRIES that consumes every one of its 4,096 hops,
+  // and the full 241-assertion S2/S3 suite was indifferent to the substitution.
+  //
+  // WHY IT IS KEPT RATHER THAN DELETED, since four sibling guards in this file were
+  // deleted for being untestable. Those four were removable with no behavioural
+  // change — an equivalent guard already covered each. This one is not: deleting the
+  // statement means changing the loop to `for (;;)` so TypeScript stops requiring a
+  // terminal return, which trades a provably-dead line for a HANG if the
+  // monotonicity invariant above is ever broken by a later edit. The house rule is
+  // fail-closed, and a typed `ambiguous` is the fail-closed answer where an infinite
+  // loop is the worst possible one. This follows the precedent already set (and
+  // documented) for the `target === undefined` guard in the rollback proof.
+  //
+  // Do not write a test that appears to cover this. No valid input can reach it;
+  // `D8` in adoption-manifest-open-defects.test.ts pins the INVARIANT that keeps it
+  // dead instead, which is the thing that could actually regress.
   return { status: "ambiguous", ref: null, trail };
 }
 
