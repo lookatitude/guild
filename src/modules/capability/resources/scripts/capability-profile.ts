@@ -222,6 +222,7 @@ function cmdEmit(argv: string[]): void {
         status: "emitted",
         rel_path: result.rel_path,
         mutation_performed: result.profile.mutation_performed,
+        mutation_window: result.profile.mutation_window,
         hashes: result.hashes,
         candidates: result.profile.candidates.length,
         feedstock_absent: result.profile.feedstock.absent,

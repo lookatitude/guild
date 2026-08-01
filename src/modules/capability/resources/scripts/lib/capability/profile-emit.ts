@@ -73,6 +73,7 @@ import {
   type CoverageVerdict,
   type DomainFact,
   type MethodFact,
+  type MutationWindow,
   type ProjectCapabilityProfileV1,
   type ResolverMode,
   PROJECT_CAPABILITY_PROFILE_SCHEMA,
@@ -375,20 +376,6 @@ export const EMIT_REFUSAL_CODES = Object.freeze([
   "post_write_mutation",
 ] as const);
 export type EmitRefusalCode = (typeof EMIT_REFUSAL_CODES)[number];
-
-/**
- * How wide the no-mutation comparison actually was.
- *
- * CODEX-REVIEW FIX (round 2, finding 3). The emitted artifact cannot record this —
- * S1's shape is closed and frozen — so a reader of the FILE alone genuinely cannot
- * tell a whole-run claim from an emission-only one. Recording it on the RESULT and
- * in the CLI output is the honest half that is available: a caller now knows which
- * claim it just made instead of assuming the stronger one.
- *
- * Widening S1 to carry this is owed work on that contract, not something this
- * module can do.
- */
-export type MutationWindow = "run" | "emission";
 
 export type EmitResult =
   | {
@@ -771,6 +758,7 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       candidates: (o.facts as DerivedFacts)?.candidates,
       resolver_mode: o.resolverMode as ResolverMode,
       mutation_performed: false,
+      mutation_window: window,
       mutation_evidence: {
         agents_tree_hash_before: before.agents,
         agents_tree_hash_after: after.agents,
@@ -812,10 +800,27 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
     const abs = path.join(root, rel);
     let priorBytes: Buffer | null = null;
     try {
+      // ── PHYSICAL containment, CHECKED TWICE — and both checks are load-bearing ──
+      //
+      // A single post-mkdir check was still wrong, and this is the SYMLINKED-PARENT
+      // variant a sibling lane independently rated CRITICAL: if an ancestor is a
+      // symlink out of the tree, `mkdirSync(..., {recursive:true})` CREATES
+      // DIRECTORIES THROUGH IT before any check runs. The write would then be
+      // refused, but directories would already exist outside the project root — a
+      // refusal that still had a side effect outside its bounds.
+      //
+      // So: check the deepest EXISTING ancestor BEFORE creating anything, then
+      // create, then check again now that the real destination exists. The first
+      // check bounds the mkdir; the second bounds the write. Neither substitutes
+      // for the other.
+      if (!isContainedRealPath(root, path.dirname(abs))) {
+        return {
+          status: "refused",
+          code: "escapes_project_root",
+          detail: `"${rel}" has an ancestor that resolves outside the project root`,
+        };
+      }
       fs.mkdirSync(path.dirname(abs), { recursive: true });
-      // PHYSICAL containment, AFTER mkdir so the real destination exists and BEFORE
-      // the write. A symlinked `capability/` directory pointed the file at /tmp and
-      // the emitter still reported success (Codex round 2, finding 1).
       if (!isContainedRealPath(root, abs)) {
         return {
           status: "refused",

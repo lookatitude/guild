@@ -8,7 +8,7 @@
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "resource_path": "resources/scripts/capability-profile.ts",
-      "sha256": "717e572fc1fbd2c9c2f1c3e8146d887ec740249e9cc962deac2bfd447a942616"
+      "sha256": "e2062c74692c7dcd7cfebd62e56c2fc4f4960fc72893abc2373ee6b537d7d4a3"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "lib/capability/profile-emit",
       "source_path": "scripts/lib/capability/profile-emit.ts",
       "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
-      "sha256": "52f2db1c3d85e019cd369f1a82a7db97ad6a8fdf9358f1f73011424b1f54a146"
+      "sha256": "7ad07d3b0a9a3cc36159a21d435f9357d4aa58881dd1758a7609f1a1fea64648"
     },
     {
       "category": "scripts",
@@ -78,7 +78,7 @@
       "id": "lib/core/contracts/project-capability-profile",
       "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
       "resource_path": "resources/scripts/lib/core/contracts/project-capability-profile.ts",
-      "sha256": "48bbce116e2ee7f28bc4300126a395121b2713da82836b682e37aeae4d75358d"
+      "sha256": "f4a77799eac643ef59453dd9631dac99481491a2783acc5abe58a633150cf3d6"
     },
     {
       "category": "scripts",

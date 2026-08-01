@@ -667,3 +667,72 @@ describe("CODEX ROUND 2 — regressions for the reported counterexamples", () =>
     }
   });
 });
+
+
+describe("the mutation window reaches the ARTIFACT, not just the result", () => {
+  it("no baseline ⇒ the file itself says \"emission\"", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const r = emit();
+    expect(r.status).toBe("emitted");
+    if (r.status !== "emitted") return;
+    expect(r.window).toBe("emission");
+    expect(r.profile.mutation_window).toBe("emission");
+    // And on disk, which is the half that matters: a reader of the FILE alone can
+    // now tell the narrow claim from the wide one.
+    expect(readCapabilityProfile(tmp, RUN_ID)!.mutation_window).toBe("emission");
+  });
+
+  it("a run-start baseline ⇒ the file itself says \"run\"", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const r = emit({ baselineHashes: snapshotTreeHashes(tmp)! });
+    expect(r.status).toBe("emitted");
+    if (r.status !== "emitted") return;
+    expect(r.profile.mutation_window).toBe("run");
+    expect(readCapabilityProfile(tmp, RUN_ID)!.mutation_window).toBe("run");
+  });
+});
+
+describe("CROSS-LANE CLASS — lexical path checks need a realpath half", () => {
+  /**
+   * Confirmed twice independently in parallel lanes: this emitter wrote outside
+   * the project root through a symlinked directory, and a sibling lane rated the
+   * same root cause CRITICAL when a symlinked TARGET and then a symlinked PARENT
+   * let a write escape while the operation reported success. One root cause: a
+   * LEXICAL path check with no realpath. Systemic, not incidental.
+   */
+  it("a symlinked LEAF directory is refused (the reported variant)", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "escape-leaf-"));
+    fs.mkdirSync(path.join(tmp, ".guild/runs", RUN_ID), { recursive: true });
+    fs.symlinkSync(outside, path.join(tmp, ".guild/runs", RUN_ID, "capability"));
+    const r = emit();
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("escapes_project_root");
+    expect(fs.readdirSync(outside)).toEqual([]);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("a symlinked ANCESTOR is refused BEFORE mkdir creates anything through it", () => {
+    // The variant the sibling lane found. A single post-mkdir check would refuse
+    // the WRITE but only after `mkdirSync(..., {recursive:true})` had already
+    // created directories through the symlink — a refusal with a side effect
+    // outside its own bounds.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "escape-parent-"));
+    fs.mkdirSync(path.join(tmp, ".guild/runs"), { recursive: true });
+    fs.symlinkSync(outside, path.join(tmp, ".guild/runs", RUN_ID));
+
+    const r = emit();
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("escapes_project_root");
+    // NOTHING was created through the symlink — not even an empty directory.
+    expect(fs.readdirSync(outside)).toEqual([]);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("ANTI-VACUITY: an ordinary (non-symlinked) destination still emits", () => {
+    // A containment check that refused everything would pass both rows above.
+    mk(".guild/agents/backend.md", "# backend\n");
+    expect(emit().status).toBe("emitted");
+  });
+});

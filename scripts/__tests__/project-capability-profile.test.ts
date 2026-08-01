@@ -132,6 +132,7 @@ function profile(over: Partial<ProjectCapabilityProfileV1> = {}): any {
     ],
     resolver_mode: "observe",
     mutation_performed: false,
+    mutation_window: "emission",
     mutation_evidence: {
       agents_tree_hash_before: TREE_A,
       agents_tree_hash_after: TREE_A,
@@ -1117,5 +1118,29 @@ describe("CODEX ROUND 3 — regressions for the reported counterexamples", () =>
 
   it("ANTI-VACUITY: the reference fixture still validates after all of the above", () => {
     expect(ok(profile())).not.toBeNull();
+  });
+});
+
+
+describe("mutation_window — the artifact records WHAT its hashes bracket", () => {
+  it("is REQUIRED — a profile that omits it is invalid, never defaulted", () => {
+    // A missing window would be read as the stronger claim by every reader who did
+    // not know to check, which is the exact over-reading the field prevents.
+    const p = profile();
+    delete (p as Record<string, unknown>).mutation_window;
+    expect(ok(p)).toBeNull();
+  });
+
+  it("accepts exactly the two windows and nothing else", () => {
+    expect(ok(profile({ mutation_window: "run" } as never))).not.toBeNull();
+    expect(ok(profile({ mutation_window: "emission" } as never))).not.toBeNull();
+    for (const bad of ["whole", "", null, true, "RUN"]) {
+      expect(ok(profile({ mutation_window: bad } as never))).toBeNull();
+    }
+  });
+
+  it("survives the round trip — the value is carried, not normalised away", () => {
+    expect(ok(profile({ mutation_window: "emission" } as never))!.mutation_window).toBe("emission");
+    expect(ok(profile({ mutation_window: "run" } as never))!.mutation_window).toBe("run");
   });
 });

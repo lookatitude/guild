@@ -128,6 +128,30 @@ export const EVIDENCE_SOURCES = [
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
 const EVIDENCE_SOURCE_SET: ReadonlySet<string> = new Set<string>(EVIDENCE_SOURCES);
 
+/**
+ * HOW WIDE THE NO-MUTATION COMPARISON ACTUALLY WAS. Closed vocabulary.
+ *
+ *   "run"      — the `before` hashes were captured at RUN START, so the compared
+ *                window covers the WHOLE Learn run.
+ *   "emission" — `before` was captured inside the emitter, so the window covers
+ *                only the emission. Everything the pipeline did earlier is
+ *                OUTSIDE the comparison.
+ *
+ * ── WHY THIS FIELD EXISTS, AND WHY ITS ABSENCE WAS THE SAME CLASS OF DEFECT ──
+ * `mutation_evidence` proves the hashes it contains are equal. It never said what
+ * those hashes BRACKET. A reader of the file alone therefore could not distinguish
+ * "nothing changed during this entire Learn run" from "nothing changed during the
+ * last few milliseconds of it" — and would naturally assume the stronger one,
+ * because that is what the artifact is for.
+ *
+ * A shape that cannot express the weaker claim forces every reader to over-read
+ * the evidence. That is the same failure as an unbounded scalar: the artifact
+ * quietly means less than it appears to.
+ */
+export const MUTATION_WINDOWS = ["run", "emission"] as const;
+export type MutationWindow = (typeof MUTATION_WINDOWS)[number];
+const MUTATION_WINDOW_SET: ReadonlySet<string> = new Set<string>(MUTATION_WINDOWS);
+
 /** The subset of sources that may back a `MethodFact.occurrence_count` (A1.11). */
 export const HISTORICAL_EVIDENCE_SOURCES = ["run", "reflection"] as const;
 const HISTORICAL_SOURCE_SET: ReadonlySet<string> = new Set<string>(HISTORICAL_EVIDENCE_SOURCES);
@@ -300,6 +324,15 @@ export interface ProjectCapabilityProfileV1 {
 
   /** Before/after tree hashes proving the assertion above. */
   mutation_evidence: MutationEvidence;
+
+  /**
+   * WHAT `mutation_evidence` BRACKETS — the whole run, or only the emission.
+   *
+   * Required, and deliberately not defaulted: a missing window would be read as
+   * the stronger claim by every reader who did not know to check, which is the
+   * exact over-reading the field exists to prevent.
+   */
+  mutation_window: MutationWindow;
 }
 
 // ── Hardening primitives ─────────────────────────────────────────────────────
@@ -1123,6 +1156,7 @@ const PROFILE_KEYS = [
   "resolver_mode",
   "mutation_performed",
   "mutation_evidence",
+  "mutation_window",
 ] as const;
 
 export interface ValidateProfileOptions {
@@ -1211,6 +1245,7 @@ function validateProjectCapabilityProfileV1Inner(
   const resolverModeProp = ownDataProp(obj, "resolver_mode");
   const mutationPerformedProp = ownDataProp(obj, "mutation_performed");
   const mutationEvidenceProp = ownDataProp(obj, "mutation_evidence");
+  const mutationWindowProp = ownDataProp(obj, "mutation_window");
 
   if (projectId.kind !== "data" || runId.kind !== "data") return null;
   if (generatedAt.kind !== "data" || sourceCommit.kind !== "data") return null;
@@ -1219,6 +1254,13 @@ function validateProjectCapabilityProfileV1Inner(
   if (coverageProp.kind !== "data" || candidatesProp.kind !== "data") return null;
   if (resolverModeProp.kind !== "data") return null;
   if (mutationPerformedProp.kind !== "data" || mutationEvidenceProp.kind !== "data") return null;
+  if (mutationWindowProp.kind !== "data") return null;
+  if (
+    typeof mutationWindowProp.value !== "string" ||
+    !MUTATION_WINDOW_SET.has(mutationWindowProp.value)
+  ) {
+    return null;
+  }
 
   if (!isBoundedSlug(projectId.value)) return null;
   if (!isBoundedSlug(runId.value)) return null;
@@ -1346,6 +1388,7 @@ function validateProjectCapabilityProfileV1Inner(
     resolver_mode: resolverModeProp.value as ResolverMode,
     mutation_performed: false,
     mutation_evidence: mutationEvidence,
+    mutation_window: mutationWindowProp.value as MutationWindow,
   };
 
   // THE AGGREGATE BUDGET, measured on the SANITIZED result rather than the input:
