@@ -15,21 +15,21 @@
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "b034be8965a7a6ba1e5ac23ed0b327572a13c9767c0447500498f2efad7dd242"
+      "sha256": "e1dc9055c45f9caccb006b656f7ea6d0d4a60f6ea41d0705bf7a60016eb8eed2"
     },
     {
       "category": "scripts",
       "id": "lib/config-reconcile",
       "source_path": "scripts/lib/config-reconcile.ts",
       "resource_path": "resources/scripts/lib/config-reconcile.ts",
-      "sha256": "937a772a95fa51d52b6ba9e0b25e2fbe30dc554b23bf8ae07245f0cc0482eb57"
+      "sha256": "aec5f24865fa037ce64c42f32310c7b68dd723cc78a5aa4b6e896689e57c5da7"
     },
     {
       "category": "scripts",
       "id": "lib/config-reconcile-contract",
       "source_path": "scripts/lib/config-reconcile-contract.ts",
       "resource_path": "resources/scripts/lib/config-reconcile-contract.ts",
-      "sha256": "f38d5acf106ffe3b2491415551c0231db835823bf9cbf4be8483e073ccdd5763"
+      "sha256": "ba89d4e00de764ddb6df3cf84c2f7d67232a620b6b67c69b81c280a797029d0e"
     },
     {
       "category": "scripts",
@@ -64,7 +64,7 @@
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "170c8d61c47870232d03ae6514fd82cda631ac48f1820b91f1f2e12aef54e018"
+      "sha256": "d61550ffb6cc8366790c8beb86779894ede210e0b4031a2843a8d7a05da65138"
     },
     {
       "category": "scripts",
@@ -99,7 +99,7 @@
       "id": "read-guild-config",
       "source_path": "scripts/read-guild-config.ts",
       "resource_path": "resources/scripts/read-guild-config.ts",
-      "sha256": "08a2c299bd636456b54f90d59ec7124c3071717baa6b691615d3c7537a9b6b13"
+      "sha256": "c7a5bec795cabc9ac3200e594e9ab06c8832302d18ba968fa9f7783178953d69"
     }
   ]
 }

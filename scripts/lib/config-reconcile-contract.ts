@@ -127,6 +127,80 @@ export function mayReconcileWrite(current: MaterializedField | undefined): boole
 }
 
 // ---------------------------------------------------------------------------
+// S5 / cap-loc-D04 — resolver-mode auto-advance
+// ---------------------------------------------------------------------------
+
+export interface ResolverModeAdvanceInput {
+  /** The materialized `capability.resolver_mode` field, or undefined if absent. */
+  readonly current: MaterializedField | undefined;
+  /** The materialized `capability.auto_create_policy` VALUE. */
+  readonly autoCreatePolicy: string;
+  /** The mode to advance to (D04: `project-local` on first approved proposal). */
+  readonly target: string;
+  /** ISO timestamp to stamp on a write. Passed in — this function reads no clock. */
+  readonly now: string;
+}
+
+export interface ResolverModeAdvanceOutcome {
+  readonly advanced: boolean;
+  /** Present only when `advanced`. The field to persist. */
+  readonly field: MaterializedField | null;
+  /** Why the advance did or did not happen — always populated, never inferred by the caller. */
+  readonly reason:
+    | "advanced"
+    | "policy_never"
+    | "user_pinned"
+    | "already_at_target";
+}
+
+/**
+ * D04's auto-advance, as CODE rather than prose.
+ *
+ * The rule: on an approved capability proposal, a project in an earlier resolver mode
+ * moves to `target` — but ONLY through `mayReconcileWrite`. Routing the advance
+ * through that one predicate is the whole design: a user who pinned their mode stays
+ * pinned forever, and there is no second never-clobber rule to keep in sync.
+ *
+ * This function exists because an adversarial review correctly observed that a test
+ * calling `mayReconcileWrite` directly proves nothing about the advance — it would
+ * still pass if a future auto-advance bypassed the predicate entirely. Now there IS a
+ * production path, and it is the thing under test.
+ *
+ * Pure: no I/O, no clock, no config read. The caller supplies the materialized fields
+ * and persists the returned one.
+ */
+export function advanceResolverModeOnApproval(
+  input: ResolverModeAdvanceInput,
+): ResolverModeAdvanceOutcome {
+  // An explicit `never` suppresses the advance regardless of provenance. Two
+  // INDEPENDENT off-switches — policy (is advancing wanted?) and provenance (who owns
+  // the value?) — and neither implies the other.
+  if (input.autoCreatePolicy === "never") {
+    return { advanced: false, field: null, reason: "policy_never" };
+  }
+  // THE never-clobber gate. Checked before anything else about the value, so a
+  // user-pinned mode is immutable even when every other condition is satisfied.
+  if (!mayReconcileWrite(input.current)) {
+    return { advanced: false, field: null, reason: "user_pinned" };
+  }
+  if (input.current !== undefined && input.current.value === input.target) {
+    return { advanced: false, field: null, reason: "already_at_target" };
+  }
+  return {
+    advanced: true,
+    reason: "advanced",
+    field: {
+      key: "capability.resolver_mode",
+      value: input.target,
+      // `reconciled`, never `user`: the machine advanced this, and a later operator
+      // pin must still be able to take ownership and freeze it.
+      provenance: "reconciled",
+      last_reconciled_at: input.now,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Reconcile reference (pure)
 // ---------------------------------------------------------------------------
 

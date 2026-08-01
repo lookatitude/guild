@@ -3117,7 +3117,17 @@ var NON_INHERITABLE_KEYS = /* @__PURE__ */ new Set([
 ]);
 var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
+var CAPABILITY_RESOLVER_MODES = [
+  "legacy",
+  "observe",
+  "shadow",
+  "project-local",
+  "strict"
+];
+var CAPABILITY_AUTO_CREATE_POLICIES = ["never", "on_approval"];
 var CAPABILITY_RESOLVER_MODE_DEFAULT = "legacy";
+var CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
+var CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
 var DEFAULTS = {
   rigor: "standard",
   auto_approve: [],
@@ -6159,6 +6169,50 @@ var DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
   "lifecycle_gate"
   // rf-wi-01 (G1)
 ]);
+var VALID_CAPABILITY_KEYS = /* @__PURE__ */ new Set([
+  "resolver_mode",
+  "suggestion_budget",
+  "starter_roles",
+  "auto_create_policy"
+]);
+function coerceCapability(raw) {
+  const base = DEFAULTS.capability;
+  const out = {
+    resolver_mode: base.resolver_mode,
+    suggestion_budget: base.suggestion_budget,
+    starter_roles: [...base.starter_roles],
+    auto_create_policy: base.auto_create_policy
+  };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const r = raw;
+  if (CAPABILITY_RESOLVER_MODES.includes(r["resolver_mode"])) {
+    out.resolver_mode = r["resolver_mode"];
+  }
+  if (CAPABILITY_AUTO_CREATE_POLICIES.includes(r["auto_create_policy"])) {
+    out.auto_create_policy = r["auto_create_policy"];
+  }
+  const b = r["suggestion_budget"];
+  if (typeof b === "number" && Number.isFinite(b)) {
+    out.suggestion_budget = Math.min(
+      CAPABILITY_SUGGESTION_BUDGET_MAX,
+      Math.max(CAPABILITY_SUGGESTION_BUDGET_MIN, Math.trunc(b))
+    );
+  }
+  const roles = r["starter_roles"];
+  if (Array.isArray(roles)) {
+    const seen = /* @__PURE__ */ new Set();
+    const acc = [];
+    for (const entry of roles) {
+      if (typeof entry !== "string") continue;
+      const slug = entry.trim();
+      if (slug === "" || seen.has(slug)) continue;
+      seen.add(slug);
+      acc.push(slug);
+    }
+    out.starter_roles = acc;
+  }
+  return out;
+}
 function isPlainObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -6375,6 +6429,14 @@ function parseSettingsFile_fromParsed(parsed) {
     if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string")
       sparseMcp.bridge_package = rawMcp["bridge_package"];
     out.mcp = sparseMcp;
+  }
+  if (isPlainObject3(parsed["capability"])) {
+    const rawCapability = parsed["capability"];
+    const known = {};
+    for (const k of Object.keys(rawCapability)) {
+      if (VALID_CAPABILITY_KEYS.has(k)) known[k] = rawCapability[k];
+    }
+    out.capability = coerceCapability(known);
   }
   if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
   if (typeof parsed["adversarial_review_provider"] === "string") {

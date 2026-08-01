@@ -95,6 +95,52 @@ export const CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
 export const CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
 
 /**
+ * SEMANTIC validity of one flattened `capability.*` value, for the reconciler.
+ *
+ * Returns `undefined` for any non-capability key so the caller falls through to the
+ * generic structural check.
+ *
+ * Why this exists (adversarial-review finding): `reconcile repair` classifies a value
+ * as malformed via `defaultIsValidValue`, which is STRUCTURAL — it accepts any finite
+ * number and any array. So `suggestion_budget: 9` and
+ * `starter_roles: ["qa","qa"]` were considered valid and survived `repair`, even at
+ * `reconciled` provenance where the reconciler is allowed to write. That made S5's
+ * "budget over-range ⇒ repair → 4" conformance row false.
+ *
+ * Never-clobber is unaffected: a `user`-provenance value is still immutable, because
+ * the reconciler consults provenance before it ever consults validity.
+ */
+export function isValidCapabilityValue(key: string, value: unknown): boolean | undefined {
+  switch (key) {
+    case "capability.resolver_mode":
+      return CAPABILITY_RESOLVER_MODES.includes(value as CapabilityResolverMode);
+    case "capability.auto_create_policy":
+      return CAPABILITY_AUTO_CREATE_POLICIES.includes(value as CapabilityAutoCreatePolicy);
+    case "capability.suggestion_budget":
+      return (
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        value >= CAPABILITY_SUGGESTION_BUDGET_MIN &&
+        value <= CAPABILITY_SUGGESTION_BUDGET_MAX
+      );
+    case "capability.starter_roles": {
+      if (!Array.isArray(value)) return false;
+      const seen = new Set<string>();
+      for (const entry of value) {
+        // Same slug contract validateCapability enforces, so validate / repair /
+        // resolve cannot disagree about what a well-formed roster looks like.
+        if (typeof entry !== "string" || entry === "" || entry !== entry.trim()) return false;
+        if (/\s/.test(entry) || seen.has(entry)) return false;
+        seen.add(entry);
+      }
+      return true;
+    }
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Canonical Guild settings default tree.
  *
  * Keep this file free of internal runtime imports: config defaults must remain

@@ -34,7 +34,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // ../src/modules/config/workflows/config-defaults.ts
-var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, CAPABILITY_RESOLVER_MODE_DEFAULT, DEFAULTS;
+var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_DEFAULT, CAPABILITY_SUGGESTION_BUDGET_MIN, CAPABILITY_SUGGESTION_BUDGET_MAX, DEFAULTS;
 var init_config_defaults = __esm({
   "../src/modules/config/workflows/config-defaults.ts"() {
     DEFAULT_ESCALATION_MARKERS = [
@@ -54,7 +54,17 @@ var init_config_defaults = __esm({
     ]);
     LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
     SIDECAR_MAX_BYTES = 1024 * 1024;
+    CAPABILITY_RESOLVER_MODES = [
+      "legacy",
+      "observe",
+      "shadow",
+      "project-local",
+      "strict"
+    ];
+    CAPABILITY_AUTO_CREATE_POLICIES = ["never", "on_approval"];
     CAPABILITY_RESOLVER_MODE_DEFAULT = "legacy";
+    CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
+    CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
     DEFAULTS = {
       rigor: "standard",
       auto_approve: [],
@@ -5316,6 +5326,44 @@ function normalizeDispatchHostId(value) {
   const normalized = normalizeHostId(value);
   return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
 }
+function coerceCapability(raw) {
+  const base = DEFAULTS.capability;
+  const out = {
+    resolver_mode: base.resolver_mode,
+    suggestion_budget: base.suggestion_budget,
+    starter_roles: [...base.starter_roles],
+    auto_create_policy: base.auto_create_policy
+  };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const r = raw;
+  if (CAPABILITY_RESOLVER_MODES.includes(r["resolver_mode"])) {
+    out.resolver_mode = r["resolver_mode"];
+  }
+  if (CAPABILITY_AUTO_CREATE_POLICIES.includes(r["auto_create_policy"])) {
+    out.auto_create_policy = r["auto_create_policy"];
+  }
+  const b = r["suggestion_budget"];
+  if (typeof b === "number" && Number.isFinite(b)) {
+    out.suggestion_budget = Math.min(
+      CAPABILITY_SUGGESTION_BUDGET_MAX,
+      Math.max(CAPABILITY_SUGGESTION_BUDGET_MIN, Math.trunc(b))
+    );
+  }
+  const roles = r["starter_roles"];
+  if (Array.isArray(roles)) {
+    const seen = /* @__PURE__ */ new Set();
+    const acc = [];
+    for (const entry of roles) {
+      if (typeof entry !== "string") continue;
+      const slug = entry.trim();
+      if (slug === "" || seen.has(slug)) continue;
+      seen.add(slug);
+      acc.push(slug);
+    }
+    out.starter_roles = acc;
+  }
+  return out;
+}
 function isPlainObject2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -5532,6 +5580,14 @@ function parseSettingsFile_fromParsed(parsed) {
     if (rawMcp["bridge_package"] === null || typeof rawMcp["bridge_package"] === "string")
       sparseMcp.bridge_package = rawMcp["bridge_package"];
     out.mcp = sparseMcp;
+  }
+  if (isPlainObject2(parsed["capability"])) {
+    const rawCapability = parsed["capability"];
+    const known = {};
+    for (const k of Object.keys(rawCapability)) {
+      if (VALID_CAPABILITY_KEYS.has(k)) known[k] = rawCapability[k];
+    }
+    out.capability = coerceCapability(known);
   }
   if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
   if (typeof parsed["adversarial_review_provider"] === "string") {
@@ -5839,7 +5895,7 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs4, path5, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS;
+var fs4, path5, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, VALID_CAPABILITY_KEYS;
 var init_settings_reader = __esm({
   "../src/modules/config/workflows/settings-reader.ts"() {
     fs4 = __toESM(require("fs"));
@@ -5890,6 +5946,12 @@ var init_settings_reader = __esm({
       "lean_lead",
       "lifecycle_gate"
       // rf-wi-01 (G1)
+    ]);
+    VALID_CAPABILITY_KEYS = /* @__PURE__ */ new Set([
+      "resolver_mode",
+      "suggestion_budget",
+      "starter_roles",
+      "auto_create_policy"
     ]);
   }
 });

@@ -20,13 +20,37 @@ import {
   CAPABILITY_SUGGESTION_BUDGET_MAX,
   CAPABILITY_SUGGESTION_BUDGET_MIN,
   DEFAULTS,
+  isValidCapabilityValue,
 } from "../lib/shared/config-defaults";
 import { CONFIG_SCHEMA, getFieldSpec, isSecuritySensitiveKey } from "../lib/config-schema";
 import { coerceCapabilityBlock, validateCapability } from "../lib/core/config-cli";
-import { mayReconcileWrite } from "../lib/config-reconcile-contract";
+import {
+  advanceResolverModeOnApproval,
+  mayReconcileWrite,
+} from "../lib/config-reconcile-contract";
 import { CONFIG_UI_METADATA } from "../lib/config-ui-metadata";
 import { renderAllHostConfigs } from "../lib/config-render";
 import { resolveBaselineGolden } from "../lib/permission-policy-schema";
+import { resolveSettings } from "../lib/settings-resolver";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { spawnSync } from "node:child_process";
+
+/** A scratch project root carrying `settings`, returned as its cwd. */
+function mkSettings(settings: Record<string, unknown>): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-cfg-"));
+  fs.mkdirSync(path.join(dir, ".guild"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".guild", "settings.json"), JSON.stringify(settings));
+  return dir;
+}
+
+/** Drive the REAL config-cmd CLI (subprocess), matching config-cmd.test.ts's convention. */
+function runConfigCmd(args: string[]): { status: number; out: string; err: string } {
+  const script = path.resolve(__dirname, "..", "config-cmd.ts");
+  const r = spawnSync("npx", ["tsx", script, ...args], { encoding: "utf8" });
+  return { status: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
+}
 
 const KEYS = [
   "capability.resolver_mode",
@@ -171,7 +195,9 @@ describe("S5 — validate REJECTS", () => {
   it("starter_roles must be non-empty slugs", () => {
     expect(validateCapability({ starter_roles: ["ok", ""] })).toHaveLength(1);
     expect(validateCapability({ starter_roles: "backend" })).toHaveLength(1);
-    expect(validateCapability({ starter_roles: [1, 2] })).toHaveLength(1);
+    // One reject PER offending entry, not one for the array: an operator fixing a
+    // 20-role list should not have to re-run validate 20 times to find them all.
+    expect(validateCapability({ starter_roles: [1, 2] })).toHaveLength(2);
     expect(validateCapability({ starter_roles: [] })).toEqual([]);
   });
 
@@ -332,5 +358,219 @@ describe("S5 — UI metadata (CI-gated by config-ui-metadata-coverage.test.ts)",
     expect(CONFIG_UI_METADATA["capability.resolver_mode"].control).toBe("enum");
     expect(CONFIG_UI_METADATA["capability.starter_roles"].control).toBe("string_array");
     expect(CONFIG_UI_METADATA["capability.suggestion_budget"].control).toBe("number");
+  });
+});
+
+// ===========================================================================
+// CODEX ADVERSARIAL ROUND — defects found by an independent reviewer.
+// Each case reproduces a REAL defect the first cut shipped. They are written as
+// the reviewer described them, not as I would have guessed them.
+// ===========================================================================
+
+describe("S5 codex-round — the RUNTIME resolver must honor the block (BLOCKER)", () => {
+  // The schema, the CLI loader and the UI all knew about `capability`, but the
+  // resolver every runtime consumer actually reads — settings-resolver, backed by
+  // src/modules/config/workflows/settings-reader.ts — has its OWN closed TIER1 key
+  // set and its own ResolvedConfig. It omitted `capability`, so a project that
+  // configured `resolver_mode: "strict"` silently resolved to the shipped default.
+  // Config that cannot be read is config that does not exist.
+  function resolveIn(settings: Record<string, unknown>) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-resolve-"));
+    fs.mkdirSync(path.join(dir, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".guild", "settings.json"), JSON.stringify(settings));
+    return resolveSettings({ cwd: dir });
+  }
+
+  it("a configured resolver_mode survives resolution", () => {
+    const resolved = resolveIn({ capability: { resolver_mode: "strict" } });
+    expect(resolved.config.capability?.resolver_mode).toBe("strict");
+  });
+
+  it("suggestion_budget 0 survives — 0 must not be swallowed as falsy", () => {
+    const resolved = resolveIn({ capability: { suggestion_budget: 0 } });
+    expect(resolved.config.capability?.suggestion_budget).toBe(0);
+  });
+
+  it("an absent block resolves to the shipped defaults", () => {
+    const resolved = resolveIn({});
+    expect(resolved.config.capability?.resolver_mode).toBe(CAPABILITY_RESOLVER_MODE_DEFAULT);
+    expect(resolved.config.capability?.suggestion_budget).toBe(4);
+  });
+
+  it("the resolver COERCES a malformed block rather than passing it through", () => {
+    const resolved = resolveIn({
+      capability: { suggestion_budget: 9, starter_roles: [" qa ", "qa", ""], resolver_mode: "bogus" },
+    });
+    expect(resolved.config.capability?.suggestion_budget).toBe(4);
+    expect(resolved.config.capability?.starter_roles).toEqual(["qa"]);
+    expect(resolved.config.capability?.resolver_mode).toBe(CAPABILITY_RESOLVER_MODE_DEFAULT);
+  });
+
+  it("a valid block is NOT reported as an unknown top-level key by `config validate`", () => {
+    // The second validation entrypoint (config-cli's own TIER1 sweep) also omitted
+    // `capability`, so a perfectly valid block was rejected by the very function that
+    // then went on to validate its contents.
+    const dir = mkSettings({ capability: { resolver_mode: "shadow" } });
+    const r = runConfigCmd(["validate", "--effective", "--cwd", dir]);
+    expect(`${r.out}${r.err}`).not.toMatch(/unknown .*key .*capability/i);
+    expect(r.status).toBe(0);
+  });
+
+  it("`config validate` still REJECTS a malformed block (the gate is not merely open)", () => {
+    // Anti-vacuity for the row above: accepting the key must not mean accepting
+    // anything under it. Before the fix, the resolver dropped the whole block, so a
+    // malformed one was replaced by defaults and reported VALID.
+    const dir = mkSettings({
+      capability: { resolver_modee: "observe", suggestion_budget: 9 },
+    });
+    const r = runConfigCmd(["validate", "--effective", "--cwd", dir]);
+    expect(r.status).not.toBe(0);
+  });
+});
+
+describe("S5 codex-round — validate and coerce must AGREE on the same input", () => {
+  // The reviewer's sharpest catch: `[" qa ", "qa"]` passed validate unchanged, then
+  // coerce silently rewrote it to `["qa"]`. A value that validates but is then
+  // altered is a value the operator was never told about.
+  it("REJECTS an untrimmed slug rather than silently trimming it later", () => {
+    expect(validateCapability({ starter_roles: [" qa "] })).toHaveLength(1);
+  });
+
+  it("REJECTS duplicates rather than silently deduping them later", () => {
+    expect(validateCapability({ starter_roles: ["qa", "qa"] })).toHaveLength(1);
+  });
+
+  it("REJECTS a slug with inner whitespace", () => {
+    expect(validateCapability({ starter_roles: ["not a slug"] })).toHaveLength(1);
+  });
+
+  it("PROPERTY: anything validate accepts, coerce leaves untouched", () => {
+    // The invariant that makes the two halves coherent: coercion is only ever
+    // reached by input validate would have rejected.
+    for (const roles of [[], ["qa"], ["qa", "backend"], ["a-b", "c_d"]]) {
+      expect(validateCapability({ starter_roles: roles })).toEqual([]);
+      expect(coerceCapabilityBlock({ starter_roles: roles }).starter_roles).toEqual(roles);
+    }
+    for (const budget of [0, 1, 4]) {
+      expect(validateCapability({ suggestion_budget: budget })).toEqual([]);
+      expect(coerceCapabilityBlock({ suggestion_budget: budget }).suggestion_budget).toBe(budget);
+    }
+  });
+});
+
+describe("S5 codex-round — auto-advance is CODE, not prose (HIGH)", () => {
+  // The reviewer's point: a test that calls mayReconcileWrite directly proves nothing
+  // about the advance — it would still pass if a future auto-advance bypassed the
+  // predicate entirely. These exercise the production path instead.
+  const NOW = "2026-08-01T00:00:00Z";
+  const field = (provenance: "default" | "user" | "reconciled", value = "legacy") => ({
+    key: "capability.resolver_mode",
+    value,
+    provenance,
+    last_reconciled_at: NOW,
+  });
+
+  it("advances a default-provenance mode and stamps it `reconciled`", () => {
+    const out = advanceResolverModeOnApproval({
+      current: field("default"),
+      autoCreatePolicy: "on_approval",
+      target: "project-local",
+      now: NOW,
+    });
+    expect(out.advanced).toBe(true);
+    expect(out.reason).toBe("advanced");
+    expect(out.field).toEqual({
+      key: "capability.resolver_mode",
+      value: "project-local",
+      // `reconciled`, so a later operator pin can still take ownership and freeze it.
+      provenance: "reconciled",
+      last_reconciled_at: NOW,
+    });
+  });
+
+  it("A USER-PINNED MODE IS NEVER ADVANCED — through the predicate, not beside it", () => {
+    const out = advanceResolverModeOnApproval({
+      current: field("user", "observe"),
+      autoCreatePolicy: "on_approval",
+      target: "project-local",
+      now: NOW,
+    });
+    expect(out.advanced).toBe(false);
+    expect(out.reason).toBe("user_pinned");
+    expect(out.field).toBeNull();
+  });
+
+  it("`auto_create_policy: never` suppresses the advance independently of provenance", () => {
+    const out = advanceResolverModeOnApproval({
+      current: field("default"),
+      autoCreatePolicy: "never",
+      target: "project-local",
+      now: NOW,
+    });
+    expect(out.advanced).toBe(false);
+    expect(out.reason).toBe("policy_never");
+  });
+
+  it("policy `never` wins even when provenance would allow the write", () => {
+    // Two INDEPENDENT off-switches; neither implies the other.
+    expect(mayReconcileWrite(field("reconciled"))).toBe(true);
+    expect(
+      advanceResolverModeOnApproval({
+        current: field("reconciled"),
+        autoCreatePolicy: "never",
+        target: "project-local",
+        now: NOW,
+      }).advanced,
+    ).toBe(false);
+  });
+
+  it("is idempotent — advancing to the mode already held is a no-op", () => {
+    const out = advanceResolverModeOnApproval({
+      current: field("reconciled", "project-local"),
+      autoCreatePolicy: "on_approval",
+      target: "project-local",
+      now: NOW,
+    });
+    expect(out.advanced).toBe(false);
+    expect(out.reason).toBe("already_at_target");
+  });
+
+  it("an ABSENT field advances (fill is allowed)", () => {
+    const out = advanceResolverModeOnApproval({
+      current: undefined,
+      autoCreatePolicy: "on_approval",
+      target: "observe",
+      now: NOW,
+    });
+    expect(out.advanced).toBe(true);
+  });
+});
+
+describe("S5 codex-round — reconcile repair COERCES capability values (HIGH)", () => {
+  // defaultIsValidValue is STRUCTURAL: it accepts any finite number and any array, so
+  // suggestion_budget 9 and duplicate starter_roles survived `repair` even at
+  // `reconciled` provenance. isValidCapabilityValue is the semantic check that fixes it.
+  it("an out-of-range budget is malformed", () => {
+    expect(isValidCapabilityValue("capability.suggestion_budget", 9)).toBe(false);
+    expect(isValidCapabilityValue("capability.suggestion_budget", 2.5)).toBe(false);
+    expect(isValidCapabilityValue("capability.suggestion_budget", 4)).toBe(true);
+    expect(isValidCapabilityValue("capability.suggestion_budget", 0)).toBe(true);
+  });
+
+  it("duplicate or untrimmed starter_roles are malformed", () => {
+    expect(isValidCapabilityValue("capability.starter_roles", ["qa", "qa"])).toBe(false);
+    expect(isValidCapabilityValue("capability.starter_roles", [" qa "])).toBe(false);
+    expect(isValidCapabilityValue("capability.starter_roles", ["qa", "backend"])).toBe(true);
+    expect(isValidCapabilityValue("capability.starter_roles", [])).toBe(true);
+  });
+
+  it("an off-ladder mode is malformed", () => {
+    expect(isValidCapabilityValue("capability.resolver_mode", "aggressive")).toBe(false);
+    expect(isValidCapabilityValue("capability.resolver_mode", "shadow")).toBe(true);
+  });
+
+  it("defers on every non-capability key (undefined ⇒ use the structural check)", () => {
+    expect(isValidCapabilityValue("rigor", "deep")).toBeUndefined();
+    expect(isValidCapabilityValue("loop_cap", 16)).toBeUndefined();
   });
 });

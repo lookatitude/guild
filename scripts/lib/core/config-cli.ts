@@ -1201,10 +1201,35 @@ export function validateCapability(c: Record<string, unknown>): string[] {
   }
   if (c["starter_roles"] !== undefined) {
     const r = c["starter_roles"];
-    if (!Array.isArray(r) || r.some((e) => typeof e !== "string" || e.trim() === "")) {
-      rejects.push(
-        `capability.starter_roles must be an array of non-empty role slugs (got ${JSON.stringify(r)})`,
-      );
+    if (!Array.isArray(r)) {
+      rejects.push(`capability.starter_roles must be an array of role slugs (got ${JSON.stringify(r)})`);
+    } else {
+      // VALIDATE AND COERCE MUST AGREE ON THE SAME INPUT (adversarial-review finding).
+      // The first cut accepted `[" qa ", "qa"]` here and then let coercion silently
+      // rewrite it to `["qa"]` — a value the operator was told was fine and never told
+      // was changed. So the SLUG FORM itself is the contract: already-trimmed, no
+      // inner whitespace, no duplicates. Everything validate accepts, coerce now
+      // leaves byte-identical.
+      const seen = new Set<string>();
+      for (const e of r) {
+        if (typeof e !== "string" || e === "") {
+          rejects.push(`capability.starter_roles entries must be non-empty strings (got ${JSON.stringify(e)})`);
+          continue;
+        }
+        if (e !== e.trim()) {
+          rejects.push(`capability.starter_roles entry ${JSON.stringify(e)} has leading/trailing whitespace`);
+          continue;
+        }
+        if (/\s/.test(e)) {
+          rejects.push(`capability.starter_roles entry ${JSON.stringify(e)} is not a slug (contains whitespace)`);
+          continue;
+        }
+        if (seen.has(e)) {
+          rejects.push(`capability.starter_roles contains duplicate entry ${JSON.stringify(e)}`);
+          continue;
+        }
+        seen.add(e);
+      }
     }
   }
   return rejects;
@@ -1540,6 +1565,9 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       "rigor", "auto_approve", "review", "host", "host_mode", "roles", "host_profiles", "initiative_default",
       "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace", "models",
       "security", "secrets_policy", "mcp",
+      "capability",                  // S5 (cap-loc-D04) — else a VALID block is reported
+                                     // as an unknown top-level key by the very function
+                                     // that then calls validateCapability on it.
       "statusline",                  // R-009: status-line pane enable (--statusline flag / settings key)
       "adversarial_review_provider", // R-008: cross-review provider pin
       "loops", "loop_cap", "codex_cap", "defaults",

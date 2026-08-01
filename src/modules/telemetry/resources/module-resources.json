@@ -50,7 +50,7 @@
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "36cd56c10023233425cefe37c94a316cb3efdabe5ae7cfe96af6b15a56e8b62a"
+      "sha256": "b51fc7959dc194637043c8b119ad17cccebfa12c1fdb1d88ea914477e657f725"
     },
     {
       "category": "scripts",
