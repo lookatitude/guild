@@ -661,7 +661,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "source_path": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-capabilities-schema.ts",
-      "sha256": "b853b20d320aea0d1adae6c14f618a2e018f219da25dcebbedd25a773ead9885",
+      "sha256": "39c78360cf3e243c6d598bbe76d1d608813ba4ba9beb3518f8b2b0a6e61044e1",
       "projection_dependency": true
     },
     {
@@ -709,7 +709,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-registry-schema.ts",
       "source_path": "src/modules/host-runtime/workflows/host-registry-schema.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-registry-schema.ts",
-      "sha256": "644ded7af0f308ccbf0a69428896520e926caed7e44223b060747ccd970e4d0d",
+      "sha256": "aa1b7b225d8ad66d0d08188cab7d1abddfff9880cfe52d1a18c3c3a6752fc4b0",
       "projection_dependency": true
     },
     {

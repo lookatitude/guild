@@ -255,7 +255,17 @@ const CODEX_ENTRY: HostRegistryEntry = {
 function inferredCaps(
   host_kind: string,
   family: string,
-  surface_kind: "cli" | "app" | "file" = "cli"
+  surface_kind: "cli" | "app" | "file" = "cli",
+  /**
+   * CODEX-REVIEW FIX (S6 round 1, HIGH-3): injection facts derive from whether a
+   * lane can actually be DISPATCHED here, NOT from the surface kind. The previous
+   * `surface_kind === "cli"` test relied on an undocumented correlation: a
+   * non-selectable CLI would have been handed `target`/`prompt_text`, and a
+   * selectable non-CLI `absent`/`none`, with nothing to catch either. Callers pass
+   * the SAME value they put on the registry entry's `dispatch_selectable`, and
+   * `validateHostRegistryEntry` now cross-checks that they agree.
+   */
+  dispatch_selectable: boolean = surface_kind === "cli"
 ): GuildHostCapabilitiesV1 {
   return {
     schema_version: "guild.host_capabilities.v1",
@@ -288,6 +298,41 @@ function inferredCaps(
     commands: { slash_commands: false, command_files: "none" },
     skills: { native_skills: false, skill_dir: null },
     agents: { native_agents: false, agent_format: null },
+    // cap-loc-D11 — injection facts derived STRUCTURALLY from the surface kind.
+    // A `cli` surface has somewhere to dispatch a lane, so injection is an
+    // unproven TARGET. An `app` or `file` surface has no pane to dispatch into
+    // (see the AGENTS_FILE / kiro / qoder / trae rows: `dispatch_selectable:
+    // false`), so there is nothing to inject INTO — `absent`, and nothing to
+    // degrade to either. That is a structural fact, not pessimism.
+    //
+    // NO ROW STARTS `verified`: injection is unbuilt, so no probe of it has ever
+    // run on any host. A row flips only on a real probe receipt (E3 / cap-loc-D12).
+    injection:
+      dispatch_selectable
+        ? {
+            definition_injection: false,
+            definition_injection_support: "target" as const,
+            skill_bundle_injection: false,
+            skill_bundle_injection_support: "target" as const,
+            dynamic_registration: false,
+            dynamic_registration_support: "absent" as const,
+            fallback: "prompt_text" as const,
+            definition_injection_verified_by: null,
+            skill_bundle_injection_verified_by: null,
+            dynamic_registration_verified_by: null,
+          }
+        : {
+            definition_injection: false,
+            definition_injection_support: "absent" as const,
+            skill_bundle_injection: false,
+            skill_bundle_injection_support: "absent" as const,
+            dynamic_registration: false,
+            dynamic_registration_support: "absent" as const,
+            fallback: "none" as const,
+            definition_injection_verified_by: null,
+            skill_bundle_injection_verified_by: null,
+            dynamic_registration_verified_by: null,
+          },
     hooks: {
       session_start: false,
       user_prompt_submit: false,
@@ -839,6 +884,55 @@ export function validateHostRegistryEntry(value: unknown): ValidationResult {
     }
   }
 
+  // CODEX-REVIEW FIX (S6 round 1, HIGH-2): the structural injection invariant is
+  // CROSS-FIELD, so it can only be checked HERE — `validateHostCapabilitiesV1` sees
+  // the capabilities object alone and never sees `dispatch_selectable`. Without
+  // this, a row with `dispatch_selectable: false` but `"target"`/`"prompt_text"`
+  // injection facts passed both validators while violating the rule outright.
+  //
+  // The invariant, in one place: a pane-less surface has nothing to inject INTO
+  // (⇒ `absent`, `none`), and a dispatchable surface is never structurally absent.
+  {
+    const caps = o["capabilities"];
+    const selectable = o["dispatch_selectable"];
+    if (
+      typeof selectable === "boolean" &&
+      typeof caps === "object" &&
+      caps !== null &&
+      !Array.isArray(caps)
+    ) {
+      const inj = (caps as Record<string, unknown>)["injection"];
+      if (typeof inj === "object" && inj !== null && !Array.isArray(inj)) {
+        const i = inj as Record<string, unknown>;
+        const supports = [
+          "definition_injection_support",
+          "skill_bundle_injection_support",
+          "dynamic_registration_support",
+        ] as const;
+        if (!selectable) {
+          for (const k of supports) {
+            if (i[k] !== "absent") {
+              errors.push(
+                `dispatch_selectable is false but injection.${k} is ${JSON.stringify(i[k])} — ` +
+                  `a host with no dispatch surface has nothing to inject into (must be "absent")`
+              );
+            }
+          }
+          if (i["fallback"] !== "none") {
+            errors.push(
+              `dispatch_selectable is false but injection.fallback is ` +
+                `${JSON.stringify(i["fallback"])} — there is no lane to fall back to (must be "none")`
+            );
+          }
+        } else if (i["definition_injection_support"] === "absent") {
+          errors.push(
+            "dispatch_selectable is true but injection.definition_injection_support is " +
+              '"absent" — a dispatchable surface is never structurally absent'
+          );
+        }
+      }
+    }
+  }
   return { valid: errors.length === 0, errors };
 }
 

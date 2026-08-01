@@ -143,6 +143,96 @@ export interface AgentsCaps {
  * advertised or degraded. A host that lacks an event sets it false; degradation
  * routes through the HookEmitter (parent ADR Surface 3).
  */
+/**
+ * cap-loc-D11 / gap-audit D8 — can this host receive a PINNED DEFINITION BUNDLE
+ * with a dispatch?
+ *
+ * A SEPARATE top-level group, deliberately not fields on `agents`/`skills`. Those
+ * describe STATIC INSTALL-TIME registration — what the host loads from disk at
+ * startup (`skill_dir`, `agent_format`). Injection is a PER-DISPATCH RUNTIME
+ * property. Merging them would make `agents.native_agents: false` ambiguous
+ * between "no agent files" and "no runtime injection".
+ *
+ * TWO-FIELD HONESTY, the `installable`/`installability` pattern from PackageCaps:
+ * a boolean routing consumes, plus an enum saying WHY it holds that value. The
+ * invariant `*_support !== "verified" ⇒ boolean false` is enforced by
+ * `validateHostCapabilitiesV1`, so a row cannot assert a capability that was
+ * never probed.
+ */
+export interface InjectionCaps {
+  /** Can this host receive a `guild.project_definition_ref.v1` with a spawn? */
+  definition_injection: boolean;
+  definition_injection_support: InjectionSupport;
+  /** Can this host receive a pinned SKILL BUNDLE with a spawn? */
+  skill_bundle_injection: boolean;
+  skill_bundle_injection_support: InjectionSupport;
+  /** Runtime registration, vs. startup-only from `skill_dir`/`agent_format`. */
+  dynamic_registration: boolean;
+  dynamic_registration_support: InjectionSupport;
+  /**
+   * How a definition reaches the lane when injection is unsupported.
+   * `prompt_text` is TODAY's behaviour and is explicitly DEGRADED: unhashed,
+   * unverifiable, not carried by the transport. `none` means the host has no
+   * dispatch surface at all, so there is nothing to degrade to.
+   */
+  fallback: "prompt_text" | "none";
+  /**
+   * PER-CAPABILITY probe-receipt citations (codex round 1 CRITICAL-1, round 2 HIGH-4).
+   *
+   * Round 1: `"verified"` was an unchecked self-assertion — a row could claim a
+   * capability nobody probed and pass, the exact failure the two-field scheme
+   * exists to prevent. So a `"verified"` support must CITE its evidence.
+   *
+   * Round 2: a SINGLE shared citation was still wrong — three independent
+   * capabilities cannot be bound to one receipt, and nothing stopped `"x"`. Each
+   * capability now carries its OWN citation, and the path must match the receipt
+   * grammar `evidence/host-smoke/<host-id>/<box-id>.json`.
+   *
+   * Each field is non-null IFF its own support is `"verified"`.
+   *
+   * A pure validator cannot read the file, so this does not make a false citation
+   * impossible — it makes one FALSIFIABLE and correctly ATTRIBUTED.
+   *
+   * WHAT THIS CONTRACT CANNOT CHECK, stated rather than implied (codex round 3,
+   * HIGH-5). Nothing here proves the cited receipt actually probed the capability
+   * citing it: the same path may legitimately populate all three fields, because
+   * one smoke run can genuinely probe several capabilities. Only a reader with I/O
+   * can bind a citation to a RESULT inside the receipt. The conformance pass
+   * therefore owes three checks this file cannot do:
+   *
+   *   1. the cited path EXISTS under the evidence tree;
+   *   2. the receipt's `host_id` matches the row citing it (host binding);
+   *   3. the receipt contains a PASSING concern for THAT capability
+   *      (capability-to-result binding) — not merely that the file exists.
+   *
+   * Check 3 is the one that makes a citation mean something. Requiring DISTINCT
+   * paths would be the wrong fix: it would forbid a legitimate multi-capability
+   * probe while still not proving any single claim.
+   */
+  definition_injection_verified_by: string | null;
+  skill_bundle_injection_verified_by: string | null;
+  dynamic_registration_verified_by: string | null;
+}
+
+/**
+ * The probe-receipt path grammar: `evidence/host-smoke/<host-id>/<box-id>.json`.
+ * Segments are restricted so a citation cannot traverse or name something outside
+ * the evidence tree.
+ */
+export const PROBE_RECEIPT_PATH_RE =
+  /^evidence\/host-smoke\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\.json$/;
+
+/**
+ * Why an injection boolean holds its value.
+ *   "verified" — proven on a live host of this kind (a probe receipt exists)
+ *   "target"   — a dispatch surface exists but injection is unproven; routing MUST
+ *                NOT present it as supported
+ *   "absent"   — no mechanism at all (typically: no dispatch surface)
+ */
+export const INJECTION_SUPPORT = ["verified", "target", "absent"] as const;
+const INJECTION_SUPPORT_SET: ReadonlySet<string> = new Set<string>(INJECTION_SUPPORT);
+export type InjectionSupport = (typeof INJECTION_SUPPORT)[number];
+
 export interface HooksCaps {
   session_start: boolean;
   user_prompt_submit: boolean;
@@ -257,6 +347,8 @@ export interface GuildHostCapabilitiesV1 {
   commands: CommandsCaps;
   skills: SkillsCaps;
   agents: AgentsCaps;
+  /** cap-loc-D11 — per-dispatch definition/skill-bundle injection facts. */
+  injection: InjectionCaps;
   hooks: HooksCaps;
   permissions: PermissionsCaps;
   dispatch: DispatchCaps;
@@ -293,6 +385,20 @@ export const CLAUDE_CAPABILITIES: GuildHostCapabilitiesV1 = {
   commands: { slash_commands: true, command_files: "markdown" },
   skills: { native_skills: true, skill_dir: ".claude/skills" },
   agents: { native_agents: true, agent_format: "claude-md" },
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "target",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null,
+  },
   hooks: {
     // All ten events are bound in the live hooks/hooks.json (verified).
     session_start: true,
@@ -405,6 +511,20 @@ export const CODEX_CAPABILITIES: GuildHostCapabilitiesV1 = {
   },
   skills: { native_skills: false, skill_dir: null }, // Verified (per-host-packaging).
   agents: { native_agents: false, agent_format: null }, // Verified (per-host-packaging flags agents unsupported).
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null,
+  },
   hooks: {
     // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
     // Claude-equivalent hooks" claim was empirically false. Codex accepts a
@@ -526,6 +646,19 @@ export const AGENTS_FILE_CAPABILITIES: GuildHostCapabilitiesV1 = {
   commands: { slash_commands: false, command_files: "none" },
   skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
   agents: { native_agents: false, agent_format: null },
+  injection: {
+    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+    definition_injection: false,
+    definition_injection_support: "absent",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "absent",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "none",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null,
+  },
   hooks: NO_HOOKS,
   permissions: {
     deny: false,
@@ -668,6 +801,85 @@ export function validateHostCapabilitiesV1(value: unknown): ValidationResult {
     for (const [tk, tv] of Object.entries(tools as Record<string, unknown>)) {
       if (typeof tv !== "string" || !TOOL_STRENGTHS.has(tv)) {
         errors.push(`tools.${tk} must be one of native|bridge|emulated|none; got ${JSON.stringify(tv)}`);
+      }
+    }
+  }
+
+  // injection (cap-loc-D11): the group is REQUIRED, and the TWO-FIELD HONESTY rule
+  // is enforced here rather than documented. `*_support !== "verified"` MUST carry
+  // its boolean at false — that is what stops a row asserting a capability nobody
+  // probed, which is the exact failure mode gap-audit E3 records for the Codex rows.
+  {
+    const inj = (value as Record<string, unknown>)["injection"];
+    if (typeof inj !== "object" || inj === null || Array.isArray(inj)) {
+      errors.push("injection must be an object");
+    } else {
+      const i = inj as Record<string, unknown>;
+      const pairs: ReadonlyArray<readonly [string, string]> = [
+        ["definition_injection", "definition_injection_support"],
+        ["skill_bundle_injection", "skill_bundle_injection_support"],
+        ["dynamic_registration", "dynamic_registration_support"],
+      ];
+      for (const [boolKey, supportKey] of pairs) {
+        const b = i[boolKey];
+        const sup = i[supportKey];
+        if (typeof b !== "boolean") {
+          errors.push(`injection.${boolKey} must be boolean; got ${JSON.stringify(b)}`);
+        }
+        if (typeof sup !== "string" || !INJECTION_SUPPORT_SET.has(sup)) {
+          errors.push(
+            `injection.${supportKey} must be one of verified|target|absent; got ${JSON.stringify(sup)}`
+          );
+        }
+        // THE HONESTY INVARIANT — a BICONDITIONAL (codex round 4, HIGH-6).
+        //
+        // `boolean true ⇒ support verified` alone left the other direction open:
+        // `verified` + `false` passed, which asserts "a probe proved this" while
+        // routing reads the capability as unavailable. That is incoherent, and it
+        // would silently waste real evidence.
+        //
+        // `verified` means "verified PRESENT". A probe that ran and found the
+        // capability MISSING is `absent` (the enum already carries that meaning);
+        // a mechanism that exists but was never probed is `target`.
+        if (b === true && sup !== "verified") {
+          errors.push(
+            `injection.${boolKey} is true but ${supportKey} is ${JSON.stringify(sup)} — ` +
+              `only a "verified" support value may carry a true capability`
+          );
+        }
+        if (sup === "verified" && b !== true) {
+          errors.push(
+            `injection.${supportKey} is "verified" but ${boolKey} is ${JSON.stringify(b)} — ` +
+              `"verified" means a probe proved the capability PRESENT; use "absent" for a ` +
+              `probe that found it missing, or "target" for an unprobed mechanism`
+          );
+        }
+      }
+      // CRITICAL-1 + HIGH-4: each capability cites its OWN probe receipt, and the
+      // citation must match the receipt path grammar. One shared string could not
+      // attribute three independent claims, and an unconstrained string accepted "x".
+      for (const [boolKey, supportKey] of pairs) {
+        const citeKey = `${boolKey}_verified_by`;
+        const cite = i[citeKey];
+        if (i[supportKey] === "verified") {
+          if (typeof cite !== "string" || !PROBE_RECEIPT_PATH_RE.test(cite)) {
+            errors.push(
+              `injection.${supportKey} is "verified" but ${citeKey} is ${JSON.stringify(cite)} — ` +
+                "a verified capability must cite its own probe receipt at " +
+                "evidence/host-smoke/<host-id>/<box-id>.json"
+            );
+          }
+        } else if (cite !== null) {
+          errors.push(
+            `injection.${citeKey} must be null when ${supportKey} is not "verified"; ` +
+              `got ${JSON.stringify(cite)}`
+          );
+        }
+      }
+
+      const fb = i["fallback"];
+      if (fb !== "prompt_text" && fb !== "none") {
+        errors.push(`injection.fallback must be prompt_text|none; got ${JSON.stringify(fb)}`);
       }
     }
   }
