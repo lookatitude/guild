@@ -1019,3 +1019,190 @@ describe("D8 — traversal terminates by strict monotonicity, not by its loop bo
     }
   });
 });
+
+
+// ── Codex round 1 (post-fix) — findings against MY fixes, not the pristine tip ──
+
+describe("D1-R1 — a destination's undo stack is per ERA, not for all time", () => {
+  /**
+   * FOUND BY CODEX AGAINST MY OWN D1 FIX, and reproduced before changing anything:
+   *
+   *   A→X(1), X→Y(2), B→X(3), X→B(4 rb 3)
+   *     entries 1-3 valid; A resolves to Y, B resolves to X
+   *     entry 4 REJECTED by my `lineage.length !== 1` rule
+   *
+   * X's stack was [1,3]. Sequence 1 was outstanding but no longer RIDING X — that
+   * lineage departed to Y at sequence 2. So `length === 1` was not equivalent to
+   * "no other lineage rides this destination", which is the property D1 claims to
+   * enforce. My rule rejected a legitimate history: precisely the failure mode this
+   * file has now produced four times, and the one I was warned to expect.
+   *
+   * FIX: an identity that is adopted away and later RE-CREATED by a fresh adoption
+   * starts a NEW ERA; the previous era's adoptions onto it are no longer unwindable
+   * through it, so the stale stack is dropped. A ROLLBACK landing on it restores the
+   * SAME era and keeps the stack — that distinction is what preserves sequential
+   * rollback of a multi-step migration.
+   */
+  it("accepts the rollback after destination reuse that my first rule rejected", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("X", "3"), to: ref("Y", "e") },
+          { from: loc("B", "b"), to: ref("X", "3") },
+          rb(3, { from: loc("X", "3"), to: ref("B", "b") }),
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("a ROLLBACK landing on a departed identity keeps its era — stack preserved", () => {
+    // `A→X(1), X→Y(2), Y→X(3 rb 2), X→A(4 rb 1)`: entry 3 restores the SAME X, so
+    // sequence 1 is still unwindable through it at entry 4. If the era-clear fired
+    // on rollback landings too, entry 4 would break — and with it every sequential
+    // rollback of a multi-step migration.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("X", "3"), to: ref("Y", "e") },
+          rb(2, { from: loc("Y", "e"), to: ref("X", "3") }),
+          rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("the D1 rejection still stands where the lineages ARE concurrent", () => {
+    // `U→X(1), N→X(2), X→N(3 rb 2)`: nothing departed X between 1 and 2, so both
+    // adoptions ride the same era of X and the partial un-collapse is still refused.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("U", "1"), to: ref("X", "3") },
+          { from: loc("N", "2"), to: ref("X", "3") },
+          rb(2, { from: loc("X", "3"), to: ref("N", "2") }),
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("a stale PREVIOUS-era adoption cannot be rolled back through the new era", () => {
+    // After the era boundary at 3, sequence 1 is gone from X's stack, so naming it
+    // finds a different top and is rejected — the LIFO rule doing its job across
+    // the boundary rather than being bypassed by it.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: ref("X", "3") },
+          { from: loc("X", "3"), to: ref("Y", "e") },
+          { from: loc("B", "b"), to: ref("X", "3") },
+          rb(1, { from: loc("X", "3"), to: ref("A", "a") }),
+        ])
+      )
+    ).toBeNull();
+  });
+});
+
+
+describe("D6-R1 — S2 identities are TOKEN-shaped, and the commit bound fits real git", () => {
+  /**
+   * THREE CODEX FINDINGS AGAINST MY OWN D6 FIX, all reproduced first.
+   *
+   * #3 (P1) `{...ref, id: "../outside"}` and a pinned skill `id: "../../secret"`
+   *   both VALIDATED. I bounded these scalars and never SHAPE-checked them — half of
+   *   Rule 6. S3's legacy locator and query both require `TOKEN_RE`, so such a
+   *   destination could resolve once and then never legally become a later `from`
+   *   identity: the same identity, legal on one side of the manifest and illegal on
+   *   the other. That is the D4 disagreement reappearing across the S2/S3 seam.
+   *
+   * #4 (P2) `MAX_SOURCE_COMMIT = 128` rejected a real 137-character
+   *   `git describe --tags --long` output, though the field is documented as "a sha,
+   *   a tag, a describe string". A bound that rejects the documented input is a
+   *   defect in the bound, not in the input.
+   *
+   * #5 (P2) was about my RATIONALE, not the number, and is answered in the source:
+   *   S3's `historical_path` is ABSOLUTE and S2's `relative_path` is RELATIVE, so
+   *   they are different fields and equal caps never made them "consistent". The cap
+   *   stands on the file's own stated policy — deliberately stricter than the
+   *   filesystem — and the comment now says that instead of the wrong thing.
+   */
+  const validRef = () => ref("A", "a");
+  const validSkill = () => ({
+    id: "s1",
+    relative_path: ".guild/skills/s1/SKILL.md",
+    content_hash: H("a"),
+  });
+
+  it.each([
+    ["parent traversal", "../outside"],
+    ["nested traversal", "../../secret"],
+    ["path separator", "a/b"],
+    ["leading dot", ".hidden"],
+    ["leading dash", "-flag"],
+    ["absolute", "/etc/passwd"],
+    ["space", "a b"],
+  ])("ref.id rejects a non-token identity — %s", (_label, bad) => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), id: bad })).toBeNull();
+  });
+
+  it.each([
+    ["parent traversal", "../outside"],
+    ["nested traversal", "../../secret"],
+    ["path separator", "a/b"],
+  ])("skills[].id rejects a non-token identity — %s", (_label, bad) => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [{ ...validSkill(), id: bad }] })
+    ).toBeNull();
+  });
+
+  it("project_id is token-shaped too — S3's manifest project_id already was", () => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), project_id: "../other" })).toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), project_id: "plugin" })).not.toBeNull();
+  });
+
+  it.each([
+    ["plain slug", "plugin-runtime-architect"],
+    ["dotted", "guild.review"],
+    ["underscored", "doc_writer"],
+    ["digits", "r0"],
+    ["single char", "a"],
+  ])("…and every REAL identity shape still validates — %s", (_label, good) => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), id: good })).not.toBeNull();
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [{ ...validSkill(), id: good }] })
+    ).not.toBeNull();
+  });
+
+  it("an S2 identity is now legal on BOTH sides of the manifest seam", () => {
+    // The point of the shape rule: what S2 accepts as a destination id, S3 accepts
+    // as a later source id. Previously `../outside` passed one and failed the other.
+    const good = "plugin-runtime-architect";
+    expect(validateProjectDefinitionRefV1({ ...validRef(), id: good })).not.toBeNull();
+    expect(
+      validateAdoptionManifestV1(chain([{ from: loc(good, "a"), to: ref("B", "b") }]))
+    ).not.toBeNull();
+  });
+
+  it("accepts a real 137-char `git describe --tags --long` output", () => {
+    const describe137 = "release-" + "c".repeat(118) + "-1-g02bcf9f";
+    expect(describe137.length).toBe(137);
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), source_commit: describe137 })
+    ).not.toBeNull();
+  });
+
+  it("…and source_commit is still bounded, exactly at MAX_SOURCE_COMMIT", () => {
+    const at = "c".repeat(MAX_SOURCE_COMMIT);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at })).not.toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at + "c" })).toBeNull();
+  });
+
+  it("source_commit is NOT token-shaped — a git ref legitimately contains `/`", () => {
+    // Over-tightening this the way ids were tightened would be its own defect:
+    // `refs/tags/v1` and `feature/x-1-gabc1234` are ordinary values.
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), source_commit: "refs/tags/v2.5.0" })
+    ).not.toBeNull();
+  });
+});
