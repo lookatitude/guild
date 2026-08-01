@@ -509,7 +509,7 @@
       "id": "projection:src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "source_path": "src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-adapters.ts",
-      "sha256": "46bceeee85377d2f2434e7d380fd87fedbbff8059a35224eb6337ed0e464d551",
+      "sha256": "eca268af19247b6d96aaa39870445abba97253189874dbd2f466b9adec03feee",
       "projection_dependency": true
     },
     {
@@ -517,7 +517,7 @@
       "id": "projection:src/modules/dispatch/workflows/execution-transport-ports.ts",
       "source_path": "src/modules/dispatch/workflows/execution-transport-ports.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-ports.ts",
-      "sha256": "ab69203e1ab2be6248c9b560f645c0f147573f91ef1ef7ccb69ab9d849bc6da0",
+      "sha256": "8b68a91be5013b9cba878524577ab35955ae8e23cc0d7a8ae21827537e83a406",
       "projection_dependency": true
     },
     {
