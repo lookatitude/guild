@@ -880,16 +880,48 @@ describe("cycle + round-trip semantics", () => {
     expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
   });
 
-  it("REGRESSION (codex r5) — same id+hash at DIFFERENT source paths are two sources", () => {
-    // A(/p1,h)->B, B->C, A(/p2,h)->B. Without the full-locator check a pathless
-    // query returned B and a /p1-qualified query returned C — one manifest, two
-    // answers, depending only on how you asked.
+  it("SUPERSEDED BY D4 — same id+hash at DIFFERENT source paths are ONE identity", () => {
+    // THIS ASSERTION WAS BOTH STALE AND VACUOUS, and both halves are recorded because
+    // a green test that proves nothing is worse than a missing one.
+    //
+    // STALE: it encoded "different `historical_path` ⇒ two sources". Defect D4
+    // (codex round 5 on the pristine tip) proved that rule wrong — liveness keys on
+    // (kind, id, bytes) and had already ruled these ONE identity, while traversal
+    // re-litigated it with a stricter locator comparison, so one manifest gave two
+    // answers depending on whether the optional `historical_path` was supplied.
+    //
+    // VACUOUS: its fixture never validated in the first place. `A@f` is adopted away
+    // at sequence 1 and never restored, so the liveness rule rejects sequence 3 and
+    // `resolveHistorical` returned `ambiguous` with an EMPTY trail — the assertion
+    // passed without traversal identity ever being exercised (codex round 5, #5).
+    //
+    // Rewritten to be neither: an intervening rollback makes the manifest genuinely
+    // valid, and the assertion is now D4's rule, checked from both query shapes.
     const m = chain([
       { from: { id: "A", historical_path: "/g/p1/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("C", "c") },
-      { from: { id: "A", historical_path: "/g/p2/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
+      {
+        from: loc("B", "b"),
+        to: ref("A", "f"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: { id: "A", historical_path: "/g/p2/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("C", "c") },
     ]);
-    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+    expect(validateAdoptionManifestV1(m)).not.toBeNull(); // …genuinely valid now
+    const pathless = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(pathless.status).toBe("resolved");
+    expect(pathless.ref?.id).toBe("C");
+    // and supplying the OPTIONAL disambiguator cannot change the answer
+    const qualified = resolveHistorical(m, {
+      kind: "agent",
+      id: "A",
+      content_hash: H("f"),
+      historical_path: "/g/p1/A.md",
+    });
+    expect(qualified.status).toBe("resolved");
+    expect(qualified.ref?.id).toBe("C");
   });
 
   it("REGRESSION (codex r4 #3) — same bytes at DIFFERENT paths are different locators", () => {

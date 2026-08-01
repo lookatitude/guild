@@ -300,6 +300,23 @@ function isIdentityToken(v: unknown, max: number): v is string {
   return isBoundedScalar(v, max) && IDENTITY_TOKEN_RE.test(v);
 }
 
+/** The canonical skill-body filename, in both the project and plugin layouts. */
+const SKILL_BODY_FILENAME = "SKILL.md";
+
+/**
+ * A commit-ish: a sha, a tag, or `git describe` output (codex round 5, #3).
+ *
+ * D6 claimed "every scalar is BOUNDED and SHAPE-CHECKED" and this one was only
+ * bounded — `"not a commit"`, `"../../not-a-ref"` and arbitrary emoji prose all
+ * validated. Deliberately NOT `IDENTITY_TOKEN_RE`: a git ref legitimately contains
+ * `/` (`refs/tags/v2.5.0`), which is why the token shape was withheld here in the
+ * first place. This grammar admits every real spelling — a sha, `refs/tags/v2.5.0`,
+ * `release-<tag>-1-g02bcf9f` — while excluding whitespace, control characters and
+ * traversal-shaped prose. `..` is rejected anywhere, matching Rule 5's treatment of
+ * every other path-like scalar in this file.
+ */
+const COMMITISH_RE = /^[A-Za-z0-9][A-Za-z0-9._/+-]*$/;
+
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
 
 export function isValidContentHash(v: unknown): v is string {
@@ -389,8 +406,15 @@ function validatePinnedSkillRefInner(obj: unknown): PinnedSkillRef | null {
   // layouts — a project's `.guild/skills/<id>/SKILL.md` and the plugin's tiered
   // `skills/<tier>/<id>/SKILL.md` — without this envelope having to know either.
   // A path with no directory to own the id cannot satisfy it, and is refused.
+  // …AND IT MUST NAME A SKILL BODY (codex round 5, #2). Binding only the directory
+  // left `id: "deploy-production"` at `.guild/skills/deploy-production/README.md`
+  // valid: the hash verifies the README's bytes correctly while the consumer believes
+  // it received the pinned skill DEFINITION. Owning-directory alone was half the
+  // binding — the same instance-not-class shape as the round-4 tombstone. Both
+  // layouts this contract documents end in the canonical body filename.
   const segments = pathProp.value.split("/");
   if (segments.length < 2) return null;
+  if (segments[segments.length - 1] !== SKILL_BODY_FILENAME) return null;
   if (segments[segments.length - 2] !== idProp.value) return null;
 
   return {
@@ -581,8 +605,10 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
 
   // `source_commit`: a non-empty string or explicit null. `undefined` is NOT
   // accepted — an absent commit must be stated, not implied.
-  if (commitProp.value !== null && !isBoundedScalar(commitProp.value, MAX_SOURCE_COMMIT)) {
-    return null;
+  if (commitProp.value !== null) {
+    if (!isBoundedScalar(commitProp.value, MAX_SOURCE_COMMIT)) return null;
+    if (!COMMITISH_RE.test(commitProp.value)) return null;
+    if (commitProp.value.split("/").includes("..")) return null;
   }
 
   // Identity hashes are raw sha256 hex (the shape hashSpecialistProfile emits —

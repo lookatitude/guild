@@ -1027,9 +1027,15 @@ describe("D8 — traversal terminates by strict monotonicity, not by its loop bo
         for (const hash of ["a", "b", "c", "d", "e"]) {
           const r = resolveHistorical(m, { kind: "agent", id, content_hash: H(hash) });
           expect(r.trail.length).toBeLessThanOrEqual(m.entries.length);
-          // and the dead statement's signature — a full-length trail with no
-          // terminal answer — never appears.
-          expect(r.trail.length === m.entries.length && r.status === "ambiguous").toBe(false);
+          // A "full-length ambiguous trail is the dead statement's signature" clause
+          // stood here and was FALSE (codex round 5, #6): the valid unlabelled loop
+          // `A@a→B@b, B@b→A@a` yields `ambiguous` with `trail.length === 2 === entries
+          // .length`, from the legitimate cycle guard and not from the post-loop
+          // return. The shapes iterated here never produced it, so a false claim
+          // passed as a green assertion — the same vacuity codex found in my symbol
+          // test. Removed rather than narrowed: the length bound and the strict
+          // monotonicity assertion are the properties that actually keep the
+          // statement dead, and they are asserted directly.
         }
       }
     }
@@ -1671,5 +1677,121 @@ describe("R4 — codex round 4: the tombstone's source side, and bounds before E
         entries,
       })
     ).toBeNull();
+  });
+});
+
+
+describe("R5 — codex round 5: both halves of every hash/no-hash pairing", () => {
+  const validRef = () => ref("A", "a");
+  const skill = (id: string, path?: string) => ({
+    id,
+    relative_path: path ?? `.guild/skills/${id}/SKILL.md`,
+    content_hash: H("a"),
+  });
+
+  /**
+   * R5 #1 (P1). The round-4 fix closed "the REMOVAL did not know its bytes" and left
+   * "the LATER ENTRY does not know its bytes" open — the instance-not-class shape,
+   * for the third time. `A@a→null(removed)`, `A@null→C(2)` validated, because
+   * `A@null` is a different `identityOf` key and nothing had marked it dead. Unknown
+   * bytes could BE the retired bytes.
+   */
+  it("R5#1 a known-byte removal also bars a later HASH-LESS source", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "gone" },
+          { from: { ...loc("A", "a"), content_hash: null }, to: ref("C", "c") },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it("R5#1 …and known-vs-known, where the hashes really differ, still passes", () => {
+    // The rule closes the pairings where one side is UNKNOWN. It must not swallow the
+    // case where both sides are known and genuinely different — that is a different
+    // definition sharing an id, which D3 already asserted stays legal.
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          { from: loc("A", "a"), to: null, reason: "removed", detail: "gone" },
+          { from: loc("A", "b"), to: ref("C", "c") },
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it.each([
+    ["hash-less removal, known source", null, "a"],
+    ["hash-less removal, hash-less source", null, null],
+    ["known removal, hash-less source", "a", null],
+  ])("R5#1 every UNKNOWN-bearing pairing is closed — %s", (_label, removalHash, sourceHash) => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          {
+            from: { ...loc("A", "a"), content_hash: removalHash === null ? null : H(removalHash) },
+            to: null,
+            reason: "removed",
+            detail: "gone",
+          },
+          {
+            from: { ...loc("A", "a"), content_hash: sourceHash === null ? null : H(sourceHash) },
+            to: ref("C", "c"),
+          },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  /**
+   * R5 #2 (P1). Binding the owning DIRECTORY was half the binding: `id:
+   * "deploy-production"` at `.guild/skills/deploy-production/README.md` validated,
+   * and the hash verifies the README's bytes correctly while the consumer believes it
+   * received the pinned skill DEFINITION.
+   */
+  it("R5#2 a pinned skill must name a skill BODY, not any file in its directory", () => {
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [skill("deploy-production", ".guild/skills/deploy-production/README.md")],
+      })
+    ).toBeNull();
+  });
+
+  it.each([
+    [".guild project layout", "s1", ".guild/skills/s1/SKILL.md"],
+    ["plugin tiered layout", "tdd", "skills/meta/tdd/SKILL.md"],
+  ])("R5#2 …and both documented layouts still validate — %s", (_label, id, path) => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [skill(id, path)] })
+    ).not.toBeNull();
+  });
+
+  /**
+   * R5 #3 (P2). D6 claimed "every scalar is BOUNDED and SHAPE-CHECKED"; this one was
+   * only bounded. The grammar deliberately still admits `/`, which is why the token
+   * shape was withheld from this field in the first place.
+   */
+  it.each([
+    ["prose with spaces", "not a commit"],
+    ["traversal-shaped", "../../not-a-ref"],
+    ["leading dot", ".hidden"],
+    ["emoji prose", "🚨 arbitrary prose 🚨"],
+    ["embedded traversal", "refs/../../etc"],
+  ])("R5#3 source_commit rejects a non-commit-ish — %s", (_label, bad) => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: bad })).toBeNull();
+  });
+
+  it.each([
+    ["abbreviated sha", "abc1234"],
+    ["full sha", "a".repeat(40)],
+    ["qualified ref", "refs/tags/v2.5.0"],
+    ["describe output", "release-2.5.0-1-g02bcf9f"],
+    ["prerelease tag", "v2.5.0-beta.1"],
+  ])("R5#3 …and every real git spelling still validates — %s", (_label, good) => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), source_commit: good })
+    ).not.toBeNull();
   });
 });

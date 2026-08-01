@@ -285,13 +285,19 @@ function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): bool
  * a rejection cost as much as an acceptance. The round-4 fix moved that cost one
  * step earlier without eliminating it. It is now O(1) for the oversized case.
  *
- * WHAT REMAINS, stated rather than claimed closed: an object whose `length` is
- * small but which carries a huge number of own NAMED properties still costs one
- * `getOwnPropertyNames`. There is no early-exit own-key enumerator in JS, so this
- * cannot be bounded without one — and such an object cannot come from `JSON.parse`,
- * which is this contract's actual input path (a parsed array has only index keys
- * plus `length`). The residual is one name array over properties the caller already
- * allocated, with no amplification beyond that.
+ * WHAT REMAINS, stated rather than claimed closed. An object whose `length` is
+ * small but which carries a huge number of own properties still costs one full
+ * enumeration — and that is true of SYMBOL keys exactly as it is of NAMED ones
+ * (codex round 5, #4): an array with `length === 0` and 300,000 symbol properties
+ * passes the cap and then scans every symbol, ~46ms against ~0.014ms bare. Moving
+ * the cap ahead of both scans bounds the OVERSIZED case, which is the one a count
+ * bound is for; it does not and cannot bound the in-bounds-length case, because JS
+ * has no early-exit own-key enumerator for either kind of key.
+ *
+ * Neither shape can come from `JSON.parse`, which is this contract's actual input
+ * path — a parsed array has only index keys plus `length`, and no symbols at all.
+ * The residual is one enumeration over properties the caller already allocated, with
+ * no amplification beyond that. It is documented rather than claimed bounded.
  */
 function arrayLength(v: unknown, max: number): number | null {
   if (!Array.isArray(v)) return null;
@@ -710,6 +716,8 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     const removedIds = new Set<string>();
     /** (kind,id) retired by a removal whose BYTES were unrecoverable. Also never revoked. */
     const removedAnyHash = new Set<string>();
+    /** (kind,id) retired by a removal that DID record its bytes. Also never revoked. */
+    const removedKnownHash = new Set<string>();
     // CODEX (merged round) #1: this keyed on (kind, id) only, so `A@h1` and `A@h2`
     // were ONE identity — and combined with the blanket resurrect below, the fork
     // this rule exists to forbid stayed representable. The liveness identity must
@@ -728,6 +736,20 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       // side and false on the source side — the reported instance fixed, the class
       // left open, which is the failure this task exists to stop repeating.
       if (removedAnyHash.has(`${entry.kind}\u0000${entry.from.id}`)) return null;
+      // …AND THE MIRROR OF IT (codex round 5, #1). The rule above covers "the removal
+      // did not know its bytes"; this covers "the LATER ENTRY does not know its
+      // bytes". `A@a→null(removed)`, `A@null→C(2)` validated, because `A@null` is a
+      // different `identityOf` key from `A@a` and nothing had marked it dead. But
+      // unknown bytes could BE the retired bytes — the same "absence is not evidence
+      // of difference" this file applies everywhere else. Both directions of the
+      // hash/no-hash pairing are now closed; only known-vs-known, where the two
+      // hashes actually differ, still passes.
+      if (
+        entry.from.content_hash === null &&
+        removedKnownHash.has(`${entry.kind}\u0000${entry.from.id}`)
+      ) {
+        return null;
+      }
 
       // NOTE — there is deliberately NO liveness rule on `to`. Two tempting ones
       // were tried and both rejected LEGITIMATE histories:
@@ -780,6 +802,8 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
         // A hash-less removal cannot say WHICH bytes it retired, so it retires the id.
         if (entry.from.content_hash === null) {
           removedAnyHash.add(`${entry.kind}\u0000${entry.from.id}`);
+        } else {
+          removedKnownHash.add(`${entry.kind}\u0000${entry.from.id}`);
         }
       }
     }
