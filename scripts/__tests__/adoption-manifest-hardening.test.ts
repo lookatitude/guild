@@ -232,8 +232,20 @@ describe("#4 — the query boundary is hardened, own-data only", () => {
   it("a symbol-keyed query field is rejected (getOwnPropertyNames does not see symbols)", () => {
     const q: Record<string | symbol, unknown> = { kind: "agent", id: "A" };
     q[Symbol("x")] = 1;
-    // isPlainDataObject's symbol check is what catches this.
-    expect(resolveHistorical(m(), q).status).toBe("resolved");
+    // ASSERTION CORRECTED (codex round 5, #7). This read `resolved`, and its comment
+    // read "isPlainDataObject's symbol check is what catches this" — but
+    // `isPlainDataObject` in `adoption-manifest.ts` has NO symbol check
+    // (null/type/array/Proxy/prototype, and nothing else). So the assertion pinned
+    // behaviour the author believed came from somewhere it does not exist, against a
+    // title that already stated the intended rule.
+    //
+    // The rest of the file was never in doubt: `hasExactKeys`, which validates the
+    // locator, the entry and the manifest, opens with
+    // `getOwnPropertySymbols(o).length > 0 → false`. The query was the only closed
+    // key set checked by a hand-rolled `getOwnPropertyNames` loop, and the only one
+    // that let a symbol-keyed payload through. The rule was right and this line was
+    // wrong. Further cases in adoption-manifest-open-defects.test.ts (D7).
+    expect(resolveHistorical(m(), q).status).toBe("ambiguous");
   });
 
   it("a Proxy query does not escape the never-throws contract", () => {

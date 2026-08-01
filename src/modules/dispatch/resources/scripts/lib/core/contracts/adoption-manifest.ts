@@ -994,6 +994,13 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   // ── QUERY FIRST, own-data only, closed key set ──
   if (!isPlainDataObject(query)) return NO_ANSWER;
   const QUERY_KEYS = ["kind", "id", "historical_path", "content_hash"];
+  // SYMBOLS FIRST (codex round 5, #7). `getOwnPropertyNames` does not see symbol
+  // keys, so `{kind, id, [Symbol("payload")]: huge}` sailed through a check whose
+  // entire job is "closed key set". The query was the ONLY closed shape here
+  // validated by a hand-rolled loop; `hasExactKeys` — used for the locator, the
+  // entry and the manifest — has opened with exactly this line all along. One rule,
+  // one file.
+  if (Object.getOwnPropertySymbols(query).length > 0) return NO_ANSWER;
   for (const k of Object.getOwnPropertyNames(query)) {
     if (!QUERY_KEYS.includes(k)) return NO_ANSWER; // unknown key ⇒ reject, never ignore
   }

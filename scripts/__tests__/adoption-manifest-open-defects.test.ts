@@ -17,6 +17,7 @@ import {
   MAX_ENTRIES,
   entryDigest,
   resolveHistorical,
+  validateAdoptionEntry,
   validateAdoptionManifestV1,
   type AdoptionEntry,
   type AdoptionManifestV1,
@@ -867,5 +868,64 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
         chain([{ from: loc("A", "a"), to: { ...ref("B", "b"), id: "x".repeat(8 * 1024 * 1024) } }])
       )
     ).toBeNull();
+  });
+});
+
+
+// ── Defect 7 — the query is the ONE closed key set that ignored symbols ────
+
+describe("D7 — a symbol-keyed query field is rejected, like every other closed shape", () => {
+  /**
+   * PRISTINE-TIP BEHAVIOUR (reproduced): `{kind, id, [Symbol("payload")]: huge}`
+   * resolved. The query's closed-key check loops `getOwnPropertyNames`, which does
+   * not see symbols, so an arbitrary symbol-keyed payload rode along.
+   *
+   * THIS CONTRADICTED AN EXISTING TEST — and the existing test's own NAME, "a
+   * symbol-keyed query field is rejected", was on the right side of it while its
+   * ASSERTION (`resolved`) was on the wrong one. Its comment claimed
+   * "isPlainDataObject's symbol check is what catches this"; `isPlainDataObject` in
+   * this contract has no symbol check at all (null/type/array/Proxy/prototype, and
+   * nothing else). So the assertion was pinning behaviour the author believed was
+   * something else.
+   *
+   * The rule the rest of the file keeps: `hasExactKeys` — used for the locator, the
+   * entry and the manifest — opens with `getOwnPropertySymbols(o).length > 0 →
+   * false`. The query was the only closed key set validated by a hand-rolled loop,
+   * and the only one that let symbols through. The assertion was corrected, with
+   * that reasoning recorded at the old test.
+   */
+  const m = () => chain([{ from: loc("A", "a"), to: ref("B", "b") }]);
+
+  it("rejects a symbol-keyed query", () => {
+    const q: Record<string | symbol, unknown> = { kind: "agent", id: "A" };
+    q[Symbol("payload")] = "x".repeat(1024);
+    expect(resolveHistorical(m(), q).status).toBe("ambiguous");
+  });
+
+  it("rejects a WELL-KNOWN symbol too — not just fresh ones", () => {
+    const q: Record<string | symbol, unknown> = { kind: "agent", id: "A" };
+    (q as Record<symbol, unknown>)[Symbol.iterator] = () => undefined;
+    expect(resolveHistorical(m(), q).status).toBe("ambiguous");
+  });
+
+  it("rejects a NON-ENUMERABLE symbol — `getOwnPropertySymbols` sees those too", () => {
+    const q: Record<string, unknown> = { kind: "agent", id: "A" };
+    Object.defineProperty(q, Symbol("hidden"), { value: 1, enumerable: false });
+    expect(resolveHistorical(m(), q).status).toBe("ambiguous");
+  });
+
+  it("and an ordinary symbol-free query still resolves", () => {
+    // Both directions, so the rule cannot be met by always answering `ambiguous`.
+    expect(resolveHistorical(m(), { kind: "agent", id: "A" }).status).toBe("resolved");
+  });
+
+  it("the query now matches `hasExactKeys` on symbols — the same rule, one file", () => {
+    // The closed shapes validated by `hasExactKeys` already behaved this way; this
+    // asserts the query is no longer the exception.
+    const entryWithSymbol: Record<string | symbol, unknown> = {
+      ...chain([{ from: loc("A", "a"), to: ref("B", "b") }]).entries[0],
+    };
+    entryWithSymbol[Symbol("x")] = 1;
+    expect(validateAdoptionEntry(entryWithSymbol)).toBeNull();
   });
 });
