@@ -326,6 +326,140 @@ function ownDataProp(
   return { kind: "data", value: desc.value };
 }
 
+// ── THE CONTAINMENT LADDER (spec README rules 6 and 7) ───────────────────────
+//
+// ⚠️ FIXED AFTER A REPORTED DEFECT. Every scalar below was previously validated by
+// `isNonEmptyStr` ALONE: no length bound, no control-character rejection. That is
+// the same class that let a 12 KB agent definition ride through S4's `child_commit`
+// while its schema claimed "no body field" — an unbounded free-text scalar IS a
+// body field, whatever the field name says.
+//
+// It also had a second consequence that is worse than smuggling, and is the reason
+// this fix is not merely tidiness. See the R6 note on `MAX_LABEL_LEN` below.
+//
+// Enumerated explicitly, because a level that is not named is the level that turns
+// out to be unbounded:
+//
+//   SCALARS
+//     id-shaped   id, fact_id, project_id, run_id, proposed_id, owning_layer  128
+//     label       DomainFact/BoundaryFact/MethodFact.label                    200
+//     prose       rationale, defer_reason                                     500
+//     locator     EvidenceRef locator                                         512
+//     anchor      EvidenceRef anchor                                           64
+//     ref         the whole `<source>:<locator>#<anchor>` wire string         640
+//     commitish   source_commit                                         7–64 hex
+//     timestamp   generated_at                                     RFC3339, ≤ 64
+//     hash        every *_tree_hash_*, feedstock hashes         already 64 hex
+//
+//   ARRAYS
+//     domains / boundaries / repeated_methods                             200 each
+//     evidence_refs (per fact)                                                  64
+//     occurrence_count                                    1 … MAX_EVIDENCE_REFS
+//     coverage.covered / uncovered / unmatched_roles                      500 each
+//     justified_by (per candidate)                                              32
+//     feedstock.absent                                                          16
+//     candidates                              capability.suggestion_budget (A1.1)
+//
+// `occurrence_count`'s ceiling is not a separate number: A1.4 requires it to equal
+// `evidence_refs.length`, so bounding the array bounds the count by construction.
+// Two independently-chosen limits could disagree; one cannot.
+
+/** ids name files, roles and facts — bounded, and NOT path-shaped (XC.5). */
+export const MAX_ID_LEN = 128;
+/** A short human label. */
+export const MAX_LABEL_LEN = 200;
+/** A sentence or two of human prose (`rationale`, `defer_reason`). */
+export const MAX_PROSE_LEN = 500;
+export const MAX_LOCATOR_LEN = 512;
+export const MAX_ANCHOR_LEN = 64;
+export const MAX_REF_LEN = 640;
+export const MAX_TIMESTAMP_LEN = 64;
+export const MAX_FACTS = 200;
+export const MAX_EVIDENCE_REFS = 64;
+export const MAX_COVERAGE_ENTRIES = 500;
+export const MAX_JUSTIFIED_BY = 32;
+export const MAX_ABSENT = 16;
+
+/**
+ * C0 / C1 / DEL. THE SHARP UNIVERSAL GUARD: an id, label, reason, sha, run id or
+ * timestamp never contains a newline or an escape byte; a payload always does.
+ *
+ * ── R6, IN A FORM THE PLAN DID NOT ANTICIPATE ───────────────────────────────
+ * Risk R6 is "Learn turns untrusted repo content into trusted execution state".
+ * The anticipated shape was state mutation. This is the other shape: a candidate
+ * carrying an ANSI erase-line sequence VALIDATED, and `/guild:status` printed it —
+ * so untrusted repo content could erase the line reading
+ *
+ *     "report-only — nothing is created without approval"
+ *
+ * and print its own in its place. Not mutating state: REWRITING THE OPERATOR'S
+ * EVIDENCE THAT STATE WAS NOT MUTATED.
+ *
+ * That is the strongest argument in this initiative for why the no-mutation marker
+ * has to be STRUCTURAL (`mutation_performed` as the literal `false`, checked
+ * before/after hashes) rather than printed. A printed assurance is only as
+ * trustworthy as the least-validated string on the same terminal.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+
+/**
+ * TWO id shapes, because this contract genuinely has two kinds of id and
+ * collapsing them would either break the namespacing convention or leave a path
+ * where a filename belongs.
+ *
+ *   SLUG — names something that becomes a FILE or a config value:
+ *          `proposed_id` (→ `.guild/agents/<id>.md`), `project_id`, `run_id`,
+ *          `owning_layer`, role names. NO `/` at all: a `proposed_id` of
+ *          `../../etc/passwd` must not be expressible (XC.5).
+ *
+ *   NAMESPACED ID — names a FACT inside this artifact: `domain/dispatch`,
+ *          `method/adversarial-review`, `cand/1`. `/` is the established
+ *          namespace separator here, so forbidding it would be a gratuitous
+ *          break. Traversal is what actually matters, and it is forbidden:
+ *          no `.` or `..` segment, no leading/trailing/doubled slash — the same
+ *          discipline `isCanonicalLocator` applies, so one referent has exactly
+ *          one spelling and raw-string comparison stays sound.
+ *
+ * Both are bounded and control-character-free.
+ */
+const SLUG_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function isBoundedSlug(v: unknown): v is string {
+  return (
+    typeof v === "string" &&
+    v.length > 0 &&
+    v.length <= MAX_ID_LEN &&
+    !CONTROL_CHARS.test(v) &&
+    SLUG_SHAPE.test(v)
+  );
+}
+
+function isBoundedNamespacedId(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_ID_LEN) return false;
+  if (CONTROL_CHARS.test(v)) return false;
+  if (v.includes("\\")) return false; // one separator convention only
+  for (const seg of v.split("/")) {
+    if (!SLUG_SHAPE.test(seg)) return false; // also rejects "", ".", ".." by shape
+  }
+  return true;
+}
+
+/** Human text: bounded and control-character-free, but otherwise unrestricted. */
+function isBoundedText(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.length > 0 && v.length <= max && !CONTROL_CHARS.test(v);
+}
+
+/**
+ * `source_commit`: 7–64 hex, or null. Previously any non-empty string, which is
+ * exactly the S4 `child_commit` defect — a commit id that accepts prose accepts a
+ * body (XC.3).
+ */
+const COMMITISH_RE = /^[0-9a-f]{7,64}$/;
+
+/** RFC3339, shape-checked. `"yesterday"` is not a timestamp (XC.4). */
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
 const isNonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
 /** Exactly the closed key set — no extras, no symbols. */
@@ -383,14 +517,32 @@ function readDataArray(v: unknown): unknown[] | null {
   return out;
 }
 
-/** Array of non-empty strings, single-pass, no duplicates permitted when `unique`. */
-function readStrArray(v: unknown, opts: { unique?: boolean } = {}): string[] | null {
+/**
+ * Array of bounded strings, single-pass, no duplicates permitted when `unique`.
+ *
+ * `maxItems` and `maxLen` are REQUIRED by every caller. Bounding the element and
+ * leaving the array unbounded is rule 7's exact failure — body capacity is the
+ * product of field size and field count, so bounding the parts does not bound the
+ * whole. The array cap is checked BEFORE the per-entry scan, so an over-long array
+ * fails as over-long rather than on whatever its 500th entry happens to get wrong.
+ */
+function readStrArray(
+  v: unknown,
+  opts: { unique?: boolean; maxItems: number; maxLen: number; idKind?: "slug" | "namespaced" }
+): string[] | null {
   const raw = readDataArray(v);
   if (raw === null) return null;
+  if (raw.length > opts.maxItems) return null;
   const out: string[] = [];
   const seen = new Set<string>();
   for (const entry of raw) {
-    if (!isNonEmptyStr(entry)) return null;
+    if (opts.idKind === "slug") {
+      if (!isBoundedSlug(entry)) return null;
+    } else if (opts.idKind === "namespaced") {
+      if (!isBoundedNamespacedId(entry)) return null;
+    } else if (!isBoundedText(entry, opts.maxLen)) {
+      return null;
+    }
     if (opts.unique) {
       if (seen.has(entry)) return null;
       seen.add(entry);
@@ -431,6 +583,7 @@ export function isTreeHash(v: unknown): v is string {
  */
 export function parseEvidenceRef(v: unknown): EvidenceRef | null {
   if (!isNonEmptyStr(v)) return null;
+  if (v.length > MAX_REF_LEN) return null; // the whole wire string is bounded
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f]/.test(v)) return null;
 
@@ -449,7 +602,8 @@ export function parseEvidenceRef(v: unknown): EvidenceRef | null {
     rest = rest.slice(0, hash);
     if (anchor.length === 0) return null; // trailing `#` with no anchor
   }
-  if (rest.length === 0) return null; // empty locator
+  if (rest.length === 0 || rest.length > MAX_LOCATOR_LEN) return null;
+  if (anchor !== null && anchor.length > MAX_ANCHOR_LEN) return null;
   if (!isCanonicalLocator(rest)) return null;
 
   return { source: source as EvidenceSource, locator: rest, anchor };
@@ -506,7 +660,7 @@ export function isEvidenceRef(v: unknown): boolean {
  * about how often something happened has to cite history, not code (A1.11).
  */
 function readEvidenceRefArray(v: unknown, opts: { historicalOnly?: boolean } = {}): string[] | null {
-  const raw = readStrArray(v, { unique: true });
+  const raw = readStrArray(v, { unique: true, maxItems: MAX_EVIDENCE_REFS, maxLen: MAX_REF_LEN });
   if (raw === null) return null;
   for (const entry of raw) {
     const parsed = parseEvidenceRef(entry);
@@ -596,7 +750,14 @@ function validateFeedstockInner(obj: unknown): FeedstockBinding | null {
   if (kg.value !== null && !isFeedstockHash(kg.value)) return null;
   if (roster.value !== null && !isFeedstockHash(roster.value)) return null;
 
-  const absent = readStrArray(absentProp.value, { unique: true });
+  // `absent` names members of the CLOSED feedstock vocabulary, so it is id-shaped
+  // and small — an "absent" list longer than the input list is nonsense.
+  const absent = readStrArray(absentProp.value, {
+    unique: true,
+    maxItems: MAX_ABSENT,
+    maxLen: MAX_ID_LEN,
+    idKind: "slug",
+  });
   if (absent === null) return null;
 
   return {
@@ -622,7 +783,7 @@ function validateDomainFactInner(obj: unknown): DomainFact | null {
   if (id.kind !== "data" || label.kind !== "data") return null;
   if (refs.kind !== "data" || conf.kind !== "data") return null;
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(label.value)) return null;
+  if (!isBoundedNamespacedId(id.value) || !isBoundedText(label.value, MAX_LABEL_LEN)) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
 
   const evidence = readEvidenceRefArray(refs.value);
@@ -648,10 +809,11 @@ function validateBoundaryFactInner(obj: unknown): BoundaryFact | null {
   if (id.kind !== "data" || label.kind !== "data" || rationale.kind !== "data") return null;
   if (refs.kind !== "data" || conf.kind !== "data") return null;
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(label.value)) return null;
+  if (!isBoundedNamespacedId(id.value) || !isBoundedText(label.value, MAX_LABEL_LEN)) return null;
   // A boundary asserts a JUDGMENT seam; an unexplained one is an unfalsifiable
-  // claim, so the rationale is required rather than optional.
-  if (!isNonEmptyStr(rationale.value)) return null;
+  // claim, so the rationale is required rather than optional — and bounded, since
+  // "required prose" is precisely where an unbounded body would be welcome.
+  if (!isBoundedText(rationale.value, MAX_PROSE_LEN)) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
 
   const evidence = readEvidenceRefArray(refs.value);
@@ -678,10 +840,14 @@ function validateMethodFactInner(obj: unknown): MethodFact | null {
   if (id.kind !== "data" || label.kind !== "data" || count.kind !== "data") return null;
   if (refs.kind !== "data" || conf.kind !== "data") return null;
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(label.value)) return null;
+  if (!isBoundedNamespacedId(id.value) || !isBoundedText(label.value, MAX_LABEL_LEN)) return null;
   if (typeof count.value !== "number" || !Number.isInteger(count.value) || count.value < 1) {
     return null;
   }
+  // The ceiling is MAX_EVIDENCE_REFS, not a separate number: A1.4 forces the count
+  // to equal `evidence_refs.length`, so one limit bounds both and they cannot
+  // disagree. Checked early so an absurd count fails as absurd.
+  if (count.value > MAX_EVIDENCE_REFS) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
 
   // A1.11 — a recurrence claim must cite HISTORY (run / reflection), not code.
@@ -710,7 +876,7 @@ function validateCoveredEntryInner(obj: unknown): CoveredEntry | null {
   const factId = ownDataProp(obj, "fact_id");
   const coveredBy = ownDataProp(obj, "covered_by");
   if (factId.kind !== "data" || coveredBy.kind !== "data") return null;
-  if (!isNonEmptyStr(factId.value)) return null;
+  if (!isBoundedNamespacedId(factId.value)) return null;
 
   // A1.8 — coverage is HASH-BOUND. Delegated to S2's validator rather than
   // re-implemented: a second implementation of the same contract is exactly the
@@ -735,7 +901,7 @@ function validateCoverageInner(obj: unknown): CoverageVerdict | null {
   if (uncoveredProp.kind !== "data" || unmatchedProp.kind !== "data") return null;
 
   const rawCovered = readDataArray(coveredProp.value);
-  if (rawCovered === null) return null;
+  if (rawCovered === null || rawCovered.length > MAX_COVERAGE_ENTRIES) return null;
   const covered: CoveredEntry[] = [];
   const seenFacts = new Set<string>();
   for (const entry of rawCovered) {
@@ -748,9 +914,19 @@ function validateCoverageInner(obj: unknown): CoverageVerdict | null {
     covered.push(parsed);
   }
 
-  const uncovered = readStrArray(uncoveredProp.value, { unique: true });
+  const uncovered = readStrArray(uncoveredProp.value, {
+    unique: true,
+    maxItems: MAX_COVERAGE_ENTRIES,
+    maxLen: MAX_ID_LEN,
+    idKind: "namespaced", // fact ids
+  });
   if (uncovered === null) return null;
-  const unmatchedRoles = readStrArray(unmatchedProp.value, { unique: true });
+  const unmatchedRoles = readStrArray(unmatchedProp.value, {
+    unique: true,
+    maxItems: MAX_COVERAGE_ENTRIES,
+    maxLen: MAX_ID_LEN,
+    idKind: "slug", // role names become files
+  });
   if (unmatchedRoles === null) return null;
 
   // A fact cannot be both covered and uncovered.
@@ -788,8 +964,11 @@ function validateCandidateInner(obj: unknown): CapabilityCandidate | null {
     return null;
   }
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(proposedId.value)) return null;
-  if (!isNonEmptyStr(owningLayer.value)) return null;
+  // `proposed_id` names a FILE a human may approve into existence, and
+  // `owning_layer` names the workspace or a child. Both id-shaped: bounded, not
+  // path-shaped, no control characters.
+  if (!isBoundedNamespacedId(id.value) || !isBoundedSlug(proposedId.value)) return null;
+  if (!isBoundedSlug(owningLayer.value)) return null;
   if (typeof kind.value !== "string" || !CANDIDATE_KIND_SET.has(kind.value)) return null;
   if (typeof action.value !== "string" || !CANDIDATE_ACTION_SET.has(action.value)) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
@@ -800,7 +979,12 @@ function validateCandidateInner(obj: unknown): CapabilityCandidate | null {
   // A1.2 — no evidence, no candidate. This is the "no invented professions" guard
   // as code rather than prose. `justified_by` cites fact ids, not evidence refs,
   // so it is a plain non-empty unique string array.
-  const justified = readStrArray(justifiedBy.value, { unique: true });
+  const justified = readStrArray(justifiedBy.value, {
+    unique: true,
+    maxItems: MAX_JUSTIFIED_BY,
+    maxLen: MAX_ID_LEN,
+    idKind: "namespaced", // cites fact ids
+  });
   if (justified === null || justified.length === 0) return null;
 
   // A1.3 — a low-confidence finding may be surfaced, but it may NOT be proposed.
@@ -812,7 +996,7 @@ function validateCandidateInner(obj: unknown): CapabilityCandidate | null {
   if (actionValue === "propose") {
     if (deferReason.value !== null) return null;
   } else {
-    if (!isNonEmptyStr(deferReason.value)) return null;
+    if (!isBoundedText(deferReason.value, MAX_PROSE_LEN)) return null;
   }
 
   return {
@@ -941,10 +1125,20 @@ function validateProjectCapabilityProfileV1Inner(
   if (resolverModeProp.kind !== "data") return null;
   if (mutationPerformedProp.kind !== "data" || mutationEvidenceProp.kind !== "data") return null;
 
-  if (!isNonEmptyStr(projectId.value)) return null;
-  if (!isNonEmptyStr(runId.value)) return null;
-  if (!isNonEmptyStr(generatedAt.value)) return null;
-  if (sourceCommit.value !== null && !isNonEmptyStr(sourceCommit.value)) return null;
+  if (!isBoundedSlug(projectId.value)) return null;
+  if (!isBoundedSlug(runId.value)) return null;
+  // XC.4 — a timestamp is shape-checked. `"yesterday"` is not a timestamp.
+  if (
+    typeof generatedAt.value !== "string" ||
+    generatedAt.value.length > MAX_TIMESTAMP_LEN ||
+    !RFC3339_RE.test(generatedAt.value)
+  ) {
+    return null;
+  }
+  // XC.3 — a commitish is 7-64 hex. S4 shipped a `child_commit` validated as any
+  // non-empty string and it carried a 12 KB agent definition; the same field name
+  // gets the same treatment here.
+  if (sourceCommit.value !== null && !COMMITISH_RE.test(String(sourceCommit.value))) return null;
 
   if (
     typeof resolverModeProp.value !== "string" ||
@@ -967,7 +1161,7 @@ function validateProjectCapabilityProfileV1Inner(
   if (mutationEvidence === null) return null;
 
   const rawDomains = readDataArray(domainsProp.value);
-  if (rawDomains === null) return null;
+  if (rawDomains === null || rawDomains.length > MAX_FACTS) return null;
   const domains: DomainFact[] = [];
   const domainIds = new Set<string>();
   for (const entry of rawDomains) {
@@ -979,7 +1173,7 @@ function validateProjectCapabilityProfileV1Inner(
   }
 
   const rawBoundaries = readDataArray(boundariesProp.value);
-  if (rawBoundaries === null) return null;
+  if (rawBoundaries === null || rawBoundaries.length > MAX_FACTS) return null;
   const boundaries: BoundaryFact[] = [];
   const boundaryIds = new Set<string>();
   for (const entry of rawBoundaries) {
@@ -991,7 +1185,7 @@ function validateProjectCapabilityProfileV1Inner(
   }
 
   const rawMethods = readDataArray(methodsProp.value);
-  if (rawMethods === null) return null;
+  if (rawMethods === null || rawMethods.length > MAX_FACTS) return null;
   const repeatedMethods: MethodFact[] = [];
   const methodIds = new Set<string>();
   for (const entry of rawMethods) {

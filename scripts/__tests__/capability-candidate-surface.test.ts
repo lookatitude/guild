@@ -248,78 +248,163 @@ describe("F7 — the rendered block a human actually reads", () => {
   });
 });
 
-describe("F7 — the rendered line is not a FORGERY CHANNEL", () => {
+describe("R6 — the forgery channel is CLOSED AT THE CONTRACT, not at the renderer", () => {
   /**
-   * The real hole this closes. S1 validates `proposed_id`, `defer_reason` and
-   * `owning_layer` with `isNonEmptyStr` only — no length bound, no control-char
-   * rejection — so a VALID profile can carry an ANSI erase-line sequence. That
-   * profile is then printed by `/guild:status`. Unrendered safely, a candidate
-   * could wipe the "report-only — nothing is created without approval" line and
-   * print its own, forging approval in the operator's own status output.
+   * THE DEFECT, AND WHY IT WAS R6 RATHER THAN A VALIDATION GAP.
    *
-   * These fixtures are written straight to disk (not through the emitter) because
-   * that is exactly the threat model: a profile that ALREADY validates.
+   * S1 validated `proposed_id`, `defer_reason`, `owning_layer`, `label` and
+   * `rationale` with `isNonEmptyStr` ALONE. A candidate carrying an ANSI
+   * erase-line sequence therefore VALIDATED, and `/guild:status` printed it — so
+   * untrusted repo content could erase the line reading
+   *
+   *     "report-only — nothing is created without approval"
+   *
+   * and print its own. That is risk R6 (Learn turning untrusted repo content into
+   * trusted execution state) in a shape the plan did not anticipate: not mutating
+   * state, but REWRITING THE OPERATOR'S EVIDENCE THAT STATE WAS NOT MUTATED.
+   *
+   * The fix is in the CONTRACT, so every consumer inherits it — not only this one.
+   * These rows assert the profile no longer validates at all; the renderer's
+   * replacement markers, tested separately below, are now defense in depth and
+   * UNREACHABLE through this path rather than merely redundant.
    */
   const ESC = String.fromCharCode(27);
 
-  function writeRawProfile(candidateOverrides: Record<string, unknown>): void {
+  function writeRawProfile(over: Record<string, unknown>): void {
     expect(emitInto("run-20260801-120000-a", factsWith(1)).status).toBe("emitted");
     const p = path.join(tmp, ".guild/runs/run-20260801-120000-a/capability/profile.json");
     const profile = JSON.parse(fs.readFileSync(p, "utf8"));
-    Object.assign(profile.candidates[0], candidateOverrides);
+    Object.assign(profile.candidates[0], over);
     fs.writeFileSync(p, JSON.stringify(profile, null, 2));
   }
 
-  it("a control-character `proposed_id` still VALIDATES — proving the hole is real", () => {
+  it("an ANSI erase-line `proposed_id` NO LONGER VALIDATES — the R6 payload is rejected", () => {
     writeRawProfile({ proposed_id: `evil${ESC}[2K\rAPPROVED` });
-    // If this ever starts returning `profile_invalid`, S1 gained the bound and
-    // this whole block becomes belt-and-braces rather than the only guard.
-    expect(surfaceCapabilityCandidates(tmp).empty_reason).toBeNull();
-  });
-
-  it("...but the RENDERED line carries no control character", () => {
-    writeRawProfile({ proposed_id: `evil${ESC}[2K\rAPPROVED` });
-    const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
-    expect(text).not.toContain(ESC);
-    expect(text).not.toContain("\r");
-    expect(text).toContain("<proposed_id: unrenderable characters>");
-    // And the warning the forgery targeted survives.
+    const s = surfaceCapabilityCandidates(tmp);
+    expect(s.empty_reason).toBe("profile_invalid");
+    expect(s.pending).toEqual([]);
+    // And the operator still sees WHY, plus the report-only framing intact.
+    const text = renderCandidateSection(s);
+    expect(text).toContain("FAILED validation");
     expect(text).toContain("report-only");
+    expect(text).not.toContain("APPROVED");
+    expect(text).not.toContain(ESC);
   });
 
-  it("a newline in `defer_reason` cannot forge an extra output line", () => {
+  it("a newline in `defer_reason` no longer validates", () => {
     writeRawProfile({
       action: "observe",
-      defer_reason: "ok\n  • [propose] agent \"backdoor\" (confidence high, owner project)",
+      defer_reason: 'ok\n  • [propose] agent "backdoor" (confidence high, owner project)',
+    });
+    const s = surfaceCapabilityCandidates(tmp);
+    expect(s.empty_reason).toBe("profile_invalid");
+    expect(renderCandidateSection(s)).not.toContain("backdoor");
+  });
+
+  it("a control-character `owning_layer` no longer validates", () => {
+    writeRawProfile({ owning_layer: `x${ESC}[31m` });
+    expect(surfaceCapabilityCandidates(tmp).empty_reason).toBe("profile_invalid");
+  });
+
+  it("delimiter injection no longer validates either — `\"` and `(` are not slug characters", () => {
+    // Codex round 2 finding 8's exact payload. It contains no control character,
+    // so the renderer's original denylist passed it; the contract's slug shape
+    // rejects it outright.
+    writeRawProfile({ proposed_id: 'x" (confidence high, owner project) — APPROVED "' });
+    const s = surfaceCapabilityCandidates(tmp);
+    expect(s.empty_reason).toBe("profile_invalid");
+    expect(renderCandidateSection(s)).not.toContain("APPROVED");
+  });
+
+  it("bidi overrides, line separators and zero-width characters no longer validate", () => {
+    for (const payload of ["x\u202Ereversed", "x\u2066isolate", "x\u2028line", "x\u2029para", "x\u200Bzero"]) {
+      writeRawProfile({ proposed_id: payload });
+      expect(surfaceCapabilityCandidates(tmp).empty_reason).toBe("profile_invalid");
+    }
+  });
+
+  it("an over-long field no longer validates", () => {
+    writeRawProfile({ proposed_id: "a".repeat(5000) });
+    expect(surfaceCapabilityCandidates(tmp).empty_reason).toBe("profile_invalid");
+  });
+
+  it("ANTI-VACUITY: an ordinary candidate still validates and renders verbatim", () => {
+    // A contract that rejected everything would satisfy every row above while
+    // making the surface useless. Real content must still pass end to end.
+    writeRawProfile({
+      proposed_id: "host-integrator_v2.1",
+      action: "observe",
+      defer_reason: "only 2 occurrences; watch for a third",
+      owning_layer: "workspace",
     });
     const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
-    expect(text).not.toContain("backdoor");
-    expect(text).toContain("<defer_reason: unrenderable characters>");
+    expect(text).toContain("host-integrator_v2.1");
+    expect(text).toContain("only 2 occurrences; watch for a third");
+    expect(text).toContain("workspace");
+  });
+});
+
+describe("R6 — the renderer's guard, as DEFENSE IN DEPTH", () => {
+  /**
+   * The contract now rejects every payload above, so these markers are
+   * unreachable through `surfaceCapabilityCandidates`. That is the goal, not a
+   * reason to delete the guard: the renderer is the last boundary before a human
+   * reads the text, and it must not depend on an upstream validator staying
+   * correct forever.
+   *
+   * Reached here by handing `renderCandidateSection` a surface object DIRECTLY,
+   * which is the only honest way to exercise a layer that is now unreachable by
+   * construction.
+   */
+  const ESC = String.fromCharCode(27);
+
+  const surfaceWith = (over: Record<string, unknown>) =>
+    ({
+      source_run_id: "run-20260801-120000-a",
+      pending: [
+        {
+          run_id: "run-20260801-120000-a",
+          candidate: {
+            id: "c0",
+            kind: "agent",
+            proposed_id: "ok-role",
+            justified_by: ["d1"],
+            action: "propose",
+            defer_reason: null,
+            confidence: "high",
+            owning_layer: "project",
+            ...over,
+          },
+        },
+      ],
+      satisfied: [],
+      empty_reason: null,
+    }) as never;
+
+  it("still replaces a control-character field whole", () => {
+    const text = renderCandidateSection(surfaceWith({ proposed_id: `evil${ESC}[2K\r` }));
+    expect(text).toContain("<proposed_id: unrenderable characters>");
+    expect(text).not.toContain(ESC);
   });
 
-  it("an over-long field is REPLACED, not truncated — a truncated id is worse than none", () => {
-    // Truncation would print a plausible-looking id an operator could approve.
-    writeRawProfile({ proposed_id: "a".repeat(5000) });
-    const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
+  it("still replaces a delimiter-injection field whole", () => {
+    const text = renderCandidateSection(
+      surfaceWith({ proposed_id: 'x" (confidence high, owner project) — APPROVED "' })
+    );
+    expect(text).not.toContain("APPROVED");
+    expect(text.split("\n").filter((l) => l.trim().startsWith("•"))).toHaveLength(1);
+  });
+
+  it("still REPLACES rather than truncates an over-long field", () => {
+    // A truncated `proposed_id` is worse than none — an operator could approve
+    // the wrong thing.
+    const text = renderCandidateSection(surfaceWith({ proposed_id: "a".repeat(5000) }));
     expect(text).toContain("<proposed_id: over 120 chars>");
     expect(text).not.toContain("aaaaaaaaaa");
-    expect(text.split("\n").every((l) => l.length < 300)).toBe(true);
   });
 
-  it("`owning_layer` gets the same treatment as the other free scalars", () => {
-    writeRawProfile({ owning_layer: `x${ESC}[31m` });
-    expect(renderCandidateSection(surfaceCapabilityCandidates(tmp))).toContain(
-      "<owning_layer: unrenderable characters>"
-    );
-  });
-
-  it("a benign field is printed UNCHANGED — the guard is not a blanket mangler", () => {
-    // Anti-vacuity: a check that replaced everything would pass every row above
-    // while destroying the surface's usefulness.
-    expect(emitInto("run-20260801-120000-a", factsWith(1)).status).toBe("emitted");
-    expect(renderCandidateSection(surfaceCapabilityCandidates(tmp))).toContain(
-      '"agent-role-0"'
-    );
+  it("ANTI-VACUITY: ordinary values still pass through the guard untouched", () => {
+    expect(renderCandidateSection(surfaceWith({}))).toContain('"ok-role"');
   });
 });
 
@@ -379,48 +464,10 @@ describe("CODEX ROUND 2 — regressions for the reported counterexamples", () =>
     fs.writeFileSync(p, JSON.stringify(profile, null, 2));
   }
 
-  it("finding 8 — DELIMITER INJECTION cannot forge a second candidate line", () => {
-    // Codex's exact payload. It contains no control character, so the previous
-    // control-char denylist passed it through and it rendered as an approved
-    // candidate. An allowlist closes the class, not just this string.
-    writeRawProfile({ proposed_id: 'x" (confidence high, owner project) — APPROVED "' });
-    const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
-    expect(text).not.toContain("APPROVED");
-    expect(text).toContain("<proposed_id: unrenderable characters>");
-    // Exactly one candidate line, whatever the payload tried to add.
-    expect(text.split("\n").filter((l) => l.trim().startsWith("•"))).toHaveLength(1);
-  });
-
-  it("finding 8 — bidi overrides, line separators and zero-width chars are all refused", () => {
-    for (const payload of [
-      "x‮reversed",
-      "x⁦isolate",
-      "x line",
-      "x para",
-      "x​zero",
-      `x${ESC}[31m`,
-    ]) {
-      writeRawProfile({ proposed_id: payload });
-      expect(renderCandidateSection(surfaceCapabilityCandidates(tmp))).toContain(
-        "<proposed_id: unrenderable characters>",
-      );
-    }
-  });
-
-  it("ANTI-VACUITY: an ordinary slug and an ordinary reason still render verbatim", () => {
-    // An allowlist that refused everything would satisfy every row above while
-    // destroying the surface. The permitted set must cover real content.
-    writeRawProfile({
-      proposed_id: "host-integrator_v2.1",
-      action: "observe",
-      defer_reason: "only 2 occurrences; watch for a third",
-      owning_layer: "workspace/plugin",
-    });
-    const text = renderCandidateSection(surfaceCapabilityCandidates(tmp));
-    expect(text).toContain("host-integrator_v2.1");
-    expect(text).toContain("only 2 occurrences; watch for a third");
-    expect(text).toContain("workspace/plugin");
-  });
+  // findings 8's rows moved UP into the R6 blocks above: the contract now rejects
+  // those payloads outright, so the assertions there are "does not validate"
+  // rather than "renders safely". Keeping duplicates here would test the renderer
+  // through a path that can no longer reach it.
 
   it("finding 9 — an out-of-range run stamp is SKIPPED, not treated as newest", () => {
     // `run-99999999-999999-x` sorts ahead of every real run, so a single bogus

@@ -39,6 +39,14 @@ import {
   validateProjectCapabilityProfileV1,
   isProjectCapabilityProfileV1,
   type ProjectCapabilityProfileV1,
+  MAX_ABSENT,
+  MAX_COVERAGE_ENTRIES,
+  MAX_EVIDENCE_REFS,
+  MAX_FACTS,
+  MAX_ID_LEN,
+  MAX_JUSTIFIED_BY,
+  MAX_LABEL_LEN,
+  MAX_PROSE_LEN,
 } from "../lib/core/contracts/project-capability-profile";
 
 import { PROJECT_DEFINITION_REF_SCHEMA } from "../lib/core/contracts/project-definition-ref";
@@ -800,5 +808,189 @@ describe("anti-vacuity — the fixture is not passing by accident", () => {
     expect(src).not.toContain('from "fs"');
     expect(src).not.toContain("Date.now");
     expect(src).not.toContain("new Date");
+  });
+});
+
+describe("XC / rule 6 — every free-text scalar is BOUNDED and SHAPE-CHECKED", () => {
+  /**
+   * The defect this closes: `proposed_id`, `defer_reason`, `owning_layer`, `label`
+   * and `rationale` were validated by `isNonEmptyStr` ALONE — no length bound, no
+   * control-character rejection. That is the S4 `child_commit` class (a schema
+   * claiming "no body field" that carried 12 KB of agent definition), and it had a
+   * second consequence documented on CONTROL_CHARS: an ANSI erase-line sequence
+   * validated and was printed by `/guild:status`, letting untrusted repo content
+   * rewrite the operator's evidence that nothing was mutated (R6).
+   *
+   * Fixed by SWEEP, not by patching the five fields that were reported.
+   */
+  const ESC = String.fromCharCode(27);
+  const CONTROL_PAYLOAD = `evil${ESC}[2K\rAPPROVED`;
+  const LONG = "a".repeat(5000);
+
+  it("XC.2 — a control character is rejected in EVERY string field", () => {
+    expect(ok(profile({ project_id: CONTROL_PAYLOAD } as never))).toBeNull();
+    expect(ok(profile({ run_id: CONTROL_PAYLOAD } as never))).toBeNull();
+
+    const withDomain = (over: Record<string, unknown>) => {
+      const p = profile();
+      Object.assign(p.domains[0], over);
+      return ok(p);
+    };
+    expect(withDomain({ id: CONTROL_PAYLOAD })).toBeNull();
+    expect(withDomain({ label: CONTROL_PAYLOAD })).toBeNull();
+
+    const p1 = profile();
+    p1.boundaries[0].rationale = CONTROL_PAYLOAD;
+    expect(ok(p1)).toBeNull();
+
+    const p2 = profile();
+    p2.repeated_methods[0].label = CONTROL_PAYLOAD;
+    expect(ok(p2)).toBeNull();
+
+    const p3 = profile();
+    p3.candidates[0].proposed_id = CONTROL_PAYLOAD;
+    expect(ok(p3)).toBeNull();
+
+    const p4 = profile();
+    p4.candidates[0].owning_layer = CONTROL_PAYLOAD;
+    expect(ok(p4)).toBeNull();
+
+    const p5 = profile();
+    p5.candidates[0].action = "observe";
+    p5.candidates[0].defer_reason = CONTROL_PAYLOAD;
+    expect(ok(p5)).toBeNull();
+  });
+
+  it("XC.1 — a 5 KB payload is rejected in EVERY string field", () => {
+    expect(ok(profile({ project_id: LONG } as never))).toBeNull();
+    expect(ok(profile({ run_id: LONG } as never))).toBeNull();
+
+    const p1 = profile();
+    p1.domains[0].label = LONG;
+    expect(ok(p1)).toBeNull();
+
+    const p2 = profile();
+    p2.boundaries[0].rationale = LONG;
+    expect(ok(p2)).toBeNull();
+
+    const p3 = profile();
+    p3.candidates[0].proposed_id = LONG;
+    expect(ok(p3)).toBeNull();
+
+    const p4 = profile();
+    p4.candidates[0].action = "defer";
+    p4.candidates[0].defer_reason = LONG;
+    expect(ok(p4)).toBeNull();
+  });
+
+  it("XC.5 — a SLUG field is not path-shaped: `proposed_id` cannot be a location", () => {
+    // `proposed_id` becomes `.guild/agents/<id>.md`. If it could contain `/`, an
+    // approved candidate could name a path instead of a role.
+    for (const bad of ["../../etc/passwd", "a/b", "a\\b", ".hidden", "-leading", "with space"]) {
+      const p = profile();
+      p.candidates[0].proposed_id = bad;
+      expect(ok(p)).toBeNull();
+    }
+  });
+
+  it("a NAMESPACED fact id keeps `/` but rejects traversal and alias spellings", () => {
+    // `domain/dispatch` is the established convention and must keep working;
+    // traversal and non-canonical spellings must not.
+    const good = profile();
+    expect(ok(good)).not.toBeNull();
+    expect(good.domains[0].id).toContain("/");
+
+    for (const bad of ["domain/../escape", "domain//dispatch", "domain/./x", "/leading", "trailing/"]) {
+      const p = profile();
+      p.domains[0].id = bad;
+      p.coverage.covered[0].fact_id = bad;
+      p.coverage.uncovered = [];
+      expect(ok(p)).toBeNull();
+    }
+  });
+
+  it("XC.4 — `generated_at` is RFC3339-shaped, not merely non-empty", () => {
+    for (const bad of ["yesterday", "2026-08-01", "", "2026-08-01T05:00:00", "not-a-time"]) {
+      expect(ok(profile({ generated_at: bad } as never))).toBeNull();
+    }
+    for (const good of ["2026-08-01T05:00:00Z", "2026-08-01T05:00:00.123Z", "2026-08-01T05:00:00+02:00"]) {
+      expect(ok(profile({ generated_at: good } as never))).not.toBeNull();
+    }
+  });
+
+  it("XC.3 — `source_commit` is 7-64 hex, the S4 `child_commit` lesson applied", () => {
+    for (const bad of ["not-a-sha", "abc", "A".repeat(40), LONG, "an entire agent definition"]) {
+      expect(ok(profile({ source_commit: bad } as never))).toBeNull();
+    }
+    expect(ok(profile({ source_commit: "a".repeat(40) } as never))).not.toBeNull();
+    expect(ok(profile({ source_commit: null } as never))).not.toBeNull();
+  });
+
+  it("rule 7 — the ARRAY levels are bounded too, not just their elements", () => {
+    // Body capacity is the product of field size and field count: bounding the
+    // parts does not bound the whole.
+    const many = (n: number, f: (i: number) => unknown) => Array.from({ length: n }, (_, i) => f(i));
+
+    const pDomains = profile();
+    pDomains.domains = many(MAX_FACTS + 1, (i) => ({
+      id: `domain/d${i}`,
+      label: "x",
+      evidence_refs: ["codebase_map:a.ts"],
+      confidence: "high",
+    }));
+    expect(ok(pDomains)).toBeNull();
+
+    const pRefs = profile();
+    pRefs.domains[0].evidence_refs = many(MAX_EVIDENCE_REFS + 1, (i) => `codebase_map:f${i}.ts`);
+    expect(ok(pRefs)).toBeNull();
+
+    const pJust = profile();
+    pJust.candidates[0].justified_by = many(MAX_JUSTIFIED_BY + 1, (i) => `method/m${i}`);
+    expect(ok(pJust)).toBeNull();
+
+    const pAbsent = profile();
+    pAbsent.feedstock.absent = many(MAX_ABSENT + 1, (i) => `input${i}`);
+    expect(ok(pAbsent)).toBeNull();
+
+    const pUncovered = profile();
+    pUncovered.coverage.uncovered = many(MAX_COVERAGE_ENTRIES + 1, (i) => `domain/x${i}`);
+    expect(ok(pUncovered)).toBeNull();
+  });
+
+  it("`occurrence_count` cannot exceed the evidence-array cap (ONE limit, not two)", () => {
+    const p = profile();
+    p.repeated_methods[0].occurrence_count = MAX_EVIDENCE_REFS + 1;
+    p.repeated_methods[0].evidence_refs = Array.from(
+      { length: MAX_EVIDENCE_REFS + 1 },
+      (_, i) => `run:run-2026080${1}-00000${0}-r${i}`
+    );
+    expect(ok(p)).toBeNull();
+  });
+
+  it("ANTI-VACUITY: the reference fixture and realistic content still VALIDATE", () => {
+    // A sweep that rejected everything would satisfy every row above while
+    // breaking the contract for real producers. The fixture uses namespaced fact
+    // ids, a prose rationale with punctuation, and a hyphenated proposed_id.
+    expect(ok(profile())).not.toBeNull();
+
+    const realistic = profile();
+    realistic.boundaries[0].rationale =
+      "Adapters own discovery; the core owns policy — a change to one should not force a change to the other.";
+    realistic.candidates[0].action = "observe";
+    realistic.candidates[0].defer_reason = "only 2 occurrences so far; watch for a third";
+    realistic.candidates[0].owning_layer = "workspace";
+    realistic.candidates[0].proposed_id = "host-integrator_v2.1";
+    expect(ok(realistic)).not.toBeNull();
+  });
+
+  it("the bound CONSTANTS are exported so consumers cannot guess a different number", () => {
+    expect(MAX_ID_LEN).toBe(128);
+    expect(MAX_LABEL_LEN).toBe(200);
+    expect(MAX_PROSE_LEN).toBe(500);
+    expect(MAX_EVIDENCE_REFS).toBe(64);
+    expect(MAX_FACTS).toBe(200);
+    expect(MAX_JUSTIFIED_BY).toBe(32);
+    expect(MAX_ABSENT).toBe(16);
+    expect(MAX_COVERAGE_ENTRIES).toBe(500);
   });
 });
