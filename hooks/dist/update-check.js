@@ -6240,14 +6240,38 @@ function parseSemver(v) {
   if (!m) return null;
   return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
 }
+function parseComparable(v) {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(v.trim());
+  if (!m) return null;
+  return {
+    triple: [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)],
+    prerelease: m[4] ? m[4].split(".") : []
+  };
+}
+function comparePrereleaseIds(a, b) {
+  const aNum = /^\d+$/.test(a);
+  const bNum = /^\d+$/.test(b);
+  if (aNum && bNum) return Number(a) - Number(b);
+  if (aNum) return -1;
+  if (bNum) return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 function semverLt(a, b) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
+  const pa = parseComparable(a);
+  const pb = parseComparable(b);
   if (!pa || !pb) return false;
   for (let i = 0; i < 3; i++) {
-    if (pa[i] !== pb[i]) return pa[i] < pb[i];
+    if (pa.triple[i] !== pb.triple[i]) return pa.triple[i] < pb.triple[i];
   }
-  return false;
+  if (pa.prerelease.length === 0 || pb.prerelease.length === 0) {
+    return pa.prerelease.length > 0 && pb.prerelease.length === 0;
+  }
+  const shared = Math.min(pa.prerelease.length, pb.prerelease.length);
+  for (let i = 0; i < shared; i++) {
+    const cmp = comparePrereleaseIds(pa.prerelease[i], pb.prerelease[i]);
+    if (cmp !== 0) return cmp < 0;
+  }
+  return pa.prerelease.length < pb.prerelease.length;
 }
 function latestStableTag(tags) {
   let best = null;
