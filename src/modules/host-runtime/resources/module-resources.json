@@ -1149,7 +1149,7 @@
       "id": "projection:src/modules/security/workflows/redact-log.ts",
       "source_path": "src/modules/security/workflows/redact-log.ts",
       "resource_path": "resources/src/modules/security/workflows/redact-log.ts",
-      "sha256": "d39e0ac21eebf816668558130b6e714327404bb986c14aab9662e2cabae3b05b",
+      "sha256": "bbbfe563f78e602078d65aa3539cbdbaadea4048ae7c600789e1ddd3fe72ffd3",
       "projection_dependency": true
     },
     {

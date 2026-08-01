@@ -65,34 +65,32 @@ export const FIELD_SIZE_CAP_BYTES = 4 * 1024; // 4 KiB
  * (sk-, eyJ, Bearer, ghp_, etc.) — this is the canonical implementation.
  */
 /**
- * ARRAY-FROZEN, ELEMENTS DELIBERATELY NOT FROZEN — the one justified exception in the
- * registry-freeze sweep (#18).
+ * DEEP-FROZEN — array AND every RegExp element.
  *
- * Freezing the ARRAY closes the hole that matters: no caller can add a pattern (to make
- * the redactor match something it shouldn't) or remove one (to make a real secret pass
- * through unredacted).
+ * CORRECTION (adversarial review, #18). I first left the elements mutable, reasoning
+ * that `.exec()`/`.test()` on a frozen `/g` RegExp throws when it writes `lastIndex`.
+ * That hazard is real IN GENERAL but does NOT apply here, and I verified the wrong
+ * thing: `redactTokenShapes` builds `new RegExp(re.source, re.flags)` — a FRESH CLONE
+ * per use — so the frozen original's `lastIndex` is never written. The comment two
+ * functions below says exactly that, and I read past it.
  *
- * Deep-freezing the ELEMENTS would BREAK REDACTION. Every pattern here carries the `g`
- * flag, and `.exec()`/`.test()` on a global RegExp WRITE `lastIndex` as they scan. On a
- * frozen RegExp that write throws `TypeError: Cannot assign to read only property
- * 'lastIndex'` in strict mode — verified, not assumed — so a deep freeze would turn the
- * secrets redactor from "scrubs the log" into "throws on the first line".
- *
- * This is why the freeze rail reports object-element registries as their own population
- * rather than folding them into a single count: a green "array frozen" over mutable
- * elements is a half-truth, and the honest answer here is "array closed, elements must
- * stay mutable, and here is the reason".
+ * Leaving the elements extensible was therefore not a justified exception, it was a
+ * hole in a security control. Reproduced against the shipped code: with the array
+ * frozen, redefining one element's `source` to `(?!)` turned
+ * `redactTokenShapes("sk-AAAA…")` from "[REDACTED_TOKEN]" back into the raw secret.
+ * Freezing the array alone stops a pattern being ADDED or REMOVED; it does nothing
+ * about a pattern being NEUTERED in place.
  */
 export const TOKEN_SHAPE_PATTERNS: readonly RegExp[] = Object.freeze([
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g),
 ] as const);
 
 /** Apply group 1 — token-shape redaction. */
