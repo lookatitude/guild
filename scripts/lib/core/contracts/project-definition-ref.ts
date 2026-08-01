@@ -157,8 +157,6 @@ function ownDataProp(
   return { kind: "data", value: desc.value };
 }
 
-const isNonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
-
 /** Exactly the closed key set — no extras, no symbols. */
 function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): boolean {
   if (Object.getOwnPropertySymbols(o).length > 0) return false;
@@ -185,6 +183,53 @@ function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): bool
  */
 export const MAX_SKILLS = 256;
 
+/**
+ * THE SCALAR BOUNDS — the rung BOUNDING COUNTS DOES NOT REACH (codex round 5, #6).
+ *
+ * `MAX_SKILLS` and S3's `MAX_ENTRIES` bound HOW MANY, and nothing here bounded HOW
+ * BIG. Reproduced against the pristine tip: `project_id`, `id`, `relative_path`,
+ * `source_commit` and both pinned-skill scalars each accepted an 8 MiB value, so a
+ * ref with 256 skills whose ids were hundreds of MB validated — times 4,096 S3
+ * entries. Per-item validation without a size bound is not containment; it is
+ * containment-shaped, exactly as an uncapped array was one rung out.
+ *
+ * Every string field of this envelope is registered against one of these, and
+ * `project-definition-ref` conformance tests assert that registration is TOTAL —
+ * a new field added to `REF_KEYS` or `PINNED_SKILL_KEYS` without a bound is a red
+ * build, not a silent hole. That is the only way this rung stops being re-missed;
+ * it has now been missed twice.
+ *
+ * THE COMPOSED CEILING, computed once so nobody has to re-derive it. A pinned skill
+ * is ≤ ~1.2 KiB (id + path + hash); a ref is ≤ ~1.6 KiB + 256 × 1.2 KiB ≈ 314 KiB;
+ * an S3 entry is ≤ ~3.5 KiB + one ref ≈ 318 KiB; 4,096 entries ≈ 1.3 GiB. That is a
+ * CEILING ON ACCEPTED PAYLOAD, reachable only by a caller who has already
+ * materialised 1.3 GiB of parsed JSON — the validator adds no amplification on top.
+ * Tightening it further is a `MAX_SKILLS` / `MAX_ENTRIES` decision, not a per-scalar
+ * one, and is deliberately not taken here: both counts are frozen contract surface.
+ */
+export const MAX_PROJECT_ID = 128;
+/** Role slug or skill name — the same budget S3 gives a legacy id. */
+export const MAX_DEFINITION_ID = 128;
+/** Matches S3's `MAX_PATH`, so one path cannot be legal on one side and not the other. */
+export const MAX_RELATIVE_PATH = 1024;
+/** A commit-ish: a sha, a tag, a describe string. Never a document. */
+export const MAX_SOURCE_COMMIT = 128;
+
+/**
+ * Rule 6's universal shape gate, spelled exactly as `adoption-manifest.ts` spells
+ * it — C0, C1, and the Unicode line separators. An id, path, or commit NEVER
+ * contains one; a smuggled body always does. The two contracts share a field
+ * (`relative_path` is carried verbatim into S3's traversal), so a character legal
+ * here and illegal there would be an alias hole between them.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/** A bounded, control-free, non-empty scalar. */
+function isBoundedScalar(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.length > 0 && v.length <= max && !CONTROL_RE.test(v);
+}
+
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
 
 export function isValidContentHash(v: unknown): v is string {
@@ -208,9 +253,11 @@ export function isValidContentHash(v: unknown): v is string {
  * and a path that reads differently on two platforms is a hash-binding hazard.
  */
 export function isProjectRelativePath(v: unknown): v is string {
-  if (typeof v !== "string" || v.length === 0) return false;
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f]/.test(v)) return false;
+  // BOUNDED FIRST (codex round 5, #6). Every rule below was a SHAPE rule, and a
+  // shape rule says nothing about size: an 8 MiB path of legal segments validated.
+  // The bound matches S3's `MAX_PATH`, so one path cannot be legal on one side of
+  // the adoption manifest and illegal on the other.
+  if (!isBoundedScalar(v, MAX_RELATIVE_PATH)) return false;
   if (v.includes("\\")) return false; // no backslashes — POSIX separators only
   if (v.startsWith("/")) return false; // absolute
   if (/^[A-Za-z]:/.test(v)) return false; // Windows drive absolute
@@ -250,7 +297,7 @@ function validatePinnedSkillRefInner(obj: unknown): PinnedSkillRef | null {
   const hashProp = ownDataProp(obj, "content_hash");
   if (idProp.kind !== "data" || pathProp.kind !== "data" || hashProp.kind !== "data") return null;
 
-  if (!isNonEmptyStr(idProp.value)) return null;
+  if (!isBoundedScalar(idProp.value, MAX_DEFINITION_ID)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
@@ -402,16 +449,18 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (typeHashProp.kind !== "data") return null;
   if (skillsProp.kind !== "data") return null;
 
-  if (!isNonEmptyStr(projectProp.value)) return null;
+  if (!isBoundedScalar(projectProp.value, MAX_PROJECT_ID)) return null;
   if (typeof kindProp.value !== "string" || !DEFINITION_KIND_SET.has(kindProp.value)) return null;
   const kind = kindProp.value as DefinitionKind;
-  if (!isNonEmptyStr(idProp.value)) return null;
+  if (!isBoundedScalar(idProp.value, MAX_DEFINITION_ID)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
   // `source_commit`: a non-empty string or explicit null. `undefined` is NOT
   // accepted — an absent commit must be stated, not implied.
-  if (commitProp.value !== null && !isNonEmptyStr(commitProp.value)) return null;
+  if (commitProp.value !== null && !isBoundedScalar(commitProp.value, MAX_SOURCE_COMMIT)) {
+    return null;
+  }
 
   // Identity hashes are raw sha256 hex (the shape hashSpecialistProfile emits —
   // NOT the "sha256:"-prefixed form this file uses for byte hashes). They are

@@ -22,7 +22,11 @@ import {
   type AdoptionManifestV1,
 } from "../lib/core/contracts/adoption-manifest";
 import {
+  MAX_DEFINITION_ID,
+  MAX_PROJECT_ID,
+  MAX_RELATIVE_PATH,
   MAX_SKILLS,
+  MAX_SOURCE_COMMIT,
   PROJECT_DEFINITION_REF_SCHEMA,
   validateProjectDefinitionRefV1,
   type ProjectDefinitionRefV1,
@@ -707,6 +711,161 @@ describe("D5 — a collection bound is paid BEFORE the pre-check work, not after
         project_id: "plugin",
         entries,
       })
+    ).toBeNull();
+  });
+});
+
+
+// ── Defect 6 — bounding COUNTS is not bounding BYTES ───────────────────────
+
+describe("D6 — every scalar at every nesting level is byte-bounded, by registration", () => {
+  /**
+   * PRISTINE-TIP BEHAVIOUR (reproduced): each of these accepted an 8,388,608-byte
+   * value —
+   *
+   *   ref.project_id · ref.id · ref.relative_path · ref.source_commit
+   *   skills[].id · skills[].relative_path
+   *
+   * — so a ref with 256 skills whose ids were hundreds of MB validated, times 4,096
+   * S3 entries. `MAX_SKILLS` and `MAX_ENTRIES` bound HOW MANY; nothing bounded HOW
+   * BIG. This is the rung that has now been missed twice in this lane, so the
+   * coverage below is REGISTRATION-driven rather than a list of remembered fields:
+   * a new key added to either closed shape without a bound is a RED BUILD.
+   */
+  const validRef = () => ref("A", "a");
+  const validSkill = () => ({
+    id: "s1",
+    relative_path: ".guild/skills/s1/SKILL.md",
+    content_hash: H("a"),
+  });
+
+  /** Every string-valued ref field, against the bound that governs it. */
+  const REF_SCALAR_BOUNDS: Record<string, number> = {
+    project_id: MAX_PROJECT_ID,
+    id: MAX_DEFINITION_ID,
+    relative_path: MAX_RELATIVE_PATH,
+    source_commit: MAX_SOURCE_COMMIT,
+    content_hash: 71, // "sha256:" + 64 hex, fixed by regex
+    specialist_profile_hash: 64, // raw hex, fixed by regex
+    specialist_type_hash: 64,
+  };
+  /** Fields bounded by something OTHER than a byte cap. Each must say which. */
+  const REF_NON_SCALAR: Record<string, string> = {
+    schema_version: "frozen literal - one legal value",
+    kind: "closed vocabulary - DEFINITION_KINDS",
+    skills: "collection - bounded by MAX_SKILLS, elements bounded below",
+  };
+
+  const SKILL_SCALAR_BOUNDS: Record<string, number> = {
+    id: MAX_DEFINITION_ID,
+    relative_path: MAX_RELATIVE_PATH,
+    content_hash: 71,
+  };
+
+  it("REGISTRATION IS TOTAL for the ref — a new field must be classified", () => {
+    expect([...Object.keys(REF_SCALAR_BOUNDS), ...Object.keys(REF_NON_SCALAR)].sort()).toEqual(
+      Object.keys(validRef()).sort()
+    );
+  });
+
+  it("REGISTRATION IS TOTAL for a pinned skill", () => {
+    expect(Object.keys(SKILL_SCALAR_BOUNDS).sort()).toEqual(Object.keys(validSkill()).sort());
+  });
+
+  const HUGE = "x".repeat(8 * 1024 * 1024);
+
+  it.each(Object.keys(REF_SCALAR_BOUNDS))("ref.%s rejects an 8 MiB value", (field) => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), [field]: HUGE })).toBeNull();
+  });
+
+  it.each(Object.keys(SKILL_SCALAR_BOUNDS))("skills[].%s rejects an 8 MiB value", (field) => {
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [{ ...validSkill(), [field]: HUGE }],
+      })
+    ).toBeNull();
+  });
+
+  // ── the bound is EXACT, not merely "not 8 MiB" ──────────────────────────
+
+  it("accepts project_id at exactly MAX_PROJECT_ID and rejects at +1", () => {
+    const at = "p".repeat(MAX_PROJECT_ID);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), project_id: at })).not.toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), project_id: at + "p" })).toBeNull();
+  });
+
+  it("accepts id at exactly MAX_DEFINITION_ID and rejects at +1", () => {
+    const at = "i".repeat(MAX_DEFINITION_ID);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), id: at })).not.toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), id: at + "i" })).toBeNull();
+  });
+
+  it("accepts source_commit at exactly MAX_SOURCE_COMMIT and rejects at +1", () => {
+    const at = "c".repeat(MAX_SOURCE_COMMIT);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at })).not.toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at + "c" })).toBeNull();
+    // …and an explicit null is still the way to say "outside a git tree".
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: null })).not.toBeNull();
+  });
+
+  it("accepts relative_path at exactly MAX_RELATIVE_PATH and rejects at +1", () => {
+    const at = "d/".repeat((MAX_RELATIVE_PATH - 4) / 2) + "a.md";
+    expect(at.length).toBe(MAX_RELATIVE_PATH);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), relative_path: at })).not.toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), relative_path: "d/" + at })).toBeNull();
+  });
+
+  it("skills[].id and skills[].relative_path are exact at their bounds too", () => {
+    const idAt = "s".repeat(MAX_DEFINITION_ID);
+    const pathAt = "d/".repeat((MAX_RELATIVE_PATH - 4) / 2) + "a.md";
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [{ ...validSkill(), id: idAt, relative_path: pathAt }],
+      })
+    ).not.toBeNull();
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), skills: [{ ...validSkill(), id: idAt + "s" }] })
+    ).toBeNull();
+  });
+
+  // ── Rule 6's other half: a bounded scalar is still SHAPE-checked ─────────
+  // Built with fromCharCode so no literal control byte appears in this source,
+  // matching the convention in adoption-manifest-hardening.test.ts.
+
+  const CONTROLS: Array<[string, string]> = [
+    ["NUL (U+0000)", String.fromCharCode(0x00)],
+    ["newline (U+000A)", String.fromCharCode(0x0a)],
+    ["NEL (U+0085)", String.fromCharCode(0x85)],
+    ["LINE SEPARATOR (U+2028)", String.fromCharCode(0x2028)],
+    ["PARAGRAPH SEPARATOR (U+2029)", String.fromCharCode(0x2029)],
+  ];
+
+  it.each(CONTROLS)("a control character is rejected in ref.id — %s", (_label, ch) => {
+    expect(validateProjectDefinitionRefV1({ ...validRef(), id: `a${ch}b` })).toBeNull();
+  });
+
+  it("the same control class is rejected in project_id, source_commit and skill ids", () => {
+    const NEL = String.fromCharCode(0x85);
+    expect(validateProjectDefinitionRefV1({ ...validRef(), project_id: `a${NEL}b` })).toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: `a${NEL}b` })).toBeNull();
+    expect(
+      validateProjectDefinitionRefV1({
+        ...validRef(),
+        skills: [{ ...validSkill(), id: `a${NEL}b` }],
+      })
+    ).toBeNull();
+  });
+
+  it("S3 rejects an oversized S2 ref carried as an entry destination", () => {
+    // The levels compose: bounding S2 is what bounds an S3 entry, and an S3 entry
+    // is what MAX_ENTRIES multiplies. A hole at the innermost level defeats both
+    // outer counts, which is the whole shape of this defect.
+    expect(
+      validateAdoptionManifestV1(
+        chain([{ from: loc("A", "a"), to: { ...ref("B", "b"), id: "x".repeat(8 * 1024 * 1024) } }])
+      )
     ).toBeNull();
   });
 });
