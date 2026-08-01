@@ -47,6 +47,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/core/contracts/project-capability-profile",
+      "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/project-capability-profile.ts",
+      "sha256": "3e856f80ee5eec622cb28975f06eda4367291ec18e82b220c7f2ec2bf9072622"
+    },
+    {
+      "category": "scripts",
       "id": "lib/role-model-schema",
       "source_path": "scripts/lib/role-model-schema.ts",
       "resource_path": "resources/scripts/lib/role-model-schema.ts",

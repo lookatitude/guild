@@ -1575,6 +1575,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/core/contracts/project-capability-profile",
+      "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/core/contracts/project-definition-ref",
       "source_path": "scripts/lib/core/contracts/project-definition-ref.ts",
       "kind": "lib"
