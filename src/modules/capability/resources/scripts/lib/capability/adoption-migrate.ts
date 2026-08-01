@@ -1384,8 +1384,19 @@ function buildProjectDefinitionRef(args: {
 export type AdoptionRollbackOutcome =
   | {
       readonly status: "rolled_back";
-      /** Project-relative paths removed, sorted. */
+      /**
+       * Project-relative paths ACTUALLY removed, sorted — verified against disk,
+       * never assumed from intent (CODEX round 3: this used to list files whose
+       * removal had thrown and been swallowed).
+       */
       readonly removed: readonly string[];
+      /**
+       * Removals that were attempted and FAILED, as `path: reason`. Reported
+       * rather than swallowed: the reversal is recorded in the manifest either
+       * way, so a leftover file is a real thing the operator must clear, and a
+       * success report that hides it is a lie about the tree's state.
+       */
+      readonly removal_failed: readonly string[];
       /**
        * Adopted copies LEFT IN PLACE because they were edited after adoption.
        * Reported, never deleted: R11 says a rollback must not destroy evidence,
@@ -1644,26 +1655,74 @@ export function rollbackAdoption(opts: unknown): AdoptionRollbackOutcome {
     }
   }
 
+  // ── The mutation phase ──
+  //
+  // CODEX round 3 found TWO defects here, both the partial-application class that
+  // `applyAdoptionPlan` was already fixed for but this path was not:
+  //
+  //   (a) THE MANIFEST WRITE COULD THROW. With a read-only manifest the EACCES
+  //       escaped a function documented as never throwing — and by then the
+  //       adopted copy had ALREADY been deleted, so the project was left with the
+  //       file gone and no record that the reversal happened. Silent, and the
+  //       worst possible ordering.
+  //   (b) `removed` LIED. With a read-only parent directory `fs.rmSync` threw, the
+  //       catch swallowed it, and the outcome still reported
+  //       `removed: [".guild/agents/qa.md"]` while the file was still on disk.
+  //       A report that claims a deletion that did not happen is worse than the
+  //       failed deletion.
+  //
+  // THE MANIFEST IS WRITTEN FIRST, and a failure there means nothing was touched:
+  // the manifest is the append-only record of truth, so if it cannot be written
+  // the rollback did not happen. Removals follow, each VERIFIED, and any that
+  // fails is REPORTED in `removal_failed` rather than swallowed — the reversal is
+  // genuinely recorded, and the leftover file is the operator's to clear.
+  const removed: string[] = [];
+  const removalFailed: Array<{ path: string; reason: string }> = [];
+
   if (!dryRun) {
+    const manifestAbs = path.join(projRoot, ADOPTION_MANIFEST_RELPATH);
+    try {
+      fs.mkdirSync(path.dirname(manifestAbs), { recursive: true });
+      fs.writeFileSync(manifestAbs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
+    } catch (err) {
+      return {
+        status: "refused",
+        reason: `could not write ${ADOPTION_MANIFEST_RELPATH} (${(err as Error).message}); nothing was removed`,
+      };
+    }
+
     for (const r of removals) {
       try {
         fs.rmSync(r.abs);
+        // Verified, not assumed: `rmSync` can succeed against a path that is then
+        // re-created, and on some filesystems a failure is not an exception.
+        if (fs.existsSync(r.abs)) {
+          removalFailed.push({ path: r.rel, reason: "still present after removal" });
+          continue;
+        }
+        removed.push(r.rel);
         // A skill's directory is only removed when the removal emptied it.
         const dir = path.dirname(r.abs);
         if (dir !== projRoot && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
-      } catch {
-        // A file that vanished between the check and the unlink is already in the
-        // state the rollback wanted. The manifest entry still records the reversal.
+      } catch (err) {
+        // A file that vanished on its own is already in the state the rollback
+        // wanted, and counts as removed. Anything else is a real failure and is
+        // NAMED — never swallowed into a success report.
+        if (!fs.existsSync(r.abs)) removed.push(r.rel);
+        else removalFailed.push({ path: r.rel, reason: (err as Error).message });
       }
     }
-    const manifestAbs = path.join(projRoot, ADOPTION_MANIFEST_RELPATH);
-    fs.mkdirSync(path.dirname(manifestAbs), { recursive: true });
-    fs.writeFileSync(manifestAbs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
+  } else {
+    // A dry run reports what it WOULD remove, without claiming it happened.
+    removed.push(...removals.map((r) => r.rel));
   }
 
   return {
     status: "rolled_back",
-    removed: Object.freeze(removals.map((r) => r.rel).sort()),
+    removed: Object.freeze(removed.sort()),
+    removal_failed: Object.freeze(
+      removalFailed.map((f) => `${f.path}: ${f.reason}`).sort(),
+    ),
     kept_local_edits: Object.freeze([...kept].sort()),
     restored_ids: Object.freeze(restoredIds),
     entries_appended: pending.length,

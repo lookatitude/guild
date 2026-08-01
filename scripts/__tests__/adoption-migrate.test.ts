@@ -822,3 +822,84 @@ describe("D6 — the capability-adopt command, end to end", () => {
     }
   });
 });
+
+describe("D6 — codex round 3 regressions (rollback mutation phase)", () => {
+  function adopt(): void {
+    const out = flat(
+      applyAdoptionPlan({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        report: report(),
+        decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
+        runId: "run-a",
+        authorizedBy: "cap-loc-D06",
+        adoptedAt: AT,
+      }),
+    );
+    if (out.status !== "applied") throw new Error(`adopt failed: ${String(out.reason)}`);
+  }
+
+  function rollback(): Flat {
+    return flat(
+      rollbackAdoption({
+        pluginRoot: PLUGIN_ROOT,
+        projectRoot: tmp,
+        projectId: "demo",
+        runId: "run-b",
+        authorizedBy: "cap-loc-D03",
+        adoptedAt: "2026-08-01T13:00:00Z",
+        reason: "io probe",
+      }),
+    );
+  }
+
+  it("R3 an unwritable manifest REFUSES without deleting anything", () => {
+    // Was: the EACCES escaped a function documented as never throwing, and by then
+    // the adopted copy had ALREADY been deleted — file gone, no record that the
+    // reversal happened. The manifest is now written FIRST, so a failure there
+    // means nothing was touched.
+    adopt();
+    const manifest = path.join(tmp, ADOPTION_MANIFEST_RELPATH);
+    fs.chmodSync(manifest, 0o444);
+    try {
+      let out: Flat;
+      expect(() => {
+        out = rollback();
+      }).not.toThrow();
+      expect(out!.status).toBe("refused");
+      expect(String(out!.reason)).toMatch(/nothing was removed/);
+      expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(true);
+    } finally {
+      fs.chmodSync(manifest, 0o644);
+    }
+  });
+
+  it("R3 `removed` never claims a deletion that did not happen", () => {
+    // Was: rmSync threw against a read-only parent, the catch swallowed it, and the
+    // outcome still reported the file as removed while it sat on disk.
+    adopt();
+    const agents = path.join(tmp, ".guild/agents");
+    fs.chmodSync(agents, 0o555);
+    try {
+      const out = rollback();
+      expect(out.status).toBe("rolled_back");
+      expect(out.removed).toEqual([]);
+      expect((out.removal_failed as string[]).length).toBe(1);
+      expect(String((out.removal_failed as string[])[0])).toContain(".guild/agents/qa.md");
+      expect(fs.existsSync(path.join(agents, "qa.md"))).toBe(true);
+    } finally {
+      fs.chmodSync(agents, 0o755);
+    }
+  });
+
+  // ANTI-VACUITY partner: an unobstructed rollback still removes and reports it.
+  it("R3 an unobstructed rollback still removes the copy and reports no failures", () => {
+    adopt();
+    const out = rollback();
+    expect(out.status).toBe("rolled_back");
+    expect(out.removed).toEqual([".guild/agents/qa.md"]);
+    expect(out.removal_failed).toEqual([]);
+    expect(fs.existsSync(path.join(tmp, ".guild/agents/qa.md"))).toBe(false);
+  });
+});
