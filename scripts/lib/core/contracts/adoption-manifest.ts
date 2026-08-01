@@ -557,6 +557,11 @@ function validateAdoptionEntryInner(obj: unknown): AdoptionEntry | null {
     // The successor's KIND must match the entry's. A `kind:"agent"` adoption whose
     // successor is a skill ref would corrupt identity-matched traversal.
     if (to.kind !== kindP.value) return null;
+    // AN ADOPTION MUST GO SOMEWHERE — the successor cannot BE the source (defect 9,
+    // reported by the resolver lane). See `isUnstampedAdoption` for the full case.
+    if (identityOf(kindP.value, from.id, from.content_hash) === identityOf(to.kind, to.id, to.content_hash)) {
+      return null;
+    }
   }
 
   if (detailP.value !== null && !isCleanScalar(detailP.value, MAX_DETAIL)) return null;
@@ -609,6 +614,81 @@ export function validateAdoptionEntry(obj: unknown): AdoptionEntry | null {
     return validateAdoptionEntryInner(obj);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Does this entry claim to adopt a definition into ITSELF?
+ *
+ * DEFECT 9 — reported by the resolver lane as "a same-id, same-bytes REHOME is
+ * unrepresentable", and reproduced here as something worse. A verbatim rehome
+ * (`architect@a` in `umbrella-guild` landing as `architect@a` in a project) does not
+ * die at write time at all:
+ *
+ *     validates:      TRUE
+ *     resolve:        ambiguous, trail [1]     ← written fine, unreadable
+ *     can continue:   false
+ *     can roll back:  false
+ *
+ * The manifest ACCEPTED an entry that provably could not be read back, because
+ * `identityOf` ignores the owning layer: `from` and `to` were literally one identity,
+ * so traversal's cycle guard saw the walk return to where it started. A silent
+ * write-then-unreadable is worse than a refusal, and worse than the reported
+ * "dies at liveness with a confusing error".
+ *
+ * THE REFUSAL COSTS NOTHING THAT EXISTS TODAY. The entry carries no resolvable
+ * information now, so rejecting it removes no capability — it converts a silent hole
+ * into an explicit rejection at the ENTRY validator, where a producer meets it
+ * immediately instead of discovering it at read time.
+ *
+ * THE CONTRACT RULE THIS MAKES EXPLICIT: **an adoption stamps provenance.** A copy
+ * must differ from its source — as `mintFromTemplate` already stamps `generated_by`,
+ * and as the resolver lane stamps `adopted_from` / `adopted_source_hash` /
+ * `adopted_source_version` / `adopted_disposition`. A stamped copy is a distinct
+ * identity, so it validates, resolves, and can be continued or rolled back.
+ *
+ * WHY THIS IS A PREDICATE AND NOT A TYPED REASON: this contract returns
+ * `T | null` and NEVER throws, so there is no channel for a reason code. A producer
+ * that gets `null` calls this to learn which rule it broke. That is the closest
+ * honest thing to the typed reason the resolver lane asked for, and the limitation is
+ * stated rather than papered over.
+ *
+ * IT SELF-RETIRES, BUT IT IS NOT THE WHOLE FIX — and the difference is measured,
+ * not assumed. The rule is expressed in terms of `identityOf`, not "same id and same
+ * hash", so if identity ever gains a location component — the schema change that also
+ * closes the cross-project conflation gap — a rehome's two sides stop being one
+ * identity and this refusal disappears without anyone remembering to remove it.
+ *
+ * I VERIFIED THAT by giving `identityOf` a location component and re-running the
+ * reproduction: the rehome VALIDATES again, exactly as claimed. It still resolved
+ * `ambiguous`. Adding location to `identityOf` alone is therefore NOT sufficient to
+ * make a rehome resolvable, because the read path does not use `identityOf` — it has
+ * its own `identityKey`, plus a `byFromId` bucket index keyed on bare `(kind, id)`,
+ * plus a `HistoricalQuery` shape with no placement field for a caller to pin. All
+ * four must gain the component together, which is what "it touches every hop of the
+ * traversal" actually means in this file. Recorded so that work is not started from
+ * the optimistic half of the measurement.
+ *
+ * Never throws: takes `unknown` and reads through own-data descriptors.
+ */
+export function isUnstampedAdoption(entry: unknown): boolean {
+  try {
+    if (!isPlainDataObject(entry)) return false;
+    const kindP = ownDataProp(entry, "kind");
+    const fromP = ownDataProp(entry, "from");
+    const toP = ownDataProp(entry, "to");
+    if (kindP.kind !== "data" || fromP.kind !== "data" || toP.kind !== "data") return false;
+    if (kindP.value !== "agent" && kindP.value !== "skill") return false;
+    const from = validateLegacyLocatorInner(fromP.value);
+    if (from === null) return false;
+    const to = validateProjectDefinitionRefV1(toP.value);
+    if (to === null) return false;
+    return (
+      identityOf(kindP.value, from.id, from.content_hash) ===
+      identityOf(to.kind, to.id, to.content_hash)
+    );
+  } catch {
+    return false;
   }
 }
 

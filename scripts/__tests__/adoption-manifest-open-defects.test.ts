@@ -16,6 +16,7 @@ import {
   ADOPTION_MANIFEST_SCHEMA,
   MAX_ENTRIES,
   entryDigest,
+  isUnstampedAdoption,
   resolveHistorical,
   validateAdoptionEntry,
   validateAdoptionManifestV1,
@@ -91,6 +92,23 @@ function chain(parts: Array<Partial<AdoptionEntry>>): AdoptionManifestV1 {
     prev = entryDigest(e);
   });
   return { schema_version: ADOPTION_MANIFEST_SCHEMA, project_id: "plugin", entries };
+}
+
+function rawD9(over: Partial<AdoptionEntry>): AdoptionEntry {
+  return {
+    sequence: 1,
+    kind: "agent",
+    from: loc("SRC", "f"),
+    to: ref("DST", "a"),
+    reason: "migrated",
+    detail: null,
+    reverses_sequence: null,
+    adopted_at: "2026-08-01T00:00:00Z",
+    run_id: "run-cap-loc",
+    authorized_by: "cap-loc-D07",
+    prev_digest: null,
+    ...over,
+  } as AdoptionEntry;
 }
 
 const rb = (target: number, over: Partial<AdoptionEntry>): Partial<AdoptionEntry> => ({
@@ -1831,5 +1849,167 @@ describe("R6 — codex round 6: the locator's ROOT, and git's own ref rules", ()
     ["traversal prose", "../../not-a-ref"],
   ])("R6#2 …and an INVALID ref is rejected — %s", (_label, bad) => {
     expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: bad })).toBeNull();
+  });
+});
+
+
+// ── Defect 9 — a verbatim REHOME is unresolvable, so it must be refused ─────
+
+describe("D9 — an adoption whose successor IS its source is refused, not silently written", () => {
+  /**
+   * REPORTED by the resolver lane, REPRODUCED here before anything changed, and it
+   * is worse than reported. The claim was that a verbatim rehome "dies at liveness";
+   * what actually happens is:
+   *
+   *   from: architect@a (home: umbrella-guild)  ->  to: architect@a (project ref)
+   *     validates:      TRUE
+   *     resolve:        ambiguous, trail [1]      <- written fine, unreadable
+   *     can continue:   false
+   *     can roll back:  false
+   *
+   * So the manifest ACCEPTS an entry that provably cannot be read back. The write
+   * side says yes and the read side says `ambiguous`, because `identityOf` ignores
+   * the owning layer: `from` and `to` are literally one identity, so traversal's
+   * cycle guard sees the walk return to where it started.
+   *
+   * That is why the refusal costs NOTHING that exists today — the entry carries no
+   * resolvable information now. It converts a silent write-then-unreadable into an
+   * explicit rejection at the entry validator, where a producer meets it immediately.
+   *
+   * The REAL fix is a location-bearing identity, which needs a schema change (`to`
+   * has no home/layer field at all) and is the SAME decision as the cross-project
+   * conflation gap. Both are escalated together; this rule is the honest interim.
+   */
+  const umbrella = (id: string, hash: string) => ({
+    id,
+    historical_path: `/umbrella/.guild/agents/${id}.md`,
+    content_hash: H(hash),
+    home: "umbrella-guild" as const,
+  });
+
+  it("REFUSES a verbatim rehome — same kind, id and bytes on both sides", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([{ from: umbrella("architect", "a"), to: ref("architect", "a"), reason: "rehomed" }])
+      )
+    ).toBeNull();
+  });
+
+  it("…at the ENTRY validator, so a producer meets it immediately", () => {
+    expect(
+      validateAdoptionEntry(
+        rawD9({ from: umbrella("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
+      )
+    ).toBeNull();
+  });
+
+  it.each(["migrated", "collapsed", "rehomed", "renamed", "rolled_back"])(
+    "…whatever the reason claims to be doing — %s",
+    (reason) => {
+      expect(
+        validateAdoptionEntry(
+          rawD9({
+            from: umbrella("architect", "a"),
+            to: ref("architect", "a"),
+            reason: reason as AdoptionEntry["reason"],
+            detail: "note",
+            reverses_sequence: reason === "rolled_back" ? null : null,
+          })
+        )
+      ).toBeNull();
+    }
+  );
+
+  it("`isUnstampedAdoption` names the reason a producer needs", () => {
+    // The contract returns `null`, never a typed reason, so this predicate is the
+    // only channel through which "why" can travel. A producer that gets `null` can
+    // ask this and learn that the adoption must stamp provenance.
+    expect(
+      isUnstampedAdoption(
+        rawD9({ from: umbrella("architect", "a"), to: ref("architect", "a"), reason: "rehomed" })
+      )
+    ).toBe(true);
+  });
+
+  // ── the STAMPED adoption — the shape that must keep working ──────────────
+
+  const stamped = () => ({
+    from: umbrella("architect", "a"),
+    to: ref("architect", "b"), // provenance stamped ⇒ different bytes ⇒ distinct identity
+    reason: "rehomed" as const,
+  });
+
+  it("a STAMPED adoption validates, resolves, and continues", () => {
+    const m = chain([stamped()]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "architect", content_hash: H("a") });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.content_hash).toBe(H("b"));
+    expect(
+      validateAdoptionManifestV1(
+        chain([
+          stamped(),
+          {
+            from: { ...umbrella("architect", "b"), home: "project-guild" as const },
+            to: ref("architect2", "c"),
+          },
+        ])
+      )
+    ).not.toBeNull();
+  });
+
+  it("…and `isUnstampedAdoption` is false for it", () => {
+    expect(isUnstampedAdoption(rawD9(stamped()))).toBe(false);
+  });
+
+  it("a same-ID adoption with DIFFERENT bytes is untouched — only identity matters", () => {
+    // The rule keys on the whole identity, not on the id. A genuine same-id upgrade
+    // (bytes changed) is an ordinary adoption and must stay legal.
+    expect(
+      validateAdoptionManifestV1(
+        chain([{ from: umbrella("architect", "a"), to: ref("architect", "b") }])
+      )
+    ).not.toBeNull();
+  });
+
+  it("a same-BYTES adoption under a DIFFERENT id is untouched too", () => {
+    expect(
+      validateAdoptionManifestV1(
+        chain([{ from: umbrella("architect", "a"), to: ref("architect-renamed", "a") }])
+      )
+    ).not.toBeNull();
+  });
+
+  it("`isUnstampedAdoption` never throws on hostile input", () => {
+    for (const hostile of [null, undefined, 42, "x", {}, new Proxy({}, { get() { throw new Error("boom"); } })]) {
+      expect(() => isUnstampedAdoption(hostile)).not.toThrow();
+      expect(isUnstampedAdoption(hostile)).toBe(false);
+    }
+  });
+
+  // ── the property the resolver lane asked me to confirm my fixes preserve ──
+
+  it("a bare-id query is ambiguous ONLY when the id really has two distinct sources", () => {
+    // Two sources = same id, DIFFERENT bytes. Pinning `content_hash` disambiguates.
+    const two = chain([
+      { from: umbrella("A", "a"), to: ref("B", "b") },
+      { from: umbrella("A", "c"), to: ref("D", "d") },
+    ]);
+    expect(validateAdoptionManifestV1(two)).not.toBeNull();
+    expect(resolveHistorical(two, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+    expect(resolveHistorical(two, { kind: "agent", id: "A", content_hash: H("a") }).ref?.id).toBe("B");
+    expect(resolveHistorical(two, { kind: "agent", id: "A", content_hash: H("c") }).ref?.id).toBe("D");
+  });
+
+  it("…and NOT for adopt→rollback→re-adopt, which is ONE identity and one history", () => {
+    // Worth pinning because the two are easy to conflate: identical bytes across a
+    // rollback are a re-adoption, not two sources, and a bare-id query resolves.
+    const readopt = chain([
+      { from: umbrella("A", "a"), to: ref("B", "b") },
+      rb(1, { from: umbrella("B", "b"), to: ref("A", "a") }),
+      { from: umbrella("A", "a"), to: ref("C", "c") },
+    ]);
+    expect(validateAdoptionManifestV1(readopt)).not.toBeNull();
+    expect(resolveHistorical(readopt, { kind: "agent", id: "A" }).status).toBe("resolved");
   });
 });
