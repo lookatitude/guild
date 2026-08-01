@@ -1089,6 +1089,13 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   let currentHash: string | undefined = snapHash as string | undefined;
   let firstHopPath: string | undefined = snapPath as string | undefined;
   let minSequence = 0;
+  /**
+   * The sequence that introduced the walk's ORIGIN position, or 0 when the origin
+   * pre-dates the log (or its bytes never became known). Part of the rollback
+   * AUTHORITY set alongside `trail`: a query entering a lineage mid-way inherits
+   * the provenance of where it entered.
+   */
+  let originSequence = 0;
 
   // Seed the ORIGIN position when the caller pinned it. Without a seed, a two-link
   // round trip back to the starting bytes has nothing to compare against.
@@ -1170,7 +1177,11 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
       const originHash = currentHash ?? entry.from.content_hash;
       if (originHash !== null && originHash !== undefined) {
         const k = identityKey(currentKind, currentId, originHash);
-        seeIdentity(k, originStamp(k, entry.sequence));
+        // The SAME stamp feeds the cycle guard and the rollback-authority set, so
+        // "which entry put this walk where it started" has exactly one answer. 0 ⇒
+        // the origin pre-dates the log, and no rollback can claim to have unwound it.
+        originSequence = originStamp(k, entry.sequence);
+        seeIdentity(k, originSequence);
       }
     }
 
@@ -1207,7 +1218,42 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // entry 3, i.e. the legitimate re-adoption still reported `ambiguous`, just from
     // a different guard. Found by repo-prep while checking this guard against the
     // liveness rule; their patch, their reasoning.
-    if (entry.reason === "rolled_back") {
+    //
+    // THE EXEMPTION IS PER LINEAGE — IT IS NOT A PROPERTY OF THE EDGE (codex round
+    // 5, #2). It used to be unconditional: ANY walk that reached a `rolled_back`
+    // edge skipped the revisit check and took its rewind. But a rollback is proven
+    // against exactly ONE earlier entry, and that proof only says something about
+    // the lineage that entry belongs to. Reproduced against the pristine tip:
+    //
+    //   U→N(1), N→Z(2), C→N(3), Z→X(4), N→X(5), X→N(6 rb 5)
+    //   resolving U walked 1,2,4,6 and answered `resolved` — a closed loop back to
+    //   the N it occupied at step 1, concealed by an exemption earned by sequence 5,
+    //   an entry U's lineage never touched. The rewind boundary 5 correctly
+    //   PRESERVED that N (seen at 1), so the guard would have caught it; the
+    //   unconditional exemption is what skipped the guard entirely.
+    //
+    // A walk may still FOLLOW a foreign rollback — that is not the defect, and
+    // requiring trail membership to follow was tried and REGRESSED a real history:
+    // `A→B(1), B→C(2), C→B(3 rb 2), B→A(4 rb 1)` queried at B must resolve to A, and
+    // entry 4 reverses sequence 1, which a walk starting at B never traversed.
+    // Following is about where the bytes went; the EXEMPTION is a claim of
+    // authority, and only the reversed entry's own lineage holds it.
+    //
+    // THE AUTHORITY SET IS THE TRAIL *PLUS THE ORIGIN'S INTRODUCTION*, and getting
+    // that wrong is the trap this rule sits in. A bare `trail.includes(...)` was
+    // written first and reddened D19-R1.1: `A→B(1), B→A(2 rb 1), A→B(3)` queried at
+    // B, where entry 2 legitimately unwinds the entry that CREATED the walk's own
+    // starting position — but the walk never traversed entry 1, because it began
+    // after it. A query entering mid-lineage inherits its origin's provenance;
+    // `originSequence` below is exactly the stamp `originStamp` already computes for
+    // the cycle guard, so the two cannot drift apart. The pre-existing test was
+    // right and this rule was wrong — it is recorded here rather than quietly
+    // relaxed, because that test is the only thing that said so.
+    const authorizedRewind =
+      entry.reason === "rolled_back" &&
+      ((entry.reverses_sequence as number) === originSequence ||
+        trail.includes(entry.reverses_sequence as number));
+    if (authorizedRewind) {
       // Rewind to the era boundary: forget only what the reversed entry's era
       // introduced. `reverses_sequence` is non-null here (the validator proves it
       // IFF `rolled_back`) and names a real, unique, operative target.
@@ -1216,6 +1262,8 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
         if (seq >= boundary) visitedIdentities.delete(key);
       }
     } else if (visitedIdentities.has(nextIdentity)) {
+      // Includes the unauthorized-rollback case: no rewind is taken either, because
+      // forgetting an era is the same privilege as skipping the check. Fail-closed.
       return { status: "ambiguous", ref: null, trail };
     }
     seeIdentity(nextIdentity, entry.sequence);
