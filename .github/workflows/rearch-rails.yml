@@ -77,6 +77,27 @@ jobs:
         run: |
           cd scripts && npm run check:inventory -- --root ..
 
+      # Dual-home mirror-sync gate (gap-audit C5).
+      #
+      # Several contract files are DUAL-HOMED: the live path (e.g. scripts/lib/core/contracts/
+      # specialist-identity.ts, scripts/lib/host-capabilities-schema.ts, src/modules/dispatch/
+      # workflows/execution-transport-ports.ts) is the source of truth, and each module's
+      # src/modules/<module>/resources/** carries a byte-identical mirror recorded in that
+      # module's resources/module-resources.json with a sha256 per entry. A hand-edit to only
+      # one home silently reverts the next time the mirror is re-synced.
+      #
+      # `sync-module-resources.ts --check` (npm check:module-resources) already diffed every
+      # mirrored pair against its recorded sha256, and check-module-ownership.ts already proved
+      # every inventory item is owned by exactly one module manifest — but NEITHER was wired
+      # into any workflow or git hook, so the dual-home hazard the audit flagged was ungated.
+      # (The sibling legs of check:module-source-of-truth — check:live-resources and
+      # check:claude-install — are already gated by verify:host-packages below.)
+      #
+      # Read-only: --check never writes, so this cannot perturb the steps that follow.
+      - name: Dual-home mirror-sync gate (src/modules/**/resources mirrors match their live sources)
+        run: |
+          cd scripts && npm run check:modules -- --root .. && npm run check:module-resources -- --root ..
+
       # Install-channel flip (G7) — the generated tree is now the AUTHORITATIVE install surface.
       # Enforces SC-2 full-tree equivalence + SC-7b subset + the Claude install-surface render
       # (.claude-plugin/plugin.json + marketplace.json must equal the inventory render) + the
