@@ -27,6 +27,7 @@ import {
   evaluateG5,
   isCompatibilityUsageV1,
   isDependenceRead,
+  parseCompatibilityUsageV1,
   rollupCompatibilityUsage,
   type CompatibilityReadReason,
   type CompatibilityUsageV1,
@@ -108,6 +109,90 @@ describe("S8 — payload validation", () => {
       expect(() => isCompatibilityUsageV1(bad)).not.toThrow();
       expect(isCompatibilityUsageV1(bad)).toBe(false);
     }
+  });
+
+  it("rejects an unknown key (closed key set — never silently ignored)", () => {
+    expect(isCompatibilityUsageV1({ ...usage(), sneaky: true })).toBe(false);
+  });
+});
+
+describe("S8 — fail-closed hardening (the specialist-identity.ts idiom)", () => {
+  // A record that validates but reads back DIFFERENTLY would corrupt the G5 count —
+  // the single number the removal gate rests on. These are the exotic-input paths
+  // that a naive `typeof v.field === "string"` guard would wave through.
+
+  it("returns a typed value or null, never throws", () => {
+    expect(parseCompatibilityUsageV1(usage())).not.toBeNull();
+    expect(parseCompatibilityUsageV1({})).toBeNull();
+  });
+
+  it("NEVER invokes a getter — an accessor property reads as absent, not as its value", () => {
+    let invoked = 0;
+    const hostile = {
+      ...usage(),
+    } as Record<string, unknown>;
+    Object.defineProperty(hostile, "asset_id", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        invoked += 1;
+        return "backend-api-contract";
+      },
+    });
+    expect(parseCompatibilityUsageV1(hostile)).toBeNull();
+    expect(invoked).toBe(0);
+  });
+
+  it("REJECTS a getter that would flip `synthetic` after validation (TOCTOU)", () => {
+    // The attack this closes: read #1 says synthetic:true (benign, excluded), read #2
+    // says false — or vice versa, silently moving a record in or out of the G5 count.
+    let reads = 0;
+    const hostile = { ...usage() } as Record<string, unknown>;
+    Object.defineProperty(hostile, "synthetic", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1;
+      },
+    });
+    expect(parseCompatibilityUsageV1(hostile)).toBeNull();
+  });
+
+  it("REJECTS a Proxy outright — it can lie on every trap", () => {
+    const proxied = new Proxy(usage() as unknown as Record<string, unknown>, {});
+    expect(parseCompatibilityUsageV1(proxied)).toBeNull();
+  });
+
+  it("REJECTS an exotic prototype — an inherited field must not slip past an own-key scan", () => {
+    const inherited = Object.create({ synthetic: false }) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(usage())) {
+      if (k !== "synthetic") inherited[k] = v;
+    }
+    expect(parseCompatibilityUsageV1(inherited)).toBeNull();
+  });
+
+  it("accepts a null-prototype object (plain JSON data, no chain to walk)", () => {
+    const bare = Object.assign(Object.create(null), usage()) as Record<string, unknown>;
+    expect(parseCompatibilityUsageV1(bare)).not.toBeNull();
+  });
+
+  it("REJECTS symbol-keyed data rather than silently dropping it", () => {
+    const withSymbol = { ...usage(), [Symbol("x")]: 1 };
+    expect(parseCompatibilityUsageV1(withSymbol)).toBeNull();
+  });
+
+  it("returns a FROZEN fresh copy — later mutation of the input cannot change it", () => {
+    const source = { ...usage() } as Record<string, unknown>;
+    const parsed = parseCompatibilityUsageV1(source)!;
+    expect(parsed).not.toBeNull();
+    source.reason = "mint_source";
+    source.synthetic = true;
+    // The parsed record still carries what was VALIDATED, so the G5 verdict computed
+    // from it cannot be retroactively altered through the input object.
+    expect(parsed.reason).toBe("no_project_definition");
+    expect(parsed.synthetic).toBe(false);
+    expect(Object.isFrozen(parsed)).toBe(true);
   });
 });
 

@@ -35,6 +35,8 @@
  * module's public index.
  */
 
+import { types as nodeTypes } from "util";
+
 import { CAPABILITY_RESOLVER_MODES, type CapabilityResolverMode } from "../../config";
 
 // ---------------------------------------------------------------------------
@@ -130,24 +132,132 @@ export interface CompatibilityUsageV1 {
   readonly specialist_id: string | null;
 }
 
-/** Structural validation. Pure, never throws — an invalid payload is a typed `false`. */
+// ---------------------------------------------------------------------------
+// Validation — the fail-closed `specialist-identity.ts` idiom
+// ---------------------------------------------------------------------------
+//
+// Typed-or-null, never throws, never repairs. Reads every field through its OWN
+// DATA DESCRIPTOR so a caller-supplied getter is never invoked (it could throw, or
+// return a different value on each read) and the prototype chain is never walked.
+// Proxies are rejected outright: a Proxy can lie on every trap, and no userland
+// check defeats a consistent liar. The real input path is a JSON-parsed journal
+// payload, never an exotic object.
+//
+// This matters more here than for a typical payload: a record that validates but
+// then reads back differently would corrupt the G5 count — the one number the
+// removal gate rests on.
+
+/** Non-null, non-array, prototype `Object.prototype` or `null`, not a Proxy. */
+function isPlainDataObject(v: unknown): v is Record<string, unknown> {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  if (nodeTypes.isProxy(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+/** The own DATA value of `key`, or a marker. An accessor is rejected, never invoked. */
+function ownDataProp(
+  o: object,
+  key: string,
+): { kind: "absent" } | { kind: "accessor" } | { kind: "data"; value: unknown } {
+  const desc = Object.getOwnPropertyDescriptor(o, key);
+  if (!desc) return { kind: "absent" };
+  if (!("value" in desc)) return { kind: "accessor" };
+  return { kind: "data", value: desc.value };
+}
+
+/** Own data value or `undefined` — a missing OR accessor property both read as absent. */
+function ownValue(o: object, key: string): unknown {
+  const p = ownDataProp(o, key);
+  return p.kind === "data" ? p.value : undefined;
+}
+
+const isNonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+
+/** The closed key set — an unknown key is a REJECT, not something to ignore. */
+const COMPATIBILITY_USAGE_KEYS: readonly string[] = [
+  "schema_version",
+  "asset_kind",
+  "asset_id",
+  "asset_path",
+  "content_hash",
+  "reason",
+  "resolver_mode",
+  "synthetic",
+  "specialist_id",
+];
+
+/**
+ * Parse an untrusted value into a frozen `CompatibilityUsageV1`, or `null`.
+ *
+ * The returned object is a FRESH copy built from the values that were validated, so
+ * no later read can differ from what passed the checks (no time-of-check /
+ * time-of-use gap). Never throws.
+ */
+export function parseCompatibilityUsageV1(value: unknown): CompatibilityUsageV1 | null {
+  try {
+    if (!isPlainDataObject(value)) return null;
+    // Symbol-keyed data is rejected fail-closed rather than silently dropped.
+    if (Object.getOwnPropertySymbols(value).length > 0) return null;
+    for (const key of Object.keys(value)) {
+      if (!COMPATIBILITY_USAGE_KEYS.includes(key)) return null;
+    }
+
+    if (ownValue(value, "schema_version") !== COMPATIBILITY_USAGE_SCHEMA) return null;
+
+    const assetKind = ownValue(value, "asset_kind");
+    if (!COMPATIBILITY_ASSET_KINDS.includes(assetKind as CompatibilityAssetKind)) return null;
+
+    const assetId = ownValue(value, "asset_id");
+    if (!isNonEmptyStr(assetId)) return null;
+
+    const assetPath = ownValue(value, "asset_path");
+    if (!isNonEmptyStr(assetPath)) return null;
+
+    // S8 invariant 4: mandatory, so a rollup can distinguish versions of one asset.
+    const contentHash = ownValue(value, "content_hash");
+    if (!isNonEmptyStr(contentHash)) return null;
+
+    const reason = ownValue(value, "reason");
+    if (!COMPATIBILITY_READ_REASONS.includes(reason as CompatibilityReadReason)) return null;
+
+    const resolverMode = ownValue(value, "resolver_mode");
+    if (!CAPABILITY_RESOLVER_MODES.includes(resolverMode as CapabilityResolverMode)) return null;
+
+    // S8 invariant 3: an explicit boolean set at the emission point. Not optional and
+    // not coerced — "missing" must never read as "not synthetic", which would pull a
+    // tooling read into the G5 dependence count.
+    const synthetic = ownValue(value, "synthetic");
+    if (typeof synthetic !== "boolean") return null;
+
+    // Explicit branches rather than `x !== null && !isNonEmptyStr(x)`: the negated
+    // form does not narrow `unknown` down to `string | null` for the constructor below.
+    const specialistIdRaw = ownValue(value, "specialist_id");
+    let specialistId: string | null;
+    if (specialistIdRaw === null) specialistId = null;
+    else if (isNonEmptyStr(specialistIdRaw)) specialistId = specialistIdRaw;
+    else return null;
+
+    return Object.freeze({
+      schema_version: COMPATIBILITY_USAGE_SCHEMA,
+      asset_kind: assetKind as CompatibilityAssetKind,
+      asset_id: assetId,
+      asset_path: assetPath,
+      content_hash: contentHash,
+      reason: reason as CompatibilityReadReason,
+      resolver_mode: resolverMode as CapabilityResolverMode,
+      synthetic,
+      specialist_id: specialistId,
+    });
+  } catch {
+    // An exotic input that throws mid-read is a REJECT, never a crash.
+    return null;
+  }
+}
+
+/** Boolean convenience over `parseCompatibilityUsageV1`. Pure, never throws. */
 export function isCompatibilityUsageV1(value: unknown): value is CompatibilityUsageV1 {
-  if (value === null || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return (
-    v.schema_version === COMPATIBILITY_USAGE_SCHEMA &&
-    COMPATIBILITY_ASSET_KINDS.includes(v.asset_kind as CompatibilityAssetKind) &&
-    typeof v.asset_id === "string" &&
-    v.asset_id.length > 0 &&
-    typeof v.asset_path === "string" &&
-    v.asset_path.length > 0 &&
-    typeof v.content_hash === "string" &&
-    v.content_hash.length > 0 &&
-    COMPATIBILITY_READ_REASONS.includes(v.reason as CompatibilityReadReason) &&
-    CAPABILITY_RESOLVER_MODES.includes(v.resolver_mode as CapabilityResolverMode) &&
-    typeof v.synthetic === "boolean" &&
-    (v.specialist_id === null || typeof v.specialist_id === "string")
-  );
+  return parseCompatibilityUsageV1(value) !== null;
 }
 
 /**
