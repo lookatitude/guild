@@ -588,6 +588,76 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     entries.push(entry);
   }
 
+  // ── THE LIVENESS RULE — make the undecidable states UNREPRESENTABLE ────────
+  //
+  // Rather than adjudicate a one-to-many "fork" at READ time, forbid it at WRITE
+  // time. An entry's `from` identity must be LIVE at that sequence, and its `to`
+  // identity must not already be live. Concretely, walking the log in order:
+  //
+  //   a `from` identity is live if it has never been adopted away, or was restored
+  //   by an intervening proven rollback;
+  //   a `to` identity must be dead, unless this entry IS that proven rollback.
+  //
+  // What this dissolves, without any read-time special case:
+  //
+  //   A->B(1), A->C(2)          the "fork". A was adopted away at 1 and never
+  //                             restored, so entry 2 is REJECTED. There is no
+  //                             ambiguity to resolve because the state cannot exist.
+  // What it deliberately does NOT dissolve: an UNLABELLED loop (A->B, B->A as a
+  // plain migration) stays representable, because every rule that would forbid it
+  // also forbids collapse or re-adoption. That case is caught at READ time by the
+  // authorization-based revisit guard instead — validation and traversal each take
+  // the half they can express without collateral damage.
+  //
+  // What it preserves — every history D03 contemplates:
+  //
+  //   A->B(1), B->C(2)                   sequential migration
+  //   A->B(1), B->A(2 rollback)          forward-append rollback
+  //   A->B(1), B->A(2 rb), A->B(3)       RE-ADOPTION: the rollback restored A, so A
+  //                                      is live again at 3
+  //   U->X(1), N->X(2)                   collapse: two distinct live sources
+  //
+  // The payoff is that traversal needs NO discriminator: multiple forward matches
+  // from one source identity can now only be a re-adoption, so earliest-forward-
+  // match is correct by construction. Three earlier attempts at a read-time rule
+  // were each wrong in a different way (one broke re-adoption, one resolved to the
+  // WRONG BYTES, one mis-scoped identity) — the state is better removed than judged.
+  //
+  // KNOWN LIMITATION, stated rather than discovered later: a `removed` identity
+  // cannot be re-created and re-adopted, because nothing restores it. If that
+  // history is ever needed it wants an explicit `restored` reason, not a hole here.
+  {
+    const liveIds = new Set<string>();
+    const deadIds = new Set<string>();
+    const identityOf = (kind: string, id: string) => `${kind}\u0000${id}`;
+
+    for (const entry of entries) {
+      const fromKey = identityOf(entry.kind, entry.from.id);
+
+      // `from` must be live. An identity is live until adopted away; the first
+      // time we see it as a source it is live by default (it pre-dates the log).
+      if (deadIds.has(fromKey)) return null;
+
+      // NOTE — there is deliberately NO liveness rule on `to`. Two tempting ones
+      // were tried and both rejected LEGITIMATE histories:
+      //   "to must not be live"  breaks COLLAPSE (U->X, N->X land on one survivor
+      //                          by design — D10's whole shape).
+      //   "to must not be dead"  breaks RE-ADOPTION (A->B, B->A rollback, A->B:
+      //                          the third entry necessarily resurrects B).
+      // Constraining the SOURCE is enough to make the fork unrepresentable, and
+      // constraining the destination costs more than it buys.
+      if (entry.to !== null) {
+        const toKey = identityOf(entry.to.kind, entry.to.id);
+        liveIds.add(toKey);
+        deadIds.delete(toKey);
+      }
+
+      // The source is now adopted away.
+      deadIds.add(fromKey);
+      liveIds.delete(fromKey);
+    }
+  }
+
   // Cross-entry rollback proof, now that every entry is in hand.
   for (const entry of entries) {
     if (entry.reason !== "rolled_back") continue;
@@ -805,67 +875,22 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
         ? { status: "not_found", ref: null, trail } // NEVER a fallback to live content
         : { status: "ambiguous", ref: null, trail }; // dead end mid-chain
     }
-    // MULTIPLE FORWARD MATCHES. Three prior attempts at this branch were wrong in
-    // three different ways, so the reasoning is written out rather than implied.
+    // MULTIPLE FORWARD MATCHES — now a SETTLED case, because the state that made
+    // it hard is unrepresentable.
     //
-    //   v1 "ambiguous always"     broke re-adoption: A->B, B->A, A->B is an ordinary
-    //                             D03 history and the manifest answered "nothing".
-    //   v2 "same destination ->    RESOLVED TO THE WRONG BYTES. A->B(1), B->C(2),
-    //       take the EARLIEST"     A->B(3): 1 and 3 share a destination, so it took 1,
-    //                             walked into 2, and returned C — while the LATEST
-    //                             history (3) says B. Optimising the trail for
-    //                             "complete provenance" cost correctness.
-    //   v3 (this)                 take the LATEST match. In an append-only log later
-    //                             supersedes earlier — the same rule forward-only
-    //                             already rests on — so the newest edge from an
-    //                             identity IS its current history. Correct on the
-    //                             round trip, the re-adoption, and the duplicate edge.
+    // The LIVENESS RULE (validation) rejects a one-to-many fork outright: a source
+    // adopted away and never restored cannot appear as a source again. So multiple
+    // forward matches from one identity can ONLY be a re-adoption reached through a
+    // rollback — one history, in order. Take the EARLIEST and keep walking; the
+    // chain replays the real sequence and the trail is the full provenance.
     //
-    // Two things must ALSO hold before multiplicity is treated as one history, or a
-    // conflict can be disguised as a re-adoption:
-    //   - every match must share the SAME SOURCE identity, hash included. With a
-    //     hash-less query the predicate treats the hash as a wildcard, so A@h1->B
-    //     and A@h2->B would otherwise look like one source. They are two.
-    //   - every match must share the SAME DESTINATION REFERENCE — id, kind, hash AND
-    //     project-relative path. Equal bytes at different paths are different
-    //     locators, and this function promises to resolve a REFERENCE, not a digest.
-    let entry = matches[matches.length - 1];
-    if (matches.length > 1) {
-      // CODEX r5: id + hash was not enough. `A(/p1,h)->B`, `B->C`, `A(/p2,h)->B`
-      // passed both sameness checks, so a PATHLESS query took the latest edge and
-      // returned B while a `/p1`-qualified query followed the first and returned C —
-      // the same manifest answering two different things depending on how you asked.
-      // A source locator is the WHOLE locator; two paths are two sources.
-      const sameSource = matches.every(
-        (x) =>
-          x.from.id === matches[0].from.id &&
-          x.from.content_hash === matches[0].from.content_hash &&
-          x.from.historical_path === matches[0].from.historical_path &&
-          x.from.home === matches[0].from.home
-      );
-      const first = matches[0].to;
-      const sameDestination = matches.every((x) => {
-        if (x.to === null || first === null) return x.to === first;
-        return (
-          x.to.kind === first.kind &&
-          x.to.id === first.id &&
-          x.to.content_hash === first.content_hash &&
-          x.to.project_id === first.project_id &&
-          x.to.relative_path === first.relative_path
-        );
-      });
-      if (!sameSource || !sameDestination) {
-        return {
-          status: "ambiguous",
-          ref: null,
-          trail: [...trail, ...matches.map((x) => x.sequence)],
-        };
-      }
-      // LATEST wins. The trail is shorter than a full walk would be; that is the
-      // correct trade — the receipt records what was CONSULTED to reach the answer,
-      // and consulting superseded edges would misreport the current history.
-      entry = matches.reduce((a, b) => (a.sequence >= b.sequence ? a : b));
-    }
+    // Three read-time rules were tried before this and each was wrong differently:
+    // "ambiguous always" broke re-adoption; "same destination, take earliest"
+    // resolved to the WRONG BYTES; "take latest" fixed that but needed a growing
+    // pile of sameness checks (source hash, destination path, whole locator) to stop
+    // conflicts masquerading as re-adoptions. Removing the state beat judging it —
+    // the whole discriminator is gone, not merely corrected.
+    const entry = matches.reduce((a, b) => (a.sequence <= b.sequence ? a : b));
 
     trail.push(entry.sequence);
     minSequence = entry.sequence;
@@ -902,7 +927,15 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // Checked BEFORE the `hasNext` lookahead: a loop is a loop whether or not it
     // continues.
     const nextIdentity = identityKey(next.kind, next.id, next.content_hash);
-    if (entry.reason !== "rolled_back" && visitedIdentities.has(nextIdentity)) {
+    // A proven rollback REWINDS the lineage, so the era it undid stops counting as
+    // occupied — a later RE-ADOPTION is new history, not a loop. Exempting only the
+    // rollback EDGE (and not the era) left `A->B, B->A rollback, A->B` tripping on
+    // entry 3, i.e. the legitimate re-adoption still reported `ambiguous`, just from
+    // a different guard. Found by repo-prep while checking this guard against the
+    // liveness rule; their patch, their reasoning.
+    if (entry.reason === "rolled_back") {
+      visitedIdentities.clear();
+    } else if (visitedIdentities.has(nextIdentity)) {
       return { status: "ambiguous", ref: null, trail };
     }
     visitedIdentities.add(nextIdentity);

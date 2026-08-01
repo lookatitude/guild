@@ -793,15 +793,25 @@ describe("hardening — fail-closed, never throws", () => {
 
 describe("cycle + round-trip semantics", () => {
   const A = (h: string) => loc("A", h);
+  /**
+   * A PROVEN rollback of `seq`: starts where that entry landed, returns to the
+   * identity it came from. An UNLABELLED return is deliberately NOT this — the
+   * cycle guard treats it as a closed loop, which is the point of the exemption.
+   */
+  const rollbackOf = (seq: number, fromRef: ProjectDefinitionRefV1, toId: string, toHash: string) => ({
+    from: { id: fromRef.id, historical_path: `/g/${fromRef.id}.md`, content_hash: fromRef.content_hash, home: "project-guild" as const },
+    to: ref(toId, toHash),
+    reason: "rolled_back" as const,
+    detail: `reverses sequence ${seq}`,
+    reverses_sequence: seq,
+    authorized_by: "cap-loc-D03",
+  });
 
   it("TERMINATION is structural — forward-only bounds the walk, no visited-set needed", () => {
     // A tight A->B->A loop. minSequence strictly increases, so an entry can never
     // be revisited and the walk is bounded by entry count. An identity-visited set
     // would add nothing here — and would BREAK the re-adoption case below.
-    const m = chain([
-      { from: A("f"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("A", "f") },
-    ]);
+    const m = chain([{ from: A("f"), to: ref("B", "b") }, rollbackOf(1, ref("B", "b"), "A", "f")]);
     const t0 = Date.now();
     const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
     expect(Date.now() - t0).toBeLessThan(1000);
@@ -809,62 +819,54 @@ describe("cycle + round-trip semantics", () => {
   });
 
   it("DIRECTION 1 — round trip to DIFFERENT bytes resolves to the rollback destination", () => {
-    const m = chain([
-      { from: A("f"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("A", "e") },
-    ]);
+    // NOTE: a rollback must land on the reversed entry's SOURCE identity, so a
+    // "rollback to different bytes" is not expressible — the cross-entry proof
+    // requires the original hash. Kept as the labelled round trip it really is.
+    const m = chain([{ from: A("f"), to: ref("B", "b") }, rollbackOf(1, ref("B", "b"), "A", "f")]);
     const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
     expect(r.status).toBe("resolved");
     expect(r.ref?.id).toBe("A");
-    expect(r.ref?.content_hash).toBe(H("e"));
+    expect(r.ref?.content_hash).toBe(H("f"));
     expect(r.trail).toEqual([1, 2]);
   });
 
   it("DIRECTION 1b — round trip to IDENTICAL bytes ALSO resolves (not ambiguous)", () => {
     // The spec-author call: landing back on byte-identical content is an ordinary
     // rollback, not a cycle. A resolves to where A now lives, which is A.
-    const m = chain([
-      { from: A("f"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("A", "f") },
-    ]);
+    const m = chain([{ from: A("f"), to: ref("B", "b") }, rollbackOf(1, ref("B", "b"), "A", "f")]);
     const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
     expect(r.status).toBe("resolved");
     expect(r.ref?.content_hash).toBe(H("f"));
   });
 
-  it("DIRECTION 2 — RE-ADOPTION after a round trip resolves to the LATEST edge", () => {
+  it("DIRECTION 2 — RE-ADOPTION after a round trip resolves, walking the FULL history", () => {
     // adopt -> roll back -> re-adopt. Entries 1 and 3 both start from A, so the old
     // multiplicity check called this a fork and answered "nothing" for a history
     // D03 is explicitly designed to record.
     const m = chain([
       { from: A("f"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("A", "f") },
+      rollbackOf(1, ref("B", "b"), "A", "f"),
       { from: A("f"), to: ref("B", "b") },
     ]);
     const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
     expect(r.status).toBe("resolved");
     expect(r.ref?.id).toBe("B");
-    // The trail is [3], NOT [1,2,3]. An earlier version took the EARLIEST match to
-    // record "complete provenance" — and that resolved to the WRONG BYTES on
-    // A->B(1), B->C(2), A->B(3): it took 1, walked into 2, and returned C while the
-    // latest history said B. The receipt records what was CONSULTED to reach the
-    // answer; consulting superseded edges would misreport the current history.
-    expect(r.trail).toEqual([3]);
+    // The full provenance. Earliest-forward-match is safe here BECAUSE the liveness
+    // rule made the fork unrepresentable — every multi-match is one ordered history.
+    expect(r.trail).toEqual([1, 2, 3]);
   });
 
-  it("REGRESSION (codex r4 #1) — a duplicate edge must not steer resolution to the wrong bytes", () => {
-    // A->B(1), B->C(2), A->B(3). Entries 1 and 3 share a destination, so the
-    // earliest-match version selected 1, followed 2, and returned C. The latest
-    // history (3) says B, and B is the answer.
+  it("LIVENESS — the wrong-bytes case is now UNREPRESENTABLE, not adjudicated", () => {
+    // A->B(1), B->C(2), A->B(3). This once resolved to C (wrong bytes) under an
+    // earliest-match rule, then to B under a latest-match rule. Both were read-time
+    // answers to a state that should never have been writable: A was adopted away
+    // at 1 and no rollback restored it, so entry 3 has a DEAD source.
     const m = chain([
       { from: A("f"), to: ref("B", "b") },
       { from: loc("B", "b"), to: ref("C", "c") },
       { from: A("f"), to: ref("B", "b") },
     ]);
-    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
-    expect(r.status).toBe("resolved");
-    expect(r.ref?.id).toBe("B"); // NOT "C"
-    expect(r.trail).toEqual([3]);
+    expect(validateAdoptionManifestV1(m)).toBeNull(); // rejected at WRITE time
   });
 
   it("REGRESSION (codex r4 #2) — different SOURCE hashes are two identities, not one", () => {
@@ -897,9 +899,10 @@ describe("cycle + round-trip semantics", () => {
       { from: loc("B", "b"), to: ref("A", "f") },
       { from: A("f"), to: { ...ref("B", "b"), relative_path: ".guild/agents/B-moved.md" } },
     ]);
-    expect(
-      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") }).status
-    ).toBe("ambiguous");
+    // Also unrepresentable now: entry 3's source A is live (restored by the
+    // rollback), so this one is about the DESTINATION differing — and with the
+    // discriminator gone it simply replays as history. Kept as a shape fixture.
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
   });
 
   it("REGRESSION (codex r4 #4) — entryDigest never throws on a hostile entry", () => {
@@ -913,17 +916,35 @@ describe("cycle + round-trip semantics", () => {
     expect(entryDigest(hostile)).toBe("invalid-entry");
   });
 
-  it("DIRECTION 3 — a genuine DESTINATION CONFLICT is still ambiguous", () => {
-    // Same source bytes adopted to two DIFFERENT successors. No principled pick
-    // exists, so guessing would silently resolve to the wrong bytes.
+  it("DIRECTION 3 — the FORK is REJECTED AT WRITE TIME, not adjudicated at read time", () => {
+    // A->B(1), A->C(2). This used to be the hard case: one source, two successors,
+    // no principled pick. The liveness rule removes it — A was adopted away at 1
+    // and never restored, so entry 2 has a dead source and the manifest is invalid.
+    // An undecidable state you cannot write is better than one you must judge.
     const m = chain([
       { from: A("f"), to: ref("B", "b") },
       { from: A("f"), to: ref("C", "c") },
     ]);
-    const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
-    expect(r.status).toBe("ambiguous");
-    expect(r.ref).toBeNull();
-    expect(r.trail).toEqual([1, 2]); // both conflicting entries named in the receipt
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("LIVENESS preserves COLLAPSE — two distinct live sources may share a survivor", () => {
+    // The rule constrains the SOURCE only. Constraining the destination would have
+    // broken exactly this (D10's shape) and re-adoption too.
+    const m = chain([
+      { from: loc("U", "f"), to: ref("X", "c"), reason: "collapsed", detail: "D10", authorized_by: "cap-loc-D10" },
+      { from: loc("N", "d"), to: ref("X", "c"), reason: "collapsed", detail: "D10", authorized_by: "cap-loc-D10" },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    expect(resolveHistorical(m, { kind: "agent", id: "U", content_hash: H("f") }).ref?.id).toBe("X");
+  });
+
+  it("LIVENESS preserves the ordinary sequential migration A->B->C", () => {
+    const m = chain([
+      { from: A("f"), to: ref("B", "b") },
+      { from: loc("B", "b"), to: ref("C", "c") },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") }).ref?.id).toBe("C");
   });
 
   it("THE DISCRIMINATOR IS THE DESTINATION, not the multiplicity", () => {
@@ -931,7 +952,7 @@ describe("cycle + round-trip semantics", () => {
     // If multiplicity alone decided, these would answer the same — and one would be wrong.
     const sameDest = chain([
       { from: A("f"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("A", "f") },
+      rollbackOf(1, ref("B", "b"), "A", "f"),
       { from: A("f"), to: ref("B", "b") },
     ]);
     const diffDest = chain([
@@ -949,9 +970,9 @@ describe("cycle + round-trip semantics", () => {
   it("a longer legitimate chain with two round trips still resolves", () => {
     const m = chain([
       { from: A("f"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("A", "f") },
+      rollbackOf(1, ref("B", "b"), "A", "f"),
       { from: A("f"), to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("A", "f") },
+      rollbackOf(3, ref("B", "b"), "A", "f"),
     ]);
     const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
     expect(r.status).toBe("resolved");
