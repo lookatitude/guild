@@ -9,6 +9,9 @@
  * Anti-vacuity is stated per block: each guard names the edit that turns it red.
  */
 
+import * as fs from "fs";
+import * as path from "path";
+
 import {
   CONTEXT_MANAGER_AGENT_ID,
   CONTEXT_MANAGER_CAPABILITY_SCOPE,
@@ -276,6 +279,52 @@ describe("F5 — path hardening (spec README rules 5 and 6)", () => {
     expect(isCanonicalRelPath("")).toBe(false);
     expect(isCanonicalRelPath("a/")).toBe(false);
     expect(isCanonicalRelPath("/a")).toBe(false);
+  });
+});
+
+describe("F5 — the AGENT FILE is bound to the contract, not merely adjacent to it", () => {
+  /**
+   * The gap this closes: the contract declares a tool scope and a tier, and the
+   * agent file declares them again in YAML. Nothing made the two agree. A widened
+   * `tools:` line in `agents/context-manager.md` — adding `Bash`, say — would have
+   * voided every path check in the contract while every test above stayed green,
+   * because the host reads the frontmatter and not the TypeScript.
+   */
+  const agentFile = fs.readFileSync(
+    path.join(__dirname, "..", "..", "agents", "context-manager.md"),
+    "utf8"
+  );
+  const frontmatter = agentFile.slice(0, agentFile.indexOf("\n---", 4));
+
+  it("the frontmatter `tools:` list is EXACTLY the contract's tool scope", () => {
+    const line = /^tools:\s*(.+)$/m.exec(frontmatter);
+    expect(line).not.toBeNull();
+    const declared = line![1].split(",").map((t) => t.trim());
+    expect(declared).toEqual([...CONTEXT_MANAGER_TOOLS]);
+  });
+
+  it("no WITHHELD tool appears in the frontmatter — Bash above all", () => {
+    const line = /^tools:\s*(.+)$/m.exec(frontmatter)!;
+    for (const withheld of CONTEXT_MANAGER_WITHHELD_TOOLS) {
+      expect(line[1].split(",").map((t) => t.trim())).not.toContain(withheld);
+    }
+  });
+
+  it("the agent's `name` is the contract's agent id", () => {
+    expect(frontmatter).toMatch(new RegExp(`^name:\\s*${CONTEXT_MANAGER_AGENT_ID}$`, "m"));
+  });
+
+  it("the declared `mid` tier is carried as the model the tier maps to", () => {
+    // `mid` is sonnet across this roster (specialist-roster.md tier map). Asserting
+    // the model rather than a prose tier note is what the roster-consistency rail
+    // and the host both actually read.
+    expect(CONTEXT_MANAGER_TIER).toBe("mid");
+    expect(frontmatter).toMatch(/^model:\s*sonnet$/m);
+  });
+
+  it("the body POINTS AT the contract file rather than restating the boundary", () => {
+    // Two copies of a boundary drift; one copy plus a pointer cannot.
+    expect(agentFile).toContain("scripts/lib/capability/context-manager-contract.ts");
   });
 });
 
