@@ -1565,6 +1565,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/core/contracts/project-definition-ref",
+      "source_path": "scripts/lib/core/contracts/project-definition-ref.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/core/contracts/specialist-identity",
       "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
       "kind": "lib"

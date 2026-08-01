@@ -12,6 +12,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/core/contracts/project-definition-ref",
+      "source_path": "scripts/lib/core/contracts/project-definition-ref.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/project-definition-ref.ts",
+      "sha256": "ce5076c45b1c080e35e4bbd777ff7a0e66c3b84f7e53c6442c46be092a0121ac"
+    },
+    {
+      "category": "scripts",
       "id": "lib/core/contracts/specialist-identity",
       "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
       "resource_path": "resources/scripts/lib/core/contracts/specialist-identity.ts",
