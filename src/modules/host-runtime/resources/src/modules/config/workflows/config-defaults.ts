@@ -31,6 +31,69 @@ export const LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 /** Default sidecar file cap — 1 MiB. */
 export const SIDECAR_MAX_BYTES = 1024 * 1024;
 
+// ---------------------------------------------------------------------------
+// Project-capability localization vocabularies (spec S5; cap-loc-D03/D04)
+// ---------------------------------------------------------------------------
+
+/**
+ * D03's migration ladder, ordered least→most localized. `resolver_mode` records
+ * WHERE A PROJECT IS on this ladder; it never encodes whether it may advance —
+ * advance conditions are gate criteria the initiative evaluates, and a mode change
+ * is always a deliberate write.
+ *
+ * Ordered on purpose: a consumer comparing progress must not re-derive the order
+ * from a set, and `indexOf` here is the only ranking anyone should use.
+ */
+export const CAPABILITY_RESOLVER_MODES = [
+  "legacy",
+  "observe",
+  "shadow",
+  "project-local",
+  "strict",
+] as const;
+export type CapabilityResolverMode = (typeof CAPABILITY_RESOLVER_MODES)[number];
+
+/** Whether an approved proposal may auto-advance the resolver mode (D04). */
+export const CAPABILITY_AUTO_CREATE_POLICIES = ["never", "on_approval"] as const;
+export type CapabilityAutoCreatePolicy = (typeof CAPABILITY_AUTO_CREATE_POLICIES)[number];
+
+/**
+ * Shipped default for `capability.resolver_mode`.
+ *
+ * ── WHY `legacy` AND NOT D04's `observe` ────────────────────────────────────
+ * S5 §"Hard precondition (from D04)" is explicit: *"Do not ship the `observe`
+ * default until F7 (candidate surfacing in `/guild:status`) lands. An `observe`
+ * install that emits candidates nobody surfaces is a silent no-op — worse than no
+ * default."* F7 has not landed, so shipping `observe` today would create exactly
+ * the vacuous behavior the precondition forbids: profiling would run, candidates
+ * would accumulate, and no surface would ever show them to a human.
+ *
+ * `legacy` is the honest value for a codebase that has no localization machinery
+ * wired yet — it says "this project resolves the way it always has", which is true.
+ *
+ * ── FLIPPING IT ─────────────────────────────────────────────────────────────
+ * When F7 lands, change this ONE constant to `"observe"`. Nothing else moves:
+ * DEFAULTS reads it, CONFIG_SCHEMA derives from DEFAULTS, and the conformance
+ * test `capability-config.test.ts` already carries the post-F7 expectation in a
+ * test named for the flip, so the change is one line plus one expectation.
+ */
+export const CAPABILITY_RESOLVER_MODE_DEFAULT: CapabilityResolverMode = "legacy";
+
+/**
+ * D04's intended default once F7 (candidate surfacing) lands. Exported so the flip
+ * is a documented, testable transition rather than a remembered intention — see
+ * CAPABILITY_RESOLVER_MODE_DEFAULT.
+ */
+export const CAPABILITY_RESOLVER_MODE_AFTER_F7: CapabilityResolverMode = "observe";
+
+/**
+ * Inclusive bounds for `capability.suggestion_budget` (D04/F10: fixed at 4, not
+ * "3–4"). The ceiling matches the one S1's profile validator enforces so the two
+ * cannot disagree; `0` is legal and means "profile but never propose".
+ */
+export const CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
+export const CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
+
 /**
  * Canonical Guild settings default tree.
  *
@@ -123,6 +186,50 @@ export const DEFAULTS = {
     stdio_available: true,
     http_available: false,
     bridge_package: null,
+  },
+  /**
+   * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+   * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+   * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+   *
+   * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+   * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+   * What a lane may DO stays with `capability_scope` and the permission keys.
+   *
+   * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+   * already emits unconditionally — capability ownership is per project by
+   * definition (the umbrella and each child answer "what roles do I need"
+   * independently, and D03 has the four repos migrating at different rates). Per
+   * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+   * out with zero generator change, and adding it would touch every existing key.
+   */
+  capability: {
+    /**
+     * Which resolver mode this project is in on D03's migration ladder. Config
+     * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+     * gate criteria the initiative evaluates, and a mode change is a deliberate
+     * write.
+     *
+     * DEFAULT IS `legacy`, NOT `observe` — see CAPABILITY_RESOLVER_MODE_DEFAULT in
+     * capability-config.ts for the F7 precondition governing the flip to D04's
+     * intended `observe`. Never silently defaulted: an unset value resolves with
+     * provenance `default`, so `config show --sources` shows it was never chosen.
+     */
+    resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+    /**
+     * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+     * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+     * the two cannot disagree. 0 is legal: "profile but never propose".
+     */
+    suggestion_budget: 4,
+    /**
+     * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+     * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+     * Learn proposes.
+     */
+    starter_roles: [],
+    /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+    auto_create_policy: "on_approval",
   },
   statusline: false,
   adversarial_review_provider: "auto",

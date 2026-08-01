@@ -56,7 +56,15 @@ import { normalizeHostId } from "../host-id-namespace";
 import { validateHostProfiles } from "../host-profiles-validate";
 // Canonical single-source prototype-pollution guard (re-arch WAVE 1).
 import { PROTO_POISON_KEYS } from "../shared/safe-object";
-import { DEFAULTS as SHARED_DEFAULTS } from "../shared/config-defaults";
+import {
+  DEFAULTS as SHARED_DEFAULTS,
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+  CAPABILITY_SUGGESTION_BUDGET_MAX,
+  CAPABILITY_SUGGESTION_BUDGET_MIN,
+  type CapabilityAutoCreatePolicy,
+  type CapabilityResolverMode,
+} from "../shared/config-defaults";
 import {
   resolveTierModel,
   type ResolvedTierModel,
@@ -287,6 +295,18 @@ interface McpBlock {
   bridge_package?: string | null;
 }
 
+// ── capability block (S5 — cap-loc-D04 new-install policy, cap-loc-D03 ladder).
+interface CapabilityBlock {
+  /** Where this project sits on D03's migration ladder. Never encodes whether it may advance. */
+  resolver_mode: CapabilityResolverMode;
+  /** Max proposals surfaced per project. Range [0, 4]; 0 = "profile but never propose". */
+  suggestion_budget: number;
+  /** Roles a new install starts with. Empty by design — a non-empty default would ship a roster. */
+  starter_roles: string[];
+  /** Whether an approved proposal may auto-advance the resolver mode. */
+  auto_create_policy: CapabilityAutoCreatePolicy;
+}
+
 // ── defaults.index sub-block (v2-persistence-and-sqlite-index ADR — D-PS-1).
 // Configures the measured-slowness thresholds for the lazy index.sqlite cache.
 interface IndexBlock {
@@ -397,6 +417,12 @@ interface GuildSettings {
    * review is not "cross". Set via: config set adversarial_review_provider codex-plugin
    */
   adversarial_review_provider: string;
+  /**
+   * S5 (cap-loc-D04/D03) — project-capability localization policy. These keys
+   * select WHICH DEFINITIONS RESOLVE; they are not security-sensitive and never
+   * widen what a lane may do (that stays with `capability_scope` + permission keys).
+   */
+  capability: CapabilityBlock;
   // power-user overrides
   loops: string | null;
   loop_cap: number;
@@ -1129,6 +1155,104 @@ export function validateMcp(m: Record<string, unknown>): string[] {
   return rejects;
 }
 
+/** Closed key set for the `capability` block (S5). A typo must surface, not silently pass. */
+const VALID_CAPABILITY_KEYS: ReadonlySet<string> = new Set([
+  "resolver_mode",
+  "suggestion_budget",
+  "starter_roles",
+  "auto_create_policy",
+]);
+
+/**
+ * Closed-key validation of the `capability` block (S5 — cap-loc-D04/D03/F10).
+ *
+ * `validate` REJECTS; the caller's resolve path separately COERCES (see
+ * `coerceCapabilityBlock`). Keeping the two apart is the existing contract here:
+ * `--validate` must hard-fail on a bad value so a typo surfaces, while `repair`
+ * brings a malformed value back into range without discarding the operator's intent.
+ */
+export function validateCapability(c: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  for (const k of Object.keys(c)) {
+    if (!VALID_CAPABILITY_KEYS.has(k)) {
+      rejects.push(
+        `unknown capability key "${k}" (closed key set — valid: resolver_mode, suggestion_budget, starter_roles, auto_create_policy)`,
+      );
+    }
+  }
+  if (c["resolver_mode"] !== undefined && !CAPABILITY_RESOLVER_MODES.includes(c["resolver_mode"] as CapabilityResolverMode)) {
+    rejects.push(
+      `capability.resolver_mode must be one of ${CAPABILITY_RESOLVER_MODES.join("|")} (got ${JSON.stringify(c["resolver_mode"])})`,
+    );
+  }
+  if (c["auto_create_policy"] !== undefined && !CAPABILITY_AUTO_CREATE_POLICIES.includes(c["auto_create_policy"] as CapabilityAutoCreatePolicy)) {
+    rejects.push(
+      `capability.auto_create_policy must be one of ${CAPABILITY_AUTO_CREATE_POLICIES.join("|")} (got ${JSON.stringify(c["auto_create_policy"])})`,
+    );
+  }
+  if (c["suggestion_budget"] !== undefined) {
+    const b = c["suggestion_budget"];
+    // F10 pinned the budget at 4. Out-of-range is a REJECT here (repair coerces).
+    if (typeof b !== "number" || !Number.isInteger(b) || b < CAPABILITY_SUGGESTION_BUDGET_MIN || b > CAPABILITY_SUGGESTION_BUDGET_MAX) {
+      rejects.push(
+        `capability.suggestion_budget must be an integer in [${CAPABILITY_SUGGESTION_BUDGET_MIN}, ${CAPABILITY_SUGGESTION_BUDGET_MAX}] (got ${JSON.stringify(b)})`,
+      );
+    }
+  }
+  if (c["starter_roles"] !== undefined) {
+    const r = c["starter_roles"];
+    if (!Array.isArray(r) || r.some((e) => typeof e !== "string" || e.trim() === "")) {
+      rejects.push(
+        `capability.starter_roles must be an array of non-empty role slugs (got ${JSON.stringify(r)})`,
+      );
+    }
+  }
+  return rejects;
+}
+
+/**
+ * Resolve-path coercion for the `capability` block — the `repair` half of S5.
+ *
+ * Out-of-range budgets clamp to the [0, 4] ceiling rather than resetting to the
+ * default: an operator who wrote `9` wanted "as many as possible", and 4 is that.
+ * Unknown enum members and malformed types fall back to the shipped default, because
+ * there is no partially-valid reading of them. `starter_roles` is trimmed, emptied of
+ * blanks, and DEDUPED (S5 invariant 3) while preserving first-seen order so the
+ * resolved config is stable across runs.
+ */
+export function coerceCapabilityBlock(raw: Record<string, unknown>): CapabilityBlock {
+  const base = DEFAULTS.capability;
+  const out: CapabilityBlock = { ...base, starter_roles: [...base.starter_roles] };
+
+  if (CAPABILITY_RESOLVER_MODES.includes(raw["resolver_mode"] as CapabilityResolverMode)) {
+    out.resolver_mode = raw["resolver_mode"] as CapabilityResolverMode;
+  }
+  if (CAPABILITY_AUTO_CREATE_POLICIES.includes(raw["auto_create_policy"] as CapabilityAutoCreatePolicy)) {
+    out.auto_create_policy = raw["auto_create_policy"] as CapabilityAutoCreatePolicy;
+  }
+  const b = raw["suggestion_budget"];
+  if (typeof b === "number" && Number.isFinite(b)) {
+    out.suggestion_budget = Math.min(
+      CAPABILITY_SUGGESTION_BUDGET_MAX,
+      Math.max(CAPABILITY_SUGGESTION_BUDGET_MIN, Math.trunc(b)),
+    );
+  }
+  const r = raw["starter_roles"];
+  if (Array.isArray(r)) {
+    const seen = new Set<string>();
+    const roles: string[] = [];
+    for (const entry of r) {
+      if (typeof entry !== "string") continue;
+      const slug = entry.trim();
+      if (slug === "" || seen.has(slug)) continue;
+      seen.add(slug);
+      roles.push(slug);
+    }
+    out.starter_roles = roles;
+  }
+  return out;
+}
+
 /**
  * Closed-key validation of the `roles` block (LW1-6 / SC-W1-7). Sub-keys are CLOSED to
  * {host, advisory, adversarial}; each value must be `null` or a KNOWN registry host_id
@@ -1671,6 +1795,14 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
         mergedMcp.bridge_package = rawMcp["bridge_package"] as string | null;
       }
       out.mcp = mergedMcp;
+    }
+    // S5 — capability localization policy. validate REJECTS a bad value; the resolve
+    // path COERCES it (clamp/dedupe/fall-back) so a malformed file still yields a
+    // usable config instead of a crash.
+    if (isPlainObject(parsed["capability"])) {
+      const rawCapability = parsed["capability"] as Record<string, unknown>;
+      rejects.push(...validateCapability(rawCapability));
+      out.capability = coerceCapabilityBlock(rawCapability);
     }
     if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"] as string | null;
     if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));

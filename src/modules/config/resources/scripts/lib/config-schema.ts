@@ -21,6 +21,12 @@ import {
   type ConfigValueType,
 } from "./config-reconcile-contract";
 import { DEFAULTS } from "../read-guild-config";
+// S5: the capability vocabularies live beside the DEFAULTS they describe (same
+// module, config), so the enum members and the shipped default cannot drift apart.
+import {
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+} from "../../src/modules/config/workflows/config-defaults";
 
 /**
  * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
@@ -182,6 +188,33 @@ const NULLABLE_ENUM_OVERRIDES: Record<string, NullableEnumOverride> = {
 };
 
 /**
+ * S5 (cap-loc-D04) — PLAIN enum fields: non-security AND non-nullable.
+ *
+ * The generator types a key as `enum` only when it appears in one of the override
+ * tables; otherwise `type` is `inferType(def)`, which classifies a string default as
+ * `"string"` and drops `enum_values` entirely — so the key would carry NO closed-set
+ * validation at all. `capability.resolver_mode` and `capability.auto_create_policy`
+ * are enums that fit NEITHER existing table: they are not security-sensitive
+ * (`isSecuritySensitiveKey` matches neither, correctly — they select WHICH
+ * DEFINITIONS RESOLVE, not what a lane may do) and they are not nullable (there is
+ * always a mode; "unset" is expressed by provenance `default`, not by `null`).
+ *
+ * Rejected alternative: reusing SECURITY_ENUM_OVERRIDES. It would mark these keys
+ * security-sensitive, which is false, and drag them into the F4 fail-closed repair
+ * semantics — repairing a malformed value to a "most restrictive" member. There is
+ * no meaningful most-restrictive resolver mode (`strict` is the most LOCALIZED, not
+ * the safest), so the concept does not apply. Hence a third table carrying
+ * `enum_values` ONLY: no `most_restrictive`, no `nullable`.
+ */
+interface PlainEnumOverride {
+  enum_values: readonly string[];
+}
+const PLAIN_ENUM_OVERRIDES: Record<string, PlainEnumOverride> = {
+  "capability.resolver_mode": { enum_values: CAPABILITY_RESOLVER_MODES },
+  "capability.auto_create_policy": { enum_values: CAPABILITY_AUTO_CREATE_POLICIES },
+};
+
+/**
  * The `guild.config_schema.v1` field registry, derived from the canonical DEFAULTS
  * tree. One ConfigFieldSpec per flattened leaf; `default` is the canonical value
  * (single source ⇒ no drift). Scope is "project" (today's settings.json target).
@@ -197,9 +230,10 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
   return Object.entries(flat).map(([key, def]) => {
     const override = SECURITY_ENUM_OVERRIDES[key];
     const nullableEnum = NULLABLE_ENUM_OVERRIDES[key];
+    const plainEnum = PLAIN_ENUM_OVERRIDES[key];
     const spec: ConfigFieldSpec = {
       key,
-      type: override || nullableEnum ? "enum" : inferType(def),
+      type: override || nullableEnum || plainEnum ? "enum" : inferType(def),
       default: def,
       scope: "project",
       security_sensitive: isSecuritySensitiveKey(key),
@@ -211,6 +245,10 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
       spec.enum_values = nullableEnum.enum_values;
       spec.nullable = true;
       spec.most_restrictive = nullableEnum.most_restrictive;
+    } else if (plainEnum) {
+      // enum_values ONLY — see PLAIN_ENUM_OVERRIDES: not nullable, and
+      // `most_restrictive` is deliberately absent (no fail-closed repair target).
+      spec.enum_values = plainEnum.enum_values;
     } else if (key in SECURITY_MOST_RESTRICTIVE_NONENUM) {
       spec.most_restrictive = SECURITY_MOST_RESTRICTIVE_NONENUM[key];
     }

@@ -405,7 +405,7 @@
       "id": "projection:src/modules/config/workflows/config-defaults.ts",
       "source_path": "src/modules/config/workflows/config-defaults.ts",
       "resource_path": "resources/src/modules/config/workflows/config-defaults.ts",
-      "sha256": "47e61834955c37b7a6d37e031de52ea56652b92e4a89f89d5d8eabb077a0e11e",
+      "sha256": "9bf29c10186a1cded3d1b797dbda7e5a45bdcfd8611d440a7dd26c03e28b5fc2",
       "projection_dependency": true
     },
     {

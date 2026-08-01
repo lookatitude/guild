@@ -155,6 +155,12 @@ const TIER1_KEYS = new Set([
   // (Codex G-lane MUST-FIX). Their CONTENT is validated by validateRoles/validateHostProfiles.
   "roles",
   "host_profiles",
+  // S5 (cap-loc-D04): the capability-localization policy block. Same reasoning as
+  // roles/host_profiles above — it lives in DEFAULTS and is materialized by
+  // `reconcile sync`/`config init`, so the closed key set MUST accept it or
+  // `validate --effective` would reject keys config init itself writes. CONTENT is
+  // validated by validateCapability (config-cli.ts).
+  "capability",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -250,6 +256,17 @@ const MCP_KEYS = new Set([
   "stdio_available",   // R-019: bool — MCP stdio transport available
   "http_available",    // R-019: bool — MCP HTTP transport available
   "bridge_package",    // R-019: string|null — MCP bridge package name
+]);
+
+/**
+ * Valid sub-keys for capability.* (S5 — cap-loc-D04). Mirrors VALID_CAPABILITY_KEYS
+ * in config-cli.ts; that module owns VALUE validation, this one owns PATH validation.
+ */
+const CAPABILITY_KEYS = new Set([
+  "resolver_mode",
+  "suggestion_budget",
+  "starter_roles",
+  "auto_create_policy",
 ]);
 
 /** Valid sub-keys for defaults.* */
@@ -431,6 +448,20 @@ function validateKeyPath(keyPath: string): string | null {
   if (top === "mcp") {
     if (!MCP_KEYS.has(seg1)) {
       return `unknown mcp key "${seg1}" (closed key set — only: ${[...MCP_KEYS].join(", ")})`;
+    }
+    return null;
+  }
+
+  // capability.* — closed sub-key set (S5). Each sub-key is a scalar or a flat array;
+  // no deeper path exists, so a too-deep path is a distinct, nameable error rather
+  // than a silent accept. VALUES are validated by validateCapability at
+  // `validate --effective` time (single SoT in config-cli.ts, no vocabulary drift).
+  if (top === "capability") {
+    if (!CAPABILITY_KEYS.has(seg1)) {
+      return `unknown capability key "${seg1}" (closed key set — only: ${[...CAPABILITY_KEYS].join(", ")})`;
+    }
+    if (parts.length > 2) {
+      return `key path "${keyPath}" is too deep — capability.${seg1} is a scalar or flat array`;
     }
     return null;
   }
