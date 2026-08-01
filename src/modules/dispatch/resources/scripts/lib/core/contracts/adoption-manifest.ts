@@ -91,14 +91,14 @@ import {
 export const ADOPTION_MANIFEST_SCHEMA = "guild.adoption_manifest.v1" as const;
 
 /** Why an entry exists. CLOSED — never free-text classification. */
-export const ADOPTION_REASONS = [
+export const ADOPTION_REASONS = Object.freeze([
   "migrated",
   "collapsed",
   "rehomed",
   "renamed",
   "removed",
   "rolled_back",
-] as const;
+] as const);
 export type AdoptionReason = (typeof ADOPTION_REASONS)[number];
 
 const ADOPTION_REASON_SET: ReadonlySet<string> = new Set<string>(ADOPTION_REASONS);
@@ -110,12 +110,12 @@ const DETAIL_REQUIRED: ReadonlySet<string> = new Set<string>([
   "rolled_back",
 ]);
 
-export const LEGACY_HOMES = [
+export const LEGACY_HOMES = Object.freeze([
   "plugin-shipped",
   "dot-claude-agents",
   "project-guild",
   "umbrella-guild",
-] as const;
+] as const);
 export type LegacyHome = (typeof LEGACY_HOMES)[number];
 
 const LEGACY_HOME_SET: ReadonlySet<string> = new Set<string>(LEGACY_HOMES);
@@ -724,7 +724,7 @@ export function validateAdoptionManifestV1(obj: unknown): AdoptionManifestV1 | n
 
 // ── Reader contract (the part gap-audit F1 says is missing) ─────────────────
 
-export const ADOPTION_RESOLUTIONS = [
+export const ADOPTION_RESOLUTIONS = Object.freeze([
   "resolved",
   /** Deliberately removed with no successor — DISTINCT from `not_found`. */
   "removed",
@@ -732,7 +732,7 @@ export const ADOPTION_RESOLUTIONS = [
   "not_found",
   /** A fork, a cycle, or a malformed manifest. Never a guess. */
   "ambiguous",
-] as const;
+] as const);
 export type AdoptionResolutionStatus = (typeof ADOPTION_RESOLUTIONS)[number];
 
 export interface AdoptionResolution {

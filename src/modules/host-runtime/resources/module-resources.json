@@ -525,7 +525,7 @@
       "id": "projection:src/modules/dispatch/workflows/execution-transport-ports.ts",
       "source_path": "src/modules/dispatch/workflows/execution-transport-ports.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-ports.ts",
-      "sha256": "8b68a91be5013b9cba878524577ab35955ae8e23cc0d7a8ae21827537e83a406",
+      "sha256": "8663f2f4352d4d301760166475fce912b071fc2edafdd6a37b6acf6b295b613e",
       "projection_dependency": true
     },
     {
@@ -669,7 +669,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "source_path": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-capabilities-schema.ts",
-      "sha256": "39c78360cf3e243c6d598bbe76d1d608813ba4ba9beb3518f8b2b0a6e61044e1",
+      "sha256": "9f150abc2ddb0588df8a0ca0e275afe2d0366e99592068b7748bc3ae3e74258c",
       "projection_dependency": true
     },
     {
