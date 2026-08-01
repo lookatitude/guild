@@ -572,6 +572,12 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
   for (const entry of entries) {
     if (entry.reason !== "rolled_back") continue;
     const target = entries[(entry.reverses_sequence as number) - 1];
+    // UNREACHABLE BY CONSTRUCTION, kept as a belt-and-braces guard: the entry-level
+    // validator already rejects `reverses_sequence >= sequence`, and every entry has
+    // been proven `sequence === index + 1` above, so the index is always in range.
+    // Noted explicitly because the anti-vacuity sweep flags it as uncovered — it is
+    // dead code by design, NOT a guard someone forgot to test. Do not write a test
+    // that appears to cover it; no valid input can reach it.
     if (target === undefined) return null; // referenced sequence does not exist
     if (target.sequence !== entry.reverses_sequence) return null;
     // It must genuinely REVERSE the target: this entry's `from` is where the target
@@ -682,6 +688,17 @@ export function resolveHistorical(
  * this file's own new API. The query is now accepted as `unknown` and SNAPSHOTTED
  * through own-data descriptors BEFORE anything about the manifest is walked.
  */
+/**
+ * The key a lineage's position is tracked by: kind + id + exact bytes. ONE helper
+ * builds every key so the two construction sites can never spell the separator
+ * differently — a guard whose two keys disagree is a guard that silently never
+ * fires. `\u0000` cannot occur in a validated id or a `sha256:<hex>`, so no two
+ * distinct positions collide.
+ */
+function identityKey(kind: string, id: string, contentHash: string): string {
+  return `${kind}\u0000${id}\u0000${contentHash}`;
+}
+
 function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionResolution {
   const NO_ANSWER: AdoptionResolution = { status: "ambiguous", ref: null, trail: [] };
 
@@ -713,11 +730,33 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   if (m === null) return NO_ANSWER;
 
   const trail: number[] = [];
+  /**
+   * IDENTITY-CYCLE GUARD.
+   *
+   * Forward-only traversal (`minSequence`) guarantees TERMINATION, so there is no
+   * hang — but it does not detect a lineage that comes back to a position it has
+   * already occupied. `A@h1 → B@h2 → A@h1` walks forward the whole way and reports
+   * `resolved` at A@h1, which is not a terminal at all: it is where the walk
+   * started. The chain closed a loop, so its endpoint is genuinely indeterminate
+   * and the honest answer is `ambiguous`.
+   *
+   * This is precisely what separates the two round trips S3 cares about: a
+   * rollback to DIFFERENT bytes (`A@h1 → B@h2 → A@h3`) is legal and must resolve,
+   * while a return to IDENTICAL bytes is a closed loop. Both directions are
+   * asserted, so the rule cannot be satisfied by always answering `ambiguous`.
+   */
+  const visitedIdentities = new Set<string>();
   let currentKind: "agent" | "skill" = qKind.value;
   let currentId: string = qId.value;
   let currentHash: string | undefined = snapHash as string | undefined;
   let firstHopPath: string | undefined = snapPath as string | undefined;
   let minSequence = 0;
+
+  // Seed the ORIGIN position when the caller pinned it. Without a seed, a two-link
+  // round trip back to the starting bytes has nothing to compare against.
+  if (currentHash !== undefined) {
+    visitedIdentities.add(identityKey(currentKind, currentId, currentHash));
+  }
 
   for (let step = 0; step <= m.entries.length; step++) {
     const matches = m.entries.filter((e) => {
@@ -756,9 +795,42 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     trail.push(entry.sequence);
     minSequence = entry.sequence;
 
+    // The caller supplies an id but often no hash, so the first matched entry's
+    // `from` is the only place the ORIGIN bytes become known. Recovering them here
+    // extends the cycle guard to the common un-pinned query.
+    if (step === 0 && currentHash === undefined && entry.from.content_hash !== null) {
+      visitedIdentities.add(identityKey(entry.kind, entry.from.id, entry.from.content_hash));
+    }
+
     if (entry.to === null) return { status: "removed", ref: null, trail };
 
     const next = entry.to;
+
+    // A position already occupied ⇒ the lineage closed a loop — UNLESS this edge is
+    // a PROVEN rollback.
+    //
+    // That exemption is load-bearing, and finding it is why this guard is written
+    // this way. `rolled_back` entries are REQUIRED by the cross-entry proof above to
+    // land back on the reversed entry's `from` identity (id AND, when recorded,
+    // content_hash). So every well-formed rollback returns to bytes the lineage has
+    // already occupied — a naive "revisited position ⇒ cycle" rule would flag EVERY
+    // legal rollback as ambiguous, breaking the central forward-append semantic S3
+    // exists to express (`A → B → A'` is a chain, never a rewind).
+    //
+    // The distinction is AUTHORIZATION, not geometry. A rollback is an authorized
+    // return: the validator has already proven it references a real, strictly
+    // earlier entry, that it genuinely reverses it in both directions, and that no
+    // entry is reversed twice. An UNLABELLED edge back to an occupied position has
+    // proven none of that — it is a corrupt or mislabelled loop with an
+    // indeterminate endpoint, and that is what `ambiguous` is for.
+    //
+    // Checked BEFORE the `hasNext` lookahead: a loop is a loop whether or not it
+    // continues.
+    const nextIdentity = identityKey(next.kind, next.id, next.content_hash);
+    if (entry.reason !== "rolled_back" && visitedIdentities.has(nextIdentity)) {
+      return { status: "ambiguous", ref: null, trail };
+    }
+    visitedIdentities.add(nextIdentity);
     const hasNext = m.entries.some(
       (e) =>
         e.sequence > minSequence &&
