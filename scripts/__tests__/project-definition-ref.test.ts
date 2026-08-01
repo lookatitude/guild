@@ -24,6 +24,7 @@ import {
   isProjectDefinitionRefV1,
   verifyRefAgainstBytes,
   type ProjectDefinitionRefV1,
+  MAX_SKILLS,
 } from "../lib/core/contracts/project-definition-ref";
 
 const HASH_A = `sha256:${"a".repeat(64)}`;
@@ -376,5 +377,32 @@ describe("skills[] — prototype and out-of-band key hardening (codex round 1)",
 
   it("still accepts a plain literal array", () => {
     expect(validateProjectDefinitionRefV1(agentRef({ skills: [s1] }))).not.toBeNull();
+  });
+});
+
+
+describe("containment ladder — the skill bundle is a bounded COLLECTION", () => {
+  function withSkills(n: number) {
+    const skills = [];
+    for (let i = 0; i < n; i++) {
+      skills.push({
+        id: `s${i}`,
+        relative_path: `.guild/skills/s${i}/SKILL.md`,
+        content_hash: `sha256:${"e".repeat(64)}`,
+      });
+    }
+    return agentRef({ skills });
+  }
+
+  it("rejects a bundle over the cap", () => {
+    // Found by sweeping the ladder for OTHER unbounded levels while bounding S3's
+    // `entries[]`. Per-item validation without a count bound is not containment: a
+    // single ref carrying 100k skills validated at ~15MB, and S3 accepts 4096
+    // entries, so the outer bound was defeated one rung down.
+    expect(validateProjectDefinitionRefV1(withSkills(MAX_SKILLS + 1))).toBeNull();
+  });
+
+  it("accepts a bundle AT the cap", () => {
+    expect(validateProjectDefinitionRefV1(withSkills(MAX_SKILLS))).not.toBeNull();
   });
 });

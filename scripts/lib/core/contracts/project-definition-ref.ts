@@ -171,6 +171,20 @@ function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): bool
 // ── Path + hash rules (the load-bearing validation) ──────────────────────────
 
 /** `sha256:` + exactly 64 lowercase hex. */
+/**
+ * The COLLECTION bound on a pinned skill bundle — the containment ladder one rung
+ * INSIDE the envelope.
+ *
+ * Every scalar here is shape-checked, and S3 bounds its `entries[]`, but `skills[]`
+ * had no cap, so the outer bound was defeated one level down: a single ref carrying
+ * 100,000 skills validated at ~15MB / 179ms, and S3 accepts 4096 entries. Per-item
+ * validation without a count bound is not containment — it is containment-shaped.
+ *
+ * 256 is far above any real bundle (the whole plugin ships 111 skills; one
+ * specialist pins a handful) and far below a denial-of-service quantity.
+ */
+export const MAX_SKILLS = 256;
+
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
 
 export function isValidContentHash(v: unknown): v is string {
@@ -293,6 +307,9 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   ) {
     return null;
   }
+  // BEFORE the per-item loop: an oversized bundle must not cost a full validation
+  // pass to reject. This is the rung an outer `MAX_ENTRIES` bound cannot reach.
+  if (lenDesc.value > MAX_SKILLS) return null;
 
   // CODEX-REVIEW FIX (adversarial round 1): reject EXTRA own string keys. A
   // genuine JSON-parsed array has exactly the index keys plus `length`. An array
