@@ -439,6 +439,245 @@ describe("traversal matches IDENTITY, not bare ids", () => {
   });
 });
 
+// ── A3.9 — identity-space cycle detection ───────────────────────────────────
+//
+// Forward-only traversal already guarantees TERMINATION, so nothing here is about
+// hangs. It is about a lineage that walks forward into a position it has already
+// occupied: its endpoint is not a terminal, it is where the walk began, and the
+// honest answer is `ambiguous`.
+//
+// Every assertion below is paired with its opposite, so the rule cannot be
+// satisfied by a resolver that always answers `ambiguous` (nor by one that never
+// does) — the failure mode a one-sided cycle test invites.
+
+describe("A3.8b — a rollback must LAND on the target's source identity", () => {
+  it("rejects a rollback of a REMOVAL — there is no landing point to return to", () => {
+    const m = chain([
+      { from: loc("A"), to: null, reason: "removed", detail: "dropped" },
+      {
+        from: loc("A"),
+        to: ref("A", "f"),
+        reason: "rolled_back",
+        detail: "un-remove",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("rejects an entry whose `kind` disagrees with its own `to.kind`", () => {
+    const m = chain([
+      {
+        kind: "agent",
+        from: loc("A"),
+        to: {
+          schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+          project_id: "plugin",
+          kind: "skill" as const, // ← disagrees with the entry's own kind
+          id: "A",
+          relative_path: ".guild/skills/A/SKILL.md",
+          content_hash: H("a"),
+          source_commit: "abc1234",
+          specialist_profile_hash: null,
+          specialist_type_hash: null,
+          skills: [],
+        },
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("rejects a 'rolled_back' edge whose KIND differs from its target's", () => {
+    // An agent adoption cannot be reversed by a skill entry. Also uncovered before
+    // the anti-vacuity sweep: every other field lines up here, so with the kind
+    // check removed this manifest validates.
+    const to1 = ref("B");
+    const skillRef = {
+      schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+      project_id: "plugin",
+      kind: "skill" as const,
+      id: "A",
+      relative_path: ".guild/skills/A/SKILL.md",
+      content_hash: H("f"),
+      source_commit: "abc1234",
+      specialist_profile_hash: null,
+      specialist_type_hash: null,
+      skills: [],
+    };
+    const m = chain([
+      { from: loc("A"), to: to1 },
+      {
+        kind: "skill", // ← entry 1 was an agent adoption
+        from: {
+          id: "B",
+          historical_path: "/g/.guild/agents/B.md",
+          content_hash: to1.content_hash,
+          home: "project-guild",
+        },
+        to: skillRef,
+        reason: "rolled_back",
+        detail: "claims to reverse sequence 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("rejects a 'rolled_back' edge that does not START where the target landed", () => {
+    // The mirror of the case below, and also uncovered before this sweep. Entry 1
+    // moves A → B; this edge leaves from Z (carrying B's bytes, so the hash check
+    // alone would not catch it) and lands on A. It reverses nothing: a reversal must
+    // begin where the entry it reverses ENDED.
+    const to1 = ref("B");
+    const m = chain([
+      { from: loc("A"), to: to1 },
+      {
+        from: {
+          id: "Z", // ← not B: never picks up where entry 1 left off
+          historical_path: "/g/.guild/agents/Z.md",
+          content_hash: to1.content_hash,
+          home: "project-guild",
+        },
+        to: ref("A", "f"),
+        reason: "rolled_back",
+        detail: "claims to reverse sequence 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("rejects a 'rolled_back' edge that starts right but lands somewhere else", () => {
+    // Found by the anti-vacuity sweep on the merged contract: the validator's
+    // landing-identity check (`entry.to.id !== target.from.id`) was CORRECT but
+    // UNCOVERED — deleting it reddened nothing, so nothing stopped a future edit
+    // from removing it. This is the case it exists for: `A → B` (seq 1) followed by
+    // an edge that leaves from B (so the ORIGIN check passes) but lands on C rather
+    // than back on A. That is a continuation wearing a rollback's label, not a
+    // reversal.
+    const to1 = ref("B");
+    const m = chain([
+      { from: loc("A"), to: to1 },
+      {
+        from: {
+          id: "B",
+          historical_path: "/g/.guild/agents/B.md",
+          content_hash: to1.content_hash,
+          home: "project-guild",
+        },
+        to: ref("C", "f"), // right bytes, WRONG id — never returns to A
+        reason: "rolled_back",
+        detail: "claims to reverse sequence 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+});
+
+describe("A3.9 — an UNAUTHORIZED return to an occupied identity is ambiguous", () => {
+  it("a two-link loop back to the ORIGINAL bytes is a cycle", () => {
+    const b = ref("B", "2");
+    const m = chain([
+      { from: loc("A", "1"), to: b },
+      { from: { ...loc("B", "2"), content_hash: b.content_hash }, to: ref("A", "1") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("ambiguous");
+    expect(r.ref).toBeNull();
+  });
+
+  it("CONTRAST — a move to DIFFERENT bytes is not a cycle and resolves", () => {
+    const b = ref("B", "2");
+    const m = chain([
+      { from: loc("A", "1"), to: b },
+      { from: { ...loc("B", "2"), content_hash: b.content_hash }, to: ref("A", "3") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.content_hash).toBe(H("3"));
+  });
+
+  it("a three-link loop is a cycle", () => {
+    const b = ref("B", "2");
+    const c = ref("C", "3");
+    const m = chain([
+      { from: loc("A", "1"), to: b },
+      { from: { ...loc("B", "2"), content_hash: b.content_hash }, to: c },
+      { from: { ...loc("C", "3"), content_hash: c.content_hash }, to: ref("A", "1") },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+  });
+
+  it("CONTRAST — the same three links ending on NEW bytes resolve", () => {
+    const b = ref("B", "2");
+    const c = ref("C", "3");
+    const m = chain([
+      { from: loc("A", "1"), to: b },
+      { from: { ...loc("B", "2"), content_hash: b.content_hash }, to: c },
+      { from: { ...loc("C", "3"), content_hash: c.content_hash }, to: ref("A", "4") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.content_hash).toBe(H("4"));
+  });
+
+  it("the origin is recovered from the first hop even when the query pins no hash", () => {
+    // The caller supplies an id but usually no bytes; without recovering the origin
+    // from the first entry's `from`, a two-link loop has nothing to compare against.
+    const b = ref("B", "2");
+    const m = chain([
+      { from: loc("A", "1"), to: b },
+      { from: { ...loc("B", "2"), content_hash: b.content_hash }, to: ref("A", "1") },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+    // …and a caller that DOES pin the origin gets the same verdict.
+    expect(
+      resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("1") }).status
+    ).toBe("ambiguous");
+  });
+});
+
+describe("A3.9b — a PROVEN rollback is an AUTHORIZED return, never a cycle", () => {
+  // This exemption is load-bearing. The cross-entry proof REQUIRES a `rolled_back`
+  // entry to land back on the reversed entry's `from` identity — same id, same
+  // bytes — so every well-formed rollback revisits an occupied position. A naive
+  // "revisited ⇒ cycle" rule would flag EVERY legal rollback and destroy the
+  // forward-append semantic S3 exists to express. The discriminator is
+  // AUTHORIZATION, not geometry.
+  it("the canonical rollback (back to the ORIGINAL bytes) still resolves", () => {
+    const r = resolveHistorical(rollbackManifest(), { kind: "agent", id: "A" });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.content_hash).toBe(H("f")); // the original bytes — and NOT a cycle
+    expect(r.trail).toEqual([1, 2]);
+  });
+
+  it("but an UNLABELLED edge making the identical move IS a cycle", () => {
+    // Byte-for-byte the same geometry as the rollback above; the only difference is
+    // that this edge never proved it reverses anything. That difference is the
+    // whole rule, so this pair is what stops the exemption from being a loophole.
+    const to1 = ref("B");
+    const m = chain([
+      { from: loc("A"), to: to1 },
+      {
+        from: {
+          id: "B",
+          historical_path: "/g/.guild/agents/B.md",
+          content_hash: to1.content_hash,
+          home: "project-guild",
+        },
+        to: ref("A", "f"),
+        reason: "migrated", // ← not a proven reversal
+      },
+    ]);
+    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+  });
+});
+
 describe("A3.6 — many-to-one legal, one-to-many ambiguous", () => {
   it("a COLLAPSE resolves both predecessors to the survivor", () => {
     const survivor = ref("diagram-motion-designer");
