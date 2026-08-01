@@ -4400,8 +4400,30 @@ var AGENTS_FILE_ENTRY = {
   installability: "target",
   result_adapter: false,
   // INFERRED — no cross-review adapter; verify at live-host availability.
-  dispatch_selectable: true,
-  // INFERRED — a host consuming AGENTS.md can run a lane.
+  // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
+  // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
+  // The prior value was annotated INFERRED with the rationale "a host consuming
+  // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
+  // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
+  // THIS row", and under that reading it is false by construction:
+  //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
+  //     TeamBackend/pane path can name it;
+  //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
+  //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
+  //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
+  //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
+  //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
+  //     package target, not a process launcher".
+  // The G4b lane carved this row out as a documented exception rather than flipping it.
+  // That carve-out is superseded here because the field has REAL per-row consumers that
+  // read it as selectability: config-cli.ts builds the operator-pinnable host set from
+  // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
+  // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
+  // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
+  // and then dispatch into an adapter that returns `command: null`. A concrete
+  // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
+  // this row is the render TARGET, never a dispatch destination.
+  dispatch_selectable: false,
   capabilities: AGENTS_FILE_CAPABILITIES,
   // file surface — matches top-level surface_kind.
   provenance: "inferred"

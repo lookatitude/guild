@@ -709,7 +709,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-registry-schema.ts",
       "source_path": "src/modules/host-runtime/workflows/host-registry-schema.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-registry-schema.ts",
-      "sha256": "4cfde3f94a1054ae3d5d6bd8e09341d122274411d7c2ab748d54a702f75e0432",
+      "sha256": "644ded7af0f308ccbf0a69428896520e926caed7e44223b060747ccd970e4d0d",
       "projection_dependency": true
     },
     {

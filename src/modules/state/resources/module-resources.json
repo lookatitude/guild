@@ -8,28 +8,28 @@
       "id": "PreCompact:pre-compact.js",
       "source_path": "hooks/dist/pre-compact.js",
       "resource_path": "resources/hooks/dist/pre-compact.js",
-      "sha256": "b52dd48da84cae60ecce965cf162f93af7eb6eb1279a75d8ce2e2045a9f0d33a"
+      "sha256": "010a431b114f92d4229aef235698c2d465c57f77ce1a38984e258026da8a3b1e"
     },
     {
       "category": "hooks",
       "id": "SessionStart:session-reanchor.js",
       "source_path": "hooks/dist/session-reanchor.js",
       "resource_path": "resources/hooks/dist/session-reanchor.js",
-      "sha256": "5adf779f1bc20dc926d4786566b34501e96c67f1b629df40b714e3d014a22a82"
+      "sha256": "f9b082cf3d64a0c79ed75901485a67458ed8829998d125223ee431a1f6ab24d4"
     },
     {
       "category": "hooks",
       "id": "Stop:lean-lead-guard.js",
       "source_path": "hooks/dist/lean-lead-guard.js",
       "resource_path": "resources/hooks/dist/lean-lead-guard.js",
-      "sha256": "3f0d752f80abff6768b3f342c784a002ad2ad8a027c24dfd9888cb31f42b356e"
+      "sha256": "e84c6a7735682afd8fae52622e85e50916b179eeb6e5ae17ffd114329a2dacad"
     },
     {
       "category": "hooks",
       "id": "Stop:lifecycle-gate.js",
       "source_path": "hooks/dist/lifecycle-gate.js",
       "resource_path": "resources/hooks/dist/lifecycle-gate.js",
-      "sha256": "7a0a034c334ca6721825f1e570f619a2314fe4bb0d0a8cf9d4f68a828bd00fac"
+      "sha256": "ce2eafe26e2426894b1f99118092bc301944f98ceec5d9daae29030d93b017d0"
     },
     {
       "category": "scripts",
