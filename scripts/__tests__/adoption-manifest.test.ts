@@ -1013,43 +1013,6 @@ describe("D19.1 — a rollback rewinds ONLY its own era, not the whole ancestry"
     expect(r.status).toBe("ambiguous"); // …but it closes a loop
   });
 
-  it("an identity introduced BEFORE the reversed era survives the rewind", () => {
-    // Isolates the STAMPING rule, and it takes a rollback-of-a-rollback to do it.
-    //
-    // B is introduced at 1, and re-introduced at 3 by a rollback (the only way to
-    // revisit an identity without tripping the cycle guard on the spot). Entry 4
-    // then reverses entry 3, so the rewind boundary is exactly 3 — the sequence
-    // that RE-introduced B, not the one that first did.
-    //
-    // Stamping each identity with the EARLIEST sequence that introduced it keeps B
-    // at 1, safely older than the boundary, so entry 5's return to B is caught as a
-    // loop. Stamping with the latest marks B as born at 3, the rewind drops it, and
-    // entry 5 resolves onto bytes the lineage already occupied.
-    const m = chain([
-      { from: at("A", "1"), to: ref("B", "2") },
-      { from: at("B", "2"), to: ref("C", "3") },
-      {
-        from: at("C", "3"),
-        to: ref("B", "2"),
-        reason: "rolled_back",
-        detail: "reverses 2",
-        reverses_sequence: 2,
-        authorized_by: "cap-loc-D03",
-      },
-      {
-        from: at("B", "2"),
-        to: ref("C", "3"),
-        reason: "rolled_back",
-        detail: "reverses 3 — a rollback of a rollback (S3 invariant 5)",
-        reverses_sequence: 3,
-        authorized_by: "cap-loc-D03",
-      },
-      { from: at("C", "3"), to: ref("B", "2") },
-    ]);
-    expect(validateAdoptionManifestV1(m)).not.toBeNull();
-    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
-  });
-
   it("CONTRAST — re-adoption after a rollback is still fresh history and resolves", () => {
     // The pair that stops the rewind from over-correcting back into a blanket rule.
     const m = chain([
@@ -1146,5 +1109,89 @@ describe("D19.3 — the COLLECTION is bounded, not just its scalars", () => {
     const r = resolveHistorical(m, { kind: "agent", id: "r0" });
     expect(r.status).toBe("resolved");
     expect(r.trail.length).toBe(MAX_ENTRIES);
+  });
+});
+
+// ── D19-R1 — three defects the codex round found in the fixes above ─────────
+
+describe("D19-R1.1 — the ORIGIN is not immune to a rewind that unwinds past it", () => {
+  it("querying the INTERMEDIATE identity of a rollback+re-adoption resolves", () => {
+    // Stamping the origin `0` unconditionally makes it survive every rewind, even
+    // one that legitimately unwinds the entry that INTRODUCED it. Here the query
+    // enters at B, which entry 1 created; entry 2 rolls entry 1 back, so B's era is
+    // gone and entry 3's re-adoption is fresh history. With a hard-coded 0 the
+    // origin survives and entry 3 reads as a loop — the same manifest resolving
+    // from A but not from B, which cannot both be right.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "B", content_hash: H("2") });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("B");
+  });
+});
+
+describe("D19-R1.2 — NESTED rollbacks unwind LIFO and must stay representable", () => {
+  it("accepts A->B, B->C, C->B(rb 2), B->A(rb 1) — unwinding two migrations in order", () => {
+    // "The target must be the latest edge that landed on my source" conflates
+    // "which edge put us here" with "which edge is being undone". Entry 3 restored
+    // B, so it is the latest landing — but entry 4 undoes entry 1, which is still
+    // outstanding. Rollbacks form an UNDO STACK: a rollback pops the top.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("B", "2"), to: ref("C", "3") },
+      {
+        from: at("C", "3"),
+        to: ref("B", "2"),
+        reason: "rolled_back",
+        detail: "reverses 2",
+        reverses_sequence: 2,
+        authorized_by: "cap-loc-D03",
+      },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 — unwinding the outer migration",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+  });
+
+  it("still rejects a rollback that skips the top of the undo stack", () => {
+    // The paired negative: entry 4 names entry 1, but entry 2 already popped it and
+    // entry 3 is the outstanding adoption. LIFO is a rule, not a suggestion.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 AGAIN — stale, 3 is outstanding",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
   });
 });

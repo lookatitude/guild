@@ -702,27 +702,35 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
 
   // Cross-entry rollback proof, now that every entry is in hand.
   //
-  // Two properties beyond "it reverses its target", both previously ASSERTED IN A
-  // COMMENT AND NOT ENFORCED (the traversal guard's comment claimed "no entry is
-  // reversed twice" while nothing checked it — the claim is now true):
+  // Beyond "it structurally reverses its target", rollbacks form an UNDO STACK:
   //
-  //   OPERATIVE the referenced entry must be the one that actually established the
-  //             state being undone — the LATEST edge before this rollback that
-  //             landed on the rollback's source identity. Reversing a stale edge
-  //             lets a rollback claim authority it does not have, which at read
-  //             time buys the cycle exemption.
+  //   LIFO  each adoption with a destination PUSHES; a rollback must POP the TOP —
+  //         the outstanding adoption whose effect is still in force — and must name
+  //         it. Reversing anything else is a stale claim, and at read time a stale
+  //         claim buys the cycle exemption, so this is load-bearing rather than
+  //         bookkeeping.
   //
-  // "NO ENTRY IS REVERSED TWICE" is a CONSEQUENCE of this, not a separate check —
-  // and saying so is the point, because the traversal guard's comment asserted it
-  // while nothing enforced it. A second rollback of an already-undone entry must
-  // depart from that entry's destination identity, which the first rollback left
-  // dead; either liveness rejects it, or some later edge re-landed there and IS the
-  // operative target, so OPERATIVE rejects it. An explicit uniqueness check was
-  // written, found unreachable by the anti-vacuity sweep, and DELETED rather than
-  // shipped as a second untested guard. The property is proven end-to-end by
-  // D19.2's rejection test, not asserted in prose.
+  // An earlier formulation — "the target must be the LATEST edge that landed on my
+  // source identity" — was WRONG, and the codex round caught it. It conflates
+  // "which edge put us here" with "which edge is being undone". In `A->B(1)`,
+  // `B->C(2)`, `C->B(3 rb 2)`, `B->A(4 rb 1)`, entry 3 is the latest edge landing on
+  // B, yet entry 4 legitimately unwinds entry 1, still outstanding. That rule made
+  // sequential rollback of a multi-step migration UNREPRESENTABLE. "Outstanding" is
+  // the real predicate, and LIFO expresses it.
+  //
+  // "NO ENTRY IS REVERSED TWICE" falls out rather than being checked separately: a
+  // popped sequence is never on top again, so a second rollback naming it finds a
+  // different top and is rejected. Saying so matters because the traversal guard's
+  // comment asserted that property while nothing enforced it; it is now proven
+  // end-to-end by the D19.2 / D19-R1.2 rejection tests, not by prose.
+  const undoStack: number[] = [];
   for (const entry of entries) {
-    if (entry.reason !== "rolled_back") continue;
+    if (entry.reason !== "rolled_back") {
+      // An adoption with a destination is an outstanding effect a later rollback may
+      // unwind. A removal has no destination, so there is nothing to return to.
+      if (entry.to !== null) undoStack.push(entry.sequence);
+      continue;
+    }
     const target = entries[(entry.reverses_sequence as number) - 1];
     // UNREACHABLE BY CONSTRUCTION, kept as a belt-and-braces guard: the entry-level
     // validator already rejects `reverses_sequence >= sequence`, and every entry has
@@ -748,25 +756,13 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
       return null;
     }
 
-    // OPERATIVE — the target must be the edge whose effect this rollback undoes,
-    // i.e. the LATEST entry before this one that landed on this rollback's source
-    // identity. If a later edge landed there, THAT is what is being undone, and
-    // naming the earlier one is a stale claim.
-    //
-    // Concretely, in `A->B(1)`, `B->A(2 rb 1)`, `A->B(3)`, `B->A(4 rb 1)`: entry 4
-    // undoes entry 3, not entry 1. Before this check entry 4 validated and then
-    // collected the read-time cycle exemption on a reversal that had already
-    // happened.
-    const fromIdentity = identityOf(entry.kind, entry.from.id, entry.from.content_hash);
-    let operative: number | null = null;
-    for (const prior of entries) {
-      if (prior.sequence >= entry.sequence) break; // entries are in sequence order
-      if (prior.to === null) continue;
-      if (identityOf(prior.to.kind, prior.to.id, prior.to.content_hash) === fromIdentity) {
-        operative = prior.sequence; // keep the LATEST such edge
-      }
-    }
-    if (operative !== null && operative !== target.sequence) return null;
+    // LIFO — pop the top, and it must be the named target. An EMPTY stack needs no
+    // separate check: `undoStack[-1]` is `undefined`, which never equals a validated
+    // sequence, so "nothing outstanding" rejects through the same line. An explicit
+    // emptiness guard was written, shown redundant by the anti-vacuity sweep, and
+    // removed rather than shipped untested.
+    if (undoStack[undoStack.length - 1] !== target.sequence) return null;
+    undoStack.pop();
   }
 
   return {
@@ -902,12 +898,25 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   if (m === null) return NO_ANSWER;
 
   /**
-   * PER-HOP COST (D19.3). Both the forward-match filter and the `hasNext`
-   * lookahead scanned the WHOLE array on every hop, so a valid chain of length n
-   * cost O(n^2) per resolve — the bound on the collection caps the damage, but the
-   * scan is the reason the cap has to be low. Indexing once by the source identity
-   * an entry departs FROM makes each hop proportional to the entries that actually
-   * share that identity, which is one in the overwhelmingly common case.
+   * PER-HOP COST (D19.3). Both the forward-match filter and the `hasNext` lookahead
+   * scanned the WHOLE array on every hop. Indexing once by the source identity an
+   * entry departs FROM makes each hop proportional to the entries sharing that
+   * identity.
+   *
+   * WHAT THIS DOES AND DOES NOT BUY — stated precisely, because the first version
+   * of this comment claimed the quadratic term was gone and the codex round showed
+   * it was not. For a chain over DISTINCT identities each bucket holds one entry and
+   * traversal is linear. For a history that keeps returning to the SAME identities
+   * — `A->B, B->A(rb), A->B, ...` — both buckets are Theta(n) and every hop filters
+   * one of them, so the quadratic term REMAINS. Measured, 256 -> 2048 entries:
+   * distinct 2.3 -> 15.6ms, alternating 4.3 -> 44.1ms.
+   *
+   * `MAX_ENTRIES` is therefore still doing the real containment work, and the index
+   * is a constant-factor win on the common shape rather than a change of complexity
+   * class. Making the pathological case linear needs a per-bucket cursor that only
+   * advances (`minSequence` is monotonic, buckets are in sequence order); it is not
+   * done here because the bound already caps the damage and an untested optimisation
+   * is worth less than an honest comment.
    *
    * Keyed on (kind, from.id) rather than the full identity because a hash-less
    * query must still find its candidates; the byte check stays in the filter.
@@ -922,6 +931,42 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
   /** Entries departing from (kind, id), in sequence order. Never null. */
   const departingFrom = (kind: string, id: string): AdoptionEntry[] =>
     byFromId.get(`${kind}\u0000${id}`) ?? [];
+
+  /**
+   * Every sequence at which the log INTRODUCED an identity (each entry whose `to`
+   * it is), in order.
+   *
+   * The origin's stamp used to be a hard-coded 0, which made it immune to EVERY
+   * rewind — including one unwinding the very entry that created it. Codex found
+   * the consequence: `A->B(1), B->A(2 rb 1), A->B(3)` queried at B reported
+   * `ambiguous`, because B survived a rewind of the entry that introduced it, while
+   * the SAME manifest queried at A resolved. One manifest cannot have two answers.
+   *
+   * The stamp must be the introduction the walk STARTS FROM — the latest one
+   * strictly BEFORE the first hop. Taking the earliest instead (or ignoring the
+   * bound) picks up a FUTURE re-introduction and rewinds an origin that had not yet
+   * been re-created: that regressed `A->B, B->C, C->B(rb 2), B->A`, where A is
+   * introduced only by entry 4, long after the walk began at it.
+   */
+  const introducedAt = new Map<string, number[]>();
+  for (const e of m.entries) {
+    if (e.to === null) continue;
+    const k = identityKey(e.to.kind, e.to.id, e.to.content_hash);
+    const seqs = introducedAt.get(k);
+    if (seqs === undefined) introducedAt.set(k, [e.sequence]);
+    else seqs.push(e.sequence);
+  }
+  /** Latest introduction strictly before `before`; 0 ⇒ pre-dates the log. */
+  const originStamp = (key: string, before: number): number => {
+    const seqs = introducedAt.get(key);
+    if (seqs === undefined) return 0;
+    let best = 0;
+    for (const q of seqs) {
+      if (q >= before) break; // ascending
+      best = q;
+    }
+    return best;
+  };
 
   const trail: number[] = [];
   /**
@@ -952,7 +997,19 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
    * which cannot exist.
    */
   const visitedIdentities = new Map<string, number>();
-  /** Record an identity, keeping the EARLIEST sequence that introduced it. */
+  /**
+   * Record an identity, keeping the EARLIEST sequence that introduced it.
+   *
+   * CURRENTLY UNOBSERVABLE, kept deliberately and said out loud: under the LIFO
+   * undo-stack rule an identity can only be re-introduced by a rollback's `to`, and
+   * the anti-vacuity sweep confirms that swapping this for last-write-wins changes
+   * no test. It is kept because the two differ in FAILURE DIRECTION — earliest-wins
+   * holds an ancestor longer, so a rewind that should not forget it cannot, which
+   * fails toward `ambiguous`; last-write-wins fails toward `resolved` on bytes the
+   * lineage already occupied. The house rule is fail-closed, so the conservative
+   * one stays. Do not write a test that merely appears to cover this: the fixture
+   * that used to (a rollback of a rollback) is no longer a representable history.
+   */
   const seeIdentity = (key: string, seq: number): void => {
     if (!visitedIdentities.has(key)) visitedIdentities.set(key, seq);
   };
@@ -964,9 +1021,8 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
 
   // Seed the ORIGIN position when the caller pinned it. Without a seed, a two-link
   // round trip back to the starting bytes has nothing to compare against.
-  if (currentHash !== undefined) {
-    seeIdentity(identityKey(currentKind, currentId, currentHash), 0);
-  }
+  // The origin seed is deferred to the first hop: its stamp depends on which entry
+  // the walk actually starts from.
 
   for (let step = 0; step <= m.entries.length; step++) {
     const matches = departingFrom(currentKind, currentId).filter((e) => {
@@ -1037,8 +1093,14 @@ function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionReso
     // The caller supplies an id but often no hash, so the first matched entry's
     // `from` is the only place the ORIGIN bytes become known. Recovering them here
     // extends the cycle guard to the common un-pinned query.
-    if (step === 0 && currentHash === undefined && entry.from.content_hash !== null) {
-      seeIdentity(identityKey(entry.kind, entry.from.id, entry.from.content_hash), 0);
+    if (step === 0) {
+      // Seed the ORIGIN now that the first hop is known. The caller may have pinned
+      // the bytes; otherwise the first entry's `from` is where they become known.
+      const originHash = currentHash ?? entry.from.content_hash;
+      if (originHash !== null && originHash !== undefined) {
+        const k = identityKey(currentKind, currentId, originHash);
+        seeIdentity(k, originStamp(k, entry.sequence));
+      }
     }
 
     if (entry.to === null) return { status: "removed", ref: null, trail };
