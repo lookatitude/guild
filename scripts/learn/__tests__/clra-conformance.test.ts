@@ -1625,7 +1625,12 @@ describe("[G14-sec] scrub/audit share-set — ONE canonical source, no mirror dr
   };
 
   test("the canonical share-set is the expected per-run artifact set (locked, non-empty)", () => {
-    expect(SHARED_SCRUBBED_NAMES).toEqual(EXPECTED_CANON);
+    // Compare MEMBERSHIP, not representation. `SHARED_SCRUBBED_NAMES` is a sealed
+    // vocabulary, and a sealed vocabulary is deliberately not a `Set`: a branded Set can
+    // never be closed, because `Set.prototype.delete.call(x, k)` reaches its internal slot
+    // past any neutered own method. `toEqual` against a real Set compares own properties
+    // and so diffs the facade's methods — which says nothing about the share-set.
+    expect(new Set(SHARED_SCRUBBED_NAMES)).toEqual(EXPECTED_CANON);
     expect(SHARED_SCRUBBED_NAMES.size).toBeGreaterThan(0);
   });
 

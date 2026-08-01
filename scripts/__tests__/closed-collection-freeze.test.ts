@@ -232,6 +232,43 @@ function scanStatic(): StaticCollection[] {
   return found;
 }
 
+/**
+ * Can this file be `require`d by a test WITHOUT running anything?
+ *
+ * The runtime half was originally scoped to module public indexes because they are
+ * import-safe by construction. That left the collections declared in `scripts/**`,
+ * `hooks/**`, and module-internal files verified BY SPELLING ONLY — and the positive
+ * control proved the gap is real, not theoretical: of 13 registries frozen by an earlier
+ * lane, only 6 are reachable through a module index. `INJECTION_SUPPORT` and
+ * `REQUIRED_HOOK_EVENTS` sit inside host-runtime and are simply not on its index.
+ *
+ * So instead of widening the blast radius blindly, this classifies a file as import-safe
+ * when every top-level statement merely DECLARES. A bare expression statement, a loop, or
+ * an unguarded `if` means importing it would execute something, and this repo genuinely
+ * ships CLIs that write files. `if (require.main === module)` is the repo's own CLI guard
+ * and is never true under `require()`, so it does not count against a file.
+ */
+function importSafety(file: string, text: string): { safe: true } | { safe: false; reason: string } {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  for (const statement of source.statements) {
+    if (
+      ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement) ||
+      ts.isExportAssignment(statement) || ts.isVariableStatement(statement) ||
+      ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
+      ts.isEnumDeclaration(statement) || ts.isModuleDeclaration(statement) ||
+      ts.isEmptyStatement(statement)
+    ) continue;
+    if (ts.isIfStatement(statement)) {
+      const test = statement.expression.getText(source);
+      if (/require\.main\s*===\s*module/.test(test) || /import\.meta\.main/.test(test)) continue;
+      return { safe: false, reason: `unguarded top-level if (${test.slice(0, 30).replace(/\s+/g, " ")}…)` };
+    }
+    return { safe: false, reason: `top-level ${ts.SyntaxKind[statement.kind]} runs on import` };
+  }
+  return { safe: true };
+}
+
 const statics = scanStatic();
 const identity = (c: StaticCollection): string => `${c.file}::${c.name}`;
 
@@ -522,6 +559,76 @@ describe("closed collections — RUNTIME (deep-walk of every module export graph
 });
 
 // ---------------------------------------------------------------------------
+// Runtime tier 2 — import the DECLARING FILE, joined on (file, name)
+// ---------------------------------------------------------------------------
+
+/**
+ * The module-index walk is the strongest evidence, but it cannot see everything, and the
+ * gap is not theoretical. A positive control — 13 registries an earlier lane froze — found
+ * only 6 of them reachable through a module index. `INJECTION_SUPPORT` and
+ * `REQUIRED_HOOK_EVENTS` are declared inside host-runtime and are simply not on its index;
+ * the other five live under `scripts/lib/core/contracts/**` and never could be.
+ *
+ * So this tier imports the DECLARING FILE and reads the export by name — but only when the
+ * file is import-safe by the AST test above, because this repo ships CLIs that write files
+ * and importing one would run it. That gives the strongest join available: `(file, name)`,
+ * the exact identity the pin uses, binding the walked VALUE to the declaration site
+ * instead of matching a spelling within a module.
+ */
+const directFileResults = new Map<string, { verified: boolean; reason?: string }>();
+
+describe("closed collections — RUNTIME tier 2 (the declaring file, joined on file+name)", () => {
+  const byFile = new Map<string, StaticCollection[]>();
+  for (const collection of statics) {
+    const list = byFile.get(collection.file) ?? [];
+    list.push(collection);
+    byFile.set(collection.file, list);
+  }
+
+  it("ANTI-VACUITY: there are declaring files to import", () => {
+    expect(byFile.size).toBeGreaterThan(50);
+  });
+
+  it("every collection in an import-safe declaring file is frozen or sealed AT RUNTIME", () => {
+    const findings: string[] = [];
+    let verified = 0;
+    for (const [file, collections] of byFile) {
+      const absolute = path.join(REPO, file);
+      const safety = importSafety(absolute, fs.readFileSync(absolute, "utf8"));
+      if (safety.safe === false) {
+        const reason = `not import-safe (${safety.reason})`;
+        for (const c of collections) directFileResults.set(identity(c), { verified: false, reason });
+        continue;
+      }
+      let exports: Record<string, unknown>;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        exports = require(absolute) as Record<string, unknown>;
+      } catch (err) {
+        const reason = `import failed: ${(err as Error).message.split("\n")[0].slice(0, 80)}`;
+        for (const c of collections) directFileResults.set(identity(c), { verified: false, reason });
+        continue;
+      }
+      for (const c of collections) {
+        const value = exports[c.name];
+        if (value === undefined) {
+          directFileResults.set(identity(c), { verified: false, reason: "export absent at runtime" });
+          continue;
+        }
+        const result: WalkResult = { findings: [], visited: 0, names: new Set() };
+        walkValue(value, identity(c), new WeakSet(), result, 0, false);
+        for (const f of result.findings) findings.push(`${f.kind}: ${f.path}`);
+        directFileResults.set(identity(c), { verified: true });
+        verified += 1;
+      }
+    }
+    expect(findings.sort()).toEqual([]);
+    // Non-vacuous: this tier must actually verify a large share of the population.
+    expect(verified).toBeGreaterThan(150);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The evidence split — computed by JOINING on identity, never by subtraction
 // ---------------------------------------------------------------------------
 
@@ -551,13 +658,24 @@ describe("closed collections — evidence strength, joined on identity", () => {
       else staticOnly.push({ id, reason: "declared inside a module but not re-exported from its index", detail: mod });
     }
 
+    // Tier 2 re-classifies anything the index walk could not reach but the declaring-file
+    // import COULD — a strictly stronger join (file+name, the pin's own identity).
+    const stillStatic: typeof staticOnly = [];
+    for (const entry of staticOnly) {
+      const direct = directFileResults.get(entry.id);
+      if (direct?.verified) runtimeVerified.push(entry.id);
+      else stillStatic.push(direct?.reason ? { ...entry, reason: direct.reason } : entry);
+    }
+    staticOnly.length = 0;
+    staticOnly.push(...stillStatic);
+
     const reasons: Record<string, number> = {};
     for (const entry of staticOnly) reasons[entry.reason] = (reasons[entry.reason] ?? 0) + 1;
 
     // eslint-disable-next-line no-console
     console.log(
       `[closed-collection] ${statics.length} declaration sites scanned; ` +
-        `${runtimeVerified.length} JOINED to a runtime-walked module export (file+name); ` +
+        `${runtimeVerified.length} VERIFIED AT RUNTIME (module index, or the declaring file joined on file+name); ` +
         `${staticOnly.length} verified by declaration site only — ` +
         Object.entries(reasons).map(([r, n]) => `${n} ${r}`).join("; "),
     );
@@ -701,6 +819,67 @@ describe("closed collections — the exploits, demonstrated against this branch"
         (list as string[]).length = 0;
       }).toThrow(TypeError);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The facade's blast radius — `instanceof Set` is now a wrong answer, not an error
+// ---------------------------------------------------------------------------
+
+describe("closed collections — nothing branches on the REPRESENTATION of a vocabulary", () => {
+  /**
+   * A sealed vocabulary is a frozen facade, not a `Set`. That is deliberate and
+   * unavoidable — a branded Set cannot be closed — but it makes `instanceof Set` a
+   * SILENTLY WRONG ANSWER rather than a loud failure: the check returns false and the code
+   * quietly takes the other branch.
+   *
+   * Landing the facade broke four assertions that tested the REPRESENTATION
+   * (`toBeInstanceOf(Set)`, `toEqual(new Set(...))`) instead of the CONTRACT (has / size /
+   * iterate), and each was found by a separate full-suite run, one at a time. This guard
+   * turns that into one fast failure at the source: production code must not branch on the
+   * constructor of something that may be a vocabulary.
+   *
+   * The primitive is the ONE legitimate user — telling a branded collection from a facade
+   * is precisely its job — so it is exempted by path, not by pattern.
+   */
+  const PRIMITIVE = "src/modules/kernel/workflows/sealed-collections.ts";
+
+  const instanceofSetHits = (rel: string, text: string): string[] => {
+    const source = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const hits: string[] = [];
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword &&
+        ts.isIdentifier(node.right) &&
+        (node.right.text === "Set" || node.right.text === "Map")
+      ) {
+        const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+        hits.push(`${rel}:${line + 1}  ${node.getText(source).slice(0, 60)}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    return hits;
+  };
+
+  it("no production file outside the primitive branches on instanceof Set/Map", () => {
+    const offenders: string[] = [];
+    for (const root of ["src", "scripts", "hooks"]) {
+      for (const file of walkFiles(path.join(REPO, root))) {
+        const rel = path.relative(REPO, file).replace(/\\/g, "/");
+        if (rel === PRIMITIVE) continue;
+        offenders.push(...instanceofSetHits(rel, fs.readFileSync(file, "utf8")));
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it("ANTI-VACUITY: the matcher DOES see the primitive's own legitimate uses", () => {
+    // If this drops to zero the AST matcher stopped matching, and the guard above would
+    // pass happily over a repo full of `instanceof Set`.
+    const text = fs.readFileSync(path.join(REPO, PRIMITIVE), "utf8");
+    expect(instanceofSetHits(PRIMITIVE, text).length).toBeGreaterThan(2);
   });
 });
 
