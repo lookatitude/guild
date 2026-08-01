@@ -99,7 +99,8 @@ describe("capability module catalogs", () => {
         path.join(pluginRoot, "templates", "specialists", `${n}.md`)
       ),
     ];
-    expect(definitionPaths).toHaveLength(17);
+    // 3 machinery agents (advisor, context-manager, developer) + 15 domain templates.
+    expect(definitionPaths).toHaveLength(18);
     for (const p of definitionPaths) {
       const fm = parseFrontmatter(fs.readFileSync(p, "utf8")) ?? {};
       expect({ file: p, v: fm["operating_style"] }).toEqual({

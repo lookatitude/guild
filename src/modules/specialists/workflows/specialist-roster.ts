@@ -1,9 +1,11 @@
 /**
  * The specialists catalog (machinery-vs-template-library ADR).
  *
- * The plugin ships exactly TWO registered, dispatchable agents — the machinery
- * set (`agents/*.md`): `advisor` (powerful escalation supervisor) and
- * `developer` (generic mid-tier lane worker). Every DOMAIN specialist type is
+ * The plugin ships exactly THREE registered, dispatchable agents — the machinery
+ * set (`agents/*.md`): `advisor` (powerful escalation supervisor),
+ * `context-manager` (mid-tier bounded context assembler, added by decision
+ * cap-loc-D01 once its written contract landed) and `developer` (generic
+ * mid-tier lane worker). Every DOMAIN specialist type is
  * a TEMPLATE (`templates/specialists/*.md`, `guild.specialist_template.v1`):
  * read-only feedstock that guild:team-compose mints into the consuming repo's
  * `.guild/agents/` (roster-resolve.ts `mint`) before it can join a team.
@@ -13,7 +15,7 @@
  * canonical enumeration consumers use at runtime is scripts/lib/roster.ts.
  */
 
-export const MACHINERY_AGENT_IDS = ["advisor", "developer"] as const;
+export const MACHINERY_AGENT_IDS = ["advisor", "context-manager", "developer"] as const;
 
 export const SPECIALIST_TEMPLATE_IDS = [
   "architect",
