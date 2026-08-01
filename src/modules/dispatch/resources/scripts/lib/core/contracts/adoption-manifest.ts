@@ -786,13 +786,50 @@ function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | nul
     // when the sweep proved it unreachable behind this one.
     if (entry.to.content_hash !== target.from.content_hash) return null;
 
-    // LIFO within THIS lineage — pop its top, and it must be the named target. An
-    // absent or empty stack needs no separate check: the lookup yields `undefined`,
-    // which never equals a validated sequence, so "nothing outstanding here" rejects
-    // through the same line. An explicit emptiness guard was written, shown redundant
-    // by the anti-vacuity sweep, and removed rather than shipped untested.
+    // LIFO within this destination — pop its top, and it must be the named target.
+    // An absent or empty stack needs no separate check: the lookup yields
+    // `undefined`, which never equals a validated sequence, so "nothing outstanding
+    // here" rejects through the same line. An explicit emptiness guard was written,
+    // shown redundant by the anti-vacuity sweep, and removed rather than shipped
+    // untested.
+    //
+    // AND IT MUST BE THE *ONLY* THING OUTSTANDING (codex round 5, #1).
+    //
+    // Keying by destination is correct — a rollback departs from exactly where its
+    // target landed — but it is NOT the same thing as keying by lineage, and COLLAPSE
+    // is where the two come apart. `U→X(1)`, `N→X(2)`, `X→N(3 rb 2)` gave X the stack
+    // [1,2]; popping 2 satisfied LIFO while 1 was still outstanding. Two things then
+    // went wrong at once, and both were reproduced against the tip before this line
+    // was written:
+    //
+    //   • resolving `U` walked 1,3 and answered `resolved → N`. `U` was never rolled
+    //     back; it landed on the bytes `N` had just been given back.
+    //   • sequence 1 became permanently UN-unwindable: entry 3 marks `X` dead, so a
+    //     later `X→U (rb 1)` is rejected by the liveness rule. The log had reached a
+    //     state with an outstanding effect that nothing could ever undo.
+    //
+    // The reason is structural, not a missing side-condition. A rollback edge is a
+    // WHOLE-IDENTITY move — `X→N` says everything at X is now at N — but under
+    // collapse X is shared, so no such edge can be true for one participant and false
+    // for the other. The entry shape simply cannot express "un-collapse N only".
+    //
+    // So the state is made UNREPRESENTABLE rather than adjudicated, exactly as the
+    // liveness rule above does with the fork. `length === 1` is precisely "no other
+    // lineage is riding on this destination": a second outstanding adoption on one
+    // destination can only come from a DIFFERENT source, because re-adopting the same
+    // source requires an intervening rollback, and that rollback already popped.
+    //
+    // KNOWN LIMITATION, stated rather than discovered later — and it is not a
+    // NARROWING. The pristine tip could not express a collapse rollback either: it
+    // accepted the first half (`X→N rb 2`) and then rejected the second (`X→U rb 1`),
+    // leaving a half-unwound log and a lineage resolving to another role's bytes. The
+    // rule below refuses the same history EARLY and WHOLE instead of late and torn. If
+    // un-collapsing one participant is ever genuinely needed it wants its own reason
+    // and its own edge shape — a `split` that names WHICH source it releases — not a
+    // hole here.
     const lineage = undoStacks.get(identityOf(entry.kind, entry.from.id, entry.from.content_hash));
     if (lineage === undefined || lineage[lineage.length - 1] !== target.sequence) return null;
+    if (lineage.length !== 1) return null; // another lineage still rides this destination
     lineage.pop();
   }
 
