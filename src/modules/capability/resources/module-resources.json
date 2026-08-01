@@ -8,7 +8,7 @@
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "resource_path": "resources/scripts/capability-profile.ts",
-      "sha256": "a0c72fe27f53c97dde99f7254981d81503ac20e6c5556d6a714f0ea263840de5"
+      "sha256": "717e572fc1fbd2c9c2f1c3e8146d887ec740249e9cc962deac2bfd447a942616"
     },
     {
       "category": "scripts",
@@ -22,7 +22,7 @@
       "id": "lib/capability/candidate-surface",
       "source_path": "scripts/lib/capability/candidate-surface.ts",
       "resource_path": "resources/scripts/lib/capability/candidate-surface.ts",
-      "sha256": "0af139414dc091244826cc5cdc0e0d6c95d45d25244f201b3307ad0be71085bf"
+      "sha256": "bfb19b88f5c95d83f4a72f49f4fc9914ad8b8c1cb55873fb3b1ca900b9a47cf8"
     },
     {
       "category": "scripts",
@@ -36,14 +36,14 @@
       "id": "lib/capability/context-manager-contract",
       "source_path": "scripts/lib/capability/context-manager-contract.ts",
       "resource_path": "resources/scripts/lib/capability/context-manager-contract.ts",
-      "sha256": "089d0d55243b9f74dfbe9980fe75a2958a2ce506c7ae2ef895c7b832e126c304"
+      "sha256": "8f3119891c3f204968ba7d822ae1a7b05a126b8fddc78bb159d734183defd348"
     },
     {
       "category": "scripts",
       "id": "lib/capability/profile-emit",
       "source_path": "scripts/lib/capability/profile-emit.ts",
       "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
-      "sha256": "561be2d1393f3be6697c4ec454c832919d49d5756a198e6fceba5edf6e0677fd"
+      "sha256": "3f875660d9f37e554e5f356c0a77ed626e88c13000e90e8bc11be1a434b771ed"
     },
     {
       "category": "scripts",

@@ -11,6 +11,30 @@
  * │ `agents/context-manager.md` may not ship until this module does.          │
  * └───────────────────────────────────────────────────────────────────────────┘
  *
+ * ⚠️ WHAT THIS MODULE DOES AND DOES NOT ENFORCE — READ THIS FIRST
+ *
+ * CODEX-REVIEW CORRECTION (round 2, finding 5). An earlier version of this header
+ * claimed the contract "forbids the rest structurally". That was an OVERCLAIM and
+ * is corrected here, because an overclaimed boundary is worse than a documented
+ * gap — a reader trusts it and stops looking.
+ *
+ * What IS enforced: every write performed by code that routes through
+ * `classifyContextManagerWrite` — which is every write the profile emitter makes
+ * (`profile-emit.ts`), the one code path in this wave that writes on the agent's
+ * behalf. Physical containment (symlinked directories) is enforced there, by the
+ * emitter's realpath check, because it needs I/O and this module is pure.
+ *
+ * What is NOT enforced here: the agent's OWN `Write`/`Edit` tool calls. The host
+ * grants those tools from the frontmatter and Guild has no per-path tool gate, so
+ * a direct `Write(".guild/agents/x.md", …)` by the model has no mechanical
+ * connection to this file. What bounds it today is the agent body's instruction
+ * plus review — which is exactly the prose-only enforcement this codebase distrusts.
+ * A host-side path policy on Write/Edit is the real closure and is OWED WORK, not
+ * something this module delivers.
+ *
+ * So: this contract makes the boundary CHECKABLE and makes the code path that
+ * matters most obey it. It does not make the boundary unbypassable.
+ *
  * WHAT R13 IS, AND WHY PROSE CANNOT CLOSE IT
  *
  * The plan's risk R13 (High/High) is "context manager becomes a universal domain
@@ -238,6 +262,18 @@ export function isCanonicalRelPath(v: unknown): v is string {
   for (const seg of v.split("/")) {
     if (seg.length === 0) return false; // leading, trailing, or doubled slash
     if (seg === "." || seg === "..") return false; // alias or traversal
+    // CODEX-REVIEW FIX (round 2, finding 1). Exact-match on `.`/`..` was not
+    // enough. Win32 STRIPS trailing dots and spaces from path components, so
+    // `".. "` and `"..."` reach the filesystem AS `..`. Reproduced as:
+    //
+    //   classifyContextManagerWrite(".guild/context/.. /agents/pwn.md")
+    //   // => allowed:true, and on Win32 resolves into .guild/agents/
+    //
+    // Rejecting the segment whose trailing dots and spaces are stripped closes
+    // the class rather than the two spellings that were reported.
+    const stripped = seg.replace(/[. ]+$/, "");
+    if (stripped === "." || stripped === "..") return false;
+    if (stripped.length === 0) return false; // all dots/spaces — no referent
   }
   return true;
 }
@@ -281,6 +317,18 @@ export type ContextManagerWriteVerdict =
  *
  * Fail-closed in every direction: a malformed path is a refusal, not a repair; an
  * unrecognized location is a refusal, not a default-allow. NEVER throws.
+ *
+ * ⚠️ THIS IS A LEXICAL CHECK, AND DELIBERATELY SO. It is pure — no I/O — so it
+ * cannot know that `.guild/runs/<id>/capability` is a SYMLINK to `/tmp`. Codex
+ * round 2 finding 1 reproduced exactly that: the classifier said `allowed`, and
+ * the file landed outside the root.
+ *
+ * Lexical containment is a PRECONDITION for physical containment, not a substitute
+ * for it. Any caller that actually touches the filesystem must ALSO resolve the
+ * real path and confirm it is still under the project root — see
+ * `assertContainedRealPath` in `profile-emit.ts`, which is where the I/O half
+ * lives. Splitting it this way keeps this module pure and testable while putting
+ * the check that needs `realpathSync` next to the code that needs it.
  *
  * @param relPath project-root-relative, canonical spelling only.
  */

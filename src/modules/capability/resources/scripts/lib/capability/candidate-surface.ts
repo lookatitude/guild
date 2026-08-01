@@ -43,6 +43,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { types as nodeTypes } from "util";
 
 import {
   DEFAULT_SUGGESTION_BUDGET,
@@ -56,7 +57,26 @@ const RUNS_DIR = ".guild/runs";
 const PROFILE_LEAF = path.join("capability", "profile.json");
 
 /** Run-directory shape. Bounded and anchored — a run id names a directory. */
-const RUN_DIR_RE = /^run-[0-9]{8}-[0-9]{6}-[a-z0-9][a-z0-9._-]*$/;
+const RUN_DIR_RE = /^run-([0-9]{8})-([0-9]{6})-[a-z0-9][a-z0-9._-]*$/;
+
+/**
+ * The regex alone admits `run-99999999-999999-x`, which sorts AHEAD of every real
+ * run and would be selected as "newest" forever (Codex round 2, finding 9). The
+ * field ranges are checked so a nonsense stamp is skipped rather than trusted.
+ *
+ * Same-second ties are broken by slug, which is arbitrary but DETERMINISTIC — and
+ * that is the honest limit of a name-based ordering. Reading mtime would break the
+ * no-clock rule and would be no more correct.
+ */
+function isRealRunDir(name: string): boolean {
+  const m = RUN_DIR_RE.exec(name);
+  if (m === null) return false;
+  const [y, mo, d] = [+m[1].slice(0, 4), +m[1].slice(4, 6), +m[1].slice(6, 8)];
+  const [h, mi, sec] = [+m[2].slice(0, 2), +m[2].slice(2, 4), +m[2].slice(4, 6)];
+  if (y < 2000 || y > 2999 || mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  if (h > 23 || mi > 59 || sec > 60) return false; // 60 admits a leap second
+  return true;
+}
 
 /**
  * THE CONTAINMENT LADDER (spec README rule 7). Every level, named, or one of them
@@ -124,6 +144,7 @@ export const EMPTY_REASONS = Object.freeze([
   "no_profile_found",
   "profile_invalid",
   "profile_too_large",
+  "invalid_options",
   "profile_has_no_candidates",
   "all_candidates_satisfied",
 ] as const);
@@ -172,7 +193,7 @@ export function readLiveRosterIds(projectRoot: string): { agents: Set<string>; s
  */
 export function listProfileRunIds(projectRoot: string): string[] {
   const dirs = safeReadDir(path.join(projectRoot, RUNS_DIR))
-    .filter((n) => RUN_DIR_RE.test(n))
+    .filter(isRealRunDir)
     .sort()
     .reverse();
   const out: string[] = [];
@@ -186,6 +207,36 @@ export function listProfileRunIds(projectRoot: string): string[] {
 export interface SurfaceOptions {
   /** Resolved `capability.suggestion_budget`; passed straight to S1's validator. */
   suggestionBudget?: number;
+}
+
+/**
+ * Resolve `SurfaceOptions` through own-data descriptors — the READ-ONLY guarantee
+ * covers the options too.
+ *
+ * CODEX-REVIEW FIX (round 2, finding 10). This function contains no write call,
+ * but a `suggestionBudget` GETTER supplied by the caller was executed during
+ * surfacing and created a file. "Contains no write" and "is read-only" are not
+ * the same claim when caller code can run inside the call, and `/guild:status`
+ * makes the stronger one.
+ *
+ * Returns the resolved budget, or `null` to mean "reject".
+ */
+function resolveSurfaceBudget(opts: unknown): number | null {
+  if (opts === undefined) return DEFAULT_SUGGESTION_BUDGET;
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return null;
+  if (nodeTypes.isProxy(opts)) return null;
+  const proto = Object.getPrototypeOf(opts);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(opts).length > 0) return null;
+  for (const k of Object.getOwnPropertyNames(opts)) {
+    if (k !== "suggestionBudget") return null; // closed key set
+  }
+  const d = Object.getOwnPropertyDescriptor(opts, "suggestionBudget");
+  if (!d) return DEFAULT_SUGGESTION_BUDGET;
+  if (!("value" in d)) return null; // accessor — NEVER fired
+  if (d.value === undefined) return DEFAULT_SUGGESTION_BUDGET;
+  if (typeof d.value !== "number" || !Number.isInteger(d.value) || d.value < 0) return null;
+  return d.value;
 }
 
 /**
@@ -209,6 +260,11 @@ export function surfaceCapabilityCandidates(
   });
 
   try {
+    // OPTIONS FIRST — before any filesystem read, so nothing caller-supplied runs
+    // inside a call that claims to be read-only.
+    const budget = resolveSurfaceBudget(opts);
+    if (budget === null) return empty("invalid_options");
+
     if (!fs.existsSync(path.join(projectRoot, RUNS_DIR))) return empty("no_runs_directory");
 
     const runIds = listProfileRunIds(projectRoot);
@@ -232,9 +288,7 @@ export function surfaceCapabilityCandidates(
     let profile: ProjectCapabilityProfileV1 | null = null;
     try {
       const raw: unknown = JSON.parse(fs.readFileSync(profileAbs, "utf8"));
-      profile = validateProjectCapabilityProfileV1(raw, {
-        suggestionBudget: opts.suggestionBudget ?? DEFAULT_SUGGESTION_BUDGET,
-      });
+      profile = validateProjectCapabilityProfileV1(raw, { suggestionBudget: budget });
     } catch {
       profile = null;
     }
@@ -269,6 +323,7 @@ const EMPTY_TEXT: Readonly<Record<EmptyReason, string>> = Object.freeze({
   no_profile_found: "no capability profile emitted yet (run /guild:learn)",
   profile_invalid: "the newest capability profile FAILED validation — treat it as absent",
   profile_too_large: "the newest capability profile exceeds the size bound — not read",
+  invalid_options: "the surfacing options were malformed — nothing was read",
   profile_has_no_candidates: "profiled, no candidates proposed",
   all_candidates_satisfied: "all proposed candidates already exist in the roster",
 });
@@ -283,17 +338,34 @@ const EMPTY_TEXT: Readonly<Record<EmptyReason, string>> = Object.freeze({
  * field, so the line stays readable, the anomaly stays loud, and nothing the
  * profile carries reaches the terminal unexamined.
  *
- * Rejected: any C0/C1 control character or DEL — one rule that covers ESC (the
- * lead byte of every ANSI sequence), CR (line overwrite), and LF (forging an
- * extra output line) in one rule, and matches the "an identifier never contains a
- * control character, a body always does" guard used across this wave.
+ * CODEX-REVIEW FIX (round 2, finding 8). Rejecting control characters was NOT
+ * enough, because the rendered line has its own delimiters. This `proposed_id`
+ * validated and contained no control character:
+ *
+ *   x" (confidence high, owner project) — APPROVED "
+ *
+ * and rendered as a line that reads as a second, approved candidate. Bidi
+ * overrides, U+2028/2029 line separators, and zero-width characters do the same
+ * job by different means.
+ *
+ * So the rule is an ALLOWLIST, not a denylist. A denylist over an open character
+ * set is a list of the tricks someone already thought of; an allowlist is closed
+ * by construction. The permitted set is what a role slug, a layer name, or a short
+ * human reason actually needs — and deliberately excludes the `"`, `(`, `)` and
+ * `—` that structure the line.
  */
-// eslint-disable-next-line no-control-regex
-const UNSAFE_RENDER_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+/**
+ * The CLOSED set a rendered scalar may consist of: letters, digits, and the
+ * punctuation an identifier or a short reason needs. Notably ABSENT are the
+ * line's own delimiters (`"`, `(`, `)`), every quote variant, and everything
+ * outside printable ASCII — which excludes bidi controls, U+2028/2029, zero-width
+ * joiners and combining overlays without having to enumerate them.
+ */
+const RENDERABLE = /^[A-Za-z0-9 ._,:;/@+#=?!'\-]*$/;
 
 function renderScalar(value: string, field: string): string {
   if (value.length > RENDER_FIELD_MAX_LEN) return `<${field}: over ${RENDER_FIELD_MAX_LEN} chars>`;
-  if (UNSAFE_RENDER_CHARS.test(value)) return `<${field}: control characters>`;
+  if (!RENDERABLE.test(value)) return `<${field}: unrenderable characters>`;
   return value;
 }
 

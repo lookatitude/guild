@@ -88,9 +88,17 @@ import { classifyContextManagerWrite } from "./context-manager-contract";
  * and `scripts/capability-profile.ts hash-tree` prints the same value, giving the
  * conformance run two independent computations to compare.
  *
- *   for each file under the root, in ascending byte order of its POSIX-relative path:
- *     emit  "<relpath>\0<sha256-hex-of-file-bytes>\n"
+ *   for each ENTRY under the root, in ascending byte order of its POSIX-relative path:
+ *     a regular file  →  "<relpath>\0<sha256-hex-of-file-bytes>\n"
+ *     a directory     →  "<relpath>\0dir\n"
+ *     anything else   →  "<relpath>\0symlink\n"
  *   sha256 over that concatenation, lowercase hex
+ *
+ * DIRECTORIES AND SYMLINKS ARE IN THE DIGEST, and that is a correction, not a
+ * flourish (Codex round 2, finding 4). With files alone, deleting an empty
+ * `.guild/agents` directory, or swapping a directory for a symlink to an identical
+ * tree, both left the hash byte-identical — changes the no-mutation claim is
+ * specifically about.
  *
  * An ABSENT root hashes the empty string — which is the same value an empty root
  * produces, and deliberately so: for the no-mutation comparison what matters is
@@ -102,7 +110,7 @@ import { classifyContextManagerWrite } from "./context-manager-contract";
  * different trees could hash the same. NUL cannot occur in a path.
  */
 export const TREE_HASH_RECIPE =
-  'sha256( concat( sorted( "<relpath>\\0" + sha256(file bytes) + "\\n" ) ) )';
+  'sha256( concat( sorted( "<relpath>\\0" + (file ? sha256(bytes) : kind) + "\\n" ) ) )';
 
 /** The three trees whose immutability the profile asserts. Closed and frozen. */
 export const HASHED_TREES = Object.freeze([
@@ -138,37 +146,103 @@ function sha256File(abs: string): string | null {
  */
 const MAX_TREE_DEPTH = 32;
 
-function listFiles(absRoot: string, rel = "", depth = 0): string[] {
-  // Depth cap: symlinks are skipped so a cycle cannot form through one, but a
-  // deep real tree (or a bind mount) would still recurse without a bound, and
-  // this runs inside `/guild:status`' read path.
-  if (depth > MAX_TREE_DEPTH) return [];
+/**
+ * A tree entry as it contributes to the hash. Directories are listed TOO — see
+ * `hashTree` for why an empty directory has to be visible.
+ */
+interface TreeEntry {
+  rel: string;
+  kind: "file" | "dir" | "symlink";
+}
+
+/**
+ * CODEX-REVIEW FIX (round 2, finding 4). The previous walk SKIPPED symlinks,
+ * SKIPPED unreadable entries, SKIPPED anything past the depth cap, and listed no
+ * directories. Each omission made a real change invisible to the comparison:
+ *
+ *   - `.guild/agents` replaced by a symlink to an identical external tree
+ *   - an empty `.guild/agents` directory deleted
+ *   - a file added below 33 nested directories
+ *   - a file made unreadable (skipped by the `continue`, which is precisely the
+ *     accept-by-attrition rule 6 forbids)
+ *
+ * The walk now RECORDS rather than skips, and signals failure rather than
+ * truncating. `null` means "this tree could not be listed completely" — the caller
+ * turns that into a refusal, because a partial listing cannot be the stable half
+ * of a no-mutation comparison. Absent is never success.
+ */
+function listTree(absRoot: string, rel = "", depth = 0): TreeEntry[] | null {
+  if (depth > MAX_TREE_DEPTH) return null; // truncation would hide a deep change
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(absRoot, { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (e) {
+    // An absent root is legitimately empty; anything else is an unreadable tree.
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return [];
+    return null;
   }
-  const out: string[] = [];
+  const out: TreeEntry[] = [];
   for (const e of entries) {
-    if (e.isSymbolicLink()) continue;
     const childRel = rel ? `${rel}/${e.name}` : e.name;
-    if (e.isDirectory()) out.push(...listFiles(path.join(absRoot, e.name), childRel, depth + 1));
-    else if (e.isFile()) out.push(childRel);
+    if (e.isSymbolicLink()) {
+      // RECORDED, not followed. Following would let external bytes masquerade as
+      // tree content; skipping would make the swap invisible.
+      out.push({ rel: childRel, kind: "symlink" });
+    } else if (e.isDirectory()) {
+      out.push({ rel: childRel, kind: "dir" });
+      const child = listTree(path.join(absRoot, e.name), childRel, depth + 1);
+      if (child === null) return null;
+      out.push(...child);
+    } else if (e.isFile()) {
+      out.push({ rel: childRel, kind: "file" });
+    } else {
+      out.push({ rel: childRel, kind: "symlink" }); // socket/fifo/device — recorded as non-file
+    }
   }
-  return out.sort();
+  return out.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
 }
 
-/** Hash one directory tree per `TREE_HASH_RECIPE`. An absent tree hashes empty. */
-export function hashTree(projectRoot: string, relRoot: string): string {
+/**
+ * Hash one directory tree per `TREE_HASH_RECIPE`, or return `null` when the tree
+ * cannot be listed completely.
+ *
+ * `null` is a REFUSAL SIGNAL, not an error value to paper over: an unreadable
+ * entry, a too-deep tree, or a symlinked root all mean the hash would describe
+ * less than the tree, and a hash that silently covers a subset cannot support a
+ * no-mutation claim about the whole.
+ *
+ * Directories and symlinks appear in the digest with their KIND, so that
+ * deleting an empty directory, or swapping a directory for a symlink to an
+ * identical tree, both move the hash (Codex round 2, finding 4). An ABSENT root
+ * still hashes empty — that case is stable and meaningful.
+ */
+export function hashTree(projectRoot: string, relRoot: string): string | null {
   const abs = path.join(projectRoot, relRoot);
-  const files = listFiles(abs);
-  if (files.length === 0) return EMPTY_TREE_HASH;
+
+  // The ROOT'S OWN type matters: replacing `.guild/agents` with a symlink to an
+  // identical external tree left the old walk's output byte-identical.
+  try {
+    const st = fs.lstatSync(abs);
+    if (st.isSymbolicLink()) return null; // a symlinked root is not this tree
+    if (!st.isDirectory()) return null;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") return null;
+    return EMPTY_TREE_HASH; // absent — stable and meaningful
+  }
+
+  const entries = listTree(abs);
+  if (entries === null) return null;
+  if (entries.length === 0) return EMPTY_TREE_HASH;
+
   const h = createHash("sha256");
-  for (const f of files) {
-    const fileHash = sha256File(path.join(abs, f));
-    if (fileHash === null) continue; // unreadable — skipped, per listFiles' reasoning
-    h.update(`${f}\0${fileHash}\n`);
+  for (const e of entries) {
+    if (e.kind !== "file") {
+      h.update(`${e.rel}\0${e.kind}\n`); // presence + kind, no content to read
+      continue;
+    }
+    const fileHash = sha256File(path.join(abs, e.rel));
+    if (fileHash === null) return null; // unreadable — REFUSE, never skip (rule 6)
+    h.update(`${e.rel}\0${fileHash}\n`);
   }
   return h.digest("hex");
 }
@@ -182,12 +256,23 @@ export function hashTree(projectRoot: string, relRoot: string): string {
  * A missing file contributes nothing, so "both registries absent" and "no registry
  * files" agree — the same stability argument as `hashTree`.
  */
-export function hashFileSet(projectRoot: string, relPaths: readonly string[]): string {
+export function hashFileSet(projectRoot: string, relPaths: readonly string[]): string | null {
   const h = createHash("sha256");
   let any = false;
   for (const rel of [...relPaths].sort()) {
-    const fileHash = sha256File(path.join(projectRoot, rel));
-    if (fileHash === null) continue;
+    const abs = path.join(projectRoot, rel);
+    let exists: boolean;
+    try {
+      const st = fs.lstatSync(abs);
+      if (st.isSymbolicLink()) return null; // a symlinked registry is not this file
+      exists = st.isFile();
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") return null;
+      exists = false;
+    }
+    if (!exists) continue; // genuinely absent — contributes nothing, stably
+    const fileHash = sha256File(abs);
+    if (fileHash === null) return null; // present but unreadable — REFUSE, never skip
     any = true;
     h.update(`${rel}\0${fileHash}\n`);
   }
@@ -200,13 +285,19 @@ export interface TreeHashes {
   registries: string;
 }
 
-/** The three hashes S1's `mutation_evidence` compares. One call, one snapshot. */
-export function snapshotTreeHashes(projectRoot: string): TreeHashes {
-  return {
-    agents: hashTree(projectRoot, HASHED_TREES[0]),
-    skills: hashTree(projectRoot, HASHED_TREES[1]),
-    registries: hashFileSet(projectRoot, HASHED_REGISTRIES),
-  };
+/**
+ * The three hashes S1's `mutation_evidence` compares. One call, one snapshot.
+ *
+ * Returns `null` when ANY of the three could not be computed completely — the
+ * snapshot is all-or-nothing, because two of three hashes cannot support a claim
+ * about the tree as a whole.
+ */
+export function snapshotTreeHashes(projectRoot: string): TreeHashes | null {
+  const agents = hashTree(projectRoot, HASHED_TREES[0]);
+  const skills = hashTree(projectRoot, HASHED_TREES[1]);
+  const registries = hashFileSet(projectRoot, HASHED_REGISTRIES);
+  if (agents === null || skills === null || registries === null) return null;
+  return { agents, skills, registries };
 }
 
 function sameHashes(a: TreeHashes, b: TreeHashes): boolean {
@@ -271,7 +362,11 @@ export const EMIT_REFUSAL_CODES = Object.freeze([
   "resolver_mode_disabled",
   "invalid_run_id",
   "invalid_project_id",
+  "invalid_generated_at",
+  "invalid_options",
   "invalid_baseline",
+  "hash_incomplete",
+  "escapes_project_root",
   "mutation_detected",
   "profile_invalid",
   "write_forbidden",
@@ -280,12 +375,28 @@ export const EMIT_REFUSAL_CODES = Object.freeze([
 ] as const);
 export type EmitRefusalCode = (typeof EMIT_REFUSAL_CODES)[number];
 
+/**
+ * How wide the no-mutation comparison actually was.
+ *
+ * CODEX-REVIEW FIX (round 2, finding 3). The emitted artifact cannot record this —
+ * S1's shape is closed and frozen — so a reader of the FILE alone genuinely cannot
+ * tell a whole-run claim from an emission-only one. Recording it on the RESULT and
+ * in the CLI output is the honest half that is available: a caller now knows which
+ * claim it just made instead of assuming the stronger one.
+ *
+ * Widening S1 to carry this is owed work on that contract, not something this
+ * module can do.
+ */
+export type MutationWindow = "run" | "emission";
+
 export type EmitResult =
   | {
       status: "emitted";
       rel_path: string;
       profile: ProjectCapabilityProfileV1;
       hashes: TreeHashes;
+      /** "run" when a run-start baseline was supplied; "emission" otherwise. */
+      window: MutationWindow;
     }
   | { status: "refused"; code: EmitRefusalCode; detail: string };
 
@@ -336,6 +447,143 @@ export interface EmitProfileOptions {
    * is the correct fallback; a fabricated wider one would not be.
    */
   baselineHashes?: TreeHashes;
+}
+
+/** RFC3339 UTC, shape-checked. `"not-rfc3339"` is not a timestamp (Codex r2, L). */
+const RFC3339_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
+const EMIT_OPTION_KEYS = [
+  "projectRoot",
+  "runId",
+  "projectId",
+  "generatedAt",
+  "sourceCommit",
+  "resolverMode",
+  "suggestionBudget",
+  "facts",
+  "baselineHashes",
+] as const;
+
+/**
+ * Read the ENTIRE options object through own-data descriptors, ONCE per field,
+ * before any filesystem work.
+ *
+ * CODEX-REVIEW FIX (round 2, finding 2). Only `baselineHashes` was descriptor-read;
+ * every other field used ordinary property access, and `baselineHashes` itself was
+ * fetched twice by plain access before its nested validation ran. Reproduced: a
+ * `facts` getter created `.guild/agents/transient.md` on its first read and removed
+ * it on its second — it fired FIVE times, and emission still returned `emitted`
+ * because the endpoints matched.
+ *
+ * That is rule 4 exactly: caller code executing inside the validation window is
+ * what makes an endpoint comparison meaningless. Nothing caller-supplied may run
+ * between a snapshot and the read it guards, so every field is captured here, in
+ * one pass, with Proxy / prototype / symbol-key / unknown-key / accessor rejection.
+ *
+ * Returns the frozen capture, or `null` to mean "reject".
+ */
+interface CapturedOptions {
+  projectRoot: string;
+  runId: string;
+  projectId: string;
+  generatedAt: string;
+  sourceCommit: string | null;
+  resolverMode: string;
+  suggestionBudget: number;
+  facts: unknown;
+  baselineHashes: unknown;
+}
+
+function captureEmitOptions(opts: unknown): CapturedOptions | null {
+  if (opts === null || typeof opts !== "object" || Array.isArray(opts)) return null;
+  if (nodeTypes.isProxy(opts)) return null;
+  const proto = Object.getPrototypeOf(opts);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(opts).length > 0) return null;
+  for (const k of Object.getOwnPropertyNames(opts)) {
+    if (!(EMIT_OPTION_KEYS as readonly string[]).includes(k)) return null;
+  }
+
+  const read = (k: string): { present: boolean; value: unknown } | null => {
+    const d = Object.getOwnPropertyDescriptor(opts, k);
+    if (!d) return { present: false, value: undefined };
+    if (!("value" in d)) return null; // accessor — NEVER fired
+    return { present: true, value: d.value };
+  };
+
+  const fields: Record<string, { present: boolean; value: unknown }> = {};
+  for (const k of EMIT_OPTION_KEYS) {
+    const r = read(k);
+    if (r === null) return null;
+    fields[k] = r;
+  }
+
+  const projectRoot = fields.projectRoot.value;
+  const runId = fields.runId.value;
+  const projectId = fields.projectId.value;
+  const generatedAt = fields.generatedAt.value;
+  const sourceCommit = fields.sourceCommit.value;
+  const resolverMode = fields.resolverMode.value;
+  if (typeof projectRoot !== "string" || projectRoot.length === 0) return null;
+  if (typeof runId !== "string" || typeof projectId !== "string") return null;
+  if (typeof generatedAt !== "string") return null;
+  if (sourceCommit !== null && sourceCommit !== undefined && typeof sourceCommit !== "string") {
+    return null;
+  }
+  if (typeof resolverMode !== "string") return null;
+
+  let budget = DEFAULT_SUGGESTION_BUDGET;
+  if (fields.suggestionBudget.present && fields.suggestionBudget.value !== undefined) {
+    const b = fields.suggestionBudget.value;
+    if (typeof b !== "number" || !Number.isInteger(b) || b < 0) return null;
+    budget = b;
+  }
+
+  return Object.freeze({
+    projectRoot,
+    runId,
+    projectId,
+    generatedAt,
+    sourceCommit: (sourceCommit ?? null) as string | null,
+    resolverMode,
+    suggestionBudget: budget,
+    facts: fields.facts.value,
+    baselineHashes: fields.baselineHashes.value,
+  });
+}
+
+/**
+ * PHYSICAL containment: does `abs` actually live under `projectRoot` once every
+ * symlink is resolved?
+ *
+ * CODEX-REVIEW FIX (round 2, finding 1). `classifyContextManagerWrite` is a pure
+ * LEXICAL check, so it cannot know that `.guild/runs/<id>/capability` is a symlink
+ * to `/tmp/out`. Reproduced: the classifier allowed it, the emitter reported
+ * `emitted`, and the file was written to `/tmp/out/profile.json` — the bounded-write
+ * guarantee was simply false.
+ *
+ * Resolving the deepest EXISTING ancestor is what makes this work before the leaf
+ * exists: the directories are created first, so the check runs against the real
+ * destination rather than a path that is not there yet.
+ */
+function isContainedRealPath(projectRoot: string, abs: string): boolean {
+  try {
+    const rootReal = fs.realpathSync(projectRoot);
+    let probe = abs;
+    // Walk up to the deepest ancestor that exists, then resolve it.
+    for (;;) {
+      if (fs.existsSync(probe)) break;
+      const parent = path.dirname(probe);
+      if (parent === probe) return false;
+      probe = parent;
+    }
+    const probeReal = fs.realpathSync(probe);
+    const rel = path.relative(rootReal, probeReal);
+    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -405,30 +653,50 @@ function isSafeId(v: unknown): v is string {
  */
 export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
   try {
-    if (!EMITTING_MODE_SET.has(opts.resolverMode)) {
+    // ── 0 — OPTIONS FIRST, in ONE pass, before any filesystem work ────────────
+    // Rule 4. Every field is captured through own-data descriptors here so that
+    // nothing caller-supplied can execute later, between a snapshot and the read
+    // it guards. A getter that mutated the roster between two reads is exactly
+    // what made the endpoint comparison meaningless (Codex round 2, finding 2).
+    const o = captureEmitOptions(opts);
+    if (o === null) {
+      return {
+        status: "refused",
+        code: "invalid_options",
+        detail: "options object is hostile or malformed (Proxy / accessor / unknown key / bad type)",
+      };
+    }
+
+    if (!EMITTING_MODE_SET.has(o.resolverMode)) {
       return {
         status: "refused",
         code: "resolver_mode_disabled",
-        detail: `resolver_mode "${opts.resolverMode}" does not emit capability profiles`,
+        detail: `resolver_mode "${o.resolverMode}" does not emit capability profiles`,
       };
     }
-    if (!isSafeId(opts.runId)) {
+    if (!isSafeId(o.runId)) {
       return { status: "refused", code: "invalid_run_id", detail: "run id is not a safe slug" };
     }
-    if (!isSafeId(opts.projectId)) {
+    if (!isSafeId(o.projectId)) {
       return {
         status: "refused",
         code: "invalid_project_id",
         detail: "project id is not a safe slug",
       };
     }
+    // A timestamp is an identifier-shaped scalar: shape-checked, not merely
+    // non-empty. "not-rfc3339" was accepted and emitted (Codex round 2, L).
+    if (o.generatedAt.length > 64 || !RFC3339_RE.test(o.generatedAt)) {
+      return {
+        status: "refused",
+        code: "invalid_generated_at",
+        detail: "generated_at is not an RFC3339 timestamp",
+      };
+    }
 
-    // OPTIONS FIRST — the baseline is resolved before any filesystem work, so
-    // nothing caller-supplied can execute between a snapshot and the read it
-    // guards (spec README rule 4).
     let baseline: TreeHashes | null = null;
-    if (opts.baselineHashes !== undefined) {
-      baseline = resolveBaselineHashes(opts.baselineHashes);
+    if (o.baselineHashes !== undefined) {
+      baseline = resolveBaselineHashes(o.baselineHashes);
       if (baseline === null) {
         return {
           status: "refused",
@@ -437,20 +705,37 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
         };
       }
     }
+    const window: MutationWindow = baseline === null ? "emission" : "run";
 
-    const root = opts.projectRoot;
+    const root = o.projectRoot;
 
-    // 1 — BEFORE. A caller-supplied run-start baseline widens the compared window
-    //     to the whole Learn run; without one it brackets the emission only, and
-    //     the profile claims no more than that.
+    // ── 1 — BEFORE ────────────────────────────────────────────────────────────
+    // A caller-supplied run-start baseline widens the compared window to the whole
+    // Learn run; without one it brackets the emission only, and the result says so
+    // via `window` rather than leaving the reader to assume the wider claim.
     const before = baseline ?? snapshotTreeHashes(root);
+    if (before === null) {
+      return {
+        status: "refused",
+        code: "hash_incomplete",
+        detail: "the agents/skills/registry trees could not be hashed completely",
+      };
+    }
 
-    // 2 — read-only derivation happened in the caller; 3 — AFTER.
+    // ── 2 derive (in the caller, read-only) — 3 AFTER ─────────────────────────
     const feedstock = snapshotFeedstock(root);
     const after = snapshotTreeHashes(root);
+    if (after === null) {
+      return {
+        status: "refused",
+        code: "hash_incomplete",
+        detail: "the agents/skills/registry trees could not be re-hashed completely",
+      };
+    }
 
-    // 4 — a run that mutated cannot emit. There is no "report the mutation"
-    //     branch, because S1's type has no way to express one.
+    // ── 4 — a run that mutated cannot emit ────────────────────────────────────
+    // There is no "report the mutation" branch, because S1's type has no way to
+    // express one.
     if (!sameHashes(before, after)) {
       return {
         status: "refused",
@@ -461,17 +746,17 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
 
     const profile: ProjectCapabilityProfileV1 = {
       schema_version: PROJECT_CAPABILITY_PROFILE_SCHEMA,
-      project_id: opts.projectId,
-      run_id: opts.runId,
-      generated_at: opts.generatedAt,
-      source_commit: opts.sourceCommit,
+      project_id: o.projectId,
+      run_id: o.runId,
+      generated_at: o.generatedAt,
+      source_commit: o.sourceCommit,
       feedstock,
-      domains: opts.facts.domains,
-      boundaries: opts.facts.boundaries,
-      repeated_methods: opts.facts.repeated_methods,
-      coverage: opts.facts.coverage,
-      candidates: opts.facts.candidates,
-      resolver_mode: opts.resolverMode,
+      domains: (o.facts as DerivedFacts)?.domains,
+      boundaries: (o.facts as DerivedFacts)?.boundaries,
+      repeated_methods: (o.facts as DerivedFacts)?.repeated_methods,
+      coverage: (o.facts as DerivedFacts)?.coverage,
+      candidates: (o.facts as DerivedFacts)?.candidates,
+      resolver_mode: o.resolverMode as ResolverMode,
       mutation_performed: false,
       mutation_evidence: {
         agents_tree_hash_before: before.agents,
@@ -483,11 +768,13 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       },
     };
 
-    // 5 — S1's validator, not a second opinion of it. An invalid profile is never
-    //     written: a file on disk that fails validation is worse than no file,
-    //     because a reader has to discover the failure instead of the absence.
-    const budget = opts.suggestionBudget ?? DEFAULT_SUGGESTION_BUDGET;
-    const validated = validateProjectCapabilityProfileV1(profile, { suggestionBudget: budget });
+    // ── 5 — S1's validator, not a second opinion of it ────────────────────────
+    // An invalid profile is never written: a file on disk that fails validation is
+    // worse than no file, because a reader has to discover the failure instead of
+    // the absence.
+    const validated = validateProjectCapabilityProfileV1(profile, {
+      suggestionBudget: o.suggestionBudget,
+    });
     if (validated === null) {
       return {
         status: "refused",
@@ -496,9 +783,10 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
       };
     }
 
-    // 6 — the ONE write, through the context-manager contract. The emitter cannot
-    //     write anywhere the agent may not; the contract binds both.
-    const rel = profileRelPath(opts.runId);
+    // ── 6 — the ONE write ─────────────────────────────────────────────────────
+    // LEXICAL bound first, through the same function that bounds the agent, then
+    // the PHYSICAL bound, which the pure contract cannot check.
+    const rel = profileRelPath(o.runId);
     const verdict = classifyContextManagerWrite(rel);
     if (verdict.allowed !== true) {
       return {
@@ -509,32 +797,54 @@ export function emitCapabilityProfile(opts: EmitProfileOptions): EmitResult {
     }
 
     const abs = path.join(root, rel);
+    let priorBytes: Buffer | null = null;
     try {
       fs.mkdirSync(path.dirname(abs), { recursive: true });
+      // PHYSICAL containment, AFTER mkdir so the real destination exists and BEFORE
+      // the write. A symlinked `capability/` directory pointed the file at /tmp and
+      // the emitter still reported success (Codex round 2, finding 1).
+      if (!isContainedRealPath(root, abs)) {
+        return {
+          status: "refused",
+          code: "escapes_project_root",
+          detail: `"${rel}" resolves outside the project root once symlinks are followed`,
+        };
+      }
+      // Capture the previous bytes so a post-write refusal RESTORES rather than
+      // destroys a profile that was valid a moment ago (Codex round 2, finding 12).
+      try {
+        priorBytes = fs.readFileSync(abs);
+      } catch {
+        priorBytes = null; // no previous profile — nothing to restore
+      }
       fs.writeFileSync(abs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
     } catch (e) {
       return { status: "refused", code: "write_failed", detail: String(e) };
     }
 
-    // 7 — POST-WRITE re-hash. Steps 1–4 prove the derivation was clean; only this
-    //     proves the EMISSION was. If the write escaped its bounds, remove the
-    //     profile: a run that mutated must not leave behind an artifact asserting
-    //     it did not.
+    // ── 7 — POST-WRITE re-hash ────────────────────────────────────────────────
+    // Steps 1-4 prove the derivation was clean; only this proves the EMISSION was.
+    // If the write escaped its bounds, undo it: a run that mutated must not leave
+    // behind an artifact asserting it did not.
     const post = snapshotTreeHashes(root);
-    if (!sameHashes(after, post)) {
+    if (post === null || !sameHashes(after, post)) {
       try {
-        fs.rmSync(abs, { force: true });
+        if (priorBytes === null) fs.rmSync(abs, { force: true });
+        else fs.writeFileSync(abs, priorBytes);
       } catch {
         /* best effort — the refusal below is the report either way */
       }
       return {
         status: "refused",
-        code: "post_write_mutation",
-        detail: "profile emission itself changed a hashed tree — profile removed",
+        code: post === null ? "hash_incomplete" : "post_write_mutation",
+        detail:
+          post === null
+            ? "post-write hashing was incomplete — profile rolled back"
+            : "profile emission itself changed a hashed tree — profile rolled back",
       };
     }
 
-    return { status: "emitted", rel_path: rel, profile: validated, hashes: after };
+    return { status: "emitted", rel_path: rel, profile: validated, hashes: after, window };
   } catch (e) {
     // A thrown emitter would abort the Learn run this is a side-report of.
     return { status: "refused", code: "write_failed", detail: String(e) };

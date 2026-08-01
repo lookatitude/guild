@@ -54,17 +54,21 @@ function shellHashTree(root: string, relRoot: string): string {
   if (!fs.existsSync(abs)) {
     return execFileSync("shasum", ["-a", "256"], { input: "" }).toString().split(" ")[0];
   }
-  // NUL-separated, exactly as TREE_HASH_RECIPE states. `printf '%s\\0%s\\n'` is
-  // what makes this a real reproduction rather than an approximation of it.
+  // NUL-separated, exactly as TREE_HASH_RECIPE states — including the DIRECTORY
+  // and SYMLINK entries, which are what make an emptied directory or a swapped
+  // root visible to the comparison.
   const script = `
     cd "${abs}" || exit 1
-    files=$(find . -type f | sed 's|^\\./||' | LC_ALL=C sort)
-    if [ -z "$files" ]; then printf '' | shasum -a 256 | cut -d' ' -f1; exit 0; fi
-    # while-read with IFS cleared, NOT \`for f in $files\` — word splitting would
+    entries=$(find . -mindepth 1 | sed 's|^\\./||' | LC_ALL=C sort)
+    if [ -z "$entries" ]; then printf '' | shasum -a 256 | cut -d' ' -f1; exit 0; fi
+    # while-read with IFS cleared, NOT \`for f in $entries\` — word splitting would
     # break on a filename containing a space, and the production hash does not.
-    printf '%s\\n' "$files" | while IFS= read -r f; do
-      h=$(shasum -a 256 "$f" | cut -d' ' -f1)
-      printf '%s\\0%s\\n' "$f" "$h"
+    printf '%s\\n' "$entries" | while IFS= read -r f; do
+      if [ -L "$f" ]; then printf '%s\\0symlink\\n' "$f"
+      elif [ -d "$f" ]; then printf '%s\\0dir\\n' "$f"
+      elif [ -f "$f" ]; then printf '%s\\0%s\\n' "$f" "$(shasum -a 256 "$f" | cut -d' ' -f1)"
+      else printf '%s\\0symlink\\n' "$f"
+      fi
     done | shasum -a 256 | cut -d' ' -f1
   `;
   return execFileSync("bash", ["-c", script]).toString().trim();
@@ -434,6 +438,26 @@ describe("the CLI is the REAL path (conformance rule 3)", () => {
     expect(out.agents).toBe(shellHashTree(tmp, ".guild/agents"));
   });
 
+  it("finding 6 — `--baseline` with NO VALUE is a hard error, never a silent downgrade", () => {
+    // `emit ... --baseline --resolver-mode observe` previously read as "no
+    // baseline", emitted with the NARROW window, and reported success — exactly
+    // the silent downgrade the baseline documentation says must be a refusal.
+    mk(".guild/agents/backend.md", "# backend\n");
+    let threw = false;
+    try {
+      run([
+        "emit", "--cwd", tmp, "--run-id", RUN_ID, "--project-id", "fx",
+        "--generated-at", "2026-08-01T12:00:00Z",
+        "--baseline", "--resolver-mode", "observe",
+      ]);
+    } catch (e) {
+      threw = true;
+      expect(String((e as { stderr?: Buffer }).stderr ?? e)).toMatch(/missing_value/);
+    }
+    expect(threw).toBe(true);
+    expect(fs.existsSync(path.join(tmp, profileRelPath(RUN_ID)))).toBe(false);
+  });
+
   it("`emit` writes a profile whose hashes match the shell, through the shipped CLI", () => {
     mk(".guild/agents/backend.md", "# backend\n");
     const shellBefore = shellHashTree(tmp, ".guild/agents");
@@ -457,5 +481,189 @@ describe("the CLI is the REAL path (conformance rule 3)", () => {
     expect(shellHashTree(tmp, ".guild/agents")).toBe(shellBefore);
     const onDisk = readCapabilityProfile(tmp, RUN_ID);
     expect(onDisk?.mutation_evidence.agents_tree_hash_after).toBe(shellBefore);
+  });
+});
+
+describe("CODEX ROUND 2 — regressions for the reported counterexamples", () => {
+  it("finding 1 — a SYMLINKED write directory is REFUSED, and nothing lands outside", () => {
+    // The reproduction: make `.guild/runs/<id>/capability` a symlink to /tmp/out.
+    // The lexical classifier said allowed, the emitter said emitted, and the file
+    // was written outside the project root. The bounded-write guarantee was false.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "escape-"));
+    fs.mkdirSync(path.join(tmp, ".guild/runs", RUN_ID), { recursive: true });
+    fs.symlinkSync(outside, path.join(tmp, ".guild/runs", RUN_ID, "capability"));
+
+    const r = emit();
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("escapes_project_root");
+    expect(fs.readdirSync(outside)).toEqual([]); // nothing landed outside
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it("finding 1 — a Win32 trailing-dot/space traversal segment is refused", () => {
+    // `".. "` reaches a Win32 filesystem AS `..`, so exact-matching `..` was not
+    // enough. Checked here through the emitter's own classifier call path.
+    const { classifyContextManagerWrite } = require("../lib/capability/context-manager-contract");
+    for (const p of [
+      ".guild/context/.. /agents/pwn.md",
+      ".guild/context/.../agents/pwn.md",
+      ".guild/context/. /x.md",
+      ".guild/context/   /x.md",
+    ]) {
+      expect(classifyContextManagerWrite(p).allowed).toBe(false);
+    }
+  });
+
+  it("finding 2 — a hostile options GETTER never fires and the emission is REFUSED", () => {
+    // The reproduction: a `facts` getter that created `.guild/agents/transient.md`
+    // on its first read and removed it on its second fired FIVE times, and emission
+    // still returned `emitted` because the endpoints matched.
+    mk(".guild/agents/backend.md", "# backend\n");
+    let fired = 0;
+    const hostile: Record<string, unknown> = {
+      projectRoot: tmp,
+      runId: RUN_ID,
+      projectId: "fx",
+      generatedAt: "2026-08-01T12:00:00Z",
+      sourceCommit: null,
+      resolverMode: "observe",
+      suggestionBudget: 4,
+      baselineHashes: undefined,
+    };
+    Object.defineProperty(hostile, "facts", {
+      enumerable: true,
+      get() {
+        fired += 1;
+        fs.writeFileSync(path.join(tmp, ".guild/agents/transient.md"), "# transient\n");
+        return EMPTY_FACTS;
+      },
+    });
+
+    const r = emitCapabilityProfile(hostile as never);
+    expect(fired).toBe(0);
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("invalid_options");
+    expect(fs.existsSync(path.join(tmp, ".guild/agents/transient.md"))).toBe(false);
+  });
+
+  it("finding 2 — Proxy, symbol keys, unknown keys and bad prototypes are refused", () => {
+    const good = {
+      projectRoot: tmp,
+      runId: RUN_ID,
+      projectId: "fx",
+      generatedAt: "2026-08-01T12:00:00Z",
+      sourceCommit: null,
+      resolverMode: "observe",
+      suggestionBudget: 4,
+      facts: EMPTY_FACTS,
+    };
+    for (const bad of [
+      new Proxy(good, {}),
+      Object.assign({ [Symbol("x")]: 1 }, good),
+      { ...good, bogus: 1 },
+      Object.assign(Object.create({ inherited: 1 }), good),
+    ]) {
+      const r = emitCapabilityProfile(bad as never);
+      expect(r.status).toBe("refused");
+      if (r.status === "refused") expect(r.code).toBe("invalid_options");
+    }
+  });
+
+  it("finding 3 — the RESULT records which window was compared", () => {
+    // S1's shape is frozen so the FILE cannot carry this, but a caller must not be
+    // left assuming the wider claim. The result says which one it just made.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const narrow = emit();
+    expect(narrow.status).toBe("emitted");
+    if (narrow.status === "emitted") expect(narrow.window).toBe("emission");
+
+    fs.rmSync(path.join(tmp, ".guild/runs"), { recursive: true, force: true });
+    const wide = emit({ baselineHashes: snapshotTreeHashes(tmp)! });
+    expect(wide.status).toBe("emitted");
+    if (wide.status === "emitted") expect(wide.window).toBe("run");
+  });
+
+  it("finding 4 — deleting an EMPTY directory moves the hash", () => {
+    fs.mkdirSync(path.join(tmp, ".guild/agents/empty-sub"), { recursive: true });
+    const withDir = hashTree(tmp, ".guild/agents");
+    fs.rmdirSync(path.join(tmp, ".guild/agents/empty-sub"));
+    expect(hashTree(tmp, ".guild/agents")).not.toBe(withDir);
+  });
+
+  it("finding 4 — swapping the ROOT for a symlink to an identical tree is REFUSED", () => {
+    // The old walk produced byte-identical output for this, so the swap was
+    // invisible to the comparison it exists to feed.
+    mk(".guild/agents/backend.md", "# backend\n");
+    const twin = fs.mkdtempSync(path.join(os.tmpdir(), "twin-"));
+    fs.writeFileSync(path.join(twin, "backend.md"), "# backend\n");
+    fs.rmSync(path.join(tmp, ".guild/agents"), { recursive: true, force: true });
+    fs.symlinkSync(twin, path.join(tmp, ".guild/agents"));
+    expect(hashTree(tmp, ".guild/agents")).toBeNull();
+    expect(snapshotTreeHashes(tmp)).toBeNull();
+    const r = emit();
+    expect(r.status).toBe("refused");
+    if (r.status === "refused") expect(r.code).toBe("hash_incomplete");
+    fs.rmSync(twin, { recursive: true, force: true });
+  });
+
+  it("finding 4 — an UNREADABLE file REFUSES rather than being skipped (rule 6)", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const secret = path.join(tmp, ".guild/agents/secret.md");
+    fs.writeFileSync(secret, "# secret\n");
+    fs.chmodSync(secret, 0o000);
+    try {
+      // Root can read anything, so skip rather than assert a false negative.
+      let readable = true;
+      try {
+        fs.readFileSync(secret);
+      } catch {
+        readable = false;
+      }
+      if (!readable) {
+        expect(hashTree(tmp, ".guild/agents")).toBeNull();
+        const r = emit();
+        expect(r.status).toBe("refused");
+        if (r.status === "refused") expect(r.code).toBe("hash_incomplete");
+      }
+    } finally {
+      fs.chmodSync(secret, 0o644);
+    }
+  });
+
+  it("finding 12 — a post-write refusal RESTORES the previous profile, never destroys it", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    expect(emit().status).toBe("emitted");
+    const abs = path.join(tmp, profileRelPath(RUN_ID));
+    const original = fs.readFileSync(abs, "utf8");
+
+    const realWrite = fs.writeFileSync;
+    const spy = jest.spyOn(fs, "writeFileSync").mockImplementation(((p: never, d: never, o: never) => {
+      realWrite(p, d, o);
+      if (String(p).includes("capability/profile.json")) {
+        realWrite(path.join(tmp, ".guild/agents/late.md"), "# late\n", "utf8");
+      }
+    }) as typeof fs.writeFileSync);
+    try {
+      const r = emit();
+      expect(r.status).toBe("refused");
+      if (r.status === "refused") expect(r.code).toBe("post_write_mutation");
+    } finally {
+      spy.mockRestore();
+    }
+    // The profile that was valid a moment ago is still there, byte-identical.
+    expect(fs.readFileSync(abs, "utf8")).toBe(original);
+  });
+
+  it("finding L — `generated_at` is RFC3339-SHAPED, not merely non-empty", () => {
+    for (const bad of ["not-rfc3339", "yesterday", "2026-08-01", "", "2026-08-01T12:00:00"]) {
+      const r = emit({ generatedAt: bad });
+      expect(r.status).toBe("refused");
+      if (r.status === "refused") expect(r.code).toBe("invalid_generated_at");
+    }
+    for (const good of ["2026-08-01T12:00:00Z", "2026-08-01T12:00:00.123Z", "2026-08-01T12:00:00+02:00"]) {
+      fs.rmSync(path.join(tmp, ".guild/runs"), { recursive: true, force: true });
+      expect(emit({ generatedAt: good }).status).toBe("emitted");
+    }
   });
 });

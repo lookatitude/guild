@@ -64,19 +64,40 @@ import { DEFAULT_SUGGESTION_BUDGET } from "./lib/core/contracts/project-capabili
 // ── arg parsing ──────────────────────────────────────────────────────────────
 
 /**
- * Read `--<name> <value>`.
+ * Read `--<name> <value>`, distinguishing ABSENT from PRESENT-BUT-EMPTY.
  *
- * Returns null when the next token is itself a flag: `--facts --run-id x` means
- * the user forgot the value, and silently consuming `--run-id` as the filename
- * would turn a typo into a confusing downstream error about a missing file.
- * Refusing here makes it a missing-argument error, which is what it is.
+ * CODEX-REVIEW FIX (round 2, finding 6). The previous version returned `null` for
+ * both, so `emit --baseline --resolver-mode observe` was indistinguishable from
+ * omitting `--baseline` entirely: the flag was silently dropped and the run
+ * emitted with the NARROW window — the exact silent downgrade the baseline
+ * comment says must be a refusal. Same shape for `--facts`, `--budget`,
+ * `--resolver-mode` and `--source-commit`.
+ *
+ * The two states are now distinct, and the caller must handle both.
+ */
+type FlagRead =
+  | { state: "absent" }
+  | { state: "missing_value" }
+  | { state: "value"; value: string };
+
+function readFlag(argv: string[], name: string): FlagRead {
+  const i = argv.indexOf(`--${name}`);
+  if (i === -1) return { state: "absent" };
+  if (i + 1 >= argv.length) return { state: "missing_value" };
+  const value = argv[i + 1];
+  if (value.startsWith("--")) return { state: "missing_value" };
+  return { state: "value", value };
+}
+
+/**
+ * `readFlag` with the missing-value case turned into a hard failure. This is the
+ * form every caller wants: a flag typed without its value is an operator mistake,
+ * never a request for the default.
  */
 function flag(argv: string[], name: string): string | null {
-  const i = argv.indexOf(`--${name}`);
-  if (i === -1 || i + 1 >= argv.length) return null;
-  const value = argv[i + 1];
-  if (value.startsWith("--")) return null;
-  return value;
+  const r = readFlag(argv, name);
+  if (r.state === "missing_value") fail("missing_value", `--${name} was given without a value`);
+  return r.state === "value" ? r.value : null;
 }
 
 /**

@@ -46,8 +46,26 @@ agent did** (`cap-loc-D01 §Recommendation.4` makes the written contract a block
 registration, not a follow-up). Read it as the authority; this section is its index, never a
 second copy of it.
 
+### ⚠️ What is mechanically enforced, and what is not
+
+Stated up front because an overclaimed boundary is worse than a documented gap — a reader
+trusts it and stops checking.
+
+- **Enforced mechanically:** every write made by code that routes through
+  `classifyContextManagerWrite`, which is every write the capability-profile emitter performs.
+  That path also checks **physical** containment (`realpathSync`), so a symlinked directory
+  cannot redirect a write outside the project root.
+- **NOT enforced mechanically:** your own `Write` / `Edit` tool calls. The host grants those
+  tools from this file's frontmatter, and Guild has no per-path tool gate today. Nothing stops
+  a `Write(".guild/agents/x.md", …)` except this instruction and review.
+
+So treat the write roots below as **binding on you as an operator instruction**, and know that
+the contract is what makes the boundary checkable rather than what makes it unbypassable. A
+host-side path policy on Write/Edit is the real closure and is owed work.
+
 Risk **R13** — *"context manager becomes a universal domain expert or policy engine"* — is
-High/High, and prose has never held a boundary in this codebase. So the bound is structural:
+High/High, and prose has never held a boundary in this codebase. So the bound is expressed as
+data and checked by a function wherever a code path exists to check it:
 
 - **Write-root allowlist**, checked by `classifyContextManagerWrite`: `.guild/context/**`,
   `.guild/artifacts/**`, `.guild/runs/**`. Everything else is refused with a typed reason.
@@ -61,8 +79,14 @@ High/High, and prose has never held a boundary in this codebase. So the bound is
   `approve_*`, or `create_*` member — the policy-engine failure mode is *unexpressible*, not
   merely forbidden.
 - **No `Bash`.** A shell is a universal write primitive; granting it would make every path
-  check above decorative. The write bound is only real because the tool set cannot route
-  around it.
+  check above decorative. Withholding it is what keeps the write bound meaningful given that
+  `Write`/`Edit` are ungated.
+- **Path shape.** A write target must be a canonical project-relative path: forward slashes
+  only, no `.`/`..` segments (including Win32's trailing-dot and trailing-space spellings), no
+  control characters, at most 512 characters. Non-canonical spellings are REJECTED, never
+  normalized.
+- **Reading** is broad by design — `.guild/`, `docs/`, `src/`, `scripts/`. Reading is not the
+  risk R13 names.
 
 If a task cannot be done inside that scope, the correct output is a **refusal plus a pointer to
 the owner** — never a widened interpretation of the scope.
@@ -84,6 +108,10 @@ domain skill, the work is domain judgment wearing an assembly costume — hand i
 - **Learn's semantic halves.** The LLM stages of the `learn-*` pipeline (semantic node/edge
   typing, layer naming, domain narration, spec synthesis) are *universal learning operations*
   bound to installed machinery — this agent is that machinery, at the tier each stage states.
+  All four are `summarize_for_bundle` in contract terms: they read the script half's output and
+  write narration into run-scoped artifacts. They are **not** additional capability-scope
+  members, and none of them licenses a write outside the roots below — naming a Learn stage
+  does not widen the scope.
 - **Capability-profile emission.** Produce the `guild.project_capability_profile.v1` REPORT for
   a run. Report-only by construction: the artifact's `mutation_performed` is the literal
   `false` and its validator rejects unequal before/after tree hashes, so an emission that
