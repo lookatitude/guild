@@ -493,29 +493,67 @@ export function run(base: string, id: string): void {
     );
   });
 
-  test("the SAME inline shape with a realpath is NOT flagged — the signal is 'lexical', not 'has a startsWith'", () => {
+  test("the SAME inline shape, written CORRECTLY, is not flagged", () => {
     seedHome();
     seedAdopted();
-    // The negative control that makes the previous one mean something. Identical
-    // structure — resolve, startsWith a separator boundary, recursive mkdir — except
-    // the check consults the filesystem. If this were flagged, `lexical-guard` would
-    // just be "saw a boundary comparison near a write", and every correctly-written
-    // caller would trip it.
+    // The negative control that makes the positive one mean something. If a
+    // correctly-written caller tripped `lexical-guard`, the signal would degrade
+    // into "saw a boundary comparison near a write" and every honest caller would
+    // redden it — and a rail that cries wolf gets switched off.
+    //
+    // THE FIRST VERSION OF THIS FIXTURE WAS ITSELF UNSAFE, which is worse than a
+    // missing control: it realpath'd only the BASE, so with `alias -> /tmp/outside`
+    // the lexical prefix still passed and the mkdir still escaped. It therefore
+    // pinned a FALSE NEGATIVE — asserting that an exploitable guard is fine — while
+    // looking like protection against false positives. Rewritten to use the shared
+    // primitive, which is what "correctly written" actually means here.
     write(
-      "scripts/lib/inline-real.ts",
+      "scripts/lib/inline-correct.ts",
       `import * as fs from "node:fs";
 import * as path from "node:path";
+import { checkContained, isRefused } from "../kernel";
 export function run(base: string, id: string): void {
   const dir = path.join(base, id);
-  const resolved = fs.realpathSync(path.resolve(base));
-  if (!path.resolve(dir).startsWith(resolved + path.sep)) throw new Error("escapes base");
+  const r = checkContained(base, dir, { policy: "physical" });
+  if (isRefused(r)) throw new Error(r.code);
   fs.mkdirSync(dir, { recursive: true });
 }
 `
     );
     const { sites } = scanRepo(scratch);
-    const site = sites.find((s) => s.path === "scripts/lib/inline-real.ts");
+    const site = sites.find((s) => s.path === "scripts/lib/inline-correct.ts");
     expect(site?.evidence ?? []).not.toContain("lexical-guard");
+  });
+
+  test("KNOWN COARSENESS: a realpath applied to the WRONG path still suppresses the signal", () => {
+    seedHome();
+    seedAdopted();
+    // Recorded as a test rather than a comment, because it is a real miss and the
+    // next person should find it by running the suite rather than by being exploited.
+    //
+    // The detector suppresses `lexical-guard` when ANY realpath appears in the
+    // scope. A guard that realpaths the BASE but compares the unresolved TARGET is
+    // still exploitable — `alias -> /tmp/outside` escapes — and is invisible here.
+    // Closing it needs dataflow (does the realpath'd value reach the comparison?),
+    // which this scan deliberately does not attempt.
+    //
+    // The assertion is the CURRENT behaviour, so it fails the day someone adds that
+    // dataflow — which is the signal to delete this test, not to fix the fixture.
+    write(
+      "scripts/lib/inline-wrong-realpath.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+export function run(base: string, id: string): void {
+  const dir = path.join(base, id);
+  const realBase = fs.realpathSync(base);
+  if (!path.resolve(dir).startsWith(realBase + path.sep)) throw new Error("escapes");
+  fs.mkdirSync(dir, { recursive: true });
+}
+`
+    );
+    const { sites } = scanRepo(scratch);
+    const site = sites.find((s) => s.path === "scripts/lib/inline-wrong-realpath.ts");
+    expect(site?.evidence ?? []).not.toContain("lexical-guard"); // the known miss
   });
 
   test("a `path.relative` used to build a LABEL is not a lexical guard — the signal is structural, not name-based", () => {

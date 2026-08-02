@@ -481,7 +481,12 @@ function isLexicalContainmentHelper(scope: ts.Node, aliases: AliasMap): boolean 
       // all count.
       if (isBooleanish(e, aliases)) verdicts = true;
     }
-    if (/\.realpathSync(\.native)?/.test(n.getText?.() ?? "") && ts.isPropertyAccessExpression(n)) {
+    // NOTE the escape: a literal 0x08 (backspace) lived here, because a heredoc ate
+    // the backslash in `\\b`. It made this branch match nothing, so the helper pass
+    // could not see `fs.realpathSync.native` and flagged a correctly-canonicalised
+    // helper as a lexical guard. Found by review, not by any test — a control byte
+    // in a regex is invisible in a diff and silent at runtime.
+    if (/\.realpathSync(\.native)?\b/.test(n.getText?.() ?? "") && ts.isPropertyAccessExpression(n)) {
       realpath = true;
     }
     ts.forEachChild(n, visit);

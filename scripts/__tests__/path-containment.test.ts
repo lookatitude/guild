@@ -510,6 +510,34 @@ describe("adversarial round 2 — reproduced counterexamples", () => {
     expect(fs.existsSync(path.join(outside, "victim"))).toBe(false);
   });
 
+  test("a ROOT spelled with `..` is ordinary and must be accepted (regression)", () => {
+    // `--workspace /tmp/x/parent/../workspace` with `parent` an ordinary directory.
+    // A first version of the `..` refusal applied to the ROOT as well as the target
+    // and rejected this; the predecessor accepted it and wrote the manifest.
+    //
+    // The asymmetry is principled: the root goes through `realpathSync`, a syscall
+    // that resolves `..` correctly against the real filesystem. Only the TARGET
+    // cannot be resolved that way, because it may not exist yet.
+    const real = path.join(scratch, "workspace");
+    fs.mkdirSync(path.join(scratch, "parent"), { recursive: true });
+    fs.mkdirSync(real, { recursive: true });
+    const spelled = path.join(scratch, "parent", "..", "workspace");
+
+    const r = checkContained(spelled, path.join(real, "out", "x.json"));
+    expect(r.contained).toBe(true);
+    const w = writeContainedFile(spelled, path.join(real, "out", "x.json"), Buffer.from("{}"));
+    expect(w.written).toBe(true);
+    expect(fs.readFileSync(path.join(real, "out", "x.json"), "utf8")).toBe("{}");
+  });
+
+  test("a `..` in the TARGET is still refused — the asymmetry is deliberate", () => {
+    const { root, outside } = fixture();
+    const dir = path.join(outside, "dir");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.symlinkSync(dir, path.join(root, "link"));
+    expect(refusalOf(checkContained(root, "link/../victim")).code).toBe("parent-traversal");
+  });
+
   test("a REPLACED ANCESTOR cannot be reported as an applied write", () => {
     // `O_NOFOLLOW` refuses a symlink at the FINAL component only. Replacing the
     // resolved ANCESTOR between the proof and the open reproduced `{written:true}`

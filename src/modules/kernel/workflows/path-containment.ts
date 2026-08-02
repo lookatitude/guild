@@ -300,14 +300,28 @@ export function checkContained(
   // whose whole job is to be trustworthy must not answer a question it cannot.
   // Callers construct destinations with `path.join`, which collapses `..` at build
   // time, so a `..` surviving into this call is already unusual.
-  if (hasParentSegment(target) || hasParentSegment(root)) {
+  // THE `..` REFUSAL APPLIES TO THE TARGET, NOT TO THE ROOT — and applying it to
+  // the root was a regression an adversarial round caught with an ordinary input:
+  // `--workspace /tmp/x/parent/../workspace`, where `parent` is a plain directory.
+  // That is a normal path spelling, the predecessor accepted it, and this refused it.
+  //
+  // The asymmetry is principled rather than a concession. The hazard is `path.resolve`
+  // collapsing `..` LEXICALLY before symlinks are resolved — and the root does not go
+  // through `path.resolve` alone: it goes through `realpathSync`, which is a syscall
+  // that walks the real filesystem and resolves `..` correctly against it. The target
+  // is the one that cannot be resolved that way, because it may not exist yet.
+  //
+  // So the root is CANONICALISED FIRST and the target is resolved against the
+  // canonical root — which also removes the second half of the hazard, since a `..`
+  // in the root can no longer reach `path.resolve` at all.
+  if (hasParentSegment(target)) {
     return refuse(
       "parent-traversal",
       `refusing a path spelled with a ".." segment (${target}) — parent traversal cannot be resolved before symlinks`
     );
   }
 
-  const abs = path.resolve(root, target);
+  const abs = path.isAbsolute(target) ? path.resolve(target) : path.resolve(realRoot, target);
 
   // ── Climb to the deepest EXISTING entry ─────────────────────────────────────
   // `lstatSync`, NOT `existsSync`. `existsSync` FOLLOWS symlinks, so a DANGLING
@@ -429,14 +443,22 @@ export function prepareContainedWrite(
   // `checkContained`. Resolving first and then delegating would collapse the
   // parent segment before the guard ever saw it — the same
   // lexical-collapse-before-symlink-resolution mistake, made one layer up.
-  if (hasParentSegment(target) || hasParentSegment(root)) {
+  if (hasParentSegment(target)) {
     return refuse(
       "parent-traversal",
       `refusing a path spelled with a ".." segment (${target}) — parent traversal cannot be resolved before symlinks`
     );
   }
 
-  const abs = path.resolve(root, target);
+  // Canonicalise the root here too, for the same reason and so both entry points
+  // agree about what `abs` is. A root spelled with `..` is ordinary and legal.
+  let canonRoot: string;
+  try {
+    canonRoot = fs.realpathSync(path.resolve(root));
+  } catch {
+    return refuse("root-unresolvable", `project root ${root} does not resolve`);
+  }
+  const abs = path.isAbsolute(target) ? path.resolve(target) : path.resolve(canonRoot, target);
   const dir = path.dirname(abs);
 
   // (1) PRE-CHECK — bounds the mkdir. `requireRegularFileLeaf` is deliberately NOT
