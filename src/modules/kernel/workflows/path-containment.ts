@@ -183,6 +183,61 @@ function lstatOrNull(p: string): fs.Stats | null {
 }
 
 /**
+ * Pure, segment-aware containment over two ALREADY-RESOLVED paths: is `child` the
+ * same as, or nested under, `parent`? No I/O — pair it with
+ * {@link canonicalizeRealPath} when the inputs might contain links.
+ *
+ * The `rel !== ".."` / `rel.startsWith("../")` shape is load-bearing. A plain
+ * `rel.startsWith("..")` calls a sibling directory literally named `..guild` an
+ * escape, and it is not one.
+ */
+export function isWithin(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === "" || !escapes(rel);
+}
+
+/**
+ * Canonicalize a path that MAY NOT EXIST YET: resolve every symlink on its
+ * deepest existing prefix and re-append the missing tail.
+ *
+ * This is the shape three separate files had each grown their own copy of —
+ * `canonicalAbs` in `command-registry.ts`, a byte-identical `canonicalAbs` in
+ * `skill-source-transform.ts`, and `resolveRealTarget` in `instantiate-template.ts`
+ * — and ALL THREE climbed with `existsSync`, so all three carried variant 2(b):
+ * a dangling symlink read as "does not exist", the climb walked past it, and the
+ * canonical path it returned was not where a write would land. The climb here uses
+ * `lstat`.
+ *
+ * CLASSIFICATION, NOT CONTAINMENT. When the deepest existing entry is a symlink
+ * that does not resolve, this climbs PAST it and re-appends the link's own name,
+ * yielding the link's location resolved through its real parent. That is the right
+ * answer for "which subtree is this in?" and the WRONG answer for "may I write
+ * here?" — a security decision must use {@link checkContained}, which refuses a
+ * dangling link outright rather than guessing where it points.
+ */
+export function canonicalizeRealPath(p: string): string {
+  const abs = path.resolve(p);
+  let existing = abs;
+  const tail: string[] = [];
+  for (;;) {
+    const st = lstatOrNull(existing);
+    if (st !== null) {
+      try {
+        const real = fs.realpathSync(existing);
+        return tail.length ? path.join(real, ...tail) : real;
+      } catch {
+        // A present-but-unresolvable entry (a dangling link). Keep climbing so the
+        // answer is anchored on a real directory instead of collapsing to `abs`.
+      }
+    }
+    tail.unshift(path.basename(existing));
+    const parent = path.dirname(existing);
+    if (parent === existing) return abs; // hit the filesystem root
+    existing = parent;
+  }
+}
+
+/**
  * Prove that `target` resolves inside `root`, reading the filesystem to see through
  * every symlink. Creates NOTHING. Safe to call before the destination exists.
  *

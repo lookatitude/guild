@@ -36,6 +36,10 @@ import * as path from "path";
 // The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
 // goes through it — this file only DUMPS YAML directly.
 import { parseFrontmatter, parseYaml } from "./frontmatter";
+import {
+  checkContained,
+  isRefused,
+} from "../../src/modules/kernel/workflows/path-containment";
 
 const yaml = require("js-yaml") as {
   dump: (o: unknown, opts?: Record<string, unknown>) => string;
@@ -452,22 +456,18 @@ export function mintFromTemplate(opts: {
   if (st) {
     return { path: target, action: "exists", reason: "instance already minted (reuse, never re-create)" };
   }
-  let ancestor = path.dirname(target);
-  while (!fs.existsSync(ancestor)) {
-    const up = path.dirname(ancestor);
-    if (up === ancestor) break;
-    ancestor = up;
-  }
-  if (fs.existsSync(ancestor)) {
-    const realDir = fs.realpathSync(ancestor);
-    const realRoot = fs.realpathSync(projectRoot);
-    if (realDir !== realRoot && !realDir.startsWith(realRoot + path.sep)) {
-      return {
-        path: target,
-        action: "refused",
-        reason: `${target} resolves outside the project root (${realDir})`,
-      };
-    }
+  // MIGRATED to the shared path-containment primitive. This inline climb appeared
+  // THREE times in this file, each copy using `existsSync` — which FOLLOWS
+  // symlinks, so a DANGLING symlink read as absent and the climb went on to
+  // validate its in-root parent instead. The shared climb uses `lstat` and reports
+  // WHICH rule refused.
+  const containment = checkContained(projectRoot, target);
+  if (isRefused(containment)) {
+    return {
+      path: target,
+      action: "refused",
+      reason: `${target} resolves outside the project root [${containment.code}] — ${containment.detail}`,
+    };
   }
 
   // The one-line provenance transform, bounded to the frontmatter block (the
@@ -570,18 +570,16 @@ function writable(
   // .guild/agents whose parent .guild is a symlink — may redirect the write.
   // Walk up to the nearest EXISTING ancestor and require its realpath to stay
   // under the resolved project root.
-  let ancestor = path.dirname(target);
-  while (!fs.existsSync(ancestor)) {
-    const up = path.dirname(ancestor);
-    if (up === ancestor) break;
-    ancestor = up;
-  }
-  if (fs.existsSync(ancestor)) {
-    const realDir = fs.realpathSync(ancestor);
-    const realRoot = fs.realpathSync(projectRoot);
-    if (realDir !== realRoot && !realDir.startsWith(realRoot + path.sep)) {
-      return refuseHard(`resolves outside the project root (${realDir})`);
-    }
+  // MIGRATED to the shared path-containment primitive. This inline climb appeared
+  // THREE times in this file, each copy using `existsSync` — which FOLLOWS
+  // symlinks, so a DANGLING symlink read as absent and the climb went on to
+  // validate its in-root parent instead. The shared climb uses `lstat` and reports
+  // WHICH rule refused.
+  const containment = checkContained(projectRoot, target);
+  if (isRefused(containment)) {
+    return refuseHard(
+      `resolves outside the project root [${containment.code}] — ${containment.detail}`,
+    );
   }
   if (!st) return { ok: true };
   if (!st.isFile()) return refuseHard("is not a regular file");
@@ -749,22 +747,18 @@ export function projectInstanceToHostNative(opts: {
   // A symlinked .claude/ (or .claude/agents/) ancestor could redirect the
   // write outside the project — same hard rule as every other roster writer:
   // the nearest existing ancestor's realpath must stay under the project root.
-  let ancestor = path.dirname(target);
-  while (!fs.existsSync(ancestor)) {
-    const up = path.dirname(ancestor);
-    if (up === ancestor) break;
-    ancestor = up;
-  }
-  if (fs.existsSync(ancestor)) {
-    const realDir = fs.realpathSync(ancestor);
-    const realRoot = fs.realpathSync(projectRoot);
-    if (realDir !== realRoot && !realDir.startsWith(realRoot + path.sep)) {
-      return {
-        path: target,
-        action: "refused",
-        reason: `${target} resolves outside the project root (${realDir})`,
-      };
-    }
+  // MIGRATED to the shared path-containment primitive. This inline climb appeared
+  // THREE times in this file, each copy using `existsSync` — which FOLLOWS
+  // symlinks, so a DANGLING symlink read as absent and the climb went on to
+  // validate its in-root parent instead. The shared climb uses `lstat` and reports
+  // WHICH rule refused.
+  const containment = checkContained(projectRoot, target);
+  if (isRefused(containment)) {
+    return {
+      path: target,
+      action: "refused",
+      reason: `${target} resolves outside the project root [${containment.code}] — ${containment.detail}`,
+    };
   }
   if (st) {
     const existing = parseFrontmatter(fs.readFileSync(target, "utf8"));
