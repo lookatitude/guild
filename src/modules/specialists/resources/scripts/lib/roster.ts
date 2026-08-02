@@ -9,7 +9,7 @@
  * prose executed by the model. This library is the code-backed implementation:
  *
  *   shipped roster   = <pluginRoot>/agents/*.md            (MACHINERY agents only —
- *                       advisor/developer; the plugin ships no domain specialists
+ *                       advisor/context-manager/developer; the plugin ships no domain specialists
  *                       as registered agents)
  *   template library = <pluginRoot>/templates/specialists/*.md (the 15 domain
  *                       specialist TYPE templates — read-only feedstock, never
@@ -49,14 +49,16 @@ export type RosterSource = "shipped" | "project" | "template";
 /**
  * The machinery agents the plugin ships as registered, dispatchable agents
  * (machinery-vs-template-library ADR): `advisor` (the powerful escalation
- * supervisor) and `developer` (the generic mid-tier lane worker). They stay in
- * the roster but are flagged `augmenting: true` so guild:team-compose excludes
+ * supervisor), `context-manager` (the mid-tier bounded context assembler added
+ * by decision cap-loc-D01) and `developer` (the generic mid-tier lane worker).
+ * They stay in the roster but are flagged `augmenting: true` so
+ * guild:team-compose excludes
  * them from domain matching and the cap-6 count. Every DOMAIN specialist
  * (architect, backend, … — formerly shipped agents, including doc-writer) is a
  * template under templates/specialists/, minted into the consuming repo's
  * .guild/agents/ before it can join a team.
  */
-export const AUGMENTING_AGENT_IDS = new Set(["advisor", "developer"]);
+export const AUGMENTING_AGENT_IDS = new Set(["advisor", "context-manager", "developer"]);
 
 export const SPECIALIST_TEMPLATE_VERSION = "guild.specialist_template.v1";
 
@@ -86,7 +88,7 @@ export interface RosterAgentEntry {
   /** true on a project entry whose name collides with a shipped type (the project instance wins in the merged roster). */
   overrides_shipped: boolean;
   /**
-   * true for the machinery agents (advisor/developer): kept in the roster
+   * true for the machinery agents (advisor/context-manager/developer): kept in the roster
    * for dispatch, excluded from team-compose domain matching and the cap-6
    * count (machinery-vs-template-library ADR).
    */
@@ -820,7 +822,7 @@ export interface TeamMigrationFileResult {
  * agent name. For each such entry: mint the project instance (idempotent —
  * `exists` is fine) and rewrite the entry to
  * `definition: .guild/agents/<role>.md` + `definition_source: project`.
- * Machinery agents (advisor/developer) keep `shipped`.
+ * Machinery agents (advisor/context-manager/developer) keep `shipped`.
  *
  * Team files are derived composition artifacts, so the rewrite is a canonical
  * re-dump of the parsed document (data-preserving; comment lines are not).

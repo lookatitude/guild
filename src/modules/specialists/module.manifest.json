@@ -4,12 +4,13 @@
   "title": "Specialists",
   "kind": "capability",
   "implementation_mode": "workflow-backed",
-  "description": "Owns the machinery agents (advisor/developer), the specialist type-template library under templates/specialists/, and the reusable specialist skill resources.",
+  "description": "Owns the machinery agents (advisor/context-manager/developer), the specialist type-template library under templates/specialists/, and the reusable specialist skill resources.",
   "depends_on": ["teams"],
   "owns": {
     "scripts": ["roster-resolve", "lib/roster"],
     "agents": [
       "advisor",
+      "context-manager",
       "developer"
     ],
     "skill_id_prefixes": [

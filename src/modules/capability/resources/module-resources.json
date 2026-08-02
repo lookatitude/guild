@@ -12,6 +12,13 @@
     },
     {
       "category": "scripts",
+      "id": "capability-profile",
+      "source_path": "scripts/capability-profile.ts",
+      "resource_path": "resources/scripts/capability-profile.ts",
+      "sha256": "ddfccc7098f4523e969dd45aad652cc47a0b4fa6c3e9584a9046195a507f7f23"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/adoption-migrate",
       "source_path": "scripts/lib/capability/adoption-migrate.ts",
       "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
@@ -26,6 +33,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/capability/candidate-surface",
+      "source_path": "scripts/lib/capability/candidate-surface.ts",
+      "resource_path": "resources/scripts/lib/capability/candidate-surface.ts",
+      "sha256": "4f2987e64cf8be211becc641e640e86d2ec7fba3a224a3a60a05ca1ca8f566a4"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/compatibility-catalog",
       "source_path": "scripts/lib/capability/compatibility-catalog.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-catalog.ts",
@@ -37,6 +51,20 @@
       "source_path": "scripts/lib/capability/compatibility-usage.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-usage.ts",
       "sha256": "519d4e80cb148b574c71f74b6cc750ce8d9bd950eac412d61da94facd58f4b13"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/context-manager-contract",
+      "source_path": "scripts/lib/capability/context-manager-contract.ts",
+      "resource_path": "resources/scripts/lib/capability/context-manager-contract.ts",
+      "sha256": "8f3119891c3f204968ba7d822ae1a7b05a126b8fddc78bb159d734183defd348"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/profile-emit",
+      "source_path": "scripts/lib/capability/profile-emit.ts",
+      "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
+      "sha256": "ded67aca9ca17ce0ea2d27a8ee9cd4f822874a20d9719142a26c9bc37ef214d2"
     },
     {
       "category": "scripts",
@@ -78,7 +106,7 @@
       "id": "lib/core/contracts/project-capability-profile",
       "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
       "resource_path": "resources/scripts/lib/core/contracts/project-capability-profile.ts",
-      "sha256": "3e856f80ee5eec622cb28975f06eda4367291ec18e82b220c7f2ec2bf9072622"
+      "sha256": "f4a77799eac643ef59453dd9631dac99481491a2783acc5abe58a633150cf3d6"
     },
     {
       "category": "scripts",

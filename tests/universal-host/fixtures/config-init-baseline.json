@@ -135,7 +135,7 @@
     "bridge_package": null
   },
   "capability": {
-    "resolver_mode": "legacy",
+    "resolver_mode": "observe",
     "suggestion_budget": 4,
     "starter_roles": [],
     "auto_create_policy": "on_approval"

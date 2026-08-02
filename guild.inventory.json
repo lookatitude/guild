@@ -5,7 +5,7 @@
   "manifest": {
     "name": "guild",
     "version": "2.5.0-beta.1",
-    "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 2 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
+    "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
     "author": {
@@ -807,6 +807,11 @@
       "description": "The on-demand `powerful` supervisor a stuck low-tier agent consults. Answers EXACTLY ONE escalated sub-question, seeing only the draft + question + a compact critique instruction — NEVER the raw file/project context (that withholding keeps the call cheap). Returns a `guild.handoff.v2` envelope; the cheap/mid agent continues with the answer folded in. The §3 advisor-escalation net (cost-aware-tiering ADR), NOT a standalone reviewer (O-1: no reviewer type ships). TRIGGER only via escalation: an agent emits `status: escalate` + `escalate_reason`, OR the coordinator detects an uncertainty marker / short output and routes one sub-question here. DO NOT TRIGGER for: a fresh task lane (developer/backend/frontend/mobile); a systems-design or ADR pass (architect designs, advisor critiques a slice); G6 receipt review (guild:review); the quality gate (guild:guild-quality); whole-transcript review or wholesale re-runs; direct use as a general critic. The advisor sees a draft + a question, never a repo."
     },
     {
+      "id": "context-manager",
+      "source_path": "agents/context-manager.md",
+      "description": "The `mid`-tier installed machinery agent that ASSEMBLES bounded context and emits run-scoped capability evidence — the executor for Learn's semantic operations and for per-lane context bundles, so a project-local role is never also the thing that assembles its own context. Writes ONLY under `.guild/context/**`, `.guild/artifacts/**`, `.guild/runs/**`; its contract (`scripts/lib/capability/context-manager-contract.ts`) forbids the rest structurally. TRIGGER for \\\"assemble the context bundle for this lane\\\", \\\"run the Learn semantic stage\\\", \\\"emit the capability profile\\\", \\\"resolve this recall query\\\", \\\"summarize this feedstock into a bundle\\\". DO NOT TRIGGER for: writing agent or skill definitions (guild:create-specialist / guild:create-skill, human-gated); promoting knowledge to the wiki (guild:wiki-ingest, human gate); approving a capability candidate or advancing the resolver mode (operator only); deciding a project question (architect designs, advisor critiques, the operator decides); implementing a task lane (developer / domain specialists); reviewing work (guild:review). It assembles evidence and never exercises authority over it."
+    },
+    {
       "id": "developer",
       "source_path": "agents/developer.md",
       "description": "The generic `mid`-tier task-lane implementer: takes a settled plan lane and writes/refactors its code (draft, reason, build), escalating to the advisor when above its tier. The default ephemeral worker for implementation lanes that are NOT domain-recognizable. TRIGGER for \\\"implement this lane\\\", \\\"build this task\\\", \\\"write the code for X\\\", \\\"refactor this module\\\" where the work has no clear domain home. DO NOT TRIGGER for: API/data-layer/migrations/integrations/queue/worker code (backend); web frontend (frontend); iOS/Android/RN/Expo (mobile); systems design, tradeoffs, ADRs (architect — developer implements after the design); test strategy / suite shape (qa — developer writes pinning tests only); deploy/CI/CD/IaC/observability (devops); security audits, threat models, auth review (security); content/commercial work (writing/commercial groups); skill/hook/command authoring — dev-team. If a lane is domain-recognizable, hand off, not absorb. A `powerful` need escalates to advisor, never self-promote."
@@ -1002,6 +1007,11 @@
     {
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "capability-profile",
+      "source_path": "scripts/capability-profile.ts",
       "kind": "cli"
     },
     {
@@ -1500,6 +1510,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/candidate-surface",
+      "source_path": "scripts/lib/capability/candidate-surface.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/compatibility-catalog",
       "source_path": "scripts/lib/capability/compatibility-catalog.ts",
       "kind": "lib"
@@ -1507,6 +1522,16 @@
     {
       "id": "lib/capability/compatibility-usage",
       "source_path": "scripts/lib/capability/compatibility-usage.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/context-manager-contract",
+      "source_path": "scripts/lib/capability/context-manager-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/profile-emit",
+      "source_path": "scripts/lib/capability/profile-emit.ts",
       "kind": "lib"
     },
     {

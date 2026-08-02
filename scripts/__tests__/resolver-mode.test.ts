@@ -121,8 +121,18 @@ describe("D4 — the ladder is complete, ordered, and frozen", () => {
   });
 
   it("does not decide the shipped default — that stays in config-defaults", () => {
-    expect(CAPABILITY_RESOLVER_MODE_DEFAULT).toBe("legacy");
+    // INTEGRATION (five-branch stack): this assertion pinned `legacy` because, when
+    // this lane was written, F7 had not landed and S5's hard precondition held the
+    // default there. feature/cap-loc-learn closed F7 and flipped it. The point of
+    // the test is unchanged — THIS module does not decide the default — so it is
+    // re-pinned to the flipped value rather than deleted, and it stays a real pin:
+    // it reddens if either constant moves again.
+    //
+    // Neither branch was red alone. The flip and the pin were written against each
+    // other's absence, and only the integration can see both.
+    expect(CAPABILITY_RESOLVER_MODE_DEFAULT).toBe("observe");
     expect(CAPABILITY_RESOLVER_MODE_AFTER_F7).toBe("observe");
+    expect(CAPABILITY_RESOLVER_MODE_DEFAULT).toBe(CAPABILITY_RESOLVER_MODE_AFTER_F7);
   });
 });
 
