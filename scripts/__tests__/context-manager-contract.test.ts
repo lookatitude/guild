@@ -12,6 +12,8 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { parseFrontmatter } from "../lib/frontmatter";
+
 import {
   CONTEXT_MANAGER_AGENT_ID,
   CONTEXT_MANAGER_CAPABILITY_SCOPE,
@@ -294,24 +296,43 @@ describe("F5 — the AGENT FILE is bound to the contract, not merely adjacent to
     path.join(__dirname, "..", "..", "agents", "context-manager.md"),
     "utf8"
   );
-  const frontmatter = agentFile.slice(0, agentFile.indexOf("\n---", 4));
+
+  /**
+   * Read through the SHARED js-yaml parser (OD-3 / communication-format-policy),
+   * not a hand-rolled line-anchored field extractor.
+   *
+   * This is not merely policy compliance — it strengthens the block. The previous
+   * reader hand-sliced to the first delimiter and then ran a multiline
+   * line-anchored key regex over the slice, so it asserted on "some line
+   * beginning with the key", which a nested or body-level occurrence could
+   * satisfy. `parseFrontmatter` returns the TOP-LEVEL key the host actually
+   * reads, which is the thing this block claims to bind.
+   */
+  const frontmatter = parseFrontmatter(agentFile);
+
+  /** The declared tool list, as the host reads it: one comma-separated scalar. */
+  const declaredTools = (): string[] => {
+    expect(frontmatter).not.toBeNull();
+    const raw = frontmatter!["tools"];
+    expect(typeof raw).toBe("string");
+    return String(raw)
+      .split(",")
+      .map((t) => t.trim());
+  };
 
   it("the frontmatter `tools:` list is EXACTLY the contract's tool scope", () => {
-    const line = /^tools:\s*(.+)$/m.exec(frontmatter);
-    expect(line).not.toBeNull();
-    const declared = line![1].split(",").map((t) => t.trim());
-    expect(declared).toEqual([...CONTEXT_MANAGER_TOOLS]);
+    expect(declaredTools()).toEqual([...CONTEXT_MANAGER_TOOLS]);
   });
 
   it("no WITHHELD tool appears in the frontmatter — Bash above all", () => {
-    const line = /^tools:\s*(.+)$/m.exec(frontmatter)!;
     for (const withheld of CONTEXT_MANAGER_WITHHELD_TOOLS) {
-      expect(line[1].split(",").map((t) => t.trim())).not.toContain(withheld);
+      expect(declaredTools()).not.toContain(withheld);
     }
   });
 
   it("the agent's `name` is the contract's agent id", () => {
-    expect(frontmatter).toMatch(new RegExp(`^name:\\s*${CONTEXT_MANAGER_AGENT_ID}$`, "m"));
+    expect(frontmatter).not.toBeNull();
+    expect(frontmatter!["name"]).toBe(CONTEXT_MANAGER_AGENT_ID);
   });
 
   it("the declared `mid` tier is carried as the model the tier maps to", () => {
@@ -319,7 +340,8 @@ describe("F5 — the AGENT FILE is bound to the contract, not merely adjacent to
     // the model rather than a prose tier note is what the roster-consistency rail
     // and the host both actually read.
     expect(CONTEXT_MANAGER_TIER).toBe("mid");
-    expect(frontmatter).toMatch(/^model:\s*sonnet$/m);
+    expect(frontmatter).not.toBeNull();
+    expect(frontmatter!["model"]).toBe("sonnet");
   });
 
   it("the body POINTS AT the contract file rather than restating the boundary", () => {
