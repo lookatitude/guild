@@ -46,6 +46,7 @@
  */
 
 import * as fs from "fs";
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
 import * as path from "path";
 import { createHash } from "crypto";
 import * as ts from "typescript";
@@ -56,15 +57,15 @@ import { walkRepo } from "./lib/walk";
 // Extension sets
 // ---------------------------------------------------------------------------
 
-export const CODE_EXTENSIONS = new Set([
+export const CODE_EXTENSIONS = sealSet([
   ".ts", ".tsx", ".mts", ".cts",
   ".js", ".jsx", ".mjs", ".cjs",
-]);
+], "CODE_EXTENSIONS");
 
-export const DOC_EXTENSIONS = new Set([".md", ".mdx"]);
+export const DOC_EXTENSIONS = sealSet([".md", ".mdx"], "DOC_EXTENSIONS");
 
 /** .svg added per SC-14 spec — isDiagramFile covers standalone SVG exports. */
-export const DIAGRAM_EXTENSIONS = new Set([".mermaid", ".mmd", ".svg"]);
+export const DIAGRAM_EXTENSIONS = sealSet([".mermaid", ".mmd", ".svg"], "DIAGRAM_EXTENSIONS");
 
 // ---------------------------------------------------------------------------
 // File type classifiers

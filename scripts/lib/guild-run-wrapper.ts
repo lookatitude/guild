@@ -148,13 +148,13 @@ export interface WrapperPlan {
 // ---------------------------------------------------------------------------
 
 /** Permission modes in ascending autonomy. Index ordering drives degradation. */
-export const AUTONOMY_ORDER: PermissionMode[] = [
+export const AUTONOMY_ORDER: readonly PermissionMode[] = Object.freeze([
   "read_only",
   "ask",
   "accept_edits",
   "auto",
   "bypass_all",
-];
+]);
 
 /**
  * Resolve launch flags for `requested` from caps.permissions.launch_modes.

@@ -1,9 +1,10 @@
 import * as path from "node:path";
+import { sealSet } from "../../kernel";
 import { parseYaml } from "../../state";
 
-export const STRUCTURAL_BASENAMES = new Set([
+export const STRUCTURAL_BASENAMES = sealSet([
   "index.md", "readme.md", "log.md", "query.md", "transfer-manifest.md",
-]);
+], "STRUCTURAL_BASENAMES");
 const PROVENANCE_SEGMENTS = new Set(["research", "ideation", "sources"]);
 const PROVENANCE_VALUES = new Set(["provenance", "exploratory", "research", "ideation", "source"]);
 

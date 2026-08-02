@@ -1140,7 +1140,7 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
-export const CONFIG_SUBCOMMANDS = [
+export const CONFIG_SUBCOMMANDS = Object.freeze([
   "set",
   "role",
   "show",
@@ -1149,7 +1149,7 @@ export const CONFIG_SUBCOMMANDS = [
   "update-mcp-hashes",
   "reconcile",
   "ui",
-] as const;
+] as const);
 
 export type ConfigSubcommand = (typeof CONFIG_SUBCOMMANDS)[number];
 

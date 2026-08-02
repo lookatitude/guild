@@ -9,7 +9,9 @@
  */
 
 /** Default escalation marker phrases for the cost auto-scorer. */
-export const DEFAULT_ESCALATION_MARKERS: string[] = [
+import { sealSet, deepFreeze } from "../../kernel";
+
+export const DEFAULT_ESCALATION_MARKERS: readonly string[] = Object.freeze([
   "I'm not sure",
   "unclear",
   "cannot determine",
@@ -17,13 +19,13 @@ export const DEFAULT_ESCALATION_MARKERS: string[] = [
   "ambiguous",
   "uncertain",
   "not enough information",
-];
+]);
 
 /** Keys excluded from workspace-to-child inheritance (OD-1 + detection-only). */
-export const NON_INHERITABLE_KEYS: ReadonlySet<string> = new Set<string>([
+export const NON_INHERITABLE_KEYS: ReadonlySet<string> = sealSet([
   "initiative_default", // OD-1: attach-to-wrong-initiative risk
   "workspace",          // workspace.mode is root-detection-only
-]);
+], "NON_INHERITABLE_KEYS");
 
 /** Default rotation threshold for JSONL log files — 10 MiB. */
 export const LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
@@ -44,17 +46,17 @@ export const SIDECAR_MAX_BYTES = 1024 * 1024;
  * Ordered on purpose: a consumer comparing progress must not re-derive the order
  * from a set, and `indexOf` here is the only ranking anyone should use.
  */
-export const CAPABILITY_RESOLVER_MODES = [
+export const CAPABILITY_RESOLVER_MODES = Object.freeze([
   "legacy",
   "observe",
   "shadow",
   "project-local",
   "strict",
-] as const;
+] as const);
 export type CapabilityResolverMode = (typeof CAPABILITY_RESOLVER_MODES)[number];
 
 /** Whether an approved proposal may auto-advance the resolver mode (D04). */
-export const CAPABILITY_AUTO_CREATE_POLICIES = ["never", "on_approval"] as const;
+export const CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"] as const);
 export type CapabilityAutoCreatePolicy = (typeof CAPABILITY_AUTO_CREATE_POLICIES)[number];
 
 /**
@@ -189,7 +191,7 @@ export function isValidCapabilityValue(key: string, value: unknown): boolean | u
  * Keep this file free of internal runtime imports: config defaults must remain
  * usable by both core settings code paths without pulling host/runtime layers upward.
  */
-export const DEFAULTS = {
+export const DEFAULTS = deepFreeze({
   rigor: "standard",
   auto_approve: [],
   review: "local",
@@ -367,4 +369,4 @@ export const DEFAULTS = {
      */
     lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
   },
-} as const;
+} as const);

@@ -80,10 +80,10 @@ import type {
 // ---------------------------------------------------------------------------
 
 /** `open` is the only non-terminal status. */
-export const NEUTRAL_RUN_STATUSES = ["open", "completed", "aborted"] as const;
+export const NEUTRAL_RUN_STATUSES = Object.freeze(["open", "completed", "aborted"] as const);
 export type NeutralRunStatus = (typeof NEUTRAL_RUN_STATUSES)[number];
 
-export const NEUTRAL_TERMINAL_RUN_STATUSES: readonly NeutralRunStatus[] = ["completed", "aborted"];
+export const NEUTRAL_TERMINAL_RUN_STATUSES: readonly NeutralRunStatus[] = Object.freeze(["completed", "aborted"]);
 
 /**
  * The run-bound admission inputs (MH-02-R1-B01).

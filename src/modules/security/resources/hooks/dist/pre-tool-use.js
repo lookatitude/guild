@@ -66,8 +66,103 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+function refuseMutator(label, method) {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+    );
+  };
+}
+function sealSet(values, label = "this Set") {
+  const inner = new Set(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value) => inner.has(value),
+    keys: () => inner.keys(),
+    values: () => inner.values(),
+    entries: () => inner.entries(),
+    forEach: (callback, thisArg) => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade));
+    },
+    [Symbol.iterator]: () => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear")
+  };
+  return Object.freeze(facade);
+}
+function isSealedCollection(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues(value) {
+  if (!isSealedCollection(value)) return void 0;
+  return [...value];
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
 // ../src/modules/lifecycle/workflows/event-log-schema.ts
-var TOOL_CALL_TOOL_VALUES = [
+var TOOL_CALL_TOOL_VALUES = Object.freeze([
   "Read",
   "Write",
   "Edit",
@@ -85,7 +180,35 @@ var TOOL_CALL_TOOL_VALUES = [
   "NotebookEdit",
   "BashOutput",
   "KillShell"
-];
+]);
+var HOOK_EVENT_NAMES = Object.freeze([
+  "SessionStart",
+  "SessionEnd",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "Notification",
+  "Stop",
+  "SubagentStop",
+  "PreCompact",
+  "TaskCreated",
+  "TaskCompleted",
+  "TeammateIdle"
+]);
+var EVENT_TYPES = sealSet([
+  "phase_start",
+  "phase_end",
+  "specialist_dispatch",
+  "specialist_receipt",
+  "loop_round_start",
+  "loop_round_end",
+  "tool_call",
+  "hook_event",
+  "gate_decision",
+  "assumption_logged",
+  "escalation",
+  "codex_review_round"
+], "EVENT_TYPES");
 var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function isSafeRunId(id) {
@@ -108,6 +231,9 @@ function assertSafeLaneId(id) {
 // ../src/modules/lifecycle/workflows/event-log-writer.ts
 var import_node_path2 = require("node:path");
 
+// ../src/modules/security/workflows/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+
 // ../src/modules/security/workflows/scrubbed-write.ts
 var fs6 = __toESM(require("node:fs"));
 var path6 = __toESM(require("node:path"));
@@ -120,17 +246,17 @@ var KV_REDACTED = "[REDACTED]";
 var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
 var TRUNCATION_SUFFIX = "... [TRUNCATED]";
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
-];
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+]);
 function redactTokenShapes(input) {
   let out = input;
   for (const re of TOKEN_SHAPE_PATTERNS) {
@@ -138,6 +264,13 @@ function redactTokenShapes(input) {
   }
   return out;
 }
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
 var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
 function redactHomeDirPaths(input) {
   return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
@@ -240,7 +373,7 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
   out = truncateToCap(out, cap);
   return out;
 }
-var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
+var REDACTABLE_FIELD_NAMES = Object.freeze([
   "command_redacted",
   "result_excerpt_redacted",
   "payload_excerpt_redacted",
@@ -248,6 +381,7 @@ var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
   "assumption_text",
   "result"
 ]);
+var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
 function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   const out = { ...event };
   for (const [k, v] of Object.entries(out)) {
@@ -285,6 +419,21 @@ function applySecretsPolicy(value, policy, opts) {
 // ../src/modules/security/workflows/config.ts
 var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
+
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
 
 // ../src/modules/state/workflows/guild-root.ts
 var fs2 = __toESM(require("node:fs"));
@@ -582,6 +731,15 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
   runIndexMigrateCli();
 }
 
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
 // ../src/modules/security/workflows/config.ts
 function parseAutonomyMode(v) {
   if (v === "interactive" || v === "autonomous_after_plan_approval" || v === "auto_approve") {
@@ -732,7 +890,7 @@ function resolveRunAutonomyMode(opts) {
 var fs5 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
-var KNOWN_GUILD_HOST_KINDS = [
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -742,7 +900,7 @@ var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-web",
   "codex-app",
   "claude-ai-connector"
-];
+]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 var LEGACY_HOST_ALIASES = {
   claude: "claude-code-cli",
@@ -932,6 +1090,16 @@ function scrubbedWrite(outPath, content, opts) {
   writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
   return { written: false, blocked: true };
 }
+
+// ../src/modules/security/workflows/share-set.ts
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
 
 // ../src/modules/lifecycle/workflows/stable-lock.ts
 var import_node_fs = require("node:fs");

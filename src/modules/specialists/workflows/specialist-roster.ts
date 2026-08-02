@@ -15,9 +15,17 @@
  * canonical enumeration consumers use at runtime is scripts/lib/roster.ts.
  */
 
-export const MACHINERY_AGENT_IDS = ["advisor", "context-manager", "developer"] as const;
+// INTEGRATION (five-branch stack): the union of the learn lane's third machinery
+// agent and the freeze lane's Object.freeze. Same conflict as
+// `AUGMENTING_AGENT_IDS` in scripts/lib/roster.ts, and it must resolve the same
+// way — capability-catalogs.test.ts holds these two enumerations to each other.
+export const MACHINERY_AGENT_IDS = Object.freeze([
+  "advisor",
+  "context-manager",
+  "developer",
+] as const);
 
-export const SPECIALIST_TEMPLATE_IDS = [
+export const SPECIALIST_TEMPLATE_IDS = Object.freeze([
   "architect",
   "backend",
   "copywriter",
@@ -33,9 +41,9 @@ export const SPECIALIST_TEMPLATE_IDS = [
   "seo",
   "social-media",
   "technical-writer",
-] as const;
+] as const);
 
-export const SPECIALIST_SKILL_PREFIXES = [
+export const SPECIALIST_SKILL_PREFIXES = Object.freeze([
   "architect-",
   "backend-",
   "copywriter-",
@@ -51,7 +59,7 @@ export const SPECIALIST_SKILL_PREFIXES = [
   "seo-",
   "social-media-",
   "technical-writer-",
-] as const;
+] as const);
 
 export type MachineryAgentId = (typeof MACHINERY_AGENT_IDS)[number];
 export type SpecialistTemplateId = (typeof SPECIALIST_TEMPLATE_IDS)[number];

@@ -40,7 +40,7 @@ import { acceptanceCriterionIds } from "./define-schema";
 // ---------------------------------------------------------------------------
 
 /** The four traceability stages, in chain order. The release gate is last + required. */
-export const TRACE_STAGES = ["plan", "build_receipt", "qa", "release_gate"] as const;
+export const TRACE_STAGES = Object.freeze(["plan", "build_receipt", "qa", "release_gate"] as const);
 export type TraceStageName = (typeof TRACE_STAGES)[number];
 
 export type TraceStatus = "resolved" | "unmet";

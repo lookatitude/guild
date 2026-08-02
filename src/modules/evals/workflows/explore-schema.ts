@@ -32,6 +32,8 @@
 // Schema constant + result shape
 // ---------------------------------------------------------------------------
 
+import { deepFreeze } from "../../kernel";
+
 export const EXPLORE_SCHEMA_VERSION = "guild.explore.v1" as const;
 
 /** Fail-closed validator result — `{ valid, errors }` (P1 convention). */
@@ -167,14 +169,14 @@ export function isExploreV1(value: unknown): value is ExploreV1 {
 // ---------------------------------------------------------------------------
 
 /** A valid `guild.explore.v1` sample. Frozen, deterministic — no clock/random. */
-export const EXPLORE_V1_EXAMPLE: ExploreV1 = {
+export const EXPLORE_V1_EXAMPLE: ExploreV1 = deepFreeze({
   schema_version: EXPLORE_SCHEMA_VERSION,
   assumptions: ["users will accept a CLI-first workflow", "teams already use git"],
   evidence_needs: ["how many target users live in the terminal vs an IDE"],
   comparables: ["GitHub Copilot CLI", "Aider"],
   risks: ["host fragmentation increases support surface"],
   recommended_next_step: "run a 5-user concierge test on the no-slash product intake",
-};
+});
 
 // ---------------------------------------------------------------------------
 // Import-pure self-check (NO process IO at module scope — F8-F11). LW1-8 may call it.

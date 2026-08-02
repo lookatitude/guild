@@ -29,7 +29,7 @@
       "id": "lib/advisory-record",
       "source_path": "scripts/lib/advisory-record.ts",
       "resource_path": "resources/scripts/lib/advisory-record.ts",
-      "sha256": "a8e0219a783684fe771f9673298bb29a7fefe4cbfb6686beb0d2231251aa4cca"
+      "sha256": "f8f5db946463285a634eee9105604790c1f8b075f27ab797a82f0daae3801688"
     },
     {
       "category": "scripts",
@@ -57,7 +57,7 @@
       "id": "verify-codex-review-trail",
       "source_path": "scripts/verify-codex-review-trail.ts",
       "resource_path": "resources/scripts/verify-codex-review-trail.ts",
-      "sha256": "e09c6b48c073aee45c89e7cc4ab3b01ca19153240e544f1f43526f6259e1a3f5"
+      "sha256": "f67b4e15590a5a2e5d364e34daf3a78b5e24cc0b76e0c4102f030fd6ae7060f8"
     },
     {
       "category": "scripts",

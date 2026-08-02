@@ -1,4 +1,6 @@
 /** Module-owned guild.handoff.v2 schema and runtime validator. */
+import { sealSet } from "../../kernel";
+
 export type HandoffTier = "cheap" | "mid" | "powerful";
 export type HandoffStatus = "done" | "blocked" | "escalate";
 export interface HandoffV2 {
@@ -11,11 +13,11 @@ export interface HandoffValidationResult { valid: boolean; errors: string[] }
 export const SUMMARY_MAX_CHARS = 600;
 export const NOTES_MAX_CHARS = 200;
 export const ALLOWED_INJECTION_CLEAN_VALUES: ReadonlySet<string> =
-  new Set(["clean", "flagged", "unverified"]);
-export const ALLOWED_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
+  sealSet(["clean", "flagged", "unverified"], "ALLOWED_INJECTION_CLEAN_VALUES");
+export const ALLOWED_TOP_LEVEL_KEYS: ReadonlySet<string> = sealSet([
   "schema_version", "task_id", "tier", "status", "summary", "artifacts", "issues",
   "escalate_reason", "learnings", "notes", "injection_clean",
-]);
+], "ALLOWED_TOP_LEVEL_KEYS");
 const VALID_TIERS = new Set(["cheap", "mid", "powerful"]);
 const VALID_STATUSES = new Set(["done", "blocked", "escalate"]);
 

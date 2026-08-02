@@ -1,13 +1,13 @@
 import * as crypto from "node:crypto";
 
 export const RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1" as const;
-export const OPERATION_KINDS = ["render", "install", "activate", "update", "uninstall", "verify"] as const;
-export const ACCEPTED_CONFORMANCE_ARTIFACTS = [
-  { path: "handoffs/tooling-engineer-MH-08.md", sha256: "6168cd3381edd6a8f4cb234e4cb1c714147c65ea11c92cd9210c6429663fcdb1" },
-  { path: "validation/mh-08-r12-done-lead-validation.json", sha256: "23dee57b587426ef56fbbc60e38d0008eb8c972890d1ceb3cbe0ddde3bcebb85" },
-  { path: "review/G-lane:MH-08/result-12-r2.json", sha256: "5141b2b45caee0e47ca21dd853db22f8d885161935b19049c2392036710d0bd4" },
-  { path: "validation/mh-08-r12-review-r2-lead-validation.json", sha256: "0f8054585bd4aeae1780e49c67cf6e65efe7023aeafceeed6fe336090c0fc27e" },
-] as const;
+export const OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"] as const);
+export const ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
+  Object.freeze({ path: "handoffs/tooling-engineer-MH-08.md", sha256: "6168cd3381edd6a8f4cb234e4cb1c714147c65ea11c92cd9210c6429663fcdb1" }),
+  Object.freeze({ path: "validation/mh-08-r12-done-lead-validation.json", sha256: "23dee57b587426ef56fbbc60e38d0008eb8c972890d1ceb3cbe0ddde3bcebb85" }),
+  Object.freeze({ path: "review/G-lane:MH-08/result-12-r2.json", sha256: "5141b2b45caee0e47ca21dd853db22f8d885161935b19049c2392036710d0bd4" }),
+  Object.freeze({ path: "validation/mh-08-r12-review-r2-lead-validation.json", sha256: "0f8054585bd4aeae1780e49c67cf6e65efe7023aeafceeed6fe336090c0fc27e" }),
+] as const);
 export type OperationKind = (typeof OPERATION_KINDS)[number];
 export type EvidenceClass = "release-builder" | "operator" | "fixture" | "unsupported";
 

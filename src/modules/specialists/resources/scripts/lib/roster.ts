@@ -32,6 +32,7 @@
  */
 
 import * as fs from "fs";
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
 import * as path from "path";
 // The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
 // goes through it — this file only DUMPS YAML directly.
@@ -58,7 +59,15 @@ export type RosterSource = "shipped" | "project" | "template";
  * template under templates/specialists/, minted into the consuming repo's
  * .guild/agents/ before it can join a team.
  */
-export const AUGMENTING_AGENT_IDS = new Set(["advisor", "context-manager", "developer"]);
+// INTEGRATION (five-branch stack): a UNION, not a choice. feature/cap-loc-learn
+// registered `context-manager` as the third machinery agent (D5 / cap-loc-D01);
+// feature/deep-freeze-collections sealed this Set against mutation (#22) and was
+// written before that agent existed. Taking either side alone would have dropped
+// the other lane's whole point — an unsealed Set, or a missing agent.
+export const AUGMENTING_AGENT_IDS = sealSet(
+  ["advisor", "context-manager", "developer"],
+  "AUGMENTING_AGENT_IDS",
+);
 
 export const SPECIALIST_TEMPLATE_VERSION = "guild.specialist_template.v1";
 

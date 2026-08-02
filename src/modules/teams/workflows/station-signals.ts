@@ -60,14 +60,14 @@ export const STATION_SIGNALS_SCHEMA = "guild.station_signals.v1" as const;
  * `StationSignals`: if G6a adds or removes a signal field, this file stops
  * compiling until the array is reconciled.
  */
-export const STATION_SIGNAL_KEYS = [
+export const STATION_SIGNAL_KEYS = Object.freeze([
   "multi_component",
   "auth_touched",
   "backend_present",
   "user_facing_ui",
   "public_docs",
   "search_discoverability",
-] as const;
+] as const);
 
 export type StationSignalKey = (typeof STATION_SIGNAL_KEYS)[number];
 

@@ -2,7 +2,7 @@ import type { DegradationReceipt } from "../../host-runtime";
 
 export const REVIEW_PROGRESS_SCHEMA = "guild.review_progress.v1" as const;
 
-export const REVIEW_PROGRESS_STATES = [
+export const REVIEW_PROGRESS_STATES = Object.freeze([
   "launched",
   "running",
   "heartbeat",
@@ -13,7 +13,7 @@ export const REVIEW_PROGRESS_STATES = [
   "cancelled",
   "skipped",
   "succeeded",
-] as const;
+] as const);
 
 export type ReviewProgressState = (typeof REVIEW_PROGRESS_STATES)[number];
 export type ReviewIndependence = "strong" | "weak";

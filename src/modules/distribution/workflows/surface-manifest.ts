@@ -27,7 +27,7 @@ export const SURFACE_MANIFEST_SCHEMA_VERSION = "guild.surface_manifest.v1" as co
 
 /** The three live-surface artifact classes a manifest can describe. */
 export type SurfaceKind = "skill" | "command" | "agent";
-export const SURFACE_KINDS: readonly SurfaceKind[] = ["skill", "command", "agent"];
+export const SURFACE_KINDS: readonly SurfaceKind[] = Object.freeze(["skill", "command", "agent"]);
 
 /**
  * The declarative metadata block. Common structured metadata across

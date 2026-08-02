@@ -34,6 +34,8 @@
 // Schema constant + result shape
 // ---------------------------------------------------------------------------
 
+import { deepFreeze } from "../../kernel";
+
 export const DEFINE_SCHEMA_VERSION = "guild.define.v1" as const;
 
 /** Fail-closed validator result — `{ valid, errors }` (P1 convention). */
@@ -224,7 +226,7 @@ export function acceptanceCriterionIds(value: unknown): string[] {
 // ---------------------------------------------------------------------------
 
 /** A valid `guild.define.v1` sample. Frozen, deterministic — no clock/random. */
-export const DEFINE_V1_EXAMPLE: DefineV1 = {
+export const DEFINE_V1_EXAMPLE: DefineV1 = deepFreeze({
   schema_version: DEFINE_SCHEMA_VERSION,
   acceptance_criteria: [
     { id: "AC-1", text: "A vague product prompt reaches product-loop intake with no slash command." },
@@ -235,7 +237,7 @@ export const DEFINE_V1_EXAMPLE: DefineV1 = {
   risks: ["intake classifier over-fires on non-product prompts"],
   affected_surfaces: ["scripts/lib/ intake classifier", "using-guild no-slash entry"],
   test_implications: ["precision ≥0.9 / recall ≥0.8 trigger-accuracy eval"],
-};
+});
 
 // ---------------------------------------------------------------------------
 // Import-pure self-check (NO process IO at module scope — F8-F11). LW1-8 may call it.

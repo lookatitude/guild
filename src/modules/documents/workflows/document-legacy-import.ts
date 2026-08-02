@@ -20,6 +20,7 @@
  */
 
 import { DocumentIssue, sha256Of } from "./document-safe";
+import { deepFreeze } from "../../kernel";
 import { DOCUMENT_KINDS, DocumentKind } from "./document-records";
 
 export const LEGACY_DOCUMENT_SCHEMA_VERSION = "guild.legacy_document.v1" as const;
@@ -62,7 +63,7 @@ export interface LegacyImportResult {
 const INLINE_HTML = /<\/?[a-zA-Z][^>]*>/g;
 const HEADING = /^(#{1,6})\s+(.*)$/;
 
-const KIND_HINTS: ReadonlyArray<[RegExp, DocumentKind]> = Object.freeze([
+const KIND_HINTS: ReadonlyArray<[RegExp, DocumentKind]> = deepFreeze([
   [/\bplan\b/i, "plan"],
   [/\bspec(?:ification)?\b/i, "spec"],
   [/\b(?:handoff|receipt)\b/i, "handoff"],

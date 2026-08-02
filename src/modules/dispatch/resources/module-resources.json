@@ -29,14 +29,14 @@
       "id": "lib/core/contracts/specialist-identity",
       "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
       "resource_path": "resources/scripts/lib/core/contracts/specialist-identity.ts",
-      "sha256": "71013a384205271bb970e1f1a67e150ca232a33db89d5e8d3a74d9c60a80e762"
+      "sha256": "4c56826dccbc789e37b2e60143e4a9673ef34c431478ae14a8690e249cc778c0"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/task-cell-backend",
       "source_path": "scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/task-cell-backend.ts",
-      "sha256": "92cb28d53275269d8a315162647d72bd42a545cc611f31455049896aa9127952"
+      "sha256": "3981b150984555d7458350b4a5b9932d2c398509bf31e26cf39f99109acf1171"
     },
     {
       "category": "scripts",

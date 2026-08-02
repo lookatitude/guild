@@ -3071,8 +3071,142 @@ var path4 = __toESM(require("path"));
 var fs2 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/yaml-loader.ts
+var path = __toESM(require("node:path"));
+function pluginLocalScriptsRoots() {
+  return [
+    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
+    path.resolve(__dirname, "..", "..", "..", "..", "scripts"),
+    // Bundled hook layout: hooks/dist -> plugin/scripts.
+    path.resolve(__dirname, "..", "..", "scripts"),
+    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
+    path.resolve(__dirname, "..", "..", "..", "scripts")
+  ];
+}
+function tryScriptsRoot(scriptsRoot) {
+  try {
+    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+  } catch {
+    return null;
+  }
+}
+function loadYamlApi() {
+  const tried = [];
+  for (const scriptsRoot of pluginLocalScriptsRoots()) {
+    tried.push(scriptsRoot);
+    const api2 = tryScriptsRoot(scriptsRoot);
+    if (api2) return api2;
+  }
+  try {
+    return require_js_yaml();
+  } catch {
+  }
+  const cwdRoot = path.resolve(process.cwd(), "scripts");
+  tried.push(cwdRoot);
+  const api = tryScriptsRoot(cwdRoot);
+  if (api) return api;
+  throw new Error(
+    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
+  );
+}
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+function refuseMutator(label, method) {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+    );
+  };
+}
+function sealSet(values, label = "this Set") {
+  const inner = new Set(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value) => inner.has(value),
+    keys: () => inner.keys(),
+    values: () => inner.values(),
+    entries: () => inner.entries(),
+    forEach: (callback, thisArg) => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade));
+    },
+    [Symbol.iterator]: () => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear")
+  };
+  return Object.freeze(facade);
+}
+function isSealedCollection(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues(value) {
+  if (!isSealedCollection(value)) return void 0;
+  return [...value];
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
 // ../src/modules/distribution/workflows/inventory-schema.ts
-var INVENTORY_CATEGORIES = [
+var INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
   "agents",
@@ -3081,14 +3215,14 @@ var INVENTORY_CATEGORIES = [
   "scripts",
   "schemas",
   "docs"
-];
-var ALLOWED_INVENTORY_KEYS = /* @__PURE__ */ new Set([
+]);
+var ALLOWED_INVENTORY_KEYS = sealSet([
   "schema_version",
   "generated_at",
   "plugin_version",
   "manifest",
   ...INVENTORY_CATEGORIES
-]);
+], "ALLOWED_INVENTORY_KEYS");
 function isNonEmptyString(v) {
   return typeof v === "string" && v.trim() !== "";
 }
@@ -3185,44 +3319,20 @@ function validateInventoryV1(value) {
   return { valid: errors.length === 0, errors };
 }
 
-// ../src/modules/kernel/workflows/yaml-loader.ts
-var path = __toESM(require("node:path"));
-function pluginLocalScriptsRoots() {
-  return [
-    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "..", "..", "scripts"),
-    // Bundled hook layout: hooks/dist -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "scripts"),
-    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "..", "scripts")
-  ];
-}
-function tryScriptsRoot(scriptsRoot) {
-  try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
-  } catch {
-    return null;
-  }
-}
-function loadYamlApi() {
-  const tried = [];
-  for (const scriptsRoot of pluginLocalScriptsRoots()) {
-    tried.push(scriptsRoot);
-    const api2 = tryScriptsRoot(scriptsRoot);
-    if (api2) return api2;
-  }
-  try {
-    return require_js_yaml();
-  } catch {
-  }
-  const cwdRoot = path.resolve(process.cwd(), "scripts");
-  tried.push(cwdRoot);
-  const api = tryScriptsRoot(cwdRoot);
-  if (api) return api;
-  throw new Error(
-    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
-  );
-}
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
 
 // ../src/modules/state/workflows/frontmatter.ts
 function readScalarField(content, key) {
@@ -3515,8 +3625,17 @@ if (typeof module !== "undefined" && require.main === module && /^index-migrate\
   runIndexMigrateCli();
 }
 
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
 // ../src/modules/distribution/workflows/parity-contract.ts
-var DISCOVERY_RULES = [
+var DISCOVERY_RULES = deepFreeze([
   {
     category: "commands",
     globs: ["commands/*.md"],
@@ -3571,10 +3690,10 @@ var DISCOVERY_RULES = [
     enforced: false,
     note: "Full docs/ tree is inventoried (FU-5). Still non-enforced: docs are a coverage/curation surface, not a load-bearing package input, so a missing doc is not an SC-7 fail-fixture."
   }
-];
-var COVERAGE_ENFORCED_CATEGORIES = DISCOVERY_RULES.filter(
+]);
+var COVERAGE_ENFORCED_CATEGORIES = Object.freeze(DISCOVERY_RULES.filter(
   (r) => r.enforced
-).map((r) => r.category);
+).map((r) => r.category));
 function inventoryIds(inventory, category) {
   const list = inventory[category] ?? [];
   return new Set(list.map((e) => e.id));
@@ -3617,8 +3736,8 @@ function checkCoverage(discovered, inventory) {
 }
 
 // ../src/modules/distribution/workflows/handoff-v2.ts
-var ALLOWED_INJECTION_CLEAN_VALUES = /* @__PURE__ */ new Set(["clean", "flagged", "unverified"]);
-var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+var ALLOWED_INJECTION_CLEAN_VALUES = sealSet(["clean", "flagged", "unverified"], "ALLOWED_INJECTION_CLEAN_VALUES");
+var ALLOWED_TOP_LEVEL_KEYS = sealSet([
   "schema_version",
   "task_id",
   "tier",
@@ -3630,10 +3749,10 @@ var ALLOWED_TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "learnings",
   "notes",
   "injection_clean"
-]);
+], "ALLOWED_TOP_LEVEL_KEYS");
 
 // ../src/modules/distribution/workflows/result-contracts.ts
-var EXISTING_CONTRACTS = [
+var EXISTING_CONTRACTS = deepFreeze([
   {
     wire_schema_version: "guild.handoff.v2",
     status: "exists",
@@ -3678,15 +3797,13 @@ var EXISTING_CONTRACTS = [
     source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
     purpose: "Test matrix execution, gaps, failures, release predicate."
   }
-];
-var DEFERRED_CONTRACTS = [];
-var RESULT_CONTRACTS = [
+]);
+var DEFERRED_CONTRACTS = Object.freeze([]);
+var RESULT_CONTRACTS = Object.freeze([
   ...EXISTING_CONTRACTS,
   ...DEFERRED_CONTRACTS
-];
-var PHASE1_NORMALIZER_TARGETS = new Set(
-  EXISTING_CONTRACTS.map((c) => c.wire_schema_version)
-);
+]);
+var PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
 
 // ../src/modules/distribution/workflows/build-inventory.ts
 var PLUGIN_ROOT = path3.resolve(__dirname, "../../../..");
@@ -4036,12 +4153,61 @@ if (require.main === module) {
   process.exit(main());
 }
 
+// ../src/modules/distribution/workflows/equivalence-contract.ts
+var EQUIVALENCE_SURFACES = Object.freeze([
+  "manifest",
+  "commands",
+  "skills",
+  "agents",
+  "hooks_json",
+  "bootstrap_sh",
+  "mcp_json",
+  "script_refs"
+]);
+var INTENTIONAL_EXCLUSIONS = deepFreeze([
+  {
+    path: "hooks_json.SessionStart (using-guild additionalContext injection)",
+    reason: "L5b deliberately changes Claude SessionStart from bootstrap.sh plain-stdout banners to hookSpecificOutput.additionalContext injection \u2014 a chosen format change, NOT zero-delta (spec SC-8).",
+    verified_by: "L5b golden test (NOT this equivalence check)."
+  },
+  {
+    path: "*._rendered_at, *._source_version, generated_at",
+    reason: "Render-provenance fields are build metadata the committed package does not carry; they are normalized OUT before comparison, never compared.",
+    verified_by: "normalizeJson() strips them (PROVENANCE_FIELDS)."
+  },
+  {
+    path: "manifest.skills, manifest.commands, manifest.agents (glob ordering)",
+    reason: "The generated manifest's skill/command/agent path globs derive from the inventory in a canonical order; ordering is not semantically meaningful.",
+    verified_by: "normalizeJson() sorts arrays of path-strings for these manifest fields (see SORTED_MANIFEST_ARRAYS) so order deltas are not failures."
+  }
+]);
+var PROVENANCE_FIELDS = sealSet([
+  "_rendered_at",
+  "_source_version",
+  "generated_at"
+], "PROVENANCE_FIELDS");
+var SORTED_MANIFEST_ARRAYS = sealSet(["skills", "commands", "agents"], "SORTED_MANIFEST_ARRAYS");
+
+// ../src/modules/distribution/workflows/release-distribution-contract.ts
+var OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
+var ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
+  Object.freeze({ path: "handoffs/tooling-engineer-MH-08.md", sha256: "6168cd3381edd6a8f4cb234e4cb1c714147c65ea11c92cd9210c6429663fcdb1" }),
+  Object.freeze({ path: "validation/mh-08-r12-done-lead-validation.json", sha256: "23dee57b587426ef56fbbc60e38d0008eb8c972890d1ceb3cbe0ddde3bcebb85" }),
+  Object.freeze({ path: "review/G-lane:MH-08/result-12-r2.json", sha256: "5141b2b45caee0e47ca21dd853db22f8d885161935b19049c2392036710d0bd4" }),
+  Object.freeze({ path: "validation/mh-08-r12-review-r2-lead-validation.json", sha256: "0f8054585bd4aeae1780e49c67cf6e65efe7023aeafceeed6fe336090c0fc27e" })
+]);
+
+// ../src/modules/distribution/workflows/surface-manifest.ts
+var SURFACE_KINDS = Object.freeze(["skill", "command", "agent"]);
+
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS = {
   marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
   self_update: "guild-run update",
   reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
 };
+var INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+var INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
 var CLAUDE_CAPABILITIES = {
   schema_version: "guild.host_capabilities.v1",
   host_kind: "claude",
@@ -4062,6 +4228,20 @@ var CLAUDE_CAPABILITIES = {
   commands: { slash_commands: true, command_files: "markdown" },
   skills: { native_skills: true, skill_dir: ".claude/skills" },
   agents: { native_agents: true, agent_format: "claude-md" },
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "target",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: {
     // All ten events are bound in the live hooks/hooks.json (verified).
     session_start: true,
@@ -4173,6 +4353,20 @@ var CODEX_CAPABILITIES = {
   // Verified (per-host-packaging).
   agents: { native_agents: false, agent_format: null },
   // Verified (per-host-packaging flags agents unsupported).
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: {
     // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
     // Claude-equivalent hooks" claim was empirically false. Codex accepts a
@@ -4307,6 +4501,19 @@ var AGENTS_FILE_CAPABILITIES = {
   commands: { slash_commands: false, command_files: "none" },
   skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
   agents: { native_agents: false, agent_format: null },
+  injection: {
+    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+    definition_injection: false,
+    definition_injection_support: "absent",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "absent",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "none",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: NO_HOOKS,
   permissions: {
     deny: false,
@@ -4355,9 +4562,21 @@ var AGENTS_FILE_CAPABILITIES = {
     powerful: { model: null }
   }
 };
+var REQUIRED_HOOK_EVENTS = Object.freeze([
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+  "post_tool_use",
+  "stop",
+  "pre_compact",
+  "subagent_stop",
+  "task_created",
+  "task_completed",
+  "teammate_idle"
+]);
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
-var HOST_IDS = [
+var HOST_IDS = Object.freeze([
   // keep CLI/file (5)
   "claude-code-cli",
   "codex-cli",
@@ -4379,8 +4598,8 @@ var HOST_IDS = [
   "kiro",
   "qoder",
   "trae"
-];
-var HOST_FAMILIES = [
+]);
+var HOST_FAMILIES = Object.freeze([
   "claude",
   "codex",
   "agents",
@@ -4390,15 +4609,15 @@ var HOST_FAMILIES = [
   "copilot",
   "opencode",
   "rovo"
-];
-var AUTH_PROBES = [
+]);
+var AUTH_PROBES = Object.freeze([
   "codex_stored_or_env",
   "none",
   "cursor_stored",
   "gh_auth",
   "opencode_stored_or_env",
   "acli_stored"
-];
+]);
 var CLAUDE_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-cli",
@@ -4429,7 +4648,7 @@ var CODEX_ENTRY = {
   provenance: "verified"
   // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
 };
-function inferredCaps(host_kind, family, surface_kind = "cli") {
+function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
     host_kind,
@@ -4456,6 +4675,38 @@ function inferredCaps(host_kind, family, surface_kind = "cli") {
     commands: { slash_commands: false, command_files: "none" },
     skills: { native_skills: false, skill_dir: null },
     agents: { native_agents: false, agent_format: null },
+    // cap-loc-D11 — injection facts derived STRUCTURALLY from the surface kind.
+    // A `cli` surface has somewhere to dispatch a lane, so injection is an
+    // unproven TARGET. An `app` or `file` surface has no pane to dispatch into
+    // (see the AGENTS_FILE / kiro / qoder / trae rows: `dispatch_selectable:
+    // false`), so there is nothing to inject INTO — `absent`, and nothing to
+    // degrade to either. That is a structural fact, not pessimism.
+    //
+    // NO ROW STARTS `verified`: injection is unbuilt, so no probe of it has ever
+    // run on any host. A row flips only on a real probe receipt (E3 / cap-loc-D12).
+    injection: dispatch_selectable ? {
+      definition_injection: false,
+      definition_injection_support: "target",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "target",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "prompt_text",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    } : {
+      definition_injection: false,
+      definition_injection_support: "absent",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "absent",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "none",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    },
     hooks: {
       session_start: false,
       user_prompt_submit: false,
@@ -4802,7 +5053,7 @@ var TRAE_ENTRY = {
   capabilities: inferredCaps("trae", "agents", "file"),
   provenance: "inferred"
 };
-var HOST_REGISTRY_ROWS = {
+var HOST_REGISTRY_ROWS = deepFreeze({
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
   "pi-cli": PI_ENTRY,
@@ -4819,7 +5070,7 @@ var HOST_REGISTRY_ROWS = {
   kiro: KIRO_ENTRY,
   qoder: QODER_ENTRY,
   trae: TRAE_ENTRY
-};
+});
 var HOST_ID_SET = new Set(HOST_IDS);
 var FAMILY_SET = new Set(HOST_FAMILIES);
 var AUTH_PROBE_SET = new Set(AUTH_PROBES);
@@ -4844,13 +5095,32 @@ function normalizeHostId(value) {
 }
 
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
-var RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
-var ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"];
+var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
+var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+var INFERRED_HOSTS = sealSet([
+  "agents-file",
+  "pi-cli",
+  "antigravity-cli",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  "kiro",
+  "qoder",
+  "trae"
+], "INFERRED_HOSTS");
 var RUNG_SET = new Set(RUNGS);
 var SURFACE_SET = new Set(ADAPTER_SURFACES);
 
 // ../src/modules/host-runtime/workflows/host-profiles-validate.ts
 var KNOWN_HOST_IDS = new Set(HOST_IDS);
+var VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
+var VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
 
 // ../src/modules/host-runtime/workflows/host-registry.ts
 function deriveCapabilityRow(row) {
@@ -4898,11 +5168,25 @@ var PROVIDER_REGISTRY = [
   { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
 ];
 
+// ../src/modules/host-runtime/workflows/host-adapter-contract.ts
+var HOST_ADAPTER_OPERATIONS = Object.freeze([
+  "capabilities",
+  "bootstrap",
+  "preflight",
+  "dispatch",
+  "collect",
+  "renderCommandSurface",
+  "renderPackage",
+  "renderPermissionDecision",
+  "resolveModelParams",
+  "memory"
+]);
+
 // ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
 var import_node_crypto = require("node:crypto");
 var HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
 var HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
-var HOST_CAPABILITY_IDS = [
+var HOST_CAPABILITY_IDS = Object.freeze([
   "host.artifacts.direct_filesystem",
   "host.artifacts.file_bus",
   "host.bootstrap.context_injection",
@@ -4933,7 +5217,7 @@ var HOST_CAPABILITY_IDS = [
   "host.result_adapter",
   "host.sessions.resume_by_id",
   "host.structured_output.native_json"
-];
+]);
 var CAPABILITY_READERS = {
   "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
   "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
@@ -4977,15 +5261,6 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function deepFreeze(value) {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value)) {
-    deepFreeze(value[key]);
-  }
-  return value;
-}
 function canonicalJson(value) {
   if (value === null) return "null";
   const kind = typeof value;
@@ -5284,19 +5559,19 @@ var HOST_ADAPTER_REASON_CODES = Object.freeze([
   "execution_failed",
   "unknown_event"
 ]);
-var HOST_ADAPTER_OWNED_CONCERNS = [
+var HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
   "host_identity_resolution",
   "host_entry_point_binding",
   "host_capability_snapshot",
   "host_native_event_normalization"
-];
-var HOST_ADAPTER_NOT_OWNED_CONCERNS = [
+]);
+var HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
   "lifecycle_state",
   "gate_policy",
   "artifact_semantics",
   "document_rendering",
   "transport_execution"
-];
+]);
 var CONCERN_OWNERS = Object.freeze({
   host_identity_resolution: "host-adapters",
   host_entry_point_binding: "host-adapters",
@@ -5345,6 +5620,151 @@ var HOST_ENTRY_POINTS = Object.freeze(
   )
 );
 var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
+
+// ../src/modules/distribution/workflows/verify-installer.ts
+var BUILD_ONCE_SNIPPET = "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>";
+var INSTALLER_HOST_EXPECTATIONS = deepFreeze([
+  // ── keep/CLI+file ───────────────────────────────────────────────────────────
+  {
+    host: "claude-code-cli",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "would run: claude plugin validate dist/claude-code",
+      "would run: claude plugin marketplace add dist/claude-code",
+      "would run: claude plugin marketplace update guild",
+      "would run: claude plugin install guild@guild",
+      "Guild installed into Claude Code."
+    ]
+  },
+  {
+    host: "codex-cli",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "would run: codex plugin marketplace remove guild || true",
+      "would run: codex plugin marketplace add ",
+      "/dist/codex-marketplace",
+      "would run: codex plugin add guild@guild",
+      "Package bootstrap: AGENTS.md plus .agents/skills/guild.",
+      "Codex App local plugin link:",
+      "codex://plugins/guild?marketplacePath=",
+      "/dist/codex-marketplace/.agents/plugins/marketplace.json",
+      "After installing/enabling Guild in Codex App, try /guild:status.",
+      "If the app slash parser rejects /guild before hooks run"
+    ]
+  },
+  {
+    host: "pi-cli",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "would run: pi install dist/pi",
+      "pi-manifest.json",
+      "guild-run --host pi"
+    ]
+  },
+  {
+    host: "antigravity-cli",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "would run: agy plugin validate dist/antigravity",
+      "would run: agy plugin install dist/antigravity",
+      "plugin.json",
+      "antigravity-manifest.json",
+      "guild-run --host antigravity"
+    ]
+  },
+  {
+    host: "agents-file",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "Universal AGENTS.md package rendered at:",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild"
+    ]
+  },
+  // ── new-CLI (installability: target — package tree is the deliverable; ADR §4) ─
+  {
+    host: "cursor",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "cursor (new-CLI)",
+      "would prepare package tree: dist/cursor",
+      "would wire launcher: dist/cursor/bin/guild-run --host cursor",
+      "Guild package prepared for cursor.",
+      "cursor-manifest.json (installability: target).",
+      "dist/cursor/bin/guild-run --host cursor --prompt"
+    ]
+  },
+  {
+    host: "github-copilot",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "github-copilot (new-CLI)",
+      "would prepare package tree: dist/github-copilot",
+      "would wire launcher: dist/github-copilot/bin/guild-run --host github-copilot",
+      "Guild package prepared for github-copilot.",
+      "github-copilot-manifest.json (installability: target).",
+      "dist/github-copilot/bin/guild-run --host github-copilot --prompt"
+    ]
+  },
+  {
+    host: "opencode",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "opencode (new-CLI)",
+      "would prepare package tree: dist/opencode",
+      "would wire launcher: dist/opencode/bin/guild-run --host opencode",
+      "Guild package prepared for opencode.",
+      "opencode-manifest.json (installability: target).",
+      "dist/opencode/bin/guild-run --host opencode --prompt"
+    ]
+  },
+  {
+    host: "rovo-dev",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "rovo-dev (new-CLI)",
+      "would prepare package tree: dist/rovo-dev",
+      "would wire launcher: dist/rovo-dev/bin/guild-run --host rovo-dev",
+      "Guild package prepared for rovo-dev.",
+      "rovo-dev-manifest.json (installability: target).",
+      "dist/rovo-dev/bin/guild-run --host rovo-dev --prompt"
+    ]
+  },
+  // ── new-IDE (adapter_binding: agents-file — REUSE dist/agents; ADR §3.1) ───────
+  {
+    host: "kiro",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "kiro (new-IDE, agents-file binding)",
+      "Guild package for kiro is the universal AGENTS.md package (adapter_binding: agents-file):",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild",
+      "Copy it into your kiro project root (marker: .kiro/). kiro reads root AGENTS.md."
+    ]
+  },
+  {
+    host: "qoder",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "qoder (new-IDE, agents-file binding)",
+      "Guild package for qoder is the universal AGENTS.md package (adapter_binding: agents-file):",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild",
+      "Copy it into your qoder project root (marker: .qoder/). qoder reads root AGENTS.md."
+    ]
+  },
+  {
+    host: "trae",
+    snippets: [
+      BUILD_ONCE_SNIPPET,
+      "trae (new-IDE, agents-file binding)",
+      "Guild package for trae is the universal AGENTS.md package (adapter_binding: agents-file):",
+      "dist/agents/AGENTS.md",
+      "dist/agents/.agents/skills/guild",
+      "Copy it into your trae project root (marker: .trae/). trae reads root AGENTS.md."
+    ]
+  }
+]);
 
 // ../src/modules/communication/workflows/comms-format-lint.ts
 var yaml = loadYamlApi();

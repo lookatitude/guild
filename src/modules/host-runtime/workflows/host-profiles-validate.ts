@@ -9,15 +9,16 @@
  */
 
 import { HOST_IDS } from "./host-registry-schema";
+import { sealSet } from "../../kernel";
 import { normalizeHostId } from "./host-id-namespace";
 
 /** Closed registry host-id set (single SoT - host-registry-schema.ts HOST_IDS). */
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
 
 /** Closed entry-shape key set. */
-export const VALID_HOST_PROFILE_ENTRY_KEYS = new Set(["models", "enabled"]);
+export const VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
 /** Closed per-tier model key set. */
-export const VALID_HOST_PROFILE_MODEL_KEYS = new Set(["cheap", "mid", "powerful"]);
+export const VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

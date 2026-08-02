@@ -969,7 +969,10 @@ describe("phase vocabulary drift guard", () => {
     // Read as TEXT, never imported: run-lifecycle.ts depends on hooks and
     // host-runtime, so importing it into the neutral core would break closure.
     const source = fs.readFileSync(path.join(CORE_DIR, "run-lifecycle.ts"), "utf8");
-    const match = /export const CANONICAL_PHASES = \[([^\]]*)\]/.exec(source);
+    // Tolerates a freeze wrapper: `CANONICAL_PHASES` is `Object.freeze([...] as const)`
+    // since the registry-freeze sweep, and a scraper pinned to the bare-literal spelling
+    // reports "no match" — a FALSE FAIL that says nothing about phase-vocabulary drift.
+    const match = /export const CANONICAL_PHASES(?::[^=]*)? = (?:Object\.freeze\()?\[([^\]]*)\]/.exec(source);
     expect(match).not.toBeNull();
     const declared = (match as RegExpExecArray)[1]
       .split(",")

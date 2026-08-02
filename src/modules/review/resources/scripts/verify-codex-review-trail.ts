@@ -53,12 +53,12 @@ import { join } from "node:path";
  * value verbatim and DELIBERATELY fails this validator — an audit exception to be
  * resolved, never one of these two clean capped terminals.
  */
-export const ALLOWED_FINAL_STATUS = [
+export const ALLOWED_FINAL_STATUS = Object.freeze([
   "satisfied",
   "skipped-codex-unavailable",
   "cap-pushback-recorded",
   "cap-verification-only",
-] as const;
+] as const);
 
 export type AllowedFinalStatus = (typeof ALLOWED_FINAL_STATUS)[number];
 

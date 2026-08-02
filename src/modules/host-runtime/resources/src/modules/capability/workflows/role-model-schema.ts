@@ -30,7 +30,7 @@ import { type HostId, HOST_IDS, type HostRegistryEntry } from "../../host-runtim
 // Role + strength types
 // ---------------------------------------------------------------------------
 
-export const ROLES = ["host", "advisory", "adversarial"] as const;
+export const ROLES = Object.freeze(["host", "advisory", "adversarial"] as const);
 export type Role = (typeof ROLES)[number];
 
 /**
@@ -41,7 +41,7 @@ export type Role = (typeof ROLES)[number];
  *               the same family as the host — independence lost; or advisory fell back
  *               to the local advisor). Mirrors host-router's `independence` signal.
  */
-export const ROLE_STRENGTHS = ["strong", "weak"] as const;
+export const ROLE_STRENGTHS = Object.freeze(["strong", "weak"] as const);
 export type RoleStrength = (typeof ROLE_STRENGTHS)[number];
 
 /** A single resolved role. */

@@ -50,7 +50,7 @@
       "id": "check-entrypoint-packaging",
       "source_path": "scripts/check-entrypoint-packaging.ts",
       "resource_path": "resources/scripts/check-entrypoint-packaging.ts",
-      "sha256": "9b334ed148f0fda88ff7ecc6f00e9d9df2c899cf50be00e28656ab6ebbf8e975"
+      "sha256": "c7bf4739bbfebf84782416efa57369cec7b5e54926b42363d48ddbba23d115f8"
     },
     {
       "category": "scripts",
@@ -155,7 +155,7 @@
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "resource_path": "resources/scripts/lib/skill-source-transform.ts",
-      "sha256": "917365be01690f997e909d7be651baef771c9a6d42989254a86c163d17cd5075"
+      "sha256": "6079b6d938c7231a089db109cc17182aaee92a5e65d2ec0d7d33421e4e4a92a0"
     },
     {
       "category": "scripts",
@@ -176,7 +176,7 @@
       "id": "projection:src/modules/distribution/workflows/release-distribution-contract.ts",
       "source_path": "src/modules/distribution/workflows/release-distribution-contract.ts",
       "resource_path": "resources/src/modules/distribution/workflows/release-distribution-contract.ts",
-      "sha256": "73661baab296e915fa9939a19b21ffc81f3c64e534f238062573c8810c82cb63",
+      "sha256": "ebe668778c60434010d73f2d546ddd891fb9dcabfa54ee2b20a85d4123cdd789",
       "projection_dependency": true
     },
     {

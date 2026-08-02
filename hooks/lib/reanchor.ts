@@ -32,6 +32,7 @@
  */
 
 import * as fs from "node:fs";
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
 import * as path from "node:path";
 
 import * as yaml from "js-yaml";
@@ -118,7 +119,7 @@ export function isPassedGateRecord(record: unknown): boolean {
 }
 
 /** SessionStart `source` values that mean "context was just dropped / restored". */
-export const REANCHOR_SESSION_SOURCES = new Set(["compact", "resume"]);
+export const REANCHOR_SESSION_SOURCES = sealSet(["compact", "resume"], "REANCHOR_SESSION_SOURCES");
 
 /** Minimal run.yaml facts the header needs. All optional — degrade gracefully. */
 export interface RunYamlFacts {

@@ -111,20 +111,20 @@ export const HOST_ADAPTER_REASON_CODES: readonly NeutralReasonCode[] = Object.fr
 // Ownership fence
 // ---------------------------------------------------------------------------
 
-export const HOST_ADAPTER_OWNED_CONCERNS = [
+export const HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
   "host_identity_resolution",
   "host_entry_point_binding",
   "host_capability_snapshot",
   "host_native_event_normalization",
-] as const;
+] as const);
 
-export const HOST_ADAPTER_NOT_OWNED_CONCERNS = [
+export const HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
   "lifecycle_state",
   "gate_policy",
   "artifact_semantics",
   "document_rendering",
   "transport_execution",
-] as const;
+] as const);
 
 const CONCERN_OWNERS: Readonly<Record<string, string>> = Object.freeze({
   host_identity_resolution: "host-adapters",
