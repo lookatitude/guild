@@ -256,16 +256,93 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * (execute-plan surface change), so the skills tree is the UNION of #86 + #89
  * surface changes; recomputed hash EQUALS this branch's pre-merge pin (the
  * branch already carried #86's content — stacked) — verified, not assumed.
+ *
+ * Re-ratified 2026-08-02 (capability-localization integration, guild#129 /
+ * feature/cap-loc-integrated) — DELIBERATE. All three anchors move. The full
+ * enumeration follows; it is the enumeration, not the hash bump, that is the
+ * ratification. Nothing was regenerated blindly: the pre-bump deltas were read
+ * per-file out of `describeTreeDelta`, and every entry below was checked for
+ * BOTH intent (a decision that asked for it) and REACHABILITY (something in the
+ * shipped surface can actually invoke it).
+ *
+ * ADDED ENTRIES — exactly ONE across the whole pinned surface:
+ *   (A1) `.claude-plugin/plugin.json` `agents[]` gains `./agents/context-manager.md`.
+ *        INTENDED: decision cap-loc-D01 — the `mid`-tier installed machinery
+ *        agent that executes Learn's semantic halves and per-lane context
+ *        assembly, so a project-local role is never also the thing that
+ *        assembles its own context.
+ *        REACHABLE: registered in plugin.json `agents[]` (the host's dispatch
+ *        surface), carried in `guild.inventory.json`, named as the executor by
+ *        `skills/knowledge/learn-graph/SKILL.md`, and bound to
+ *        `scripts/lib/capability/context-manager-contract.ts` by the F5 suite
+ *        (`scripts/__tests__/context-manager-contract.test.ts` asserts the
+ *        frontmatter `tools:`/`name:`/`model:` ARE the contract's values).
+ *        `check-roster-consistency` green.
+ *   The `.claude-plugin/**` FILE SET is UNCHANGED (still exactly the two
+ *   manifests) — verified via claudePluginFileSet(), not assumed.
+ *
+ * MODIFIED ENTRIES — no additions, no deletions, in either tree:
+ *   commands/ (2 files, both additive sections):
+ *   (M1) `commands/status.md` — F7 candidate surfacing. Prints
+ *        `scripts/capability-profile.ts candidates`. Load-bearing rather than
+ *        cosmetic: cap-loc-D04 §Recommendation.5 makes this block a HARD
+ *        precondition on shipping `capability.resolver_mode: observe` as the
+ *        default. REACHABLE: the `candidates` sub-command exists
+ *        (capability-profile.ts case "candidates") and is read-only.
+ *   (M2) `commands/dashboard.md` — the same block as a terminal-output echo.
+ *        Explicitly scoped to terminal output, not the (cross-repo) web UI.
+ *   skills/ (6 files across 4 skills):
+ *   (M3) `skills/knowledge/learn/SKILL.md` — new step 12b, the D1 report-only
+ *        `guild.project_capability_profile.v1` emission, plus the step-1
+ *        `--baseline` capture that makes the mutation window the whole run.
+ *        REACHABLE: `emit` and `hash-tree` both exist in capability-profile.ts.
+ *   (M4) `skills/knowledge/learn-map/SKILL.md` — states that the cheap-scan tier
+ *        emits NO capability proposals (the sparse-project guard, cap-loc-D04).
+ *   (M5) `skills/knowledge/learn-graph/SKILL.md` — names the EXECUTOR of the LLM
+ *        halves as the installed learning machinery (the context-manager agent
+ *        at `mid` tier) instead of roster roles, with session-runs-it fallback.
+ *        This is the skill-side half of (A1); the two ship together or the agent
+ *        is registered with nothing pointing at it.
+ *   (M6) `skills/meta/create-skill/{SKILL.md,workflow.md,evals.json}` — the
+ *        human-requested vs evolution-proposed creation-authority split (human
+ *        authority waives extraction signals 1 and 4 ONLY; 2/3/5 and the paired
+ *        eval gate stay mandatory on both). evals.json gains one
+ *        `should_trigger` case for the human-requested phrasing.
+ *   `command-src/command-registry.json` and `skill-src/skill-registry.json` are
+ *   NOT stale on this tree — `check-surface-pins.ts` reports no `registry_stale`
+ *   finding, so no re-extraction was needed and none was performed (checked, not
+ *   assumed).
+ *
+ * VERSION FIELD: 2.4.0 → 2.5.0-beta.1 in both manifests. That part is EXEMPT by
+ * construction (stripVersions), so it is not why RATIFIED_MANIFESTS moves. Both
+ * manifest hashes move because of (A1) and the `description` string it forces —
+ * "2 machinery agents" → "3 machinery agents" — which is exactly the class of
+ * non-version manifest edit the per-file anchors exist to catch. It caught it.
+ *
+ * NOT IN THE PINNED SURFACE, recorded because the check found it: this work also
+ * ships `scripts/capability-adopt.ts` (gap D6, self-described as "the user-facing
+ * surface" over adoption-migrate). `scripts/**` is not anchored, so it does not
+ * move a pin — but the reachability half of this re-ratification found NOTHING in
+ * commands/, skills/, agents/ or the manifests that invokes or documents it. It
+ * ships reachable only by hand-typed `npx tsx`. Filed rather than fixed here (a
+ * command page is a surface addition, and inventing one inside a re-ratification
+ * commit is precisely the blind widening this pin exists to prevent).
+ *
+ * Pins below were computed AFTER `sync-module-resources` with all four
+ * module-SoT `--check` modes clean. ANTI-VACUITY: both guards were observed RED
+ * against the OLD pins on this exact tree before the bump — SC-W2-5(1) naming
+ * `M commands/dashboard.md` + `M commands/status.md`, SC-W3-6(B) naming the
+ * `.claude-plugin` manifest hashes, and both naming the six skills files.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "6f5889958e8fee52efbb5944fa80afad5e316470",
-  skills: "819d795207286ee81e50b142ff217d219df84e4d",
+  commands: "6e911d9f724f1d1bf831386509e4269254a78102",
+  skills: "931c854c3e1557857b3408d9e555ea875ee9661b",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "d5ff5f898e6122f64fe2cc2af3810ff5f8e7a471131c97c720ee6092c6ff38de",
-  ".claude-plugin/marketplace.json": "0668d0fe064775e3a0b754474a9ca8a44d327e4132d298e65737183bf06bcdb4",
+  ".claude-plugin/plugin.json": "14ac5fc1f859d90e6da4025398ef8b83939dee19b7eed8fa49260b76a834f197",
+  ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 
 /**
