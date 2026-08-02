@@ -79,10 +79,34 @@ export function checkContained(root: string, t: string): boolean {
   );
 }
 
-/** The registry's non-home entries, as files that import the primitive. */
+/**
+ * The registry's non-home entries, seeded so each SATISFIES its declared status.
+ *
+ * Status-aware on purpose. An `adopted` entry gets a file that genuinely USES the
+ * primitive; a `waived` entry gets a file the scanner genuinely SEES as a site —
+ * because the rail requires a waiver to have something to feel, and seeding a
+ * waived entry with an inert stub would make the baseline red for a reason that has
+ * nothing to do with the control under test.
+ */
 function seedAdopted(): void {
   for (const s of CONTAINMENT_SITES) {
     if (s.status === "home") continue;
+    if (s.status === "waived") {
+      write(
+        s.path,
+        `import * as path from "node:path";
+function assertContained(target: string, base: string): boolean {
+  const t = path.resolve(target);
+  const b = path.resolve(base);
+  if (!t.startsWith(b + path.sep)) return false;
+  return true;
+}
+import * as fs from "node:fs";
+export function go(p: string): void { fs.writeFileSync(p, String(assertContained(p, p))); }
+`
+      );
+      continue;
+    }
     write(s.path, `import { checkContained } from "../kernel";\nexport const x = checkContained;\n`);
   }
 }
@@ -402,6 +426,65 @@ export function f(p: string): string {
     expect(findings.map((x) => `${x.code}:${x.path}`)).toContain(
       "unregistered-site:scripts/lib/wrapped.ts"
     );
+  });
+
+  test("LEXICAL GUARD: a containment check with NO realpath at all is flagged — the state BEFORE anyone knows", () => {
+    seedHome();
+    seedAdopted();
+    // The signal that found the TENTH home, `run-lifecycle.ts`, after a human sweep
+    // and two adversarial rounds had all missed it. The climb and bounded-write
+    // signals only find code someone has ALREADY fixed once — reaching for
+    // `realpath` means they already knew. This finds the state before that:
+    // `path.resolve` + `startsWith(base + sep)`, which is string algebra guarding a
+    // real write, and string algebra cannot see a symlink.
+    write(
+      "scripts/lib/lexical.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+function assertContained(target: string, base: string): void {
+  const t = path.resolve(target);
+  const b = path.resolve(base);
+  if (!t.startsWith(b + path.sep)) throw new Error("escape");
+}
+export function emit(base: string, target: string, bytes: string): void {
+  assertContained(target, base);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, bytes);
+}
+`
+    );
+    const { sites, findings } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/lexical.ts")?.evidence).toContain(
+      "lexical-guard"
+    );
+    expect(findings.map((x) => `${x.code}:${x.path}`)).toContain(
+      "unregistered-site:scripts/lib/lexical.ts"
+    );
+  });
+
+  test("a `path.relative` used to build a LABEL is not a lexical guard — the signal is structural, not name-based", () => {
+    seedHome();
+    seedAdopted();
+    // The first version of this signal joined ANY `path.relative` in a file with ANY
+    // write in that file, and produced three false positives on the real tree
+    // (dashboard-launch, dot-guild/audit, lifecycle-gate) where the relative path
+    // was building a display string. A rail that cries wolf gets switched off, so
+    // the helper must take a target AND a base and must VERDICT (throw, or return a
+    // boolean literal). This is the negative control for that tightening.
+    write(
+      "scripts/lib/labels.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+function label(root: string, p: string): string {
+  return path.relative(path.resolve(root), path.resolve(p));
+}
+export function report(root: string, files: string[], out: string): void {
+  fs.writeFileSync(out, files.map((f) => label(root, f)).join("\\n"));
+}
+`
+    );
+    const { sites } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/labels.ts")).toBeUndefined();
   });
 
   test("a loop that is NOT a climb is not a site — the scanner is not just 'saw a loop'", () => {

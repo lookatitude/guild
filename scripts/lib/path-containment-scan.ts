@@ -48,7 +48,7 @@ import {
   type ContainmentSite,
 } from "./path-containment-registry";
 
-export type ContainmentEvidence = "climb" | "bounded-write";
+export type ContainmentEvidence = "climb" | "bounded-write" | "lexical-guard";
 
 export interface ScannedSite {
   /** Repo-relative POSIX path. */
@@ -352,12 +352,103 @@ function isLoop(n: ts.Node): boolean {
 interface FileEvidence {
   climb: boolean;
   boundedWrite: boolean;
+  lexicalGuard: boolean;
+}
+
+/** Write-ish fs calls. A bounded write is one of these under a root check. */
+const WRITE_CALLS = new Set([
+  "mkdirSync",
+  "writeFileSync",
+  "appendFileSync",
+  "copyFileSync",
+  "cpSync",
+  "renameSync",
+  "openSync",
+]);
+
+/**
+ * A LEXICAL CONTAINMENT HELPER: proves "inside the base" with string algebra only —
+ * `path.resolve` plus a `startsWith(base + path.sep)` or `path.relative` escape test
+ * — and never calls `realpath`.
+ *
+ * THIS IS THE MOST VALUABLE THING THE SCAN LOOKS FOR, and it was missing until a
+ * third adversarial round pointed at `run-lifecycle.ts`. The climb and bounded-write
+ * signals find code that has ALREADY been fixed once — someone reached for
+ * `realpath`, which means they already knew. A purely lexical guard is the state
+ * BEFORE anyone knows: it is exactly what the resolver lane rated CRITICAL, what the
+ * Learn lane found, and what `station-signals` had to work around. `path.resolve` is
+ * pure string algebra and knows nothing about links, so a symlinked `.guild/runs`
+ * walks straight through one of these while it reports success.
+ */
+function isLexicalContainmentHelper(scope: ts.Node, aliases: AliasMap): boolean {
+  // STRUCTURAL, not name-based. A containment helper takes at least a target and a
+  // base, and it VERDICTS — it throws or returns a boolean. Requiring that keeps
+  // the signal on real guards and off the many functions that use `path.relative`
+  // to build a display label and happen to live in a file that also writes. A
+  // file-level join without it produced three false positives on the first run
+  // (`dashboard-launch`, `dot-guild/audit`, `lifecycle-gate`), and a rail that
+  // cries wolf is a rail that gets switched off.
+  const params = (scope as ts.FunctionDeclaration).parameters;
+  if (params === undefined || params.length < 2) return false;
+  let resolves = false;
+  let compares = false;
+  let realpath = false;
+  let writes = false;
+  let verdicts = false;
+  const visit = (n: ts.Node): void => {
+    if (ts.isCallExpression(n)) {
+      const name = calleeName(n, aliases);
+      if (name === "resolve") resolves = true;
+      if (name === "relative") compares = true;
+      if (name === "startsWith") {
+        // `startsWith(base + path.sep)` — a containment test, not a prefix match on
+        // an unrelated string. The `path.sep` (or a `/`) is what makes it one.
+        const arg = n.arguments[0]?.getText() ?? "";
+        if (/path\.sep|["'`]\//.test(arg)) compares = true;
+      }
+      if (name === "realpathSync") realpath = true;
+      if (WRITE_CALLS.has(name)) writes = true;
+    }
+    if (ts.isThrowStatement(n)) verdicts = true;
+    if (
+      ts.isReturnStatement(n) &&
+      n.expression !== undefined &&
+      (n.expression.kind === ts.SyntaxKind.TrueKeyword ||
+        n.expression.kind === ts.SyntaxKind.FalseKeyword)
+    ) {
+      verdicts = true;
+    }
+    if (/\.realpathSync(\.native)?/.test(n.getText?.() ?? "") && ts.isPropertyAccessExpression(n)) {
+      realpath = true;
+    }
+    ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(scope, visit);
+  return resolves && compares && verdicts && !realpath && !writes;
 }
 
 function scanSource(text: string, fileName: string): FileEvidence {
   const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true);
-  const ev: FileEvidence = { climb: false, boundedWrite: false };
+  const ev: FileEvidence = { climb: false, boundedWrite: false, lexicalGuard: false };
   const aliases = collectAliases(sf);
+
+  // ── The lexical-guard pass ────────────────────────────────────────────────────
+  // A guard and the write it protects live in DIFFERENT functions — that is good
+  // design, and it means neither scope alone shows the pattern. So this is a
+  // file-level join: does this file declare a lexical containment helper, AND does
+  // it anywhere perform a write? If so, a write in this file is bounded by string
+  // algebra, and string algebra cannot see a symlink.
+  const lexicalHelpers: string[] = [];
+  let fileWrites = false;
+  const topScan = (n: ts.Node): void => {
+    if (ts.isFunctionDeclaration(n) && n.name && n.body) {
+      if (isLexicalContainmentHelper(n, aliases)) lexicalHelpers.push(n.name.getText());
+    }
+    if (ts.isCallExpression(n) && WRITE_CALLS.has(calleeName(n, aliases))) fileWrites = true;
+    ts.forEachChild(n, topScan);
+  };
+  ts.forEachChild(sf, topScan);
+  if (lexicalHelpers.length > 0 && fileWrites) ev.lexicalGuard = true;
 
   // Evidence is gathered PER FUNCTION so an unrelated `realpathSync` at the top of
   // a file cannot be paired with an unrelated `mkdirSync` at the bottom.
@@ -473,6 +564,7 @@ export function scanRepo(repoRoot: string): ScanResult {
       const evidence: ContainmentEvidence[] = [];
       if (ev.climb) evidence.push("climb");
       if (ev.boundedWrite) evidence.push("bounded-write");
+      if (ev.lexicalGuard) evidence.push("lexical-guard");
       if (evidence.length === 0) continue;
       sites.push({
         path: relPath,

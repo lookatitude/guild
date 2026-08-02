@@ -773,7 +773,7 @@
       "id": "projection:src/modules/kernel/workflows/path-containment.ts",
       "source_path": "src/modules/kernel/workflows/path-containment.ts",
       "resource_path": "resources/src/modules/kernel/workflows/path-containment.ts",
-      "sha256": "fafae454a40bbceb9531c8270e4a37519a26589cd4d14497f74ad868abc109eb",
+      "sha256": "206e49d8de7c7b7c86fbbbfaeb203b16d56c27e84173ca23cc330b23da31fad3",
       "projection_dependency": true
     },
     {
@@ -989,7 +989,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "919b400b747f94156f716bb08aa257b1b52142ff981e444b56c6f36eaddc4a89",
+      "sha256": "79f17bd482e988e0d270d9fe37f2418e6bd24645f76dea4943bd8c1d720e284b",
       "projection_dependency": true
     },
     {

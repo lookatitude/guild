@@ -234,6 +234,15 @@ export function isWithin(child: string, parent: string): boolean {
  * answer for "which subtree is this in?" and the WRONG answer for "may I write
  * here?" — a security decision must use {@link checkContained}, which refuses a
  * dangling link outright rather than guessing where it points.
+ *
+ * KNOWN RESIDUAL, stated rather than hidden: this calls `path.resolve`, which
+ * collapses `..` LEXICALLY, before any symlink is resolved. For a spelling like
+ * `a/link/../b` where `link` is a symlink, the answer is the lexically-collapsed
+ * location, not the physical one. {@link checkContained} REFUSES such spellings
+ * (`parent-traversal`) precisely because it makes a security decision; this one
+ * cannot refuse, because its callers need a path back rather than a verdict, and
+ * they use it to classify a path they then check separately. A caller that turns
+ * this result into a security verdict must guard the `..` case itself.
  */
 export function canonicalizeRealPath(p: string): string {
   const abs = path.resolve(p);

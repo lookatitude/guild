@@ -136,6 +136,16 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "VARIANT 3's production adoption. A symlinked hooks/node_modules baked out-of-package paths into 66 committed bundles; this rail found it only from the fingerprint left behind. It now asks the primitive up front, with `policy: \"physical\"`. The esbuild METAFILE paths it checks afterwards are recorded strings with nothing on disk to resolve, and are deliberately left alone.",
   },
   {
+    path: "src/modules/lifecycle/workflows/run-lifecycle.ts",
+    status: "adopted",
+    note: "THE TENTH HOME, and the rail found it — not a human sweep. Its `assertContained` was PURELY LEXICAL (path.resolve + startsWith(base + sep)), guarding a mkdirSync + write into `.guild/runs`: a symlinked runs directory walked straight through it while it reported success. Its own docstring said it mirrored a further copy in `promote-upstream.ts`. Now `policy: \"physical\"`, since a run tree whose realpath is load-bearing provenance must be physically real; the strict-subdirectory half stays local because containment permits equality.",
+  },
+  {
+    path: "scripts/dot-guild/audit.ts",
+    status: "waived",
+    note: "WAIVER: its boolean-returning path helper classifies LEAK CANDIDATES for a read-only audit — a verdict about whether a file is exposed, not about whether a write is contained. There is no root-bounded write in this file. Unlike the two waivers this registry rejected earlier, this one has something to feel it: the scanner DOES see the site, so `registration-without-site` keeps the waiver honest.",
+  },
+  {
     path: "src/modules/teams/workflows/station-signals.ts",
     status: "adopted",
     note: "Had already rebuilt the whole pre/post pairing locally, in a comment saying it was doing so 'without widening the shared helper's contract'. Now a caller, with `policy: \"physical\"` preserving its stricter stance.",
