@@ -8,7 +8,7 @@
       "id": "PostToolUse:comms-format-lint.js",
       "source_path": "hooks/dist/comms-format-lint.js",
       "resource_path": "resources/hooks/dist/comms-format-lint.js",
-      "sha256": "a3fed98684b3ae3e194f693c0f1dbf4c8b80e66e6d039127715700071f965586"
+      "sha256": "f15e250f9910965b7a32cbe7e9390ad81a654334e58954f6401b9a4c64a8f199"
     },
     {
       "category": "hooks",
