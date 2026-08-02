@@ -989,7 +989,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "79f17bd482e988e0d270d9fe37f2418e6bd24645f76dea4943bd8c1d720e284b",
+      "sha256": "39ddb66853687d6c64278cd208a4e2a78e0209c322f43b05b83d602f9447dfeb",
       "projection_dependency": true
     },
     {

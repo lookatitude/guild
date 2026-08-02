@@ -592,6 +592,105 @@ describe("adversarial round 2 — reproduced counterexamples", () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// THE RUN-TREE STRICTNESS DECISION (task #33), pinned here because it is a
+// property of the PRIMITIVE'S ROOT CHOICE and every run-tree writer inherits it.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("a symlinked `.guild/runs` is an ESCAPE VECTOR, not operator configuration", () => {
+  /**
+   * THE DECISION, AND WHY IT WENT THIS WAY.
+   *
+   * Three writers put records into the run tree: `station-signals.ts`,
+   * `run-lifecycle.ts` and `promote-upstream.ts`. After migration two refused a
+   * symlinked `.guild/runs` and one accepted it, because the accepting one passed
+   * `runsBase` as the primitive's ROOT — and the primitive permits its own root to
+   * be a link, since the root is resolved separately.
+   *
+   * The tie was not broken by preference. `station-signals.ts` has refused a
+   * symlinked `.guild`, `.guild/runs`, run root and kind dir since before any of
+   * this work, deliberately, with the reason written down: a bare
+   * `mkdirSync(runsContainer, {recursive:true})` follows the link and "makes the
+   * external target the authoritative realpath". Run records are provenance, and
+   * provenance whose location is redirectable is not provenance.
+   *
+   * The other two were purely LEXICAL before migration — blind to symlinks, neither
+   * permitting nor refusing — so the permissive reading was never a contract either
+   * of them kept. One writer thought about this and refused; two were blind.
+   *
+   * PINNED HERE so the twelfth writer inherits the decision instead of re-deriving
+   * it. This class has now been rediscovered eleven times in this initiative.
+   */
+  test("a runs dir linked OUT of the project is refused as outside-root", () => {
+    // The obvious half. Plain containment already catches this, which is why the
+    // NEXT test is the one that actually pins the decision.
+    //
+    // I first asserted `physical-symlink` here and was wrong: containment is
+    // evaluated before the physical walk, so an escaping link reports the stronger
+    // fact. Asserting the CODE rather than "some refusal" is what surfaced that my
+    // model of which rule fires was off — which is the entire reason these
+    // assertions name a rule.
+    const root = path.join(scratch, "project");
+    const elsewhere = path.join(scratch, "elsewhere");
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.mkdirSync(elsewhere, { recursive: true });
+    fs.symlinkSync(elsewhere, path.join(root, ".guild", "runs"));
+
+    const target = path.join(root, ".guild", "runs", "r1", "settings.json");
+    expect(refusalOf(checkContained(root, target, { policy: "physical" })).code).toBe(
+      "outside-root"
+    );
+  });
+
+  test("a runs dir linked WITHIN the project is refused too — where the decision bites", () => {
+    // `.guild/runs -> .guild/_runs`. Contained by any measure, so plain containment
+    // ACCEPTS it and only `policy: "physical"` refuses. This is the case the two
+    // peer writers disagreed about, and the one that would silently change meaning
+    // if someone relaxed the policy or moved the root argument.
+    const root = path.join(scratch, "project");
+    fs.mkdirSync(path.join(root, ".guild", "_runs"), { recursive: true });
+    fs.symlinkSync(path.join(root, ".guild", "_runs"), path.join(root, ".guild", "runs"));
+
+    const target = path.join(root, ".guild", "runs", "r1", "settings.json");
+    // Contained — so this is NOT a containment question…
+    expect(checkContained(root, target).contained).toBe(true);
+    // …and it is refused anyway, which is the decision.
+    expect(refusalOf(checkContained(root, target, { policy: "physical" })).code).toBe(
+      "physical-symlink"
+    );
+  });
+
+  test("passing the RUNS BASE would have accepted it — the shape that caused the split", () => {
+    // The counterpart, kept deliberately. Without it the test above reads as "the
+    // primitive refuses symlinks" rather than "the ROOT CHOICE decides", and the
+    // next person changes a root argument without realising it moves this line.
+    const root = path.join(scratch, "project");
+    const elsewhere = path.join(scratch, "elsewhere");
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.mkdirSync(elsewhere, { recursive: true });
+    const runsBase = path.join(root, ".guild", "runs");
+    fs.symlinkSync(elsewhere, runsBase);
+
+    const target = path.join(runsBase, "r1", "settings.json");
+    expect(checkContained(runsBase, target, { policy: "physical" }).contained).toBe(true);
+  });
+
+  test("a symlinked PROJECT ROOT is still permitted — the exception that survives", () => {
+    // The decision above must not become "refuse every symlink near a run tree".
+    // Relocating a whole project via a symlinked root stays legal; only redirecting
+    // the run tree out from under the project does not.
+    const real = path.join(scratch, "real-project");
+    fs.mkdirSync(path.join(real, ".guild", "runs"), { recursive: true });
+    const alias = path.join(scratch, "alias-project");
+    fs.symlinkSync(real, alias);
+
+    const r = checkContained(alias, path.join(alias, ".guild", "runs", "r1", "x.json"), {
+      policy: "physical",
+    });
+    expect(r.contained).toBe(true);
+  });
+});
+
 describe("the write is atomic and refuses a link planted at the leaf", () => {
   test("a successful write replaces the previous bytes wholesale", () => {
     const { root } = fixture();
