@@ -51,6 +51,20 @@ import { filterHostProfiles } from "../../host-runtime";
 // Canonical single-source prototype-pollution guard (re-arch WAVE 1).
 import { PROTO_POISON_KEYS } from "../../security";
 import { DEFAULTS as SHARED_DEFAULTS, NON_INHERITABLE_KEYS } from "./config-defaults";
+// T8R/F2: `config` is the LOWER substrate — `capability` already imports
+// config's tier-model resolver, so eagerly loading capability's public index at
+// config module-init closes a require cycle
+// (config/index → settings-resolver → settings-reader → capability/index →
+//  capability/router → config/index) and leaves settings-resolver
+// half-initialised in the real launcher process
+// (`import_settings_resolver.isPlainObject is not a function`). The one symbol
+// config needs from capability is resolved LAZILY, at call time, through the
+// SAME public module entrypoint the boundary rail requires.
+function validateModelPolicy(input: unknown): string[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const capability = require("../../capability") as typeof import("../../capability");
+  return capability.validateModelPolicy(input);
+}
 import { loadYamlApi } from "../../kernel";
 
 const yaml = loadYamlApi() as { load: (src: string) => unknown };
@@ -222,6 +236,12 @@ export interface ResolvedConfig {
   agent_mode: "team" | "agent" | "subagent" | "auto";
   workspace: WorkspaceBlock;
   models: ModelsBlock;
+  /**
+   * T5 (dynamic-host-model-routing): guild.model_policy.v2 — durable operator
+   * model-routing preferences. null = not configured (legacy tier maps drive
+   * generic preferences for the migration window).
+   */
+  model_policy: Record<string, unknown> | null;
   security: SecurityBlock;
   secrets_policy: SecretsPolicyBlock;
   mcp: McpBlock;
@@ -387,6 +407,7 @@ const TIER1_KEYS = new Set([
   "statusline",                  // R-009
   "adversarial_review_provider", // R-008
   "loops", "loop_cap", "codex_cap", "defaults",
+  "model_policy",                // T5 dynamic-host-model-routing: guild.model_policy.v2 (optional closed key)
 ]);
 
 // ---------------------------------------------------------------------------
@@ -602,6 +623,14 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
       out.workspace = { mode: wsMode };
     }
   }
+  // T5 (dynamic-host-model-routing): guild.model_policy.v2 — copied only when
+  // it passes the closed-key validator. Resolve mode is non-blocking, so an
+  // invalid policy is DROPPED here (never half-applied); the --validate path
+  // (config-cli loadFileConfig) rejects it loudly with the per-rule messages.
+  if (parsed["model_policy"] === null) out.model_policy = null;
+  else if (isPlainObject(parsed["model_policy"]) &&
+      validateModelPolicy(parsed["model_policy"]).length === 0)
+    out.model_policy = parsed["model_policy"] as Record<string, unknown>;
   if (isPlainObject(parsed["models"])) {
     const rawModels = parsed["models"] as Record<string, unknown>;
     const sparse: Partial<ModelsBlock> = {};

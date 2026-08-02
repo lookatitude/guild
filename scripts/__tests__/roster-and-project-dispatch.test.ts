@@ -170,6 +170,7 @@ describe("lib/roster resolveRoster (D4 enumeration)", () => {
           "owns: [kb_viz, dashboards]",
           "external_skills: [impeccable]",
           "reusable_in: [benchmark]",
+          "work_class: implementation",
           "consistency_source: ../website/.guild/agents/kb-viz-engineer.md",
           "---",
           "",
@@ -187,6 +188,9 @@ describe("lib/roster resolveRoster (D4 enumeration)", () => {
     const agent = r.project.find((a) => a.name === "kb-viz-engineer")!;
     expect(agent.owns).toEqual(["kb_viz", "dashboards"]);
     expect(agent.reusable_in).toEqual(["benchmark"]);
+    expect(agent.work_class).toBe("implementation");
+    // Optional: absent (not null) in the entry-derived registry when the source lacks it.
+    expect(r.project.find((a) => a.name === "backend")!.work_class).toBeNull();
     expect(agent.consistency_source).toBe("../website/.guild/agents/kb-viz-engineer.md");
     expect(r.project_skills[0].type).toBe("production");
     expect(r.project_skills[0].used_by).toEqual(["kb-viz-engineer"]);
@@ -198,6 +202,9 @@ describe("lib/roster resolveRoster (D4 enumeration)", () => {
     );
     expect(reg).toContain("owns:");
     expect(reg).toContain("kb_viz");
+    expect(reg).toContain("work_class: implementation");
+    // The work_class-less project override must not gain a null/empty key.
+    expect(reg).not.toContain("work_class: null");
     expect(reg).toContain("consistency_source: ../website/.guild/agents/kb-viz-engineer.md");
     expect(deriveSkillsRegistry(r).action).toBe("written");
     const sreg = fs.readFileSync(
@@ -713,6 +720,11 @@ describe("agent-team-launcher parseYaml — no generic `source:` alias", () => {
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined && k !== "TMUX") env[k] = v;
     }
+    // T7R-R1-B1: this fixture is about roster/agent-definition dispatch, not
+    // approval, and carries no team-plan trail. Opt into the ONE audited escape
+    // hatch; the gate's own pins live in t7-h1-dispatch-approval.test.ts.
+    env.GUILD_DISPATCH_APPROVAL_OVERRIDE =
+      "roster dispatch fixture: no team-plan trail; approval verification is pinned separately";
     const result = spawnSync(
       "npx",
       ["tsx", LAUNCHER, "--team", teamPath, "--cwd", tmpDir, "--dry-run"],
@@ -756,6 +768,11 @@ describe("agent-team-launcher CLI — definition threading (dry-run)", () => {
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined && k !== "TMUX") env[k] = v;
     }
+    // T7R-R1-B1: this fixture is about roster/agent-definition dispatch, not
+    // approval, and carries no team-plan trail. Opt into the ONE audited escape
+    // hatch; the gate's own pins live in t7-h1-dispatch-approval.test.ts.
+    env.GUILD_DISPATCH_APPROVAL_OVERRIDE =
+      "roster dispatch fixture: no team-plan trail; approval verification is pinned separately";
     const result = spawnSync(
       "npx",
       ["tsx", LAUNCHER, "--team", teamPath, "--cwd", tmpDir, "--dry-run"],

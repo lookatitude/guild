@@ -36,7 +36,8 @@
       "**/workspace/*.test.ts",
       "**/integration/*.test.ts",
       "**/dot-guild/*.test.ts",
-      "**/universal-host/*.test.ts"
+      "**/universal-host/*.test.ts",
+      "**/contracts/*.test.ts"
     ],
     "testTimeout": 60000
   }

@@ -75,6 +75,22 @@ import {
   type PreflightProbe,
   type ResolvedSettingsSnapshot,
 } from "../../scripts/lib/runstart-preflight.js";
+// T3b: every writer in this module authorizes through the shared hook-binding
+// guard and fails CLOSED on absent/not-minted/malformed/closed/mismatched
+// bindings. Rework F1: the nonce is CALLER-PRESENTED only (explicit
+// binding_ref opt or the GUILD_RUN_BINDING_REF env envelope naming the exact
+// run) — the guard never reads binding.json to recover it. Sentinels are
+// interactive intake only (locateCandidateRunId) — they never resolve a
+// write identity.
+import {
+  authorizeHookWrite,
+  formatBindingRejected,
+  locateCandidateRunId,
+} from "./hook-binding.js";
+// Rework F1 mint-origin seam (see mintOriginBindingRef below) — NOT an
+// authorization-recovery import: authorizeHookWrite never touches it.
+import { loadRunBinding } from "../../scripts/lib/run-binding.js";
+import type { HostKind } from "../../src/modules/host-runtime/workflows/host-types.js";
 
 import { writeCheckpoint } from "../emit-learning-checkpoint.js";
 import { PHASE_TOKEN_TO_CHECKPOINT } from "./learning-backstop.js";
@@ -89,6 +105,21 @@ import { extractHandoffEnvelope } from "./handoff-v2.js";
 
 /** The host-adapter binding B2's createRealEnv consumes. Host-neutral. */
 export type ResolveHost = RunLifecycleEnv["resolveHost"];
+
+/**
+ * The hook-leg host binding: HostKind OR the honest terminal `"unknown"`
+ * (session_context §3 — unset/auto/unrecognized input NEVER defaults to
+ * claude). The core RunLifecycleEnv["resolveHost"] type predates §3's unknown
+ * member; run-lifecycle only serializes `resolved` into run.yaml's host block,
+ * so the widened value is runtime-safe. The single `as ResolveHost` cast at
+ * each createRealEnv boundary below is the documented seam until the core
+ * union gains "unknown" (owned by the lifecycle module, not the hook leg).
+ */
+export type HookResolveHost = (requested: string) => {
+  requested: string;
+  resolved: HostKind | "unknown";
+  capabilities_ref?: string;
+};
 
 /** A single SC-G skipped-file decision (the learn skill produces these). */
 export interface SkippedFileEntry {
@@ -132,60 +163,40 @@ function skippedFilesPath(root: string, runId: string): string {
   return path.join(runDir(root, runId), "learn", "skipped-files.json");
 }
 
-// ── Run-id resolution (reconciles the legacy + B2 sentinel locations) ─────────
+// ── Run-id resolution (explicit binding ONLY — session_context §5, T3b) ───────
 
 /**
- * Resolve the active run-id for trace emission. Precedence:
- *   1. GUILD_RUN_ID env (tests / orchestrator / agent-team launcher).
- *   2. .guild/runs/current-run-id  — the LEGACY sentinel (scripts/new-run-id.ts,
- *      read by capture-telemetry / pre-/post-tool-use today).
- *   3. .guild/current-run-id       — B2's run-lifecycle sentinel location.
- *
- * NOTE (divergence flagged to B2/operator): B2's startRun writes the sentinel to
- * .guild/current-run-id, while the existing hook ecosystem reads
- * .guild/runs/current-run-id. We read BOTH so the hook leg works regardless of
- * which entrypoint started the run; legacy location wins to avoid regressing
- * existing telemetry resolution.
+ * Resolve the active run-id for trace emission from the EXPLICIT binding env
+ * (GUILD_RUN_ID — tests / orchestrator / agent-team launcher) and nothing
+ * else. The workspace-global sentinels (.guild/runs/current-run-id legacy AND
+ * .guild/current-run-id B2) are demoted to interactive command intake
+ * convenience (locateCandidateRunId in scripts/lib/run-binding.ts): a sentinel
+ * value never resolves a WRITER's run identity, so moving the sentinel mid-run
+ * cannot redirect an in-flight write (SC-1). Absent an explicit binding this
+ * returns null and the hook leg fails closed (no write).
  */
 export function resolveRunIdForTrace(
-  root: string,
+  _root: string,
   env: { GUILD_RUN_ID?: string },
 ): string | null {
   const fromEnv = env.GUILD_RUN_ID;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-
-  const legacy = readSentinel(path.join(root, ".guild", "runs", "current-run-id"));
-  if (legacy) return legacy;
-
-  const b2 = readSentinel(path.join(root, ".guild", "current-run-id"));
-  if (b2) return b2;
-
   return null;
 }
 
-function readSentinel(p: string): string | null {
-  try {
-    const v = fs.readFileSync(p, "utf8").trim();
-    return v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-// ── Default host binding (host-neutral; never claude-pinned in logic) ─────────
+// ── Default host binding (unknown-safe — session_context §3, T3b) ─────────────
 
 /**
- * The default resolveHost binding for the hook leg. Mirrors the canonical
- * GUILD_HOST resolution used by write-host-capability.ts's resolveHostKind
- * (which is private) WITHOUT importing the heavy capability builder — the hook
- * leg only needs the resolved HostKind, never the full advertisement. Stays
- * host-neutral: it records whatever GUILD_HOST asks for and never assumes claude
- * unless GUILD_HOST is unset/auto (the documented expected-host default, same as
- * resolveHostKind).
+ * The default resolveHost binding for the hook leg. Precedence: GUILD_HOST env
+ * wins over the requested arg (identity-source precedence pin). A RECOGNIZED
+ * HostKind resolves verbatim; unset/"auto"/unrecognized input resolves the
+ * honest terminal `"unknown"` — it NEVER defaults to claude (or any family).
+ * `unknown` is terminal-safe: consumers record it honestly and never "repair"
+ * it by guessing (§3). This retires the pre-contract behavior where
+ * unrecognized values resolved to claude.
  */
-// Mirrors write-host-capability.ts's private ALL_HOST_KINDS (canonical union in
-// src/modules/host-runtime/workflows/host-types.ts). `gemini` was sunset
-// 2026-06-14 and purged from HostKind; unrecognized values resolve to claude.
+// The full canonical HostKind union (src/modules/host-runtime/workflows/
+// host-types.ts) — `satisfies` keeps this list from drifting off the union.
 const KNOWN_HOST_KINDS = [
   "claude",
   "codex",
@@ -195,13 +206,17 @@ const KNOWN_HOST_KINDS = [
   "claude-code-web",
   "codex-app",
   "claude-ai-connector",
-] as const;
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+] as const satisfies readonly HostKind[];
 
-export function defaultResolveHost(requested: string): ReturnType<ResolveHost> {
+export function defaultResolveHost(requested: string): ReturnType<HookResolveHost> {
   const raw = (process.env["GUILD_HOST"] ?? requested ?? "").trim().toLowerCase();
   const resolved = (KNOWN_HOST_KINDS as readonly string[]).includes(raw)
-    ? (raw as (typeof KNOWN_HOST_KINDS)[number])
-    : "claude";
+    ? (raw as HostKind)
+    : "unknown";
   return { requested, resolved };
 }
 
@@ -230,14 +245,25 @@ function readTraceLines(file: string): TraceEventV1[] {
  * Emit the run_started guild.trace_event.v1 line into the run's
  * logs/v1.4-events.jsonl. Idempotent: a run_started already present for this run
  * short-circuits (so a UserPromptSubmit-per-run emit never double-fires).
+ * T3b: the write is binding-gated — an absent/closed/mismatched binding
+ * refuses with a structured binding_rejected diagnostic and writes nothing.
  * Best-effort; never throws.
  */
 export function emitRunStarted(
   root: string,
   runId: string,
-  opts: { now?: string } = {},
+  opts: {
+    now?: string;
+    /** Rework F1: caller-held nonce (else the env envelope must name runId). */
+    binding_ref?: string;
+  } = {},
 ): void {
   try {
+    const auth = authorizeHookWrite(root, { runId, bindingRef: opts.binding_ref });
+    if (auth.ok === false) {
+      process.stderr.write(formatBindingRejected("run-trace", auth));
+      return;
+    }
     const file = liveLogPath(root, runId);
     if (readTraceLines(file).some((e) => e.event_name === "run_started")) return;
     appendTraceLine(file, {
@@ -264,9 +290,11 @@ export function emitRunStarted(
 export function emitRunClosed(
   root: string,
   runId: string,
-  resolveHost: ResolveHost,
+  resolveHost: HookResolveHost,
   opts: {
     status?: "closed" | "failed" | "resumable";
+    /** T3 §5: the run's minted binding nonce (preferred explicit channel). */
+    binding_ref?: string;
     touched?: Parameters<ReturnType<typeof createRunLifecycle>["closeRun"]>[1]["touched"];
     coverage?: { scanned_count: number; skipped_count: number; skipped_files_ref: string };
     final_learning_checkpoint?: string | null;
@@ -274,9 +302,20 @@ export function emitRunClosed(
   } = {},
 ): void {
   try {
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    // T3 §5 / T3b — resolve AND VERIFY the required binding; fail closed (no
+    // write) on absent/not-minted/malformed/closed/mismatched. Precedence
+    // (rework F1 — caller-presented only): explicit opt → hook env envelope
+    // (matching run only). Never recovered from binding.json; a sentinel
+    // value never participates.
+    const auth = authorizeHookWrite(root, { runId, bindingRef: opts.binding_ref });
+    if (auth.ok === false) {
+      process.stderr.write(formatBindingRejected("run-trace", auth));
+      return;
+    }
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost));
     lifecycle.closeRun(runId, {
       status: opts.status ?? "closed",
+      binding_ref: auth.binding_ref,
       touched: opts.touched,
       coverage: opts.coverage,
       final_learning_checkpoint: opts.final_learning_checkpoint,
@@ -475,16 +514,39 @@ export function newestPostCloseActivityMs(root: string, runId: string): number {
  * min default) so this is rare, and the cost is bounded: the run's artifacts
  * remain; only a synthetic terminal status is written.
  */
+/**
+ * Rework F1: the nonce for a run THIS invocation just minted via
+ * lifecycle.startRun. The frozen core surface returns only the run id, so the
+ * MINT-ORIGIN caller (the process whose startRun call created the binding
+ * microseconds earlier, operating on the id that call returned) reads back
+ * its own nonce here to thread it explicitly into the close. This is origin
+ * authority — the caller IS the binding's creator — not the banned
+ * possession-of-a-run-id recovery path: authorizeHookWrite never reads a
+ * record, and no path feeds an externally-supplied run id into this helper.
+ * (Follow-up for the T3 core owner: have startRun RETURN the minted binding
+ * so this read-back seam disappears.)
+ */
+function mintOriginBindingRef(root: string, runId: string): string | undefined {
+  return loadRunBinding({ root, run_id: runId })?.binding_ref;
+}
+
 function closeStalePriorOpenRun(
   root: string,
-  resolveHost: ResolveHost,
+  resolveHost: HookResolveHost,
   now: () => number = Date.now,
 ): void {
   try {
-    // Resolve the run the SENTINEL currently points to (the prior run, before the
-    // new run claims it). Pass {} so env GUILD_RUN_ID never short-circuits the
-    // sentinel read — the staleness guard below protects any genuinely-live run.
-    const priorId = resolveRunIdForTrace(root, {});
+    // Locate the run the SENTINEL currently points to — INTAKE-ONLY semantics
+    // (session_context §5): this run-starting command may use the sentinel to
+    // find the CANDIDATE prior run, but the candidate never authorizes the
+    // close write. Authorization happens inside emitRunClosed, which (rework
+    // F1) accepts ONLY a caller-presented nonce — this janitor holds none for
+    // the prior run (its minting process is gone), so unless the current env
+    // envelope happens to name that exact run, the close is REFUSED and the
+    // orphan is honestly left open (binding_rejected diagnostic). Legacy /
+    // orphaned runs are migrated or refused, never grandfathered past
+    // verification (run-binding.ts §T3 rework F2).
+    const priorId = locateCandidateRunId(root)?.run_id ?? null;
     if (!priorId) return;
     // run.yaml must exist and be status:open (already-closed / missing → nothing to do).
     let runYaml: string;
@@ -511,12 +573,12 @@ function closeStalePriorOpenRun(
 
 export function startRunOnly(
   root: string,
-  resolveHost: ResolveHost,
+  resolveHost: HookResolveHost,
   opts: StartAndCloseOpts = {},
 ): string | null {
   try {
     closeStalePriorOpenRun(root, resolveHost);
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost));
     return lifecycle.startRun(buildStartRunOpts(root, opts));
   } catch (err) {
     process.stderr.write(
@@ -737,12 +799,27 @@ function emitPhaseCheckpoint(root: string, runId: string, phase: string): void {
 export function recordPhase(
   root: string,
   phase: string,
-  opts: { runId?: string; env?: { GUILD_RUN_ID?: string } } = {},
+  opts: {
+    runId?: string;
+    /** Rework F1: caller-held nonce (else the env envelope must name runId). */
+    binding_ref?: string;
+    env?: { GUILD_RUN_ID?: string; GUILD_RUN_BINDING_REF?: string };
+  } = {},
 ): string | null {
   try {
     const runId = opts.runId ?? resolveRunIdForTrace(root, opts.env ?? process.env);
     if (!runId) return null;
-    const lifecycleEnv = createRealEnv(root, defaultResolveHost);
+    // T3b: phases_log + checkpoint are runtime writes — binding-gated (§5).
+    const auth = authorizeHookWrite(root, {
+      runId,
+      bindingRef: opts.binding_ref,
+      env: opts.env as Record<string, string | undefined> | undefined,
+    });
+    if (auth.ok === false) {
+      process.stderr.write(formatBindingRejected("run-trace", auth));
+      return null;
+    }
+    const lifecycleEnv = createRealEnv(root, defaultResolveHost as ResolveHost);
     if (!appendPhase(lifecycleEnv, root, runId, phase)) return null;
     // METRIC 2: deterministic emit — a healthy phase close always produces its
     // real checkpoint without the model running a CLI (deterministic-code-not-prose).
@@ -775,17 +852,23 @@ export function recordPhase(
  */
 export function startAndCloseRun(
   root: string,
-  resolveHost: ResolveHost,
+  resolveHost: HookResolveHost,
   opts: StartAndCloseOpts = {},
 ): string | null {
   try {
     closeStalePriorOpenRun(root, resolveHost); // #13: self-heal a stale orphan before claiming the sentinel
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost));
     const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
     // Close via emitRunClosed so the run_closed JSONL line is appended with the
     // event_id matching the provenance pointer (P2a). For lightweight runs B2
     // enforces final_learning_checkpoint:null and the write-set stays runs/-only.
-    emitRunClosed(root, runId, resolveHost, { status: "closed" });
+    // Rework F1: thread the nonce THIS startRun call just minted (mint-origin
+    // authority — see mintOriginBindingRef) so the inline close presents the
+    // caller-held pair the guard now requires.
+    emitRunClosed(root, runId, resolveHost, {
+      status: "closed",
+      binding_ref: mintOriginBindingRef(root, runId),
+    });
     return runId;
   } catch (err) {
     process.stderr.write(
@@ -807,7 +890,7 @@ export function startAndCloseRun(
  */
 export function recordStatusLightweight(
   root: string,
-  resolveHost: ResolveHost,
+  resolveHost: HookResolveHost,
   opts: { cwd?: string; target_kind?: TargetKind } = {},
 ): string | null {
   // OQ6 rollback gate — false reverts /guild:status to pure-read (no run).
@@ -826,13 +909,24 @@ export function recordStatusLightweight(
  * Persist the SC-G skipped-files decisions to
  * .guild/runs/<run-id>/learn/skipped-files.json. The learn skill (Lane A1)
  * supplies the entries; this writer is the sink + the file the
- * provenance.coverage.skipped_files_ref pointer names. Returns the written path.
+ * provenance.coverage.skipped_files_ref pointer names. Returns the written
+ * path, or null when the write is refused (T3b binding gate — the CLI caller
+ * surfaces the refusal non-zero).
  */
 export function writeSkippedFiles(
   root: string,
   runId: string,
   entries: SkippedFileEntry[],
-): string {
+  opts: {
+    /** Rework F1: caller-held nonce (else the env envelope must name runId). */
+    binding_ref?: string;
+  } = {},
+): string | null {
+  const auth = authorizeHookWrite(root, { runId, bindingRef: opts.binding_ref });
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("run-trace", auth));
+    return null;
+  }
   const out = skippedFilesPath(root, runId);
   const body = {
     schema_version: "guild.skipped_files.v1",

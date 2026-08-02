@@ -4,6 +4,13 @@
   "generated_from": "guild.inventory.v1",
   "entries": [
     {
+      "category": "commands",
+      "id": "models",
+      "source_path": "commands/models.md",
+      "resource_path": "resources/commands/models.md",
+      "sha256": "3bd6611670eded7836fc6d726354aae43789486680ba597c4af8538d7ae3972e"
+    },
+    {
       "category": "scripts",
       "id": "lib/capability/backend-factory",
       "source_path": "scripts/lib/capability/backend-factory.ts",
@@ -51,6 +58,13 @@
       "source_path": "scripts/lib/role-resolver.ts",
       "resource_path": "resources/scripts/lib/role-resolver.ts",
       "sha256": "3940995252e92164002c13a9bbad401fd5170825474bc1bcd3ae6bf0f5fc1945"
+    },
+    {
+      "category": "scripts",
+      "id": "models-cmd",
+      "source_path": "scripts/models-cmd.ts",
+      "resource_path": "resources/scripts/models-cmd.ts",
+      "sha256": "23548e5478aaa590ece89b0f5d8f777dfb8e7ca7c9e5f29ffe69b21ab53649da"
     },
     {
       "category": "scripts",

@@ -16,6 +16,22 @@
 import * as fs from "fs";
 import * as path from "path";
 
+// T3 rework F3 (guild.session_context.v1 §5): every production dispatch-
+// descriptor write carries an explicit run binding (run_id + binding_ref) and
+// is verified fail-closed BEFORE anything reaches disk. The frozen
+// guild.task_assignment.v1 schema is preserved — the binding rides the writer
+// API, not the descriptor payload.
+import {
+  BindingRejectedError,
+  verifyRunBinding,
+} from "../../lifecycle";
+
+/** The explicit run-binding envelope every descriptor writer requires (§5). */
+export interface DispatchBindingEnvelope {
+  /** The nonce minted for this run at run start (mintRunBinding). */
+  binding_ref: string;
+}
+
 export const TASK_ASSIGNMENT_SCHEMA = "guild.task_assignment.v1" as const;
 
 export interface TaskAssignmentV1 {
@@ -92,12 +108,35 @@ export function validateTaskAssignmentV1(obj: unknown): TaskAssignmentV1 | null 
 
 /**
  * Write a specialist's task assignment (launcher side). Validates before writing —
- * a malformed assignment is never persisted. Returns the path written, or null on
- * validation failure (best-effort; the launcher logs and continues).
+ * a malformed assignment is never persisted (returns null; the launcher logs and
+ * continues). The run BINDING is verified fail-closed first (T3 F3): a missing,
+ * malformed, closed, or mismatched binding — or a runDir that does not address
+ * the assignment's own run — THROWS BindingRejectedError (structured
+ * `binding_rejected`, non-zero result to the caller) and nothing is written.
  */
-export function writeTaskAssignment(runDir: string, assignment: TaskAssignmentV1): string | null {
+export function writeTaskAssignment(
+  runDir: string,
+  assignment: TaskAssignmentV1,
+  binding: DispatchBindingEnvelope
+): string | null {
   const valid = validateTaskAssignmentV1(assignment);
   if (!valid) return null;
+  // Addressing integrity: the descriptor must land in ITS OWN run's dir. A
+  // runDir naming a different run is the cross-run/moved-sentinel write class.
+  if (path.basename(runDir) !== valid.run_id) {
+    throw new BindingRejectedError("binding_mismatch", valid.run_id);
+  }
+  // Canonical layout: runDir = <root>/.guild/runs/<run_id> — derive the root
+  // the binding record is verified under.
+  const root = path.resolve(runDir, "..", "..", "..");
+  const verdict = verifyRunBinding({
+    root,
+    run_id: valid.run_id,
+    binding_ref: binding?.binding_ref,
+  });
+  if (verdict.ok === false) {
+    throw new BindingRejectedError(verdict.reason, valid.run_id);
+  }
   const out = taskAssignmentPath(runDir, valid.specialist);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(valid, null, 2) + "\n");

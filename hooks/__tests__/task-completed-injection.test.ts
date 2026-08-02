@@ -25,6 +25,12 @@ import * as os from "os";
 
 const SCRIPT = path.resolve(__dirname, "../agent-team/task-completed.ts");
 const RUN = "tc-inject-test-run";
+
+// T3b (session_context §5): the injection-audit + security-event writes are
+// binding-gated; fixtures mint the run's binding. hermeticEnv strips outer
+// Guild-lane env.
+import { mintTestBinding } from "../test-support/mint-binding";
+import { hermeticEnv } from "../test-support/hermetic-env";
 const SPECIALIST = "backend";
 const TASK_ID = "task-inject-001";
 
@@ -97,9 +103,10 @@ function run(
     input: JSON.stringify(payload),
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...hermeticEnv(),
       GUILD_CWD: tmp,
       GUILD_RUN_ID: RUN,
+      GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
     },
     timeout: 30000,
@@ -145,6 +152,7 @@ describe("task-completed.ts — HK-08 injection_clean enforcement", () => {
     // Write minimal run.yaml so OD-4 discriminator recognizes it as in-scope
     const runDir = path.join(tmp, ".guild", "runs", RUN);
     fs.mkdirSync(runDir, { recursive: true });
+    mintTestBinding(tmp, RUN);
     const startedAt = new Date();
     startedAt.setFullYear(startedAt.getFullYear() + 1); // future date → always in-scope
     fs.writeFileSync(

@@ -34,7 +34,7 @@ __export(post_tool_use_exports, {
 });
 module.exports = __toCommonJS(post_tool_use_exports);
 var fs6 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
+var path8 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -64,6 +64,100 @@ function resolveGuildRoot(startCwd) {
     }
     current = parent;
   }
+}
+
+// ../src/modules/lifecycle/workflows/run-binding.ts
+var fsReal = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
+function realBindingFs() {
+  return {
+    mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
+    writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    readFile: (p) => fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null,
+    exists: (p) => fsReal.existsSync(p)
+  };
+}
+function runBindingPath(root, runId) {
+  return path2.join(root, ".guild", "runs", runId, "binding.json");
+}
+function validateRunBindingRecord(parsed, expectedRunId) {
+  if (parsed === null || typeof parsed !== "object") return null;
+  const o = parsed;
+  if (o["schema_version"] !== "guild.run_binding.v1") return null;
+  if (typeof o["run_id"] !== "string" || o["run_id"] !== expectedRunId) return null;
+  const ref = o["binding_ref"];
+  if (typeof ref !== "string" || !/^rb-[A-Za-z0-9_-]+$/.test(ref)) return null;
+  if (o["state"] !== "open" && o["state"] !== "closed") return null;
+  return {
+    schema_version: "guild.run_binding.v1",
+    run_id: o["run_id"],
+    binding_ref: ref,
+    state: o["state"]
+  };
+}
+function readRunBindingRecord(opts) {
+  const fs7 = opts.fs ?? realBindingFs();
+  const raw = fs7.readFile(runBindingPath(opts.root, opts.run_id));
+  if (raw === null) return { status: "absent" };
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { status: "malformed" };
+  }
+  const record = validateRunBindingRecord(parsed, opts.run_id);
+  if (record === null) return { status: "malformed" };
+  return { status: "ok", record };
+}
+function verifyRunBinding(input) {
+  const reject2 = (reason) => ({
+    ok: false,
+    diagnostic: "binding_rejected",
+    reason
+  });
+  if (!input.run_id || !input.binding_ref) return reject2("binding_absent");
+  if (!input.root) return reject2("binding_unverifiable");
+  const read = readRunBindingRecord({ root: input.root, run_id: input.run_id, fs: input.fs });
+  if (read.status === "absent") return reject2("binding_not_minted");
+  if (read.status === "malformed") return reject2("binding_malformed");
+  const record = read.record;
+  if (record.state === "closed") return reject2("binding_closed");
+  if (record.binding_ref !== input.binding_ref || record.run_id !== input.run_id) {
+    return reject2("binding_mismatch");
+  }
+  return { ok: true, binding: record };
+}
+var HOOK_BINDING_ENV_RUN_ID = "GUILD_RUN_ID";
+var HOOK_BINDING_ENV_BINDING_REF = "GUILD_RUN_BINDING_REF";
+function readHookBindingEnvelope(env) {
+  const run_id = env[HOOK_BINDING_ENV_RUN_ID]?.trim();
+  const binding_ref = env[HOOK_BINDING_ENV_BINDING_REF]?.trim();
+  if (!run_id || !binding_ref) return null;
+  return { run_id, binding_ref };
+}
+
+// lib/hook-binding.ts
+function reject(reason, run_id) {
+  return { ok: false, diagnostic: "binding_rejected", reason, run_id };
+}
+function authorizeHookWrite(root, opts = {}) {
+  const env = opts.env ?? process.env;
+  const envelope = readHookBindingEnvelope(env);
+  const envRunId = env["GUILD_RUN_ID"]?.trim();
+  const runId = opts.runId ?? envelope?.run_id ?? (envRunId || void 0);
+  if (!runId) return reject("binding_absent", null);
+  const ref = opts.bindingRef ?? (envelope && envelope.run_id === runId ? envelope.binding_ref : void 0);
+  if (ref === void 0 || ref.trim().length === 0) {
+    return reject("binding_absent", runId);
+  }
+  const verdict = verifyRunBinding({ root, run_id: runId, binding_ref: ref });
+  if (verdict.ok === false) return reject(verdict.reason, runId);
+  return { ok: true, run_id: runId, binding_ref: verdict.binding.binding_ref };
+}
+function formatBindingRejected(hook, auth) {
+  if (auth.ok !== false) return "";
+  return `[${hook}] binding_rejected (${auth.reason}) for run ${auth.run_id ?? "<unresolved>"} \u2014 no write performed (session_context \xA75: writers fail closed; sentinels are intake-only).
+`;
 }
 
 // lib/v1.4/log-jsonl-schema.ts
@@ -271,11 +365,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path8 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path8), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path8)) return;
+  const path9 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path9), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path9)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path8, "wx");
+    const fd = (0, import_node_fs.openSync)(path9, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -408,9 +502,9 @@ function appendEvent(runDir, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path8 = laneFallbackPath(runDir, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path8), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path8, "a");
+    const path9 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path9), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path9, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -498,8 +592,8 @@ function sidecarKeyMatches(entry, key) {
   return true;
 }
 function consumeSidecarPre(runDir, matchOrCallId) {
-  const path8 = sidecarPath(runDir);
-  if (!(0, import_node_fs3.existsSync)(path8)) return null;
+  const path9 = sidecarPath(runDir);
+  if (!(0, import_node_fs3.existsSync)(path9)) return null;
   const apply = (text) => {
     const lines = text.split("\n");
     const parsedLines = [];
@@ -540,15 +634,15 @@ function consumeSidecarPre(runDir, matchOrCallId) {
     return { match, rest };
   };
   if (process.platform === "win32") {
-    const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path9, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs3.writeFileSync)(path8, rest);
+    (0, import_node_fs3.writeFileSync)(path9, rest);
     return match;
   }
   return withStableLock(runDir, () => {
-    const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path9, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs3.writeFileSync)(path8, rest);
+    (0, import_node_fs3.writeFileSync)(path9, rest);
     return match;
   });
 }
@@ -604,8 +698,8 @@ function buildToolCallFromPostOnly(opts) {
   return out;
 }
 function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1e3) {
-  const path8 = sidecarPath(runDir);
-  if (!(0, import_node_fs3.existsSync)(path8)) return { orphans: [], events: [] };
+  const path9 = sidecarPath(runDir);
+  if (!(0, import_node_fs3.existsSync)(path9)) return { orphans: [], events: [] };
   const apply = (text) => {
     const lines = text.split("\n");
     const orphans2 = [];
@@ -629,15 +723,15 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
   };
   let orphans;
   if (process.platform === "win32") {
-    const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path9, "utf8");
     const out = apply(text);
-    (0, import_node_fs3.writeFileSync)(path8, out.rest);
+    (0, import_node_fs3.writeFileSync)(path9, out.rest);
     orphans = out.orphans;
   } else {
     orphans = withStableLock(runDir, () => {
-      const text = (0, import_node_fs3.readFileSync)(path8, "utf8");
+      const text = (0, import_node_fs3.readFileSync)(path9, "utf8");
       const out = apply(text);
-      (0, import_node_fs3.writeFileSync)(path8, out.rest);
+      (0, import_node_fs3.writeFileSync)(path9, out.rest);
       return out.orphans;
     });
   }
@@ -647,7 +741,7 @@ function sweepOrphanedSidecarFull(runDir, nowMs = Date.now(), maxAgeMs = 5 * 60 
 
 // lib/security/scrubbed-write.ts
 var fs4 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
+var path5 = __toESM(require("node:path"));
 var crypto2 = __toESM(require("node:crypto"));
 
 // lib/security/secrets.ts
@@ -676,7 +770,7 @@ function applySecretsPolicy(value, policy, opts) {
 
 // lib/security/config.ts
 var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var path3 = __toESM(require("node:path"));
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -751,7 +845,7 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path3.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
     raw = fs2.readFileSync(settingsPath, "utf8");
@@ -769,7 +863,7 @@ function readSecurityConfig(cwd) {
 
 // lib/security/events.ts
 var fs3 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+var path4 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
 var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-cli",
@@ -834,9 +928,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir, record) {
   try {
-    const logsDir = path3.join(runDir, "logs");
+    const logsDir = path4.join(runDir, "logs");
     fs3.mkdirSync(logsDir, { recursive: true });
-    fs3.appendFileSync(path3.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    fs3.appendFileSync(path4.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -849,11 +943,11 @@ function appendSecurityEvent(runDir, record) {
 
 // lib/security/scrubbed-write.ts
 function guildRootFromRunDir(runDir) {
-  return path4.resolve(runDir, "../../..");
+  return path5.resolve(runDir, "../../..");
 }
 function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
   try {
-    const approvalDir = path4.join(runDir, "agent-bus", "approvals");
+    const approvalDir = path5.join(runDir, "agent-bus", "approvals");
     fs4.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
@@ -863,7 +957,7 @@ function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
       ts,
       run_id: runId,
       tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path4.basename(outPath)}`,
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path5.basename(outPath)}`,
       permission_mode: "blocked",
       surface
     };
@@ -876,7 +970,7 @@ function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
       content = scrubResult.value;
     } catch {
     }
-    fs4.writeFileSync(path4.join(approvalDir, fileName), content, "utf8");
+    fs4.writeFileSync(path5.join(approvalDir, fileName), content, "utf8");
   } catch {
   }
 }
@@ -898,7 +992,7 @@ function scrubbedWrite(outPath, content, opts) {
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
-      fs4.mkdirSync(path4.dirname(outPath), { recursive: true });
+      fs4.mkdirSync(path5.dirname(outPath), { recursive: true });
       fs4.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
@@ -915,11 +1009,11 @@ function scrubbedWrite(outPath, content, opts) {
   }
   if (failMode === "open") {
     process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path4.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path5.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
 `
     );
     try {
-      fs4.mkdirSync(path4.dirname(outPath), { recursive: true });
+      fs4.mkdirSync(path5.dirname(outPath), { recursive: true });
       fs4.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
@@ -935,7 +1029,7 @@ function scrubbedWrite(outPath, content, opts) {
         event_type: "secret_scrub_blocked",
         decision: "degraded",
         tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path4.basename(outPath)}. Built-in-redacted content written.`,
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path5.basename(outPath)}. Built-in-redacted content written.`,
         permission_mode: "degraded"
       });
       appendSecurityEvent(opts.runDir, evt);
@@ -958,7 +1052,7 @@ function scrubbedWrite(outPath, content, opts) {
       event_type: "secret_scrub_blocked",
       decision: "blocked",
       tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path4.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path5.basename(outPath)} \u2014 write blocked (fail-closed).`,
       permission_mode: "blocked"
     });
     appendSecurityEvent(opts.runDir, evt);
@@ -970,13 +1064,13 @@ function scrubbedWrite(outPath, content, opts) {
 
 // lib/heartbeat-write.ts
 var fs5 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var path7 = __toESM(require("node:path"));
 
 // lib/heartbeat.ts
-var path5 = __toESM(require("node:path"));
+var path6 = __toESM(require("node:path"));
 var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
 function heartbeatPath(runDir, specialist) {
-  return path5.join(runDir, "in-progress", `${specialist}.json`);
+  return path6.join(runDir, "in-progress", `${specialist}.json`);
 }
 
 // lib/heartbeat-write.ts
@@ -984,9 +1078,14 @@ var SAFE_PATH_COMPONENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 function isSafePathComponent(id) {
   return SAFE_PATH_COMPONENT_RE.test(id) && id !== "." && id !== "..";
 }
-function writeHeartbeat(runDir, specialist, record) {
+function writeHeartbeat(auth, runDir, specialist, record) {
+  if (auth.ok !== true) {
+    throw new Error(
+      `binding_rejected (${auth.reason}): heartbeat write refused for run ${auth.run_id ?? "<unresolved>"} \u2014 no verified binding envelope.`
+    );
+  }
   const finalPath = heartbeatPath(runDir, specialist);
-  fs5.mkdirSync(path6.dirname(finalPath), { recursive: true });
+  fs5.mkdirSync(path7.dirname(finalPath), { recursive: true });
   const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   fs5.writeFileSync(tmpPath, JSON.stringify(record, null, 2) + "\n", "utf8");
   try {
@@ -1014,20 +1113,23 @@ function writeHeartbeatFromEnv(opts = {}) {
     if (!isSafePathComponent(runId) || !isSafePathComponent(specialist)) {
       return { written: false, path: null, reason: "unsafe-id" };
     }
+    const root = resolveGuildRoot(opts.cwd ?? process.cwd());
+    const auth = authorizeHookWrite(root, {
+      runId,
+      env
+    });
+    if (auth.ok !== true) {
+      return { written: false, path: null, reason: `binding_rejected:${auth.reason}` };
+    }
     const envRunDir = env["GUILD_RUN_DIR"];
-    const runDir = typeof envRunDir === "string" && envRunDir.length > 0 ? envRunDir : path6.join(
-      resolveGuildRoot(opts.cwd ?? process.cwd()),
-      ".guild",
-      "runs",
-      runId
-    );
+    const runDir = typeof envRunDir === "string" && envRunDir.length > 0 ? envRunDir : path7.join(root, ".guild", "runs", runId);
     const step = env["GUILD_STEP"];
     const record = {
       timestamp: opts.now ? opts.now() : (/* @__PURE__ */ new Date()).toISOString(),
       step: typeof step === "string" && step.length > 0 ? step : null,
       last_action: typeof opts.toolName === "string" && opts.toolName.length > 0 ? opts.toolName : null
     };
-    const finalPath = writeHeartbeat(runDir, specialist, record);
+    const finalPath = writeHeartbeat(auth, runDir, specialist, record);
     return { written: true, path: finalPath, reason: null };
   } catch (err) {
     return {
@@ -1081,8 +1183,8 @@ function resultExcerpt(payload) {
   }
 }
 function classifyGuildScrubSurface(absPath, guildRoot) {
-  const rel = path7.relative(guildRoot, absPath);
-  const parts = rel.split(path7.sep);
+  const rel = path8.relative(guildRoot, absPath);
+  const parts = rel.split(path8.sep);
   if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
   if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4) {
     if (parts[3] === "review") return "review";
@@ -1093,14 +1195,14 @@ function classifyGuildScrubSurface(absPath, guildRoot) {
 }
 function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
   const effectiveRunId = typeof runId === "string" && runId.length > 0 ? runId : "no-active-run";
-  const effectiveRunDir = typeof runDir === "string" && runDir.length > 0 ? runDir : path7.join(guildRoot, ".guild", "runs", effectiveRunId);
+  const effectiveRunDir = typeof runDir === "string" && runDir.length > 0 ? runDir : path8.join(guildRoot, ".guild", "runs", effectiveRunId);
   const toolName = payload.tool_name;
   if (toolName !== "Write" && toolName !== "Edit") return;
   const ti = payload.tool_input;
   if (!ti || typeof ti !== "object") return;
   const rawFilePath = ti["file_path"];
   if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return;
-  const absPath = path7.isAbsolute(rawFilePath) ? rawFilePath : path7.resolve(guildRoot, rawFilePath);
+  const absPath = path8.isAbsolute(rawFilePath) ? rawFilePath : path8.resolve(guildRoot, rawFilePath);
   const surface = classifyGuildScrubSurface(absPath, guildRoot);
   if (surface === null) return;
   let diskContent;
@@ -1141,7 +1243,7 @@ function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
       }
       if (!canonicalRemoved) {
         process.stderr.write(
-          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical path "${path7.basename(absPath)}" \u2014 quarantine AND canonical-removal (overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.
+          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical path "${path8.basename(absPath)}" \u2014 quarantine AND canonical-removal (overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.
 `
         );
         try {
@@ -1151,7 +1253,7 @@ function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
             event_type: "secret_scrub_blocked",
             decision: "blocked",
             tool: "post-tool-use/hk06-scrub",
-            detail: `CRITICAL: Cannot remove raw ${surface} write from canonical path "${path7.basename(absPath)}" \u2014 quarantine AND canonical-removal both failed. Raw secret may persist. Manual remediation required.`,
+            detail: `CRITICAL: Cannot remove raw ${surface} write from canonical path "${path8.basename(absPath)}" \u2014 quarantine AND canonical-removal both failed. Raw secret may persist. Manual remediation required.`,
             permission_mode: "blocked"
           });
           appendSecurityEvent(effectiveRunDir, evt);
@@ -1160,34 +1262,28 @@ function runGuildArtifactScrub(payload, guildRoot, runDir, runId, laneId) {
         process.exit(1);
       }
       process.stderr.write(
-        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path7.basename(absPath)}.
+        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path8.basename(absPath)}.
 `
       );
     }
     process.stderr.write(
-      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ${path7.basename(absPath)} \u2014 quarantined/removed. secret_scrub_blocked event emitted.
+      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ${path8.basename(absPath)} \u2014 quarantined/removed. secret_scrub_blocked event emitted.
 `
     );
   } else if (result.written) {
     process.stderr.write(
-      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path7.basename(absPath)}.
+      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path8.basename(absPath)}.
 `
     );
   }
 }
-function readCurrentRunId(guildRoot) {
-  const sentinelPath = path7.join(guildRoot, ".guild", "runs", "current-run-id");
-  try {
-    const value = fs6.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : void 0;
-  } catch {
+function resolveRunId(guildRoot) {
+  const auth = authorizeHookWrite(guildRoot);
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("post-tool-use", auth));
     return void 0;
   }
-}
-function resolveRunId(guildRoot) {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(guildRoot);
+  return auth.run_id;
 }
 async function main() {
   const raw = await readHookStdin();
@@ -1213,7 +1309,7 @@ async function main() {
   {
     const earlyRunId = resolveRunId(guildRoot);
     const earlyRunIdSafe = typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId) ? earlyRunId : void 0;
-    const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path7.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
+    const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path8.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
     const earlyRawLaneId = process.env["GUILD_LANE_ID"];
     const earlyLaneId = typeof earlyRawLaneId === "string" && earlyRawLaneId.length > 0 && isSafeLaneId(earlyRawLaneId) ? earlyRawLaneId : void 0;
     try {
@@ -1238,7 +1334,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path7.join(guildRoot, ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path8.join(guildRoot, ".guild", "runs", runId);
   const rawLaneId = process.env["GUILD_LANE_ID"];
   const laneId = typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId) ? rawLaneId : void 0;
   if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId === void 0) {

@@ -167,6 +167,11 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
       for (const [k, v] of Object.entries(process.env)) {
         if (v !== undefined && k !== "TMUX") env[k] = v;
       }
+      // T7R-R1-B1: this fixture is about host reachability, not approval, and
+      // carries no team-plan trail. Opt into the ONE audited escape hatch; the
+      // gate's own pins live in t7-h1-dispatch-approval.test.ts.
+      env.GUILD_DISPATCH_APPROVAL_OVERRIDE =
+        "host-reachability fixture: no team-plan trail; approval verification is pinned separately";
 
       const result = spawnSync(
         "npx",

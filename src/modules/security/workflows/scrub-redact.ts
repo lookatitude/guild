@@ -34,6 +34,17 @@ const WORKSPACE_ROOT_MARKER = "<workspace-root>";
 // URL-encoded slug `~/.claude/projects/-Users-<NAME>-Projects-<WS>/...`.
 const TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
 const OPERATOR_MEMORY_ROOT_MARKER = "<operator-memory-root>";
+// T6B-R1-B1: the two patterns above only recognize the WORKSPACE forms (the
+// macOS home + `Projects` + workspace path, and the tilde-Claude slug). A
+// round-1 live probe leaked a private home path under a user's `.ssh`
+// directory — an absolute path that is neither of those two shapes. This
+// third pattern generalizes to ANY private home root (a macOS `Users` home or
+// a Linux `home` home); only the home PREFIX is replaced, so
+// the path's structure survives for replay (AGENTS.md §"Redaction must
+// preserve structure"). It runs LAST so the two specific markers above win.
+// Idempotent: the marker contains no `/Users/` or `/home/` segment.
+const PRIVATE_HOME_PATH_RE = /\/(?:Users|home)\/[A-Za-z0-9._-]+(?=[/\s"',:;)\]}]|$)/g;
+const PRIVATE_HOME_MARKER = "<private-home>";
 
 export interface SecretHit {
   category: string;
@@ -61,6 +72,9 @@ export function redact(content: string): RedactResult {
   let out = content.replace(OPERATOR_PATH_RE, () => { opPaths++; return WORKSPACE_ROOT_MARKER; });
   // Decision M: also redact tilde-prefixed Claude project paths.
   out = out.replace(TILDE_CLAUDE_PROJECT_RE, () => { opPaths++; return OPERATOR_MEMORY_ROOT_MARKER; });
+  // T6B-R1-B1: any remaining private home root (`/Users/<n>`, `/home/<n>`) —
+  // the general case the two workspace-specific patterns above do not cover.
+  out = out.replace(PRIVATE_HOME_PATH_RE, () => { opPaths++; return PRIVATE_HOME_MARKER; });
   const secrets: SecretHit[] = [];
   const lines = out.split("\n");
   out = lines.map((line, i) => {

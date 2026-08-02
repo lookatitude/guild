@@ -105,6 +105,44 @@ function taskAssignmentEnv(spec: PaneSpec): Record<string, string> {
   return spec.specialist ? { GUILD_TASK_ASSIGNMENT: taskAssignmentPathFor(spec) } : {};
 }
 
+// ── T6-R2-F5: the selected model reaches the real pane process ───────────────
+//
+// `spec.model` is set ONLY when the evidenced M2 gate froze a selection for
+// this lane (dispatchModelForSpecialist). Every adapter below therefore emits
+// its legacy command byte-identically whenever it is absent.
+//
+// Each host's model flag is LIVE-VERIFIED on this machine, never guessed:
+//   claude --model <model>   (claude --help)
+//   codex exec -m <MODEL>    (codex exec --help)
+//   agy --model <model>      (agy --help)
+//   pi --model <pattern>     (pi --help)
+// The GENERIC WrappedCliPaneAdapter covers registry rows whose CLI shape we have
+// NOT verified, so it injects NO model flag — it exports GUILD_MODEL only and
+// the host keeps its own model resolution (honest degradation, never invented).
+
+/** `<flag> <model> ` argv fragment for a verified host flag, or "" when no model. */
+function modelArg(spec: PaneSpec, flag: string): string {
+  return spec.model !== undefined && spec.model.length > 0
+    ? `${flag} ${shellQuote(spec.model)} `
+    : "";
+}
+/** `export GUILD_MODEL=…; ` fragment — the provenance every pane can read back. */
+function modelExport(spec: PaneSpec): string {
+  return spec.model !== undefined && spec.model.length > 0
+    ? `export GUILD_MODEL=${shellQuote(spec.model)}; `
+    : "";
+}
+/** The `GUILD_MODEL` (+ params) entries for an adapter's env map, or {} when no model. */
+function modelEnv(spec: PaneSpec): Record<string, string> {
+  if (spec.model === undefined || spec.model.length === 0) return {};
+  return {
+    GUILD_MODEL: spec.model,
+    ...(spec.modelParams !== undefined
+      ? { GUILD_MODEL_PARAMS: JSON.stringify(spec.modelParams) }
+      : {}),
+  };
+}
+
 /**
  * Claude Code pane. `command()` delegates to the shared `paneCommand`, so a
  * Claude-only team built through the adapter path is byte-identical to the
@@ -137,12 +175,18 @@ export class ClaudePaneAdapter implements PaneAdapter {
     // (scope-file locator) and optionally GUILD_CAPABILITY_SCOPE (env fast-path).
     // G-9 / C2-D1: pass specialist so lane panes export GUILD_SPECIALIST
     // (the PostToolUse heartbeat writer's trigger).
+    // T6-R2-F5: `spec.model` (evidenced M2 selection) becomes `claude --model`.
     return paneCommand(
       spec.prompt,
       spec.runId,
       spec.capability_scope,
       spec.taskId,
       spec.specialist,
+      // `undefined` keeps paneCommand's own GUILD_PANE_DEBUG default — the
+      // shim's export surface stays frozen (rearch parity) while the model
+      // still reaches the pane.
+      undefined,
+      spec.model,
     );
   }
 
@@ -150,6 +194,7 @@ export class ClaudePaneAdapter implements PaneAdapter {
     return {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: spec.runId,
+      ...modelEnv(spec),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
@@ -256,7 +301,8 @@ export class CodexPaneAdapter implements PaneAdapter {
       specialistFragment +
       taskAssignmentExport(spec) +
       scopeFragment +
-      `codex exec ${shellQuote(spec.prompt)}; ` +
+      modelExport(spec) +
+      `codex exec ${modelArg(spec, "-m")}${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
   }
@@ -264,6 +310,7 @@ export class CodexPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...modelEnv(spec),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
@@ -330,7 +377,8 @@ export class AntigravityPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
-      `agy ${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
+      modelExport(spec) +
+      `agy ${modelArg(spec, "--model")}${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
   }
@@ -338,6 +386,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...modelEnv(spec),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
@@ -399,7 +448,8 @@ export class PiPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
-      `pi -p ${shellQuote(spec.prompt)}; ` +
+      modelExport(spec) +
+      `pi ${modelArg(spec, "--model")}-p ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
   }
@@ -407,6 +457,7 @@ export class PiPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...modelEnv(spec),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
@@ -514,9 +565,12 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
     const scopeFragment = spec.capability_scope !== undefined
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     const argv = [this.bin, ...this.argvPrefix(), "-p", shellQuote(spec.prompt)].join(" ");
+    // No verified model flag for a generic wrapped CLI → GUILD_MODEL only; the
+    // host resolves its own model. Never invent a flag onto an unprobed binary.
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      modelExport(spec) +
       `${argv}; ` +
       `exec $SHELL`
     );
@@ -525,6 +579,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      ...modelEnv(spec),
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined

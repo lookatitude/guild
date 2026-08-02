@@ -14,8 +14,9 @@
  * no-ops. If no run-id is resolvable yet (no /guild run started), this is a
  * silent no-op.
  *
- * Run-id resolution: GUILD_RUN_ID → .guild/runs/current-run-id (legacy) →
- *                    .guild/current-run-id (B2 sentinel). See lib/run-trace.ts.
+ * Run-id resolution: GUILD_RUN_ID env ONLY (session_context §5 / T3b —
+ * sentinels are interactive intake, never a writer identity); the emit itself
+ * is binding-gated inside emitRunStarted. See lib/run-trace.ts.
  *
  * Stdin:  Claude Code UserPromptSubmit hook payload (JSON). cwd is read from it.
  * Stdout: Silent (Claude Code may consume it).

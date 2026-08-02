@@ -26,6 +26,14 @@
 import * as fs from "fs";
 import * as path from "path";
 
+// T3 rework F3 (guild.session_context.v1 §5): the v2 production descriptor
+// writers require + verify the run's minted binding fail-closed before ANY
+// write. Frozen v2 schemas are preserved — the binding rides the writer API.
+import {
+  BindingRejectedError,
+  verifyRunBinding,
+} from "../../lifecycle";
+import type { DispatchBindingEnvelope } from "./task-assignment";
 import {
   TASK_ATTEMPT_SCHEMA,
   buildTaskAssignmentV2,
@@ -36,6 +44,28 @@ import {
   type TaskAttemptV1,
   type ToolPermissionProjection,
 } from "../../../../scripts/lib/core/contracts/task-cell-backend";
+// T6 rework F5: the production dispatch path consumes the M1/M2 routing plan
+// (shadow provenance on every real dispatch; v2 selection only behind the
+// verified M2 gate) — wired HERE, the module-map §1 dispatch wiring point.
+import {
+  loadVerifiedM0Reports,
+  readRoutingFlags,
+  type M2EvidenceRefs,
+} from "../../capability";
+import type { ResolveRequest, ResolutionReceipt } from "../../capability";
+import {
+  confirmationKeyForReceipt,
+  persistShadowArtifacts,
+  planDispatchModel,
+  type DispatchModelSelection,
+  type LegacySelection,
+} from "./shadow-routing";
+// T7-M4: the §6 exact-key confirmation arbiter, wired at the REAL dispatch
+// point. Before this, `claimPrompt`/`createRunLocalState` had zero production
+// callers, so nothing stopped one degradation approval from being reused
+// across a different target, purpose, or fallback shape.
+import { claimConfirmation } from "./confirmation-gate";
+import type { SpecialistModelProvenance } from "./specialist-contract";
 
 /**
  * The launcher-facing dispatch descriptor for ONE task attempt. The launcher
@@ -191,6 +221,27 @@ function absUnderCwd(cwd: string, relPath: string): string {
 }
 
 /**
+ * §5 fail-closed gate shared by the v2 descriptor writers (T3 F3): verify the
+ * caller-threaded binding against the record's OWN run under `cwd` (the run
+ * tree lives at <cwd>/.guild/runs/<run_id>). Missing, malformed, closed, or
+ * mismatched bindings THROW BindingRejectedError before anything reaches disk.
+ */
+function assertDispatchBinding(
+  cwd: string,
+  runId: string,
+  binding: DispatchBindingEnvelope
+): void {
+  const verdict = verifyRunBinding({
+    root: cwd,
+    run_id: runId,
+    binding_ref: binding?.binding_ref,
+  });
+  if (verdict.ok === false) {
+    throw new BindingRejectedError(verdict.reason, runId);
+  }
+}
+
+/**
  * Write one immutable `guild.task_assignment.v2` at its canonical
  * `assignment_path` (resolved under `cwd`). Fail-closed:
  *   - THROWS if the assignment fails `validateTaskAssignmentV2`;
@@ -198,13 +249,18 @@ function absUnderCwd(cwd: string, relPath: string): string {
  *     class — assignments are immutable per instance+attempt, D6).
  * Returns the absolute path written.
  */
-export function writeTaskAssignmentV2(cwd: string, assignment: TaskAssignmentV2): string {
+export function writeTaskAssignmentV2(
+  cwd: string,
+  assignment: TaskAssignmentV2,
+  binding: DispatchBindingEnvelope
+): string {
   const valid = validateTaskAssignmentV2(assignment);
   if (!valid) {
     throw new Error(
       "refusing to write a malformed guild.task_assignment.v2 — fail-closed (D6)"
     );
   }
+  assertDispatchBinding(cwd, valid.run_id, binding); // §5 — no descriptor without a valid binding
   const out = absUnderCwd(cwd, valid.assignment_path);
   if (fs.existsSync(out)) {
     throw new Error(
@@ -224,13 +280,18 @@ export function writeTaskAssignmentV2(cwd: string, assignment: TaskAssignmentV2)
  * record twice is a no-op; a DIFFERENT record at the same path THROWS (a terminal
  * attempt is never overwritten).
  */
-export function writeTaskAttemptV1(cwd: string, attempt: TaskAttemptV1): string {
+export function writeTaskAttemptV1(
+  cwd: string,
+  attempt: TaskAttemptV1,
+  binding: DispatchBindingEnvelope
+): string {
   const valid = validateTaskAttemptV1(attempt);
   if (!valid) {
     throw new Error(
       "refusing to write a malformed guild.task_attempt.v1 — fail-closed (D4)"
     );
   }
+  assertDispatchBinding(cwd, valid.run_id, binding); // §5 — the attempt companion is bound too
   const paths = taskCellPaths({
     run_id: valid.run_id,
     logical_task_id: valid.logical_task_id,
@@ -256,9 +317,13 @@ export function writeTaskAttemptV1(cwd: string, attempt: TaskAttemptV1): string 
  * resume reconstructs from — then the immutable assignment). Returns the two
  * absolute paths written.
  */
-export function writeTaskCell(cwd: string, cell: TaskCell): { assignmentPath: string; attemptPath: string } {
-  const attemptPath = writeTaskAttemptV1(cwd, cell.attempt);
-  const assignmentPath = writeTaskAssignmentV2(cwd, cell.assignment);
+export function writeTaskCell(
+  cwd: string,
+  cell: TaskCell,
+  binding: DispatchBindingEnvelope
+): { assignmentPath: string; attemptPath: string } {
+  const attemptPath = writeTaskAttemptV1(cwd, cell.attempt, binding);
+  const assignmentPath = writeTaskAssignmentV2(cwd, cell.assignment, binding);
   return { assignmentPath, attemptPath };
 }
 
@@ -347,6 +412,341 @@ export function acknowledgeAssignment(
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(ack, null, 2) + "\n", "utf8");
   return out;
+}
+
+// ── T6 F5: production model-routing integration (M1 shadow + gated M2) ───────
+
+/** Outcome of the per-dispatch model-routing plan on the PRODUCTION path. */
+export interface ProductionDispatchModelOutcome {
+  /** The (possibly v2-selected) dispatch model. At M0/M1 this is ALWAYS legacy. */
+  selection: DispatchModelSelection;
+  /** Provenance stamped onto the specialist dispatch contract. */
+  provenance: SpecialistModelProvenance;
+  /** Run-local shadow artifact paths (null when the shadow leg did not run). */
+  shadowArtifacts: { receiptPath: string | null; comparisonPath: string | null };
+  /** Closed-key flag violations from settings, surfaced for the caller's log. */
+  flagRejects: string[];
+  /**
+   * T7-M4 — §6 exact-key confirmation state for THIS dispatch.
+   *
+   * `required: false` on every path that does not degrade (and on M0/M1, where
+   * the selection is byte-identical legacy). When a v2 selection DOES carry a
+   * degradation and the purpose policy sets `confirm_on_degradation`, the
+   * EXACT 6-tuple (run_id, purpose, target_id, policy_hash, catalog_hash,
+   * fallback_hash) claims a prompt through the T5 arbiter — so one approval can
+   * never leak to a different target, purpose, or fallback shape.
+   *
+   * `required && !decided` means the caller MUST block this lane. Guild never
+   * auto-approves a degradation.
+   */
+  confirmation: {
+    required: boolean;
+    decided: boolean;
+    /** The recorded decision verb, or null when unanswered / not required. */
+    decision: string | null;
+    /** Stable prompt id for the exact key; null when no claim was made. */
+    prompt_id: number | null;
+    /** Why confirmation was (or was not) required — never silent. */
+    reason: string;
+  };
+}
+
+function readSettingsJson(cwd: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Discover on-record M0/M1 evidence refs in the run's own tree (gateM2 verifies each). */
+function discoverM2EvidenceRefs(cwd: string, runId: string): M2EvidenceRefs {
+  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const listJson = (sub: string, suffix: string): string[] => {
+    try {
+      return fs
+        .readdirSync(path.join(runDir, sub))
+        .filter((f) => f.endsWith(suffix))
+        .map((f) => path.join(sub, f));
+    } catch {
+      return [];
+    }
+  };
+  return {
+    root: cwd,
+    run_id: runId,
+    m0: { inspection_report_refs: listJson("inspection", ".json") },
+    m1: { shadow_comparison_refs: listJson("shadow", ".shadow-comparison.json") },
+  };
+}
+
+/**
+ * Resolver inputs sourced from the run's OWN verified M0 evidence (T6-R2-F5).
+ *
+ * The launcher has no catalog/session channel of its own, so without this the
+ * production call could never reach a v2 selection — the resolver always failed
+ * closed on `catalog_snapshot_unparsable` and M2 stayed decorative. The M2 gate
+ * already REQUIRES a verified `guild.model_inspection.v1` report in the bound
+ * run tree, and that report records exactly the two things the resolver needs:
+ * the inspected execution target and the catalog rows it inspected. So the
+ * evidence M2 gates on IS the input record — no new channel, no injectable seam.
+ *
+ * Honest + fail-closed:
+ *   - only VERIFIED reports are read (`loadVerifiedM0Reports` — inside the run
+ *     dir, schema-valid, `state: "ok"`, bound to this run, run binding ok);
+ *   - a report whose catalog block is not `state: "ok"` with rows yields NO
+ *     catalog (the resolver then fails closed exactly as today);
+ *   - the report keeps only `canonical_id` / `tier` / `evidence_state` per row,
+ *     so the reconstructed snapshot carries those plus a positional
+ *     `catalog_index` (the report preserves catalog order). A policy selecting
+ *     on a field the report does not record (e.g. `family:`) matches NOTHING
+ *     and the resolution fails closed — never a silent substitution.
+ *
+ * Returns `null` when no verified report carries a usable catalog block.
+ *
+ * T8R/F3 — WHO WRITES THAT EVIDENCE. Until T8R this reader had no producer on
+ * the real path (`persistInspectionReport` had zero production callers), so it
+ * always returned null and M2 was unreachable end-to-end. The production writer
+ * is now `capability/workflows/inspection-record.ts`
+ * (`recordRunInspectionEvidence`), called once per run by the launcher's lane
+ * model planner and inert at the ADR defaults. Its report's catalog block is
+ * `state: "ok"` only when a catalog snapshot is on record for the run's target
+ * identity; publishing one from a REAL bounded discovery run is still open
+ * (T7-M5 / T8-F7 — only `nullIo` exists today).
+ */
+export function deriveResolveInputsFromM0Evidence(
+  evidence: M2EvidenceRefs | null | undefined
+): { session_context: unknown; catalog_snapshot: unknown } | null {
+  for (const report of loadVerifiedM0Reports(evidence)) {
+    const catalog = report["catalog"];
+    if (typeof catalog !== "object" || catalog === null || Array.isArray(catalog)) continue;
+    const catalogObj = catalog as Record<string, unknown>;
+    if (catalogObj["state"] !== "ok") continue;
+    const rows = catalogObj["models"];
+    if (!Array.isArray(rows) || rows.length === 0) continue;
+    const target = report["target"];
+    const targetObj =
+      typeof target === "object" && target !== null && !Array.isArray(target)
+        ? (target as Record<string, unknown>)
+        : {};
+    const models = rows.map((r, index) => {
+      const row =
+        typeof r === "object" && r !== null && !Array.isArray(r)
+          ? (r as Record<string, unknown>)
+          : {};
+      return {
+        canonical_id: typeof row["canonical_id"] === "string" ? row["canonical_id"] : "unknown",
+        tier: typeof row["tier"] === "string" ? row["tier"] : "unknown",
+        catalog_index: index,
+        evidence: {
+          state: typeof row["evidence_state"] === "string" ? row["evidence_state"] : "unknown",
+        },
+      };
+    });
+    return {
+      // The resolver reads `session_context.target_id` (receipt binding only).
+      session_context: {
+        target_id:
+          typeof targetObj["target_id"] === "string" ? targetObj["target_id"] : "unknown",
+      },
+      catalog_snapshot: {
+        target: { target_id: catalogObj["target_id"] ?? targetObj["target_id"] ?? null },
+        models,
+      },
+    };
+  }
+  return null;
+}
+
+/**
+ * The PRODUCTION dispatch-model step (T6-R1-F5): called by the real dispatch
+ * entrypoint for EVERY task-cell attempt. It reads the rollout flags from the
+ * consuming repo's `.guild/settings.json`, discovers this run's on-record
+ * M0/M1 evidence (gateM2 loads + verifies each ref), and runs
+ * `planDispatchModel` over the caller's inputs:
+ *
+ *   - M0/M1: the returned selection is the LEGACY selection byte-identical —
+ *     this step changes NO routing; when `model_routing.shadow` is on it
+ *     additionally persists the shadow receipt + content-hashed comparison
+ *     run-local through the T3/T3b binding-verified writer (a dispatch whose
+ *     binding does not verify gets NO shadow write — the same envelope gates
+ *     the task-cell writers themselves);
+ *   - M2 (opt-in + evidenced, verified inside gateM2): the returned selection
+ *     is the v2 receipt's frozen model, with provenance hashes.
+ *
+ * Making v2 routing the DEFAULT remains a requires-confirmation followup; this
+ * function never flips a flag.
+ */
+export function planProductionDispatchModel(input: {
+  cwd: string;
+  runId: string;
+  /** Unique per task-cell attempt (e.g. the attempt_id). */
+  dispatchId: string;
+  binding: DispatchBindingEnvelope;
+  legacy: LegacySelection;
+  /** Raw settings object; when omitted, `<cwd>/.guild/settings.json` is read. */
+  settings?: unknown;
+  /** Optional resolver inputs — absent inputs fail closed honestly in shadow. */
+  sessionContext?: unknown;
+  catalogSnapshot?: unknown;
+  policy?: unknown;
+  request?: ResolveRequest;
+}): ProductionDispatchModelOutcome {
+  const settings =
+    input.settings !== undefined ? input.settings : readSettingsJson(input.cwd);
+  const { flags, rejects } = readRoutingFlags(settings);
+  const settingsObj =
+    typeof settings === "object" && settings !== null && !Array.isArray(settings)
+      ? (settings as Record<string, unknown>)
+      : {};
+  const m2Evidence = discoverM2EvidenceRefs(input.cwd, input.runId);
+  // Caller-supplied inputs always win; otherwise fall back to the run's own
+  // VERIFIED M0 evidence (the same artifacts gateM2 binds to). A run with no
+  // verified report keeps today's behavior exactly: null inputs → fail closed.
+  const derived =
+    input.sessionContext === undefined || input.catalogSnapshot === undefined
+      ? deriveResolveInputsFromM0Evidence(m2Evidence)
+      : null;
+  const plan = planDispatchModel({
+    flags,
+    m2Evidence,
+    resolveInputs: {
+      session_context: input.sessionContext ?? derived?.session_context ?? null,
+      catalog_snapshot: input.catalogSnapshot ?? derived?.catalog_snapshot ?? null,
+      policy: input.policy ?? settingsObj["model_policy"] ?? null,
+      request: input.request,
+      run_id: input.runId,
+      dispatch_id: input.dispatchId,
+    },
+    legacy: input.legacy,
+  });
+  // Persist M1 evidence through the binding-verified writer ONLY (F4): the
+  // same envelope that authorizes the task-cell writers authorizes this; a
+  // non-verifying binding throws BindingRejectedError before any write —
+  // consistent with the hard fail-closed dispatch contract (D6/§5).
+  let shadowArtifacts: ProductionDispatchModelOutcome["shadowArtifacts"] = {
+    receiptPath: null,
+    comparisonPath: null,
+  };
+  if (plan.shadow.ran) {
+    shadowArtifacts = persistShadowArtifacts(input.cwd, plan.shadow, {
+      run_id: input.runId,
+      binding_ref: input.binding?.binding_ref,
+    });
+  }
+  const provenance: SpecialistModelProvenance = {
+    source:
+      plan.selection.source === "v2" ? "v2" : plan.shadow.ran ? "v2_shadow" : "legacy",
+    ...(plan.selection.dispatch_id !== undefined
+      ? { dispatch_id: plan.selection.dispatch_id }
+      : plan.shadow.receipt
+        ? { dispatch_id: String(plan.shadow.receipt.dispatch_id) }
+        : {}),
+    ...(plan.selection.resolution_core_hash !== undefined
+      ? { resolution_core_hash: plan.selection.resolution_core_hash }
+      : plan.shadow.receipt && typeof plan.shadow.receipt.resolution_core_hash === "string"
+        ? { resolution_core_hash: plan.shadow.receipt.resolution_core_hash }
+        : {}),
+    ...(plan.shadow.comparison
+      ? { shadow_comparison_hash: plan.shadow.comparison.comparison_hash }
+      : {}),
+    // T6-R2-F5: the SELECTED model rides the provenance so the dispatch
+    // backends can actually spawn the lane at it. Stamped ONLY for a real v2
+    // selection — legacy / shadow dispatches carry no model override at all.
+    ...(plan.selection.source === "v2"
+      ? {
+          selected_model: plan.selection.model,
+          selected_effort: plan.selection.effort,
+        }
+      : {}),
+  };
+  // ── T7-M4: §6 exact-key confirmation over a v2 DEGRADATION ────────────────
+  //
+  // Scope, deliberately narrow and honest:
+  //   - M0/M1 (source "legacy") never degrade anything — the selection IS the
+  //     legacy one byte-identically — so no prompt is claimed and behavior is
+  //     unchanged. This is why the wiring is inert until M2 is turned on.
+  //   - A v2 selection with `outcome.degradation` set is the case §6 exists
+  //     for. It claims a prompt over the EXACT 6-tuple built by
+  //     `confirmationKeyForReceipt` (the canonical builder), so approval can
+  //     never leak across target / purpose / policy / catalog / fallback shape.
+  //   - `confirm_on_degradation` is `true` for every shipped purpose policy
+  //     (model-policy.ts) and `require_cross_family` may not turn it off, so a
+  //     degradation is gated unless a policy explicitly opts out.
+  const receipt = plan.selection.receipt;
+  const degradation = receipt?.outcome?.degradation ?? null;
+  let confirmation: ProductionDispatchModelOutcome["confirmation"] = {
+    required: false,
+    decided: false,
+    decision: null,
+    prompt_id: null,
+    reason:
+      plan.selection.source === "v2"
+        ? "v2 selection carries no degradation — nothing to confirm (§6)"
+        : "legacy selection — no v2 degradation exists to confirm (§6)",
+  };
+  if (plan.selection.source === "v2" && receipt && degradation) {
+    const confirmOnDegradation = purposeConfirmsOnDegradation(
+      input.policy ?? settingsObj["model_policy"],
+      receipt,
+    );
+    if (!confirmOnDegradation) {
+      confirmation = {
+        ...confirmation,
+        reason:
+          `v2 selection degraded (${degradation.kind}) but the purpose policy sets ` +
+          "confirm_on_degradation:false — no prompt claimed",
+      };
+    } else {
+      // A partial key throws inside the arbiter (fail closed); an unverifiable
+      // binding throws before any write. Neither is swallowed here.
+      const claim = claimConfirmation({
+        root: input.cwd,
+        binding: { run_id: input.runId, binding_ref: input.binding?.binding_ref as string },
+        key: confirmationKeyForReceipt(receipt),
+      });
+      confirmation = {
+        required: true,
+        decided: claim.already_decided,
+        decision: claim.decision,
+        prompt_id: claim.prompt_id,
+        reason:
+          `v2 selection degraded (${degradation.kind}: ${degradation.note}) and the purpose policy ` +
+          `requires confirmation — §6 prompt ${claim.prompt_id} claimed over the exact 6-tuple; ` +
+          (claim.already_decided
+            ? `already decided "${claim.decision}"`
+            : "AWAITING a user decision — dispatch must block (Guild never auto-approves)"),
+      };
+    }
+  }
+
+  return {
+    selection: plan.selection,
+    provenance,
+    shadowArtifacts,
+    flagRejects: rejects,
+    confirmation,
+  };
+}
+
+/**
+ * `confirm_on_degradation` for the receipt's REQUEST purpose, read from the
+ * policy the resolution actually ran under. Unknown/absent policy shape ⇒
+ * `true` (fail closed: an unreadable policy never silences the gate).
+ */
+function purposeConfirmsOnDegradation(policy: unknown, receipt: ResolutionReceipt): boolean {
+  const purpose =
+    typeof receipt.request === "object" && receipt.request !== null
+      ? (receipt.request as Record<string, unknown>)["purpose"]
+      : undefined;
+  if (typeof purpose !== "string") return true;
+  const purposes =
+    typeof policy === "object" && policy !== null
+      ? ((policy as Record<string, unknown>)["purposes"] as Record<string, unknown> | undefined)
+      : undefined;
+  const row = purposes?.[purpose];
+  if (typeof row !== "object" || row === null) return true;
+  return (row as Record<string, unknown>)["confirm_on_degradation"] !== false;
 }
 
 /** Read + validate an ack marker for an instance, or null when absent/malformed (the await primitive). */

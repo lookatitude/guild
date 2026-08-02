@@ -18,12 +18,31 @@ import {
   writeTaskAssignment,
   type TaskAssignmentV1,
 } from "../../src/modules/dispatch/workflows/task-assignment";
+import {
+  BindingRejectedError,
+  closeRunBinding,
+  loadRunBinding,
+  mintRunBinding,
+  runBindingPath,
+} from "../../src/modules/lifecycle/workflows/run-binding";
 
 const FIXED_NOW = () => "2026-06-27T00:00:00.000Z";
 
 function tmpRunDir(): string {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), "guild-task-assignment-"));
   return path.join(d, ".guild", "runs", "run-x");
+}
+
+/** The workspace root a canonical runDir hangs under (<root>/.guild/runs/<id>). */
+function rootOf(runDir: string): string {
+  return path.resolve(runDir, "..", "..", "..");
+}
+
+/** T3 F3: mint-or-load the run's binding so the fail-closed writer accepts the write. */
+function bindFor(runDir: string, runId = "run-x"): { binding_ref: string } {
+  const root = rootOf(runDir);
+  const existing = loadRunBinding({ root, run_id: runId });
+  return { binding_ref: (existing ?? mintRunBinding({ root, run_id: runId })).binding_ref };
 }
 
 describe("guild.task_assignment.v1", () => {
@@ -83,7 +102,7 @@ describe("guild.task_assignment.v1", () => {
         hostKind: "claude-code-cli",
         now: FIXED_NOW,
       });
-      const written = writeTaskAssignment(runDir, a);
+      const written = writeTaskAssignment(runDir, a, bindFor(runDir));
       expect(written).toBe(path.join(runDir, "tasks", "backend.json"));
       expect(fs.existsSync(written!)).toBe(true);
       expect(taskAssignmentPath(runDir, "backend")).toBe(written);
@@ -133,7 +152,105 @@ describe("guild.task_assignment.v1", () => {
   it("writeTaskAssignment returns null and writes nothing for an invalid assignment", () => {
     const runDir = tmpRunDir();
     const bad = { schema_version: "guild.task_assignment.v1", specialist: "backend" } as unknown as TaskAssignmentV1;
-    expect(writeTaskAssignment(runDir, bad)).toBeNull();
+    expect(writeTaskAssignment(runDir, bad, bindFor(runDir))).toBeNull();
     expect(fs.existsSync(taskAssignmentPath(runDir, "backend"))).toBe(false);
+  });
+});
+
+
+// ── T3 rework F3 — reviewer probe regressions (session_context §5, v1 channel) ──
+// Round-1 live probe: writeTaskAssignment persisted a valid v1 descriptor with
+// NO binding at all (ACCEPTED_FAIL_OPEN). These pin fail-closed for every
+// §5 failure class, plus the runDir cross-run addressing check.
+
+describe("T3 F3 — v1 descriptor writer fails closed on the run binding", () => {
+  const valid = (runId = "run-x"): TaskAssignmentV1 =>
+    buildTaskAssignment({
+      runId,
+      specialist: "backend",
+      scope: "x",
+      hostKind: "claude-code-cli",
+      now: FIXED_NOW,
+    });
+
+  function expectReject(fn: () => unknown, reason: string): void {
+    try {
+      fn();
+      throw new Error("unreachable — writer must throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(BindingRejectedError);
+      expect((e as BindingRejectedError).diagnostic).toBe("binding_rejected");
+      expect((e as BindingRejectedError).reason).toBe(reason);
+    }
+  }
+
+  it("MISSING: no minted binding for the run → binding_not_minted, nothing written", () => {
+    const runDir = tmpRunDir();
+    expectReject(() => writeTaskAssignment(runDir, valid(), { binding_ref: "rb-unminted" }), "binding_not_minted");
+    expect(fs.existsSync(taskAssignmentPath(runDir, "backend"))).toBe(false);
+  });
+
+  it("ABSENT REF: an undefined binding_ref is rejected even when a binding exists", () => {
+    const runDir = tmpRunDir();
+    bindFor(runDir);
+    expectReject(
+      () => writeTaskAssignment(runDir, valid(), { binding_ref: undefined as unknown as string }),
+      "binding_absent"
+    );
+    expect(fs.existsSync(taskAssignmentPath(runDir, "backend"))).toBe(false);
+  });
+
+  it("MALFORMED: a corrupt persisted record (state 'corrupt-openish' — the reviewer probe) rejects the write", () => {
+    const runDir = tmpRunDir();
+    const ref = bindFor(runDir).binding_ref;
+    fs.writeFileSync(
+      runBindingPath(rootOf(runDir), "run-x"),
+      JSON.stringify({
+        schema_version: "guild.run_binding.v1",
+        run_id: "run-x",
+        binding_ref: ref,
+        state: "corrupt-openish",
+      }, null, 2) + "\n"
+    );
+    expectReject(() => writeTaskAssignment(runDir, valid(), { binding_ref: ref }), "binding_malformed");
+    expect(fs.existsSync(taskAssignmentPath(runDir, "backend"))).toBe(false);
+  });
+
+  it("CLOSED: a revoked binding rejects the write", () => {
+    const runDir = tmpRunDir();
+    const bind = bindFor(runDir);
+    closeRunBinding({ root: rootOf(runDir), run_id: "run-x" });
+    expectReject(() => writeTaskAssignment(runDir, valid(), bind), "binding_closed");
+  });
+
+  it("MISMATCHED: another run's nonce rejects the write", () => {
+    const runDir = tmpRunDir();
+    bindFor(runDir);
+    const other = mintRunBinding({ root: rootOf(runDir), run_id: "run-other" });
+    expectReject(
+      () => writeTaskAssignment(runDir, valid(), { binding_ref: other.binding_ref }),
+      "binding_mismatch"
+    );
+  });
+
+  it("CROSS-RUN ADDRESSING: a runDir naming a different run than the descriptor rejects (moved-sentinel class)", () => {
+    const runDir = tmpRunDir(); // .../runs/run-x
+    const bind = bindFor(runDir);
+    expectReject(() => writeTaskAssignment(runDir, valid("run-elsewhere"), bind), "binding_mismatch");
+  });
+
+  it("MOVED SENTINEL: repointing both workspace sentinels cannot redirect or authorize the write (SC-1)", () => {
+    const runDir = tmpRunDir();
+    const root = rootOf(runDir);
+    const bind = bindFor(runDir);
+    fs.mkdirSync(path.join(root, ".guild", "runs"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "runs", "current-run-id"), "run-hijack\n");
+    fs.writeFileSync(path.join(root, ".guild", "current-run-id"), "run-hijack\n");
+    // The bound write still lands under ITS OWN run dir.
+    const written = writeTaskAssignment(runDir, valid(), bind);
+    expect(written).toBe(path.join(runDir, "tasks", "backend.json"));
+    // The sentinel-named run (no minted binding) authorizes nothing.
+    const hijackDir = path.join(root, ".guild", "runs", "run-hijack");
+    expectReject(() => writeTaskAssignment(hijackDir, valid("run-hijack"), bind), "binding_not_minted");
   });
 });

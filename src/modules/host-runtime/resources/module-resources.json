@@ -225,7 +225,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "f804b65618241370eb5965c15bb440ba3951fd098e986f4e90c400b0a9ce705c"
+      "sha256": "38322aa238be530718268a8e52990c84a097435adde6af1ab2fa6658210cccc0"
     },
     {
       "category": "scripts",
@@ -240,6 +240,13 @@
       "source_path": "scripts/lib/result-normalizer.ts",
       "resource_path": "resources/scripts/lib/result-normalizer.ts",
       "sha256": "34a4dcb7aca28ba47cadc99afdbefaffdb759ca1eda4ef5e69ac488c10439f1f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/session-context",
+      "source_path": "scripts/lib/session-context.ts",
+      "resource_path": "resources/scripts/lib/session-context.ts",
+      "sha256": "761381c12ccb26eca023580d0819a99c7d745887c3fb7c57e96192d3fac0f838"
     },
     {
       "category": "scripts",

@@ -62,6 +62,40 @@ export interface PaneSpec {
   taskId?: string;
   capability_scope?: string[];
   specialist?: string;
+  /**
+   * T6-R2-F5: the model this pane must actually run at, when the evidenced M2
+   * gate selected one. Absent (the M0/M1 default) ⇒ the adapter emits its
+   * legacy command byte-identically and the host picks its own model.
+   */
+  model?: string;
+  /** Frozen model parameters for `model` (e.g. `{ model, effort }`). */
+  modelParams?: Record<string, unknown>;
+}
+
+// ── T6-R2-F5: the ONE model-consumption rule, shared by every backend ────────
+//
+// The v2 selection reaches dispatch on the specialist's `modelProvenance`
+// (stamped by planProductionDispatchModel). These two helpers are the ONLY
+// place that reads it, so tmux panes, in-process descriptors, the serial floor
+// and the remote backend can never disagree about which model a lane runs at.
+
+/** The selected model for a lane, or null — null ⇒ legacy resolution, unchanged. */
+export function dispatchModelForSpecialist(spec: Specialist | null | undefined): string | null {
+  const prov = spec?.modelProvenance;
+  if (!prov || prov.source !== "v2") return null;
+  return typeof prov.selected_model === "string" && prov.selected_model.length > 0
+    ? prov.selected_model
+    : null;
+}
+
+/** Frozen model params for a lane (`{model, effort?}`), or undefined when no v2 model. */
+export function dispatchModelParamsForSpecialist(
+  spec: Specialist | null | undefined
+): Record<string, unknown> | undefined {
+  const model = dispatchModelForSpecialist(spec);
+  if (model === null) return undefined;
+  const effort = spec?.modelProvenance?.selected_effort;
+  return { model, ...(typeof effort === "string" && effort.length > 0 ? { effort } : {}) };
 }
 
 export interface PreflightResult {

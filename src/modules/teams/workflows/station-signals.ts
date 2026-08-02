@@ -350,6 +350,43 @@ function prepareEmitDir(
 }
 
 /**
+ * Generic hardened writer for a run-tree team artifact (T2b: proposal /
+ * decision / schedule persistence rides the SAME symlink-hardened containment
+ * path as team_plan/team_result emission — one guard, no lookalike copies).
+ * `filename` must be a safe single segment. With `immutable: true` an existing
+ * file is NEVER overwritten (team-contracts §1: artifacts are immutable; a
+ * change is a NEW artifact, never an edit). Returns the path written.
+ */
+export function writeRunArtifact(
+  cwd: string,
+  runId: string,
+  kind: typeof TEAM_PLAN_DIR | typeof TEAM_RESULT_DIR,
+  filename: string,
+  content: string,
+  opts: EmitOptions & { immutable?: boolean } = {}
+): string {
+  assertSafeRunId(runId);
+  if (!SAFE_SEGMENT.test(filename) || filename === "." || filename === "..") {
+    throw new Error(`writeRunArtifact: unsafe filename segment: ${JSON.stringify(filename)}`);
+  }
+  if (kind !== TEAM_PLAN_DIR && kind !== TEAM_RESULT_DIR) {
+    throw new Error(`writeRunArtifact: unknown artifact kind: ${JSON.stringify(kind)}`);
+  }
+  const guildDir = opts.guildDir ?? ".guild";
+  const runDir = path.join(cwd, guildDir, "runs", runId);
+  const p = path.join(runDir, kind, filename);
+  assertWithinRunTree(runDir, p, `${kind}/${filename}`);
+  prepareEmitDir(cwd, runId, p, guildDir, "writeRunArtifact");
+  if (opts.immutable && fs.existsSync(p)) {
+    throw new Error(
+      `writeRunArtifact: ${kind}/${filename} already exists — artifacts are immutable (§1); write a NEW version instead of editing`
+    );
+  }
+  fs.writeFileSync(p, content, "utf8");
+  return p;
+}
+
+/**
  * Persist a composed `guild.team_plan.v1` to
  * `.guild/runs/<run-id>/team-plan/<station>.json`. FAIL-CLOSED: the plan is
  * re-validated with the G6a `validateTeamPlanV1` before ANY write — an invalid

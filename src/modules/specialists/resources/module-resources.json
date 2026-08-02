@@ -8,21 +8,21 @@
       "id": "advisor",
       "source_path": "agents/advisor.md",
       "resource_path": "resources/agents/advisor.md",
-      "sha256": "445ae0fecf7211a5bd9e50a67ab5a3a5303a63f7eeb0b208e5c00b3ef2efcb4b"
+      "sha256": "13d76f45e75e5ce8a6d80c80fd5894310d90870ac13be1b0c7af50f97b910781"
     },
     {
       "category": "agents",
       "id": "developer",
       "source_path": "agents/developer.md",
       "resource_path": "resources/agents/developer.md",
-      "sha256": "d542ff5e4335a9c56f5032162b0762478618563ded8a98b2d77c448c96181ac0"
+      "sha256": "63138677c74d945ccc888a2acb56693fd42e9b10220594ed2535b35e3ae2258a"
     },
     {
       "category": "scripts",
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",
       "resource_path": "resources/scripts/lib/roster.ts",
-      "sha256": "66fcd3c99be81d83cdf074775e0b577ba346dcd90d241d66d3d7a3c9aaf7fb08"
+      "sha256": "10e4513d013d3a1b0fe393eefbd5eeada451124eac4014953251451ccd5e4b8a"
     },
     {
       "category": "scripts",
@@ -281,21 +281,21 @@
       "id": "researcher-comparison-table",
       "source_path": "skills/specialists/researcher-comparison-table/SKILL.md",
       "resource_path": "resources/skills/specialists/researcher-comparison-table/SKILL.md",
-      "sha256": "277b4f44e8c68caf9cdf49aba27285712bca6f3fc4ef853a90ab98e3e1a58146"
+      "sha256": "a9ea6603c1a43611e50635ad62e6a613ceb338a48219d5ae84698eae906b71b9"
     },
     {
       "category": "skills",
       "id": "researcher-deep-dive",
       "source_path": "skills/specialists/researcher-deep-dive/SKILL.md",
       "resource_path": "resources/skills/specialists/researcher-deep-dive/SKILL.md",
-      "sha256": "605d8b1a1950db8a385d08ab0713035653396594b4f0e3032ba88004bc709604"
+      "sha256": "f0aab46f333b79724ede00c869b19b6871d97cde3f4848bab1d234e15521e340"
     },
     {
       "category": "skills",
       "id": "researcher-paper-digest",
       "source_path": "skills/specialists/researcher-paper-digest/SKILL.md",
       "resource_path": "resources/skills/specialists/researcher-paper-digest/SKILL.md",
-      "sha256": "412117807891d9040e9e09b5fdc977a8bb05e56b685946cf1fc7db63794297d8"
+      "sha256": "82353f2d813315410bc3b6975779e7ab21641cca255533d7f3bd843f0c801a90"
     },
     {
       "category": "skills",

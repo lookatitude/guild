@@ -8,21 +8,21 @@
       "id": "guild-operations",
       "source_path": "skills/guild-operations/SKILL.md",
       "resource_path": "resources/skills/guild-operations/SKILL.md",
-      "sha256": "b867321ffb069db1cf2badf1455c029ff9d9ff389c15964e1a5337c4307676a8"
+      "sha256": "58979e029ca60829a1f7cd222999558b2880c40abc0c85cfd42d73e79012d7dc"
     },
     {
       "category": "skills",
       "id": "guild-operations/operations-contract.md",
       "source_path": "skills/guild-operations/operations-contract.md",
       "resource_path": "resources/skills/guild-operations/operations-contract.md",
-      "sha256": "b8e60ad3015df0856b392ead20223d423a594cbac6a61ff803fb56d0d5a00e17"
+      "sha256": "2e3d6ad538ff3a7c9a02e72b57ac6c769bafb874e97feb4dd1990b4d02168c32"
     },
     {
       "category": "skills",
       "id": "ops-incident",
       "source_path": "skills/meta/ops-incident/SKILL.md",
       "resource_path": "resources/skills/meta/ops-incident/SKILL.md",
-      "sha256": "be3f0982fa3d34013fa7cf36e9a67afac084660169946e3f3ae370ea4ef2fd86"
+      "sha256": "efa1f565329d1185202f7341d5e16c5ffdce860b5624b727d23852dba7ad6a10"
     },
     {
       "category": "skills",
@@ -50,7 +50,7 @@
       "id": "ops-rollback",
       "source_path": "skills/meta/ops-rollback/SKILL.md",
       "resource_path": "resources/skills/meta/ops-rollback/SKILL.md",
-      "sha256": "d568f30f297e2e604c5c1ae75253a9a937b22db62187a5212b41481989b4a61f"
+      "sha256": "09e9b4e075edb92a73f748e6ebc7e308afc98c1d7589a9df5e066469e1136b59"
     }
   ]
 }

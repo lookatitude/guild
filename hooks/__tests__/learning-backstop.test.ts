@@ -29,6 +29,9 @@ import {
   runLearningBackstop,
   PHASE_TOKEN_TO_CHECKPOINT,
 } from "../lib/learning-backstop";
+// T3b (session_context §5): the Stop entry's checkpoint writes are binding-
+// gated; real-path fixtures mint the run's binding so authorized writes pass.
+import { mintTestBinding } from "../test-support/mint-binding";
 import {
   writeCheckpoint,
   DECISION_TARGETS,
@@ -237,7 +240,7 @@ describe("REAL PATH — Stop entry (hooks/learning-backstop.ts via tsx)", () => 
     stderr: string;
   } {
     const base: Record<string, string | undefined> = { ...process.env };
-    for (const k of ["GUILD_RUN_ID", "GUILD_CWD", "GUILD_RUN_DIR"]) {
+    for (const k of ["GUILD_RUN_ID", "GUILD_CWD", "GUILD_RUN_DIR", "GUILD_RUN_BINDING_REF"]) {
       delete base[k];
     }
     const result = spawnSync("npx", ["tsx", ENTRY], {
@@ -255,8 +258,12 @@ describe("REAL PATH — Stop entry (hooks/learning-backstop.ts via tsx)", () => 
 
   it("writes backstop checkpoints for the active run and exits 0", () => {
     writeRunYaml(BLOCK_PHASES_LOG);
+    // Rework F1: the writer requires the caller-PRESENTED pair — export the
+    // full envelope (a minted record alone no longer authorizes).
+    const ref = mintTestBinding(root, RUN_ID);
     const { exitCode, stderr } = runEntry({
       GUILD_RUN_ID: RUN_ID,
+      GUILD_RUN_BINDING_REF: ref,
       GUILD_CWD: root,
     });
     expect(exitCode).toBe(0);
@@ -267,8 +274,14 @@ describe("REAL PATH — Stop entry (hooks/learning-backstop.ts via tsx)", () => 
     expect(content).toMatch(/^  backstop: true$/m);
   });
 
-  it("resolves the run id from the current-run-id sentinel when env is unset", () => {
+  it("does NOT resolve the run id from the current-run-id sentinel when env is unset (T3b §5: sentinel is intake-only, never a writer identity)", () => {
+    // CORRECTED (T3b): this test previously ENCODED the retired sentinel-write
+    // defect (sentinel resolved a writer identity and the backstop wrote under
+    // it). Under session_context §5 the sentinel never authorizes a write:
+    // with no explicit binding env, the entry fails closed and writes nothing —
+    // even with a minted, open binding record present (no envelope, no write).
     writeRunYaml(BLOCK_PHASES_LOG);
+    mintTestBinding(root, RUN_ID);
     fs.writeFileSync(
       path.join(root, ".guild", "runs", "current-run-id"),
       RUN_ID + "\n",
@@ -276,7 +289,7 @@ describe("REAL PATH — Stop entry (hooks/learning-backstop.ts via tsx)", () => 
     );
     const { exitCode } = runEntry({ GUILD_CWD: root });
     expect(exitCode).toBe(0);
-    expect(fs.existsSync(learningFile("development"))).toBe(true);
+    expect(fs.existsSync(learningFile("development"))).toBe(false);
   });
 
   it("is a silent no-op (exit 0) with no resolvable run", () => {

@@ -117,15 +117,54 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * RATIFIED_MANIFESTS and RATIFIED_CLAUDE_PLUGIN_FILES below are UNCHANGED —
  * verified, not assumed. Both guards were observed RED against the old pin
  * before this bump, which is the anti-vacuity evidence that the pin is live.
+ *
+ * Re-ratified 2026-08-01 (dynamic-host-model-routing lane T6b, command surfaces) —
+ * DELIBERATE surface change, TWO anchors moved:
+ *   - `commands` tree: adds the new public read-only command `commands/models.md`
+ *     (`guild models inspect`) and inserts the blocking *Team decision gate*
+ *     section into the eight dispatching entrypoints (build, ideate, init, ops,
+ *     plan, qa, resume + the router pointer in guild). `command-src/command-registry.json`
+ *     was re-extracted in the SAME change, so `render(entry) === commands/<id>.md`
+ *     holds byte-for-byte for all 22 commands (verified: 0 drift).
+ *   - `.claude-plugin/plugin.json`: registers `./commands/models.md`. This is NOT a
+ *     pure version bump, so the version-stripped hash legitimately moves;
+ *     `RATIFIED_CLAUDE_PLUGIN_FILES` and the marketplace manifest are UNCHANGED
+ *     (verified by recomputation, not assumed).
+ * The `skills` tree hash is deliberately NOT re-ratified here: the skills delta in
+ * this working tree belongs to OTHER lanes of the same run (team-policy skill text),
+ * and a lane must never ratify a surface it did not author. The guard therefore stays
+ * RED on `skills` until that lane's owner ratifies it — which is the anchor working
+ * as designed, not a regression from this change.
+ *
+ * Re-ratified 2026-08-01 (dynamic-host-model-routing lane T6b, REWORK ROUND 2) —
+ * DELIBERATE, ONE anchor moved (`commands`), one file changed:
+ *   - `commands/models.md` body only (frontmatter untouched, so the router's
+ *     trigger surface is unchanged). The G-lane review found two blocking defects
+ *     in the command's behaviour and the doc had to follow the code: exit `3` now
+ *     also means the PER-FIELD display validator refused a value (T6B-R1-B1 — it
+ *     prints `<REJECTED:<category>:<12-hex>>`, in text and in JSON), and the doc
+ *     now states that a persisted inspection report is an UNTRUSTED POINTER whose
+ *     claims are rebuilt from self-verifying artifacts (T6B-R1-B2), including the
+ *     `UNTRUSTED CLAIM(S) NOT SUPPORTED BY VERIFIED ARTIFACTS` line an operator
+ *     must relay verbatim. Leaving the doc stale would have documented a
+ *     fail-closed contract the command no longer has.
+ *   - `command-src/command-registry.json` was re-extracted in the SAME change
+ *     (`render(entry) === commands/models.md` re-proved byte-for-byte before the
+ *     write; all 22 commands, 0 drift, both registry suites green).
+ *   - `.claude-plugin/**` is UNTOUCHED this round, so `RATIFIED_MANIFESTS` and
+ *     `RATIFIED_CLAUDE_PLUGIN_FILES` below are unchanged — verified by
+ *     recomputation, not assumed. Both guards were observed RED against the old
+ *     `commands` pin before this bump (anti-vacuity evidence that the pin is live).
+ *   - `skills` is again NOT re-ratified: that delta still belongs to other lanes.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "d49cf3d93fe29992c5b85eb4f87d681d538dc188",
+  commands: "61dfd9eafefd7651aaee0fd5c9e8e51f33248944",
   skills: "e539a219ed4c01aac2d6fdb795b898cf474988dd",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "d5ff5f898e6122f64fe2cc2af3810ff5f8e7a471131c97c720ee6092c6ff38de",
+  ".claude-plugin/plugin.json": "30e3d850ab2032a755851ffaa10bfa32a4a80888a867b9929a97836956ecc34b",
   ".claude-plugin/marketplace.json": "0668d0fe064775e3a0b754474a9ca8a44d327e4132d298e65737183bf06bcdb4",
 });
 

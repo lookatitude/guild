@@ -3,9 +3,12 @@ name: researcher-comparison-table
 description: Produces an N-option comparison table — libraries, vendors, frameworks, models — with named axes, cell rationale, and takeaways. Output: markdown table + 3–5 bullet takeaways + source list. Pulled by the `researcher` specialist. TRIGGER: "compare these five libraries", "side-by-side of X vs Y vs Z", "give me a comparison table of the top options for X", "evaluate these vendors for X", "which of these frameworks fits us best", "benchmark these options on cost and features". DO NOT TRIGGER for: scoring two *project-internal* architecture options for this codebase (use `architect-tradeoff-matrix`), open-ended topic research with multiple sources (use `researcher-deep-dive`), summarizing a single paper (use `researcher-paper-digest`), generating copy for a comparison landing page (copywriter-long-form or seo).
 when_to_use: The parent `researcher` specialist pulls this skill when the task is a structured comparison of named external options (3+), and a reusable table is the right artifact. Also fires on explicit user request.
 type: specialist
+work_class: research
 ---
 
 # researcher-comparison-table
+
+**Work class: `research` (authoritative, non-downgradable).** Any lane pulling this skill is `purpose: research` and resolves `effective_complexity: hard` / `tier: powerful` (`research_always_hard` — the frozen `guild.model_policy.v2` floor); the floor is transitive through every handoff and sub-dispatch and is recorded in the receipt (`forced_floor_reason: research_always_hard`).
 
 Evidence is a table whose every cell cites a source — no opinion cells, no unsourced "best" claims.
 

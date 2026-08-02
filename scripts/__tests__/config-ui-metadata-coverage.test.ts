@@ -26,9 +26,9 @@ describe("CONFIG_UI_METADATA coverage (V9)", () => {
     expect(report.ok).toBe(true);
   });
 
-  it("has metadata for all 132 schema keys", () => {
-    expect(CONFIG_SCHEMA.length).toBe(132);
-    expect(Object.keys(CONFIG_UI_METADATA).length).toBe(132);
+  it("has metadata for all 133 schema keys", () => {
+    expect(CONFIG_SCHEMA.length).toBe(133);
+    expect(Object.keys(CONFIG_UI_METADATA).length).toBe(133);
   });
 
   it("every key declares all required UI fields", () => {

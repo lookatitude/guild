@@ -48,9 +48,15 @@ const ERROR_EVENT = JSON.stringify({
   ms: 300,
 });
 
+// T3b (session_context §5): reflection-side writes are binding-gated; every
+// fixture run mints its binding. hermeticEnv strips outer Guild-lane env.
+import { mintTestBinding } from "../test-support/mint-binding";
+import { hermeticEnv } from "../test-support/hermetic-env";
+
 function makeRunDir(tmpDir: string, runId: string, events: string[]): string {
   const runDir = path.join(tmpDir, ".guild", "runs", runId);
   fs.mkdirSync(runDir, { recursive: true });
+  mintTestBinding(tmpDir, runId);
   if (events.length > 0) {
     fs.writeFileSync(
       path.join(runDir, "events.ndjson"),
@@ -68,7 +74,7 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...hermeticEnv(), ...env },
     timeout: 15000,
   });
   return {
@@ -98,6 +104,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       // Must emit a line telling orchestrator to invoke guild:reflect
@@ -110,6 +117,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
     });
@@ -122,6 +130,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -135,6 +144,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -151,6 +161,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -162,9 +173,11 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       // Create run dir but no events file
       const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
       fs.mkdirSync(runDir, { recursive: true });
+      mintTestBinding(tmpDir, "test-run");
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -177,6 +190,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode } = runScript("not valid json", {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
     });
@@ -205,6 +219,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     // Write events ONLY to canonical file — legacy events.ndjson absent
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
@@ -215,6 +230,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("GUILD_REFLECT");
@@ -224,6 +240,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     // makeRunDir writes to events.ndjson only
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     fs.mkdirSync(runDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     fs.writeFileSync(
       path.join(runDir, "events.ndjson"),
       [SPECIALIST_EVENT, FILE_EDIT_EVENT].join("\n") + "\n",
@@ -233,6 +250,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("GUILD_REFLECT");
@@ -242,6 +260,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     // Canonical has passing events; legacy has an error event that would fail the gate
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
@@ -257,6 +276,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     // Gate passes because canonical (no error) is used, not legacy (has error)
     expect(exitCode).toBe(0);
@@ -311,6 +331,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
       [SPECIALIST_EVENT, TOOL_CALL_WRITE].join("\n") + "\n",
@@ -320,6 +341,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("GUILD_REFLECT");
@@ -329,6 +351,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
       [SPECIALIST_EVENT, TOOL_CALL_WRITE, TOOL_CALL_ERR].join("\n") + "\n",
@@ -338,6 +361,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toBe("");
@@ -402,6 +426,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       // Explicitly clear the env var so we exercise the default-off path.
       GUILD_ENABLE_DEVTEAM_REFLECT: "",
     });
@@ -416,6 +441,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
     });
     expect(exitCode).toBe(0);
@@ -429,6 +455,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
     });
     expect(exitCode).toBe(0);
@@ -442,6 +469,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
       GUILD_SPEC_SLUG: "v1.3.0-deferred-cleanup",
     });
@@ -455,6 +483,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
       GUILD_SPEC_SLUG: "nonexistent-spec",
     });
@@ -469,6 +498,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
     });
     expect(exitCode).toBe(0);
@@ -555,6 +585,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stderr).not.toMatch(/DISCIPLINE/);
@@ -571,6 +602,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(
@@ -587,6 +619,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).not.toBe(0);
     expect(stderr).toMatch(/DISCIPLINE/);
@@ -606,6 +639,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).not.toBe(0);
     expect(stderr).toMatch(/DISCIPLINE/);
@@ -630,6 +664,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stderr).not.toMatch(/DISCIPLINE/);

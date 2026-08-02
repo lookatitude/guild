@@ -24,6 +24,7 @@
       "retry-lane",
       "write-run-manifest",
       "write-task-run",
+      "lib/run-binding",
       "lib/run-lifecycle",
       "lib/run-manifest-wiring",
       "lib/runstart-preflight"

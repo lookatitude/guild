@@ -119,6 +119,11 @@ export const DEFAULTS = {
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
+  // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
+  // routing intent. null = not configured — v2 routing stays off and the legacy
+  // tier maps drive generic preferences for the §6 migration window. When set, the
+  // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
+  model_policy: null,
   defaults: {
     auto_learn: false,
     adversarial: "on",

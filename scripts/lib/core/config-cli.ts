@@ -63,6 +63,11 @@ import {
   type TierHostValue,
   type TierModelSpec,
 } from "../../../src/modules/config/workflows/tier-model";
+// guild.model_policy.v2 closed-key validator (T5 dynamic-host-model-routing).
+// The policy is an OPTIONAL settings key during the M0-M2 rollout: registered
+// (accepted + validated at load, §5 fail-closed) but never scaffolded into a
+// fresh settings.json, so `config init` stays byte-identical to the golden.
+import { validateModelPolicy } from "../../../src/modules/capability/workflows/model-policy";
 export { resolveTierModel };
 export type { ResolvedTierModel, TierHostValue, TierModelSpec };
 
@@ -372,6 +377,15 @@ interface GuildSettings {
   loop_cap: number;
   codex_cap: number;
   defaults: DefaultsBlock;
+  /**
+   * guild.model_policy.v2 (dynamic-host-model-routing T5) — durable operator
+   * model-routing preferences (selectors, never inventory). Registered in the
+   * config-schema SoT via DEFAULTS with default `null` (= not configured: v2
+   * routing off, legacy tier maps drive the §6 migration window). When set to
+   * an object it is validated by the §5 validator and rejected at load on any
+   * violation (fail closed).
+   */
+  model_policy?: Record<string, unknown> | null;
 }
 
 // P1-L9: exported (additive — no behavior change) so config-schema.ts derives its
@@ -418,11 +432,19 @@ export const HELP: Record<string, string> = {
   loops: "null | none|spec|plan|implementation|all|<csv> — power-user; null = derive from rigor",
   loop_cap: "int 1-256 — max rounds per adversarial loop",
   codex_cap: "int 1-10 — max rounds per Codex review gate",
+  model_policy:
+    "null | guild.model_policy.v2 object — durable operator model-routing preferences " +
+    "(purpose routes over selectors, never inventory). null = not configured (legacy tier maps " +
+    "drive generic preferences for the migration window); an object must pass the closed-key " +
+    "§5 validator or the whole policy is rejected at load.",
   "defaults.auto_learn":
     "bool (default false) — when true, /guild init runs the full learn-* pipeline at bootstrap (D3). " +
     "Precedence: --learn CLI flag > settings.json > built-in(false).",
   "defaults.adversarial": "on | off — (off REJECTED for Guild self-build)",
-  "defaults.team.size": "null = 3-4 rule | <int> (cap-6 unless overridden)",
+  "defaults.team.size":
+    "null (default) | <positive int> — LEGACY migration-window scheduling input (team-contracts §6): " +
+    "read as a concurrency hint clamped by verified backend capacity; NEVER a logical team-size cap " +
+    "(the logical team is uncapped, guild.team_proposal.v2); fails validation after the two-release window",
   "defaults.team.always_include": "[] | subset of the specialist roles",
   "defaults.review_workflow": "standard | cross | minimal — default review depth",
   "defaults.skill_policy": "standard | conservative — default skill-usage",
@@ -1329,6 +1351,7 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       "statusline",                  // R-009: status-line pane enable (--statusline flag / settings key)
       "adversarial_review_provider", // R-008: cross-review provider pin
       "loops", "loop_cap", "codex_cap", "defaults",
+      "model_policy",                // T5 dynamic-host-model-routing: guild.model_policy.v2 (optional; §5-validated)
     ]);
     for (const k of Object.keys(parsed)) {
       if (k.startsWith("_")) continue; // _help / _docs annotations
@@ -1400,6 +1423,18 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
       rejects.push(
         `codex_skip_enforcement "${parsed["codex_skip_enforcement"]}" is invalid — valid: warn|block`
       );
+    }
+    // T5 (dynamic-host-model-routing): guild.model_policy.v2 — closed key with
+    // scaffolded default `null` (= not configured). A non-null value MUST pass
+    // the §5 validator; any violation is a hard reject at load (fail closed —
+    // an invalid policy never resolves anything).
+    if (parsed["model_policy"] !== undefined && parsed["model_policy"] !== null) {
+      const policyRejects = validateModelPolicy(parsed["model_policy"]);
+      if (policyRejects.length > 0) {
+        rejects.push(...policyRejects);
+      } else {
+        out.model_policy = parsed["model_policy"] as Record<string, unknown>;
+      }
     }
     // D5: agent_mode as Tier-1 key (supersedes defaults.agent_team).
     if (VALID_AGENT_MODE.has(parsed["agent_mode"] as string))

@@ -15,7 +15,11 @@ import type {
   TeamLaunchRequest,
   TeamLaunchResult,
 } from "../core/contracts/team-backend";
-import { GENERIC_SUBAGENT_TYPE } from "../core/contracts/team-backend";
+import {
+  GENERIC_SUBAGENT_TYPE,
+  dispatchModelForSpecialist,
+  dispatchModelParamsForSpecialist,
+} from "../core/contracts/team-backend";
 import { buildPrompt, shellQuote } from "./tmux-backend";
 
 export function composeInProcessDispatch(
@@ -29,14 +33,24 @@ export function composeInProcessDispatch(
     // instruction so the lane still runs the minted role at its own tier.
     const isProjectLocal =
       spec.definition_source === "project" && !!spec.definition;
+    // T6-R2-F5: an evidenced-M2 selection IS the descriptor's model, so the
+    // Agent() call guild:execute-plan issues runs at the resolver's frozen
+    // model instead of being auto-scored. `null` (legacy / shadow / no
+    // provenance) keeps the auto-scored behavior byte-identical.
+    const model = dispatchModelForSpecialist(spec);
+    const modelParams = dispatchModelParamsForSpecialist(spec);
     return {
       name: spec.name,
       subagentType: isProjectLocal ? GENERIC_SUBAGENT_TYPE : spec.name,
-      model: null,
+      model,
       env: {
         GUILD_RUN_ID: req.runId,
         GUILD_SPECIALIST: spec.name,
         GUILD_TASK_ID: spec.taskId ?? spec.name,
+        ...(model !== null ? { GUILD_MODEL: model } : {}),
+        ...(modelParams !== undefined
+          ? { GUILD_MODEL_PARAMS: JSON.stringify(modelParams) }
+          : {}),
         ...(spec.capability_scope !== undefined
           ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
           : {}),

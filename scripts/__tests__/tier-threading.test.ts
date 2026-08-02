@@ -166,6 +166,11 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     env["GUILD_HOST"] = "claude";
     env["GUILD_CROSS_HOST_ENABLED"] = "1";
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "1";
+    // T7R-R1-B1: this fixture is about tier threading, not approval, and carries
+    // no team-plan trail. Opt into the ONE audited escape hatch; the gate's own
+    // pins live in t7-h1-dispatch-approval.test.ts.
+    env["GUILD_DISPATCH_APPROVAL_OVERRIDE"] =
+      "tier-threading fixture: no team-plan trail; approval verification is pinned separately";
 
     const r = spawnSync(
       "npx",

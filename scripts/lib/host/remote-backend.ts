@@ -25,8 +25,16 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  dispatchModelForSpecialist,
+  dispatchModelParamsForSpecialist,
 } from "../core/contracts/team-backend";
-import { buildPrompt, paneCommand, shellQuote, wrapLoginShell, binaryForHostKind } from "./tmux-backend";
+import {
+  buildPrompt,
+  paneCommand,
+  shellQuote,
+  wrapLoginShell,
+  binaryForHostKind,
+} from "./tmux-backend";
 import type { HostKind } from "../host-types";
 
 // ── MockTransport ─────────────────────────────────────────────────────────────
@@ -193,6 +201,10 @@ export class RemoteTeamBackend implements TeamBackend {
   private commandFor(spec: Specialist, req: TeamLaunchRequest): { paneSpec: PaneSpec; command: string } {
     const hostKind: HostKind = spec.host_kind ?? req.orchestratorHostKind ?? "claude";
     const prompt = buildPrompt(req.slug, req.runId, spec, req.teamPath, hostKind);
+    // T6-R2-F5: a remote lane spawns at the same evidenced-M2 selection a local
+    // pane would — one consumption rule, every backend (absent ⇒ legacy bytes).
+    const model = dispatchModelForSpecialist(spec) ?? undefined;
+    const modelParams = dispatchModelParamsForSpecialist(spec);
     const paneSpec: PaneSpec = {
       name: spec.name,
       scope: spec.scope,
@@ -203,10 +215,20 @@ export class RemoteTeamBackend implements TeamBackend {
       taskId: spec.taskId,
       capability_scope: spec.capability_scope,
       specialist: spec.name,
+      ...(model !== undefined ? { model } : {}),
+      ...(modelParams !== undefined ? { modelParams } : {}),
     };
     const command = this.resolveAdapter
       ? this.resolveAdapter(hostKind).command(paneSpec)
-      : paneCommand(prompt, req.runId, spec.capability_scope, spec.taskId, spec.name);
+      : paneCommand(
+          prompt,
+          req.runId,
+          spec.capability_scope,
+          spec.taskId,
+          spec.name,
+          undefined, // keep paneCommand's own GUILD_PANE_DEBUG default
+          model,
+        );
     return { paneSpec, command };
   }
 

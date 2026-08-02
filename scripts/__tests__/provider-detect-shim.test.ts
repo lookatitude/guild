@@ -36,6 +36,7 @@ describe("provider-detect compatibility shim", () => {
     const detection = shim.detectProviders({
       cwd: CWD,
       host: "claude",
+      trust: "verified",
       probe: makeProbe({ codexPlugin: true, codexCli: true, storedAuth: true }),
     });
 
@@ -48,6 +49,7 @@ describe("provider-detect compatibility shim", () => {
     const sameFamily = shim.detectProviders({
       cwd: CWD,
       host: "codex",
+      trust: "verified",
       probe: makeProbe({ codexPlugin: true, codexCli: true, storedAuth: true }),
     });
     expect(

@@ -429,3 +429,19 @@ Exit codes: `0` success; `1` bad input / IO error; `2` bad `--cwd`.
   flatten (`execution`/`loops`/`review`/`team`/…) is deferred as a followup.
 - Every flag has a `settings.json` equivalent; you can drive Guild entirely by
   flags, entirely by `settings.json`, or any mix (flags win).
+- **The model-routing rollout flags live OUTSIDE this schema (today).** The seven
+  closed keys `model_routing.{identity_v2,binding_enforce,discovery,inspect,shadow,enabled}`
+  and `teams.proposal_v2` are read directly from `.guild/settings.json` by the rollout
+  reader (`capability/workflows/routing-rollout.ts`), **not** by the `guild.config_schema.v1`
+  registry. Consequences, stated plainly:
+  - `config init` / `config reconcile sync` will **not** scaffold or document them, and
+    `config set model_routing.*` is rejected as an unknown key — set them by hand.
+  - A hand-set value is still validated **closed-key and closed-value** by the rollout
+    reader: an unknown key under `model_routing` or a value other than `"on"`/`"off"` is
+    recorded as a reject and the flag keeps its ADR default. Reading never throws and never
+    invents an enablement.
+  - Defaults when unset: `identity_v2`, `binding_enforce`, `discovery`, `inspect`, and
+    `teams.proposal_v2` are **on** (M0, live); `shadow` (M1) and `enabled` (M2) are **off**.
+  - `/guild:models inspect` prints the effective values, so you never have to infer them.
+
+  Registering these keys in the schema SoT is tracked with the M1 config-surface work.

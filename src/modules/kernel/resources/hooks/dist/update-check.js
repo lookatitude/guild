@@ -947,6 +947,536 @@ var init_provider_detect = __esm({
   }
 });
 
+// ../src/modules/host-runtime/workflows/session-context.ts
+var init_session_context = __esm({
+  "../src/modules/host-runtime/workflows/session-context.ts"() {
+    init_provider_detect();
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts
+function isFailureReason(value) {
+  return typeof value === "string" && FAILURE_REASONS.includes(value);
+}
+function failureResult(adapter, status, failureReason, latencyMs, sourceRef) {
+  if (!isFailureReason(failureReason)) throw new Error("failure_reason outside the closed vocabulary");
+  return {
+    adapter_id: adapter.adapter_id,
+    adapter_version: adapter.adapter_version,
+    target_id: adapter.target_id,
+    method: adapter.method,
+    source_ref: sourceRef,
+    status,
+    latency_ms: latencyMs,
+    failure_reason: failureReason,
+    models: []
+  };
+}
+var FAILURE_REASONS, DiscoveryParseRejected;
+var init_adapter_contract = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts"() {
+    init_session_context();
+    FAILURE_REASONS = [
+      "timeout_budget_exceeded",
+      "parse_rejected",
+      "io_unavailable",
+      "tool_version_out_of_range",
+      "subprocess_failed",
+      "http_error",
+      "auth_unavailable",
+      "surface_absent"
+    ];
+    DiscoveryParseRejected = class extends Error {
+      constructor(detail) {
+        super(`provider output rejected by schema validation: ${detail}`);
+        this.name = "DiscoveryParseRejected";
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/claude-api.ts
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseClaudeModelsPage(raw) {
+  if (!isRecord(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    if (entry.capabilities !== void 0 && !isRecord(entry.capabilities)) {
+      throw new DiscoveryParseRejected(`data[${i}].capabilities is not an object`);
+    }
+    models.push(entry);
+  });
+  return {
+    models,
+    hasMore: raw.has_more === true,
+    lastId: typeof raw.last_id === "string" ? raw.last_id : null
+  };
+}
+function effortsFromCapabilities(capabilities) {
+  const effort = capabilities?.effort;
+  if (!isRecord(effort)) return [];
+  return CLAUDE_EFFORT_LEVELS.filter((level) => effort[level] === true);
+}
+function normalizeClaudeApiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    model_family: "claude",
+    // this authenticated first-party catalog lists Claude models
+    reasoning_efforts: effortsFromCapabilities(m.capabilities),
+    default_effort: null,
+    // the listing carries support flags, not a default
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: isRecord(m.capabilities) ? m.capabilities : {},
+    evidence_source: "contract_api_list",
+    // The one row whose contract states availability for the requesting target.
+    contract_states_availability: true
+  }));
+}
+var CLAUDE_API_ADAPTER_ID, CLAUDE_API_ADAPTER_VERSION, CLAUDE_API_MODELS_URL, CLAUDE_API_VERSION_HEADER, CLAUDE_API_MAX_PAGES, CLAUDE_EFFORT_LEVELS, claudeApiAdapter;
+var init_claude_api = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/claude-api.ts"() {
+    init_adapter_contract();
+    CLAUDE_API_ADAPTER_ID = "claude-api-models";
+    CLAUDE_API_ADAPTER_VERSION = "1.0.0";
+    CLAUDE_API_MODELS_URL = "https://api.anthropic.com/v1/models";
+    CLAUDE_API_VERSION_HEADER = "2023-06-01";
+    CLAUDE_API_MAX_PAGES = 5;
+    CLAUDE_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];
+    claudeApiAdapter = {
+      adapter_id: CLAUDE_API_ADAPTER_ID,
+      adapter_version: CLAUDE_API_ADAPTER_VERSION,
+      target_id: "claude-api",
+      method: "contract_api_list",
+      tool_versions: null,
+      // versioned REST surface; gated by anthropic-version header, not CLI version
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.httpGetJson) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CLAUDE_API_ADAPTER_ID);
+        }
+        const all = [];
+        let url = `${CLAUDE_API_MODELS_URL}?limit=1000`;
+        for (let page = 0; page < CLAUDE_API_MAX_PAGES; page += 1) {
+          const raw = await io.httpGetJson(url, { "anthropic-version": CLAUDE_API_VERSION_HEADER });
+          const { models, hasMore, lastId } = parseClaudeModelsPage(raw);
+          all.push(...normalizeClaudeApiModels(models));
+          if (!hasMore || !lastId) {
+            return {
+              adapter_id: CLAUDE_API_ADAPTER_ID,
+              adapter_version: CLAUDE_API_ADAPTER_VERSION,
+              target_id: "claude-api",
+              method: "contract_api_list",
+              source_ref: "claude-api GET /v1/models",
+              status: "ok",
+              latency_ms: elapsed(),
+              failure_reason: null,
+              models: all
+            };
+          }
+          url = `${CLAUDE_API_MODELS_URL}?limit=1000&after_id=${encodeURIComponent(lastId)}`;
+        }
+        return {
+          adapter_id: CLAUDE_API_ADAPTER_ID,
+          adapter_version: CLAUDE_API_ADAPTER_VERSION,
+          target_id: "claude-api",
+          method: "contract_api_list",
+          source_ref: "claude-api GET /v1/models",
+          status: "partial",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models: all
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseModelListResult(raw) {
+  if (!isRecord2(raw)) throw new DiscoveryParseRejected("result is not an object");
+  const data = raw.data;
+  if (!Array.isArray(data)) throw new DiscoveryParseRejected("result.data is not an array");
+  const models = [];
+  data.forEach((entry, i) => {
+    if (!isRecord2(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.model !== "string" || entry.model.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].model is not a non-empty string`);
+    }
+    if (entry.supportedReasoningEfforts !== void 0) {
+      if (!Array.isArray(entry.supportedReasoningEfforts)) {
+        throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts is not an array`);
+      }
+      for (const [j, eff] of entry.supportedReasoningEfforts.entries()) {
+        if (!isRecord2(eff) || typeof eff.reasoningEffort !== "string") {
+          throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts[${j}].reasoningEffort missing`);
+        }
+      }
+    }
+    if (entry.hidden !== void 0 && typeof entry.hidden !== "boolean") {
+      throw new DiscoveryParseRejected(`data[${i}].hidden is not a boolean`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeAppServerModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.model,
+    display_name: typeof m.displayName === "string" ? m.displayName : void 0,
+    // No family field is provider-stated on this surface.
+    reasoning_efforts: (m.supportedReasoningEfforts ?? []).map((e) => e.reasoningEffort),
+    default_effort: typeof m.defaultReasoningEffort === "string" ? m.defaultReasoningEffort : null,
+    provider_priority: null,
+    // app-server exposes order, not a numeric priority field
+    provider_default: m.isDefault === true,
+    visibility: m.hidden === true ? "hidden" : "listed",
+    deprecation: {
+      upgrade_to: typeof m.upgrade === "string" ? m.upgrade : null,
+      migration_note: typeof m.upgradeInfo?.migrationMarkdown === "string" ? m.upgradeInfo.migrationMarkdown : null
+    },
+    capabilities: {
+      image_input: Array.isArray(m.inputModalities) ? m.inputModalities.includes("image") : void 0,
+      // Superset-schema extensions preserved from the provider listing:
+      service_tiers: Array.isArray(m.serviceTiers) ? m.serviceTiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additionalSpeedTiers) ? m.additionalSpeedTiers : [],
+      default_service_tier: typeof m.defaultServiceTier === "string" ? m.defaultServiceTier : null
+    },
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // entitlement semantics contractually undefined
+  }));
+}
+var CODEX_APP_SERVER_ADAPTER_ID, CODEX_APP_SERVER_ADAPTER_VERSION, CODEX_APP_SERVER_TOOL_VERSIONS, codexAppServerAdapter;
+var init_codex_app_server = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts"() {
+    init_adapter_contract();
+    CODEX_APP_SERVER_ADAPTER_ID = "codex-app-server-model-list";
+    CODEX_APP_SERVER_ADAPTER_VERSION = "1.0.0";
+    CODEX_APP_SERVER_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "2.0.0" };
+    codexAppServerAdapter = {
+      adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+      adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+      target_id: "codex-app-server",
+      method: "native_list",
+      tool_versions: CODEX_APP_SERVER_TOOL_VERSIONS,
+      async discover(io, opts = {}) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.jsonRpcCall) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_APP_SERVER_ADAPTER_ID);
+        }
+        const includeHidden = opts.includeHidden === true;
+        const result = await io.jsonRpcCall("model/list", includeHidden ? { includeHidden: true } : {});
+        const models = normalizeAppServerModels(parseModelListResult(result));
+        return {
+          adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+          adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+          target_id: "codex-app-server",
+          method: "native_list",
+          source_ref: "codex-app-server model/list",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts
+function isRecord3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseDebugModelsOutput(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new DiscoveryParseRejected("stdout is not valid JSON");
+  }
+  if (!isRecord3(parsed) || !Array.isArray(parsed.models)) {
+    throw new DiscoveryParseRejected("payload.models is not an array");
+  }
+  const entries = [];
+  parsed.models.forEach((entry, i) => {
+    if (!isRecord3(entry)) throw new DiscoveryParseRejected(`models[${i}] is not an object`);
+    if (typeof entry.slug !== "string" || entry.slug.length === 0) {
+      throw new DiscoveryParseRejected(`models[${i}].slug is not a non-empty string`);
+    }
+    if (entry.supported_reasoning_levels !== void 0) {
+      if (!Array.isArray(entry.supported_reasoning_levels)) {
+        throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels is not an array`);
+      }
+      for (const [j, lvl] of entry.supported_reasoning_levels.entries()) {
+        if (!isRecord3(lvl) || typeof lvl.effort !== "string") {
+          throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels[${j}].effort missing`);
+        }
+      }
+    }
+    entries.push(entry);
+  });
+  return entries;
+}
+function normalizeDebugModels(entries) {
+  return entries.map((m) => ({
+    canonical_id: m.slug,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    reasoning_efforts: (m.supported_reasoning_levels ?? []).map((l) => l.effort),
+    default_effort: typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null,
+    provider_priority: typeof m.priority === "number" ? m.priority : null,
+    provider_default: false,
+    // the debug catalog carries no default flag
+    visibility: m.visibility === "hide" ? "hidden" : "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {
+      // Advertised subscription-catalog metadata about the API target (F5):
+      // preserved verbatim as metadata, never treated as dispatch evidence.
+      supported_in_api: typeof m.supported_in_api === "boolean" ? m.supported_in_api : void 0,
+      service_tiers: Array.isArray(m.service_tiers) ? m.service_tiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additional_speed_tiers) ? m.additional_speed_tiers : []
+    },
+    evidence_source: "debug_catalog",
+    contract_states_availability: false
+  }));
+}
+var CODEX_DEBUG_MODELS_ADAPTER_ID, CODEX_DEBUG_MODELS_ADAPTER_VERSION, CODEX_DEBUG_MODELS_TOOL_VERSIONS, codexDebugModelsAdapter;
+var init_codex_debug_models = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts"() {
+    init_adapter_contract();
+    CODEX_DEBUG_MODELS_ADAPTER_ID = "codex-debug-models";
+    CODEX_DEBUG_MODELS_ADAPTER_VERSION = "1.0.0";
+    CODEX_DEBUG_MODELS_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "0.147.0" };
+    codexDebugModelsAdapter = {
+      adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+      adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+      target_id: "codex-cli-chatgpt",
+      method: "debug_catalog",
+      tool_versions: CODEX_DEBUG_MODELS_TOOL_VERSIONS,
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.execCapture) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_DEBUG_MODELS_ADAPTER_ID);
+        }
+        const { stdout } = await io.execCapture(["codex", "debug", "models"]);
+        const models = normalizeDebugModels(parseDebugModelsOutput(stdout));
+        return {
+          adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+          adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+          target_id: "codex-cli-chatgpt",
+          method: "debug_catalog",
+          source_ref: "codex debug models",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/openai-api.ts
+function isRecord4(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function openAiFamilyFor(id) {
+  if (id.startsWith("gpt-")) return "gpt";
+  return "unknown";
+}
+function parseOpenAiModelsResponse(raw) {
+  if (!isRecord4(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord4(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeOpenAiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    model_family: openAiFamilyFor(m.id),
+    reasoning_efforts: [],
+    // not stated on this surface — never copied from other targets
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // scope-ambiguous contract ⇒ advertised at most
+  }));
+}
+var OPENAI_API_ADAPTER_ID, OPENAI_API_ADAPTER_VERSION, OPENAI_API_MODELS_URL, openAiApiAdapter;
+var init_openai_api = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/openai-api.ts"() {
+    init_adapter_contract();
+    OPENAI_API_ADAPTER_ID = "openai-api-models";
+    OPENAI_API_ADAPTER_VERSION = "1.0.0";
+    OPENAI_API_MODELS_URL = "https://api.openai.com/v1/models";
+    openAiApiAdapter = {
+      adapter_id: OPENAI_API_ADAPTER_ID,
+      adapter_version: OPENAI_API_ADAPTER_VERSION,
+      target_id: "openai-api",
+      method: "native_list",
+      tool_versions: null,
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.httpGetJson) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), OPENAI_API_ADAPTER_ID);
+        }
+        const raw = await io.httpGetJson(OPENAI_API_MODELS_URL, {});
+        const models = normalizeOpenAiModels(parseOpenAiModelsResponse(raw));
+        return {
+          adapter_id: OPENAI_API_ADAPTER_ID,
+          adapter_version: OPENAI_API_ADAPTER_VERSION,
+          target_id: "openai-api",
+          method: "native_list",
+          source_ref: "openai-api GET /v1/models",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts
+function staticHintEntries(hints) {
+  return hints.map((h) => ({
+    canonical_id: h.canonical_id,
+    display_name: h.display_name,
+    aliases: h.aliases,
+    model_family: h.model_family,
+    reasoning_efforts: [],
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "static_hint",
+    contract_states_availability: false
+  }));
+}
+function makeHonestUnknownAdapter(targetId, opts = {}) {
+  const hints = opts.staticHints ?? [];
+  const adapterId = `honest-unknown-${targetId}`;
+  return {
+    adapter_id: adapterId,
+    adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+    target_id: targetId,
+    method: hints.length > 0 ? "static_hint" : "none",
+    tool_versions: null,
+    async discover(io) {
+      const started = io.monotonicMs();
+      return {
+        adapter_id: adapterId,
+        adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+        target_id: targetId,
+        method: hints.length > 0 ? "static_hint" : "none",
+        source_ref: opts.surfaceNote ?? "no evidenced availability-listing surface",
+        // The receipt itself is honest: no listing surface exists for this
+        // target, so discovery is `unsupported` and the target-level evidence
+        // state stays `unknown` (static hints only fill model metadata).
+        status: "unsupported",
+        latency_ms: Math.max(0, io.monotonicMs() - started),
+        failure_reason: "surface_absent",
+        models: staticHintEntries(hints)
+      };
+    }
+  };
+}
+var HONEST_UNKNOWN_ADAPTER_VERSION, claudeCliSubscriptionAdapter, claudeAppAdapter, claudeWebAdapter, claudeGatewayBedrockAdapter, claudeGatewayVertexAdapter, claudeGatewayFoundryAdapter, codexCliApiKeyAdapter;
+var init_honest_unknown = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts"() {
+    HONEST_UNKNOWN_ADAPTER_VERSION = "1.0.0";
+    claudeCliSubscriptionAdapter = makeHonestUnknownAdapter("claude-cli-subscription", {
+      surfaceNote: "picker is interactive-only; headless entitlement unprovable pre-dispatch"
+    });
+    claudeAppAdapter = makeHonestUnknownAdapter("claude-app", {
+      surfaceNote: "no programmatic discovery surface exists"
+    });
+    claudeWebAdapter = makeHonestUnknownAdapter("claude-web", {
+      surfaceNote: "no programmatic discovery surface exists"
+    });
+    claudeGatewayBedrockAdapter = makeHonestUnknownAdapter("claude-gateway-bedrock", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    claudeGatewayVertexAdapter = makeHonestUnknownAdapter("claude-gateway-vertex", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    claudeGatewayFoundryAdapter = makeHonestUnknownAdapter("claude-gateway-foundry", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    codexCliApiKeyAdapter = makeHonestUnknownAdapter("codex-cli-api-key", {
+      surfaceNote: "no listing evidenced under API-key auth (distinct target from codex-cli-chatgpt)"
+    });
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/index.ts
+var DISCOVERY_ADAPTER_REGISTRY, CODEX_SEAM_ADAPTERS;
+var init_model_discovery = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/index.ts"() {
+    init_adapter_contract();
+    init_claude_api();
+    init_codex_app_server();
+    init_codex_debug_models();
+    init_openai_api();
+    init_honest_unknown();
+    init_adapter_contract();
+    init_codex_app_server();
+    init_codex_debug_models();
+    init_claude_api();
+    init_openai_api();
+    init_honest_unknown();
+    DISCOVERY_ADAPTER_REGISTRY = Object.freeze({
+      "claude-cli-subscription": claudeCliSubscriptionAdapter,
+      "claude-app": claudeAppAdapter,
+      "claude-web": claudeWebAdapter,
+      "claude-api": claudeApiAdapter,
+      "claude-gateway-bedrock": claudeGatewayBedrockAdapter,
+      "claude-gateway-vertex": claudeGatewayVertexAdapter,
+      "claude-gateway-foundry": claudeGatewayFoundryAdapter,
+      "codex-cli-chatgpt": codexDebugModelsAdapter,
+      "codex-app-server": codexAppServerAdapter,
+      "codex-cli-api-key": codexCliApiKeyAdapter,
+      "openai-api": openAiApiAdapter
+    });
+    CODEX_SEAM_ADAPTERS = Object.freeze({
+      "app-server": codexAppServerAdapter,
+      "debug-models": codexDebugModelsAdapter
+    });
+  }
+});
+
 // ../src/modules/host-runtime/index.ts
 var init_host_runtime = __esm({
   "../src/modules/host-runtime/index.ts"() {
@@ -956,6 +1486,8 @@ var init_host_runtime = __esm({
     init_host_registry();
     init_host_registry_schema();
     init_provider_detect();
+    init_session_context();
+    init_model_discovery();
   }
 });
 
@@ -973,11 +1505,26 @@ var init_share_set = __esm({
   }
 });
 
+// ../src/modules/security/workflows/secret-patterns.ts
+var init_secret_patterns = __esm({
+  "../src/modules/security/workflows/secret-patterns.ts"() {
+  }
+});
+
+// ../src/modules/security/workflows/scrub-redact.ts
+var init_scrub_redact = __esm({
+  "../src/modules/security/workflows/scrub-redact.ts"() {
+    init_secret_patterns();
+  }
+});
+
 // ../src/modules/security/index.ts
 var init_security = __esm({
   "../src/modules/security/index.ts"() {
     init_safe_object();
     init_share_set();
+    init_scrub_redact();
+    init_secret_patterns();
   }
 });
 
@@ -1084,6 +1631,11 @@ var init_config_defaults = __esm({
       loops: null,
       loop_cap: 16,
       codex_cap: 5,
+      // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
+      // routing intent. null = not configured — v2 routing stays off and the legacy
+      // tier maps drive generic preferences for the §6 migration window. When set, the
+      // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
+      model_policy: null,
       defaults: {
         auto_learn: false,
         adversarial: "on",
@@ -1114,6 +1666,515 @@ var init_config_defaults = __esm({
         allowed_tools: []
       }
     };
+  }
+});
+
+// ../src/modules/capability/workflows/model-policy.ts
+function isReviewClassPurpose(p) {
+  return REVIEW_CLASS_PURPOSES.includes(p);
+}
+function parseSelector(raw) {
+  if (typeof raw !== "string" || raw.length === 0) {
+    throw new Error(`selector_malformed: empty or non-string selector`);
+  }
+  if (raw.startsWith("id:")) {
+    const id = raw.slice(3);
+    if (!id) throw new Error(`selector_malformed: "id:" needs a canonical_id (got "${raw}")`);
+    return { form: "id", canonical_id: id };
+  }
+  if (raw.startsWith("alias:")) {
+    const alias = raw.slice(6);
+    if (!alias) throw new Error(`selector_malformed: "alias:" needs an alias (got "${raw}")`);
+    return { form: "alias", alias };
+  }
+  if (raw.startsWith("expr:")) {
+    const body = raw.slice(5);
+    if (!body) throw new Error(`selector_malformed: "expr:" needs conjuncts (got "${raw}")`);
+    const out = {};
+    for (const conjunct of body.split(";")) {
+      const eq = conjunct.indexOf("=");
+      if (eq <= 0) throw new Error(`selector_malformed: bad conjunct "${conjunct}" in "${raw}"`);
+      const key = conjunct.slice(0, eq);
+      const value = conjunct.slice(eq + 1);
+      if (key === "model_family") {
+        if (out.model_family !== void 0)
+          throw new Error(`selector_malformed: duplicate conjunct key "model_family" in "${raw}"`);
+        if (!value) throw new Error(`selector_malformed: empty model_family in "${raw}"`);
+        out.model_family = value;
+      } else if (key === "tier") {
+        if (out.tier !== void 0)
+          throw new Error(`selector_malformed: duplicate conjunct key "tier" in "${raw}"`);
+        if (!POLICY_TIERS.includes(value)) {
+          throw new Error(
+            `selector_malformed: tier "${value}" invalid in "${raw}" (cheap|mid|powerful; tier=unknown is invalid)`
+          );
+        }
+        out.tier = value;
+      } else {
+        throw new Error(`selector_malformed: unknown expr key "${key}" in "${raw}" (closed: model_family, tier)`);
+      }
+    }
+    if (out.model_family === void 0 && out.tier === void 0) {
+      throw new Error(`selector_malformed: expr needs at least one conjunct ("${raw}")`);
+    }
+    return { form: "expr", ...out };
+  }
+  throw new Error(
+    `selector_malformed: "${raw}" is not id:/alias:/expr: (bare strings and unknown prefixes are rejected)`
+  );
+}
+function maxComplexity(a, b) {
+  return COMPLEXITY_ORDER[a] >= COMPLEXITY_ORDER[b] ? a : b;
+}
+function purposeComplexityFloor(purpose) {
+  return purpose === "research" ? "hard" : "easy";
+}
+function purposeTierFloor(purpose) {
+  if (purpose === "research" || isReviewClassPurpose(purpose)) return "powerful";
+  return null;
+}
+function reachableComplexities(purpose, minEffectiveComplexity) {
+  const floor = maxComplexity(purposeComplexityFloor(purpose), minEffectiveComplexity);
+  return COMPLEXITIES.filter((c) => COMPLEXITY_ORDER[c] >= COMPLEXITY_ORDER[floor]);
+}
+function isPlainObject2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function rejectUnknownKeys(obj, allowed, where, rejects) {
+  for (const k of Object.keys(obj)) {
+    if (!allowed.includes(k)) {
+      rejects.push(`${where}: unknown key "${k}" (closed key set: ${allowed.join(", ")})`);
+    }
+  }
+}
+function validateSelectorEntry(entry, where, rejects) {
+  if (!isPlainObject2(entry)) {
+    rejects.push(`${where}: selector entry must be an object with a "selector" key`);
+    return;
+  }
+  rejectUnknownKeys(entry, ["selector", "effort", "capabilities"], where, rejects);
+  if (typeof entry["selector"] !== "string") {
+    rejects.push(`${where}: "selector" must be a string (bare/missing selectors are rejected)`);
+  } else {
+    try {
+      parseSelector(entry["selector"]);
+    } catch (e) {
+      rejects.push(`${where}: ${e.message}`);
+    }
+  }
+  if (entry["effort"] !== void 0 && entry["effort"] !== null && typeof entry["effort"] !== "string") {
+    rejects.push(`${where}: "effort" must be a string or null`);
+  }
+  if (entry["capabilities"] !== void 0) {
+    const caps = entry["capabilities"];
+    if (!Array.isArray(caps) || caps.some((c) => typeof c !== "string")) {
+      rejects.push(`${where}: "capabilities" must be an array of capability-key strings`);
+    }
+  }
+}
+function validateModelPolicy(input, opts) {
+  const rejects = [];
+  if (!isPlainObject2(input)) {
+    return [`model_policy: must be an object (guild.model_policy.v2)`];
+  }
+  rejectUnknownKeys(input, ["version", "allow_advertised_attempt", "purposes"], "model_policy", rejects);
+  if (input["version"] !== 2) {
+    rejects.push(`model_policy.version: must be 2 (got ${JSON.stringify(input["version"])})`);
+  }
+  if (input["allow_advertised_attempt"] !== void 0 && typeof input["allow_advertised_attempt"] !== "boolean") {
+    rejects.push(`model_policy.allow_advertised_attempt: must be a boolean (default false)`);
+  }
+  const purposes = input["purposes"];
+  if (!isPlainObject2(purposes)) {
+    rejects.push(`model_policy.purposes: must be an object keyed by the closed purpose enum`);
+    return rejects;
+  }
+  for (const [purposeKey, rawPurpose] of Object.entries(purposes)) {
+    const where = `model_policy.purposes.${purposeKey}`;
+    if (!POLICY_PURPOSES.includes(purposeKey)) {
+      rejects.push(`${where}: unknown purpose (closed enum: ${POLICY_PURPOSES.join(", ")})`);
+      continue;
+    }
+    const purpose = purposeKey;
+    if (!isPlainObject2(rawPurpose)) {
+      rejects.push(`${where}: must be an object`);
+      continue;
+    }
+    rejectUnknownKeys(
+      rawPurpose,
+      ["min_effective_complexity", "independence", "confirm_on_degradation", "routes"],
+      where,
+      rejects
+    );
+    const minC = rawPurpose["min_effective_complexity"];
+    if (!COMPLEXITIES.includes(minC)) {
+      rejects.push(`${where}.min_effective_complexity: must be easy|medium|hard`);
+    }
+    if (purpose === "research" && minC !== "hard") {
+      rejects.push(
+        `${where}.min_effective_complexity: research is ALWAYS hard/powerful (research_always_hard); "${String(minC)}" lowers the non-downgradable floor`
+      );
+    }
+    const independence = rawPurpose["independence"];
+    if (!INDEPENDENCE_LEVELS.includes(independence)) {
+      rejects.push(`${where}.independence: must be none|prefer_cross_family|require_cross_family`);
+    }
+    if (typeof rawPurpose["confirm_on_degradation"] !== "boolean") {
+      rejects.push(`${where}.confirm_on_degradation: must be a boolean`);
+    }
+    if (independence === "require_cross_family" && rawPurpose["confirm_on_degradation"] === false) {
+      rejects.push(
+        `${where}: independence require_cross_family requires confirm_on_degradation:true (a same-family fallback must take the explicit weak-degradation labelling path, never silent)`
+      );
+    }
+    const routes = rawPurpose["routes"];
+    if (!Array.isArray(routes) || routes.length === 0) {
+      rejects.push(`${where}.routes: must be a non-empty array (closed route table, \xA71b)`);
+      continue;
+    }
+    routes.forEach((rawRoute, i) => {
+      const rWhere = `${where}.routes[${i}]`;
+      if (!isPlainObject2(rawRoute)) {
+        rejects.push(`${rWhere}: must be an object`);
+        return;
+      }
+      rejectUnknownKeys(
+        rawRoute,
+        ["complexity", "condition", "preferred", "fallbacks", "provider_default"],
+        rWhere,
+        rejects
+      );
+      const complexity = rawRoute["complexity"];
+      if (complexity !== "any" && !COMPLEXITIES.includes(complexity)) {
+        rejects.push(`${rWhere}.complexity: must be easy|medium|hard|any`);
+      }
+      const condition = rawRoute["condition"];
+      if (condition !== void 0) {
+        if (!isPlainObject2(condition)) {
+          rejects.push(`${rWhere}.condition: must be an object {kind, model_family}`);
+        } else {
+          rejectUnknownKeys(condition, ["kind", "model_family"], `${rWhere}.condition`, rejects);
+          const kind = condition["kind"];
+          if (!CONDITION_KINDS.includes(kind)) {
+            rejects.push(`${rWhere}.condition.kind: must be always|producer_model_family_is|producer_model_family_is_not`);
+          } else if (kind === "always") {
+            if (condition["model_family"] !== null && condition["model_family"] !== void 0) {
+              rejects.push(`${rWhere}.condition.model_family: MUST be null when kind = always`);
+            }
+          } else {
+            if (typeof condition["model_family"] !== "string" || condition["model_family"].length === 0) {
+              rejects.push(`${rWhere}.condition.model_family: REQUIRED (non-empty string) when kind \u2260 always`);
+            }
+            if (!isReviewClassPurpose(purpose)) {
+              rejects.push(
+                `${rWhere}.condition: non-always conditions are valid ONLY on review-class purposes (advisory, adversarial, security, adversarial-security) \u2014 "${purpose}" has no producer`
+              );
+            }
+          }
+        }
+      }
+      const preferred = rawRoute["preferred"];
+      if (!Array.isArray(preferred) || preferred.length === 0) {
+        rejects.push(`${rWhere}.preferred: must be a non-empty ordered selector list`);
+      } else {
+        preferred.forEach((entry, j) => validateSelectorEntry(entry, `${rWhere}.preferred[${j}]`, rejects));
+        if (purpose === "security") {
+          preferred.forEach((entry, j) => {
+            if (isPlainObject2(entry) && typeof entry["selector"] === "string" && !entry["selector"].startsWith("id:")) {
+              rejects.push(
+                `${rWhere}.preferred[${j}]: security-purpose preferred selectors must be pinned "id:" selectors (got "${entry["selector"]}")`
+              );
+            }
+          });
+        }
+      }
+      const fallbacks = rawRoute["fallbacks"];
+      if (!Array.isArray(fallbacks)) {
+        rejects.push(`${rWhere}.fallbacks: must be an array (may be empty)`);
+      } else {
+        fallbacks.forEach((entry, j) => validateSelectorEntry(entry, `${rWhere}.fallbacks[${j}]`, rejects));
+      }
+      const tierFloor = purposeTierFloor(purpose);
+      if (tierFloor !== null) {
+        const checkSelectorFloor = (entry, sWhere) => {
+          if (!isPlainObject2(entry) || typeof entry["selector"] !== "string") return;
+          let parsed;
+          try {
+            parsed = parseSelector(entry["selector"]);
+          } catch {
+            return;
+          }
+          if (parsed.form === "expr" && parsed.tier !== void 0 && parsed.tier !== tierFloor) {
+            rejects.push(
+              `${sWhere}: "${entry["selector"]}" names tier "${parsed.tier}" on a "${purpose}" route \u2014 the \xA73 purpose tier floor is "${tierFloor}" (non-downgradable)`
+            );
+            return;
+          }
+          const catalog = opts?.catalog_models;
+          if (!catalog) return;
+          for (const m of catalog) {
+            const matches = parsed.form === "id" ? m.canonical_id === parsed.canonical_id : parsed.form === "alias" ? Array.isArray(m.aliases) && m.aliases.includes(parsed.alias) : (parsed.model_family === void 0 || m.model_family === parsed.model_family) && (parsed.tier === void 0 || m.tier === parsed.tier);
+            if (matches && m.tier !== tierFloor) {
+              rejects.push(
+                `${sWhere}: "${entry["selector"]}" resolves to catalog model "${String(m.canonical_id)}" at tier "${m.tier ?? "unknown"}" \u2014 "${purpose}" routes must stay at the "${tierFloor}" floor (\xA73; research_always_hard forces hard AND powerful)`
+              );
+            }
+          }
+        };
+        if (Array.isArray(preferred)) {
+          preferred.forEach((entry, j) => checkSelectorFloor(entry, `${rWhere}.preferred[${j}]`));
+        }
+        if (Array.isArray(fallbacks)) {
+          fallbacks.forEach((entry, j) => checkSelectorFloor(entry, `${rWhere}.fallbacks[${j}]`));
+        }
+      }
+      const providerDefault = rawRoute["provider_default"];
+      if (providerDefault !== void 0 && providerDefault !== "forbid" && providerDefault !== "allow_last_resort") {
+        rejects.push(`${rWhere}.provider_default: must be forbid|allow_last_resort (default forbid)`);
+      }
+      if (providerDefault === "allow_last_resort" && (purpose === "research" || isReviewClassPurpose(purpose))) {
+        rejects.push(
+          `${rWhere}.provider_default: allow_last_resort is rejected on "${purpose}" routes (research and review-class purposes must be forbid)`
+        );
+      }
+    });
+    if (COMPLEXITIES.includes(minC)) {
+      const reachable = reachableComplexities(purpose, minC);
+      for (const c of reachable) {
+        const covered = routes.some((r) => {
+          if (!isPlainObject2(r)) return false;
+          const rc = r["complexity"];
+          const cond = r["condition"];
+          const isAlways = cond === void 0 || isPlainObject2(cond) && cond["kind"] === "always";
+          return (rc === c || rc === "any") && isAlways;
+        });
+        if (!covered) {
+          rejects.push(
+            `${where}.routes: route_incomplete \u2014 reachable effective_complexity "${c}" has no matching always-condition row (\xA71b coverage)`
+          );
+        }
+      }
+    }
+  }
+  return rejects;
+}
+var POLICY_PURPOSES, REVIEW_CLASS_PURPOSES, COMPLEXITIES, CONDITION_KINDS, INDEPENDENCE_LEVELS, POLICY_TIERS, COMPLEXITY_ORDER, OPERATOR_BASELINE_POLICY;
+var init_model_policy = __esm({
+  "../src/modules/capability/workflows/model-policy.ts"() {
+    POLICY_PURPOSES = [
+      "general",
+      "implementation",
+      "planning",
+      "research",
+      "advisory",
+      "adversarial",
+      "security",
+      "adversarial-security"
+    ];
+    REVIEW_CLASS_PURPOSES = [
+      "advisory",
+      "adversarial",
+      "security",
+      "adversarial-security"
+    ];
+    COMPLEXITIES = ["easy", "medium", "hard"];
+    CONDITION_KINDS = [
+      "always",
+      "producer_model_family_is",
+      "producer_model_family_is_not"
+    ];
+    INDEPENDENCE_LEVELS = ["none", "prefer_cross_family", "require_cross_family"];
+    POLICY_TIERS = ["cheap", "mid", "powerful"];
+    COMPLEXITY_ORDER = { easy: 0, medium: 1, hard: 2 };
+    OPERATOR_BASELINE_POLICY = Object.freeze({
+      version: 2,
+      allow_advertised_attempt: false,
+      purposes: {
+        general: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        implementation: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        planning: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        research: {
+          // Redundant with the §3 forced floor; stated for closure.
+          min_effective_complexity: "hard",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "hard",
+              // the ONLY reachable value (research_always_hard, §3)
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        advisory: {
+          min_effective_complexity: "easy",
+          independence: "prefer_cross_family",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "expr:model_family=gpt;tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        adversarial: {
+          min_effective_complexity: "easy",
+          // Same-family fallback allowed but ALWAYS weak-labelled (resolution §7a).
+          independence: "prefer_cross_family",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              // Producer is not gpt-family → gpt reviewer is cross-family.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              // may be same-family as producer ⇒ weak, labelled
+              provider_default: "forbid"
+            },
+            {
+              // Producer IS gpt-family → claude reviewer restores independence.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is", model_family: "gpt" },
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+              provider_default: "forbid"
+            },
+            {
+              // Producer family unknown → weak either way (resolution §7a); review still runs.
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        security: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          // same-family claude is deliberate (pinned-model rationale)
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "any",
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              // pinned id REQUIRED (§5)
+              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        "adversarial-security": {
+          min_effective_complexity: "easy",
+          independence: "require_cross_family",
+          // adjudicated weak ⇒ NO strong sign-off (resolution §7a)
+          confirm_on_degradation: true,
+          routes: [
+            {
+              // Producer not gpt-family → gpt reviewer is cross-family.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              // Cannot restore independence on this branch ⇒ weak ⇒ NO strong sign-off.
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            },
+            {
+              // Producer IS gpt-family → claude restores family independence.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is", model_family: "gpt" },
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              fallbacks: [],
+              // nothing further — beyond this there is NO strong sign-off
+              provider_default: "forbid"
+            },
+            {
+              // Producer family unknown → weak regardless; NO strong sign-off.
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            }
+          ]
+        }
+      }
+    });
   }
 });
 
@@ -4291,7 +5352,7 @@ function normalizeDispatchHostId(value) {
   const normalized = normalizeHostId(value);
   return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
 }
-function isPlainObject2(v) {
+function isPlainObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function deepMerge(base, overlay) {
@@ -4300,7 +5361,7 @@ function deepMerge(base, overlay) {
     if (PROTO_POISON_KEYS.has(k)) continue;
     if (Array.isArray(v)) {
       result[k] = v;
-    } else if (isPlainObject2(v) && isPlainObject2(result[k])) {
+    } else if (isPlainObject3(v) && isPlainObject3(result[k])) {
       result[k] = deepMerge(
         result[k],
         v
@@ -4317,7 +5378,7 @@ function collectKeyPaths(obj, prefix = "") {
     if (PROTO_POISON_KEYS.has(k)) continue;
     const full = prefix ? `${prefix}.${k}` : k;
     paths.add(full);
-    if (isPlainObject2(v)) {
+    if (isPlainObject3(v)) {
       for (const sub of collectKeyPaths(v, full)) {
         paths.add(sub);
       }
@@ -4387,9 +5448,9 @@ function parseSettingsFile_fromParsed(parsed) {
     const normalized = normalizeDispatchHostId(parsed["host"]);
     if (normalized) out.host = normalized;
   }
-  if (isPlainObject2(parsed["roles"]))
+  if (isPlainObject3(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"]);
-  if (isPlainObject2(parsed["host_profiles"]))
+  if (isPlainObject3(parsed["host_profiles"]))
     out.host_profiles = sparseHostProfiles(parsed["host_profiles"]);
   if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
     out.initiative_default = parsed["initiative_default"];
@@ -4401,34 +5462,37 @@ function parseSettingsFile_fromParsed(parsed) {
     out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
   if (VALID_AGENT_MODE.has(parsed["agent_mode"]))
     out.agent_mode = parsed["agent_mode"];
-  if (isPlainObject2(parsed["workspace"])) {
+  if (isPlainObject3(parsed["workspace"])) {
     const ws = parsed["workspace"];
     const wsMode = ws["mode"];
     if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
       out.workspace = { mode: wsMode };
     }
   }
-  if (isPlainObject2(parsed["models"])) {
+  if (parsed["model_policy"] === null) out.model_policy = null;
+  else if (isPlainObject3(parsed["model_policy"]) && validateModelPolicy(parsed["model_policy"]).length === 0)
+    out.model_policy = parsed["model_policy"];
+  if (isPlainObject3(parsed["models"])) {
     const rawModels = parsed["models"];
     const sparse = {};
     if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
-    if (isPlainObject2(rawModels["tiers"])) {
+    if (isPlainObject3(rawModels["tiers"])) {
       const rt = rawModels["tiers"];
       const sparseTiers = {};
       for (const tier of ["cheap", "mid", "powerful"]) {
-        if (isPlainObject2(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
+        if (isPlainObject3(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
       }
       sparse.tiers = sparseTiers;
     }
-    if (isPlainObject2(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
-    if (isPlainObject2(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
+    if (isPlainObject3(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
+    if (isPlainObject3(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
     if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
       sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
     if (Array.isArray(rawModels["escalationMarkers"])) sparse.escalationMarkers = rawModels["escalationMarkers"];
     if (typeof rawModels["recallBeforeRead"] === "boolean") sparse.recallBeforeRead = rawModels["recallBeforeRead"];
     if (typeof rawModels["recallScoreThreshold"] === "number") sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
     if (typeof rawModels["structuredOutputRequired"] === "boolean") sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
-    if (isPlainObject2(rawModels["cacheTTL"])) {
+    if (isPlainObject3(rawModels["cacheTTL"])) {
       const rttl = rawModels["cacheTTL"];
       const newTTL = {};
       if (VALID_CACHE_TTL.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
@@ -4443,11 +5507,11 @@ function parseSettingsFile_fromParsed(parsed) {
       sparse.importanceAtIngest = rawModels["importanceAtIngest"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-    if (isPlainObject2(rawModels["shortOutputThreshold"])) {
+    if (isPlainObject3(rawModels["shortOutputThreshold"])) {
       const sot = rawModels["shortOutputThreshold"];
       const sotMerged = {};
       for (const taskType of Object.keys(sot)) {
-        if (!isPlainObject2(sot[taskType])) continue;
+        if (!isPlainObject3(sot[taskType])) continue;
         const innerRaw = sot[taskType];
         const innerMerged = {};
         for (const tier of Object.keys(innerRaw)) {
@@ -4457,7 +5521,7 @@ function parseSettingsFile_fromParsed(parsed) {
       }
       sparse.shortOutputThreshold = sotMerged;
     }
-    if (isPlainObject2(rawModels["knowledge"])) {
+    if (isPlainObject3(rawModels["knowledge"])) {
       const rawK = rawModels["knowledge"];
       const sparseK = {};
       if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
@@ -4478,14 +5542,14 @@ function parseSettingsFile_fromParsed(parsed) {
     }
     out.models = sparse;
   }
-  if (isPlainObject2(parsed["security"])) {
+  if (isPlainObject3(parsed["security"])) {
     const rawSec = parsed["security"];
     const sparseSec = {};
     const bpp = rawSec["bypass_permissions_policy"];
     if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
     out.security = sparseSec;
   }
-  if (isPlainObject2(parsed["secrets_policy"])) {
+  if (isPlainObject3(parsed["secrets_policy"])) {
     const rawSp = parsed["secrets_policy"];
     const sparseSp = {};
     if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"];
@@ -4494,10 +5558,10 @@ function parseSettingsFile_fromParsed(parsed) {
     if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
     out.secrets_policy = sparseSp;
   }
-  if (isPlainObject2(parsed["mcp"])) {
+  if (isPlainObject3(parsed["mcp"])) {
     const rawMcp = parsed["mcp"];
     const sparseMcp = {};
-    if (isPlainObject2(rawMcp["tool_description_hashes"]))
+    if (isPlainObject3(rawMcp["tool_description_hashes"]))
       sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
     if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
     if (typeof rawMcp["http_available"] === "boolean") sparseMcp.http_available = rawMcp["http_available"];
@@ -4515,7 +5579,7 @@ function parseSettingsFile_fromParsed(parsed) {
     out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
   if (typeof parsed["codex_cap"] === "number")
     out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-  if (isPlainObject2(parsed["defaults"])) {
+  if (isPlainObject3(parsed["defaults"])) {
     const rawDefaults = parsed["defaults"];
     const sparseDefaults = {};
     for (const k of Object.keys(rawDefaults)) {
@@ -4570,11 +5634,11 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
       try {
         const raw = fs3.readFileSync(registryPath, "utf8");
         const parsed = yaml.load(raw);
-        if (isPlainObject2(parsed)) {
+        if (isPlainObject3(parsed)) {
           const list = parsed["initiatives"];
           if (Array.isArray(list)) {
             for (const entry of list) {
-              if (!isPlainObject2(entry)) continue;
+              if (!isPlainObject3(entry)) continue;
               const rec = entry;
               if (rec["id"] === id) {
                 return rec["scope"] === "workspace";
@@ -4614,9 +5678,9 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
       try {
         const raw = fs3.readFileSync(yamlPath, "utf8");
         const parsed = yaml.load(raw);
-        if (isPlainObject2(parsed)) {
+        if (isPlainObject3(parsed)) {
           const doc = parsed["initiative"];
-          if (isPlainObject2(doc)) {
+          if (isPlainObject3(doc)) {
             return doc["scope"] === "workspace";
           }
         }
@@ -4821,6 +5885,7 @@ var init_settings_reader = __esm({
     init_host_runtime();
     init_security();
     init_config_defaults();
+    init_model_policy();
     init_kernel();
     init_workspace_manifest();
     yaml = loadYamlApi();
@@ -5062,12 +6127,34 @@ function validateDegradationEvent(ev) {
   }
   return { ok: true };
 }
+function validateModelInspectionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.model_inspection.v1") {
+    return { ok: false, reason: `wrong schema_version for model_inspection: ${e["schema_version"]}` };
+  }
+  for (const key of ["host_family", "host_surface", "identity_trust", "catalog_state", "actual_model", "independence"]) {
+    if (typeof e[key] !== "string" || e[key] === "") {
+      return { ok: false, reason: `${key} must be a non-empty string` };
+    }
+  }
+  if (e["selection_model"] !== null && (typeof e["selection_model"] !== "string" || e["selection_model"] === "")) {
+    return { ok: false, reason: "selection_model must be a non-empty string or null" };
+  }
+  if (typeof e["unknowns_count"] !== "number" || e["unknowns_count"] < 0 || !Number.isInteger(e["unknowns_count"])) {
+    return { ok: false, reason: "unknowns_count must be a non-negative integer" };
+  }
+  return { ok: true };
+}
 function validateGuildTraceEvent(ev) {
   if (typeof ev !== "object" || ev === null) {
     return { ok: false, reason: "event must be a non-null object" };
   }
   const sv = ev["schema_version"];
   switch (sv) {
+    case "guild.trace.model_inspection.v1":
+      return validateModelInspectionEvent(ev);
     case "guild.trace.dispatch.v1":
       return validateDispatchEvent(ev);
     case "guild.trace.recall.v1":
@@ -5096,7 +6183,8 @@ var init_guild_trace_events = __esm({
       "guild.trace.recall_decision.v1",
       "guild.trace.config_resolution.v1",
       "guild.trace.security_decision.v1",
-      "guild.trace.degradation.v1"
+      "guild.trace.degradation.v1",
+      "guild.trace.model_inspection.v1"
     ];
     DISPATCH_BACKENDS = ["agent", "tmux", "remote", "unknown"];
     RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
@@ -5157,7 +6245,7 @@ var settings_resolver_exports = {};
 __export(settings_resolver_exports, {
   deepMerge: () => deepMerge,
   initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
-  isPlainObject: () => isPlainObject2,
+  isPlainObject: () => isPlainObject3,
   resolveSettings: () => resolveSettings2,
   rigorProfile: () => rigorProfile
 });

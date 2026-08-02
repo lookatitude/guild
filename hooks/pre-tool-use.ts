@@ -42,6 +42,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 
 import {
   appendSidecarPre,
@@ -109,20 +110,21 @@ function isKnownTool(name: string | undefined): name is ToolCallTool {
   return (TOOL_CALL_TOOL_VALUES as readonly string[]).includes(name);
 }
 
-function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
-  try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : undefined;
-  } catch {
+/**
+ * T3b (session_context §5): run identity for this hook's WRITE legs (sidecar,
+ * security events, approval requests) resolves from the explicit binding env
+ * and is verified against the run's minted binding — never a sentinel, so a
+ * moved current-run-id cannot redirect a write (SC-1). A refused binding
+ * returns undefined; every caller already degrades (no run-dir write) without
+ * weakening the env-driven security ENFORCEMENT itself.
+ */
+function resolveRunId(cwd: string): string | undefined {
+  const auth = authorizeHookWrite(resolveGuildRoot(cwd));
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("pre-tool-use", auth));
     return undefined;
   }
-}
-
-function resolveRunId(cwd: string): string | undefined {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(cwd);
+  return auth.run_id;
 }
 
 // ── HK-07: host-capability reader + approval_request writer ────────────────

@@ -33,8 +33,7 @@ __export(pre_compact_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_compact_exports);
-var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var path3 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -64,6 +63,100 @@ function resolveGuildRoot(startCwd) {
     }
     current = parent;
   }
+}
+
+// ../src/modules/lifecycle/workflows/run-binding.ts
+var fsReal = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
+function realBindingFs() {
+  return {
+    mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
+    writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    readFile: (p) => fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null,
+    exists: (p) => fsReal.existsSync(p)
+  };
+}
+function runBindingPath(root, runId) {
+  return path2.join(root, ".guild", "runs", runId, "binding.json");
+}
+function validateRunBindingRecord(parsed, expectedRunId) {
+  if (parsed === null || typeof parsed !== "object") return null;
+  const o = parsed;
+  if (o["schema_version"] !== "guild.run_binding.v1") return null;
+  if (typeof o["run_id"] !== "string" || o["run_id"] !== expectedRunId) return null;
+  const ref = o["binding_ref"];
+  if (typeof ref !== "string" || !/^rb-[A-Za-z0-9_-]+$/.test(ref)) return null;
+  if (o["state"] !== "open" && o["state"] !== "closed") return null;
+  return {
+    schema_version: "guild.run_binding.v1",
+    run_id: o["run_id"],
+    binding_ref: ref,
+    state: o["state"]
+  };
+}
+function readRunBindingRecord(opts) {
+  const fs2 = opts.fs ?? realBindingFs();
+  const raw = fs2.readFile(runBindingPath(opts.root, opts.run_id));
+  if (raw === null) return { status: "absent" };
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { status: "malformed" };
+  }
+  const record = validateRunBindingRecord(parsed, opts.run_id);
+  if (record === null) return { status: "malformed" };
+  return { status: "ok", record };
+}
+function verifyRunBinding(input) {
+  const reject2 = (reason) => ({
+    ok: false,
+    diagnostic: "binding_rejected",
+    reason
+  });
+  if (!input.run_id || !input.binding_ref) return reject2("binding_absent");
+  if (!input.root) return reject2("binding_unverifiable");
+  const read = readRunBindingRecord({ root: input.root, run_id: input.run_id, fs: input.fs });
+  if (read.status === "absent") return reject2("binding_not_minted");
+  if (read.status === "malformed") return reject2("binding_malformed");
+  const record = read.record;
+  if (record.state === "closed") return reject2("binding_closed");
+  if (record.binding_ref !== input.binding_ref || record.run_id !== input.run_id) {
+    return reject2("binding_mismatch");
+  }
+  return { ok: true, binding: record };
+}
+var HOOK_BINDING_ENV_RUN_ID = "GUILD_RUN_ID";
+var HOOK_BINDING_ENV_BINDING_REF = "GUILD_RUN_BINDING_REF";
+function readHookBindingEnvelope(env) {
+  const run_id = env[HOOK_BINDING_ENV_RUN_ID]?.trim();
+  const binding_ref = env[HOOK_BINDING_ENV_BINDING_REF]?.trim();
+  if (!run_id || !binding_ref) return null;
+  return { run_id, binding_ref };
+}
+
+// lib/hook-binding.ts
+function reject(reason, run_id) {
+  return { ok: false, diagnostic: "binding_rejected", reason, run_id };
+}
+function authorizeHookWrite(root, opts = {}) {
+  const env = opts.env ?? process.env;
+  const envelope = readHookBindingEnvelope(env);
+  const envRunId = env["GUILD_RUN_ID"]?.trim();
+  const runId = opts.runId ?? envelope?.run_id ?? (envRunId || void 0);
+  if (!runId) return reject("binding_absent", null);
+  const ref = opts.bindingRef ?? (envelope && envelope.run_id === runId ? envelope.binding_ref : void 0);
+  if (ref === void 0 || ref.trim().length === 0) {
+    return reject("binding_absent", runId);
+  }
+  const verdict = verifyRunBinding({ root, run_id: runId, binding_ref: ref });
+  if (verdict.ok === false) return reject(verdict.reason, runId);
+  return { ok: true, run_id: runId, binding_ref: verdict.binding.binding_ref };
+}
+function formatBindingRejected(hook, auth) {
+  if (auth.ok !== false) return "";
+  return `[${hook}] binding_rejected (${auth.reason}) for run ${auth.run_id ?? "<unresolved>"} \u2014 no write performed (session_context \xA75: writers fail closed; sentinels are intake-only).
+`;
 }
 
 // lib/v1.4/log-jsonl-schema.ts
@@ -252,11 +345,11 @@ function exclusionSentinelPath(runDir) {
   return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir) {
-  const path3 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path3), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path3)) return;
+  const path4 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path4), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path4)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path3, "wx");
+    const fd = (0, import_node_fs.openSync)(path4, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -369,9 +462,9 @@ function appendEvent(runDir, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path3 = laneFallbackPath(runDir, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path3), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path3, "a");
+    const path4 = laneFallbackPath(runDir, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path4), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path4, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -463,19 +556,13 @@ function payloadExcerpt(payload) {
     return "";
   }
 }
-function readCurrentRunId(guildRoot) {
-  const sentinelPath = path2.join(guildRoot, ".guild", "runs", "current-run-id");
-  try {
-    const value = fs2.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : void 0;
-  } catch {
+function resolveRunId(guildRoot) {
+  const auth = authorizeHookWrite(guildRoot);
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("pre-compact", auth));
     return void 0;
   }
-}
-function resolveRunId(guildRoot) {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(guildRoot);
+  return auth.run_id;
 }
 async function main() {
   const raw = await readStdin();
@@ -496,7 +583,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path2.join(guildRoot, ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path3.join(guildRoot, ".guild", "runs", runId);
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   const event = {
     ts,

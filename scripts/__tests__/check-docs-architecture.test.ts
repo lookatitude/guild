@@ -144,8 +144,8 @@ describe("check:docs-architecture", () => {
 
     it("ANTI-VACUITY identifiers: an em dash in a module id reports DRIFT", () => {
       const mutated = realHtml.replace(
-        "<tr><td>host-runtime</td><td>substrate</td><td>config, state</td></tr>",
-        "<tr><td>host—runtime</td><td>substrate</td><td>config, state</td></tr>",
+        "<tr><td>host-runtime</td><td>substrate</td><td>config, lifecycle, state</td></tr>",
+        "<tr><td>host—runtime</td><td>substrate</td><td>config, lifecycle, state</td></tr>",
       );
       expect(mutated).not.toBe(realHtml);
 
@@ -192,7 +192,7 @@ describe("check:docs-architecture", () => {
     });
 
     it("ANTI-VACUITY totals: changing a grand total reports DRIFT for inventory scripts", () => {
-      const mutated = realHtml.replace("254 scripts</strong>", "253 scripts</strong>");
+      const mutated = realHtml.replace("260 scripts</strong>", "253 scripts</strong>");
       expect(mutated).not.toBe(realHtml);
 
       // The derived script total tracks the live inventory, so assert against the

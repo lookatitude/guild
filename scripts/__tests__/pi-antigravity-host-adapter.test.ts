@@ -142,16 +142,62 @@ describe("R9 Pi and Antigravity concrete host adapters", () => {
     }
   });
 
-  it("Pi and Antigravity requester flows select Codex as a cross-family reviewer and emit success progress", () => {
+  it("Pi and Antigravity requester flows select Codex cross-family but stay WEAK without verified trust (T5 model_resolution section 7)", () => {
+    // The helpers carry no handshake evidence: registry-asserted identity alone
+    // must never label the pairing strong. The green "strong" expectation this
+    // replaces ENCODED the bypass c7 pins (asserted ids granted strong).
     for (const plan of [piRequestsCodexReviewProgress("run-r9"), antigravityRequestsCodexReviewProgress("run-r9")]) {
       expect(plan).toMatchObject({
         status: "selected",
         reviewer_host: "codex-cli",
-        independence: "strong",
+        independence: "weak",
       });
       expect(plan.progress.map((e) => e.state)).toEqual(["launched", "running", "heartbeat", "activity", "succeeded"]);
       for (const event of plan.progress) expect(validateReviewProgressEvent(event).valid).toBe(true);
     }
+  });
+
+  it("anti-vacuity: strong needs verified trust AND finalized cross-family SERVED-model evidence (T5 model_resolution section 7a)", () => {
+    const base = {
+      runId: "run-r9",
+      gate: "G-implementation:pi-cli",
+      roundNumber: 1,
+      authorHost: "pi-cli",
+      reviewerHost: "codex-cli",
+      independence: "weak" as const,
+      artifactPath: ".guild/runs/run-r9/review/G-implementation:pi-cli/artifact.md",
+      packetPath: ".guild/runs/run-r9/review/G-implementation:pi-cli/packet-1.md",
+      timestamp: "2026-06-18T00:00:00Z",
+      policyAllowsSkip: false,
+      reviewerAvailable: true,
+      outcome: "succeeded" as const,
+    };
+    // VERIFIED trust on both sides ALONE is the provisional strong section 7a
+    // forbids: with no served-model evidence the pairing stays weak. (The green
+    // "verified-alone => strong" pin this replaces WAS the T5-R1-F2 bypass.)
+    const verifiedOnly = planReviewPairing({ ...base, authorTrust: "verified", reviewerTrust: "verified" });
+    expect(verifiedOnly).toMatchObject({ status: "selected", independence: "weak" });
+    expect(verifiedOnly.progress.every((e) => e.independence === "weak")).toBe(true);
+    // The FULL evidence set restores strong: verified trust both sides plus
+    // finalized receipts whose SERVED models sit in different families.
+    const plan = planReviewPairing({
+      ...base,
+      authorTrust: "verified",
+      reviewerTrust: "verified",
+      authorServed: { served_model: "gemini-3-pro", served_model_family: "gemini", finalized: true, status: "served" },
+      reviewerServed: { served_model: "gpt-5.6-sol", served_model_family: "gpt", finalized: true, status: "served" },
+    });
+    expect(plan).toMatchObject({ status: "selected", independence: "strong" });
+    expect(plan.progress.every((e) => e.independence === "strong")).toBe(true);
+    // One verified side alone is not enough (single-term violation).
+    const oneSided = planReviewPairing({
+      ...base,
+      authorTrust: "verified",
+      authorServed: { served_model: "gemini-3-pro", served_model_family: "gemini", finalized: true, status: "served" },
+      reviewerServed: { served_model: "gpt-5.6-sol", served_model_family: "gpt", finalized: true, status: "served" },
+    });
+    expect(oneSided).toMatchObject({ status: "selected", independence: "weak" });
+    expect(oneSided.progress.every((e) => e.independence === "weak")).toBe(true);
   });
 
   it("review-progress scenarios cover every canonical state through non-tautological lifecycle branches", () => {

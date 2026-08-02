@@ -49,13 +49,12 @@
  *        GUILD_REFLECT run_id=<run-id>
  *      The orchestrator reads this and invokes guild:reflect.
  *
- * Run-id resolution (priority order) — via lib/run-trace.resolveRunIdForTrace(),
- * the SAME resolver run-trace-close.ts and learning-backstop.ts use:
- *   1. GUILD_RUN_ID env var
- *   2. .guild/runs/current-run-id   (legacy sentinel)
- *   3. .guild/current-run-id        (B2 sentinel)
- *   4. stdin payload session_id field (only when no sentinel is resolvable —
- *      e.g. a bare chat session with no /guild run started)
+ * Run-id resolution (T3b, session_context §5) — via lib/hook-binding
+ * authorizeHookWrite(): the explicit binding env (GUILD_RUN_ID [+
+ * GUILD_RUN_BINDING_REF]) verified against the run's minted binding, ONLY.
+ * Sentinels are interactive intake, never a writer identity; the old
+ * session_id/date fallbacks were unbound identities and are retired. A
+ * refused binding skips reflection for the turn (fail closed).
  *   5. fallback: "session-<date>"
  *
  * Working directory resolution (priority order):
@@ -79,7 +78,7 @@ import * as path from "path";
 import { spawnSync } from "child_process";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
-import { resolveRunIdForTrace } from "./lib/run-trace.js";
+import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import { detectSelfBuild } from "./lib/self-build.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -486,10 +485,17 @@ async function main(): Promise<void> {
     process.exit(CODEX_SKIP_EXIT_CODE);
   }
 
-  const sessionId = payload.session_id;
-  const runId =
-    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
-    (sessionId ? `run-${sessionId}` : `run-session-${new Date().toISOString().slice(0, 10)}`);
+  // T3b (session_context §5): the reflect leg reads the run's events AND
+  // writes the fallback run summary under the run dir — a runtime write. Run
+  // identity is the verified binding env ONLY (no sentinel, no session/date
+  // fallback: those were unbound identities a moved sentinel could redirect).
+  // A refused binding skips reflection for this turn (fail closed, exit 0).
+  const reflectAuth = authorizeHookWrite(guildRoot);
+  if (reflectAuth.ok === false) {
+    process.stderr.write(formatBindingRejected("maybe-reflect", reflectAuth));
+    process.exit(0);
+  }
+  const runId = reflectAuth.run_id;
 
   // Load telemetry events — canonical logs/v1.4-events.jsonl first (HK-04);
   // fall back to legacy events.ndjson only when canonical is absent.

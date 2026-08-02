@@ -21,6 +21,17 @@ import { inShareSet, isPayloadFile } from "../lib/shared/share-set";
 // in ONE module; audit.ts's package/receipt leak scan imports the SAME `redact` so
 // the write path and the scan can never drift.
 import { redact } from "../lib/shared/scrub-redact";
+// T4 dynamic-host-model-routing: the model-catalog discovery cache
+// (.guild/indexes/model-catalog/ — guild.model_catalog.v1 §7) is runtime-local
+// machine state (target-fingerprint-keyed snapshots + the fingerprint salt).
+// It is NEVER in the git-shared set; this leg verifies the exclusion holds so
+// a cache entry can never reach a shared tree unredacted. audit.ts carries the
+// matching CI-gating coverage leg (both scrub-policy legs updated together).
+import { spawnSync } from "child_process";
+import {
+  MODEL_CATALOG_CACHE_REL,
+  modelCatalogCacheDir,
+} from "../../src/modules/capability/workflows/catalog-cache";
 
 function walkDir(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -78,6 +89,34 @@ function processRun(runDir: string, dryRun: boolean): { files: number; changed: 
   return { files, changed, excluded, secrets: secretCount };
 }
 
+/**
+ * Model-catalog cache exclusion guard: warn loudly when any file under
+ * .guild/indexes/model-catalog/ is git-trackable (i.e. would be shared).
+ * The cache must stay runtime-local; the fix is the .gitignore deny line,
+ * never redaction (cache entries are rebuildable and carry fingerprints).
+ * Returns the number of trackable (leaking) cache files found.
+ */
+function warnTrackableModelCatalogCache(workspace: string): number {
+  const cacheDir = modelCatalogCacheDir(workspace);
+  const files = walkDir(cacheDir);
+  if (files.length === 0) return 0;
+  const rels = files.map((f) => path.relative(workspace, f));
+  const checked = spawnSync("git", ["-C", workspace, "check-ignore", "--stdin", "-z"], {
+    input: rels.join("\0"),
+    encoding: "utf8",
+  });
+  if (checked.status === 128) return 0; // not a git repo — nothing can be shared
+  const ignored = new Set((checked.stdout ?? "").split("\0").filter(Boolean));
+  const leaking = rels.filter((r) => !ignored.has(r));
+  for (const rel of leaking) {
+    process.stderr.write(
+      `[scrub] WARNING: ${rel}: model-catalog cache file is git-trackable — ` +
+        `${MODEL_CATALOG_CACHE_REL}/ must stay runtime-local (restore the .gitignore deny).\n`
+    );
+  }
+  return leaking.length;
+}
+
 function main(): void {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
@@ -86,6 +125,9 @@ function main(): void {
   const workspace = wsArg ? wsArg.split("=")[1] : path.resolve(__dirname, "../../../..");
   const globHint = globArg ? globArg.split("=")[1] : undefined;
   const runDirs = findRunDirs(workspace, globHint);
+
+  // T4: model-catalog cache exclusion guard (runs regardless of run dirs).
+  warnTrackableModelCatalogCache(workspace);
 
   if (runDirs.length === 0) {
     process.stderr.write(`[scrub] No run dirs found under ${workspace}/.guild/runs/\n`);

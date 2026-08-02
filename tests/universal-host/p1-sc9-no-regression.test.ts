@@ -159,14 +159,38 @@ describe("P1 SC-9 — the routing surfaces the SC-4 A/B pins BEHAVE", () => {
     expect(d.model).toBe("sonnet");
   });
 
-  it("detectProviders→selectReviewer still selects a different-family reviewer on review=cross", () => {
+  it("detectProviders→selectReviewer still selects a different-family reviewer on review=cross (VERIFIED identity)", () => {
     const detection = detectProviders({
       cwd: "/tmp/guild-sc9",
+      // T3 (session_context §3): the claude author is asserted explicitly —
+      // the retired "auto"/unset ⇒ claude default no longer supplies it.
+      // T3 R3-F1: selection additionally REQUIRES verified identity — this
+      // no-regression case models the production default box, where the
+      // native-adapter marker (CLAUDECODE) verifies the claude author.
+      host: "claude",
+      trust: "verified",
       probe: makeProbe({ onPath: ["codex"], versionOk: ["codex"], codexStoredAuth: true, pluginAdapters: ["codex-plugin"] }),
     });
     const sel = selectReviewer(detection, { mode: "cross", provider: "auto" });
     expect(sel.status).toBe("selected");
     expect(sel.provider).toBe("codex-plugin");
+  });
+
+  it("R3-F1 CORRECTION: an asserted-only author is NEVER selected — the pre-R3 green expectation here encoded a false sign-off", () => {
+    // This test previously described the claude host as asserted yet expected
+    // codex to be SELECTED — permanently pinning the fail-open bypass. The
+    // corrected contract: anything but verified trust degrades; only the
+    // verified case above may select.
+    const asserted = detectProviders({
+      cwd: "/tmp/guild-sc9",
+      host: "claude",
+      trust: "asserted",
+      probe: makeProbe({ onPath: ["codex"], versionOk: ["codex"], codexStoredAuth: true, pluginAdapters: ["codex-plugin"] }),
+    });
+    const sel = selectReviewer(asserted, { mode: "cross", provider: "auto" });
+    expect(sel.status).not.toBe("selected");
+    expect(sel.provider).toBeNull();
+    expect(sel.reason).toMatch(/not verified|unverified/i);
   });
 });
 

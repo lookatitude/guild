@@ -5,7 +5,7 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns host registry, adapters, wrapper launch planning, host capability files, fallback ladders, and degradation normalization.",
-  "depends_on": ["config", "state"],
+  "depends_on": ["config", "lifecycle", "state"],
   "owns": {
     "scripts": [
       "guild-run",
@@ -30,6 +30,7 @@
       "lib/mixed-host-contracts",
       "lib/pane-adapter",
       "lib/provider-detect",
+      "lib/session-context",
       "lib/result-normalizer",
       "lib/support-matrix",
       "host-smoke",

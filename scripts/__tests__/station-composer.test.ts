@@ -20,7 +20,7 @@ import {
   IMPLIED_RULES,
   STATIONS,
   STATION_POLICY,
-  TEAM_CAP,
+  TEAM_SIZE_POLICY,
   buildTierIndex,
   composeStationTeam,
   deriveDecompositionSignals,
@@ -400,7 +400,7 @@ describe("advisory challenger panel", () => {
     });
   });
 
-  it("advisory challengers do NOT enter the roster and do NOT count toward cap-6", () => {
+  it("advisory challengers do NOT enter the roster (advisory is never a lane)", () => {
     // qa's advisory panel names security + architect, but a no-signal qa roster is
     // just [qa] — the challengers stay out of the roster entirely.
     const plan = composeStationTeam("qa", NO_SIGNALS, cfg());
@@ -517,21 +517,20 @@ describe("advisory challenger panel", () => {
   });
 });
 
-// ── Cap-6 (§Team Size Rules) ───────────────────────────────────────────────────
+// ── Uncapped composition (team-contracts §2 — the cap is RETIRED) ──────────────
 
-describe("cap-6 team size rule", () => {
-  it("does not truncate a normal composition (advisory never counts)", () => {
-    const plan = composeStationTeam("plan", { auth_touched: true }, cfg());
-    expect(plan.capped).toBe(false);
-    expect(plan.dropped_roles).toEqual([]);
-    expect(plan.roster.length).toBeLessThanOrEqual(TEAM_CAP);
-    expect(plan.advisory_memory).toBe(true);
+describe("uncapped composition (team-contracts §2)", () => {
+  it("declares the uncapped policy and emits NO truncation artifacts", () => {
+    expect(TEAM_SIZE_POLICY).toBe("uncapped_task_derived");
+    const plan = composeStationTeam("plan", { auth_touched: true }, cfg()) as unknown as Record<string, unknown>;
+    expect(plan["cap"]).toBeUndefined();
+    expect(plan["capped"]).toBeUndefined();
+    expect(plan["dropped_roles"]).toBeUndefined();
   });
 
-  it("truncates to the cap, dropping optionals before hard-rule specialists", () => {
-    // Force an over-cap composition with a small cap. ops default = devops/security/qa
-    // (all "default"); fire every implied rule so architect/seo/technical-writer/frontend
-    // pile on as "implied". With cap=3 only the 3 defaults survive; implied are dropped.
+  it("a fully-justified large composition survives WHOLE — every fired role is a lane", () => {
+    // ops defaults devops/security/qa; fire every implied rule so architect,
+    // frontend, technical-writer, and seo all justify lanes too: 7 distinct roles.
     const plan = composeStationTeam(
       "ops",
       {
@@ -540,22 +539,21 @@ describe("cap-6 team size rule", () => {
         search_discoverability: true,
         user_facing_ui: true,
       },
-      cfg({ cap: 3 })
+      cfg()
     );
-    expect(plan.cap).toBe(3);
-    expect(plan.roster.length).toBe(3);
-    expect(plan.capped).toBe(true);
-    expect(plan.roster.map((l) => l.role).sort()).toEqual(["devops", "qa", "security"]);
-    // The dropped roles are surfaced in dropped_roles (its LANE was capped)…
-    expect(plan.dropped_roles).toEqual(expect.arrayContaining(["architect", "seo"]));
-    // …but the RULE still fired (its signal was true), so it stays in the audit
-    // trail even though its lane was capped — fired_rules is signal-driven, not
-    // lane-survival-driven (the M2 fix). The role is gone from the roster; the
-    // fired-rule record is not.
+    expect(plan.roster.map((l) => l.role).sort()).toEqual(
+      ["architect", "devops", "frontend", "qa", "security", "seo", "technical-writer"]
+    );
+    // fired_rules stays signal-driven (the M2 fix) AND every fired role survives.
     expect(plan.fired_rules).toContain("search_discoverability");
-    expect(plan.roster.some((l) => l.role === "seo")).toBe(false);
-    // The plan still validates (roster <= cap).
+    expect(plan.roster.some((l) => l.role === "seo")).toBe(true);
     expect(validateTeamPlanV1(plan)).not.toBeNull();
+  });
+
+  it("REJECTS the retired numeric `cap` override loudly (never honors a logical-size limiter)", () => {
+    expect(() =>
+      composeStationTeam("ops", NO_SIGNALS, { ...cfg(), cap: 3 } as never)
+    ).toThrow(/cap is retired/);
   });
 });
 
@@ -750,9 +748,8 @@ describe("G8 user override — possible + traceable (adversarial test 13)", () =
 });
 
 describe("G8 progressive disclosure / dynamic specialist discovery", () => {
-  it("names ONLY the selected roles (bounded by the cap), never the whole catalogue", () => {
+  it("names ONLY the selected (justified) roles, never the whole catalogue", () => {
     const plan = composeStationTeam("build", { multi_component: true, auth_touched: true }, cfg());
-    expect(plan.roster.length).toBeLessThanOrEqual(plan.cap);
     // The composer output enumerates selected roles, not the shipped template library.
     const catalogueSize = Object.keys(realTierIndex()).length;
     expect(plan.roster.length).toBeLessThan(catalogueSize);
@@ -915,7 +912,7 @@ describe("validateTeamPlanV1 fail-closed", () => {
     const p = good();
     const withHole: unknown[] = [];
     withHole[1] = p.roster[0]; // index 0 is a HOLE
-    expect(validateTeamPlanV1({ ...p, roster: withHole, cap: 6, capped: false, dropped_roles: [] })).toBeNull();
+    expect(validateTeamPlanV1({ ...p, roster: withHole })).toBeNull();
   });
 
   it("rejects a lane with a bad tier or fan-out", () => {
@@ -939,15 +936,13 @@ describe("validateTeamPlanV1 fail-closed", () => {
     ).toBeNull();
   });
 
-  it("rejects a capped/dropped_roles inconsistency", () => {
+  it("rejects a plan smuggling ANY retired truncation key (team-contracts §2/§7)", () => {
     const p = good();
-    expect(validateTeamPlanV1({ ...p, capped: true, dropped_roles: [] })).toBeNull();
-    expect(validateTeamPlanV1({ ...p, capped: false, dropped_roles: ["qa"] })).toBeNull();
-  });
-
-  it("rejects a roster larger than the declared cap", () => {
-    const p = good();
-    expect(validateTeamPlanV1({ ...p, cap: 1 })).toBeNull();
+    expect(validateTeamPlanV1({ ...p, cap: 6 })).toBeNull();
+    expect(validateTeamPlanV1({ ...p, capped: false, dropped_roles: [] })).toBeNull();
+    expect(validateTeamPlanV1({ ...p, dropped_roles: ["qa"] })).toBeNull();
+    expect(validateTeamPlanV1({ ...p, max_team_size: 4 })).toBeNull();
+    expect(validateTeamPlanV1({ ...p, team_size: 4 })).toBeNull();
   });
 });
 

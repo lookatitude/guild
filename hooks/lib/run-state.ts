@@ -45,6 +45,19 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { withStableLock } from "./v1.4/v1.4-lock.js";
 import { resolveGuildRoot } from "./guild-root.js";
+// T7-H2: run-state.json is in the share-set (SHARED_SCRUBBED_NAMES) AND git
+// re-included (`!.guild/runs/*/run-state.json`), so `lanes[].host.independence`
+// is a COMMITTED, shared claim. The guard below refuses to persist a "strong"
+// verdict that no §7a adjudication ever produced. Enforced HERE — the one
+// read-modify-write path for the file — so the invariant binds every producer,
+// not just the router that happened to assert it.
+//
+// T7R-R1-B2: the guard is bound to the EXACT lane + receipt-hash pair, not to
+// "some strong block exists in this run". `upsertLane` derives the lane key from
+// its own `laneId` argument (so a record can never claim another lane's
+// identity) and takes the receipt refs from the lane's declared
+// `host.independence_ref`.
+import { assertPersistableIndependence } from "../../src/modules/capability/workflows/independence-record.js";
 
 // ── Types (mirror the frozen guild.run_state.v1 body — ADR §"New contracts") ──
 
@@ -59,6 +72,27 @@ export type LaneStatus =
 
 /** Resolved model tier (cost ADR §2) — recorded per-lane. */
 export type LaneTier = "cheap" | "mid" | "powerful";
+
+/** Backward reference to one party's finalized receipt (§7a). */
+export interface LaneAdjudicationRef {
+  dispatch_id: string;
+  /** sha256 hex of that party's finalized receipt. */
+  receipt_hash: string;
+}
+
+/**
+ * T7R-R1-B2: the §7a adjudication a lane's `independence` value comes FROM.
+ * REQUIRED whenever `independence` is `"strong"` — `upsertLane` refuses the
+ * write otherwise. `producer_ref.dispatch_id` must equal the lane key: a lane's
+ * producing dispatch IS that lane, so an adjudication of any other dispatch
+ * cannot authorize it. Persisted alongside the verdict so the shared artifact is
+ * self-auditing — a reader re-verifies the claim against the named block rather
+ * than trusting the string.
+ */
+export interface LaneIndependenceRef {
+  producer_ref: LaneAdjudicationRef;
+  reviewer_ref: LaneAdjudicationRef;
+}
 
 /** R5 full host-native model parameter object. */
 export interface LaneModelParams {
@@ -89,6 +123,8 @@ export interface LaneState {
     degraded: boolean;
     /** "weak" when reviewer shares the producer host OR the route was degraded. */
     independence: "strong" | "weak";
+    /** REQUIRED when `independence` is "strong" — the §7a block it came from. */
+    independence_ref?: LaneIndependenceRef;
     /** Per-lane tier actually routed (ARCH-6 — may differ from plan estimate). */
     tier: LaneTier;
     /** Concrete model resolved for the routed tier on the selected host. */
@@ -151,6 +187,8 @@ export interface LanePatch {
     selected: string;
     degraded: boolean;
     independence: "strong" | "weak";
+    /** REQUIRED when `independence` is "strong" (T7R-R1-B2). */
+    independence_ref?: LaneIndependenceRef;
     tier: LaneTier;
     model: string;
     modelParams?: LaneModelParams;
@@ -259,6 +297,24 @@ export function upsertLane(
   laneId: string,
   patch: LanePatch
 ): RunStateV1 {
+  // T7-H2 fail-closed: reject an unearned `strong` BEFORE the lock is taken and
+  // before any byte is written — a refused write must leave the checkpoint,
+  // and the shareable artifact, exactly as it was.
+  //
+  // T7R-R1-B2: `lane_id` is DERIVED from this call's own `laneId`, never from
+  // the patch, so a record can never present another lane's identity to buy that
+  // lane's adjudication. The receipt refs come from the lane's own declared
+  // `independence_ref`; a `strong` with none refuses.
+  assertPersistableIndependence(
+    runDir,
+    patch.host?.independence,
+    `run-state lane "${laneId}"`,
+    {
+      lane_id: laneId,
+      producer_ref: patch.host?.independence_ref?.producer_ref,
+      reviewer_ref: patch.host?.independence_ref?.reviewer_ref,
+    },
+  );
   return withStableLock(runDir, () => {
     const now = new Date().toISOString();
     const state = loadRunState(runDir) ?? newCheckpoint(init, now);

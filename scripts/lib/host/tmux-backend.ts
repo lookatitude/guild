@@ -24,6 +24,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  dispatchModelForSpecialist,
+  dispatchModelParamsForSpecialist,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
 
@@ -75,6 +77,12 @@ export function paneCommand(
   taskId?: string,
   specialist?: string,
   debug: boolean = paneDebugEnabled(),
+  /**
+   * T6-R2-F5: the evidenced-M2 selected model this pane must run at. Absent ⇒
+   * the emitted command is byte-identical to the legacy one (no --model, no
+   * GUILD_MODEL export) — the flag-off path never changes a single byte.
+   */
+  model?: string,
 ): string {
   const taskFragment =
     taskId !== undefined && taskId.length > 0
@@ -102,12 +110,21 @@ export function paneCommand(
   // checks never mistake it for a worker), print an unmistakable notice, then drop
   // into a shell for the operator.
   const debugTitle = DEBUG_PANE_TITLE_PREFIX + (specialist !== undefined && specialist.length > 0 ? specialist : "orchestrator");
+  // T6-R2-F5: `claude --model <selected>` is what makes the M2 selection real —
+  // the pane process itself runs at the resolver's frozen model. No model ⇒ the
+  // invocation is exactly the legacy `claude '<prompt>'`.
+  const modelArg =
+    model !== undefined && model.length > 0 ? `--model ${shellQuote(model)} ` : "";
+  const modelFragment =
+    model !== undefined && model.length > 0
+      ? `export GUILD_MODEL=${shellQuote(model)}; `
+      : "";
   const teardownTail = debug
-    ? `claude ${shellQuote(prompt)}; ` +
+    ? `claude ${modelArg}${shellQuote(prompt)}; ` +
       `tmux select-pane -t "$TMUX_PANE" -T ${shellQuote(debugTitle)} 2>/dev/null || true; ` +
       `echo ${shellQuote("[GUILD_PANE_DEBUG] worker process exited — this is an operator debug shell, NOT a live worker.")}; ` +
       `exec $SHELL`
-    : `claude ${shellQuote(prompt)}`;
+    : `claude ${modelArg}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     `export GUILD_RUN_ID=${shellQuote(runId)}; ` +
@@ -116,6 +133,7 @@ export function paneCommand(
     assignmentFragment +
     statuslineFragment +
     scopeFragment +
+    modelFragment +
     teardownTail
   );
 }
@@ -147,8 +165,21 @@ export function composeTmuxCommands(opts: {
   const commandFor = (spec: Specialist | null): string => {
     const hostKind: HostKind = spec?.host_kind ?? orchestratorHostKind;
     const prompt = buildPrompt(slug, runId, spec, teamPath, hostKind);
+    // T6-R2-F5: an evidenced-M2 selection reaches the pane spawn HERE — both
+    // the adapter path and the legacy inline path. `null` on every lane whose
+    // provenance is legacy/shadow, so M0/M1 panes stay byte-identical.
+    const model = dispatchModelForSpecialist(spec) ?? undefined;
+    const modelParams = dispatchModelParamsForSpecialist(spec);
     if (!resolveAdapter)
-      return paneCommand(prompt, runId, spec?.capability_scope, spec?.taskId, spec?.name);
+      return paneCommand(
+        prompt,
+        runId,
+        spec?.capability_scope,
+        spec?.taskId,
+        spec?.name,
+        undefined, // keep paneCommand's own GUILD_PANE_DEBUG default
+        model,
+      );
     return resolveAdapter(hostKind).command({
       name: spec?.name ?? "orchestrator",
       scope: spec?.scope ?? "",
@@ -159,6 +190,8 @@ export function composeTmuxCommands(opts: {
       taskId: spec?.taskId,
       capability_scope: spec?.capability_scope,
       specialist: spec?.name,
+      ...(model !== undefined ? { model } : {}),
+      ...(modelParams !== undefined ? { modelParams } : {}),
     });
   };
 

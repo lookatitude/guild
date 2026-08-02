@@ -65,6 +65,11 @@ import {
   Liveness,
 } from "../lib/heartbeat.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
+// T3b rework F3: the idle BUS EVENT is a runtime write and requires the
+// verified caller-presented binding envelope (GUILD_RUN_ID +
+// GUILD_RUN_BINDING_REF); receipt/liveness READS + the stdout nudge stay
+// read-only and unauthenticated.
+import { authorizeHookWrite, formatBindingRejected } from "../lib/hook-binding.js";
 import {
   findRunAcceptances,
   readAssignmentForInstance,
@@ -123,12 +128,16 @@ interface AcceptedLane {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function deriveRunId(sessionId: string, guildRoot: string): string {
-  // GUILD_RUN_ID honored when the agent-team launcher sets it per pane; else
-  // resolveRunIdForTrace() (env → legacy sentinel → B2 sentinel) — the SAME
-  // shared resolver run-trace-close.ts/task-completed.ts use, so a session
-  // without the launcher's env still converges on the sentinel run instead of
-  // a divorced run-<session_id> directory (audit finding). Falls back to
-  // "run-<session_id>" only when neither env nor sentinel resolves.
+  // GUILD_RUN_ID honored when the agent-team launcher sets it per pane; falls
+  // back to "run-<session_id>" when the env is absent. T3b (session_context
+  // §5): the sentinel leg is retired (resolveRunIdForTrace is env-only) — a
+  // moved current-run-id can never redirect this hook.
+  //
+  // Rework F3: this derived id feeds READ-ONLY work ONLY — receipt/liveness
+  // assessment and the stdout nudge text. It is NEVER a writer identity: the
+  // idle bus event authorizes separately through authorizeHookWrite (verified
+  // GUILD_RUN_ID + GUILD_RUN_BINDING_REF envelope), so the run-<session_id>
+  // fallback can never name a write target.
   return (
     resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
     `run-${sessionId}`
@@ -510,19 +519,31 @@ async function main(): Promise<void> {
     runDir,
   };
 
-  // Emit nudge to stdout (orchestrator consumes it)
+  // Emit nudge to stdout (orchestrator consumes it) — read-only leg, always runs.
   process.stdout.write(composeNudge(ctx));
 
-  // Emit idle bus event (SK-5 / CMD-007: agent-bus producer). Best-effort — never blocks.
-  emitBusEvent(runDir, {
-    run_id: runId,
-    event: "idle",
-    lane_id: teammate,
-    team_name: teamName !== "unknown" ? teamName : undefined,
-    detail: ctx.pendingTaskIds.length > 0
-      ? `pending tasks: [${ctx.pendingTaskIds.join(", ")}]`
-      : undefined,
-  });
+  // Emit idle bus event (SK-5 / CMD-007: agent-bus producer). Best-effort —
+  // never blocks. Rework F3: this is a RUNTIME WRITE — it requires the
+  // verified caller-presented binding envelope (session_context §5). The
+  // write target derives from the VERIFIED run id, never from the
+  // session_id fallback: an absent/blank/closed/mismatched envelope refuses
+  // (binding_rejected, no write), and a bare session can never fabricate a
+  // run-<session_id> bus file.
+  const writeAuth = authorizeHookWrite(guildRootForRun);
+  if (writeAuth.ok === true) {
+    const boundRunDir = path.join(guildRootForRun, ".guild", "runs", writeAuth.run_id);
+    emitBusEvent(boundRunDir, {
+      run_id: writeAuth.run_id,
+      event: "idle",
+      lane_id: teammate,
+      team_name: teamName !== "unknown" ? teamName : undefined,
+      detail: ctx.pendingTaskIds.length > 0
+        ? `pending tasks: [${ctx.pendingTaskIds.join(", ")}]`
+        : undefined,
+    });
+  } else {
+    process.stderr.write(formatBindingRejected("teammate-idle", writeAuth));
+  }
 
   // Always exit 0 — no exit-code gating
   process.exit(0);

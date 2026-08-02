@@ -24,7 +24,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // capture-telemetry.ts
 var fs5 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+var path6 = __toESM(require("path"));
 var crypto2 = __toESM(require("crypto"));
 
 // lib/guild-root.ts
@@ -74,9 +74,103 @@ function emitClaudeHookEvent(raw) {
   return { ...parsed, host: "claude" };
 }
 
+// ../src/modules/lifecycle/workflows/run-binding.ts
+var fsReal = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
+function realBindingFs() {
+  return {
+    mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
+    writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    readFile: (p) => fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null,
+    exists: (p) => fsReal.existsSync(p)
+  };
+}
+function runBindingPath(root, runId) {
+  return path2.join(root, ".guild", "runs", runId, "binding.json");
+}
+function validateRunBindingRecord(parsed, expectedRunId) {
+  if (parsed === null || typeof parsed !== "object") return null;
+  const o = parsed;
+  if (o["schema_version"] !== "guild.run_binding.v1") return null;
+  if (typeof o["run_id"] !== "string" || o["run_id"] !== expectedRunId) return null;
+  const ref = o["binding_ref"];
+  if (typeof ref !== "string" || !/^rb-[A-Za-z0-9_-]+$/.test(ref)) return null;
+  if (o["state"] !== "open" && o["state"] !== "closed") return null;
+  return {
+    schema_version: "guild.run_binding.v1",
+    run_id: o["run_id"],
+    binding_ref: ref,
+    state: o["state"]
+  };
+}
+function readRunBindingRecord(opts) {
+  const fs6 = opts.fs ?? realBindingFs();
+  const raw = fs6.readFile(runBindingPath(opts.root, opts.run_id));
+  if (raw === null) return { status: "absent" };
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { status: "malformed" };
+  }
+  const record = validateRunBindingRecord(parsed, opts.run_id);
+  if (record === null) return { status: "malformed" };
+  return { status: "ok", record };
+}
+function verifyRunBinding(input) {
+  const reject2 = (reason) => ({
+    ok: false,
+    diagnostic: "binding_rejected",
+    reason
+  });
+  if (!input.run_id || !input.binding_ref) return reject2("binding_absent");
+  if (!input.root) return reject2("binding_unverifiable");
+  const read = readRunBindingRecord({ root: input.root, run_id: input.run_id, fs: input.fs });
+  if (read.status === "absent") return reject2("binding_not_minted");
+  if (read.status === "malformed") return reject2("binding_malformed");
+  const record = read.record;
+  if (record.state === "closed") return reject2("binding_closed");
+  if (record.binding_ref !== input.binding_ref || record.run_id !== input.run_id) {
+    return reject2("binding_mismatch");
+  }
+  return { ok: true, binding: record };
+}
+var HOOK_BINDING_ENV_RUN_ID = "GUILD_RUN_ID";
+var HOOK_BINDING_ENV_BINDING_REF = "GUILD_RUN_BINDING_REF";
+function readHookBindingEnvelope(env) {
+  const run_id = env[HOOK_BINDING_ENV_RUN_ID]?.trim();
+  const binding_ref = env[HOOK_BINDING_ENV_BINDING_REF]?.trim();
+  if (!run_id || !binding_ref) return null;
+  return { run_id, binding_ref };
+}
+
+// lib/hook-binding.ts
+function reject(reason, run_id) {
+  return { ok: false, diagnostic: "binding_rejected", reason, run_id };
+}
+function authorizeHookWrite(root, opts = {}) {
+  const env = opts.env ?? process.env;
+  const envelope = readHookBindingEnvelope(env);
+  const envRunId = env["GUILD_RUN_ID"]?.trim();
+  const runId = opts.runId ?? envelope?.run_id ?? (envRunId || void 0);
+  if (!runId) return reject("binding_absent", null);
+  const ref = opts.bindingRef ?? (envelope && envelope.run_id === runId ? envelope.binding_ref : void 0);
+  if (ref === void 0 || ref.trim().length === 0) {
+    return reject("binding_absent", runId);
+  }
+  const verdict = verifyRunBinding({ root, run_id: runId, binding_ref: ref });
+  if (verdict.ok === false) return reject(verdict.reason, runId);
+  return { ok: true, run_id: runId, binding_ref: verdict.binding.binding_ref };
+}
+function formatBindingRejected(hook, auth) {
+  if (auth.ok !== false) return "";
+  return `[${hook}] binding_rejected (${auth.reason}) for run ${auth.run_id ?? "<unresolved>"} \u2014 no write performed (session_context \xA75: writers fail closed; sentinels are intake-only).
+`;
+}
+
 // lib/security/config.ts
 var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var path3 = __toESM(require("node:path"));
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -151,7 +245,7 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path3.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
     raw = fs2.readFileSync(settingsPath, "utf8");
@@ -326,7 +420,7 @@ function resolveTelemetryField(scrub, policy) {
 
 // lib/security/events.ts
 var fs3 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+var path4 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
 var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-cli",
@@ -391,9 +485,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir, record) {
   try {
-    const logsDir = path3.join(runDir, "logs");
+    const logsDir = path4.join(runDir, "logs");
     fs3.mkdirSync(logsDir, { recursive: true });
-    fs3.appendFileSync(path3.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    fs3.appendFileSync(path4.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -405,12 +499,12 @@ function appendSecurityEvent(runDir, record) {
 }
 function resolveRunDir(cwd, runId, explicitRunDir) {
   if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
-  return path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  return path4.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
 }
 
 // lib/trace-v2.ts
 var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+var path5 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
 var TRACE_PAYLOAD_SCHEMA = "guild.trace_payload.v1";
 var SIDECAR_MAX_BYTES = 16 * 1024;
@@ -475,7 +569,7 @@ function pruneUndefined(obj) {
   return out;
 }
 function payloadSidecarPath(runDir, evtId) {
-  return path4.join(runDir, "logs", "payloads", `${evtId}.json`);
+  return path5.join(runDir, "logs", "payloads", `${evtId}.json`);
 }
 function payloadRef(evtId) {
   return `logs/payloads/${evtId}.json`;
@@ -511,7 +605,7 @@ function writePayloadSidecar(runDir, evtId, input, redact) {
       serialized = JSON.stringify(record);
     }
     const file = payloadSidecarPath(runDir, evtId);
-    fs4.mkdirSync(path4.dirname(file), { recursive: true });
+    fs4.mkdirSync(path5.dirname(file), { recursive: true });
     fs4.writeFileSync(file, serialized + "\n", "utf8");
     return payloadRef(evtId);
   } catch {
@@ -534,21 +628,13 @@ function isOk(payload) {
   }
   return true;
 }
-function readCurrentRunId(cwd) {
-  const sentinelPath = path5.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
-  try {
-    const value = fs5.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : void 0;
-  } catch {
-    return void 0;
+function resolveBoundRunId(cwd) {
+  const auth = authorizeHookWrite(resolveGuildRoot(cwd));
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("capture-telemetry", auth));
+    return null;
   }
-}
-function resolveRunId(cwd, payload) {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  const currentRunId = readCurrentRunId(cwd);
-  if (currentRunId !== void 0) return currentRunId;
-  return payload.session_id ? `run-${payload.session_id}` : `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
+  return auth.run_id;
 }
 async function main() {
   const raw = await readHookStdin();
@@ -560,7 +646,8 @@ async function main() {
     process.exit(0);
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const runId = resolveRunId(cwd, payload);
+  const runId = resolveBoundRunId(cwd);
+  if (runId === null) process.exit(0);
   const eventName = payload.hook_event_name ?? "PostToolUse";
   const tool = eventName === "SubagentStop" || eventName === "UserPromptSubmit" ? "" : payload.tool_name ?? "";
   const specialist = payload.agent_name ?? "";
@@ -612,7 +699,7 @@ async function main() {
     if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
     if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
-  const runsDir = path5.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runsDir = path6.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const redact = (s) => applySecretsPolicy(s, secPolicy).value;
   const spanId = genSpanId(runId, eventName, ts, actorId);
   const body = {};
@@ -657,9 +744,9 @@ async function main() {
     )
   );
   const eventLine = JSON.stringify(event) + "\n";
-  const logsDir = path5.join(runsDir, "logs");
-  const canonicalFile = path5.join(logsDir, "v1.4-events.jsonl");
-  const legacyFile = path5.join(runsDir, "events.ndjson");
+  const logsDir = path6.join(runsDir, "logs");
+  const canonicalFile = path6.join(logsDir, "v1.4-events.jsonl");
+  const legacyFile = path6.join(runsDir, "events.ndjson");
   if (eventName !== "PostToolUse") {
     try {
       fs5.mkdirSync(logsDir, { recursive: true });

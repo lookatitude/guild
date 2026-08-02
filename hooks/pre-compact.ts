@@ -32,6 +32,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header. Hook events are not LLM calls → no tokens.
@@ -70,20 +71,19 @@ function payloadExcerpt(payload: unknown): string {
   }
 }
 
-function readCurrentRunId(guildRoot: string): string | undefined {
-  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
-  try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : undefined;
-  } catch {
+/**
+ * T3b (session_context §5): the compact log emit is a runtime write — run
+ * identity resolves from the explicit binding env, verified against the run's
+ * minted binding; never a sentinel (a moved current-run-id cannot redirect the
+ * write, SC-1). A refused binding returns undefined → no emit.
+ */
+function resolveRunId(guildRoot: string): string | undefined {
+  const auth = authorizeHookWrite(guildRoot);
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("pre-compact", auth));
     return undefined;
   }
-}
-
-function resolveRunId(guildRoot: string): string | undefined {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(guildRoot);
+  return auth.run_id;
 }
 
 export async function main(): Promise<void> {

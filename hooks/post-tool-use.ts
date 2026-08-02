@@ -27,6 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import {
   appendEvent,
   buildToolCallFromPair,
@@ -254,20 +255,20 @@ function runGuildArtifactScrub(
 
 // ── Run ID helpers ────────────────────────────────────────────────────────────
 
-function readCurrentRunId(guildRoot: string): string | undefined {
-  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
-  try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : undefined;
-  } catch {
+/**
+ * T3b (session_context §5): run identity for this hook's WRITE legs (v1.4
+ * tool_call events, heartbeats, run-state) resolves from the explicit binding
+ * env and is verified against the run's minted binding — never a sentinel, so
+ * a moved current-run-id cannot redirect a write (SC-1). A refused binding
+ * returns undefined; callers fall through (no emit) as before.
+ */
+function resolveRunId(guildRoot: string): string | undefined {
+  const auth = authorizeHookWrite(guildRoot);
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("post-tool-use", auth));
     return undefined;
   }
-}
-
-function resolveRunId(guildRoot: string): string | undefined {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(guildRoot);
+  return auth.run_id;
 }
 
 export async function main(): Promise<void> {
@@ -291,9 +292,12 @@ export async function main(): Promise<void> {
   // sets them per lane), every PostToolUse refreshes the lane's structured
   // heartbeat at <runDir>/in-progress/<specialist>.json — the write side of
   // ADR-RE-3 that makes stall detection backend-agnostic (not tmux-only).
-  // Fail-open by contract (writeHeartbeatFromEnv never throws) and near-zero
-  // cost when the env vars are absent. Placed BEFORE the run-id gate: the
-  // heartbeat keys off its own env contract, not the sentinel file.
+  // T3b rework F2: writeHeartbeatFromEnv verifies the COMPLETE hook binding
+  // envelope (GUILD_RUN_ID + GUILD_RUN_BINDING_REF via authorizeHookWrite)
+  // BEFORE touching the filesystem — an absent/blank/closed/mismatched ref
+  // refuses (reason binding_rejected:<...>) with no heartbeat and no temp
+  // file. Fail-open by contract (never throws) and near-zero cost when the
+  // env vars are absent.
   {
     const hb = writeHeartbeatFromEnv({ toolName: payload.tool_name, cwd });
     if (!hb.written && hb.reason !== null && hb.reason !== "env-absent") {
