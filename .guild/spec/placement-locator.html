@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>guild.placement.v1 — one validated placement locator (design, task #29)</title>
+<title>guild.placement.v1 — one validated placement locator (design v2, task #29)</title>
 <style>
 :root{--bg:#fff;--fg:#1a1f28;--muted:#5b6474;--accent:#3b5bcc;--border:#d9dee8;--code-bg:#f3f5f9;--callout:#eef2fb;--warn-bg:#fff6e8;--warn-br:#e0a33c;--bad-bg:#fdeeee;--bad-br:#cc4b4b;--good-bg:#eef8f0;--good-br:#3f9b57}
 @media (prefers-color-scheme:dark){:root{--bg:#12151c;--fg:#e4e8f0;--muted:#9aa3b5;--accent:#7f9bff;--border:#2a3140;--code-bg:#1b2029;--callout:#1a2233;--warn-bg:#2a2113;--warn-br:#a8802f;--bad-bg:#2c1a1a;--bad-br:#b45757;--good-bg:#16261b;--good-br:#4f9b64}}
@@ -17,11 +17,11 @@ header.doc p.lede{margin:0;color:var(--muted)}
 .meta b{color:var(--fg);font-weight:600}
 h2{font-size:1.4rem;margin:2.4rem 0 .7rem;padding-top:.5rem;border-top:1px solid var(--border)}
 h3{font-size:1.08rem;margin:1.7rem 0 .5rem}
-h4{font-size:.98rem;margin:1.2rem 0 .35rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+h4{font-size:.95rem;margin:1.2rem 0 .35rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;background:var(--code-bg);padding:.1em .35em;border-radius:3px}
 pre{background:var(--code-bg);padding:.9rem 1rem;border-radius:6px;overflow-x:auto;border:1px solid var(--border)}
-pre code{background:none;padding:0;font-size:.84rem;line-height:1.5}
-table{border-collapse:collapse;width:100%;font-size:.9rem;margin:.8rem 0}
+pre code{background:none;padding:0;font-size:.83rem;line-height:1.5}
+table{border-collapse:collapse;width:100%;font-size:.89rem;margin:.8rem 0}
 .scroll{overflow-x:auto;margin:.8rem 0}
 th,td{border:1px solid var(--border);padding:.45rem .6rem;text-align:left;vertical-align:top}
 th{background:var(--code-bg);font-weight:600}
@@ -41,7 +41,7 @@ nav.toc a:hover{text-decoration:underline}
 .tag.ok{background:var(--good-bg);color:var(--good-br);border:1px solid var(--good-br)}
 footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--border);font-size:.85rem;color:var(--muted)}
 ul.tight li{margin:.25rem 0}
-.big-quote{font-size:1.05rem;font-style:italic;color:var(--muted);border-left:3px solid var(--border);padding-left:1rem;margin:1.2rem 0}
+.big-quote{font-size:1.03rem;font-style:italic;color:var(--muted);border-left:3px solid var(--border);padding-left:1rem;margin:1.2rem 0}
 </style>
 </head>
 <body>
@@ -49,63 +49,63 @@ ul.tight li{margin:.25rem 0}
 
 <header class="doc">
 <h1><code>guild.placement.v1</code> — one validated placement locator</h1>
-<p class="lede">A design for replacing the five-scalar identity tuple in the S2/S3 contract surface with a single closed value, so that placement stops being a set of fields discovered one defect at a time.</p>
+<p class="lede">A design for replacing independently-declared <code>kind</code>/<code>id</code>/<code>layer</code> in the S2/S3 contract surface with one authority-bound placement value — revised after an adversarial review returned <strong>REJECT</strong> on four counts, every one of which I reproduced.</p>
 <div class="meta">
   <span><b>Task</b> #29 (DESIGN)</span>
-  <span><b>Status</b> Proposed — not implemented</span>
+  <span><b>Version</b> v2 — revised after REJECT</span>
+  <span><b>Status</b> Proposed; needs re-review</span>
   <span><b>Base</b> <code>fix/s3-open-defects</code> @ <code>3595ac3</code></span>
   <span><b>Branch</b> <code>design/placement-locator</code></span>
-  <span><b>Supersedes</b> nothing; consumes the round-8 handover record (<code>cf23d20</code>)</span>
 </div>
 </header>
+
+<div class="callout bad">
+<p><strong>Read this first: v1 was rejected, and the rejection was right.</strong> An adversarial G-spec round returned <strong>REJECT</strong> with four P1 findings. I verified all four against the live tree and one of them by execution. The <em>direction</em> survived review — “replacing independently declared <code>kind</code>/<code>id</code>/<code>layer</code> with a validated canonical placement is the right direction” — but four load-bearing specifics were wrong, including one where I <em>misread <code>ls skills/</code> and called two skills “tiers”.</em> <a href="#whatchanged">§12 lists every change and what forced it.</a></p>
+</div>
 
 <nav class="toc">
 <strong>Contents</strong>
 <ol>
-  <li><a href="#evidence">The evidence that incremental completion does not converge</a></li>
-  <li><a href="#diagnosis">Diagnosis: identity is a growing tuple of declared scalars</a></li>
-  <li><a href="#proposal">The proposal — placement is <code>(root, path)</code>, everything else derived</a></li>
-  <li><a href="#grammar">The grammar, measured from the repository</a></li>
-  <li><a href="#roles">The one asymmetry that is real: live vs historical</a></li>
+  <li><a href="#evidence">The evidence, and what it does and does not prove</a></li>
+  <li><a href="#diagnosis">Diagnosis: missing canonical placement <em>plus</em> conflated equivalence relations</a></li>
+  <li><a href="#proposal">The proposal — placement is <code>(root, path)</code>, bound to repository authority</a></li>
+  <li><a href="#grammar">The grammar, and why it must be <em>derived</em> rather than written</a></li>
+  <li><a href="#rootkind">Root kind is a registry, not a scalar</a></li>
+  <li><a href="#roles">Live vs historical, and why nesting must be evidence-bound</a></li>
+  <li><a href="#keys">The three equivalence relations</a></li>
   <li><a href="#dissolves">What this dissolves, defect by defect</a></li>
-  <li><a href="#not">What it does <em>not</em> solve, and what it merely unblocks</a></li>
-  <li><a href="#shapes">Concrete shapes and the migration</a></li>
-  <li><a href="#antivacuity">Verification requirements for whoever implements it</a></li>
-  <li><a href="#risks">Risks, costs and open questions</a></li>
+  <li><a href="#not">What it does not solve</a></li>
+  <li><a href="#migration">Migration cost — <em>not</em> near-zero</a></li>
+  <li><a href="#antivacuity">Verification requirements</a></li>
+  <li><a href="#whatchanged">What changed in v2, and what forced each change</a></li>
   <li><a href="#decision">The decision being asked for</a></li>
 </ol>
 </nav>
 
 <section id="evidence">
-<h2>1. The evidence that incremental completion does not converge</h2>
-
-<p>This is not a preference for tidiness. The claim is narrow and falsifiable: <strong>completing identity one component per round has been tried eight times and each round found the next component missing.</strong></p>
+<h2>1. The evidence, and what it does and does not prove</h2>
 
 <div class="scroll">
 <table>
-<thead><tr><th>Round</th><th>Component added to identity</th><th>The defect that forced it</th></tr></thead>
+<thead><tr><th>Round</th><th>Component added</th><th>The defect that forced it</th></tr></thead>
 <tbody>
-<tr><td>early</td><td><code>content_hash</code> (bytes)</td><td>Two definitions with one id were one identity.</td></tr>
-<tr><td>amendment 1 (#27)</td><td><code>project_id</code> (root)</td><td><code>umbrella/A@a → sub-one/X@3</code> plus <code>umbrella/X@3 → sub-two/Y@e</code> resolved <code>A</code> to <code>sub-two/Y</code> — <strong>the wrong bytes</strong>.</td></tr>
-<tr><td>amendment 2 (#27, second half)</td><td><code>layer</code> (tier)</td><td>A move within one root — <code>.claude/agents → .guild/agents</code>, which is <em>cap-loc-D09's own shape</em> — had identical identities at both ends and read as going nowhere.</td></tr>
-<tr><td>round 8</td><td><em>(none — deferred here)</em></td><td>A same-layer <strong>path</strong> move <code>.guild/agents/archive/architect.md → .guild/agents/architect.md</code> is still inexpressible.</td></tr>
+<tr><td>early</td><td><code>content_hash</code></td><td>Two definitions with one id were one identity.</td></tr>
+<tr><td>amendment 1 (#27)</td><td><code>project_id</code></td><td><code>umbrella/A@a → sub-one/X@3</code> plus <code>umbrella/X@3 → sub-two/Y@e</code> resolved <code>A</code> to <code>sub-two/Y</code> — <strong>the wrong bytes</strong>.</td></tr>
+<tr><td>amendment 2 (#27)</td><td><code>layer</code></td><td>A move within one root — <code>.claude/agents → .guild/agents</code>, <em>cap-loc-D09's own shape</em> — had identical identities at both ends and read as going nowhere.</td></tr>
+<tr><td>round 8</td><td><em>none — deferred here</em></td><td>A same-layer <strong>path</strong> move is still inexpressible.</td></tr>
 </tbody>
 </table>
 </div>
 
-<div class="callout bad">
-<p><strong>The adversarial reviewer predicted the recurrence at the top of round 8, and it recurred.</strong> That is the part that makes this structural rather than unlucky. A process whose next failure is predictable from its shape is not converging; it is enumerating.</p>
+<div class="callout warn">
+<p><strong>Claim corrected.</strong> v1 said this happened “eight times”. The table has <strong>three</strong> completions across eight review rounds, and the review was right that three amendments do not <em>prove</em> a tuple cannot converge. The honest claim is narrower and still sufficient: <strong>three components were added, each discovered by a shipped defect rather than by design, and the reviewer predicted the fourth at the top of round 8 and was right.</strong> That is evidence of a structural cause, not proof of impossibility.</p>
 </div>
 
-<p>The same shape hit a second locator independently. The pinned-skill locator has been completed three times — directory, then body filename, then root — and <strong>depth and tier are still open</strong>: <code>.guild/skills/archive/tdd/SKILL.md</code>, <code>skills/tdd/SKILL.md</code>, <code>skills/not-a-tier/tdd/SKILL.md</code> and <code>skills/meta/archive/tdd/SKILL.md</code> all validate today, so a shadow file at a false locator verifies its own hash under a trusted id.</p>
-
-<p class="big-quote">Two locators, six completions, one pattern. The components were not discovered by design review; every one of them was discovered by a defect that had already shipped.</p>
+<p>The same shape hit a second locator independently: the pinned-skill locator has been completed three times (directory, body filename, root) with depth and tier still open.</p>
 </section>
 
 <section id="diagnosis">
-<h2>2. Diagnosis: identity is a growing tuple of <em>declared</em> scalars</h2>
-
-<p>The mechanism is visible in one function, which is worth reading literally:</p>
+<h2>2. Diagnosis: missing canonical placement <em>plus</em> conflated equivalence relations</h2>
 
 <pre><code>function identityOf(
   kind: string, id: string, hash: string | null,
@@ -114,299 +114,247 @@ ul.tight li{margin:.25rem 0}
   return `${kind}\0${id}\0${hash ?? ""}\0${projectId}\0${layer}`;
 }</code></pre>
 
-<p>Five independent scalars, concatenated. Three properties of that shape explain every open defect on this surface:</p>
+<p>v1 blamed one thing — an open-ended tuple of declared scalars. The review supplied the missing half, and it is the better diagnosis:</p>
 
-<h4>(a) It is open-ended by construction</h4>
-<p>Nothing in the type says what a <em>complete</em> identity is. Adding a sixth scalar is always legal, so "is identity complete?" has no answer the compiler or a test can give — only a defect can. That is precisely why each round found the next one.</p>
-
-<h4>(b) Every component is <em>declared</em>, so components can contradict each other</h4>
-<p>The <code>layerAgreesWithPath</code> function exists because a declared <code>layer</code> could disagree with the <code>path</code> describing the same file, and that disagreement <em>recreated the wrong-bytes class the amendment existed to close</em>. The current fix is an agreement rule: detect contradiction, refuse it. The file itself names the problem exactly right:</p>
 <div class="callout">
-<p>“A declared component that can contradict a derived one is not a component, it is a second opinion.”</p>
+<p><strong>There are two causes, not one.</strong></p>
+<p><strong>(a) There is no canonical locator.</strong> <code>kind</code>, <code>id</code> and <code>layer</code> are declared beside a path that also describes them, so they can contradict it — which is why <code>layerAgreesWithPath</code> had to be invented, and why the file says “a declared component that can contradict a derived one is not a component, it is a second opinion.”</p>
+<p><strong>(b) ONE equivalence relation is overloaded across five questions</strong> — placement, byte-state, liveness, rollback and cycle detection. A single <code>identityOf</code> serves all of them, so any change that makes it right for one makes it wrong for another. This is why each amendment landed cleanly and still left a hole.</p>
 </div>
-<p>An agreement rule is a patch on a representable-illegal-state. There is one such rule today. Every future declared component needs its own, and each is a new rule of exactly the kind this surface keeps getting wrong.</p>
 
-<h4>(c) A nullable component silently collapses</h4>
-<p><code>hash ?? ""</code> means a hashless origin and an empty-hash origin produce the <em>same key</em>. That is the whole of open defect 2: the origin is not seeded into <code>visitedIdentities</code> when its hash is unknown, so the cycle guard has nothing to compare, and <code>A@null → B@b</code> then unlabelled <code>B@b → A@a</code> closes a loop and still resolves. “Absence is not agreement” failing at the seed specifically.</p>
+<p>Cause (b) explains something (a) alone cannot: why the amendments <em>worked</em> and the surface still failed. It also predicts the shape of the answer — not one better key, but the right key per question.</p>
+
+<p>A third property is the mechanism behind open defect 2: <code>hash ?? ""</code> makes a hashless origin and an empty-hash origin the <em>same key</em>, so the cycle guard has nothing to seed with.</p>
 </section>
 
 <section id="proposal">
-<h2>3. The proposal — placement is <code>(root, path)</code>, everything else derived</h2>
-
-<div class="callout good">
-<p><strong>One sentence.</strong> A definition's placement is fully determined by <em>which root</em> it lives in and <em>where in that root</em> it sits; <code>layer</code>, <code>kind</code>, <code>id</code>, <code>tier</code> and depth are <strong>derived from the path by one total function</strong>, never declared alongside it.</p>
-</div>
+<h2>3. The proposal — placement is <code>(root, path)</code>, bound to repository authority</h2>
 
 <pre><code>interface PlacementV1 {
   schema_version: "guild.placement.v1";
-  /** WHICH ROOT. Not derivable from a path — the one irreducible declaration. */
+  /** WHICH ROOT. Not derivable from a path — the irreducible declaration. */
   project_id: string;
-  /** WHERE IN THAT ROOT. Project-root-relative, canonical, REQUIRED, never null. */
+  /** WHERE IN THAT ROOT. Project-root-relative, canonical, REQUIRED. */
   path: string;
 }
 
-/** Total. Returns the derived components, or a REFUSAL — never a partial answer. */
 function derivePlacement(
   p: PlacementV1,
-  rootKind: "workspace" | "project" | "plugin",
-  role: PlacementRole,
-): DerivedPlacement | PlacementRefusal;
+  roots: RootRegistry,             // project_id -> rootKind.  See section 5.
+  role: "live" | "historical",
+  authority: PlacementAuthority,   // inventory / roster.      See section 4.
+): DerivedPlacement | PlacementRefusal;   // total
 
 interface DerivedPlacement {
-  layer: DefinitionLayer;   // plugin-shipped | dot-claude-agents | project-guild | umbrella-guild
-  kind: DefinitionKind;     // agent | skill
-  id: string;
-  tier: string | null;      // plugin skill tier; null where the layer has no tier
+  layer: DefinitionLayer;
+  kind: DefinitionKind;
+  tier: string | null;
 }</code></pre>
 
-<p>Two declarations remain, and each earns its place:</p>
-<ul class="tight">
-<li><strong><code>project_id</code></strong> — a relative path genuinely cannot say which root it resolves against. This is the irreducible one.</li>
-<li><strong><code>rootKind</code></strong> — <code>.guild/</code> maps to <code>project-guild</code> <em>or</em> <code>umbrella-guild</code> depending on whether the root is a workspace. The existing code already documents that the path alone cannot decide this. It is supplied by the manifest, which already knows it, and is <em>not</em> stored per-entry — so it cannot drift per-entry either.</li>
-</ul>
-
-<p>Everything else stops being a field. <strong>You cannot lie with a field that does not exist.</strong></p>
-
-<h3>Why this terminates where the tuple did not</h3>
-<p>The completeness question becomes answerable. "Is placement complete?" is now "does the grammar accept exactly the layouts this repository actually uses?" — a question about a small closed table that a rail can check against the filesystem, rather than a question that only the next defect can answer.</p>
+<div class="callout warn">
+<p><strong><code>id</code> is NOT in <code>DerivedPlacement</code>, and that is a correction, not an omission.</strong> v1 claimed <code>id</code> derives from the path. It does not, for skills: <code>skills/core/principles/SKILL.md</code> has identity <code>guild-principles</code>, and <code>build-inventory.ts</code> reads it from frontmatter <code>name:</code>. I verified this — the inventory says <code>guild-principles</code> ← <code>skills/core/principles/SKILL.md</code>.</p>
+<p>So <code>id</code> stays a <strong>declared</strong> field, and the design's honest position is: <em>declared but validated against the file's own frontmatter</em> — exactly the treatment <code>layer</code> currently gets from <code>layerAgreesWithPath</code>, which is the treatment v1 proposed to delete. Deriving everything was too strong a thesis; the repository does not support it.</p>
+</div>
 </section>
 
 <section id="grammar">
-<h2>4. The grammar, measured from the repository</h2>
+<h2>4. The grammar, and why it must be <em>derived</em> rather than written</h2>
 
-<p>Measured on the live tree, not assumed. The plugin's skill tiers are exactly <code>core</code>, <code>guild-operations</code>, <code>guild-quality</code>, <code>knowledge</code>, <code>meta</code>, <code>specialists</code>.</p>
+<div class="callout bad">
+<p><strong>v1's grammar was wrong on the live tree in four ways, and I wrote it from <code>ls</code>.</strong> That is the strongest single argument in this document, because it is a demonstration rather than an assertion: a hand-written grammar is a hand-maintained tuple wearing a different hat, and it drifted from reality <em>on its first day</em>.</p>
+</div>
 
 <div class="scroll">
 <table>
-<thead><tr><th>Layer</th><th>Production</th><th>kind</th><th>id derived from</th><th>tier</th></tr></thead>
+<thead><tr><th>What v1's table said</th><th>What the tree actually holds</th></tr></thead>
 <tbody>
-<tr><td rowspan="3"><code>plugin-shipped</code></td><td><code>agents/&lt;id&gt;.md</code></td><td>agent</td><td>stem</td><td>—</td></tr>
-<tr><td><code>templates/specialists/&lt;id&gt;.md</code></td><td>agent</td><td>stem</td><td>—</td></tr>
-<tr><td><code>skills/&lt;tier&gt;/&lt;name&gt;/SKILL.md</code></td><td>skill</td><td><code>&lt;name&gt;</code></td><td>closed set of 6</td></tr>
-<tr><td><code>dot-claude-agents</code></td><td><code>.claude/agents/&lt;id&gt;.md</code></td><td>agent</td><td>stem</td><td>—</td></tr>
-<tr><td rowspan="2"><code>project-guild</code> / <code>umbrella-guild</code><br><span style="color:var(--muted);font-size:.85em">(disambiguated by rootKind)</span></td><td><code>.guild/agents/&lt;id&gt;.md</code></td><td>agent</td><td>stem</td><td>—</td></tr>
-<tr><td><code>.guild/skills/&lt;name&gt;/SKILL.md</code></td><td>skill</td><td><code>&lt;name&gt;</code></td><td>—</td></tr>
+<tr><td><code>guild-operations</code>, <code>guild-quality</code> are <strong>tiers</strong></td><td>They are <strong>skills</strong>: <code>skills/guild-quality/SKILL.md</code> has id <code>guild-quality</code>. I misread <code>ls skills/</code>.</td></tr>
+<tr><td>Skill files are always <code>SKILL.md</code></td><td><code>skills/meta/using-guild/SKILL.src.md</code> is an authored definition source and is in the inventory as <code>using-guild</code>.</td></tr>
+<tr><td>Skill <code>id</code> is the directory name</td><td>It is frontmatter <code>name:</code> — <code>principles/</code> → <code>guild-principles</code>.</td></tr>
+<tr><td>Six productions cover the surface</td><td>Generated host packages expose skills under <code>.agents/skills/guild/**</code> — an installed-tree layout absent entirely.</td></tr>
 </tbody>
 </table>
 </div>
 
-<p>Six productions. That is the entire surface, and it is why this is tractable: the grammar is small enough to state exhaustively, and a build-time rail can assert that <em>every definition file actually on disk parses</em>, which is the check that keeps the table honest as the repo changes.</p>
+<h3>The revision: bind the grammar to the authority that already exists</h3>
 
-<div class="callout warn">
-<p><strong>The rail matters more than the table.</strong> A hand-maintained grammar drifts from the repo exactly the way a hand-maintained identity tuple drifted from reality. The rail — walk the real definition trees, parse every path, fail on any that does not — is what converts "we listed the layouts" into "the layouts are listed". Without it this design has the same failure mode it is replacing, one level up.</p>
+<p>The repository <em>already</em> has a canonical answer to “what definitions exist and what are they called”: <code>guild.inventory.json</code>, generated by <code>build-inventory.ts</code>, plus <code>roster.ts</code> for project-local definitions. The grammar should not restate that — it should <strong>consult it</strong>.</p>
+
+<ul class="tight">
+<li><strong>Live placements are validated against the inventory/roster</strong>, not against a hand-written table. A path is a legal live placement iff the authority lists it.</li>
+<li><strong>The source tree and the installed tree are different placement spaces</strong> and must be distinguished explicitly — <code>skills/meta/x/SKILL.md</code> and <code>.agents/skills/guild/x/SKILL.md</code> are the same definition in two spaces, and conflating them is a new wrong-bytes class waiting to happen.</li>
+<li><strong>A written table survives only as a <em>fallback</em> for historical paths</strong>, which by definition are not in today's inventory.</li>
+</ul>
+
+<div class="callout good">
+<p>This is strictly better than v1's table on the design's own terms. v1 argued that deriving beats declaring because a declaration can contradict what the path proves. The same argument applies one level up: a hand-written grammar is a <em>declaration about the repository</em>, and it can contradict the repository. Binding to the inventory removes the second opinion for the same reason the first change removed it.</p>
 </div>
+</section>
+
+<section id="rootkind">
+<h2>5. Root kind is a registry, not a scalar</h2>
+
+<p>v1 proposed a single per-manifest <code>rootKind</code>, arguing it “cannot drift entry-to-entry”. The review showed that is exactly backwards:</p>
+
+<div class="callout bad">
+<p><strong>One manifest legitimately traverses heterogeneous roots.</strong> The cross-project case <code>umbrella → sub-one → sub-two</code> is <em>pinned by an existing test</em>. Those placements belong to a workspace root and to project roots <em>simultaneously</em>. A single scalar does not merely mislabel uniformly — it <strong>necessarily</strong> mislabels, because there is no single correct value.</p>
+<p>And the manifest does not “already know” it: it carries only a top-level <code>project_id</code>. <code>.guild/guild.yaml</code> knows the <em>current</em> root's kind, not every referenced root's.</p>
+</div>
+
+<p><strong>Revised:</strong> <code>RootRegistry</code> — an authority-bound <code>project_id → rootKind</code> map, sourced from each root's own manifest / the workspace federation record, with <strong>an unknown root refused</strong> rather than defaulted. That keeps the “no second opinion” property: root kind is looked up from the authority that owns it, never asserted by the entry that uses it.</p>
 </section>
 
 <section id="roles">
-<h2>5. The one asymmetry that is real: live vs historical</h2>
+<h2>6. Live vs historical, and why nesting must be evidence-bound</h2>
 
-<p>A first draft of this design collapsed <code>from</code> and <code>to</code> into a single strict type, and that draft was wrong in a way worth recording, because it would have made open defect 3 <em>worse</em>.</p>
+<p>The live/historical split survived review as principled. <strong>The historical grammar did not.</strong></p>
 
-<p>Open defect 3's own example is <code>.guild/agents/archive/architect.md</code>. Under a strict grammar that path does not parse — so the historical side of a real migration would become <em>unrepresentable</em>, which is a fail-closed refusal of a legitimate operation rather than a fix.</p>
+<div class="callout bad">
+<p>v1 said “nesting permitted below the kind directory”. The real tree contains <code>.claude/agents/_shared/handoff-contract.md</code>, <code>methodology-skills.md</code> and <code>plan-anchors.md</code> — verified present. These are <strong>helper fragments, not agents</strong>, and v1's rule admits every one of them as a historical agent. It equally admits an arbitrary shadow file under <code>.claude/agents/archive/</code>, which is the very class the live grammar exists to refuse.</p>
+<p>And <code>cited_as</code> does not save it: <strong>a citation proves what was cited, not that the cited file was ever a definition.</strong></p>
+</div>
 
-<div class="callout">
-<p><strong>The real distinction is not <code>from</code> vs <code>to</code>. It is <em>live</em> vs <em>historical</em>.</strong> A successor must be somewhere the system can actually put a definition today. A predecessor is wherever the old world happened to leave it, and the old world is not bound by today's layout.</p>
+<p><strong>Revised:</strong> historical admission must be <em>evidence-bound</em>, by one of:</p>
+<ul class="tight">
+<li><strong>Versioned legacy productions</strong> — an explicit, dated list of layouts the old world actually used, which is a closed set because history does not grow; or</li>
+<li><strong>Binding to a historical registry or run record</strong> — the path is admissible because a record shows it <em>was</em> a definition, not because its shape is plausible.</li>
+</ul>
+<p>Either way the burden inverts: a historical path is admitted on evidence, not admitted unless suspicious. Nesting alone is never evidence.</p>
+
+<p><strong>Also settled</strong> (v1 was internally underspecified — the table listed it generically, §10 proposed historical-only): <code>templates/specialists/&lt;id&gt;.md</code> is <strong>historical-only</strong>. It is read-only feedstock minted <em>into</em> <code>.guild/agents/</code>; it is a plausible migration source and never a legal successor.</p>
+</section>
+
+<section id="keys">
+<h2>7. The three equivalence relations</h2>
+
+<p>This section replaces v1's two-key answer, which was <em>also</em> wrong — and the review proved it by execution rather than argument.</p>
+
+<div class="callout bad">
+<p><strong>A placement-keyed cycle guard breaks a legal history.</strong> Executed against the current contract:</p>
+<pre><code>plugin/.guild/agents/A.md@h1  →  B@h2  →  plugin/.guild/agents/A.md@h3</code></pre>
+<p>The current validator accepts this and resolves to <code>A@h3</code>; the contrast is pinned in <code>adoption-manifest.test.ts</code>. v1's guard records only <code>(project_id, path)</code>, so it sees the final placement as already visited and returns <strong>ambiguous</strong>. Two genuinely different definitions <em>do</em> collide on one placement.</p>
+<p>The lesson is the one from §2: <code>PlacementV1</code> is a <strong>locator</strong>, not definition identity. v1 fixed the overload halfway and then reintroduced it.</p>
 </div>
 
 <div class="scroll">
 <table>
-<thead><tr><th></th><th><code>role: "live"</code></th><th><code>role: "historical"</code></th></tr></thead>
+<thead><tr><th>Relation</th><th>Key</th><th>Answers</th></tr></thead>
 <tbody>
-<tr><th>Used by</th><td><code>to</code> side; pinned skill refs</td><td><code>from</code> side</td></tr>
-<tr><th>Grammar</th><td>Exact production match. No nesting, tier constrained.</td><td>Same six productions, plus nesting permitted below the kind directory.</td></tr>
-<tr><th>Refuses</th><td><code>skills/not-a-tier/tdd/SKILL.md</code>, <code>skills/meta/archive/tdd/SKILL.md</code>, <code>skills/tdd/SKILL.md</code></td><td>Anything not canonical, or whose kind directory is unrecognisable</td></tr>
-<tr><th>Rationale</th><td>A shadow file at a false locator must not verify its own hash under a trusted id.</td><td>History is evidence, not policy. Refusing it loses the migration.</td></tr>
+<tr><td><strong>placement</strong></td><td><code>(project_id, path)</code></td><td>Where is this? Is this move a move at all?</td></tr>
+<tr><td><strong>source</strong></td><td><code>(project_id, path, content_hash)</code></td><td>Which byte-state was adopted? Fork or re-adoption (liveness)?</td></tr>
+<tr><td><strong>reachability</strong><br><span style="color:var(--muted);font-size:.85em">(cycle guard)</span></td><td><strong>exact source key when the origin hash is known</strong>; a <strong>placement wildcard</strong> that conservatively matches any later byte-state at that placement when it is not</td><td>Have we been here before?</td></tr>
 </tbody>
 </table>
 </div>
 
-<p>Critically: this is <strong>one role parameter with two values, resolved by one function against one table</strong> — not two types, not two vocabularies, and not four independent scalars each free to disagree. The from/to vocabulary asymmetry has already had to be resolved twice, once per component, which is itself the argument for collapsing it rather than maintaining it.</p>
+<p>The third row is the review's construction and it is better than mine: it keeps the legal <code>A@h1 → B → A@h3</code> history resolving (the exact key distinguishes <code>h1</code> from <code>h3</code>) while still giving a hashless origin something to seed with (the wildcard). <strong>Movement detection and reachability are mapped separately</strong> — they were the same question in v1, and that was the residue of the original overload.</p>
 
-<h3>The absolute-path asymmetry disappears</h3>
-<p>Today <code>historical_path</code> is <strong>absolute-only</strong> and <code>relative_path</code> is <strong>relative-only</strong> — a genuine spelling split, introduced because old run records literally cite <code>/Users/…/.claude/agents/&lt;role&gt;.md</code>. Under this design:</p>
-<ul class="tight">
-<li><code>PlacementV1.path</code> is <strong>always</strong> project-root-relative, on both sides.</li>
-<li>The absolute citation survives as <code>cited_as: string | null</code> — <strong>provenance, explicitly not identity-bearing</strong>, kept so an old record can still be matched by what it literally wrote.</li>
-<li>Reduction from <code>cited_as</code> to <code>(project_id, path)</code> happens once, at ingest. <strong>If it cannot be reduced, the entry is refused</strong> — fail-closed, rather than admitted carrying a path no rule can interpret.</li>
-</ul>
+<p>Each relation must be assigned to its call sites explicitly as part of implementation. That enumeration is a deliverable, not an implementation detail.</p>
 </section>
 
 <section id="dissolves">
-<h2>6. What this dissolves, defect by defect</h2>
+<h2>8. What this dissolves, defect by defect</h2>
 
 <div class="scroll">
 <table>
-<thead><tr><th>#</th><th>Open defect</th><th>How it dissolves</th></tr></thead>
+<thead><tr><th>#</th><th>Open defect</th><th>Status under v2</th></tr></thead>
 <tbody>
-<tr>
-  <td><span class="tag p1">P1</span> 1</td>
-  <td>S2 binds no top-level <code>id</code>/<code>kind</code> to its locator. An <code>agent</code> ref <code>id:"read-only-review"</code> at <code>.guild/agents/deploy-production.md</code> validates; a <code>kind:"skill"</code> ref into <code>.guild/agents/</code> validates.</td>
-  <td><strong>Structurally gone.</strong> <code>kind</code> and <code>id</code> are derived from the path. There is no declared <code>kind</code> to disagree with the directory, and no declared <code>id</code> to disagree with the filename. The E2 ruling covered the MOVE case and never covered KIND-vs-directory — under derivation there is no such case to cover.</td>
-</tr>
-<tr>
-  <td><span class="tag p1">P1</span> 3</td>
-  <td>Identity omits the PATH, so a same-layer move is inexpressible. <code>.guild/agents/archive/architect.md → .guild/agents/architect.md</code> validates, resolves ambiguous, cannot continue, cannot roll back.</td>
-  <td><strong>Structurally gone.</strong> Identity <em>is</em> placement, and placement contains the path. The two ends are different placements, so the move is a move. The <code>historical</code> role is what keeps the source side representable.</td>
-</tr>
-<tr>
-  <td><span class="tag p1">P1</span> 4</td>
-  <td>The pinned-skill locator constrains neither DEPTH nor plugin TIER; four distinct false locators validate.</td>
-  <td><strong>Structurally gone.</strong> A pinned skill is a <code>live</code> placement. All four cited paths fail the grammar: wrong depth, missing tier, unknown tier, nested under a tier.</td>
-</tr>
-<tr>
-  <td><span class="tag ok">CLASS</span></td>
-  <td>declared-vs-derived contradiction (currently held closed by <code>layerAgreesWithPath</code>)</td>
-  <td><strong>Structurally gone, and the agreement rule can be deleted</strong> — with a redundancy proof, per method note C. Nothing is declared, so nothing can contradict. This is the difference between removing a state and judging it, which this surface has already found decisive once.</td>
-</tr>
+<tr><td><span class="tag p1">P1</span> 1</td><td><code>kind</code> not bound to the locator: a <code>kind:"skill"</code> ref into <code>.guild/agents/</code> validates.</td><td><strong>Dissolved.</strong> <code>kind</code> is derived; there is no declared field to disagree with the directory.</td></tr>
+<tr><td><span class="tag p1">P1</span> 1b</td><td><code>id</code> not bound: <code>id:"read-only-review"</code> at <code>…/deploy-production.md</code> validates.</td><td><strong>Reduced, not dissolved.</strong> <code>id</code> cannot be derived (frontmatter is the authority), so it remains declared and <em>validated against the file</em>. Weaker than v1 claimed.</td></tr>
+<tr><td><span class="tag p1">P1</span> 3</td><td>Path absent from identity; a same-layer move is inexpressible.</td><td><strong>Dissolved.</strong> Placement contains the path, and §7's reachability key keeps the legal histories resolving.</td></tr>
+<tr><td><span class="tag p1">P1</span> 4</td><td>Pinned-skill locator constrains neither depth nor tier.</td><td><strong>Dissolved</strong>, and more robustly than v1: a pinned skill must be a live placement, validated against the inventory rather than a hand-written shape.</td></tr>
+<tr><td><span class="tag ok">CLASS</span></td><td>declared-vs-derived contradiction</td><td><strong>Dissolved for <code>kind</code> and <code>layer</code></strong>; <code>layerAgreesWithPath</code> can be deleted with a redundancy proof. <strong>Retained in kind for <code>id</code></strong>, which now needs its own frontmatter-agreement rule.</td></tr>
 </tbody>
 </table>
 </div>
 </section>
 
 <section id="not">
-<h2>7. What it does <em>not</em> solve, and what it merely unblocks</h2>
-
-<div class="callout warn">
-<p>Stating this plainly matters more than the wins. A design that claims to close everything is the same overreach that put nine semantically wrong rules into this contract.</p>
-</div>
-
-<h3>Not solved: open defect 2 — but unblocked, and this needed a correction</h3>
-<p>The hashless-origin cycle hole is <em>not</em> a placement defect. It is a <strong>nullable integrity component</strong> collapsing under <code>hash ?? ""</code>. This design does not fix it.</p>
-
-<div class="callout bad">
-<p><strong>A first version of this section overclaimed, and the correction is the interesting part.</strong> It said identity could simply be “keyed on placement alone, with <code>content_hash</code> demoted”. That is wrong, and the existing code says why in terms this design must respect:</p>
-<p>“<em>What this does NOT relax: differing BYTES are still two sources, because bytes are IN the identity. <code>A@h1</code> and <code>A@h2</code> under a hash-less query stay ambiguous, and pinning <code>content_hash</code> still disambiguates them — which is what that field is for, and what a path was never able to mean.</em>”</p>
-<p>Keying identity on placement alone would merge <code>A@h1</code> and <code>A@h2</code> — two genuinely different byte-states adopted at different times — into one identity, losing a discrimination the current tuple has. That is a regression, not a simplification.</p>
-</div>
-
-<h4>The corrected answer: one value, two derived keys</h4>
-<p>The mistake was treating “identity” as one question. It is two, and they want different keys — both <em>derived from the same placement value</em>, neither declared:</p>
-<div class="scroll">
-<table>
-<thead><tr><th>Key</th><th>Derived as</th><th>Answers</th><th>Nullable?</th></tr></thead>
-<tbody>
-<tr><td><strong>placement key</strong></td><td><code>(project_id, path)</code></td><td>Where is this? Does this move go anywhere? Have we been here before (cycle guard)?</td><td><strong>Never</strong> — placement is total</td></tr>
-<tr><td><strong>source key</strong></td><td><code>(project_id, path, content_hash)</code></td><td>Which byte-state was adopted? Is this a fork or a re-adoption (liveness)?</td><td>Inherits the hash's nullability, <em>and that is now confined to one key</em></td></tr>
-</tbody>
-</table>
-</div>
-<p>This is what actually unblocks defect 2: <strong>the cycle guard seeds on the placement key</strong>, which is never null, so a hashless origin has something to compare — while the liveness and fork rules keep the byte-bearing key and lose no discrimination. The <code>hash ?? ""</code> collapse stops being load-bearing for reachability without pretending bytes do not matter.</p>
-<p>Note this is only expressible <em>because</em> placement is complete. Under the current tuple there is no key that is both total and discriminating, which is precisely why the seed had nothing to use.</p>
-<p><strong>Still a consequence to be implemented and tested separately, not a claim of closure.</strong> It should be its own work item with its own reproduction.</p>
-
-<h3>Not solved: open defect 5 — the vacuous assertions</h3>
-<p>Three test defects are named in the handover: a "one vocabulary" test that spreads both arrays, so an independent identical literal stays green; an "is NOT a type predicate" test that assigns to <code>(unknown) =&gt; boolean</code>, which a TS predicate satisfies, so the forbidden mutation still compiles; and <em>a boundary test that pins defect 4's invalid nested layout</em>.</p>
-<p>The third is the sharpest, because a test can be worse than absent — an absent test leaves a gap, a wrong one manufactures confidence and defends the bug against whoever tries to fix it. It is also the one <strong>directly hostile to this design</strong>, since it would assert exactly what the grammar must refuse.</p>
-<div class="callout warn">
-<p><strong>Verification note, stated rather than assumed.</strong> I could <em>not</em> locate that third assertion by grep against this tip — neither <code>adoption-manifest-open-defects.test.ts</code> nor <code>project-definition-ref.test.ts</code> appears to pin any of defect 4's four false locators as valid. It may have been removed, or the handover may describe it loosely. <strong>The implementer must confirm before acting on this item</strong>; I am recording the handover's claim and my failure to reproduce it, not asserting it.</p>
-<p>What I <em>did</em> verify: the two positive assertions that do exist — <code>.guild/skills/tdd/SKILL.md</code> ("project layout") and <code>skills/meta/tdd/SKILL.md</code> ("plugin tiered layout") — are <strong>both legal under the proposed grammar</strong>. This design does not redden them.</p>
-</div>
-
-<h3>Not addressed: anything semantic</h3>
-<p>Role, tier-as-model-tier, tool scope, instructions. These belong to <code>specialist_profile.v1</code>. The current ref documents their absence deliberately, and this design keeps that boundary exactly where it is.</p>
-</section>
-
-<section id="shapes">
-<h2>8. Concrete shapes and the migration</h2>
-
-<pre><code>// BEFORE — two locators, five scalars, two vocabularies
-interface LegacyLocator {          interface ProjectDefinitionRefV1 {
-  project_id: string;                project_id: string;
-  id: string;                        layer: DefinitionLayer;   // declared
-  historical_path: string;  // ABS    kind: DefinitionKind;     // declared
-  content_hash: string | null;       id: string;               // declared
-  home: LegacyHome;         // NOT    relative_path: string;    // REL
-}                            identity  content_hash: string;
-                                       skills: PinnedSkillRef[];
-                                     }
-
-// AFTER — one placement, both sides
-interface AdoptionEntry {
-  sequence: number;
-  from: { placement: PlacementV1; cited_as: string | null;
-          content_hash: string | null };
-  to:   { placement: PlacementV1; content_hash: string;
-          skills: PinnedSkillRef[] } | null;
-  // …unchanged: reason, detail, reverses_sequence, adopted_at,
-  //   run_id, authorized_by, prev_digest
-}
-
-// identityOf collapses from five scalars to TWO KEYS over one value.
-// Both DERIVED, neither declared — see section 7 for why one key is not enough.
-function placementKey(p: PlacementV1): string {        // total, never nullable
-  return `${p.project_id}\0${p.path}`;                 // cycle guard, reachability
-}
-function sourceKey(p: PlacementV1, hash: string | null): string {
-  return `${placementKey(p)}\0${hash ?? ""}`;          // liveness, fork detection
-}</code></pre>
-
-<p><code>kind</code> moves off <code>AdoptionEntry</code> too — it is derived from both ends, and an entry whose ends derive to <em>different</em> kinds is refused rather than carrying a third opinion.</p>
-
-<div class="callout good">
-<p><strong>Migration cost is close to zero and should be spent now.</strong> The S3 contract is <em>unconsumed</em> — the existing code already invokes that fact to justify paying for the honest shape (“REQUIRED, not nullable… there is no migration cost to paying for the honest shape now”). The same argument applies with more force here, and it expires the moment a consumer lands.</p>
-</div>
-</section>
-
-<section id="antivacuity">
-<h2>9. Verification requirements for whoever implements it</h2>
-
-<p>The handover's method notes are carried forward as <em>requirements</em>, because this surface has already produced tests that were worse than absent.</p>
-
-<h3>A. A type check enumerates construction sites within one type graph — and no further</h3>
-<p>“TypeScript enumerated every construction site” was true and useless once: a structural duplicate in another module stayed layerless with 43 assertions green. <strong>Required:</strong> a duplicate-shape rail that finds structural copies of <code>PlacementV1</code> across <code>src/</code>, <code>scripts/</code>, <code>hooks/</code> <em>and every <code>resources/</code> mirror</em>, not merely nominal references to the type.</p>
-
-<h3>B. Anti-vacuity must itself be checked for vacuity</h3>
-<p>It has failed here twice, in two different ways: sweeps that were no-ops (a default parameter while every call site still passed the argument; a guard already subsumed by another), and one level up, <em>a rule with nothing to feel it</em> — the layer/path agreement rule was added, every fixture was made to comply, and all five guards swept green because no input violated it.</p>
-<div class="callout">
-<p><strong>The reliable check, stated as a procedure:</strong> build a fixture that makes every <em>other</em> guard pass, then sweep the one under test, and confirm <strong>which line</strong> produced the rejection. A refusal for the wrong reason is indistinguishable from a guard that works.</p>
-</div>
-<p><strong>Required:</strong> every grammar production has a positive case and a near-miss that differs by exactly one segment, and each near-miss asserts the specific refusal reason.</p>
-
-<h3>C. A deleted guard with a machine-checked redundancy proof beats a kept one with a comment</h3>
-<p><code>layerAgreesWithPath</code> should be <strong>deleted</strong>, not left as belt-and-braces, with its redundancy proved by exhaustive enumeration over the grammar — the way the departure-side root comparison was proved redundant and deleted, after which codex failed to falsify it across all 16 endpoint combinations.</p>
-
-<h3>D. The grammar must be pinned against reality</h3>
-<p><strong>Required:</strong> a rail that walks the real definition trees and asserts every file on disk parses. A grammar that is only checked against fixtures is a grammar that will drift from the repository exactly the way the identity tuple drifted from reality.</p>
-</section>
-
-<section id="risks">
-<h2>10. Risks, costs and open questions</h2>
-
-<div class="scroll">
-<table>
-<thead><tr><th>Risk</th><th>Assessment</th></tr></thead>
-<tbody>
-<tr><td><strong>The grammar becomes the new growing tuple.</strong></td><td>The honest version of this risk: a new layout means a new production. The difference is that a missing production <em>fails closed and loudly</em> at the on-disk rail (D), where a missing identity scalar failed <em>open and silently</em> until a defect found it. Mitigated, not eliminated.</td></tr>
-<tr><td><strong>Historical paths outside the grammar.</strong></td><td>The <code>historical</code> role permits nesting under a recognised kind directory. A path whose kind directory is unrecognisable is refused. This is a real behaviour change and could refuse a migration that today validates — which is the intended direction, but it needs a survey of any existing manifests before landing. <em>Currently: no manifests exist, the contract is unconsumed.</em></td></tr>
-<tr><td><strong><code>rootKind</code> is supplied, not derived.</strong></td><td>It is per-manifest, not per-entry, so it cannot drift entry-to-entry. But a manifest built with the wrong <code>rootKind</code> mislabels every layer in it uniformly. Needs one validation tying <code>rootKind</code> to the manifest's own <code>project_id</code>.</td></tr>
-<tr><td><strong>Scope.</strong></td><td>This touches both contract files, <code>identityOf</code>, the traversal, the liveness rule, and every fixture. It is not a small change. It <em>is</em> a smaller change than the four open P1s plus the next three components.</td></tr>
-</tbody>
-</table>
-</div>
-
-<h3>Open questions for review</h3>
+<h2>9. What it does not solve</h2>
 <ul class="tight">
-<li>Should <code>templates/specialists/&lt;id&gt;.md</code> be a <code>live</code> placement at all? It is read-only feedstock minted into <code>.guild/agents/</code>; it is a plausible migration <em>source</em> but arguably never a legal successor. Proposed: legal for <code>historical</code>, refused for <code>live</code>.</li>
-<li>Does any consumer need the <em>declared</em> <code>layer</code> for display, such that deriving it changes an output? Believed no — the contract is unconsumed — but worth one grep before deleting the field.</li>
-<li>Is <code>cited_as</code> worth keeping at all, or should ingest reduce and discard? Proposed keep: the gap-audit C2 finding was specifically that old records cite absolute paths, and discarding the citation loses the ability to explain <em>why</em> an entry matched.</li>
+<li><strong>Open defect 2</strong> is unblocked, not closed — §7's reachability key is the mechanism, and it needs its own implementation and reproduction.</li>
+<li><strong>Open defect 5</strong> (vacuous assertions) is untouched. One caveat carried from v1: the handover names a boundary test pinning defect 4's invalid layout; <strong>I could not locate it by grep against this tip</strong> and record that failure rather than assert the claim. What I did verify: the two positive skill-locator assertions that exist — <code>.guild/skills/tdd/SKILL.md</code> and <code>skills/meta/tdd/SKILL.md</code> — are legal under an inventory-bound grammar.</li>
+<li><strong>Anything semantic</strong> — role, model tier, tool scope, instructions — stays in <code>specialist_profile.v1</code>.</li>
 </ul>
 </section>
 
-<section id="decision">
-<h2>11. The decision being asked for</h2>
+<section id="migration">
+<h2>10. Migration cost — <em>not</em> near-zero</h2>
 
-<div class="callout">
-<p><strong>Adopt <code>guild.placement.v1</code> as the identity of both ends of an adoption hop, replacing the five-scalar <code>identityOf</code> tuple, with <code>layer</code>/<code>kind</code>/<code>id</code>/<code>tier</code> derived by one total grammar and the <code>live</code>/<code>historical</code> role as the only permitted asymmetry.</strong></p>
+<div class="callout bad">
+<p><strong>v1 claimed migration was “close to zero”. That was true only of stored data.</strong> The contract surface is consumed <em>structurally</em> today: <code>execution-transport-ports.ts</code> defines <code>DefinitionRefLike</code>, carries it on spawn/pane requests, and <code>refsConflict</code> compares <code>layer</code>, <code>kind</code>, <code>id</code>, <code>relative_path</code>, <code>content_hash</code>, <code>source_commit</code> and every pinned skill locator field by field. I verified this. Removing or deriving those fields changes production code.</p>
 </div>
 
-<p>If adopted, the implementation is its own task with its own adversarial review, sequenced <em>after</em> the integration settles — per the same reasoning that deferred it here. The residual it leaves in the meantime is known, named and reproduced, and <strong>fails closed</strong>: a same-layer move is inexpressible rather than resolving to wrong bytes.</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Surface</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td>Stored adoption manifests</td><td><strong>Genuinely zero</strong> — none exist. The <code>.guild/runs</code> schema hits are trace payloads containing source text, not manifest instances.</td></tr>
+<tr><td>Contract source (both files)</td><td>Substantial — shapes, validators, <code>identityOf</code>, traversal, liveness.</td></tr>
+<tr><td>Transport (<code>DefinitionRefLike</code>, <code>refsConflict</code>)</td><td>Real. No production producer populates the field yet, which caps the blast radius — but the comparison code is live.</td></tr>
+<tr><td>Conformance, host packages, fixtures</td><td>Real and broad.</td></tr>
+<tr><td>Schema version</td><td>Likely a major bump on both contracts.</td></tr>
+</tbody>
+</table>
+</div>
 
-<p>If not adopted, the standing expectation should be recorded explicitly: identity will acquire its next component when the next defect finds it, and on the evidence of eight rounds, there will be a next one.</p>
+<p>The “unconsumed, so pay now” argument still holds for <em>stored data</em>, and that is the argument that expires when a producer lands. It was overstated as a claim about the whole surface.</p>
+</section>
+
+<section id="antivacuity">
+<h2>11. Verification requirements</h2>
+
+<h4>A. A type check sees one type graph and no further</h4>
+<p>A structural duplicate in another module once stayed layerless with 43 assertions green. <strong>Required:</strong> a duplicate-shape rail across <code>src/</code>, <code>scripts/</code>, <code>hooks/</code> <em>and every <code>resources/</code> mirror</em>.</p>
+
+<h4>B. Anti-vacuity must itself be checked for vacuity</h4>
+<p>It has failed here twice: sweeps that were no-ops, and a rule with nothing to feel it (the agreement rule was added, every fixture made to comply, all five guards swept green). <strong>The procedure:</strong> build a fixture that makes every <em>other</em> guard pass, sweep the one under test, and confirm <strong>which line</strong> produced the rejection. <strong>Required:</strong> every production has a positive case and a near-miss differing by one segment, each asserting its specific refusal reason.</p>
+
+<h4>C. A deleted guard with a redundancy proof beats a kept one with a comment</h4>
+<p><code>layerAgreesWithPath</code> should be deleted with its redundancy proved by enumeration — not kept as belt-and-braces.</p>
+
+<h4>D. The rail must walk <em>authorities</em>, not directories</h4>
+<p><strong>Revised from v1</strong>, which said “walk the real definition trees”. The review is right that this would either fail on <code>.claude/agents/_shared/**</code> or falsely classify those fragments as definitions. <strong>Required:</strong> the rail reconciles the grammar against <code>guild.inventory.json</code> and the roster — the same authorities the grammar consults — so that a new definition layout fails the rail rather than silently widening the surface.</p>
+</section>
+
+<section id="whatchanged">
+<h2>12. What changed in v2, and what forced each change</h2>
+
+<div class="scroll">
+<table>
+<thead><tr><th></th><th>v1 said</th><th>v2 says</th><th>What forced it</th></tr></thead>
+<tbody>
+<tr><td><span class="tag p2">P2</span></td><td>Incremental completion “cannot converge”; “eight times”</td><td>Two causes — no canonical locator <em>and</em> one overloaded equivalence relation. Three completions, not eight.</td><td>Three amendments do not prove impossibility; the table has three rows. The overload is the better explanation and predicts the answer's shape.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td>Six hand-written productions cover the surface; <code>id</code> derives from the path</td><td>Grammar is bound to <code>guild.inventory.json</code> / roster; <code>id</code> stays declared-and-validated (frontmatter is the authority); source and installed trees are distinct spaces</td><td>Four verified counterexamples inside one directory, including my misreading two skills as tiers.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td>One per-manifest <code>rootKind</code></td><td><code>RootRegistry</code>: authority-bound <code>project_id → rootKind</code>, unknown roots refused</td><td>A pinned test traverses <code>umbrella → sub-one → sub-two</code>; heterogeneous roots have no single correct scalar.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td>Cycle guard keys on placement alone</td><td>Three relations; reachability uses the exact source key, falling back to a placement <em>wildcard</em> only when the origin hash is unknown</td><td>Executed: <code>A@h1 → B → A@h3</code> is legal and resolves today; v1's guard returns ambiguous.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td>Historical role permits nesting below the kind directory</td><td>Historical admission is evidence-bound: versioned legacy productions or a historical registry/run record</td><td><code>.claude/agents/_shared/*.md</code> are helper fragments that v1 admits as agents; a citation proves citation, not definition-hood.</td></tr>
+<tr><td><span class="tag p2">P2</span></td><td>Migration “close to zero”</td><td>Zero for stored data only; source/transport/conformance/fixtures/schema-version are real</td><td><code>refsConflict</code> compares every field this design removes.</td></tr>
+<tr><td><span class="tag p2">P2</span></td><td>“the only permitted asymmetry”</td><td>“the only <em>placement-grammar</em> asymmetry” — nullable historical hash, <code>cited_as</code> on <code>from</code>, skills/integrity on <code>to</code> all remain</td><td>The narrow claim was true; the broad one was not.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p class="big-quote">Every one of these was found by someone reading the repository more carefully than I did. The pattern this document is about — a component discovered by a defect rather than by design — applied to the document itself, twice: once in v1's grammar and once in v1's cycle key.</p>
+</section>
+
+<section id="decision">
+<h2>13. The decision being asked for</h2>
+
+<div class="callout">
+<p><strong>Adopt <code>guild.placement.v1</code> as the canonical locator on both ends of an adoption hop — deriving <code>kind</code> and <code>layer</code>, validating <code>id</code> against frontmatter, binding the grammar and root kinds to existing repository authority, and splitting the overloaded <code>identityOf</code> into three named equivalence relations.</strong></p>
+</div>
+
+<p>This is a <strong>re-review request</strong>, not a claim that the objections are closed. Four P1s were real; each has a revision above, and none of those revisions has itself been reviewed.</p>
+
+<p>If adopted, implementation is its own task with its own adversarial round, sequenced after the integration settles. The residual meanwhile is unchanged and <strong>fails closed</strong>: a same-layer move is inexpressible rather than resolving to wrong bytes.</p>
+
+<p>If not adopted, the expectation should be recorded explicitly: identity will acquire its next component when the next defect finds it.</p>
 </section>
 
 <footer>
-<p><strong>Task</strong> #29 · <strong>Author</strong> containment lane · <strong>Base</strong> <code>fix/s3-open-defects</code> @ <code>3595ac3</code> · <strong>Status</strong> proposed, not implemented, no code changed.</p>
-<p><strong>Evidence sources.</strong> Round-8 handover record (<code>cf23d20</code>); <code>scripts/lib/core/contracts/adoption-manifest.ts</code> (<code>identityOf</code>, <code>LegacyLocator</code>, the traversal matcher); <code>scripts/lib/core/contracts/project-definition-ref.ts</code> (<code>DEFINITION_LAYERS</code>, <code>layerAgreesWithPath</code>, <code>validatePinnedSkillRef</code>); plugin tree layout measured live.</p>
+<p><strong>Task</strong> #29 · <strong>v2</strong>, revised after an adversarial REJECT · <strong>Base</strong> <code>fix/s3-open-defects</code> @ <code>3595ac3</code> · <strong>Status</strong> proposed, needs re-review, no code changed.</p>
+<p><strong>Evidence.</strong> Round-8 handover (<code>cf23d20</code>); <code>adoption-manifest.ts</code> (<code>identityOf</code>, <code>LegacyLocator</code>, traversal); <code>project-definition-ref.ts</code> (<code>layerAgreesWithPath</code>, <code>validatePinnedSkillRef</code>); <code>build-inventory.ts</code> (skill id from frontmatter); <code>execution-transport-ports.ts</code> (<code>refsConflict</code>); <code>roster.ts</code>; live tree and <code>guild.inventory.json</code> read directly. Review verdict REJECT, 4×P1 + 3×P2, all reproduced.</p>
 </footer>
 
 </main>
