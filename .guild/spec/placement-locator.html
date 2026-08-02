@@ -53,7 +53,7 @@ ul.tight li{margin:.25rem 0}
 <div class="meta">
   <span><b>Task</b> #29 (DESIGN)</span>
   <span><b>Version</b> v2 — revised after REJECT, then REJECTED AGAIN</span>
-  <span><b>Status</b> NOT adopted; two rounds, two rejections</span>
+  <span><b>Status</b> <b style="color:var(--bad-br)">BLOCKED</b> — not adopted, not pending revision</span>
   <span><b>Base</b> <code>fix/s3-open-defects</code> @ <code>3595ac3</code></span>
   <span><b>Branch</b> <code>design/placement-locator</code></span>
 </div>
@@ -63,6 +63,7 @@ ul.tight li{margin:.25rem 0}
 <p class="big-quote" style="margin-top:0;border-left-color:var(--bad-br)">The pattern this document is about — a component discovered by a defect rather than by design — applied to the document itself, twice.</p>
 <p><strong>Both halves of that matter, and a reader who takes only the first will repeat this.</strong> It is the strongest argument <em>for</em> the design: the failure mode is real enough to catch its own author, mid-proposal, on the surface he was proposing to fix. It is equally the strongest argument against trusting <em>any single draft</em> of it — <strong>including the next one, and including this one.</strong></p>
 <p><strong>Concretely: v1 was rejected, and the rejection was right.</strong> An adversarial G-spec round returned <strong>REJECT</strong> with four P1 findings. I verified all four against the live tree and one of them by execution. The <em>direction</em> survived review — “replacing independently declared <code>kind</code>/<code>id</code>/<code>layer</code> with a validated canonical placement is the right direction” — but four load-bearing specifics were wrong, including one where I <em>misread <code>ls skills/</code> and called two skills “tiers”</em>, and one where <em>my own correction from two commits earlier was still wrong</em>. <a href="#whatchanged">§12 lists every change and what forced it.</a></p>
+<p><strong>RULING: this design is BLOCKED, and no v3 is to be written — not by me, not by a fresh author, not yet.</strong> Two rounds produced nine P1 findings with no repeats, and <em>all five of round 2's reduce to a single missing prerequisite</em>: a design that derives identity FROM an authority cannot be completed while no trustworthy, populatable authority exists — and §14 measures that none does. A fresh author would hit the same wall in a new place, which is the pattern this document describes. <strong>The prerequisite is task #35, and its deliverable may legitimately be the finding that no such authority can exist</strong> — in which case this direction is unreachable in this repository as it stands, and knowing that is worth more than a fourth draft. Do not revise this document; answer #35 first.</p>
 <p>The practical consequence for whoever reads this next: <strong>this document has now been reviewed TWICE and rejected TWICE.</strong> Round 2 reviewed the revisions rather than the original objections and returned <strong>REJECT</strong> with five further P1 findings — <em>none of them repeats from round 1</em>. Treat every section below as a proposal with a demonstrated history of being wrong in exactly the way it warns about. <a href="#round2">§14 records what round 2 found and what it means.</a></p>
 </div>
 
@@ -397,7 +398,7 @@ interface DerivedPlacement {
 <p><strong>Adopt <code>guild.placement.v1</code> as the canonical locator on both ends of an adoption hop — deriving <code>kind</code> and <code>layer</code>, validating <code>id</code> against frontmatter, binding the grammar and root kinds to existing repository authority, and splitting the overloaded <code>identityOf</code> into three named equivalence relations.</strong></p>
 </div>
 
-<p><strong>This is NOT currently adoptable, and §14 is why.</strong> Round 1's four P1s were real and were addressed; round 2 then found five more in the addressing. Nine P1 findings across two rounds, no repeats. The direction has survived both reviews; no draft of the specifics has survived one.</p>
+<p><strong>NOT adoptable, and BLOCKED rather than pending — §14 is why.</strong> Round 1's four P1s were real and were addressed; round 2 then found five more in the addressing. Nine P1 findings across two rounds, no repeats. The direction has survived both reviews; no draft of the specifics has survived one.</p>
 
 <p>If adopted, implementation is its own task with its own adversarial round, sequenced after the integration settles. The residual meanwhile is unchanged and <strong>fails closed</strong>: a same-layer move is inexpressible rather than resolving to wrong bytes.</p>
 
