@@ -88,7 +88,19 @@ export interface ScanResult {
   readonly findings: readonly Finding[];
 }
 
-const SOURCE_EXT = new Set([".ts", ".tsx"]);
+const SOURCE_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
+
+/**
+ * `dist/` is generated from the live tree and re-checked by the bundle-determinism
+ * gate; `node_modules/` is not ours.
+ *
+ * `__tests__/` is skipped DELIBERATELY and the reason matters: the regression suite
+ * for this very primitive TRANSCRIBES the historical buggy implementations verbatim,
+ * as negative controls proving its fixtures are live. Those transcriptions are real
+ * climbs. Scanning tests would flag the proof that the rule works as a violation of
+ * the rule — and the obvious "fix" would be to delete the controls, which is exactly
+ * the vacuity this whole change is trying not to commit.
+ */
 const SKIP_DIRS = new Set(["node_modules", "dist", "__tests__", ".git"]);
 
 export function walkSourceFiles(root: string, rel = "", out: string[] = []): string[] {
@@ -112,17 +124,67 @@ export function walkSourceFiles(root: string, rel = "", out: string[] = []): str
   return out;
 }
 
+/**
+ * Local names bound to an fs/path function, however it was imported or destructured.
+ *
+ * Matching only the SPELLING `fs.realpathSync` / `realpathSync` is a token check
+ * wearing an AST's clothes: `import { realpathSync as rp } from "node:fs"` and
+ * `const { dirname: up } = path` both defeat it, and both are ordinary code someone
+ * writes without any intent to evade. The alias map is built per file and consulted
+ * by every call test below.
+ */
+type AliasMap = Map<string, string>;
+
+function collectAliases(sf: ts.SourceFile): AliasMap {
+  const aliases: AliasMap = new Map();
+  const note = (local: string, canonical: string): void => {
+    aliases.set(local, canonical);
+  };
+  const visit = (n: ts.Node): void => {
+    // import { realpathSync as rp } from "fs"
+    if (ts.isImportDeclaration(n) && n.importClause?.namedBindings) {
+      const nb = n.importClause.namedBindings;
+      if (ts.isNamedImports(nb)) {
+        for (const el of nb.elements) {
+          note(el.name.getText(), (el.propertyName ?? el.name).getText());
+        }
+      }
+    }
+    // const { realpathSync, dirname: up } = fs / require("fs")
+    if (ts.isVariableDeclaration(n) && n.name && ts.isObjectBindingPattern(n.name)) {
+      for (const el of n.name.elements) {
+        if (ts.isIdentifier(el.name)) {
+          note(el.name.getText(), (el.propertyName ?? el.name).getText());
+        }
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(sf, visit);
+  return aliases;
+}
+
+/** The canonical fs/path function a call expression targets, if any. */
+function calleeName(node: ts.CallExpression, aliases: AliasMap): string {
+  const raw = node.expression.getText().replace(/\s/g, "");
+  const tail = raw.split(".").pop() ?? raw;
+  // A bare identifier may be an alias; a `x.y` form names its own member.
+  if (raw === tail) return aliases.get(raw) ?? raw;
+  return tail;
+}
+
 /** `fs.realpathSync(...)` / `realpathSync(...)` / `fs.realpathSync.native(...)`. */
-function isRealpathCall(node: ts.Node): boolean {
+function isRealpathCall(node: ts.Node, aliases: AliasMap): boolean {
   if (!ts.isCallExpression(node)) return false;
-  const text = node.expression.getText();
-  return /(^|\.)realpathSync(\.native)?$/.test(text.replace(/\s/g, ""));
+  const raw = node.expression.getText().replace(/\s/g, "");
+  if (/\.realpathSync\.native$/.test(raw)) return true;
+  return calleeName(node, aliases) === "realpathSync";
 }
 
 /** `fs.mkdirSync(x, { recursive: true })`. */
-function isRecursiveMkdir(node: ts.Node): boolean {
+function isRecursiveMkdir(node: ts.Node, aliases: AliasMap): boolean {
   if (!ts.isCallExpression(node)) return false;
-  if (!/(^|\.)mkdirSync$/.test(node.expression.getText().replace(/\s/g, ""))) return false;
+  if (calleeName(node, aliases) !== "mkdirSync") return false;
   return node.arguments.some(
     (a) =>
       ts.isObjectLiteralExpression(a) &&
@@ -131,9 +193,9 @@ function isRecursiveMkdir(node: ts.Node): boolean {
 }
 
 /** `path.dirname(x)` — returns the argument's text, or undefined. */
-function dirnameArg(node: ts.Node): string | undefined {
+function dirnameArg(node: ts.Node, aliases: AliasMap): string | undefined {
   if (!ts.isCallExpression(node)) return undefined;
-  if (!/(^|\.)dirname$/.test(node.expression.getText().replace(/\s/g, ""))) return undefined;
+  if (calleeName(node, aliases) !== "dirname") return undefined;
   const a = node.arguments[0];
   return a ? a.getText() : undefined;
 }
@@ -144,7 +206,7 @@ function dirnameArg(node: ts.Node): string | undefined {
  * The first form covers `x = path.dirname(x)`; the second covers the
  * `const up = path.dirname(ancestor); ancestor = up;` spelling in roster.ts.
  */
-function loopContainsDirnameWalk(loop: ts.Node): boolean {
+function loopContainsDirnameWalk(loop: ts.Node, aliases: AliasMap): boolean {
   let direct = false;
   const dirnameTargets = new Map<string, string>(); // declared name -> dirname arg
   const reassigned = new Set<string>(); // name -> assigned from some identifier
@@ -152,7 +214,7 @@ function loopContainsDirnameWalk(loop: ts.Node): boolean {
   const visit = (n: ts.Node): void => {
     if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
       const lhs = n.left.getText();
-      const arg = dirnameArg(n.right);
+      const arg = dirnameArg(n.right, aliases);
       if (arg !== undefined && arg === lhs) direct = true;
       if (ts.isIdentifier(n.right) && dirnameTargets.get(n.right.getText()) === lhs) {
         direct = true;
@@ -160,7 +222,7 @@ function loopContainsDirnameWalk(loop: ts.Node): boolean {
       if (ts.isIdentifier(n.right)) reassigned.add(lhs);
     }
     if (ts.isVariableDeclaration(n) && n.initializer) {
-      const arg = dirnameArg(n.initializer);
+      const arg = dirnameArg(n.initializer, aliases);
       if (arg !== undefined && n.name) dirnameTargets.set(n.name.getText(), arg);
     }
     ts.forEachChild(n, visit);
@@ -187,6 +249,7 @@ interface FileEvidence {
 function scanSource(text: string, fileName: string): FileEvidence {
   const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true);
   const ev: FileEvidence = { climb: false, boundedWrite: false };
+  const aliases = collectAliases(sf);
 
   // Evidence is gathered PER FUNCTION so an unrelated `realpathSync` at the top of
   // a file cannot be paired with an unrelated `mkdirSync` at the bottom.
@@ -200,9 +263,9 @@ function scanSource(text: string, fileName: string): FileEvidence {
         scanScope(n);
         return;
       }
-      if (isRealpathCall(n)) realpath = true;
-      if (isRecursiveMkdir(n)) mkdir = true;
-      if (isLoop(n) && loopContainsDirnameWalk(n)) climb = true;
+      if (isRealpathCall(n, aliases)) realpath = true;
+      if (isRecursiveMkdir(n, aliases)) mkdir = true;
+      if (isLoop(n) && loopContainsDirnameWalk(n, aliases)) climb = true;
       ts.forEachChild(n, visit);
     };
     ts.forEachChild(scope, visit);

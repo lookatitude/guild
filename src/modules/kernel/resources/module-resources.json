@@ -64,7 +64,7 @@
       "id": "lib/path-containment-scan",
       "source_path": "scripts/lib/path-containment-scan.ts",
       "resource_path": "resources/scripts/lib/path-containment-scan.ts",
-      "sha256": "ca747ee1f7ab3a482e5694ed08b3b16b7f72b3819f244499e57441cb54168a44"
+      "sha256": "9e75ec243efa8662dbff5a0fe174dc791502ae0f9d9ec8564a0229bcb8e1f663"
     },
     {
       "category": "scripts",

@@ -298,9 +298,12 @@ describe("variant 2b — a DANGLING symlink walked through the helper written to
 
     const w = writeContainedFile(root, target, Buffer.from("{}", "utf8"));
     expect(w.written).toBe(false);
-    // The leaf check fires first and is also correct: a symlink is not a regular
-    // file. Either way the write must not land outside.
-    expect(["dangling-symlink", "leaf-not-regular-file"]).toContain(w.code);
+    // Pinned EXACTLY, not as a set of acceptable codes. `writeContainedFile`
+    // defaults `requireRegularFileLeaf` on, and that check runs before the link is
+    // resolved — so the ordering is deterministic and a set-membership assertion
+    // would only be hiding which rule actually fired. Both codes are correct
+    // refusals; only one of them is the one that happens.
+    expect(w.code).toBe("leaf-not-regular-file");
     expect(fs.existsSync(escaped)).toBe(false);
   });
 

@@ -260,6 +260,32 @@ export function f(abs: string, target: string): string {
     );
   });
 
+  test("an ALIASED import does not evade the scan — matching the spelling is a token check in AST clothing", () => {
+    seedHome();
+    seedAdopted();
+    // `import { realpathSync as rp }` + `const { dirname: up } = path` is ordinary
+    // code, not an evasion attempt — which is exactly why a spelling match fails on
+    // it. Both aliases are resolved back to the function they name.
+    write(
+      "scripts/lib/aliased.ts",
+      `import { realpathSync as rp } from "node:fs";
+import { existsSync } from "node:fs";
+import * as pathmod from "node:path";
+const { dirname: up } = pathmod;
+export function f(root: string, target: string): string {
+  let cur = target;
+  while (!existsSync(cur)) { cur = up(cur); }
+  return rp(cur) + root;
+}
+`
+    );
+    const { sites, findings } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/aliased.ts")?.evidence).toContain("climb");
+    expect(findings.map((x) => `${x.code}:${x.path}`)).toContain(
+      "unregistered-site:scripts/lib/aliased.ts"
+    );
+  });
+
   test("a loop that is NOT a climb is not a site — the scanner is not just 'saw a loop'", () => {
     seedHome();
     seedAdopted();
