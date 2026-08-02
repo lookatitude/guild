@@ -1,7 +1,14 @@
 {
   "note": "Pinned closed-collection identities (file::exportName). The rail asserts the live scan is a SUPERSET of this list, so an identity disappearing fails BY NAME. Regenerate with GUILD_PIN_CLOSED_COLLECTIONS=1 and review the diff.",
   "measured_at": "feature/deep-freeze-collections (task #22)",
-  "count": 268,
+  "removed": [
+    {
+      "identity": "scripts/lib/core/contracts/adoption-manifest.ts::LEGACY_HOMES",
+      "removed_at": "feature/cap-loc-integrated (task #30, five-branch integration)",
+      "reason": "NOT a coverage loss — the identity moved populations. fix/s3-open-defects collapsed LEGACY_HOMES from its own frozen literal into a re-export of DEFINITION_LAYERS (task #27, one vocabulary for both ends of a hop). The STATIC scan indexes declaration-site literals, so an alias is no longer a declaration and drops out by construction. The concern is still enforced: DEFINITION_LAYERS is Object.freeze'd at its declaration site in project-definition-ref.ts (that identity is pinned), and this rail's own 'every ALIAS resolves to a target that IS frozen or sealed somewhere in the scan' test covers the alias and passes. Removed with a reason, which is what the rail's comment prescribes."
+    }
+  ],
+  "count": 267,
   "identities": [
     "hooks/emit-learning-checkpoint.ts::ALLOWED_NODE_PREFIXES",
     "hooks/emit-learning-checkpoint.ts::DECISION_TARGETS",
@@ -59,7 +66,6 @@
     "scripts/lib/config-ui-surface.ts::CONFIG_UI_GROUP_ORDER",
     "scripts/lib/core/contracts/adoption-manifest.ts::ADOPTION_REASONS",
     "scripts/lib/core/contracts/adoption-manifest.ts::ADOPTION_RESOLUTIONS",
-    "scripts/lib/core/contracts/adoption-manifest.ts::LEGACY_HOMES",
     "scripts/lib/core/contracts/project-capability-profile.ts::CANDIDATE_ACTIONS",
     "scripts/lib/core/contracts/project-capability-profile.ts::CANDIDATE_KINDS",
     "scripts/lib/core/contracts/project-capability-profile.ts::CONFIDENCE_GRADES",
