@@ -75,6 +75,84 @@ export type DefinitionKind = (typeof DEFINITION_KINDS)[number];
 
 const DEFINITION_KIND_SET: ReadonlySet<string> = new Set<string>(DEFINITION_KINDS);
 
+/**
+ * THE OWNING LAYER — which tier of the workspace holds these bytes.
+ *
+ * Added by the two-contract amendment (task #27, second half). S3's identity gained
+ * the project ROOT and that closed cross-project conflation, but it could not see a
+ * move WITHIN a root — and `.claude/agents/<role>.md → .guild/agents/<role>.md` is
+ * exactly cap-loc-D09's own shape, the ordinary reason this manifest exists. With
+ * only the root in identity, that move has identical identities on both sides, so it
+ * was refused as a self-adoption: a legitimate history rejected.
+ *
+ * THIS VOCABULARY LIVES HERE, in the LOCATOR contract, and S3 re-exports it. S3
+ * already imports this file, so defining it once is the only way the two ends of a
+ * hop can be compared at all — `from.home` and `to.layer` are now the same four
+ * values rather than two vocabularies that happen to overlap. That is the D4 lesson
+ * applied before it can bite: two sites, one definition.
+ *
+ * IT IS DECLARED DATA, NOT DERIVED FROM `relative_path`, and deliberately so. `home`
+ * has never been required to agree with `historical_path` on the S3 side, and
+ * inventing a layer↔path consistency rule here would be a new rule of exactly the
+ * kind this surface keeps getting wrong. KNOWN LIMITATION, stated rather than
+ * discovered later: nothing stops a producer declaring `project-guild` for a path
+ * under `.claude/`, and such a ref is self-inconsistent but valid.
+ */
+export const DEFINITION_LAYERS = Object.freeze([
+  "plugin-shipped",
+  "dot-claude-agents",
+  "project-guild",
+  "umbrella-guild",
+] as const);
+export type DefinitionLayer = (typeof DEFINITION_LAYERS)[number];
+
+const DEFINITION_LAYER_SET: ReadonlySet<string> = new Set<string>(DEFINITION_LAYERS);
+
+/**
+ * Does a DECLARED layer agree with the path it claims to describe?
+ *
+ * THE LIMITATION I DOCUMENTED AS ACCEPTABLE WAS EXPLOITABLE. I wrote that `layer` is
+ * declared data, not derived from the path, and recorded a self-inconsistent ref as
+ * valid-but-odd rather than invent a consistency rule. It is not odd — it recreates
+ * the WRONG-BYTES class the whole amendment existed to close:
+ *
+ *     1  A -> X   declared layer `project-guild`, path `.claude/agents/X.md`
+ *     2  X (home project-guild, path .guild/agents/X.md) -> Y
+ *     validates; resolving A returns Y on trail [1,2] instead of stopping at X.
+ *
+ * The two entries describe DIFFERENT files and chain anyway, because identity used
+ * the declared layer while the path said something else. A declared component that
+ * can contradict a derived one is not a component, it is a second opinion.
+ *
+ * DERIVING the layer outright was the other option and is NOT possible: `.guild/`
+ * maps to `project-guild` OR `umbrella-guild` depending on which root, and the path
+ * alone cannot say which. So the declaration stays and is VALIDATED against what the
+ * path can actually prove — many-to-one, refusing only genuine disagreement.
+ *
+ * Deliberately NOT a prefix test: this is used for S2's project-RELATIVE paths and
+ * for S3's ABSOLUTE `historical_path` (`/Users/…/.claude/agents/x.md`), so it asks
+ * which marker SEGMENT the path contains. ONE function serves both sides, because
+ * two copies of an identity rule is precisely how D4 happened.
+ *
+ * A path containing BOTH markers is refused: it proves nothing, and fail-closed is
+ * the house rule.
+ */
+export function layerAgreesWithPath(layer: string, path: string): boolean {
+  const segments = path.split("/");
+  const hasClaude = segments.includes(".claude");
+  const hasGuild = segments.includes(".guild");
+  if (hasClaude && hasGuild) return false; // both markers — proves nothing, fail closed
+  if (hasClaude) return layer === "dot-claude-agents";
+  if (hasGuild) return layer === "project-guild" || layer === "umbrella-guild";
+  // NO MARKER ⇒ NO CONSTRAINT, and this is the difference between validating a
+  // declaration and inventing one. A first draft forced the unmarked case to
+  // `plugin-shipped`; that refuses paths the marker cannot speak to, which is a rule
+  // I would have made up rather than a disagreement I detected. The exploit is a
+  // CONTRADICTION between two statements about one file, so only a contradiction is
+  // refused. An unmarked path makes no claim to contradict.
+  return true;
+}
+
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
 /**
@@ -103,6 +181,12 @@ export interface ProjectDefinitionRefV1 {
 
   /** Which project root `relative_path` resolves against (e.g. "plugin"). */
   project_id: string;
+  /**
+   * Which owning LAYER holds these bytes. Pairs with `LegacyLocator.home` so a hop's
+   * two ends are comparable, and completes the location half of identity: the root
+   * says WHICH PROJECT, this says WHICH TIER OF IT.
+   */
+  layer: DefinitionLayer;
   kind: DefinitionKind;
   /** Role slug or skill name. For `kind:"agent"` this matches SpecialistProfileV1.profile_id. */
   id: string;
@@ -157,8 +241,6 @@ function ownDataProp(
   return { kind: "data", value: desc.value };
 }
 
-const isNonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
-
 /** Exactly the closed key set — no extras, no symbols. */
 function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): boolean {
   if (Object.getOwnPropertySymbols(o).length > 0) return false;
@@ -171,6 +253,159 @@ function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): bool
 // ── Path + hash rules (the load-bearing validation) ──────────────────────────
 
 /** `sha256:` + exactly 64 lowercase hex. */
+/**
+ * The COLLECTION bound on a pinned skill bundle — the containment ladder one rung
+ * INSIDE the envelope.
+ *
+ * Every scalar here is shape-checked, and S3 bounds its `entries[]`, but `skills[]`
+ * had no cap, so the outer bound was defeated one level down: a single ref carrying
+ * 100,000 skills validated at ~15MB / 179ms, and S3 accepts 4096 entries. Per-item
+ * validation without a count bound is not containment — it is containment-shaped.
+ *
+ * 256 is far above any real bundle (the whole plugin ships 111 skills; one
+ * specialist pins a handful) and far below a denial-of-service quantity.
+ */
+export const MAX_SKILLS = 256;
+
+/**
+ * THE SCALAR BOUNDS — the rung BOUNDING COUNTS DOES NOT REACH (codex round 5, #6).
+ *
+ * `MAX_SKILLS` and S3's `MAX_ENTRIES` bound HOW MANY, and nothing here bounded HOW
+ * BIG. Reproduced against the pristine tip: `project_id`, `id`, `relative_path`,
+ * `source_commit` and both pinned-skill scalars each accepted an 8 MiB value, so a
+ * ref with 256 skills whose ids were hundreds of MB validated — times 4,096 S3
+ * entries. Per-item validation without a size bound is not containment; it is
+ * containment-shaped, exactly as an uncapped array was one rung out.
+ *
+ * Every string field of this envelope is registered against one of these, and
+ * `project-definition-ref` conformance tests assert that registration is TOTAL —
+ * a new field added to `REF_KEYS` or `PINNED_SKILL_KEYS` without a bound is a red
+ * build, not a silent hole. That is the only way this rung stops being re-missed;
+ * it has now been missed twice.
+ *
+ * THE COMPOSED CEILING, computed once so nobody has to re-derive it, and stated in
+ * the units it is actually measured in. THE BOUNDS IN THIS FILE ARE UTF-8 BYTES
+ * (`isBoundedScalar` uses `Buffer.byteLength`). A pinned skill is ≤ ~1.2 KiB
+ * (id + path + hash); a ref is ≤ ~1.6 KiB + 256 × 1.2 KiB ≈ 314 KiB.
+ *
+ * S3's OWN scalars are a different measure and are NOT changed here: `isCleanScalar`
+ * in `adoption-manifest.ts` bounds UTF-16 CODE UNITS, so its `detail` (2,048) can
+ * reach ~6 KiB of UTF-8 and its `historical_path` (1,024) ~3 KiB. An S3 entry is
+ * therefore ≤ ~10 KiB + one ref ≈ 324 KiB, and 4,096 entries ≈ 1.3 GiB.
+ *
+ * That is a CEILING ON ACCEPTED PAYLOAD, reachable only by a caller who has already
+ * materialised 1.3 GiB of parsed JSON — the validator adds no amplification on top.
+ * Tightening it further is a `MAX_SKILLS` / `MAX_ENTRIES` decision, not a per-scalar
+ * one, and is deliberately not taken here: both counts are frozen contract surface.
+ * Converting S3's scalars to bytes is likewise left alone — `detail` is free text
+ * where non-ASCII is legitimate, and narrowing it is a contract change, not a fix.
+ */
+export const MAX_PROJECT_ID = 128;
+/** Role slug or skill name — the same budget S3 gives a legacy id. */
+export const MAX_DEFINITION_ID = 128;
+/**
+ * RATIONALE CORRECTED (codex round 1 on this fix, #5). This said "matches S3's
+ * `MAX_PATH`, so one path cannot be legal on one side and not the other" — which is
+ * not a thing equal caps can achieve here. S3's `historical_path` is ABSOLUTE and
+ * this field is RELATIVE; they are DIFFERENT fields describing different strings,
+ * and an absolute spelling of the same file is necessarily longer. Equal numbers
+ * never made them consistent.
+ *
+ * The cap stands on this file's own stated policy instead: "deliberately stricter
+ * than the filesystem — the envelope is a CONTRACT". This locates a definition
+ * inside a project root (`.guild/agents/<slug>.md`), not an arbitrary deep tree, so
+ * 1024 is far above any real value while bounding the byte budget the composed
+ * ceiling below multiplies. It is a policy number, not a derived one, and a deep
+ * monorepo path beyond it is knowingly unrepresentable.
+ */
+export const MAX_RELATIVE_PATH = 1024;
+/**
+ * A commit-ish: a sha, a tag, a `git describe` string. Never a document.
+ *
+ * WAS 128, AND THAT REJECTED THE DOCUMENTED INPUT (codex round 1 on this fix, #4).
+ * A real `git describe --tags --long` over a 126-character tag is 137 characters —
+ * `<tag>-<n>-g<abbrev>` — so the bound refused a value the field's own doc promises
+ * to accept. A bound that rejects the documented input is a defect in the bound.
+ * 512 clears any realistic tag-plus-describe suffix (git ref components are
+ * conventionally under 255) while staying orders of magnitude below a body.
+ */
+export const MAX_SOURCE_COMMIT = 512;
+
+/**
+ * Rule 6's universal shape gate, spelled exactly as `adoption-manifest.ts` spells
+ * it — C0, C1, and the Unicode line separators. An id, path, or commit NEVER
+ * contains one; a smuggled body always does. The two contracts share a field
+ * (`relative_path` is carried verbatim into S3's traversal), so a character legal
+ * here and illegal there would be an alias hole between them.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/**
+ * A bounded, control-free, non-empty scalar. The bound is in UTF-8 BYTES.
+ *
+ * `string.length` IS UTF-16 CODE UNITS, NOT BYTES (codex round 3, #4). The first
+ * version of these bounds used it while the surrounding documentation promised byte
+ * limits and a byte ceiling: a 1,023-code-unit path of `é` was accepted at 2,041
+ * UTF-8 bytes, so every figure derived from the caps understated the real payload by
+ * up to 3x. Either the check or the claim had to change; the claim was the useful
+ * one, so the check moved to `Buffer.byteLength`.
+ *
+ * For the ASCII values these fields actually hold — token ids, `.guild/...` paths,
+ * shas and tags — the two measures are identical, so nothing legitimate narrows.
+ */
+function isBoundedScalar(v: unknown, max: number): v is string {
+  if (typeof v !== "string" || v.length === 0) return false;
+  if (CONTROL_RE.test(v)) return false;
+  return Buffer.byteLength(v, "utf8") <= max;
+}
+
+/**
+ * An IDENTITY token — spelled exactly as `adoption-manifest.ts` spells `TOKEN_RE`.
+ *
+ * BOUNDING WITHOUT SHAPE-CHECKING WAS HALF OF RULE 6 (codex round 1 on this fix,
+ * #3). `id: "../outside"` and a pinned skill `id: "../../secret"` both validated:
+ * these fields are documented as a role slug and a `.guild/skills/<id>/` directory
+ * name, and a path-shaped value masquerades as a locator.
+ *
+ * The sharper consequence is a SEAM DEFECT. S3's legacy locator and its query both
+ * require this shape, so a path-shaped S2 id could be a destination once and then
+ * never legally become a later `from` identity — one identity, legal on one side of
+ * the adoption manifest and illegal on the other. That is exactly the disagreement
+ * D4 removed inside S3, reappearing across the S2/S3 boundary.
+ *
+ * NOT applied to `source_commit`: a git ref legitimately contains `/`
+ * (`refs/tags/v2.5.0`), and over-tightening it would be its own defect.
+ */
+const IDENTITY_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** A bounded, control-free, TOKEN-shaped identity. */
+function isIdentityToken(v: unknown, max: number): v is string {
+  return isBoundedScalar(v, max) && IDENTITY_TOKEN_RE.test(v);
+}
+
+/** The canonical skill-body filename, in both the project and plugin layouts. */
+const SKILL_BODY_FILENAME = "SKILL.md";
+
+/**
+ * Characters `git check-ref-format` forbids in a ref name.
+ *
+ * MY FIRST GRAMMAR WAS A GUESS AND IT WAS WRONG IN BOTH DIRECTIONS (codex round 6,
+ * #2). `/^[A-Za-z0-9][A-Za-z0-9._\/+-]*$/` REJECTED the real tags
+ * `refs/tags/release@2026` and `refs/tags/rélease-v1`, and ACCEPTED the invalid
+ * `refs/tags/release..v1`, `refs//tags/v1`, `refs/tags/v1.lock`, `refs/tags/v1/` and
+ * `refs/tags/.hidden`. An allowlist invented from the examples in front of me is
+ * exactly the narrow-rule habit this file punishes — the D6 claim "every scalar is
+ * SHAPE-CHECKED" does not license inventing the shape.
+ *
+ * The rule is now git's own, expressed the way git expresses it: a DENYLIST of what
+ * a ref name may not contain, rather than a guess at what it may. Non-ASCII tags are
+ * legal (git allows them) and the five invalid spellings above are not, without this
+ * contract pretending to own a grammar it does not.
+ */
+// eslint-disable-next-line no-control-regex
+const REF_FORBIDDEN_CHARS = /[\u0000-\u0020\u007f~^:?*\[\\]/;
+
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
 
 export function isValidContentHash(v: unknown): v is string {
@@ -194,9 +429,11 @@ export function isValidContentHash(v: unknown): v is string {
  * and a path that reads differently on two platforms is a hash-binding hazard.
  */
 export function isProjectRelativePath(v: unknown): v is string {
-  if (typeof v !== "string" || v.length === 0) return false;
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f]/.test(v)) return false;
+  // BOUNDED FIRST (codex round 5, #6). Every rule below was a SHAPE rule, and a
+  // shape rule says nothing about size: an 8 MiB path of legal segments validated.
+  // The bound matches S3's `MAX_PATH`, so one path cannot be legal on one side of
+  // the adoption manifest and illegal on the other.
+  if (!isBoundedScalar(v, MAX_RELATIVE_PATH)) return false;
   if (v.includes("\\")) return false; // no backslashes — POSIX separators only
   if (v.startsWith("/")) return false; // absolute
   if (/^[A-Za-z]:/.test(v)) return false; // Windows drive absolute
@@ -217,6 +454,7 @@ const PINNED_SKILL_KEYS = ["id", "relative_path", "content_hash"] as const;
 const REF_KEYS = [
   "schema_version",
   "project_id",
+  "layer",
   "kind",
   "id",
   "relative_path",
@@ -236,9 +474,50 @@ function validatePinnedSkillRefInner(obj: unknown): PinnedSkillRef | null {
   const hashProp = ownDataProp(obj, "content_hash");
   if (idProp.kind !== "data" || pathProp.kind !== "data" || hashProp.kind !== "data") return null;
 
-  if (!isNonEmptyStr(idProp.value)) return null;
+  if (!isIdentityToken(idProp.value, MAX_DEFINITION_ID)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
+
+  // THE DECLARED ID MUST NAME THE BYTES IT CLAIMS (codex round 2, #3).
+  //
+  // `id` is documented above as "the `.guild/skills/<id>/` directory name", but id
+  // and path were validated INDEPENDENTLY, so this passed:
+  //
+  //   { id: "read-only-review",
+  //     relative_path: ".guild/skills/deploy-production/SKILL.md", … }
+  //
+  // A consumer selecting `read-only-review` was handed the deploy skill's pinned
+  // bytes under a trusted name. That is the same category as S3's removal
+  // limitation: an invariant the documentation states and the validator did not
+  // keep, which is worse than an undocumented one because it is what readers plan
+  // against.
+  //
+  // The rule is the OWNING DIRECTORY, not a fixed prefix, so it holds for both real
+  // layouts — a project's `.guild/skills/<id>/SKILL.md` and the plugin's tiered
+  // `skills/<tier>/<id>/SKILL.md` — without this envelope having to know either.
+  // A path with no directory to own the id cannot satisfy it, and is refused.
+  // …AND IT MUST NAME A SKILL BODY (codex round 5, #2). Binding only the directory
+  // left `id: "deploy-production"` at `.guild/skills/deploy-production/README.md`
+  // valid: the hash verifies the README's bytes correctly while the consumer believes
+  // it received the pinned skill DEFINITION. Owning-directory alone was half the
+  // binding — the same instance-not-class shape as the round-4 tombstone. Both
+  // layouts this contract documents end in the canonical body filename.
+  //
+  // AND THE ROOT (codex round 6, #1). `<id>/SKILL.md` alone still let
+  // `docs/tdd/SKILL.md`, `.guild/agents/tdd/SKILL.md` and `tmp/tdd/SKILL.md` carry
+  // arbitrary bytes under the trusted `tdd` identity. The binding is only a binding
+  // when all THREE components are fixed — root, owning directory, body filename —
+  // and I closed them one round at a time, which is the instance-not-class habit
+  // this file keeps punishing.
+  const segments = pathProp.value.split("/");
+  if (segments.length < 2) return null;
+  if (segments[segments.length - 1] !== SKILL_BODY_FILENAME) return null;
+  if (segments[segments.length - 2] !== idProp.value) return null;
+  // Exactly the two layouts this contract documents: a project's
+  // `.guild/skills/<id>/SKILL.md` and the plugin's tiered `skills/<tier>/<id>/SKILL.md`.
+  const underProjectSkills = segments[0] === ".guild" && segments[1] === "skills";
+  const underPluginSkills = segments[0] === "skills";
+  if (!underProjectSkills && !underPluginSkills) return null;
 
   return {
     id: idProp.value,
@@ -272,7 +551,6 @@ export function validatePinnedSkillRef(obj: unknown): PinnedSkillRef | null {
 function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   if (!Array.isArray(v)) return null;
   if (nodeTypes.isProxy(v)) return null;
-  if (Object.getOwnPropertySymbols(v).length > 0) return null;
 
   // CODEX-REVIEW FIX (adversarial round 1): the array's own PROTOTYPE must be
   // exactly `Array.prototype`. Without this, an array built on a polluted or
@@ -293,13 +571,54 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
   ) {
     return null;
   }
+  // THE COLLECTION BOUND, IN TWO PARTS THAT BOUND DIFFERENT THINGS.
+  //
+  // The `length` line was written first, then DELETED as redundant: a genuine JSON
+  // array has exactly its indices plus `length`, so the own-key count bounds the
+  // length too, and the anti-vacuity sweep showed nothing reddened without it. That
+  // reasoning was sound about OUTCOMES and wrong about COST — which is exactly the
+  // gap the sweep cannot see, since it only proves a guard changes an answer.
+  //
+  // Restored, ahead of the enumeration, because `getOwnPropertyNames` materialises
+  // one string per own property BEFORE any cap is consulted. Measured on the
+  // pristine tip, rejecting a dense array against a cap of 256:
+  //
+  //   250k → 112.8ms · 500k → 273.9ms · 1M → 541.0ms · 2M → 1392.4ms · 4M → 1909.9ms
+  //
+  // Linear in the INPUT. A rejection cost as much as an acceptance, which is what a
+  // collection bound exists to prevent (codex round 5, #5).
+  //
+  // AND IT IS STILL OUTCOME-REDUNDANT — said plainly, because the deleted comment's
+  // mistake was not its reasoning but its scope. Every oversized shape is rejected
+  // without this line too: a dense one by the key count below, a sparse or partly
+  // sparse one by the hole check in the index loop. Weakening this line reddens the
+  // TIMING assertion and nothing else, and that is the whole point of keeping it.
+  // A guard whose only observable effect is cost is still a guard; it just needs a
+  // cost test, which is why D5's coverage is timed rather than behavioural.
+  if (lenDesc.value > MAX_SKILLS) return null;
+  // AFTER the cap: `getOwnPropertySymbols` is an enumeration like any other, and
+  // running it first cost 131.1ms to reject an oversized array carrying 100,000
+  // symbol keys where the same array without them cost ~0.5ms (codex round 4, #4).
+  // Bounding one enumeration and leaving the other ahead of the bound is not a bound.
+  if (Object.getOwnPropertySymbols(v).length > 0) return null;
+  //
+  // Counting KEYS as well is what bounds the rest: `length` alone does not bound the
+  // WORK, because an array with `length: 1` can still carry a million NAMED own
+  // properties that the scan below walks (an earlier codex round: the bound "does
+  // not bound the property-validation work it claims to contain"). Names are
+  // materialised ONCE here and reused. The residual — one `getOwnPropertyNames` over
+  // properties the caller already allocated — is unavoidable without an early-exit
+  // own-key enumerator, and cannot arise from `JSON.parse`, this contract's actual
+  // input path.
+  const ownNames = Object.getOwnPropertyNames(v);
+  if (ownNames.length > MAX_SKILLS + 1) return null;
 
   // CODEX-REVIEW FIX (adversarial round 1): reject EXTRA own string keys. A
   // genuine JSON-parsed array has exactly the index keys plus `length`. An array
   // carrying `__proto__`, `constructor`, or any non-index own property is
   // smuggling data the index scan below would never see — and normalizing it away
   // is repair, not validation. Fail closed instead.
-  for (const k of Object.getOwnPropertyNames(v)) {
+  for (const k of ownNames) {
     if (k === "length") continue;
     // Canonical array index: a non-negative integer whose string form round-trips
     // (rejects "01", "1.0", "-1", " 1", "1e2", and every non-index name).
@@ -316,6 +635,33 @@ function sanitizeSkillArr(v: unknown): PinnedSkillRef[] | null {
     const skill = validatePinnedSkillRefInner(desc.value);
     if (skill === null) return null;
     if (seen.has(skill.id)) return null; // duplicate id ⇒ ambiguous bundle
+    // TWO IDS ON ONE LOCATOR — the same ambiguity from the other side (codex round 2,
+    // #3) — needs NO separate guard, and the one written here was DELETED rather than
+    // shipped untested. Since `validatePinnedSkillRefInner` now requires each id to
+    // name its own owning directory, two entries sharing an IDENTICAL `relative_path`
+    // string share that directory and therefore share an id, which the line above
+    // already rejects. The anti-vacuity sweep confirmed it: weakening the locator
+    // check reddened nothing.
+    //
+    // THE CLAIM IS SCOPED TO EXACT STRINGS, and the first version of this comment
+    // over-reached (codex round 3, #2). `id:"tdd"` at `skills/meta/tdd/SKILL.md` and
+    // `id:"TDD"` at `skills/meta/TDD/SKILL.md` both validate and, on a
+    // case-insensitive filesystem, name the same directory — two different ids owning
+    // one real location. The deleted guard would not have caught that either, since it
+    // compared strings too, so the deletion stands; what was wrong was calling the
+    // dedup complete. It is complete at the STRING level, which is the level this
+    // contract operates at by design (Rule 5 rejects alias spellings rather than
+    // normalising them, and case-folding is normalisation).
+    //
+    // AND THE DELEGATION MUST BE STATED AS A REQUIREMENT, NOT AS A CONSEQUENCE (codex
+    // round 4, #3). A previous version of this comment claimed a case alias "surfaces
+    // as a hash mismatch" in the artifact service. It does NOT: on a case-insensitive
+    // filesystem both spellings read the SAME inode, so both hashes verify and there
+    // is no mismatch to catch. Hash verification proves the bytes match what the ref
+    // declared, and nothing about whether two locators are one file. Deduplicating
+    // RESOLVED locators (inode identity, symlink containment) is therefore an
+    // obligation this envelope places ON the artifact service, not a property it
+    // inherits from it.
     seen.add(skill.id);
     out.push(skill);
   }
@@ -330,6 +676,7 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (schemaProp.kind !== "data" || schemaProp.value !== PROJECT_DEFINITION_REF_SCHEMA) return null;
 
   const projectProp = ownDataProp(obj, "project_id");
+  const layerProp = ownDataProp(obj, "layer");
   const kindProp = ownDataProp(obj, "kind");
   const idProp = ownDataProp(obj, "id");
   const pathProp = ownDataProp(obj, "relative_path");
@@ -343,6 +690,7 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   // array does not narrow the individual consts, and narrowing is what keeps the
   // `.value` reads type-safe below.
   if (projectProp.kind !== "data") return null; // absent or accessor → reject
+  if (layerProp.kind !== "data") return null;
   if (kindProp.kind !== "data") return null;
   if (idProp.kind !== "data") return null;
   if (pathProp.kind !== "data") return null;
@@ -352,16 +700,32 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (typeHashProp.kind !== "data") return null;
   if (skillsProp.kind !== "data") return null;
 
-  if (!isNonEmptyStr(projectProp.value)) return null;
+  if (!isIdentityToken(projectProp.value, MAX_PROJECT_ID)) return null;
+  if (typeof layerProp.value !== "string" || !DEFINITION_LAYER_SET.has(layerProp.value)) {
+    return null;
+  }
   if (typeof kindProp.value !== "string" || !DEFINITION_KIND_SET.has(kindProp.value)) return null;
   const kind = kindProp.value as DefinitionKind;
-  if (!isNonEmptyStr(idProp.value)) return null;
+  if (!isIdentityToken(idProp.value, MAX_DEFINITION_ID)) return null;
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
   // `source_commit`: a non-empty string or explicit null. `undefined` is NOT
   // accepted — an absent commit must be stated, not implied.
-  if (commitProp.value !== null && !isNonEmptyStr(commitProp.value)) return null;
+  if (commitProp.value !== null) {
+    if (!isBoundedScalar(commitProp.value, MAX_SOURCE_COMMIT)) return null;
+    const commit = commitProp.value;
+    if (REF_FORBIDDEN_CHARS.test(commit)) return null;
+    // `..` ANYWHERE, not merely as a whole segment — the previous `split("/")` form
+    // caught `refs/../x`, let `release..v1` through, and claimed to do both.
+    if (commit.includes("..")) return null;
+    if (commit.includes("//")) return null;
+    if (commit.startsWith("/") || commit.endsWith("/")) return null;
+    if (commit.startsWith(".") || commit.includes("/.")) return null;
+    if (commit.endsWith(".")) return null;
+    if (commit.endsWith(".lock") || commit.includes(".lock/")) return null;
+    if (commit === "@" || commit.includes("@{")) return null;
+  }
 
   // Identity hashes are raw sha256 hex (the shape hashSpecialistProfile emits —
   // NOT the "sha256:"-prefixed form this file uses for byte hashes). They are
@@ -380,12 +744,19 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
     if (typeHashProp.value !== null) return null;
   }
 
+  // THE DECLARED LAYER MUST AGREE WITH THE PATH IT DESCRIBES. See
+  // `layerAgreesWithPath`: without this the declaration is a second opinion, and a
+  // ref declaring `project-guild` for a `.claude/agents/` path chains into another
+  // definition's lineage and resolves to the WRONG BYTES.
+  if (!layerAgreesWithPath(layerProp.value, pathProp.value as string)) return null;
+
   const skills = sanitizeSkillArr(skillsProp.value);
   if (skills === null) return null;
 
   return {
     schema_version: PROJECT_DEFINITION_REF_SCHEMA,
     project_id: projectProp.value,
+    layer: layerProp.value as DefinitionLayer,
     kind,
     id: idProp.value,
     relative_path: pathProp.value,

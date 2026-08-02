@@ -14,6 +14,7 @@
 import {
   ADOPTION_MANIFEST_SCHEMA,
   ADOPTION_REASONS,
+  MAX_ENTRIES,
   entryDigest,
   resolveHistorical,
   validateAdoptionEntry,
@@ -33,6 +34,7 @@ const IDENT = (c: string) => c.repeat(64);
 function ref(id: string, hash = "a"): ProjectDefinitionRefV1 {
   return {
     schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+    layer: "project-guild" as const,
     project_id: "plugin",
     kind: "agent",
     id,
@@ -48,9 +50,10 @@ function ref(id: string, hash = "a"): ProjectDefinitionRefV1 {
 function loc(id: string, hash = "f") {
   return {
     id,
-    historical_path: `/Users/miguelp/Projects/guild/.claude/agents/${id}.md`,
+    project_id: "plugin",
+    historical_path: `/plugin/.guild/agents/${id}.md`,
     content_hash: H(hash),
-    home: "dot-claude-agents" as const,
+    home: "project-guild" as const,
   };
 }
 
@@ -176,8 +179,12 @@ describe("XB — non-canonical locators are REJECTED, never normalized", () => {
   it("XB.2 dedup is sound BY CONSTRUCTION — only one spelling validates", () => {
     const canonical = "/Users/miguelp/Projects/guild/.claude/agents/x.md";
     const alias = "/Users/miguelp/Projects/guild/.claude/./agents/x.md";
-    expect(validateLegacyLocator({ ...loc("x"), historical_path: canonical })).not.toBeNull();
-    expect(validateLegacyLocator({ ...loc("x"), historical_path: alias })).toBeNull();
+    // `home` rides with the path override: since the declared layer is validated
+    // against the path, a `.claude` spelling must declare `dot-claude-agents` or the
+    // fixture is a contradiction rather than a canonicalization case.
+    const claude = { ...loc("x"), home: "dot-claude-agents" as const };
+    expect(validateLegacyLocator({ ...claude, historical_path: canonical })).not.toBeNull();
+    expect(validateLegacyLocator({ ...claude, historical_path: alias })).toBeNull();
   });
 
   it("XB.3 two spellings of one file cannot BOTH enter the manifest", () => {
@@ -328,7 +335,7 @@ function rollbackManifest(): AdoptionManifestV1 {
   return chain([
     { from: loc("A"), to: to1 },
     {
-      from: { id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: to1.content_hash, home: "project-guild" },
+      from: { project_id: "plugin", id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: to1.content_hash, home: "project-guild" },
       // A GENUINE rollback returns to the target's SOURCE identity — same id AND
       // same bytes. Codex round 2 (#3) tightened the validator to require this;
       // the old fixture returned to a DIFFERENT hash, which is not a reversal.
@@ -347,7 +354,7 @@ describe("A3.7 — chains, including forward-append rollback", () => {
     const m = chain([
       { from: loc("A"), to: b },
       {
-        from: { id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: b.content_hash, home: "project-guild" },
+        from: { project_id: "plugin", id: "B", historical_path: "/g/.guild/agents/B.md", content_hash: b.content_hash, home: "project-guild" },
         to: ref("C"),
       },
     ]);
@@ -413,7 +420,7 @@ describe("traversal matches IDENTITY, not bare ids", () => {
       { from: loc("A"), to: b },
       // An unrelated later adoption of a DIFFERENT "B" (different bytes).
       {
-        from: { id: "B", historical_path: "/g/other/B.md", content_hash: H("9"), home: "project-guild" },
+        from: { project_id: "plugin", id: "B", historical_path: "/g/other/B.md", content_hash: H("9"), home: "project-guild" },
         to: ref("WRONG"),
       },
     ]);
@@ -473,6 +480,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
         from: loc("A"),
         to: {
           schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+          layer: "project-guild" as const,
           project_id: "plugin",
           kind: "skill" as const, // ← disagrees with the entry's own kind
           id: "A",
@@ -495,6 +503,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
     const to1 = ref("B");
     const skillRef = {
       schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+      layer: "project-guild" as const,
       project_id: "plugin",
       kind: "skill" as const,
       id: "A",
@@ -511,6 +520,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
         kind: "skill", // ← entry 1 was an agent adoption
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -536,6 +546,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
       {
         from: {
           id: "Z", // ← not B: never picks up where entry 1 left off
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/Z.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -564,6 +575,7 @@ describe("A3.8b — a rollback must LAND on the target's source identity", () =>
       {
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -666,6 +678,7 @@ describe("A3.9b — a PROVEN rollback is an AUTHORIZED return, never a cycle", (
       {
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: to1.content_hash,
           home: "project-guild",
@@ -693,12 +706,26 @@ describe("A3.6 — many-to-one legal, one-to-many ambiguous", () => {
     );
   });
 
-  it("a FORK is ambiguous, never a guess", () => {
+  it("a FORK is UNREPRESENTABLE — rejected at write time, not adjudicated at read time", () => {
+    // RENAMED AND RE-POINTED (codex round 6, #4). As "a FORK is ambiguous, never a
+    // guess" this looked like read-time fork coverage and was VACUOUS: the liveness
+    // rule rejects the manifest outright (`A` is adopted away at 1 and never
+    // restored), so `resolveHistorical` returned `ambiguous` with an EMPTY trail from
+    // the validation boundary and fork traversal never ran.
+    //
+    // That is not a gap in the contract — it is the contract. The liveness rule
+    // exists precisely so the fork cannot be represented, which is why no read-time
+    // discriminator survives in the resolver. The assertion now names the mechanism
+    // it actually exercises, and checks the manifest is refused rather than inferring
+    // it from a status that has two possible causes.
     const m = chain([
       { from: loc("A"), to: ref("B") },
       { from: loc("A"), to: ref("C") },
     ]);
-    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+    expect(validateAdoptionManifestV1(m)).toBeNull(); // the real, non-vacuous claim
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("ambiguous");
+    expect(r.trail).toEqual([]); // …from the validation boundary, as stated above
   });
 });
 
@@ -799,7 +826,7 @@ describe("cycle + round-trip semantics", () => {
    * cycle guard treats it as a closed loop, which is the point of the exemption.
    */
   const rollbackOf = (seq: number, fromRef: ProjectDefinitionRefV1, toId: string, toHash: string) => ({
-    from: { id: fromRef.id, historical_path: `/g/${fromRef.id}.md`, content_hash: fromRef.content_hash, home: "project-guild" as const },
+    from: { project_id: "plugin", id: fromRef.id, historical_path: `/g/${fromRef.id}.md`, content_hash: fromRef.content_hash, home: "project-guild" as const },
     to: ref(toId, toHash),
     reason: "rolled_back" as const,
     detail: `reverses sequence ${seq}`,
@@ -879,16 +906,49 @@ describe("cycle + round-trip semantics", () => {
     expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
   });
 
-  it("REGRESSION (codex r5) — same id+hash at DIFFERENT source paths are two sources", () => {
-    // A(/p1,h)->B, B->C, A(/p2,h)->B. Without the full-locator check a pathless
-    // query returned B and a /p1-qualified query returned C — one manifest, two
-    // answers, depending only on how you asked.
+  it("SUPERSEDED BY D4 — same id+hash at DIFFERENT source paths are ONE identity", () => {
+    // THIS ASSERTION WAS BOTH STALE AND VACUOUS, and both halves are recorded because
+    // a green test that proves nothing is worse than a missing one.
+    //
+    // STALE: it encoded "different `historical_path` ⇒ two sources". Defect D4
+    // (codex round 5 on the pristine tip) proved that rule wrong — liveness keys on
+    // (kind, id, bytes) and had already ruled these ONE identity, while traversal
+    // re-litigated it with a stricter locator comparison, so one manifest gave two
+    // answers depending on whether the optional `historical_path` was supplied.
+    //
+    // VACUOUS: its fixture never validated in the first place. `A@f` is adopted away
+    // at sequence 1 and never restored, so the liveness rule rejects sequence 3 and
+    // `resolveHistorical` returned `ambiguous` with an EMPTY trail — the assertion
+    // passed without traversal identity ever being exercised (codex round 5, #5).
+    //
+    // Rewritten to be neither: an intervening rollback makes the manifest genuinely
+    // valid, and the assertion is now D4's rule, checked from both query shapes.
     const m = chain([
-      { from: { id: "A", historical_path: "/g/p1/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
-      { from: loc("B", "b"), to: ref("C", "c") },
-      { from: { id: "A", historical_path: "/g/p2/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
+      { from: { project_id: "plugin", id: "A", historical_path: "/g/p1/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("B", "b") },
+      {
+        from: loc("B", "b"),
+        to: ref("A", "f"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: { project_id: "plugin", id: "A", historical_path: "/g/p2/A.md", content_hash: H("f"), home: "project-guild" }, to: ref("C", "c") },
     ]);
-    expect(resolveHistorical(m, { kind: "agent", id: "A" }).status).toBe("ambiguous");
+    expect(validateAdoptionManifestV1(m)).not.toBeNull(); // …genuinely valid now
+    const pathless = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
+    expect(pathless.status).toBe("resolved");
+    expect(pathless.ref?.id).toBe("C");
+    // and supplying the OPTIONAL disambiguator cannot change the answer
+    const qualified = resolveHistorical(m, {
+      kind: "agent",
+      id: "A",
+      content_hash: H("f"),
+      project_id: "plugin",
+      historical_path: "/g/p1/A.md",
+    });
+    expect(qualified.status).toBe("resolved");
+    expect(qualified.ref?.id).toBe("C");
   });
 
   it("REGRESSION (codex r4 #3) — same bytes at DIFFERENT paths are different locators", () => {
@@ -977,5 +1037,325 @@ describe("cycle + round-trip semantics", () => {
     const r = resolveHistorical(m, { kind: "agent", id: "A", content_hash: H("f") });
     expect(r.status).toBe("resolved");
     expect(r.trail.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── D19 — the three defects left open by 230be9c ────────────────────────────
+//
+// Written to FAIL against 230be9c, each naming the exact history it mis-handles.
+
+/** A locator pinned to `id` at bytes `h`. */
+const at = (id: string, h: string) => ({ ...loc(id, h) });
+
+describe("D19.1 — a rollback rewinds ONLY its own era, not the whole ancestry", () => {
+  it("A->B, B->C, C->B(rb 2), B->A closes a loop back to the ORIGIN and is ambiguous", () => {
+    // The rollback at 3 undoes entry 2 (B->C). It therefore rewinds the lineage to
+    // the state just before 2 — where B was current and A was already an ancestor.
+    // A blanket `visitedIdentities.clear()` also forgets A, so entry 4's return to
+    // the ORIGIN bytes reads as fresh history and resolves. The origin is not
+    // inside the reversed era, so the rollback has no authority to forget it.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("B", "2"), to: ref("C", "3") },
+      {
+        from: at("C", "3"),
+        to: ref("B", "2"),
+        reason: "rolled_back",
+        detail: "reverses 2",
+        reverses_sequence: 2,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("B", "2"), to: ref("A", "1") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull(); // the history is legal…
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("ambiguous"); // …but it closes a loop
+  });
+
+  it("CONTRAST — re-adoption after a rollback is still fresh history and resolves", () => {
+    // The pair that stops the rewind from over-correcting back into a blanket rule.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "A" });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("B");
+  });
+});
+
+describe("D19.2 — a rollback proof must be UNIQUE and OPERATIVE", () => {
+  it("rejects a SECOND rollback of an already-reversed entry", () => {
+    // The resolver's comment claims the validator proves "no entry is reversed
+    // twice". It did not. Entry 4 reverses entry 1 again — already undone by 2 —
+    // and a stale proof like this obtains the read-time cycle exemption.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 AGAIN — stale; the operative adoption is 3",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("CONTRAST — reversing the OPERATIVE adoption is legal", () => {
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 3 — the operative adoption",
+        reverses_sequence: 3,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+  });
+});
+
+describe("D19.3 — the COLLECTION is bounded, not just its scalars", () => {
+  it("rejects a manifest with more entries than the cap", () => {
+    // The containment ladder, one level out: per-scalar caps do not bound the
+    // array, so smuggling reopens as chunking and a long chain costs quadratic
+    // work per resolve.
+    const partials = [];
+    for (let i = 0; i < MAX_ENTRIES + 1; i++) {
+      partials.push({ from: at(`r${i}`, "1"), to: ref(`r${i + 1}`, "1") });
+    }
+    expect(validateAdoptionManifestV1(chain(partials))).toBeNull();
+  });
+
+  it("accepts a chain AT the cap, and resolves it without quadratic blow-up", () => {
+    const partials = [];
+    for (let i = 0; i < MAX_ENTRIES; i++) {
+      partials.push({ from: at(`r${i}`, "1"), to: ref(`r${i + 1}`, "1") });
+    }
+    const m = chain(partials);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+    const r = resolveHistorical(m, { kind: "agent", id: "r0" });
+    expect(r.status).toBe("resolved");
+    expect(r.trail.length).toBe(MAX_ENTRIES);
+  });
+});
+
+// ── D19-R1 — three defects the codex round found in the fixes above ─────────
+
+describe("D19-R1.1 — the ORIGIN is not immune to a rewind that unwinds past it", () => {
+  it("querying the INTERMEDIATE identity of a rollback+re-adoption resolves", () => {
+    // Stamping the origin `0` unconditionally makes it survive every rewind, even
+    // one that legitimately unwinds the entry that INTRODUCED it. Here the query
+    // enters at B, which entry 1 created; entry 2 rolls entry 1 back, so B's era is
+    // gone and entry 3's re-adoption is fresh history. With a hard-coded 0 the
+    // origin survives and entry 3 reads as a loop — the same manifest resolving
+    // from A but not from B, which cannot both be right.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+    ]);
+    const r = resolveHistorical(m, { kind: "agent", id: "B", content_hash: H("2") });
+    expect(r.status).toBe("resolved");
+    expect(r.ref?.id).toBe("B");
+  });
+});
+
+describe("D19-R1.2 — NESTED rollbacks unwind LIFO and must stay representable", () => {
+  it("accepts A->B, B->C, C->B(rb 2), B->A(rb 1) — unwinding two migrations in order", () => {
+    // "The target must be the latest edge that landed on my source" conflates
+    // "which edge put us here" with "which edge is being undone". Entry 3 restored
+    // B, so it is the latest landing — but entry 4 undoes entry 1, which is still
+    // outstanding. Rollbacks form an UNDO STACK: a rollback pops the top.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("B", "2"), to: ref("C", "3") },
+      {
+        from: at("C", "3"),
+        to: ref("B", "2"),
+        reason: "rolled_back",
+        detail: "reverses 2",
+        reverses_sequence: 2,
+        authorized_by: "cap-loc-D03",
+      },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 — unwinding the outer migration",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+  });
+
+  it("still rejects a rollback that skips the top of the undo stack", () => {
+    // The paired negative: entry 4 names entry 1, but entry 2 already popped it and
+    // entry 3 is the outstanding adoption. LIFO is a rule, not a suggestion.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 AGAIN — stale, 3 is outstanding",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+});
+
+
+// ── D19-R4 — codex round 4 on the merged fixes ─────────────────────────────
+
+describe("D19-R4.1 — the undo stack is PER LINEAGE, not global", () => {
+  it("accepts a rollback of one lineage while another lineage is more recent", () => {
+    // A single global stack made unrelated roles contend: entry 2 belongs to a
+    // completely different lineage, yet sat on top and blocked entry 3's rollback of
+    // entry 1. Real manifests interleave constantly — D07/D09/D10 move dozens of
+    // roles — so this rejected the ORDINARY case, not an exotic one.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("X", "7"), to: ref("Y", "8") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
+  });
+
+  it("still rejects a stale rollback within its OWN lineage", () => {
+    // Per-lineage scoping must not become per-lineage amnesia: inside one lineage
+    // LIFO still holds, so the stale re-reversal stays rejected.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "2") },
+      { from: at("X", "7"), to: ref("Y", "8") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+      { from: at("A", "1"), to: ref("B", "2") },
+      {
+        from: at("B", "2"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1 AGAIN — 4 is outstanding in this lineage",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+});
+
+describe("D19-R4.2 — a rollback cannot reverse an adoption with UNRECORDED source bytes", () => {
+  it("rejects a rollback landing on arbitrary bytes when the target source hash is null", () => {
+    // The landing check was conditional on the target having recorded a hash, so a
+    // null-sourced adoption let its rollback claim ANY replacement bytes — and then
+    // collect the read-time cycle exemption on a reversal it never demonstrated.
+    // Absence is not agreement, the same rule traversal and `identityOf` already use.
+    const m = chain([
+      { from: { ...at("A", "1"), content_hash: null }, to: ref("B", "1") },
+      {
+        from: at("B", "1"),
+        to: ref("A", "9"), // arbitrary bytes — nothing proves this is a reversal
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("rejects a rollback landing on the WRONG bytes when the target DID record them", () => {
+    // Isolates the landing-bytes equality itself: the target's source hash is
+    // present, so the check is doing real work rather than firing on a null.
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "1") },
+      {
+        from: at("B", "1"),
+        to: ref("A", "9"), // right id, WRONG bytes
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).toBeNull();
+  });
+
+  it("CONTRAST — with the source bytes recorded, the same reversal is legal", () => {
+    const m = chain([
+      { from: at("A", "1"), to: ref("B", "1") },
+      {
+        from: at("B", "1"),
+        to: ref("A", "1"),
+        reason: "rolled_back",
+        detail: "reverses 1",
+        reverses_sequence: 1,
+        authorized_by: "cap-loc-D03",
+      },
+    ]);
+    expect(validateAdoptionManifestV1(m)).not.toBeNull();
   });
 });
