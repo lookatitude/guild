@@ -141,6 +141,11 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "THE TENTH HOME, and the rail found it — not a human sweep. Its `assertContained` was PURELY LEXICAL (path.resolve + startsWith(base + sep)), guarding a mkdirSync + write into `.guild/runs`: a symlinked runs directory walked straight through it while it reported success. Its own docstring said it mirrored a further copy in `promote-upstream.ts`. Now `policy: \"physical\"`, since a run tree whose realpath is load-bearing provenance must be physically real; the strict-subdirectory half stays local because containment permits equality.",
   }),
   Object.freeze({
+    path: "src/modules/workspace/workflows/promote-upstream.ts",
+    status: "adopted",
+    note: "THE ELEVENTH HOME — the one run-lifecycle.ts named in its own docstring (\"mirrors the containment assertion in promote-upstream.ts\") and that the rail could not see, because this copy was INLINE rather than factored into a named helper. Purely lexical, guarding a mkdirSync into `.guild/runs`. Now `prepareContainedWrite` with `policy: \"physical\"`, which replaces the bare mkdir too; the strict-subdirectory rule stays local because containment permits equality.",
+  }),
+  Object.freeze({
     path: "scripts/dot-guild/audit.ts",
     status: "waived",
     note: "WAIVER: its boolean-returning path helper classifies LEAK CANDIDATES for a read-only audit — a verdict about whether a file is exposed, not about whether a write is contained. There is no root-bounded write in this file. Unlike the two waivers this registry rejected earlier, this one has something to feel it: the scanner DOES see the site, so `registration-without-site` keeps the waiver honest.",

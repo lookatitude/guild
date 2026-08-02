@@ -57,14 +57,14 @@
       "id": "lib/path-containment-registry",
       "source_path": "scripts/lib/path-containment-registry.ts",
       "resource_path": "resources/scripts/lib/path-containment-registry.ts",
-      "sha256": "75c63c2fd613e927931c3f06ca1ef1b43f9eaced79486e8ee8c05d8ab85b6c6a"
+      "sha256": "976449640031a068e2aa9c7e9e08bee62a1df9a8a260bb74c5c9df2b32c275d3"
     },
     {
       "category": "scripts",
       "id": "lib/path-containment-scan",
       "source_path": "scripts/lib/path-containment-scan.ts",
       "resource_path": "resources/scripts/lib/path-containment-scan.ts",
-      "sha256": "b2e3c36265738019ead2e1e592923aab46bb0fe470a793c6c35555266c9896f8"
+      "sha256": "e502de0e6347cbca8e1acd0fc55ce95fa9856bbde5da2d5628dcc6355b3d9a8d"
     },
     {
       "category": "scripts",

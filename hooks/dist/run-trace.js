@@ -3266,6 +3266,10 @@ function lstatOrNull(p) {
     return null;
   }
 }
+function isWithin(child, parent) {
+  const rel = path3.relative(parent, child);
+  return rel === "" || !escapes(rel);
+}
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
   let realRoot;
@@ -3274,13 +3278,13 @@ function checkContained(root, target, options = {}) {
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
-  if (hasParentSegment(target) || hasParentSegment(root)) {
+  if (hasParentSegment(target)) {
     return refuse(
       "parent-traversal",
       `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
     );
   }
-  const abs = path3.resolve(root, target);
+  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot, target);
   let probe = abs;
   let probeStat = null;
   for (; ; ) {
@@ -7860,16 +7864,18 @@ function validateRunId(runId) {
   if (runId.includes("..")) return false;
   return true;
 }
-function assertContained(target, base, label) {
-  const r = checkContained(base, target, { policy: "physical" });
+function assertContained(target, cwd, label) {
+  const r = checkContained(cwd, target, { policy: "physical" });
   if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path14.resolve(target)}" escapes runs base "${path14.resolve(base)}" [${r.code}] \u2014 ${r.detail}`
+      `[run-lifecycle] ${label}: resolved path "${path14.resolve(target)}" escapes the project root "${path14.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
     );
   }
-  if (path14.resolve(target) === path14.resolve(base)) {
+  const runsBase = path14.resolve(cwd, ".guild", "runs");
+  const resolvedTarget = path14.resolve(target);
+  if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path14.resolve(target)}" is the runs base itself`
+      `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" is not a strict subdirectory of the runs base "${runsBase}"`
     );
   }
 }
@@ -7902,7 +7908,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
   const fs15 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
   const runsBase = path14.resolve(cwd, ".guild", "runs");
-  assertContained(outPath, runsBase, "writeResolvedSettingsSnapshot");
+  assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
   const onDisk = {
     ...snapshot,
     resolved_at_ref: resolvedAtRef ?? runId

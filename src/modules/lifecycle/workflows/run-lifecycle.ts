@@ -39,7 +39,7 @@ import * as crypto from "crypto";
 import * as fsNode from "fs";
 import * as path from "path";
 
-import { checkContained, isRefused } from "../../kernel";
+import { checkContained, isRefused, isWithin } from "../../kernel";
 import type { HostKind } from "../../host-runtime";
 import { resolveSettings } from "../../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../../state";
@@ -796,19 +796,44 @@ export function validateRunId(runId: string): boolean {
  * `policy: "physical"` matches this file's contract: a run tree whose realpath is
  * load-bearing provenance must be physically real.
  */
-function assertContained(target: string, base: string, label: string): void {
-  const r = checkContained(base, target, { policy: "physical" });
+function assertContained(target: string, cwd: string, label: string): void {
+  // THE ROOT IS THE PROJECT ROOT, NOT THE RUNS BASE — and the difference is the
+  // whole of task #33.
+  //
+  // Passing `runsBase` made `.guild/runs` the primitive's ROOT, and the primitive
+  // permits its own root to be a symlink (it is resolved separately, so its
+  // link-ness is already accounted for). So `.guild/runs -> /elsewhere` was
+  // ACCEPTED here while `station-signals.ts` and `promote-upstream.ts` refused the
+  // identical shape. Two peer writers into one run tree, two strictnesses.
+  //
+  // THE DECISION, AND THE EVIDENCE FOR IT. `station-signals.ts` has refused a
+  // symlinked `.guild`, `.guild/runs`, run root and kind dir since before any of
+  // this migration, deliberately and with its reason written down: a bare
+  // `mkdirSync(runsContainer, {recursive:true})` follows the link and "makes the
+  // external target the authoritative realpath". Run records are provenance, and
+  // provenance whose location is redirectable is not provenance.
+  //
+  // `run-lifecycle.ts` and `promote-upstream.ts` were both purely LEXICAL before
+  // migration — blind to symlinks, neither permitting nor refusing. So the
+  // permissive reading here was never a contract this file kept; it was an artifact
+  // of the root I chose while migrating it. One writer thought about this and
+  // refused; two were blind. The considered answer wins.
+  const r = checkContained(cwd, target, { policy: "physical" });
   if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path.resolve(target)}" escapes runs base ` +
-        `"${path.resolve(base)}" [${r.code}] — ${r.detail}`
+      `[run-lifecycle] ${label}: resolved path "${path.resolve(target)}" escapes the ` +
+        `project root "${path.resolve(cwd)}" [${r.code}] — ${r.detail}`
     );
   }
-  // The original also required a STRICT subdirectory — the base itself is not a
-  // valid target. Containment permits equality, so that half stays local.
-  if (path.resolve(target) === path.resolve(base)) {
+  // The original also required a STRICT subdirectory of the RUNS BASE — which is
+  // now a different path from the containment root, so it is spelled explicitly.
+  // Containment permits equality; this rule does not.
+  const runsBase = path.resolve(cwd, ".guild", "runs");
+  const resolvedTarget = path.resolve(target);
+  if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path.resolve(target)}" is the runs base itself`
+      `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" is not a strict ` +
+        `subdirectory of the runs base "${runsBase}"`
     );
   }
 }
@@ -905,7 +930,7 @@ export function writeResolvedSettingsSnapshot(
   // Containment assertion: outPath must be a strict subdir of .guild/runs/.
   // Catches any edge case that slips past validateRunId on unusual platforms.
   const runsBase = path.resolve(cwd, ".guild", "runs");
-  assertContained(outPath, runsBase, "writeResolvedSettingsSnapshot");
+  assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
 
   // Build the on-disk record — resolved_at_ref is set here, not in U3.
   // We shallow-spread to avoid mutating the caller's snapshot.
@@ -958,7 +983,7 @@ export function readResolvedSettingsSnapshot(
   // Return null rather than throwing — read callers degrade gracefully.
   const runsBase = path.resolve(cwd, ".guild", "runs");
   try {
-    assertContained(filePath, runsBase, "readResolvedSettingsSnapshot");
+    assertContained(filePath, cwd, "readResolvedSettingsSnapshot");
   } catch {
     return null;
   }
