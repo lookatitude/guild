@@ -209,6 +209,11 @@ interface DerivedPlacement {
 
 <p>The live/historical split survived review as principled. <strong>The historical grammar did not.</strong></p>
 
+<div class="callout">
+<p><strong>Where the split came from, because the reasoning generalises.</strong> A first draft collapsed <code>from</code> and <code>to</code> into one <em>strict</em> type. That draft would have made <strong>open defect 3 worse</strong>: its own motivating example, <code>.guild/agents/archive/architect.md</code>, does not parse under a live grammar — so the historical side of a real migration becomes <strong>unrepresentable</strong>, which is a fail-closed refusal of a legitimate operation dressed up as a fix.</p>
+<p>Catching that a proposal makes <em>its own motivating defect worse</em> is the check this surface most needs, and it is cheap: take the defect the design exists to fix and run it through the design. The real axis turned out not to be <code>from</code> vs <code>to</code> at all — it is <strong>live vs historical</strong>. A successor must be somewhere the system can put a definition today; a predecessor is wherever the old world left it, and the old world is not bound by today's layout.</p>
+</div>
+
 <div class="callout bad">
 <p>v1 said “nesting permitted below the kind directory”. The real tree contains <code>.claude/agents/_shared/handoff-contract.md</code>, <code>methodology-skills.md</code> and <code>plan-anchors.md</code> — verified present. These are <strong>helper fragments, not agents</strong>, and v1's rule admits every one of them as a historical agent. It equally admits an arbitrary shadow file under <code>.claude/agents/archive/</code>, which is the very class the live grammar exists to refuse.</p>
 <p>And <code>cited_as</code> does not save it: <strong>a citation proves what was cited, not that the cited file was ever a definition.</strong></p>
@@ -248,6 +253,16 @@ interface DerivedPlacement {
 </div>
 
 <p>The third row is the review's construction and it is better than mine: it keeps the legal <code>A@h1 → B → A@h3</code> history resolving (the exact key distinguishes <code>h1</code> from <code>h3</code>) while still giving a hashless origin something to seed with (the wildcard). <strong>Movement detection and reachability are mapped separately</strong> — they were the same question in v1, and that was the residue of the original overload.</p>
+
+<div class="callout warn">
+<p><strong>The rule that caught this twice, stated so it can be applied a third time.</strong> Between v1 and this section the same mistake was made and corrected <em>twice</em> — first keying identity on placement alone, then keying only the cycle guard on it. Both were caught by one question:</p>
+<p class="big-quote">A design whose headline is “stop losing identity components” cannot open by dropping one.</p>
+<p>Run any proposed key against it: does the new key merge two things the old one told apart? Placement-only merges <code>A@h1</code> and <code>A@h2</code>. That is a losing trade regardless of how much tidier it reads, and it is the check to apply to the next revision of this design too.</p>
+</div>
+
+<h3>Why this is a consequence of the collapse, not an independent fix</h3>
+<p>The reachability key is <strong>only expressible because placement is complete</strong>. Under the five-scalar tuple there is no key that is both <strong>total and discriminating</strong>: the hash is discriminating but nullable, and everything else is total but too coarse. That is precisely why the seed had nothing to use, and why open defect 2 could not be fixed in place — the fix needed a component the tuple did not have. Completing placement is what makes a total key available; splitting the relations is what makes a discriminating one available at the same time.</p>
+<p>This is the difference between the proposal being <em>cleaner</em> and the proposal <em>enabling a fix that was otherwise unreachable</em>. It is the strongest argument in the document, and it survives the REJECT unchanged.</p>
 
 <p>Each relation must be assigned to its call sites explicitly as part of implementation. That enumeration is a deliverable, not an implementation detail.</p>
 </section>
