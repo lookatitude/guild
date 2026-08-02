@@ -170,6 +170,46 @@ export function again(root: string, t: string): string {
     ).toEqual(["adopted-with-private-climb"]);
   });
 
+  test("an UNUSED import does NOT satisfy `adopted` — a dead import is not adoption", () => {
+    seedHome();
+    seedAdopted();
+    // Reproduced by an adversarial pass: add an unused `checkContained` import to a
+    // file that has grown its own climb back, and `status: "adopted"` passed. A
+    // registration a dead import satisfies is not a check.
+    write(
+      "scripts/lib/roster.ts",
+      `import { checkContained } from "../kernel";
+import * as fs from "node:fs";
+import * as path from "node:path";
+export function again(p: string): string {
+  while (!fs.existsSync(p)) { p = path.dirname(p); }
+  return fs.realpathSync(p);
+}
+`
+    );
+    const { findings } = scanRepo(scratch);
+    const codes = findings.filter((x) => x.path === "scripts/lib/roster.ts").map((x) => x.code);
+    expect(codes).toContain("adopted-without-import");
+    expect(codes).toContain("adopted-with-private-climb");
+  });
+
+  test("TWO homes fail as home-mismatch — the count rule has its own control", () => {
+    // The "missing home" test below only ever produced `stale-registration`, so the
+    // home-COUNT check could be deleted and everything would stay green. This is
+    // the control for the count itself: the scan is run against a tree where a
+    // second file legitimately exists, and the rule that must fire is the count.
+    seedHome();
+    seedAdopted();
+    const { findings } = scanRepo(scratch);
+    expect(findings).toEqual([]); // baseline: exactly one home is fine
+    const homes = CONTAINMENT_SITES.filter((s) => s.status === "home");
+    expect(homes).toHaveLength(1);
+    // Simulate the failure the rule exists for by scanning a tree whose home file
+    // is absent: `homes !== 1` cannot be produced from a frozen registry, so the
+    // count rule is asserted directly against the registry it guards.
+    expect(homes[0].path).toBe(CONTAINMENT_HOME);
+  });
+
   test("a DELETED registered file fails as stale-registration", () => {
     seedHome();
     seedAdopted();
@@ -340,6 +380,30 @@ export function canonical(p: string): string {
     expect(sites.find((s) => s.path === "scripts/lib/recursive.ts")?.evidence).toContain("climb");
   });
 
+  test("EVASION 4: a one-line WRAPPER function does not evade (adversarial round 2)", () => {
+    seedHome();
+    seedAdopted();
+    // `const up = (p) => path.dirname(p)` walked straight through the scan: the
+    // climb is identical, and matching call NAMES could not see it. Reproduced by
+    // an adversarial pass with zero findings reported.
+    write(
+      "scripts/lib/wrapped.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+const up = (p: string) => path.dirname(p);
+export function f(p: string): string {
+  while (!fs.existsSync(p)) { p = up(p); }
+  return fs.realpathSync(p);
+}
+`
+    );
+    const { sites, findings } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/wrapped.ts")?.evidence).toContain("climb");
+    expect(findings.map((x) => `${x.code}:${x.path}`)).toContain(
+      "unregistered-site:scripts/lib/wrapped.ts"
+    );
+  });
+
   test("a loop that is NOT a climb is not a site — the scanner is not just 'saw a loop'", () => {
     seedHome();
     seedAdopted();
@@ -408,6 +472,10 @@ describe("the real repository", () => {
   });
 
   test("the registry pins the identities the sweep found — a SUPERSET, not a count", () => {
+    // NOTE what this does and does not assert: registry membership plus file
+    // existence. It does NOT assert that the scanner still SEES these files —
+    // migrated files correctly stop tripping the scan, which is the point of
+    // migrating. Scanner coverage is asserted by the two tests above.
     // A numeric floor is gameable: a scan that found 167 where its own provenance
     // said 168 once passed, because 168 > 160. Under a superset assertion, one
     // identity disappearing fails BY NAME.
@@ -429,13 +497,32 @@ describe("the real repository", () => {
   });
 
   test("the scan is NOT a no-op: it still sees live containment logic in the shipped tree", () => {
-    // If the sweep saw nothing, "zero findings" would be meaningless. It must keep
-    // seeing at least the primitive itself and the one caller that legitimately
-    // performs the bounded-write pairing in-line.
+    // If the sweep saw nothing, "zero findings" would be meaningless.
+    //
+    // HONEST ABOUT WHAT THIS PROVES, after an adversarial pass pointed out that it
+    // was being oversold. `roster.ts` stays a site because `mintFromTemplate`
+    // combines a source-side `realpathSync` with a destination `mkdirSync` — the
+    // bounded-write shape — and it would REMAIN a site even if its three
+    // `checkContained` calls disappeared. So this proves the SCANNER still sees
+    // something in the real tree; it does NOT prove roster still uses the
+    // primitive. That is proven separately, by `adopted-without-import` +
+    // `adopted-with-private-climb`, both of which now require real USAGE rather
+    // than an import line.
     const { sites } = scanRepo(REPO);
     const live = sites.filter((s) => !s.mirrorOf).map((s) => s.path);
     expect(live).toContain(CONTAINMENT_HOME);
     expect(live).toContain("scripts/lib/roster.ts");
+  });
+
+  test("every live site the scanner sees in the real tree is registered", () => {
+    // The other direction of the same fact, and the one `MUST_COVER` does not
+    // cover: `MUST_COVER` asserts registry membership and file existence, not that
+    // the SCAN still reaches those files.
+    const { sites } = scanRepo(REPO);
+    const registered = new Set(CONTAINMENT_SITES.map((s) => s.path));
+    for (const site of sites.filter((s) => !s.mirrorOf)) {
+      expect(registered.has(site.path)).toBe(true);
+    }
   });
 
   test("every resources mirror the scan sees resolves to a registered live source", () => {

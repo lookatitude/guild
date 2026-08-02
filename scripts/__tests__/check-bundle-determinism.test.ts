@@ -376,6 +376,20 @@ describe("output set ↔ committed bundle set (real fixture trees on disk)", () 
     );
   });
 
+  it("PLANTED CONTROL: a DANGLING hooks/node_modules link is flagged — `existsSync` reads it as absent", () => {
+    // Reproduced by an adversarial pass, in the code that extracts a primitive
+    // whose headline defect is "existsSync FOLLOWS symlinks". A dangling link reads
+    // as absent, so the containment check never ran and the rail reported PASS.
+    writeFixture(`esbuild a.ts --bundle ${aliasFlagFor("js-yaml")} --outfile=dist/a.js`, {
+      "dist/a.js": cleanBundle,
+    });
+    fs.symlinkSync(path.join(root, "does-not-exist"), path.join(root, "hooks", "node_modules"));
+    expect(fs.existsSync(path.join(root, "hooks", "node_modules"))).toBe(false); // the trap
+    expect(fs.lstatSync(path.join(root, "hooks", "node_modules")).isSymbolicLink()).toBe(true);
+    const v = findViolations(root);
+    expect(v.map((x) => x.file)).toContain("hooks/node_modules");
+  });
+
   it("CLEAN CONTROL: a REAL hooks/node_modules is not flagged — the rule is not 'refuse node_modules'", () => {
     writeFixture(`esbuild a.ts --bundle ${aliasFlagFor("js-yaml")} --outfile=dist/a.js`, {
       "dist/a.js": cleanBundle,

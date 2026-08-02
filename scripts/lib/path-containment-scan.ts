@@ -135,6 +135,31 @@ export function walkSourceFiles(root: string, rel = "", out: string[] = []): str
  */
 type AliasMap = Map<string, string>;
 
+/** The single call a `(p) => f(p)` / `function(p){ return f(p) }` wrapper delegates to. */
+function wrapperTarget(node: ts.Expression, aliases: AliasMap): string | undefined {
+  if (ts.isArrowFunction(node)) {
+    if (ts.isBlock(node.body)) return wrapperTargetFromBlock(node.body, aliases);
+    return callTargetName(node.body, aliases);
+  }
+  if (ts.isFunctionExpression(node) && node.body) return wrapperTargetFromBlock(node.body, aliases);
+  return undefined;
+}
+
+function wrapperTargetFromBlock(block: ts.Block, aliases: AliasMap): string | undefined {
+  const stmts = block.statements;
+  if (stmts.length !== 1) return undefined;
+  const only = stmts[0];
+  if (!ts.isReturnStatement(only) || only.expression === undefined) return undefined;
+  return callTargetName(only.expression, aliases);
+}
+
+function callTargetName(expr: ts.Expression, aliases: AliasMap): string | undefined {
+  if (!ts.isCallExpression(expr)) return undefined;
+  const raw = expr.expression.getText().replace(/\s/g, "");
+  const tail = raw.split(".").pop() ?? raw;
+  return aliases.get(tail) ?? tail;
+}
+
 function collectAliases(sf: ts.SourceFile): AliasMap {
   const aliases: AliasMap = new Map();
   const note = (local: string, canonical: string): void => {
@@ -157,6 +182,20 @@ function collectAliases(sf: ts.SourceFile): AliasMap {
           note(el.name.getText(), (el.propertyName ?? el.name).getText());
         }
       }
+    }
+    // const up = (p) => path.dirname(p)   /   function up(p){ return path.dirname(p) }
+    //
+    // A one-line WRAPPER, which an adversarial pass used to walk straight through
+    // the scan: `const up = (p) => path.dirname(p); while (!existsSync(p)) p = up(p)`
+    // is the same climb, and matching call NAMES could not see it. A wrapper whose
+    // body is a single call to an fs/path function is treated as that function.
+    if (ts.isVariableDeclaration(n) && n.name && ts.isIdentifier(n.name) && n.initializer) {
+      const body = wrapperTarget(n.initializer, aliases);
+      if (body !== undefined) note(n.name.getText(), body);
+    }
+    if (ts.isFunctionDeclaration(n) && n.name && n.body) {
+      const body = wrapperTargetFromBlock(n.body, aliases);
+      if (body !== undefined) note(n.name.getText(), body);
     }
     // const rp = fs.realpathSync   (a VALUE alias, not a destructure)
     if (
@@ -371,13 +410,41 @@ const PRIMITIVE_EXPORTS = [
   "CONTAINMENT_REFUSAL_CODES",
 ];
 
-function importsPrimitiveSymbols(text: string): boolean {
-  if (/workflows\/path-containment/.test(text)) return true;
+/**
+ * Has this file actually ADOPTED the primitive — i.e. does it USE one of its
+ * exports, not merely name one in an import line?
+ *
+ * The import-line version was trivially satisfiable, which an adversarial pass
+ * showed by adding an unused `checkContained` import to a file that had grown its
+ * own climb back: `status: "adopted"` passed. A registration that a dead import
+ * satisfies is not a check. Adoption is now: the symbol is imported AND referenced
+ * somewhere that is not the import statement itself.
+ */
+function importsPrimitiveSymbols(text: string, fileName = "x.ts"): boolean {
+  const imported = new Set<string>();
   for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s*["'][^"']+["']/g)) {
-    const names = m[1].split(",").map((n) => n.trim().split(/\s+as\s+/)[0].trim());
-    if (names.some((n) => PRIMITIVE_EXPORTS.includes(n))) return true;
+    for (const raw of m[1].split(",")) {
+      const parts = raw.trim().split(/\s+as\s+/);
+      const source = parts[0].trim().replace(/^type\s+/, "");
+      const local = (parts[1] ?? parts[0]).trim();
+      if (PRIMITIVE_EXPORTS.includes(source)) imported.add(local);
+    }
   }
-  return false;
+  if (imported.size === 0) return false;
+
+  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.ES2022, true);
+  let used = false;
+  const visit = (n: ts.Node): void => {
+    if (used) return;
+    if (ts.isImportDeclaration(n)) return; // the import line is not a use
+    if (ts.isIdentifier(n) && imported.has(n.getText())) {
+      used = true;
+      return;
+    }
+    ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(sf, visit);
+  return used;
 }
 
 /** Map a `resources/` mirror back to the live file it mirrors, if it is one. */
@@ -411,7 +478,7 @@ export function scanRepo(repoRoot: string): ScanResult {
         path: relPath,
         evidence,
         mirrorOf: mirrorSourceOf(relPath),
-        importsPrimitive: importsPrimitiveSymbols(text),
+        importsPrimitive: importsPrimitiveSymbols(text, relPath),
       });
     }
   }
@@ -484,7 +551,7 @@ export function scanRepo(repoRoot: string): ScanResult {
       // scanned-sites map alone.
       const imports =
         importsPrimitive.get(entry.path) ??
-        importsPrimitiveSymbols(fs.readFileSync(abs, "utf8"));
+        importsPrimitiveSymbols(fs.readFileSync(abs, "utf8"), entry.path);
       if (!imports) {
         findings.push({
           code: "adopted-without-import",

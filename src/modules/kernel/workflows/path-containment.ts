@@ -100,7 +100,20 @@ export type ContainmentRefusalCode =
   /** `requireRegularFileLeaf` and the leaf exists as something else. */
   | "leaf-not-regular-file"
   /** The bounded `mkdir` itself failed (EEXIST on a file, EACCES, …). */
-  | "mkdir-failed";
+  | "mkdir-failed"
+  /**
+   * The target spelling contains a `..` segment, which cannot be answered
+   * truthfully. `path.resolve` collapses `..` LEXICALLY, before any symlink is
+   * resolved — so `root/link/../victim` with `root/link -> outside/dir` collapses
+   * to `root/victim` and reads as contained, while a real write follows the link
+   * first and lands in `outside/victim`. Reproduced by an adversarial pass.
+   */
+  | "parent-traversal"
+  /**
+   * The destination stopped being the destination between the containment proof
+   * and the write — an ancestor directory was replaced mid-flight.
+   */
+  | "destination-moved";
 
 /**
  * The CLOSED refusal vocabulary. Frozen at RUNTIME, not merely `as const`: `as
@@ -115,6 +128,8 @@ export const CONTAINMENT_REFUSAL_CODES: readonly ContainmentRefusalCode[] = Obje
   "outside-root",
   "leaf-not-regular-file",
   "mkdir-failed",
+  "parent-traversal",
+  "destination-moved",
 ]);
 
 export interface ContainmentOptions {
@@ -171,6 +186,11 @@ function escapes(rel: string): boolean {
 
 function refuse(code: ContainmentRefusalCode, detail: string): ContainmentRefused {
   return Object.freeze({ contained: false as const, code, detail });
+}
+
+/** Does the RAW spelling contain a `..` path segment? Segment-aware, not substring. */
+function hasParentSegment(p: string): boolean {
+  return p.split(/[\\/]/).includes("..");
 }
 
 /** `lstat`, or null when the entry is genuinely absent. Never throws. */
@@ -259,6 +279,25 @@ export function checkContained(
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
 
+  // `path.resolve` IS NOT SAFE TO APPLY FIRST when the spelling contains `..`.
+  // It collapses parent segments lexically, before any symlink is resolved, so
+  // `root/link/../victim` (with `root/link -> outside/dir`) becomes `root/victim`
+  // and reads as contained — while a real write follows `link` first and lands in
+  // `outside/victim`. Reproduced by an adversarial pass, with the bytes on disk
+  // outside the root and `contained: true` returned.
+  //
+  // The honest answer is a refusal, not a guess: without segment-by-segment
+  // resolution this module cannot say where such a spelling lands, and a primitive
+  // whose whole job is to be trustworthy must not answer a question it cannot.
+  // Callers construct destinations with `path.join`, which collapses `..` at build
+  // time, so a `..` surviving into this call is already unusual.
+  if (hasParentSegment(target) || hasParentSegment(root)) {
+    return refuse(
+      "parent-traversal",
+      `refusing a path spelled with a ".." segment (${target}) — parent traversal cannot be resolved before symlinks`
+    );
+  }
+
   const abs = path.resolve(root, target);
 
   // ── Climb to the deepest EXISTING entry ─────────────────────────────────────
@@ -308,20 +347,38 @@ export function checkContained(
   }
 
   if (policy === "physical") {
-    // Every segment BELOW the root must be a real entry, not a link — even one
-    // resolving back inside the root. The walk is over the LOGICAL path, because
-    // that is where a planted link actually sits; walking the RESOLVED path would
-    // see only what the link points at and never the link itself. The root's own
-    // link-ness is already accounted for by `realRoot`, so the walk starts one
-    // segment below it and the root is never a candidate.
-    const logicalRoot = path.resolve(root);
-    const logicalRel = path.relative(logicalRoot, abs);
-    let logical = logicalRoot;
-    for (const seg of logicalRel === "" || escapes(logicalRel) ? [] : logicalRel.split(path.sep)) {
-      logical = path.join(logical, seg);
-      const st = lstatOrNull(logical);
-      if (st !== null && st.isSymbolicLink()) {
-        return refuse("physical-symlink", `refusing — symlinked path segment: ${logical}`);
+    // Walk EVERY segment of the logical path from the filesystem root down, and
+    // refuse a symlink that resolves STRICTLY INSIDE the root.
+    //
+    // The previous version walked `path.relative(logicalRoot, abs)` and bailed when
+    // that looked like an escape — which, on a case-insensitive volume, is exactly
+    // what a differently-cased root spelling produces. An adversarial pass
+    // reproduced it on APFS: root `.../Project`, target `.../project/alias/x`, an
+    // in-root symlink at `alias`. `path.relative` is byte-comparing, saw an escape,
+    // scanned ZERO segments, and the policy silently did nothing. A guard that
+    // quietly inspects nothing is worse than no guard: it reports success.
+    //
+    // Walking from the filesystem root removes the comparison entirely. The root's
+    // own link-ness is still permitted because the test is STRICTLY inside — a
+    // segment whose realpath IS the root (a symlinked project root) is not below
+    // it, and neither is anything above.
+    const parsed = path.parse(abs);
+    let walk = parsed.root;
+    for (const seg of abs.slice(parsed.root.length).split(path.sep)) {
+      if (seg === "" || seg === ".") continue;
+      walk = path.join(walk, seg);
+      const st = lstatOrNull(walk);
+      if (st === null || !st.isSymbolicLink()) continue;
+      let segReal: string;
+      try {
+        segReal = fs.realpathSync(walk);
+      } catch {
+        return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
+      }
+      const segRel = path.relative(realRoot, segReal);
+      const strictlyInside = segRel !== "" && !escapes(segRel);
+      if (strictlyInside) {
+        return refuse("physical-symlink", `refusing — symlinked path segment: ${walk}`);
       }
     }
   }
@@ -359,6 +416,17 @@ export function prepareContainedWrite(
   target: string,
   options: ContainmentOptions = {}
 ): PrepareResult {
+  // The `..` guard must run on the RAW spelling, here as well as in
+  // `checkContained`. Resolving first and then delegating would collapse the
+  // parent segment before the guard ever saw it — the same
+  // lexical-collapse-before-symlink-resolution mistake, made one layer up.
+  if (hasParentSegment(target) || hasParentSegment(root)) {
+    return refuse(
+      "parent-traversal",
+      `refusing a path spelled with a ".." segment (${target}) — parent traversal cannot be resolved before symlinks`
+    );
+  }
+
   const abs = path.resolve(root, target);
   const dir = path.dirname(abs);
 
@@ -416,19 +484,34 @@ export interface ContainedWriteResult {
  * handed, and ignoring the count fsyncs and renames a PREFIX into place while
  * reporting success. The loop below refuses on no progress rather than spinning.
  *
- * ── THE WRITE IS BOUND TO THE LOCATION, NOT TO THE NAME ────────────────────────
- * The temp and the rename both target `prepared.realPath` — the destination as it
- * RESOLVED when containment was proven — never the caller's logical path. That is
- * deliberate, and an adversarial pass demonstrated why with a concrete race: with
- * `root/alias -> root/A`, a write to `root/alias/file` that has its link swapped to
- * `root/B` between the check and the open still lands in `root/A/file`. Targeting
- * the logical name instead would have followed the swap.
+ * ── WHAT THE RACE WINDOW ACTUALLY IS, STATED HONESTLY ──────────────────────────
+ * The temp and the rename target `prepared.realPath` — the destination as it
+ * RESOLVED when containment was proven — never the caller's logical path. With
+ * `root/alias -> root/A`, a write to `root/alias/file` whose link is swapped to
+ * `root/B` mid-flight still lands in `root/A/file`. Good.
  *
- * The consequence a caller must know: after such a race, the path they PASSED no
- * longer names the file that was written — `realPath` does, and it is returned for
- * exactly that reason. Containment is what this guarantees, and containment holds
- * in both directions of the race; name stability is not on offer, because on a
- * filesystem where a component can be re-pointed concurrently, nothing can offer it.
+ * BUT AN EARLIER VERSION OF THIS COMMENT CLAIMED MORE THAN THAT, AND WAS WRONG.
+ * A second adversarial pass replaced the resolved ANCESTOR itself — `rename A to
+ * A-old`, then `A -> outside` — between the proof and the open, and reproduced
+ * `{written: true}` with the bytes in `outside/file`. `O_NOFOLLOW` refuses a
+ * symlink at the FINAL component only; it says nothing about the parents, and Node
+ * exposes no `openat`, so a fully race-free bounded write is not constructible with
+ * the synchronous `fs` API.
+ *
+ * So this does the two things that ARE constructible, and claims nothing beyond:
+ *   1. RE-STAT the destination directory after the temp is created and compare
+ *      device+inode with the directory containment was proven against. A replaced
+ *      ancestor is a different inode.
+ *   2. RE-VERIFY containment of the renamed-into-place file, and DELETE it and
+ *      report failure if it escaped.
+ * The window is not closed — it is narrowed, and a write that escapes it can no
+ * longer be REPORTED AS APPLIED, which was the actual defect in variant 1.
+ *
+ * The consequence a caller must still know: after a successful race on the NAME,
+ * the path they passed no longer names the file that was written — `realPath` does,
+ * which is why it is returned. Containment is what this offers; name stability is
+ * not, because on a filesystem where a component can be re-pointed concurrently
+ * nothing can offer it.
  */
 export function writeContainedFile(
   root: string,
@@ -446,6 +529,17 @@ export function writeContainedFile(
 
   const dest = prepared.realPath;
   const tmp = `${dest}.tmp-${process.pid}`;
+
+  // The identity of the directory containment was proven against. An ancestor
+  // swapped for a symlink is a DIFFERENT INODE, which is the one thing about this
+  // race that can be observed after the fact with the sync fs API.
+  let provenDir: fs.Stats;
+  try {
+    provenDir = fs.statSync(prepared.realDir);
+  } catch (err) {
+    return { written: false, code: "write-failed", detail: (err as Error)?.message ?? "unknown" };
+  }
+
   let fd: number | null = null;
   let created = false;
   try {
@@ -455,6 +549,16 @@ export function writeContainedFile(
       0o600
     );
     created = true;
+
+    // (1) Did the destination directory change identity while we were opening?
+    const nowDir = fs.statSync(prepared.realDir);
+    if (nowDir.dev !== provenDir.dev || nowDir.ino !== provenDir.ino) {
+      return {
+        written: false,
+        code: "destination-moved",
+        detail: "the destination directory was replaced between the containment proof and the write",
+      };
+    }
     let off = 0;
     while (off < bytes.length) {
       const n = fs.writeSync(fd, bytes, off, bytes.length - off);
@@ -466,6 +570,23 @@ export function writeContainedFile(
     fd = null;
     fs.renameSync(tmp, dest);
     created = false;
+
+    // (2) Where did it ACTUALLY land? Re-verify, and if it escaped, remove it and
+    // refuse. A write that escapes must never be reported as applied — that was
+    // the whole of variant 1, and reporting `applied` was the part with teeth.
+    const after = checkContained(root, dest, { policy: options.policy });
+    if (isRefused(after)) {
+      try {
+        fs.rmSync(dest, { force: true });
+      } catch {
+        /* best effort — the refusal is reported either way */
+      }
+      return {
+        written: false,
+        code: "destination-moved",
+        detail: `the written file resolved outside the root after the rename [${after.code}]`,
+      };
+    }
     return { written: true, realPath: dest };
   } catch (err) {
     return { written: false, code: "write-failed", detail: (err as Error)?.message ?? "unknown" };

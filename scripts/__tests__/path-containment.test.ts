@@ -15,13 +15,29 @@
  *      teams lane threw — none of the three could express "refused, but for the
  *      wrong reason", so none of their tests could have caught it.
  *
- *   2. A GUARD ALREADY SUBSUMED BY ANOTHER proves nothing when it is added. Each
- *      variant is therefore paired with a NEGATIVE CONTROL: the historical buggy
- *      implementation, transcribed verbatim from the lane that shipped it, run
- *      against the SAME fixture. The test asserts the old code ACCEPTS the attack
- *      and the new code refuses it. If the fixture were not actually dangerous —
- *      if the rule had nothing to feel — the negative control would refuse too and
- *      the test would fail. A green run therefore proves the fixture is live.
+ *   2. A GUARD ALREADY SUBSUMED BY ANOTHER proves nothing when it is added. Where a
+ *      variant HAS a historical implementation to compare against, it is paired
+ *      with a NEGATIVE CONTROL: the buggy code transcribed verbatim from the lane
+ *      that shipped it, run against the SAME fixture, asserted to ACCEPT the attack
+ *      the new code refuses. A green run then proves the fixture is live rather
+ *      than merely well-behaved.
+ *
+ *      THE COVERAGE IS NOT UNIFORM, and an adversarial pass was right to say so
+ *      after an earlier version of this header claimed it was. Precisely:
+ *        · 1b  historical control (`historicalLeafOnlyCheck` accepts) — YES
+ *        · 2b  historical control (`historicalResolverEscapes` accepts) — YES
+ *        · 2c  historical control (`historicalLearnOverStrict` wrongly REFUSES a
+ *              legitimate write) — YES, and it is a control for a FALSE REFUSAL,
+ *              the opposite direction, which is what that regression was
+ *        · 1a  NO historical control. The symlinked-leaf case was refused by every
+ *              historical version; there is no "old code accepts this" to show
+ *        · 2a  NO historical control. It demonstrates the side effect DIRECTLY —
+ *              an unguarded `mkdir -p` really creating a directory through a link —
+ *              which is stronger than a transcription, but it is not one
+ *        · 3   the historical resolver is asserted to REJECT (`not.toBeNull()`),
+ *              because variant 3 was never a write escape; the control shows the
+ *              old code could answer this question, and the point is that the same
+ *              question was being asked in a build rather than in a writer
  *
  *   3. A RULE CAN HAVE NOTHING TO FEEL IT. Every fixture here plants a REAL
  *      symlink on a REAL temp filesystem and then asks for a REAL write. Nothing
@@ -165,10 +181,12 @@ describe("the refusal vocabulary is closed and frozen", () => {
     expect([...CONTAINMENT_REFUSAL_CODES].sort()).toEqual(
       [
         "dangling-symlink",
+        "destination-moved",
         "leaf-not-regular-file",
         "mkdir-failed",
         "no-existing-ancestor",
         "outside-root",
+        "parent-traversal",
         "physical-symlink",
         "root-unresolvable",
       ].sort()
@@ -461,6 +479,88 @@ describe("the rest of the refusal vocabulary", () => {
     );
     const ok = assertContained(root, path.join(root, "a", "b"), "[emit]");
     expect(ok.realRoot).toBe(fs.realpathSync(root));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// THE SECOND ADVERSARIAL PASS. Three reproduced counterexamples, each now a test.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("adversarial round 2 — reproduced counterexamples", () => {
+  test("`..` AFTER a symlink is refused, not lexically collapsed into a false pass", () => {
+    // `path.resolve` collapses `..` BEFORE any symlink is resolved, so
+    // `root/link/../victim` with `root/link -> outside/dir` becomes `root/victim`
+    // and reads as contained — while a real write follows `link` first and lands in
+    // `outside/victim`. Reproduced with the bytes on disk outside the root.
+    const { root, outside } = fixture();
+    const dir = path.join(outside, "dir");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.symlinkSync(dir, path.join(root, "link"));
+
+    // The lexical collapse the old code performed, shown to be wrong: it points
+    // INSIDE the root, while the real write target is outside it.
+    expect(path.resolve(root, "link/../victim")).toBe(path.join(root, "victim"));
+
+    const r = checkContained(root, "link/../victim");
+    expect(refusalOf(r).code).toBe("parent-traversal");
+
+    const w = writeContainedFile(root, "link/../victim", Buffer.from("X", "utf8"));
+    expect(w.written).toBe(false);
+    expect(w.code).toBe("parent-traversal");
+    expect(fs.existsSync(path.join(outside, "victim"))).toBe(false);
+  });
+
+  test("a REPLACED ANCESTOR cannot be reported as an applied write", () => {
+    // `O_NOFOLLOW` refuses a symlink at the FINAL component only. Replacing the
+    // resolved ANCESTOR between the proof and the open reproduced `{written:true}`
+    // with the bytes outside the root. Node has no `openat`, so the window cannot
+    // be closed — but an escape must never be REPORTED AS APPLIED, which was the
+    // part of variant 1 with teeth.
+    const { root, outside } = fixture();
+    const a = path.join(root, "A");
+    fs.mkdirSync(a);
+    const dest = path.join(a, "file");
+
+    const origOpen = fs.openSync;
+    let swapped = false;
+    (fs as { openSync: typeof fs.openSync }).openSync = ((...args: Parameters<typeof fs.openSync>) => {
+      if (!swapped) {
+        swapped = true;
+        fs.renameSync(a, path.join(root, "A-old"));
+        fs.symlinkSync(outside, a);
+      }
+      return origOpen(...args);
+    }) as typeof fs.openSync;
+
+    let w: ReturnType<typeof writeContainedFile>;
+    try {
+      w = writeContainedFile(root, dest, Buffer.from("NEW", "utf8"));
+    } finally {
+      (fs as { openSync: typeof fs.openSync }).openSync = origOpen;
+    }
+
+    expect(swapped).toBe(true); // non-vacuity: the swap really happened
+    expect(w.written).toBe(false);
+    expect(w.code).toBe("destination-moved");
+    expect(fs.existsSync(path.join(outside, "file"))).toBe(false);
+  });
+
+  test("`physical` sees a symlink through a differently-cased root spelling", () => {
+    // On a case-insensitive volume the old walk compared `path.relative(logicalRoot,
+    // abs)` byte-wise, read a differently-cased spelling as an escape, scanned ZERO
+    // segments, and reported contained. A guard that quietly inspects nothing is
+    // worse than no guard. Skipped where the filesystem is case-SENSITIVE, because
+    // there the premise does not exist.
+    const realRootDir = path.join(scratch, "Project");
+    fs.mkdirSync(path.join(realRootDir, "real"), { recursive: true });
+    const lowered = path.join(scratch, "project");
+    if (!fs.existsSync(lowered)) return; // case-sensitive volume: nothing to test
+    fs.symlinkSync(path.join(realRootDir, "real"), path.join(realRootDir, "alias"));
+
+    const r = checkContained(realRootDir, path.join(lowered, "alias", "x"), {
+      policy: "physical",
+    });
+    expect(refusalOf(r).code).toBe("physical-symlink");
   });
 });
 

@@ -471,7 +471,20 @@ export function findViolations(root: string): Violation[] {
   // STRINGS, not filesystem locations, and there is nothing on disk to resolve. Forcing
   // the primitive there would trade a correct check for a familiar-looking one.
   const hooksModules = path.join(hooksDir, "node_modules");
-  if (fs.existsSync(hooksModules)) {
+  // `lstatSync`, NOT `existsSync` — and the fact that I reached for `existsSync`
+  // here, in the very change that extracts a primitive whose headline defect is
+  // "existsSync FOLLOWS symlinks", is the strongest argument this file could make
+  // for the rail. An adversarial pass reproduced it: a DANGLING
+  // `hooks/node_modules` link reads as absent, the containment check never runs,
+  // and the rail reports PASS on a non-physical node_modules.
+  const hooksModulesStat = ((): fs.Stats | null => {
+    try {
+      return fs.lstatSync(hooksModules);
+    } catch {
+      return null;
+    }
+  })();
+  if (hooksModulesStat !== null) {
     const contained = checkContained(hooksDir, hooksModules, { policy: "physical" });
     if (isRefused(contained)) {
       out.push({
