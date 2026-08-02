@@ -635,7 +635,35 @@ export function neutralFreeze<T>(value: T): T {
       if (!node.global && !node.sticky) Object.freeze(node);
       return;
     }
+    if (node instanceof Set || node instanceof Map) {
+      // ROUND-1 P2 #6. This copy cannot SEAL a Set or Map, so it used to fall through to
+      // `Object.freeze` — which closes nothing while `Object.isFrozen` reports `true`.
+      // That is the exact false green the whole rail exists to catch, and it was reachable
+      // through `neutralOutcome({ facts: { allowed: new Set([...]) } })`: the caller kept a
+      // live reference and could `clear()`/`add()` the "machine truth" afterwards. The
+      // prohibition on Sets in the neutral core was enforced only over STATIC `NEUTRAL_*`
+      // exports, so nothing constrained a value handed in at runtime.
+      //
+      // Refusing is the honest move and needs no capability this core lacks: it makes the
+      // unrepresentable case a loud error at construction instead of a silent one at use.
+      throw new TypeError(
+        "neutralFreeze: refusing to 'freeze' a Set/Map — freeze does not close membership, " +
+          "and the neutral core cannot build a sealed facade. Pass a frozen array or a plain " +
+          "record instead (outside the core, use sealSet()/sealMap()).",
+      );
+    }
     Object.freeze(node);
+    // ENUMERABLE OWN STRING KEYS ONLY, and read by [[Get]] — which INVOKES getters.
+    //
+    // This is the residue of round-1 P2 #6 that CANNOT be closed here, and the reason is
+    // mechanical rather than an oversight. Reaching a symbol-keyed or non-enumerable child
+    // needs `Object.getOwnPropertySymbols` / `getOwnPropertyNames`, and avoiding the getter
+    // invocation needs `Object.getOwnPropertyDescriptor` — all three are in
+    // `NEUTRAL_REFLECTION_METHOD_NAMES`, which `neutral-core-boundary.ts` rejects as a
+    // `reflection_call_reach`. Using them turns the core's import closure RED. The core's
+    // mechanically-checked capability closure is the stronger property, so the divergence
+    // from the kernel primitive stays, and the rail PINS it by name and by shape rather
+    // than leaving it as an unstated gap. Do not "fix" this without moving the boundary.
     for (const key of Object.keys(node as Record<string, unknown>)) {
       walk((node as Record<string, unknown>)[key]);
     }

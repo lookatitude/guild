@@ -74,6 +74,43 @@ const SKIP = ["node_modules/", "dist/", ".git/", "resources/", "__tests__/"];
 const FREEZE_WRAPPERS = new Set(["Object.freeze", "deepFreeze", "frozenList", "neutralFreeze"]);
 const SEAL_WRAPPERS = new Set(["sealSet", "sealMap"]);
 
+/**
+ * ROUND-1 P2 #5 — A WRAPPER NAME IS NOT A WRAPPER.
+ *
+ * The scan used to accept the SPELLING: any call whose callee read `sealSet` marked the
+ * declaration sealed. Nothing resolved the symbol, so a local decoy in the same file was a
+ * complete, silent bypass — and `scripts/**` and `hooks/**` get no module-index walk, so
+ * nothing downstream caught it either:
+ *
+ *     function sealSet<T>(values: Iterable<T>): ReadonlySet<T> { return new Set(values); }
+ *     export const PERMITTED_ACTIONS = sealSet(["bypass"]);   // scanned as SEALED
+ *     Set.prototype.add.call(PERMITTED_ACTIONS, "anything");  // and wide open
+ *
+ * A wrapper now counts only when the binding RESOLVES to one of the two files that
+ * actually implement it (or when the declaring file IS one of them). Everything else —
+ * a local function, a shadowed import, a same-named helper from another module — is
+ * untrusted, and the declaration is judged unfrozen.
+ */
+const WRAPPER_IMPLEMENTATIONS = new Set([
+  "src/modules/kernel/index.ts",
+  "src/modules/kernel/workflows/sealed-collections.ts",
+  // The neutral core's deliberate duplicate; `neutralFreeze` is re-exported by the index.
+  "src/modules/lifecycle/index.ts",
+  "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
+]);
+
+/** Resolve a relative import specifier to a repo-relative `.ts` path, TEXTUALLY. */
+function resolveSpecifier(fromRel: string, specifier: string): string | undefined {
+  if (!specifier.startsWith(".")) return undefined;
+  const joined = path.posix.normalize(
+    path.posix.join(path.posix.dirname(fromRel), specifier.replace(/\.js$/, "")),
+  );
+  for (const candidate of [`${joined}.ts`, `${joined}/index.ts`, joined]) {
+    if (WRAPPER_IMPLEMENTATIONS.has(candidate)) return candidate;
+  }
+  return joined;
+}
+
 function walkFiles(dir: string, out: string[] = []): string[] {
   let entries: fs.Dirent[];
   try {
@@ -175,58 +212,153 @@ function kindFromValue(node: ts.Expression): CollectionKind | undefined {
   return undefined;
 }
 
+/**
+ * Scan ONE source. Split out of the file walk so the scanner's own rules can be exercised
+ * against adversarial sources (see "the scanner's blind spots" below). A rule with nothing
+ * to feel it is not a rule: if every real file complies, a green sweep proves nothing about
+ * whether the scanner would REJECT the attack it was written for.
+ */
+export function scanSource(rel: string, text: string): StaticCollection[] {
+  const found: StaticCollection[] = [];
+  const source = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+
+  // --- symbol resolution for wrapper trust (round-1 P2 #5) -------------------
+  /** local binding name -> the repo-relative file it was imported from. */
+  const importedFrom = new Map<string, string>();
+  /** every top-level binding this file DECLARES itself — a decoy, or a shadow of `Object`. */
+  const declaredHere = new Set<string>();
+  for (const statement of source.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+      const target = resolveSpecifier(rel, statement.moduleSpecifier.text);
+      const clause = statement.importClause;
+      if (!clause || target === undefined) continue;
+      if (clause.name) importedFrom.set(clause.name.text, target);
+      if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+        for (const element of clause.namedBindings.elements) importedFrom.set(element.name.text, target);
+      }
+    }
+    if (ts.isFunctionDeclaration(statement) && statement.name) declaredHere.add(statement.name.text);
+    if (ts.isClassDeclaration(statement) && statement.name) declaredHere.add(statement.name.text);
+    if (ts.isVariableStatement(statement)) {
+      for (const decl of statement.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name)) declaredHere.add(decl.name.text);
+      }
+    }
+  }
+  const fileIsAnImplementation = WRAPPER_IMPLEMENTATIONS.has(rel);
+
+  /** Does this callee text name a wrapper that RESOLVES to a real implementation? */
+  const trustedWrapper = (callee: string | undefined): boolean => {
+    if (callee === undefined) return false;
+    if (callee === "Object.freeze") {
+      // `Object` is a global, so it is trusted UNLESS this file shadows it. A local
+      // `const Object = { freeze: (x) => x }` would otherwise launder every declaration.
+      return !declaredHere.has("Object");
+    }
+    if (!FREEZE_WRAPPERS.has(callee) && !SEAL_WRAPPERS.has(callee)) return false;
+    const importSource = importedFrom.get(callee);
+    if (importSource !== undefined) return WRAPPER_IMPLEMENTATIONS.has(importSource);
+    // Not imported. Only the implementations themselves may use the bare name.
+    return fileIsAnImplementation && declaredHere.has(callee);
+  };
+
+  const record = (name: string, type: ts.TypeNode | undefined, initializer: ts.Expression): void => {
+    let value = unwrap(initializer);
+    const outerCallee = calleeText(value);
+    const trusted = trustedWrapper(outerCallee);
+    // SPELLING alone no longer counts. An untrusted `sealSet(...)` leaves `sealed` false,
+    // so the declaration lands in the unsealed list and the rail goes red BY NAME.
+    const frozen = trusted && outerCallee !== undefined && FREEZE_WRAPPERS.has(outerCallee);
+    const sealed = trusted && outerCallee !== undefined && SEAL_WRAPPERS.has(outerCallee);
+    const deep =
+      trusted && (outerCallee === "deepFreeze" || outerCallee === "neutralFreeze" || outerCallee === "frozenList");
+    // The KIND has to be read from the OUTER call — `sealSet([...])` is a Set even
+    // though its argument is an array literal. Reading it after unwrapping would
+    // misfile every sealed Set as an unfrozen array. This uses the SPELLING on purpose:
+    // an untrusted `sealSet(["bypass"])` still produces a Set at runtime, and calling it
+    // an array would file it under the wrong (weaker) assertion.
+    const kindFromWrapper = kindFromValue(value);
+    if (outerCallee !== undefined && (FREEZE_WRAPPERS.has(outerCallee) || SEAL_WRAPPERS.has(outerCallee))) {
+      const call = value as ts.CallExpression;
+      if (call.arguments.length > 0) value = unwrap(call.arguments[0]);
+    }
+    const kind = kindFromWrapper ?? kindFromValue(value) ?? kindFromType(type);
+    if (!kind) return;
+    const ownsGraph =
+      ts.isArrayLiteralExpression(value) &&
+      value.elements.some((element) => {
+        const el = unwrap(element as ts.Expression);
+        const cal = calleeText(el);
+        if (cal && trustedWrapper(cal)) return false;
+        return (
+          ts.isObjectLiteralExpression(el) ||
+          ts.isArrayLiteralExpression(el) ||
+          ts.isRegularExpressionLiteral(el)
+        );
+      });
+    found.push({
+      file: rel,
+      name,
+      kind,
+      frozen,
+      sealed,
+      deep,
+      ownsGraph,
+      aliasOf: !frozen && !sealed && ts.isIdentifier(value) ? value.text : undefined,
+    });
+  };
+
+  // --- export forms ---------------------------------------------------------
+  // `export { X }` / `export { X as Y }` re-exports a binding declared WITHOUT the
+  // `export` modifier. That form was invisible to the scan, so moving a declaration behind
+  // a bare `const` plus an export clause removed it from coverage entirely (round-1 P2 #5).
+  const exportedByClause = new Map<string, string>(); // local name -> exported name
+  for (const statement of source.statements) {
+    if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier) continue;
+    if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) continue;
+    for (const element of statement.exportClause.elements) {
+      exportedByClause.set((element.propertyName ?? element.name).text, element.name.text);
+    }
+  }
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableStatement(node)) {
+      const directlyExported = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+      for (const decl of node.declarationList.declarations) {
+        if (!ts.isIdentifier(decl.name) || !decl.initializer) continue;
+        const viaClause = exportedByClause.get(decl.name.text);
+        if (!directlyExported && viaClause === undefined) continue;
+        record(viaClause ?? decl.name.text, decl.type, decl.initializer);
+      }
+    }
+    // `export class C { static readonly X = [...] }` — a static field is an exported
+    // vocabulary reachable as `C.X`, and was never scanned.
+    if (ts.isClassDeclaration(node) && node.name) {
+      const exportedName = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+        ? node.name.text
+        : exportedByClause.get(node.name.text);
+      if (exportedName !== undefined) {
+        for (const member of node.members) {
+          if (!ts.isPropertyDeclaration(member)) continue;
+          if (!member.modifiers?.some((m) => m.kind === ts.SyntaxKind.StaticKeyword)) continue;
+          if (!ts.isIdentifier(member.name) || !member.initializer) continue;
+          record(`${exportedName}.${member.name.text}`, member.type, member.initializer);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
 function scanStatic(): StaticCollection[] {
   const found: StaticCollection[] = [];
   for (const root of ["src", "scripts", "hooks"]) {
     for (const file of walkFiles(path.join(REPO, root))) {
-      const text = fs.readFileSync(file, "utf8");
-      const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-      const visit = (node: ts.Node): void => {
-        if (ts.isVariableStatement(node) && node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
-          for (const decl of node.declarationList.declarations) {
-            if (!ts.isIdentifier(decl.name) || !decl.initializer) continue;
-            let value = unwrap(decl.initializer);
-            const outerCallee = calleeText(value);
-            const frozen = outerCallee !== undefined && FREEZE_WRAPPERS.has(outerCallee);
-            const sealed = outerCallee !== undefined && SEAL_WRAPPERS.has(outerCallee);
-            const deep = outerCallee === "deepFreeze" || outerCallee === "neutralFreeze" || outerCallee === "frozenList";
-            // The KIND has to be read from the OUTER call — `sealSet([...])` is a Set even
-            // though its argument is an array literal. Reading it after unwrapping would
-            // misfile every sealed Set as an unfrozen array.
-            const kindFromWrapper = kindFromValue(value);
-            if (frozen || sealed) {
-              const call = value as ts.CallExpression;
-              if (call.arguments.length > 0) value = unwrap(call.arguments[0]);
-            }
-            const kind = kindFromWrapper ?? kindFromValue(value) ?? kindFromType(decl.type);
-            if (!kind) continue;
-            const ownsGraph =
-              ts.isArrayLiteralExpression(value) &&
-              value.elements.some((element) => {
-                const el = unwrap(element as ts.Expression);
-                const cal = calleeText(el);
-                if (cal && (FREEZE_WRAPPERS.has(cal) || SEAL_WRAPPERS.has(cal))) return false;
-                return (
-                  ts.isObjectLiteralExpression(el) ||
-                  ts.isArrayLiteralExpression(el) ||
-                  ts.isRegularExpressionLiteral(el)
-                );
-              });
-            found.push({
-              file: path.relative(REPO, file).replace(/\\/g, "/"),
-              name: decl.name.text,
-              kind,
-              frozen,
-              sealed,
-              deep,
-              ownsGraph,
-              aliasOf: !frozen && !sealed && ts.isIdentifier(value) ? value.text : undefined,
-            });
-          }
-        }
-        ts.forEachChild(node, visit);
-      };
-      visit(source);
+      found.push(
+        ...scanSource(path.relative(REPO, file).replace(/\\/g, "/"), fs.readFileSync(file, "utf8")),
+      );
     }
   }
   return found;
@@ -282,6 +414,32 @@ const identity = (c: StaticCollection): string => `${c.file}::${c.name}`;
  * is how the shrinkage this pin exists to catch gets absorbed.
  */
 if (process.env.GUILD_PIN_CLOSED_COLLECTIONS === "1") {
+  // ROUND-1 P3 #8 — regeneration must not be able to ratify its own shrinkage.
+  //
+  // The superset assertion below correctly catches an identity disappearing. But the
+  // sanctioned repair for a red pin is to regenerate it, and regeneration ran the SAME
+  // (possibly weakened) scanner and rewrote the file wholesale — absorbing every
+  // disappearance in one commit whose diff a reviewer reads as "the pin was refreshed".
+  // Weakening `scanStatic()` and regenerating was therefore a complete, silent bypass of
+  // the only assertion that guards coverage.
+  //
+  // Regeneration is now ADDITIVE BY DEFAULT: dropping a pinned identity requires a second,
+  // separate opt-in and prints every name being dropped, so the shrinkage has to be stated
+  // out loud in the commit rather than inferred from a 400-line diff.
+  const present = new Set(statics.map(identity));
+  const previous = fs.existsSync(PIN_PATH)
+    ? (JSON.parse(fs.readFileSync(PIN_PATH, "utf8")) as { identities?: string[] }).identities ?? []
+    : [];
+  const dropped = previous.filter((id) => !present.has(id)).sort();
+  if (dropped.length > 0 && process.env.GUILD_PIN_ALLOW_SHRINK !== "1") {
+    throw new Error(
+      `refusing to regenerate the closed-collection pin: it would DROP ${dropped.length} ` +
+        `pinned identit${dropped.length === 1 ? "y" : "ies"} that the current scan no longer ` +
+        `sees. Either the scanner regressed (fix it) or the declarations were genuinely ` +
+        `removed (re-run with GUILD_PIN_ALLOW_SHRINK=1 and say why in the commit). ` +
+        `Dropped:\n  ${dropped.join("\n  ")}`,
+    );
+  }
   fs.mkdirSync(path.dirname(PIN_PATH), { recursive: true });
   fs.writeFileSync(
     PIN_PATH,
@@ -290,7 +448,8 @@ if (process.env.GUILD_PIN_CLOSED_COLLECTIONS === "1") {
         note:
           "Pinned closed-collection identities (file::exportName). The rail asserts the live " +
           "scan is a SUPERSET of this list, so an identity disappearing fails BY NAME. " +
-          "Regenerate with GUILD_PIN_CLOSED_COLLECTIONS=1 and review the diff.",
+          "Regenerate with GUILD_PIN_CLOSED_COLLECTIONS=1 and review the diff. Regeneration " +
+          "REFUSES to drop a pinned identity unless GUILD_PIN_ALLOW_SHRINK=1 is also set.",
         measured_at: "feature/deep-freeze-collections (task #22)",
         count: statics.length,
         identities: statics.map(identity).sort(),
@@ -308,7 +467,12 @@ describe("closed collections — STATIC (TypeScript AST over every declaration s
     // the rail stayed green, because 167 > 160. Naming the identities makes shrinkage
     // impossible to absorb: a collection that disappears fails HERE, by name, and the
     // only correct response is to delete it from the pin with a reason.
-    const pin = JSON.parse(fs.readFileSync(PIN_PATH, "utf8")) as { identities: string[] };
+    const pin = JSON.parse(fs.readFileSync(PIN_PATH, "utf8")) as { identities: string[]; count?: number };
+    // `count` used to be informational — a number nobody checked, sitting next to the list
+    // it claims to describe. A hand-edited pin could then shrink the list while the count
+    // still read like the original measurement (round-1 P3 #8). Make it load-bearing.
+    expect(pin.count).toBe(pin.identities.length);
+    expect(new Set(pin.identities).size).toBe(pin.identities.length);
     const present = new Set(statics.map(identity));
     const missing = pin.identities.filter((id) => !present.has(id)).sort();
     expect(missing).toEqual([]);
@@ -396,6 +560,29 @@ function mutatorsSealed(target: object, methods: readonly string[]): boolean {
 }
 
 /**
+ * Visitation state, SPLIT BY ENFORCEMENT CONTEXT (round-1 P2 #3).
+ *
+ * A single `WeakSet` keyed on object identity alone launders a mutable object: reached
+ * first through a plain export (`insideCollection === false`) it is recorded as visited,
+ * and the LATER, in-scope arrival through a frozen array returns at `seen.has(obj)` before
+ * the element-graph check ever runs.
+ *
+ *     const shared = {};
+ *     export const A = { shared };              // walked first, out of scope
+ *     export const B = Object.freeze([shared]); // same object, now IN scope — never checked
+ *
+ * The in-scope visit is strictly stronger, so it subsumes an out-of-scope one but never
+ * the reverse. Two sets express exactly that, and still terminate on cycles because the
+ * object is recorded before the walk descends.
+ */
+interface Visited {
+  outside: WeakSet<object>;
+  inside: WeakSet<object>;
+}
+
+const newVisited = (): Visited => ({ outside: new WeakSet<object>(), inside: new WeakSet<object>() });
+
+/**
  * Walk everything an export owns. `insideCollection` marks the moment the walk enters an
  * array, Set or Map: from there on, every object/regexp it reaches is part of a CLOSED
  * COLLECTION'S ELEMENT GRAPH and in scope. Plain exported objects that own no collection
@@ -404,16 +591,21 @@ function mutatorsSealed(target: object, methods: readonly string[]): boolean {
 function walkValue(
   node: unknown,
   label: string,
-  seen: WeakSet<object>,
+  seen: Visited,
   result: WalkResult,
   depth: number,
   insideCollection: boolean,
 ): void {
   if (node === null || typeof node !== "object" || depth > 12) return;
   const obj = node as object;
-  if (seen.has(obj)) return;
-  seen.add(obj);
-  result.visited += 1;
+  // An out-of-scope visit must NOT suppress a later in-scope one; an in-scope visit DOES
+  // suppress a later out-of-scope one, because it already enforced the stronger property.
+  if (insideCollection ? seen.inside.has(obj) : seen.outside.has(obj) || seen.inside.has(obj)) return;
+  const firstEverVisit = !seen.outside.has(obj) && !seen.inside.has(obj);
+  seen.outside.add(obj);
+  if (insideCollection) seen.inside.add(obj);
+  // Counted once per object, so re-entering in scope cannot inflate the anti-vacuity floor.
+  if (firstEverVisit) result.visited += 1;
 
   if (obj instanceof RegExp) {
     // A global/sticky pattern WRITES lastIndex during `.exec()`/`.test()`, and that write
@@ -433,8 +625,22 @@ function walkValue(
     // a frozen, fully-neutered instance (round-1 P1). Only the sealSet/sealMap FACADE —
     // which has no such slot — can be closed, so a real Set/Map here is by definition open.
     result.findings.push({ path: label, kind: obj instanceof Set ? "unsealed-set" : "unsealed-map" });
-    const values = obj instanceof Set ? obj.values() : (obj as Map<unknown, unknown>).values();
-    for (const value of values) walkValue(value, `${label}{}`, seen, result, depth + 1, true);
+    // Read entries through the INTRINSIC, not `obj.values()`. `values` is inherited from
+    // Set.prototype/Map.prototype, so it is not an own property of the instance and a
+    // Proxy `get` trap may replace it with an empty generator — the round-1 P2 #4 shape,
+    // which hid the whole element graph from the walk. The intrinsic reads the receiver's
+    // internal slot, which no trap can intercept; against a Proxy it has no slot to read
+    // and throws, and the finding pushed above has already made this red.
+    const entries: unknown[] = [];
+    try {
+      const forEach = obj instanceof Set ? Set.prototype.forEach : Map.prototype.forEach;
+      (forEach as unknown as (this: unknown, cb: (v: unknown) => void) => void).call(obj, (v) => {
+        entries.push(v);
+      });
+    } catch {
+      /* no internal slot (a Proxy): nothing to walk, and already reported above */
+    }
+    for (const value of entries) walkValue(value, `${label}{}`, seen, result, depth + 1, true);
     return;
   }
 
@@ -446,7 +652,18 @@ function walkValue(
 
   if (Array.isArray(obj)) {
     if (!Object.isFrozen(obj)) result.findings.push({ path: label, kind: "unfrozen-array" });
-    obj.forEach((value, i) => walkValue(value, `${label}[${i}]`, seen, result, depth + 1, true));
+    // Elements are read through OWN INDEX DESCRIPTORS, not `obj.forEach`. `forEach` is
+    // inherited from Array.prototype — not an own property — so a Proxy `get` trap can
+    // return a no-op and hide every element while `Array.isArray` and `Object.isFrozen`
+    // both still answer `true` (round-1 P2 #4, reproduced on this Node). An own index of a
+    // FROZEN array is a non-writable, non-configurable data property, and the ES proxy
+    // invariant makes misreporting one a TypeError rather than a lie.
+    const length = Object.getOwnPropertyDescriptor(obj, "length")?.value as number | undefined;
+    for (let i = 0; i < (typeof length === "number" ? length : 0); i += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, String(i));
+      if (!descriptor || !("value" in descriptor)) continue;
+      walkValue(descriptor.value, `${label}[${i}]`, seen, result, depth + 1, true);
+    }
     return;
   }
 
@@ -534,7 +751,7 @@ describe("closed collections — RUNTIME (deep-walk of every module export graph
         return;
       }
       const result: WalkResult = { findings: [], visited: 0, names: new Set() };
-      const seen = new WeakSet<object>();
+      const seen = newVisited();
       for (const [key, value] of Object.entries(exports)) {
         if (typeof value === "function") continue;
         result.names.add(key);
@@ -616,7 +833,7 @@ describe("closed collections — RUNTIME tier 2 (the declaring file, joined on f
           continue;
         }
         const result: WalkResult = { findings: [], visited: 0, names: new Set() };
-        walkValue(value, identity(c), new WeakSet(), result, 0, false);
+        walkValue(value, identity(c), newVisited(), result, 0, false);
         for (const f of result.findings) findings.push(`${f.kind}: ${f.path}`);
         directFileResults.set(identity(c), { verified: true });
         verified += 1;
@@ -625,6 +842,271 @@ describe("closed collections — RUNTIME tier 2 (the declaring file, joined on f
     expect(findings.sort()).toEqual([]);
     // Non-vacuous: this tier must actually verify a large share of the population.
     expect(verified).toBeGreaterThan(150);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POSITIVE CONTROLS — every rule above, shown REJECTING the attack it exists for
+// ---------------------------------------------------------------------------
+
+/**
+ * A rule that only ever runs over compliant input is untested. Each block below feeds the
+ * real scanner or the real walker an adversarial input and asserts it is CAUGHT — and,
+ * where the fix was a behaviour change rather than an addition, asserts the pre-fix
+ * behaviour alongside it, so "this would have been green before" is demonstrated instead
+ * of claimed.
+ */
+describe("closed collections — POSITIVE CONTROLS for the round-1 findings", () => {
+  // --- P2 #5: the scanner trusted the wrapper's SPELLING ---------------------
+  describe("P2 #5 — a wrapper name is not a wrapper", () => {
+    const DECOY = `
+      function sealSet<T>(values: Iterable<T>): ReadonlySet<T> { return new Set(values); }
+      export const PERMITTED_ACTIONS = sealSet(["bypass"]);
+    `;
+
+    it("a LOCAL sealSet decoy does not seal — the exact round-1 reproduction", () => {
+      const [found] = scanSource("scripts/lib/decoy.ts", DECOY);
+      expect(found).toMatchObject({ name: "PERMITTED_ACTIONS", kind: "set", sealed: false });
+      // ...and it therefore lands in the population the SET/MAP assertion fails on.
+      const unsealed = scanSource("scripts/lib/decoy.ts", DECOY)
+        .filter((c) => (c.kind === "set" || c.kind === "map") && !c.sealed && !c.aliasOf)
+        .map(identity);
+      expect(unsealed).toEqual(["scripts/lib/decoy.ts::PERMITTED_ACTIONS"]);
+    });
+
+    it("the SAME source with a real import from the kernel IS sealed", () => {
+      // The contrast is the point: the rule keys on where the binding RESOLVES, not on
+      // whether the file happens to contain the letters `sealSet`.
+      const real = `
+        import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+        export const PERMITTED_ACTIONS = sealSet(["bypass"]);
+      `;
+      const [found] = scanSource("scripts/lib/real.ts", real);
+      expect(found).toMatchObject({ name: "PERMITTED_ACTIONS", kind: "set", sealed: true });
+    });
+
+    it("an import of the same NAME from somewhere else is not trusted either", () => {
+      const impostor = `
+        import { sealSet } from "./my-helpers";
+        export const PERMITTED_ACTIONS = sealSet(["bypass"]);
+      `;
+      expect(scanSource("scripts/lib/impostor.ts", impostor)[0]).toMatchObject({ sealed: false });
+    });
+
+    it("a file that SHADOWS Object cannot launder a declaration through Object.freeze", () => {
+      const shadowed = `
+        const Object = { freeze: <T>(v: T): T => v };
+        export const VOCAB = Object.freeze(["a", "b"]);
+      `;
+      expect(scanSource("scripts/lib/shadow.ts", shadowed)[0]).toMatchObject({
+        name: "VOCAB",
+        kind: "array",
+        frozen: false,
+      });
+      // Without the shadow, the very same expression IS trusted.
+      expect(scanSource("scripts/lib/plain.ts", `export const VOCAB = Object.freeze(["a", "b"]);`)[0])
+        .toMatchObject({ frozen: true });
+    });
+  });
+
+  // --- P2 #5: export forms the scan could not see ---------------------------
+  describe("P2 #5 — export forms that were invisible", () => {
+    it("`export { X }` over a bare const is scanned (it found two real unfrozen arrays)", () => {
+      const viaClause = `
+        const VOCAB = ["a", "b"];
+        export { VOCAB };
+      `;
+      const found = scanSource("scripts/lib/clause.ts", viaClause);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatchObject({ name: "VOCAB", kind: "array", frozen: false });
+      // This form is what surfaced `scripts/build-verify.ts::MCP_SERVERS` and
+      // `scripts/lib/host-adapters/app-host.ts::APP_HOSTS` — both genuinely unfrozen,
+      // both invisible to the previous scan, both now frozen at their declaration site.
+      expect(statics.some((c) => c.file === "scripts/build-verify.ts" && c.name === "MCP_SERVERS")).toBe(true);
+      expect(
+        statics.some((c) => c.file === "scripts/lib/host-adapters/app-host.ts" && c.name === "APP_HOSTS"),
+      ).toBe(true);
+    });
+
+    it("`export { X as Y }` is recorded under the EXPORTED name, which is the join key", () => {
+      const renamed = `
+        const internal = ["a"];
+        export { internal as VOCAB };
+      `;
+      expect(scanSource("scripts/lib/renamed.ts", renamed)[0]).toMatchObject({ name: "VOCAB" });
+    });
+
+    it("a static field on an exported class is scanned as `Class.field`", () => {
+      const klass = `
+        export class Policy { static readonly ACTIONS = ["bypass"]; }
+      `;
+      expect(scanSource("scripts/lib/klass.ts", klass)[0]).toMatchObject({
+        name: "Policy.ACTIONS",
+        kind: "array",
+        frozen: false,
+      });
+    });
+
+    it("a NON-exported const is still ignored — the rule did not just widen to everything", () => {
+      // A sweep that flags every local array would be a different (and much noisier) rail,
+      // and would make the assertions above meaningless.
+      expect(scanSource("scripts/lib/private.ts", `const VOCAB = ["a"];`)).toEqual([]);
+    });
+  });
+
+  // --- P2 #3: the walker's `seen` set laundered an object -------------------
+  it("P2 #3 — an object first seen OUT of collection scope is still checked in scope", () => {
+    const shared = { permission: "closed" };
+    const exports = {
+      A: Object.freeze({ shared }), // walked first, insideCollection === false
+      B: Object.freeze([shared]), // same object, now inside a closed collection
+    };
+    const result: WalkResult = { findings: [], visited: 0, names: new Set() };
+    const seen = newVisited();
+    for (const [key, value] of Object.entries(exports)) {
+      walkValue(value, `probe/${key}`, seen, result, 0, false);
+    }
+    expect(result.findings.map((f) => f.kind)).toContain("unfrozen-object");
+    expect(result.findings.some((f) => f.path.startsWith("probe/B"))).toBe(true);
+
+    // And the PRE-FIX behaviour, so the improvement is demonstrated rather than asserted:
+    // one identity-only visited set suppresses the in-scope arrival entirely.
+    const oneSet = new WeakSet<object>();
+    const legacy: WalkResult = { findings: [], visited: 0, names: new Set() };
+    const legacyWalk = (node: unknown, label: string, inside: boolean): void => {
+      if (node === null || typeof node !== "object") return;
+      const obj = node as object;
+      if (oneSet.has(obj)) return;
+      oneSet.add(obj);
+      if (Array.isArray(obj)) {
+        obj.forEach((v, i) => legacyWalk(v, `${label}[${i}]`, true));
+        return;
+      }
+      if (inside && !Object.isFrozen(obj)) legacy.findings.push({ path: label, kind: "unfrozen-object" });
+      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) legacyWalk(v, `${label}.${k}`, inside);
+    };
+    for (const [key, value] of Object.entries(exports)) legacyWalk(value, `probe/${key}`, false);
+    expect(legacy.findings).toEqual([]); // <- green, with `shared` wide open
+    expect(Object.isFrozen(shared)).toBe(false);
+  });
+
+  it("P2 #3 — the split visited-state still terminates on a cycle", () => {
+    // The obvious way to break the fix is to re-visit unconditionally.
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const result: WalkResult = { findings: [], visited: 0, names: new Set() };
+    expect(() => walkValue(Object.freeze([cyclic]), "probe/cycle", newVisited(), result, 0, false)).not.toThrow();
+    expect(result.visited).toBeGreaterThan(0);
+  });
+
+  // --- P2 #4: a Proxy hid the element graph from the walk -------------------
+  it("P2 #4 — the ORIGINAL reproduction (deepFreeze over a proxied Set) is refused", () => {
+    // Round 1 ran this against `269d0b6`, where `deepFreeze` walked Sets: the Proxy made
+    // `Symbol.iterator` and `values()` empty, so the primitive froze the container, walked
+    // nothing, and reported success while `child` stayed mutable. `fb87540` then made
+    // `deepFreeze` REFUSE every branded Set/Map, which closes this half as a side effect —
+    // a Proxy over a Set still answers `true` to `instanceof Set`. Pinned so the coverage
+    // is not lost if the refusal is ever relaxed.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { deepFreeze } = require(path.join(REPO, "src", "modules", "kernel", "index.ts")) as {
+      deepFreeze: <T>(v: T) => T;
+    };
+    const child = { gate: "closed" };
+    const proxied = new Proxy(new Set([child]), {
+      get(t, key, receiver) {
+        if (key === Symbol.iterator || key === "values") return function* (): Generator<never> { /* empty */ };
+        return Reflect.get(t, key, receiver);
+      },
+    });
+    expect(proxied instanceof Set).toBe(true); // the disguise does not survive the brand
+    expect(() => deepFreeze({ names: proxied })).toThrow(/sealSet/);
+  });
+
+  it("P2 #4 — a Proxy cannot hide array elements behind a faked inherited forEach", () => {
+    const child = { gate: "closed" };
+    const target = Object.freeze([child]);
+    const proxy = new Proxy(target, {
+      get(t, key, receiver) {
+        if (key === "forEach") return function noop(): void { /* hide everything */ };
+        return Reflect.get(t, key, receiver);
+      },
+    });
+    // The disguise is complete for every check that does not read own descriptors.
+    expect(Array.isArray(proxy)).toBe(true);
+    expect(Object.isFrozen(proxy)).toBe(true);
+    let viaForEach = 0;
+    (proxy as unknown as { forEach: (cb: () => void) => void }).forEach(() => { viaForEach += 1; });
+    expect(viaForEach).toBe(0); // <- what the walk used to see
+
+    const result: WalkResult = { findings: [], visited: 0, names: new Set() };
+    walkValue(proxy, "probe/proxied", newVisited(), result, 0, false);
+    // Own index descriptors reach the child, and the child is a mutable object inside a
+    // closed collection — exactly the finding the disguise suppressed.
+    expect(result.findings.map((f) => f.kind)).toContain("unfrozen-object");
+  });
+
+  it("P2 #4 — Set entries are read through the intrinsic, not a trappable `values()`", () => {
+    const child = { gate: "closed" };
+    const set = new Set([child]);
+    const hidden = new Proxy(set, {
+      get(t, key, receiver) {
+        if (key === "values" || key === Symbol.iterator) return function* (): Generator<never> { /* empty */ };
+        return Reflect.get(t, key, receiver);
+      },
+    });
+    // A branded Set (or a Proxy over one) is a finding on sight, so this is red either way.
+    const result: WalkResult = { findings: [], visited: 0, names: new Set() };
+    walkValue(hidden, "probe/hiddenset", newVisited(), result, 0, false);
+    expect(result.findings.map((f) => f.kind)).toContain("unsealed-set");
+    // The real (untrapped) Set still yields its entries to the intrinsic read, so the
+    // change did not silently stop traversing Set contents.
+    const plain: WalkResult = { findings: [], visited: 0, names: new Set() };
+    walkValue(new Set([{ mutable: true }]), "probe/plainset", newVisited(), plain, 0, false);
+    expect(plain.findings.map((f) => f.kind).sort()).toEqual(["unfrozen-object", "unsealed-set"]);
+  });
+
+  it("P2 #4 — a frozen facade's iterator is protected by the ES proxy invariant", () => {
+    // `sealedCollectionValues` spreads the facade, which goes through `Symbol.iterator`.
+    // That is safe ONLY because the facade is FROZEN: for a non-writable, non-configurable
+    // own data property a `get` trap must return the same value or throw. This pins the
+    // property the spread depends on, so making the facade merely sealed (or leaving one
+    // mutator configurable) fails here instead of silently reopening the hole.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { sealSet } = require(path.join(REPO, "src", "modules", "kernel", "index.ts")) as {
+      sealSet: <T>(v: Iterable<T>, label?: string) => ReadonlySet<T>;
+    };
+    const facade = sealSet(["x"], "PROBE");
+    expect(Object.isFrozen(facade)).toBe(true);
+    // The mutators must be non-configurable too — a configurable one would leave the
+    // facade non-frozen and take the invariant away with it.
+    for (const method of SET_MUTATORS) {
+      expect(Object.getOwnPropertyDescriptor(facade, method)?.configurable).toBe(false);
+    }
+    const lying = new Proxy(facade as object, {
+      get(t, key, receiver) {
+        if (key === Symbol.iterator) return function* (): Generator<never> { /* empty */ };
+        return Reflect.get(t, key, receiver);
+      },
+    });
+    expect(() => [...(lying as unknown as Iterable<unknown>)]).toThrow(TypeError);
+  });
+
+  // --- P3 #8: pin regeneration could ratify its own shrinkage ---------------
+  it("P3 #8 — regeneration refuses to drop a pinned identity without the second opt-in", () => {
+    // The guard's logic, exercised directly: regeneration is additive unless the operator
+    // says otherwise. (The guard itself runs at module load under
+    // GUILD_PIN_CLOSED_COLLECTIONS=1, which a test cannot re-enter.)
+    const wouldRefuse = (previous: string[], scanned: string[], allowShrink: boolean): string[] | null => {
+      const present = new Set(scanned);
+      const dropped = previous.filter((id) => !present.has(id)).sort();
+      return dropped.length > 0 && !allowShrink ? dropped : null;
+    };
+    expect(wouldRefuse(["a::X", "b::Y"], ["a::X"], false)).toEqual(["b::Y"]);
+    expect(wouldRefuse(["a::X", "b::Y"], ["a::X"], true)).toBeNull(); // explicit opt-in
+    expect(wouldRefuse(["a::X"], ["a::X", "b::Y"], false)).toBeNull(); // growth is fine
+    // And the pin on disk satisfies the invariant the rail now asserts about it.
+    const pin = JSON.parse(fs.readFileSync(PIN_PATH, "utf8")) as { identities: string[]; count: number };
+    expect(pin.count).toBe(pin.identities.length);
   });
 });
 
@@ -640,34 +1122,56 @@ describe("closed collections — evidence strength, joined on identity", () => {
     };
     const runtimeVerified: string[] = [];
     const staticOnly: { id: string; reason: string; detail: string }[] = [];
+    // Which join produced each verification. The two are NOT equally strong and the log
+    // must stop implying they are.
+    let byIdentity = 0; // tier 2: (file, name) — binds the walked VALUE to the declaration
+    let bySpelling = 0; // tier 1: (module, spelling) — a NAME seen somewhere in the module
 
     for (const collection of statics) {
       const id = identity(collection);
+
+      // TIER 2 FIRST (round-1 P2 #7). Tier 2 imports the DECLARING FILE and reads the
+      // export by name, so its join key is `(file, name)` — the pin's own identity, and
+      // the only one that binds the object actually walked to the site being claimed.
+      // Tier 1's key is `(module, spelling)`: `walked.names` holds every top-level export
+      // name AND every immediate nested key anywhere in the module's graph, so an
+      // unrelated namespace property named `POLICY` "verifies" a `POLICY` declared in a
+      // different file of the same module. Running tier 1 first — as this did — left the
+      // weaker join covering most of the population and sent tier 2 only the leftovers.
+      // Inverted, the identity join claims everything it can and the spelling join is
+      // demoted to the residue tier 2 genuinely cannot reach (a CLI that runs on import).
+      const direct = directFileResults.get(id);
+      if (direct?.verified) {
+        runtimeVerified.push(id);
+        byIdentity += 1;
+        continue;
+      }
+
       const mod = moduleOf(collection.file);
       if (!mod) {
-        staticOnly.push({ id, reason: "outside src/modules — no module index reaches it", detail: collection.file });
+        staticOnly.push({
+          id,
+          reason: direct?.reason ?? "outside src/modules — no module index reaches it",
+          detail: collection.file,
+        });
         continue;
       }
       const walked = runtimeByModule.get(mod);
       if (!walked) {
-        staticOnly.push({ id, reason: "module index was not walked", detail: mod });
+        staticOnly.push({ id, reason: direct?.reason ?? "module index was not walked", detail: mod });
         continue;
       }
-      // The join key: this exact binding name, observed in THIS module's export graph.
-      if (walked.names.has(collection.name)) runtimeVerified.push(id);
-      else staticOnly.push({ id, reason: "declared inside a module but not re-exported from its index", detail: mod });
+      if (walked.names.has(collection.name)) {
+        runtimeVerified.push(id);
+        bySpelling += 1;
+        continue;
+      }
+      staticOnly.push({
+        id,
+        reason: direct?.reason ?? "declared inside a module but not re-exported from its index",
+        detail: mod,
+      });
     }
-
-    // Tier 2 re-classifies anything the index walk could not reach but the declaring-file
-    // import COULD — a strictly stronger join (file+name, the pin's own identity).
-    const stillStatic: typeof staticOnly = [];
-    for (const entry of staticOnly) {
-      const direct = directFileResults.get(entry.id);
-      if (direct?.verified) runtimeVerified.push(entry.id);
-      else stillStatic.push(direct?.reason ? { ...entry, reason: direct.reason } : entry);
-    }
-    staticOnly.length = 0;
-    staticOnly.push(...stillStatic);
 
     const reasons: Record<string, number> = {};
     for (const entry of staticOnly) reasons[entry.reason] = (reasons[entry.reason] ?? 0) + 1;
@@ -675,7 +1179,9 @@ describe("closed collections — evidence strength, joined on identity", () => {
     // eslint-disable-next-line no-console
     console.log(
       `[closed-collection] ${statics.length} declaration sites scanned; ` +
-        `${runtimeVerified.length} VERIFIED AT RUNTIME (module index, or the declaring file joined on file+name); ` +
+        `${runtimeVerified.length} VERIFIED AT RUNTIME — ` +
+        `${byIdentity} on the IDENTITY join (declaring file, file+name), ` +
+        `${bySpelling} on the weaker (module, spelling) join; ` +
         `${staticOnly.length} verified by declaration site only — ` +
         Object.entries(reasons).map(([r, n]) => `${n} ${r}`).join("; "),
     );
@@ -688,6 +1194,15 @@ describe("closed collections — evidence strength, joined on identity", () => {
     // Both halves must be non-empty, else the split proves nothing.
     expect(runtimeVerified.length).toBeGreaterThan(50);
     expect(staticOnly.length).toBeGreaterThan(0);
+    expect(byIdentity + bySpelling).toBe(runtimeVerified.length);
+    // THE POINT OF THE INVERSION, asserted rather than described: the identity join must
+    // carry the overwhelming majority of the verified population. Before the tiers were
+    // swapped this was the other way round — ~138 identities were claimed by the spelling
+    // join simply because it ran first. If a future change re-orders the tiers, or breaks
+    // the declaring-file import, this ratio collapses and says so.
+    expect(byIdentity).toBeGreaterThan(runtimeVerified.length * 0.9);
+    // ...and the residue left on the spelling join must stay small enough to audit by eye.
+    expect(bySpelling).toBeLessThan(20);
   });
 });
 
@@ -839,10 +1354,26 @@ describe("closed collections — nothing branches on the REPRESENTATION of a voc
    * turns that into one fast failure at the source: production code must not branch on the
    * constructor of something that may be a vocabulary.
    *
-   * The primitive is the ONE legitimate user — telling a branded collection from a facade
-   * is precisely its job — so it is exempted by path, not by pattern.
+   * Telling a branded collection from a facade is precisely the primitives' job, so they
+   * are exempted BY PATH, never by pattern — and every exemption is anti-vacuity-checked
+   * below, so an exempted file that stops containing the use it was exempted for is a
+   * failure rather than a quietly widened hole.
    */
   const PRIMITIVE = "src/modules/kernel/workflows/sealed-collections.ts";
+  /**
+   * The neutral core's deliberate, weaker duplicate of the primitive. It must REFUSE a
+   * branded Set/Map rather than "freeze" one — it cannot build the facade — and refusing
+   * requires recognizing one. Exempted for exactly the same reason as the primitive, and
+   * for nothing else: this is the only `instanceof Set/Map` the file may contain.
+   */
+  const NEUTRAL_DUPLICATE = "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts";
+  const EXEMPT: Record<string, { minHits: number; why: string }> = {
+    [PRIMITIVE]: { minHits: 3, why: "the kernel primitive — distinguishing brand from facade IS its job" },
+    [NEUTRAL_DUPLICATE]: {
+      minHits: 1,
+      why: "the import-closed core's duplicate — it must recognize a branded Set/Map in order to refuse it",
+    },
+  };
 
   const instanceofSetHits = (rel: string, text: string): string[] => {
     const source = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -863,23 +1394,32 @@ describe("closed collections — nothing branches on the REPRESENTATION of a voc
     return hits;
   };
 
-  it("no production file outside the primitive branches on instanceof Set/Map", () => {
+  it("no production file outside the two primitives branches on instanceof Set/Map", () => {
     const offenders: string[] = [];
     for (const root of ["src", "scripts", "hooks"]) {
       for (const file of walkFiles(path.join(REPO, root))) {
         const rel = path.relative(REPO, file).replace(/\\/g, "/");
-        if (rel === PRIMITIVE) continue;
+        if (EXEMPT[rel]) continue;
         offenders.push(...instanceofSetHits(rel, fs.readFileSync(file, "utf8")));
       }
     }
     expect(offenders.sort()).toEqual([]);
   });
 
-  it("ANTI-VACUITY: the matcher DOES see the primitive's own legitimate uses", () => {
-    // If this drops to zero the AST matcher stopped matching, and the guard above would
-    // pass happily over a repo full of `instanceof Set`.
-    const text = fs.readFileSync(path.join(REPO, PRIMITIVE), "utf8");
-    expect(instanceofSetHits(PRIMITIVE, text).length).toBeGreaterThan(2);
+  it("ANTI-VACUITY: the matcher DOES see each exempted file's legitimate uses", () => {
+    // An exemption is a hole in the guard above. If the matcher stopped matching, or an
+    // exempted file stopped containing the use it was exempted FOR, the guard would pass
+    // happily over a repo full of `instanceof Set` — and the exemption would be pure cost.
+    // Asserting a per-file floor makes both failures loud.
+    for (const [rel, { minHits, why }] of Object.entries(EXEMPT)) {
+      const text = fs.readFileSync(path.join(REPO, rel), "utf8");
+      expect({ rel, why, atLeast: minHits, found: instanceofSetHits(rel, text).length >= minHits }).toEqual({
+        rel,
+        why,
+        atLeast: minHits,
+        found: true,
+      });
+    }
   });
 });
 
@@ -1009,7 +1549,7 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
     }
   });
 
-  it("DOCUMENTS the divergence: only the kernel primitive can CLOSE a Set", () => {
+  it("DOCUMENTS the divergence: the kernel primitive CLOSES a Set, the core REFUSES one", () => {
     // The kernel primitive replaces the Set with a frozen FACADE that has no [[SetData]]
     // slot, so neither the method nor the intrinsic can reach membership.
     const closed = deepFreeze({ names: sealSet(["x"], "TEST") }) as { names: ReadonlySet<string> };
@@ -1018,15 +1558,78 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
     expect(() => Set.prototype.add.call(closed.names, "y")).toThrow(TypeError);
     expect(closed.names.has("y")).toBe(false);
 
-    // The neutral core cannot call `defineProperty` and cannot build the facade either
-    // (both need bindings outside NEUTRAL_PURE_INTRINSIC_ROOTS), so its copy can only
-    // FREEZE a Set — which closes nothing while `Object.isFrozen` reports success. That is
-    // precisely the false green this rail exists to catch, so the next test makes the
-    // situation unreachable rather than tolerable.
-    const notClosed = neutralFreeze({ names: new Set(["x"]) }) as { names: Set<string> };
-    expect(Object.isFrozen(notClosed.names)).toBe(true);
-    notClosed.names.add("y");
-    expect(notClosed.names.has("y")).toBe(true);
+    // ROUND-1 P2 #6. The core cannot build the facade — sealing needs `defineProperty`,
+    // which `neutral-core-boundary.ts` rejects as a reflection call — so its copy USED to
+    // fall through to `Object.freeze`, which closes nothing while `Object.isFrozen`
+    // reports success. That false green was reachable, because `neutralOutcome` freezes
+    // whatever `facts` it is handed and the caller keeps a live reference:
+    //
+    //     const allowed = new Set(["required"]);
+    //     const outcome = neutralOutcome({ ..., facts: { allowed } });
+    //     allowed.clear(); allowed.add("bypass");     // the "machine truth" changed
+    //
+    // It now REFUSES instead of pretending, which is the only honest option available
+    // inside the closure.
+    expect(() => neutralFreeze({ names: new Set(["x"]) })).toThrow(/sealSet|refusing/);
+    expect(() => neutralFreeze({ pairs: new Map([["k", "v"]]) })).toThrow(/sealMap|refusing/);
+  });
+
+  it("and the refusal reaches neutralOutcome — a mutable Set cannot become machine truth", () => {
+    // The static prohibition ("no Set reachable from a NEUTRAL_* export") only ever scanned
+    // constants. This is the DYNAMIC path it could not constrain: a value handed in at
+    // runtime and frozen into the returned outcome.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { neutralOutcome } = require(path.join(REPO, "src", "modules", "lifecycle", "index.ts")) as {
+      neutralOutcome: (input: Record<string, unknown>) => unknown;
+    };
+    const allowed = new Set(["required"]);
+    expect(() =>
+      neutralOutcome({
+        type: "guild.policy_outcome.v1",
+        disposition: "succeeded",
+        facts: { allowed },
+      }),
+    ).toThrow(TypeError);
+    // The equivalent frozen-array fact is accepted, so the refusal is narrow rather than a
+    // blanket rejection of `facts`.
+    expect(() =>
+      neutralOutcome({
+        type: "guild.policy_outcome.v1",
+        disposition: "succeeded",
+        facts: { allowed: Object.freeze(["required"]) },
+      }),
+    ).not.toThrow();
+  });
+
+  it("PINS the residue the core cannot close: symbol-keyed and non-enumerable children", () => {
+    // Reaching these needs `Object.getOwnPropertySymbols` / `getOwnPropertyNames` and
+    // avoiding a getter invocation needs `getOwnPropertyDescriptor` — all three are in
+    // `NEUTRAL_REFLECTION_METHOD_NAMES`, so using them turns the core's import closure RED.
+    // The closure is the stronger property, so the gap stays. It is pinned HERE, with the
+    // exact shape, so it is a stated limitation rather than a silent one — and so that a
+    // future boundary change that DOES permit reflection makes this test fail and get
+    // revisited, instead of leaving the weaker walk in place forever.
+    const hidden = Symbol("hidden");
+    const symbolChild = { gate: "closed" };
+    neutralFreeze({ [hidden]: symbolChild });
+    expect(Object.isFrozen(symbolChild)).toBe(false); // <- the documented residue
+
+    const nonEnumChild = { gate: "closed" };
+    const parent = {};
+    Object.defineProperty(parent, "hiddenKey", { value: nonEnumChild, enumerable: false });
+    neutralFreeze(parent);
+    expect(Object.isFrozen(nonEnumChild)).toBe(false); // <- the documented residue
+
+    // The kernel primitive, which is under no such closure, reaches BOTH. That contrast is
+    // the reason the divergence is a boundary trade and not an oversight.
+    const kernelSymbolChild = { gate: "closed" };
+    deepFreeze({ [hidden]: kernelSymbolChild });
+    expect(Object.isFrozen(kernelSymbolChild)).toBe(true);
+    const kernelNonEnumChild = { gate: "closed" };
+    const kernelParent = {};
+    Object.defineProperty(kernelParent, "hiddenKey", { value: kernelNonEnumChild, enumerable: false });
+    deepFreeze(kernelParent);
+    expect(Object.isFrozen(kernelNonEnumChild)).toBe(true);
   });
 
   it("and the kernel primitive REFUSES to pretend it froze a branded Set", () => {
