@@ -364,6 +364,31 @@ export function runPromoteUpstreamCli(argv: string[] = process.argv.slice(2)): v
     const runsDir = path.join(runsBase, runId);
     const manifestPath = path.join(runsDir, "upstream-candidates.json");
 
+    // THE STRICT-SUBDIRECTORY RULE RUNS FIRST, AND THE ORDER IS THE WHOLE POINT.
+    //
+    // I had this second, after `prepareContainedWrite`, and that reintroduced
+    // VARIANT 2(a) — mkdir before the check — inside the migration whose entire
+    // purpose is that ordering. Reproduced: a run-id of `../evil` that slipped
+    // `validateRunId` collapses at `path.join` to `<workspaceRoot>/.guild/evil`,
+    // which IS inside the workspace root, so the primitive accepted it and created
+    // the directory; only then did this rule refuse. The old lexical code refused
+    // before any mkdir. A migration that fixes symlink escapes must not pay for it
+    // with a side effect the predecessor did not have.
+    //
+    // It belongs first on its own merits too: it is PURE (no I/O), so there is no
+    // reason to do filesystem work before asking it. Containment permits equality;
+    // requiring the run dir to sit STRICTLY below the base is this command's rule,
+    // not the primitive's, and it catches a run-id that collapses onto the base
+    // (".", "", trailing-dot forms) even if `validateRunId` misses it.
+    const resolvedRunsDir = path.resolve(runsDir);
+    if (!isWithin(resolvedRunsDir, runsBase) || resolvedRunsDir === runsBase) {
+      process.stderr.write(
+        `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" is not a ` +
+          `strict subdirectory of the runs base\n`,
+      );
+      process.exit(1);
+    }
+
     // MIGRATED to the shared path-containment primitive — THE ELEVENTH HOME of one
     // shape, and the one `run-lifecycle.ts` was pointing at all along ("mirrors the
     // containment assertion in promote-upstream.ts").
@@ -388,24 +413,12 @@ export function runPromoteUpstreamCli(argv: string[] = process.argv.slice(2)): v
     });
     if (isRefused(prepared)) {
       process.stderr.write(
-        `[promote-upstream] ERROR: resolved run dir "${path.resolve(runsDir)}" escapes ` +
+        `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" escapes ` +
           `runs base [${prepared.code}] — ${prepared.detail}\n`,
       );
       process.exit(1);
     }
 
-    // The STRICT-SUBDIRECTORY rule stays local: containment permits equality, and
-    // this caller additionally requires the run dir to be strictly below the base so
-    // a run-id collapsing onto it (".", "", trailing-dot forms) is refused even if
-    // it slips past `validateRunId`. That is this command's rule, not the
-    // primitive's.
-    if (!isWithin(path.resolve(runsDir), runsBase) || path.resolve(runsDir) === runsBase) {
-      process.stderr.write(
-        `[promote-upstream] ERROR: resolved run dir "${path.resolve(runsDir)}" is not a ` +
-          `strict subdirectory of the runs base\n`,
-      );
-      process.exit(1);
-    }
 
     // Determine scanned children for manifest
     const subGuilds = child
