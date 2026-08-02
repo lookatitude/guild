@@ -355,6 +355,36 @@ interface FileEvidence {
   lexicalGuard: boolean;
 }
 
+/**
+ * THE INLINE LEXICAL GUARD — the eleventh copy's shape, and the reason the tenth
+ * being caught was not enough.
+ *
+ * `isLexicalContainmentHelper` only inspects FUNCTION DECLARATIONS, because the
+ * tenth home (`run-lifecycle.ts`) factored its check into a named `assertContained`.
+ * The eleventh (`promote-upstream.ts`) does not factor it at all:
+ *
+ *     const resolvedRunsDir = path.resolve(runsDir);
+ *     if (!resolvedRunsDir.startsWith(runsBase + path.sep)) { …refuse… }
+ *     fs.mkdirSync(runsDir, { recursive: true });
+ *
+ * Same defect, same file-level consequence, no function to recognise. A signal that
+ * only sees the factored form finds the tidy copies and misses the untidy ones —
+ * and the untidy ones are likelier, because factoring it out is what someone does
+ * when they have already thought about it.
+ *
+ * Detected within ONE function scope: a `path.resolve`, a CONTAINMENT comparison,
+ * and a write, with NO `realpath` anywhere in that scope. The comparison must be
+ * `startsWith(<something> + path.sep)` — a bare `path.relative` is deliberately not
+ * enough here, because that is what a label builder does and it produced three
+ * false positives when the helper form was first written.
+ */
+interface InlineGuardEvidence {
+  resolves: boolean;
+  containmentCompare: boolean;
+  writes: boolean;
+  realpath: boolean;
+}
+
 /** Write-ish fs calls. A bounded write is one of these under a root check. */
 const WRITE_CALLS = new Set([
   "mkdirSync",
@@ -489,14 +519,34 @@ function scanSource(text: string, fileName: string): FileEvidence {
     let realpath = false;
     let mkdir = false;
     let climb = false;
+    const inline: InlineGuardEvidence = {
+      resolves: false,
+      containmentCompare: false,
+      writes: false,
+      realpath: false,
+    };
     const visit = (n: ts.Node): void => {
       // Do not descend into a NESTED function scope — it is scanned on its own.
       if (n !== scope && (ts.isFunctionLike(n) as boolean)) {
         scanScope(n);
         return;
       }
-      if (isRealpathCall(n, aliases)) realpath = true;
+      if (isRealpathCall(n, aliases)) {
+        realpath = true;
+        inline.realpath = true;
+      }
       if (isRecursiveMkdir(n, aliases)) mkdir = true;
+      if (ts.isCallExpression(n)) {
+        const cn = calleeName(n, aliases);
+        if (cn === "resolve") inline.resolves = true;
+        if (WRITE_CALLS.has(cn)) inline.writes = true;
+        if (cn === "startsWith") {
+          // A CONTAINMENT comparison specifically: the separator is what makes
+          // `startsWith` a boundary test rather than a prefix match on a label.
+          const arg = n.arguments[0]?.getText() ?? "";
+          if (/path\.sep|sep\b|["'`]\//.test(arg)) inline.containmentCompare = true;
+        }
+      }
       if (isLoop(n) && loopContainsDirnameWalk(n, aliases)) climb = true;
       ts.forEachChild(n, visit);
     };
@@ -505,6 +555,14 @@ function scanSource(text: string, fileName: string): FileEvidence {
     // is asked about the scope itself rather than from inside the child visitor.
     if (containsRecursiveClimb(scope, aliases)) climb = true;
     if (realpath && climb) ev.climb = true;
+    if (
+      inline.resolves &&
+      inline.containmentCompare &&
+      inline.writes &&
+      !inline.realpath
+    ) {
+      ev.lexicalGuard = true;
+    }
     if (realpath && mkdir) ev.boundedWrite = true;
   };
 

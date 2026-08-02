@@ -5,7 +5,12 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns umbrella/subrepo detection, workspace manifests, federated query, and promotion.",
-  "depends_on": ["config", "knowledge", "state"],
+  "depends_on": [
+    "config",
+    "kernel",
+    "knowledge",
+    "state"
+  ],
   "owns": {
     "scripts": [
       "workspace/detect",

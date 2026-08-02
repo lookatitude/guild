@@ -462,6 +462,62 @@ export function emit(base: string, target: string, bytes: string): void {
     );
   });
 
+  test("INLINE LEXICAL GUARD: a check that is never factored into a helper is still detected", () => {
+    seedHome();
+    seedAdopted();
+    // The ELEVENTH home's shape. The tenth (`run-lifecycle.ts`) factored its check
+    // into a named `assertContained`, so the helper-shaped signal found it. The
+    // eleventh (`promote-upstream.ts`) never factored it at all — same defect, same
+    // consequence, no function to recognise. A signal that only sees the factored
+    // form finds the tidy copies and misses the untidy ones, and the untidy ones are
+    // likelier: factoring the check out is what someone does once they have already
+    // thought about it.
+    write(
+      "scripts/lib/inline-guard.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+export function run(base: string, id: string): void {
+  const dir = path.join(base, id);
+  const resolved = path.resolve(dir);
+  if (!resolved.startsWith(base + path.sep)) throw new Error("escapes base");
+  fs.mkdirSync(dir, { recursive: true });
+}
+`
+    );
+    const { sites, findings } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/inline-guard.ts")?.evidence).toContain(
+      "lexical-guard"
+    );
+    expect(findings.map((x) => `${x.code}:${x.path}`)).toContain(
+      "unregistered-site:scripts/lib/inline-guard.ts"
+    );
+  });
+
+  test("the SAME inline shape with a realpath is NOT flagged — the signal is 'lexical', not 'has a startsWith'", () => {
+    seedHome();
+    seedAdopted();
+    // The negative control that makes the previous one mean something. Identical
+    // structure — resolve, startsWith a separator boundary, recursive mkdir — except
+    // the check consults the filesystem. If this were flagged, `lexical-guard` would
+    // just be "saw a boundary comparison near a write", and every correctly-written
+    // caller would trip it.
+    write(
+      "scripts/lib/inline-real.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+export function run(base: string, id: string): void {
+  const dir = path.join(base, id);
+  const resolved = fs.realpathSync(path.resolve(base));
+  if (!path.resolve(dir).startsWith(resolved + path.sep)) throw new Error("escapes base");
+  fs.mkdirSync(dir, { recursive: true });
+}
+`
+    );
+    const { sites } = scanRepo(scratch);
+    const site = sites.find((s) => s.path === "scripts/lib/inline-real.ts");
+    expect(site?.evidence ?? []).not.toContain("lexical-guard");
+  });
+
   test("a `path.relative` used to build a LABEL is not a lexical guard — the signal is structural, not name-based", () => {
     seedHome();
     seedAdopted();
