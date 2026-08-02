@@ -59,7 +59,12 @@ import {
 import {
   CAPABILITY_RESOLVER_MODES,
   type CapabilityResolverMode,
-} from "../src/modules/config/workflows/config-defaults";
+  // INTEGRATION (five-branch stack): via the canonical shim, not the module path.
+  // R-DIST's canonicality check names scripts/lib/shared/config-defaults as the one
+  // import site for this shared module; reaching past it into
+  // src/modules/config/workflows is the NON-canonical copy the rail exists to catch.
+  // The shim is `export *`, so this is a pure re-point.
+} from "./lib/shared/config-defaults";
 import { DEFAULT_SUGGESTION_BUDGET } from "./lib/core/contracts/project-capability-profile";
 
 // ── arg parsing ──────────────────────────────────────────────────────────────
