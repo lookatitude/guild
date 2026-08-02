@@ -158,6 +158,18 @@ function collectAliases(sf: ts.SourceFile): AliasMap {
         }
       }
     }
+    // const rp = fs.realpathSync   (a VALUE alias, not a destructure)
+    if (
+      ts.isVariableDeclaration(n) &&
+      n.name &&
+      ts.isIdentifier(n.name) &&
+      n.initializer !== undefined &&
+      (ts.isPropertyAccessExpression(n.initializer) || ts.isIdentifier(n.initializer))
+    ) {
+      const init = n.initializer.getText().replace(/\s/g, "");
+      const tail = init.split(".").pop() ?? init;
+      note(n.name.getText(), aliases.get(tail) ?? tail);
+    }
     ts.forEachChild(n, visit);
   };
   ts.forEachChild(sf, visit);
@@ -192,8 +204,26 @@ function isRecursiveMkdir(node: ts.Node, aliases: AliasMap): boolean {
   );
 }
 
-/** `path.dirname(x)` — returns the argument's text, or undefined. */
+/**
+ * A PARENT STEP — an expression that yields the parent of a path — returning the
+ * path it steps up from.
+ *
+ * Two forms, because `dirname` is not the only way anyone writes it:
+ *   • `path.dirname(x)` (or any alias of it)
+ *   • `path.parse(x).dir`
+ * Matching only `dirname` made the rail miss the second, which is ordinary code.
+ */
 function dirnameArg(node: ts.Node, aliases: AliasMap): string | undefined {
+  // path.parse(x).dir
+  if (
+    ts.isPropertyAccessExpression(node) &&
+    node.name.getText() === "dir" &&
+    ts.isCallExpression(node.expression) &&
+    calleeName(node.expression, aliases) === "parse"
+  ) {
+    const a = node.expression.arguments[0];
+    return a ? a.getText() : undefined;
+  }
   if (!ts.isCallExpression(node)) return undefined;
   if (calleeName(node, aliases) !== "dirname") return undefined;
   const a = node.arguments[0];
@@ -230,6 +260,45 @@ function loopContainsDirnameWalk(loop: ts.Node, aliases: AliasMap): boolean {
   ts.forEachChild(loop, visit);
   void reassigned;
   return direct;
+}
+
+/**
+ * A RECURSIVE CLIMB — the same walk written without a loop:
+ *
+ *     function canonical(p) { try { return realpathSync(p) } catch { return canonical(dirname(p)) } }
+ *
+ * This is not a contrived evasion; it is how a functional-leaning author writes the
+ * deepest-existing-ancestor walk, and a loop-only scan sees nothing. Detected by a
+ * self-call whose argument contains a parent step.
+ */
+function containsRecursiveClimb(scope: ts.Node, aliases: AliasMap): boolean {
+  const name =
+    (ts.isFunctionDeclaration(scope) || ts.isFunctionExpression(scope)) && scope.name
+      ? scope.name.getText()
+      : ts.isVariableDeclaration(scope.parent ?? scope) &&
+          ts.isIdentifier((scope.parent as ts.VariableDeclaration).name)
+        ? (scope.parent as ts.VariableDeclaration).name.getText()
+        : undefined;
+  if (name === undefined) return false;
+  let found = false;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(n) && n.expression.getText().replace(/\s/g, "") === name) {
+      for (const a of n.arguments) {
+        let hit = false;
+        const scan = (m: ts.Node): void => {
+          if (dirnameArg(m, aliases) !== undefined) hit = true;
+          ts.forEachChild(m, scan);
+        };
+        if (dirnameArg(a, aliases) !== undefined) hit = true;
+        ts.forEachChild(a, scan);
+        if (hit) found = true;
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  ts.forEachChild(scope, visit);
+  return found;
 }
 
 function isLoop(n: ts.Node): boolean {
@@ -269,6 +338,9 @@ function scanSource(text: string, fileName: string): FileEvidence {
       ts.forEachChild(n, visit);
     };
     ts.forEachChild(scope, visit);
+    // The recursive form is a property of THIS scope, not of any child node, so it
+    // is asked about the scope itself rather than from inside the child visitor.
+    if (containsRecursiveClimb(scope, aliases)) climb = true;
     if (realpath && climb) ev.climb = true;
     if (realpath && mkdir) ev.boundedWrite = true;
   };

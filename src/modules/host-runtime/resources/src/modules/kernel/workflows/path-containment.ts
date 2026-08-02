@@ -415,6 +415,20 @@ export interface ContainedWriteResult {
  * A SHORT WRITE IS NOT A WRITE — `writeSync` may return fewer bytes than it was
  * handed, and ignoring the count fsyncs and renames a PREFIX into place while
  * reporting success. The loop below refuses on no progress rather than spinning.
+ *
+ * ── THE WRITE IS BOUND TO THE LOCATION, NOT TO THE NAME ────────────────────────
+ * The temp and the rename both target `prepared.realPath` — the destination as it
+ * RESOLVED when containment was proven — never the caller's logical path. That is
+ * deliberate, and an adversarial pass demonstrated why with a concrete race: with
+ * `root/alias -> root/A`, a write to `root/alias/file` that has its link swapped to
+ * `root/B` between the check and the open still lands in `root/A/file`. Targeting
+ * the logical name instead would have followed the swap.
+ *
+ * The consequence a caller must know: after such a race, the path they PASSED no
+ * longer names the file that was written — `realPath` does, and it is returned for
+ * exactly that reason. Containment is what this guarantees, and containment holds
+ * in both directions of the race; name stability is not on offer, because on a
+ * filesystem where a component can be re-pointed concurrently, nothing can offer it.
  */
 export function writeContainedFile(
   root: string,

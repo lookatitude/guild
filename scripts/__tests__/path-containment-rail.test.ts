@@ -286,6 +286,60 @@ export function f(root: string, target: string): string {
     );
   });
 
+  // THE THREE EVASIONS AN ADVERSARIAL PASS FOUND, each reproduced from its own
+  // experiment. All three are ordinary ways to write this code, not contrivances —
+  // which is exactly why a spelling-and-loop scan missed them.
+  test("EVASION 1: a VALUE alias (`const rp = fs.realpathSync`) does not evade", () => {
+    seedHome();
+    seedAdopted();
+    write(
+      "scripts/lib/aliasvar.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+const rp = fs.realpathSync;
+export function f(p: string): string {
+  while (!fs.existsSync(p)) { p = path.dirname(p); }
+  return rp(p);
+}
+`
+    );
+    const { sites } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/aliasvar.ts")?.evidence).toContain("climb");
+  });
+
+  test("EVASION 2: `path.parse(p).dir` instead of `dirname` does not evade", () => {
+    seedHome();
+    seedAdopted();
+    write(
+      "scripts/lib/parsedir.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+export function f(p: string): string {
+  while (!fs.existsSync(p)) { p = path.parse(p).dir; }
+  return fs.realpathSync(p);
+}
+`
+    );
+    const { sites } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/parsedir.ts")?.evidence).toContain("climb");
+  });
+
+  test("EVASION 3: a RECURSIVE climb with no loop at all does not evade", () => {
+    seedHome();
+    seedAdopted();
+    write(
+      "scripts/lib/recursive.ts",
+      `import * as fs from "node:fs";
+import * as path from "node:path";
+export function canonical(p: string): string {
+  try { return fs.realpathSync(p); } catch { return canonical(path.dirname(p)); }
+}
+`
+    );
+    const { sites } = scanRepo(scratch);
+    expect(sites.find((s) => s.path === "scripts/lib/recursive.ts")?.evidence).toContain("climb");
+  });
+
   test("a loop that is NOT a climb is not a site — the scanner is not just 'saw a loop'", () => {
     seedHome();
     seedAdopted();

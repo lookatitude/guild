@@ -475,6 +475,51 @@ describe("the write is atomic and refuses a link planted at the leaf", () => {
     expect(fs.readdirSync(path.dirname(target))).toEqual(["profile.json"]);
   });
 
+  test("a link swapped BETWEEN the check and the open cannot move the write (adversarial repro)", () => {
+    // Reproduced by an adversarial pass. `root/alias -> root/A`; the link is
+    // re-pointed at `root/B` from inside the first `openSync`. The write must land
+    // where containment was PROVEN, not where the name points afterwards.
+    const { root } = fixture();
+    const a = path.join(root, "A");
+    const b = path.join(root, "B");
+    fs.mkdirSync(a);
+    fs.mkdirSync(b);
+    fs.writeFileSync(path.join(a, "file"), "A0", "utf8");
+    fs.writeFileSync(path.join(b, "file"), "B0", "utf8");
+    const alias = path.join(root, "alias");
+    fs.symlinkSync(a, alias);
+
+    const origOpen = fs.openSync;
+    let swapped = false;
+    (fs as { openSync: typeof fs.openSync }).openSync = ((...args: Parameters<typeof fs.openSync>) => {
+      if (!swapped) {
+        swapped = true;
+        fs.unlinkSync(alias);
+        fs.symlinkSync(b, alias);
+      }
+      return origOpen(...args);
+    }) as typeof fs.openSync;
+
+    let w: ReturnType<typeof writeContainedFile>;
+    try {
+      w = writeContainedFile(root, path.join(alias, "file"), Buffer.from("NEW", "utf8"));
+    } finally {
+      (fs as { openSync: typeof fs.openSync }).openSync = origOpen;
+    }
+
+    expect(swapped).toBe(true); // non-vacuity: the race really happened
+    expect(w.written).toBe(true);
+    // Bound to the LOCATION proven contained…
+    expect(w.realPath).toBe(path.join(fs.realpathSync(a), "file"));
+    expect(fs.readFileSync(path.join(a, "file"), "utf8")).toBe("NEW");
+    // …and the swap target is untouched, which is the property that matters.
+    expect(fs.readFileSync(path.join(b, "file"), "utf8")).toBe("B0");
+    // The caller's NAME no longer refers to the written file. Documented, not a bug:
+    // on a filesystem where a component can be re-pointed concurrently, containment
+    // is available and name stability is not.
+    expect(fs.readFileSync(path.join(alias, "file"), "utf8")).toBe("B0");
+  });
+
   test("an in-root symlink at the leaf is refused rather than followed", () => {
     const { root } = fixture();
     fs.mkdirSync(path.join(root, "out"), { recursive: true });
