@@ -27,6 +27,26 @@
  * fails when a NEW home appears without registration. A fourth independent
  * discovery of the class would mean the primitive shipped without reaching
  * everywhere it was needed; the rail is what makes that impossible to do quietly.
+ *
+ * ── TWO SITES THAT ARE NOT ON THIS BRANCH YET, AND WILL RED WHEN THEY ARRIVE ───
+ * The two lanes that FOUND this class most painfully are not merged into this
+ * base, so their call sites could not be migrated here:
+ *
+ *   feature/cap-loc-learn      scripts/lib/capability/profile-emit.ts
+ *   feature/cap-loc-resolver   scripts/lib/capability/adoption-migrate.ts
+ *
+ * That is not a gap left to good intentions. Running this rail against each lane's
+ * worktree TODAY reports, by name:
+ *
+ *   learn-profiling:  [unregistered-site]   scripts/lib/capability/profile-emit.ts
+ *                     [unregistered-mirror] …/capability/resources/…/profile-emit.ts
+ *   resolver-modes:   [unregistered-site]   scripts/lib/capability/adoption-migrate.ts
+ *                     [unregistered-mirror] …/capability/resources/…/adoption-migrate.ts
+ *
+ * So the integration that brings those lanes onto one tip CANNOT go green until
+ * both adopt the primitive or register a reasoned waiver. The migration of the two
+ * discovering lanes is therefore mechanical rather than remembered — which is the
+ * whole point, since "remembered" is what failed four times.
  */
 
 /** How a registered site relates to the shared primitive. */
