@@ -38,6 +38,8 @@
 import * as crypto from "crypto";
 import * as fsNode from "fs";
 import * as path from "path";
+
+import { checkContained, isRefused } from "../../kernel";
 import type { HostKind } from "../../host-runtime";
 import { resolveSettings } from "../../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../../state";
@@ -777,16 +779,36 @@ export function validateRunId(runId: string): boolean {
 }
 
 /**
- * Assert that `target` is a strict subdirectory of `base` (i.e. starts with
- * `base + path.sep`). Mirrors the containment assertion in promote-upstream.ts.
- * Throws with a clear message on violation.
+ * Assert that `target` is a strict subdirectory of `base`.
+ *
+ * MIGRATED to the shared path-containment primitive, and this one was a real
+ * defect rather than a tidy-up. The version here was PURELY LEXICAL —
+ * `path.resolve` plus `startsWith(base + path.sep)` — which is string algebra and
+ * knows nothing about symlinks: a symlinked `.guild/runs` walked straight through
+ * it while it reported success, guarding a `mkdirSync` + write. That is exactly the
+ * defect the resolver lane rated CRITICAL, sitting in a tenth home nobody had swept.
+ *
+ * It was found by the rail's `lexical-guard` signal, which exists precisely for
+ * this: the climb and bounded-write signals find code someone has ALREADY fixed
+ * once (reaching for `realpath` means they already knew). A purely lexical guard is
+ * the state BEFORE anyone knows.
+ *
+ * `policy: "physical"` matches this file's contract: a run tree whose realpath is
+ * load-bearing provenance must be physically real.
  */
 function assertContained(target: string, base: string, label: string): void {
-  const resolvedTarget = path.resolve(target);
-  const resolvedBase = path.resolve(base);
-  if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
+  const r = checkContained(base, target, { policy: "physical" });
+  if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" escapes runs base "${resolvedBase}"`
+      `[run-lifecycle] ${label}: resolved path "${path.resolve(target)}" escapes runs base ` +
+        `"${path.resolve(base)}" [${r.code}] — ${r.detail}`
+    );
+  }
+  // The original also required a STRICT subdirectory — the base itself is not a
+  // valid target. Containment permits equality, so that half stays local.
+  if (path.resolve(target) === path.resolve(base)) {
+    throw new Error(
+      `[run-lifecycle] ${label}: resolved path "${path.resolve(target)}" is the runs base itself`
     );
   }
 }

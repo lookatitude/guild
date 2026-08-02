@@ -3223,6 +3223,24 @@ var init_sealed_collections = __esm({
   }
 });
 
+// ../src/modules/kernel/workflows/path-containment.ts
+var CONTAINMENT_REFUSAL_CODES;
+var init_path_containment = __esm({
+  "../src/modules/kernel/workflows/path-containment.ts"() {
+    CONTAINMENT_REFUSAL_CODES = Object.freeze([
+      "root-unresolvable",
+      "no-existing-ancestor",
+      "dangling-symlink",
+      "physical-symlink",
+      "outside-root",
+      "leaf-not-regular-file",
+      "mkdir-failed",
+      "parent-traversal",
+      "destination-moved"
+    ]);
+  }
+});
+
 // ../src/modules/kernel/index.ts
 var init_kernel = __esm({
   "../src/modules/kernel/index.ts"() {
@@ -3230,6 +3248,7 @@ var init_kernel = __esm({
     init_yaml_loader();
     init_identifier_tokenize();
     init_sealed_collections();
+    init_path_containment();
   }
 });
 
@@ -6761,6 +6780,9 @@ function resolveGuildRoot(startCwd) {
 // lib/run-trace.ts
 var fs8 = __toESM(require("fs"));
 var path10 = __toESM(require("path"));
+
+// ../src/modules/lifecycle/workflows/run-lifecycle.ts
+init_kernel();
 
 // ../src/modules/config/index.ts
 init_config_defaults();

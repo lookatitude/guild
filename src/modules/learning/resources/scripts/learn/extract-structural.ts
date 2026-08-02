@@ -63,6 +63,7 @@ import {
 import { validateGraph } from "./lib/schema";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 import * as fs from "fs";
+import { assertContained as assertSharedContained } from "../../src/modules/kernel/workflows/path-containment";
 
 /**
  * FIX-T4.1-1: resolve `p` and PROVE it stays within `root` before any read/write.
@@ -73,24 +74,12 @@ import * as fs from "fs";
  */
 function assertContained(root: string, p: string, label: string): string {
   const resolved = path.resolve(root, p);
-  const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : path.resolve(root);
-  let existing = resolved;
-  const tail: string[] = [];
-  while (!fs.existsSync(existing)) {
-    tail.unshift(path.basename(existing));
-    const parent = path.dirname(existing);
-    if (parent === existing) break; // reached filesystem root
-    existing = parent;
-  }
-  const realFinal = path.join(fs.realpathSync(existing), ...tail);
-  const rel = path.relative(realRoot, realFinal);
-  const contained = rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
-  if (!contained) {
-    throw new Error(
-      `[extract-structural] refusing ${label} outside repo root: ` +
-      `"${p}" → ${realFinal} (root ${realRoot})`,
-    );
-  }
+  // MIGRATED to the shared primitive. The private climb this replaced used
+  // `existsSync`, which FOLLOWS symlinks, so a DANGLING symlink read as absent and
+  // the check validated its in-root parent instead — and its containment test used
+  // `rel.startsWith("..")`, which calls a sibling literally named `..guild` an
+  // escape. Both are fixed at the one home rather than here.
+  assertSharedContained(root, resolved, `[extract-structural] ${label}`);
   return resolved;
 }
 

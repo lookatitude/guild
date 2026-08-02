@@ -71,7 +71,7 @@
       "id": "learn/extract-structural",
       "source_path": "scripts/learn/extract-structural.ts",
       "resource_path": "resources/scripts/learn/extract-structural.ts",
-      "sha256": "0cb788ba00604c767b824a81568cad4d12391e0817d78c619c8d3a7a75d46d62"
+      "sha256": "96ff0149178f8f7a97b47c4dd70f8acd052a99d903ed654c344055fa4cfae50d"
     },
     {
       "category": "scripts",
@@ -239,7 +239,7 @@
       "id": "learn/lib/similarity",
       "source_path": "scripts/learn/lib/similarity.ts",
       "resource_path": "resources/scripts/learn/lib/similarity.ts",
-      "sha256": "8c3291804808fdc32cdb9e063c1f8881147b28d11b495397010ee37175093f04"
+      "sha256": "6afeba1de442d01bd1d35c81c8fba5112033da696b8b5c8a577ebec2bdedd93c"
     },
     {
       "category": "scripts",

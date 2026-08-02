@@ -3205,6 +3205,19 @@ function deepFreeze(value, options = {}) {
   return value;
 }
 
+// ../src/modules/kernel/workflows/path-containment.ts
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
+
 // ../src/modules/distribution/workflows/inventory-schema.ts
 var INVENTORY_CATEGORIES = Object.freeze([
   "commands",

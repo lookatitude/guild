@@ -79,6 +79,10 @@ import {
   PROJECT_CAPABILITY_PROFILE_SCHEMA,
   validateProjectCapabilityProfileV1,
 } from "../core/contracts/project-capability-profile";
+import {
+  checkContained,
+  isRefused,
+} from "../../../src/modules/kernel/workflows/path-containment";
 import { isRealRunDir } from "./candidate-surface";
 import { classifyContextManagerWrite } from "./context-manager-contract";
 
@@ -613,61 +617,21 @@ function captureEmitOptions(opts: unknown): CapturedOptions | null {
  * destination rather than a path that is not there yet.
  */
 function isContainedRealPath(projectRoot: string, abs: string): boolean {
-  try {
-    const rootReal = fs.realpathSync(projectRoot);
-    // The climb must never treat the PROJECT ROOT ITSELF as a disqualifying
-    // symlink. Reported: with `/tmp/alias -> /tmp/real` as the project root and a
-    // destination that did not exist yet, the climb reached the root symlink and
-    // refused a perfectly legitimate write. The root is resolved separately, so
-    // its own link-ness is already accounted for.
-    let rootProbe: string;
-    try {
-      rootProbe = fs.realpathSync(path.resolve(projectRoot));
-    } catch {
-      return false;
-    }
-    let probe = abs;
-    // Climb to the deepest ancestor that EXISTS AS A PATH ENTRY.
-    //
-    // `lstatSync`, NOT `existsSync`. Reported defect: `existsSync` FOLLOWS
-    // symlinks, so a DANGLING symlink reads as "does not exist" — the climb then
-    // skipped past it and validated its in-root parent instead. Reproduced with
-    //     .../capability/profile.json -> /tmp/outside/escaped.json
-    // where the target did not yet exist: the check passed and the write created
-    // the file outside the root. `lstatSync` sees the LINK itself, so a dangling
-    // symlink is a present entry and is caught below.
-    for (;;) {
-      let st: fs.Stats | null = null;
-      try {
-        st = fs.lstatSync(probe);
-      } catch {
-        st = null;
-      }
-      if (st !== null) {
-        // A symlink anywhere on the resolved path — including a dangling one at
-        // the leaf — means this path is not the path it appears to be. The one
-        // exception is the project root itself (see rootProbe above).
-        if (st.isSymbolicLink()) {
-          let probeReal: string;
-          try {
-            probeReal = fs.realpathSync(probe);
-          } catch {
-            return false;
-          }
-          if (probeReal !== rootProbe) return false;
-        }
-        break;
-      }
-      const parent = path.dirname(probe);
-      if (parent === probe) return false;
-      probe = parent;
-    }
-    const probeReal = fs.realpathSync(probe);
-    const rel = path.relative(rootReal, probeReal);
-    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
-  } catch {
-    return false;
-  }
+  // MIGRATED ONTO THE SHARED PRIMITIVE (feature/path-containment, task #28) during
+  // the six-branch integration. This lane's own climb was one of the four
+  // independent rediscoveries that motivated extracting it.
+  //
+  // NOTHING THIS COPY PROVED IS LOST, and that was worth checking rather than
+  // assuming, because this copy was the STRICTEST of the four:
+  //   - the dangling-symlink catch (`lstat`, not `existsSync`) — the defect this
+  //     copy found first — is the primitive's `dangling-symlink` refusal;
+  //   - the project-root escape hatch, which kept a SYMLINKED project root working,
+  //     survives GENERALISED: the primitive matches realpath at every node, so the
+  //     root stops being a special case and the same rule covers it.
+  // The primitive's stricter `policy: "physical"` (refuse ANY symlink below the
+  // root) stays available as a parameter; this site keeps the default `"resolve"`,
+  // which is the behaviour this lane shipped and tested.
+  return !isRefused(checkContained(projectRoot, abs));
 }
 
 /**

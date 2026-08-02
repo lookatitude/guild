@@ -3228,6 +3228,19 @@ function deepFreeze(value, options = {}) {
   return value;
 }
 
+// ../src/modules/kernel/workflows/path-containment.ts
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
+
 // ../src/modules/config/workflows/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = Object.freeze([
   "I'm not sure",

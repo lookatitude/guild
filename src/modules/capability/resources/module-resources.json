@@ -22,7 +22,7 @@
       "id": "lib/capability/adoption-migrate",
       "source_path": "scripts/lib/capability/adoption-migrate.ts",
       "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
-      "sha256": "362b38ddf93c470cd8aa4097ec7ef0d3de66f4b433fb9fbb33180eae2c1d05b3"
+      "sha256": "eccc409014da3e0365677f2c1a05d1dffbd663199469ac4de4b75ed535afe0bd"
     },
     {
       "category": "scripts",
@@ -64,7 +64,7 @@
       "id": "lib/capability/profile-emit",
       "source_path": "scripts/lib/capability/profile-emit.ts",
       "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
-      "sha256": "3bf510fca84ee8f11d7f3c6c99ca38d6beb66967534ab4beb5e9783b1138aba7"
+      "sha256": "89bb86ac54543dddfc97cc73002df138acc694e0a24197c1d2048e1e2af283ec"
     },
     {
       "category": "scripts",

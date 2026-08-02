@@ -3361,6 +3361,19 @@ function loadYamlApi() {
   );
 }
 
+// ../src/modules/kernel/workflows/path-containment.ts
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
+
 // ../src/modules/state/workflows/frontmatter.ts
 function readScalarField(content, key) {
   const prefix = key + ":";

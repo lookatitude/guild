@@ -36,7 +36,7 @@
       "id": "check-bundle-determinism",
       "source_path": "scripts/check-bundle-determinism.ts",
       "resource_path": "resources/scripts/check-bundle-determinism.ts",
-      "sha256": "c4d24dd72680f658c18e17b02a4328919410b26a5b63ef10c9d98c4d67167a33"
+      "sha256": "4784ec576452c93df36ac0cc372d512a01b631564cdb024719a8341432eb34af"
     },
     {
       "category": "scripts",
@@ -92,7 +92,7 @@
       "id": "lib/command-registry",
       "source_path": "scripts/lib/command-registry.ts",
       "resource_path": "resources/scripts/lib/command-registry.ts",
-      "sha256": "1344f1b4d2fbbdc445943957c033dee447997481615b4f4003834f2672213ece"
+      "sha256": "3daaeffd629847c82bf798020d0461a8ddb59b216a97d5d02ee913bf38d9a40f"
     },
     {
       "category": "scripts",
@@ -155,7 +155,7 @@
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "resource_path": "resources/scripts/lib/skill-source-transform.ts",
-      "sha256": "6079b6d938c7231a089db109cc17182aaee92a5e65d2ec0d7d33421e4e4a92a0"
+      "sha256": "89577b0e0aa3af1011de629475437f0bb399c5683e8cf466102ccf2771a695bd"
     },
     {
       "category": "scripts",

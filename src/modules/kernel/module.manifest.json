@@ -18,7 +18,10 @@
       "UserPromptSubmit:check-skill-coverage.sh"
     ],
     "scripts": [
+      "check-path-containment",
       "lib/module-manifest",
+      "lib/path-containment-registry",
+      "lib/path-containment-scan",
       "types/js-yaml.d"
     ]
   }

@@ -78,6 +78,10 @@ import {
   type LegacyHome,
 } from "../core/contracts/adoption-manifest";
 import {
+  checkContained,
+  isRefused,
+} from "../../../src/modules/kernel/workflows/path-containment";
+import {
   PROJECT_DEFINITION_REF_SCHEMA,
   validateProjectDefinitionRefV1,
   type DefinitionLayer,
@@ -298,37 +302,23 @@ function toPosixRel(abs: string, root: string): string | null {
  * and `writeFileSync` lands the adopted template outside the project. The same
  * escape, one level up.
  *
- * Containment is therefore proven on the deepest ANCESTOR that actually exists,
- * via `realpathSync` — which resolves every intermediate link — rather than on the
- * final component. `path.resolve` alone cannot do this: it is pure string algebra
- * and knows nothing about links.
+ * MIGRATED ONTO THE SHARED PRIMITIVE (feature/path-containment, task #28) during the
+ * six-branch integration. This file's own climb is gone, and losing it CLOSES A REAL
+ * HOLE rather than merely deduplicating: it probed with `existsSync`, which FOLLOWS
+ * symlinks, so a DANGLING symlink read as "absent", the climb stepped straight past
+ * it and proved containment of its in-root PARENT instead. The shared climb probes
+ * with `lstat`, sees the link itself, and refuses with `dangling-symlink`. The learn
+ * lane had already found and fixed exactly this in its own copy — which is the
+ * argument for one primitive, made concrete.
  *
- * Returns null when the path is contained, or a reason string when it is not.
+ * Returns null when the path is contained, or a reason string when it is not. The
+ * reason now carries the primitive's CLOSED refusal code alongside the prose, so a
+ * caller can tell "outside the root" from "the root itself does not resolve".
  */
 function escapesProjectRoot(abs: string, root: string): string | null {
-  let realRoot: string;
-  try {
-    realRoot = fs.realpathSync(root);
-  } catch {
-    return `project root ${root} does not resolve`;
-  }
-  // Walk up to the deepest existing ancestor; everything below it will be created
-  // by us, inside whatever that ancestor really is.
-  let probe = abs;
-  for (;;) {
-    if (fs.existsSync(probe)) break;
-    const parent = path.dirname(probe);
-    if (parent === probe) return `no existing ancestor of ${abs}`;
-    probe = parent;
-  }
-  let realProbe: string;
-  try {
-    realProbe = fs.realpathSync(probe);
-  } catch {
-    return `${probe} does not resolve`;
-  }
-  if (realProbe !== realRoot && !realProbe.startsWith(realRoot + path.sep)) {
-    return `${abs} resolves outside the project root (${realProbe})`;
+  const containment = checkContained(root, abs);
+  if (isRefused(containment)) {
+    return `${abs} is not contained by the project root [${containment.code}] — ${containment.detail}`;
   }
   return null;
 }
