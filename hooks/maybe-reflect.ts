@@ -317,11 +317,25 @@ const CODEX_SKIP_EXIT_CODE = 2;
  * with the formats already on disk.
  */
 function reflectionRecordsCodexSkip(content: string): boolean {
-  // (1) Canonical frontmatter field.
+  // (1) Canonical frontmatter field — AUTHORITATIVE IN BOTH DIRECTIONS.
   if (/^\s*codex_review:\s*SKIPPED\s*$/im.test(content)) return true;
+  // An explicit RAN ends the question here. The legacy heuristics below are a
+  // FALLBACK for reflections written before the canonical field existed; they
+  // must never override an explicit statement that review ran.
+  //
+  // Why this matters (observed 2026-08-02): heuristic (2) treats a reflection
+  // as a skip merely because its `proposals.skill_improvement` list NAMES
+  // `guild:codex-review`. A reflection that ran ten codex rounds AND proposed
+  // an improvement to that skill therefore counted as a skip. Three such
+  // reflections in a row armed the blocking sentinel and hard-failed the next
+  // G-gate — i.e. the guard punished exactly the runs doing the most codex
+  // review. The bug is self-reinforcing: improving codex-review marks you as
+  // skipping it.
+  if (/^\s*codex_review:\s*RAN\s*$/im.test(content)) return false;
   // (3) Body / prose marker.
   if (/<!--\s*codex_review:\s*SKIPPED\s*-->/i.test(content)) return true;
-  // (2) Legacy skill_improvement list naming guild:codex-review.
+  // (2) Legacy skill_improvement list naming guild:codex-review — only reached
+  // when the reflection carries NO canonical field at all.
   const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
   if (m && m[1].includes("guild:codex-review")) return true;
   return false;

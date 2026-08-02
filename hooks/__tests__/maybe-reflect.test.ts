@@ -517,7 +517,15 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
   }
 
   // Write a reflection file with a codex-skip marker in the given format.
-  type MarkerStyle = "frontmatter" | "legacy-list" | "body-marker" | "none";
+  type MarkerStyle =
+    | "frontmatter"
+    | "legacy-list"
+    | "body-marker"
+    | "none"
+    // RAN in the canonical field WHILE also proposing an improvement to
+    // guild:codex-review — the shape that falsely armed the guard (2026-08-02).
+    | "ran-plus-codex-proposal"
+    | "ran";
   function writeReflection(
     cwd: string,
     name: string,
@@ -542,9 +550,60 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
       case "none":
         body = "---\nschema_version: guild.reflection.v1\n---\n\n# reflection\n";
         break;
+      case "ran-plus-codex-proposal":
+        body =
+          "---\nschema_version: guild.reflection.v1\nproposals:\n  skill_improvement: [guild:verify-done, guild:codex-review]\ncodex_review: RAN\n---\n\n# reflection\n";
+        break;
+      case "ran":
+        body =
+          "---\nschema_version: guild.reflection.v1\ncodex_review: RAN\n---\n\n# reflection\n";
+        break;
     }
     fs.writeFileSync(path.join(dir, name), body, "utf8");
   }
+
+  // REGRESSION (2026-08-02): three reflections that ALL recorded
+  // `codex_review: RAN` armed the blocking sentinel and hard-failed the next
+  // G-gate. The predicate consulted the legacy "skill_improvement names
+  // guild:codex-review" heuristic even when the canonical field said RAN — so a
+  // run that executed ten codex rounds AND proposed an improvement to the
+  // codex-review skill counted as a SKIP. Self-reinforcing: improving
+  // codex-review marked you as skipping it. The canonical field is
+  // authoritative in BOTH directions; the heuristics are a pre-field fallback.
+  it("RAN + a codex-review improvement proposal does NOT arm the guard", () => {
+    seedSelfBuild(tmpDir);
+    writeReflection(tmpDir, "r1.md", "ran-plus-codex-proposal");
+    writeReflection(tmpDir, "r2.md", "ran-plus-codex-proposal");
+    writeReflection(tmpDir, "r3.md", "ran-plus-codex-proposal");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      GUILD_RUN_BINDING_REF: "rb-test-test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).not.toMatch(/DISCIPLINE HARD-FAIL/);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".guild", "codex-skip-streak.json")),
+    ).toBe(false);
+  });
+
+  it("a single RAN at the top BREAKS an older skip streak", () => {
+    seedSelfBuild(tmpDir);
+    // Older files first so mtime ordering puts the RAN newest.
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    writeReflection(tmpDir, "r2.md", "frontmatter");
+    writeReflection(tmpDir, "r3.md", "frontmatter");
+    writeReflection(tmpDir, "r4.md", "ran");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+      GUILD_RUN_BINDING_REF: "rb-test-test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).not.toMatch(/DISCIPLINE HARD-FAIL/);
+  });
 
   it("does NOT arm outside self-build context (no plugin/AGENTS.md)", () => {
     // 3 skip-marked reflections but no self-build marker → silent, exit 0.
@@ -638,3 +697,19 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     ).toBe(false);
   });
 });
+
+/**
+ * REGRESSION (2026-08-02): the codex-skip guard hard-failed against three
+ * reflections that all recorded `codex_review: RAN`.
+ *
+ * `reflectionRecordsCodexSkip` checked the legacy heuristic — "does
+ * `proposals.skill_improvement` NAME guild:codex-review?" — even when the
+ * canonical frontmatter field explicitly said RAN. So a reflection that ran ten
+ * codex rounds AND proposed an improvement to the codex-review skill counted as
+ * a SKIP. Three in a row armed the blocking sentinel and hard-failed the next
+ * G-gate, i.e. the guard punished precisely the runs doing the most review, and
+ * self-reinforced: improving codex-review marked you as skipping it.
+ *
+ * The canonical field is authoritative in BOTH directions; the legacy
+ * heuristics are a fallback for reflections that predate it.
+ */

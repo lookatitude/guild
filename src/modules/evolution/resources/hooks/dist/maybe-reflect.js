@@ -6541,6 +6541,7 @@ var CODEX_SKIP_THRESHOLD = 3;
 var CODEX_SKIP_EXIT_CODE = 2;
 function reflectionRecordsCodexSkip(content) {
   if (/^\s*codex_review:\s*SKIPPED\s*$/im.test(content)) return true;
+  if (/^\s*codex_review:\s*RAN\s*$/im.test(content)) return false;
   if (/<!--\s*codex_review:\s*SKIPPED\s*-->/i.test(content)) return true;
   const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
   if (m && m[1].includes("guild:codex-review")) return true;
