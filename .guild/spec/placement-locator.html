@@ -52,8 +52,8 @@ ul.tight li{margin:.25rem 0}
 <p class="lede">A design for replacing independently-declared <code>kind</code>/<code>id</code>/<code>layer</code> in the S2/S3 contract surface with one authority-bound placement value — revised after an adversarial review returned <strong>REJECT</strong> on four counts, every one of which I reproduced.</p>
 <div class="meta">
   <span><b>Task</b> #29 (DESIGN)</span>
-  <span><b>Version</b> v2 — revised after REJECT</span>
-  <span><b>Status</b> Proposed; needs re-review</span>
+  <span><b>Version</b> v2 — revised after REJECT, then REJECTED AGAIN</span>
+  <span><b>Status</b> NOT adopted; two rounds, two rejections</span>
   <span><b>Base</b> <code>fix/s3-open-defects</code> @ <code>3595ac3</code></span>
   <span><b>Branch</b> <code>design/placement-locator</code></span>
 </div>
@@ -63,7 +63,7 @@ ul.tight li{margin:.25rem 0}
 <p class="big-quote" style="margin-top:0;border-left-color:var(--bad-br)">The pattern this document is about — a component discovered by a defect rather than by design — applied to the document itself, twice.</p>
 <p><strong>Both halves of that matter, and a reader who takes only the first will repeat this.</strong> It is the strongest argument <em>for</em> the design: the failure mode is real enough to catch its own author, mid-proposal, on the surface he was proposing to fix. It is equally the strongest argument against trusting <em>any single draft</em> of it — <strong>including the next one, and including this one.</strong></p>
 <p><strong>Concretely: v1 was rejected, and the rejection was right.</strong> An adversarial G-spec round returned <strong>REJECT</strong> with four P1 findings. I verified all four against the live tree and one of them by execution. The <em>direction</em> survived review — “replacing independently declared <code>kind</code>/<code>id</code>/<code>layer</code> with a validated canonical placement is the right direction” — but four load-bearing specifics were wrong, including one where I <em>misread <code>ls skills/</code> and called two skills “tiers”</em>, and one where <em>my own correction from two commits earlier was still wrong</em>. <a href="#whatchanged">§12 lists every change and what forced it.</a></p>
-<p>The practical consequence for whoever reads this next: <strong>this document has been reviewed once and revised once; the revisions themselves have not been reviewed.</strong> Treat §§3–7 as proposals with a known history of being wrong in exactly the way they warn about, not as settled.</p>
+<p>The practical consequence for whoever reads this next: <strong>this document has now been reviewed TWICE and rejected TWICE.</strong> Round 2 reviewed the revisions rather than the original objections and returned <strong>REJECT</strong> with five further P1 findings — <em>none of them repeats from round 1</em>. Treat every section below as a proposal with a demonstrated history of being wrong in exactly the way it warns about. <a href="#round2">§14 records what round 2 found and what it means.</a></p>
 </div>
 
 <nav class="toc">
@@ -81,6 +81,7 @@ ul.tight li{margin:.25rem 0}
   <li><a href="#migration">Migration cost — <em>not</em> near-zero</a></li>
   <li><a href="#antivacuity">Verification requirements</a></li>
   <li><a href="#whatchanged">What changed in v2, and what forced each change</a></li>
+  <li><a href="#round2">Round 2, and what two rejections mean</a></li>
   <li><a href="#decision">The decision being asked for</a></li>
 </ol>
 </nav>
@@ -356,6 +357,39 @@ interface DerivedPlacement {
 <p class="big-quote">Every one of these was found by someone reading the repository more carefully than I did. The pattern this document is about — a component discovered by a defect rather than by design — applied to the document itself, twice: once in v1's grammar and once in v1's cycle key.</p>
 </section>
 
+<section id="round2">
+<h2>14. Round 2, and what two rejections mean</h2>
+
+<div class="callout bad">
+<p><strong>Round 2 reviewed the revisions and returned REJECT — five P1 findings, none a repeat of round 1's.</strong> The revisions fixed what round 1 found and introduced a new class of defect while doing it. That is the third demonstration, on this document, of the phenomenon the document is about.</p>
+</div>
+
+<h3>Every round-2 P1 is about AUTHORITY</h3>
+<p>This is the useful part, because it is one theme rather than five accidents. v1 declared things that could contradict the repository. v2 replaced those declarations with <em>authorities</em> — and the authorities either do not exist, cannot be trusted, or cannot be populated.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>#</th><th>Finding</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td><span class="tag p1">P1</span></td><td><strong>Binding the grammar to <code>guild.inventory.json</code> is a trust inversion.</strong> The inventory <em>validator</em> checks non-empty strings and uniqueness — not that a path exists or belongs to its category. Demonstrated by forging <code>{id:"forged-skill", source_path:".guild/agents/not-a-skill.md"}</code> into <code>skills[]</code>: <code>validateInventoryV1</code> returned <code>valid: true</code>. The <em>generator</em> is sound because it rebuilds from live discovery; that guarantee does not transfer to an arbitrary on-disk inventory consumed later. Installed-tree placements are not emitted at all.</td><td><strong>OPEN.</strong> Needs three explicit authority constructors (fresh source discovery; a shipped host-projection manifest; a per-root fresh roster), each carrying provenance/hash and refusing stale or absent authority.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td><strong>The <code>RootRegistry</code> cannot be built from existing data.</strong> <code>guild.yaml</code> carries <code>name</code> and <code>kind</code>; adoption uses <code>project_id</code>; no rule says they are equal. The workspace record carries <code>kind: sub-guild|sub-project</code>, not <code>rootKind</code>. And the federation ADR calls <code>workspace.json</code> a <em>derived, deletable projection</em> — not a system of record.</td><td><strong>OPEN.</strong> Needs a canonical <code>project_id</code> in <code>guild.root.v1</code>, uniqueness validation, and a registry built by using federation only to <em>locate</em> roots then reading each root's own manifest.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td><strong>Rollback is unmapped.</strong> §2 says the old key was overloaded across five questions; §7 supplies three relations and never assigns rollback. Rollback validity requires the named earlier edge to be reversed in both directions, still operative, LIFO/era-valid, and to restore a departed destination — a source key cannot prove any of that.</td><td><strong>OPEN, and §2 is wrong as written:</strong> rollback is not an equivalence relation at all. It needs a directed <code>reverses(rollback, target, history)</code> predicate, and §2 should stop counting it among the five.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td><strong>Evidence-bound historical admission is a requirement dressed as a design.</strong> Neither proposed authority exists — no versioned legacy-production registry, no historical definition registry, and no definition references in this checkout's <code>.guild/runs</code>. Plus a shape contradiction: <code>PlacementV1.path</code> is required relative, while the historical contract deliberately requires <em>absolute</em> paths to preserve the literal citation.</td><td><strong>OPEN.</strong> The legacy productions must be enumerated in the spec, the evidence envelope defined, and the absolute/relative contradiction resolved — with an explicit choice for legitimate migrations whose evidence was never recorded.</td></tr>
+<tr><td><span class="tag p1">P1</span></td><td><strong>Keeping <code>id</code> declared is a retreat, not a resolution.</strong> Once <code>derivePlacement</code> consults the authority, the authority lookup <em>returns</em> the id — so it can be derived even though it cannot be parsed from the path. Keeping it declared recreates the second-opinion problem the design exists to remove. There is also no uniform “frontmatter is authoritative” rule: shipped skills use frontmatter <code>name</code>, project skills use the directory, shipped agents use the filename stem, project agents use frontmatter with a filename fallback — <em>four</em> id sources.</td><td><strong>OPEN.</strong> <code>id</code> returns to <code>DerivedPlacement</code>, obtained from the selected authority. If transport must carry it, name it a redundant asserted/cache field required to equal the derived value.</td></tr>
+<tr><td><span class="tag p2">P2</span></td><td><strong><code>cited_as</code> does not exist.</strong> I referenced it as though it were a field of the current contract; the only occurrence in the repository is this spec. Also “history does not grow” is false — the set of legacy layouts grows every time a current layout is retired.</td><td><strong>OPEN.</strong> Define the field or drop both claims. The defensible property is that each <em>dated</em> legacy-production version is immutable after publication.</td></tr>
+<tr><td><span class="tag p2">P2</span></td><td><strong>The “otherwise unreachable” claim is overstated.</strong> The <em>wildcard</em>, not placement completeness, is what makes reachability total under an unknown hash. An old-tuple wildcard was already expressible — coarser, and over-refusing more histories, but expressible.</td><td><strong>OPEN.</strong> Narrow to: adding the path makes the wildcard placement-complete and avoids false collisions for same-layer moves.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>What two rejections mean, stated rather than rationalised</h3>
+<p>Round 1 found four P1s. Round 2 found five more, none of them repeats. The revisions were not sloppy — each was a direct, evidenced response to a real objection — and they still carried a fresh load-bearing defect apiece.</p>
+<p class="big-quote">A design that keeps acquiring defects one review at a time is the same shape as a contract that keeps acquiring identity components one defect at a time. The document has now reproduced its own subject three times.</p>
+<div class="callout warn">
+<p><strong>The conclusion this supports is about process, not content.</strong> Both rejections agree the <em>direction</em> is right — replacing declared <code>kind</code>/<code>id</code>/<code>layer</code> with a validated canonical placement — and both found the <em>specifics</em> wrong in a new way. Two data points is not proof, but the pattern matches the one this document was written to describe, and the honest reading is that <strong>another same-session revision by the same author is the least likely thing to converge.</strong> That is a recommendation for whoever sequences this, not a decision this document can make.</p>
+</div>
+</section>
+
 <section id="decision">
 <h2>13. The decision being asked for</h2>
 
@@ -363,7 +397,7 @@ interface DerivedPlacement {
 <p><strong>Adopt <code>guild.placement.v1</code> as the canonical locator on both ends of an adoption hop — deriving <code>kind</code> and <code>layer</code>, validating <code>id</code> against frontmatter, binding the grammar and root kinds to existing repository authority, and splitting the overloaded <code>identityOf</code> into three named equivalence relations.</strong></p>
 </div>
 
-<p>This is a <strong>re-review request</strong>, not a claim that the objections are closed. Four P1s were real; each has a revision above, and none of those revisions has itself been reviewed.</p>
+<p><strong>This is NOT currently adoptable, and §14 is why.</strong> Round 1's four P1s were real and were addressed; round 2 then found five more in the addressing. Nine P1 findings across two rounds, no repeats. The direction has survived both reviews; no draft of the specifics has survived one.</p>
 
 <p>If adopted, implementation is its own task with its own adversarial round, sequenced after the integration settles. The residual meanwhile is unchanged and <strong>fails closed</strong>: a same-layer move is inexpressible rather than resolving to wrong bytes.</p>
 
@@ -371,7 +405,7 @@ interface DerivedPlacement {
 </section>
 
 <footer>
-<p><strong>Task</strong> #29 · <strong>v2</strong>, revised after an adversarial REJECT · <strong>Base</strong> <code>fix/s3-open-defects</code> @ <code>3595ac3</code> · <strong>Status</strong> proposed, needs re-review, no code changed.</p>
+<p><strong>Task</strong> #29 · <strong>v2</strong>, revised after REJECT and then REJECTED AGAIN (2 rounds, 9×P1, no repeats) · <strong>Base</strong> <code>fix/s3-open-defects</code> @ <code>3595ac3</code> · <strong>Status</strong> proposed, needs re-review, no code changed.</p>
 <p><strong>Evidence.</strong> Round-8 handover (<code>cf23d20</code>); <code>adoption-manifest.ts</code> (<code>identityOf</code>, <code>LegacyLocator</code>, traversal); <code>project-definition-ref.ts</code> (<code>layerAgreesWithPath</code>, <code>validatePinnedSkillRef</code>); <code>build-inventory.ts</code> (skill id from frontmatter); <code>execution-transport-ports.ts</code> (<code>refsConflict</code>); <code>roster.ts</code>; live tree and <code>guild.inventory.json</code> read directly. Review verdict REJECT, 4×P1 + 3×P2, all reproduced.</p>
 </footer>
 
