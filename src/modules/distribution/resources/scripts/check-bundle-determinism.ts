@@ -88,6 +88,11 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import {
+  checkContained,
+  isRefused,
+} from "../src/modules/kernel/workflows/path-containment";
+
 // ── Types ─────────────────────────────────────────────────────────────────
 
 export interface Violation {
@@ -449,6 +454,34 @@ export function findViolations(root: string): Violation[] {
 
   if (!fs.existsSync(pkgPath)) {
     return [{ file: "hooks/package.json", detail: "missing — cannot verify bundle determinism." }];
+  }
+
+  // VARIANT 3 OF THE PATH-CONTAINMENT CLASS, caught BEFORE the build rather than
+  // afterwards in 66 committed bundles.
+  //
+  // The defect: `hooks/node_modules` was a SYMLINK to a sibling checkout, so esbuild
+  // recorded resolved paths OUTSIDE the package and the committed bytes depended on
+  // which sibling happened to be installed. This rail found it — but only from the
+  // fingerprint it left in every bundle, after the damage was committed. The question
+  // underneath ("does this path really live under that root once every link is
+  // resolved?") is the same one the write-escape variants asked, so it gets the same
+  // answer from the same primitive, asked up front.
+  //
+  // Deliberately NOT applied to the esbuild metafile paths below: those are recorded
+  // STRINGS, not filesystem locations, and there is nothing on disk to resolve. Forcing
+  // the primitive there would trade a correct check for a familiar-looking one.
+  const hooksModules = path.join(hooksDir, "node_modules");
+  if (fs.existsSync(hooksModules)) {
+    const contained = checkContained(hooksDir, hooksModules, { policy: "physical" });
+    if (isRefused(contained)) {
+      out.push({
+        file: "hooks/node_modules",
+        detail:
+          `is not physically inside the hooks package [${contained.code}] — esbuild will record ` +
+          `out-of-package module paths and the committed bundles will depend on which sibling ` +
+          `checkout is installed (issue #75). Replace the link with a real install.`,
+      });
+    }
   }
 
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));

@@ -36,7 +36,7 @@
       "id": "check-bundle-determinism",
       "source_path": "scripts/check-bundle-determinism.ts",
       "resource_path": "resources/scripts/check-bundle-determinism.ts",
-      "sha256": "c4d24dd72680f658c18e17b02a4328919410b26a5b63ef10c9d98c4d67167a33"
+      "sha256": "c13182b840622011a1dde5623eebf857d9f676649b064110beda4f469cc2e5b0"
     },
     {
       "category": "scripts",

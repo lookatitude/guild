@@ -111,6 +111,11 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "`resolveUnderRoot` realpath'd only the LEAF, so a symlinked ancestor with a not-yet-created leaf passed.",
   },
   {
+    path: "scripts/check-bundle-determinism.ts",
+    status: "adopted",
+    note: "VARIANT 3's production adoption. A symlinked hooks/node_modules baked out-of-package paths into 66 committed bundles; this rail found it only from the fingerprint left behind. It now asks the primitive up front, with `policy: \"physical\"`. The esbuild METAFILE paths it checks afterwards are recorded strings with nothing on disk to resolve, and are deliberately left alone.",
+  },
+  {
     path: "src/modules/teams/workflows/station-signals.ts",
     status: "adopted",
     note: "Had already rebuilt the whole pre/post pairing locally, in a comment saying it was doing so 'without widening the shared helper's contract'. Now a caller, with `policy: \"physical\"` preserving its stricter stance.",

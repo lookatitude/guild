@@ -338,6 +338,52 @@ describe("output set ↔ committed bundle set (real fixture trees on disk)", () 
     expect(v[0].detail).toContain("no producing esbuild invocation");
   });
 
+  it("PLANTED CONTROL: a SYMLINKED hooks/node_modules is flagged BEFORE the build (variant 3)", () => {
+    // The original defect was only ever found from the fingerprint it left in 66
+    // committed bundles. This is the same question asked up front, through the shared
+    // path-containment primitive: is `hooks/node_modules` physically inside the hooks
+    // package once every link is resolved?
+    writeFixture(`esbuild a.ts --bundle ${aliasFlagFor("js-yaml")} --outfile=dist/a.js`, {
+      "dist/a.js": cleanBundle,
+    });
+    const sibling = path.join(root, "sibling-node-modules");
+    fs.mkdirSync(sibling, { recursive: true });
+    fs.symlinkSync(sibling, path.join(root, "hooks", "node_modules"));
+    const v = findViolations(root);
+    expect(v.map((x) => x.file)).toContain("hooks/node_modules");
+    // The code is pinned EXACTLY. A link to a sibling checkout escapes the package,
+    // so `outside-root` is the rule that fires — and asserting merely "some refusal"
+    // would hide a guard that reddened for an unrelated reason.
+    expect(v.find((x) => x.file === "hooks/node_modules")?.detail).toContain(
+      "[outside-root]",
+    );
+  });
+
+  it("PLANTED CONTROL: an IN-PACKAGE symlinked node_modules is flagged too — `physical` is not a decorative default", () => {
+    // Without this, `policy: "physical"` would be an argument that changes nothing:
+    // an out-of-package link is already caught by plain containment. A link that
+    // resolves back INSIDE hooks/ is contained and still non-deterministic for
+    // esbuild, and only the physical policy refuses it. Different code, on purpose.
+    writeFixture(`esbuild a.ts --bundle ${aliasFlagFor("js-yaml")} --outfile=dist/a.js`, {
+      "dist/a.js": cleanBundle,
+    });
+    const real = path.join(root, "hooks", "vendor");
+    fs.mkdirSync(real, { recursive: true });
+    fs.symlinkSync(real, path.join(root, "hooks", "node_modules"));
+    const v = findViolations(root);
+    expect(v.find((x) => x.file === "hooks/node_modules")?.detail).toContain(
+      "[physical-symlink]",
+    );
+  });
+
+  it("CLEAN CONTROL: a REAL hooks/node_modules is not flagged — the rule is not 'refuse node_modules'", () => {
+    writeFixture(`esbuild a.ts --bundle ${aliasFlagFor("js-yaml")} --outfile=dist/a.js`, {
+      "dist/a.js": cleanBundle,
+    });
+    fs.mkdirSync(path.join(root, "hooks", "node_modules", "js-yaml"), { recursive: true });
+    expect(findViolations(root).map((x) => x.file)).not.toContain("hooks/node_modules");
+  });
+
   it("PLANTED CONTROL: a foreign-resolved dependency in a real committed bundle is flagged", () => {
     writeFixture(`esbuild a.ts --bundle ${aliasFlagFor("js-yaml")} --outfile=dist/a.js`, {
       "dist/a.js": foreignBundle,
