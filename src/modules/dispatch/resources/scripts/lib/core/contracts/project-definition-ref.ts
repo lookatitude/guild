@@ -320,25 +320,32 @@ export const MAX_DEFINITION_ID = 128;
  */
 export const MAX_RELATIVE_PATH = 1024;
 /**
- * A commit-ish: a sha, a tag, a `git describe` string. Never a document.
+ * DEAD BOUND. Not consulted by the validator, and `source_commit` is not a
+ * commit-ish: it is an OBJECT NAME, 7-64 lowercase hex, per the hex-only ruling.
+ * `SOURCE_COMMIT_RE` below bounds the length as a side effect of bounding the
+ * SHAPE, so nothing needs a byte cap.
  *
- * WAS 128, AND THAT REJECTED THE DOCUMENTED INPUT (codex round 1 on this fix, #4).
- * A real `git describe --tags --long` over a 126-character tag is 137 characters —
- * `<tag>-<n>-g<abbrev>` — so the bound refused a value the field's own doc promises
- * to accept. A bound that rejects the documented input is a defect in the bound.
- * 512 clears any realistic tag-plus-describe suffix (git ref components are
- * conventionally under 255) while staying orders of magnitude below a body.
- */
-/**
- * SUPERSEDED BY THE HEX-ONLY RULING (eight-branch integration). The 512 bound
- * existed to clear a 137-character `git describe --tags --long` output, which this
- * field no longer accepts at all: an object name is 7-64 hex characters, and the
- * regex below bounds the length as a side effect of bounding the SHAPE.
+ * READ THE RULING, NOT THIS CONSTANT. The rule and its reason live at
+ * `SOURCE_COMMIT_RE` and at the `source_commit` branch of
+ * `validateProjectDefinitionRefV1`; the inverted tests
+ * (`adoption-manifest-open-defects.test.ts`, "a movable name cannot pin bytes")
+ * are what enforce it.
  *
- * Kept as an export rather than deleted because the reasoning above it is the
- * record of why the bound was raised from 128, and because it still states the
- * outer limit any future symbolic-ref field would inherit. It is no longer
- * consulted by the validator.
+ * HISTORY, kept because it records why the number is 512 and not 128, and stated
+ * in the PAST TENSE on purpose. While the field still accepted a symbolic ref, the
+ * bound was 128, and that rejected the documented input (codex round 1, #4): a real
+ * `git describe --tags --long` over a 126-character tag is 137 characters —
+ * `<tag>-<n>-g<abbrev>` — so the bound refused a value the field's own doc then
+ * promised to accept. A bound that rejects its documented input is a defect in the
+ * bound, so it was raised to 512. The hex-only ruling later removed the input class
+ * that reasoning was about; 512 survives only as the outer limit a future
+ * symbolic-ref field — a DIFFERENT field, if one is ever added — would inherit.
+ *
+ * The two-block form this replaced put that history FIRST, in the present tense
+ * ("A commit-ish: a sha, a tag, a `git describe` string"), with the supersession
+ * below it. A reader grepping for the rule hit the superseded sentence and read a
+ * declaration as the constraint — which is the exact failure class this contract
+ * exists to close, so it does not get to live in this contract's own comments.
  */
 export const MAX_SOURCE_COMMIT = 512;
 
@@ -395,8 +402,18 @@ function isBoundedScalar(v: unknown, max: number): v is string {
  * the adoption manifest and illegal on the other. That is exactly the disagreement
  * D4 removed inside S3, reappearing across the S2/S3 boundary.
  *
- * NOT applied to `source_commit`: a git ref legitimately contains `/`
- * (`refs/tags/v2.5.0`), and over-tightening it would be its own defect.
+ * NOT applied to `source_commit` — because that field is STRICTER, not looser.
+ * It takes `SOURCE_COMMIT_RE` (7-64 lowercase hex), which this token rule would
+ * only ever widen, so applying it here would be redundant at best.
+ *
+ * THE EARLIER VERSION OF THIS LINE SAID THE OPPOSITE and was load-bearingly wrong:
+ * "a git ref legitimately contains `/` (`refs/tags/v2.5.0`), and over-tightening it
+ * would be its own defect." That was true while the field accepted symbolic refs
+ * and false the moment `SOURCE_COMMIT_RE` landed. The distinction it missed is the
+ * whole ruling: the objection to `refs/tags/v2.5.0` is not that it is MALFORMED —
+ * it is a perfectly well-formed ref — but that it is MOVABLE, and a field whose job
+ * is to pin bytes cannot accept a name that denotes different bytes tomorrow. A ref
+ * grammar is the right shape for a ref field and the wrong shape for a commit field.
  */
 const IDENTITY_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
