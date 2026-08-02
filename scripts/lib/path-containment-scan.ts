@@ -380,6 +380,38 @@ const WRITE_CALLS = new Set([
  * pure string algebra and knows nothing about links, so a symlinked `.guild/runs`
  * walks straight through one of these while it reports success.
  */
+/**
+ * Is this returned expression a VERDICT — something boolean-shaped — rather than a
+ * value?
+ *
+ * The boundary matters in both directions and both were found empirically. Requiring
+ * a boolean LITERAL missed `return t.startsWith(b + path.sep)`, the most natural way
+ * anyone writes the helper. Accepting ANY call re-admitted a label builder whose body
+ * is `return path.relative(root, p)` — a string. So: literals, negations, comparisons
+ * and logical joins, and calls to the boolean-returning string/regex predicates.
+ */
+function isBooleanish(e: ts.Expression, aliases: AliasMap): boolean {
+  if (e.kind === ts.SyntaxKind.TrueKeyword || e.kind === ts.SyntaxKind.FalseKeyword) return true;
+  if (ts.isParenthesizedExpression(e)) return isBooleanish(e.expression, aliases);
+  if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.ExclamationToken) return true;
+  if (ts.isBinaryExpression(e)) {
+    const op = e.operatorToken.kind;
+    return (
+      op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+      op === ts.SyntaxKind.ExclamationEqualsEqualsToken ||
+      op === ts.SyntaxKind.EqualsEqualsToken ||
+      op === ts.SyntaxKind.ExclamationEqualsToken ||
+      op === ts.SyntaxKind.AmpersandAmpersandToken ||
+      op === ts.SyntaxKind.BarBarToken
+    );
+  }
+  if (ts.isCallExpression(e)) {
+    const name = calleeName(e, aliases);
+    return ["startsWith", "endsWith", "includes", "test", "some", "every"].includes(name);
+  }
+  return false;
+}
+
 function isLexicalContainmentHelper(scope: ts.Node, aliases: AliasMap): boolean {
   // STRUCTURAL, not name-based. A containment helper takes at least a target and a
   // base, and it VERDICTS — it throws or returns a boolean. Requiring that keeps
@@ -410,13 +442,14 @@ function isLexicalContainmentHelper(scope: ts.Node, aliases: AliasMap): boolean 
       if (WRITE_CALLS.has(name)) writes = true;
     }
     if (ts.isThrowStatement(n)) verdicts = true;
-    if (
-      ts.isReturnStatement(n) &&
-      n.expression !== undefined &&
-      (n.expression.kind === ts.SyntaxKind.TrueKeyword ||
-        n.expression.kind === ts.SyntaxKind.FalseKeyword)
-    ) {
-      verdicts = true;
+    if (ts.isReturnStatement(n) && n.expression !== undefined) {
+      const e = n.expression;
+      // A verdict is a boolean LITERAL *or* a returned boolean EXPRESSION. Requiring
+      // a literal was an evasion an adversarial pass found: `return t.startsWith(b +
+      // path.sep)` is the most natural way anyone writes this helper, and it slipped
+      // straight through. Prefix-`!`, a comparison, `&&`/`||`, and a returned call
+      // all count.
+      if (isBooleanish(e, aliases)) verdicts = true;
     }
     if (/\.realpathSync(\.native)?/.test(n.getText?.() ?? "") && ts.isPropertyAccessExpression(n)) {
       realpath = true;

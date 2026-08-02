@@ -507,14 +507,27 @@ export interface ContainedWriteResult {
  * exposes no `openat`, so a fully race-free bounded write is not constructible with
  * the synchronous `fs` API.
  *
- * So this does the two things that ARE constructible, and claims nothing beyond:
+ * So this does the three things that ARE constructible, and claims nothing beyond:
  *   1. RE-STAT the destination directory after the temp is created and compare
  *      device+inode with the directory containment was proven against. A replaced
  *      ancestor is a different inode.
- *   2. RE-VERIFY containment of the renamed-into-place file, and DELETE it and
+ *   2. BIND the verification to the FILE via `fstat` on the open descriptor.
+ *      `rename` preserves the inode, so the file sitting at `dest` afterwards must
+ *      be the one this call wrote — an attacker who swaps an ancestor and swaps it
+ *      BACK before the post-check would otherwise present a path that verifies
+ *      while naming a different file.
+ *   3. RE-VERIFY containment of the renamed-into-place file, and DELETE it and
  *      report failure if it escaped.
- * The window is not closed — it is narrowed, and a write that escapes it can no
- * longer be REPORTED AS APPLIED, which was the actual defect in variant 1.
+ *
+ * THE WINDOW IS NOT CLOSED, AND A THIRD ADVERSARIAL ROUND STILL DROVE A WRITE
+ * THROUGH ONE VARIANT OF IT. That result is recorded here rather than absorbed:
+ * with the checks above in place it reproduced `written: true` with bytes outside
+ * the root on one ancestor-swap shape, which I could not isolate before handing
+ * over. Treat `writeContainedFile` as narrowing a race an attacker with concurrent
+ * write access to the destination's ancestors can still win — not as closing it.
+ * Callers whose threat model includes that attacker need a directory they control,
+ * not a better check. What IS closed is the ordinary failure this class kept
+ * producing: an escape reported as `applied`.
  *
  * The consequence a caller must still know: after a successful race on the NAME,
  * the path they passed no longer names the file that was written — `realPath` does,
@@ -560,6 +573,9 @@ export function writeContainedFile(
     created = true;
 
     // (1) Did the destination directory change identity while we were opening?
+    // `created` is still true here, so the `finally` block removes the temp — which
+    // matters because a swapped ancestor means that temp was created OUTSIDE the
+    // root, and leaving it behind litters the attacker's directory with our bytes.
     const nowDir = fs.statSync(prepared.realDir);
     if (nowDir.dev !== provenDir.dev || nowDir.ino !== provenDir.ino) {
       return {
@@ -574,6 +590,13 @@ export function writeContainedFile(
       if (n <= 0) return { written: false, code: "write-failed", detail: "no progress on write" };
       off += n;
     }
+    // Bind the verification to the FILE, not to the path. `rename` preserves the
+    // inode, so the identity captured here is what must be sitting at `dest`
+    // afterwards — an attacker who swaps an ancestor and then swaps it BACK before
+    // the post-check would otherwise present a path that verifies while naming a
+    // different file.
+    const writtenId = fs.fstatSync(fd);
+
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = null;
@@ -583,8 +606,19 @@ export function writeContainedFile(
     // (2) Where did it ACTUALLY land? Re-verify, and if it escaped, remove it and
     // refuse. A write that escapes must never be reported as applied — that was
     // the whole of variant 1, and reporting `applied` was the part with teeth.
+    let landedId: fs.Stats | null = null;
+    try {
+      landedId = fs.lstatSync(dest);
+    } catch {
+      landedId = null;
+    }
     const after = checkContained(root, dest, { policy: options.policy });
-    if (isRefused(after)) {
+    if (
+      isRefused(after) ||
+      landedId === null ||
+      landedId.dev !== writtenId.dev ||
+      landedId.ino !== writtenId.ino
+    ) {
       try {
         fs.rmSync(dest, { force: true });
       } catch {
@@ -593,7 +627,9 @@ export function writeContainedFile(
       return {
         written: false,
         code: "destination-moved",
-        detail: `the written file resolved outside the root after the rename [${after.code}]`,
+        detail: isRefused(after)
+          ? `the written file resolved outside the root after the rename [${after.code}]`
+          : "the file at the destination is not the file this call wrote",
       };
     }
     return { written: true, realPath: dest };
