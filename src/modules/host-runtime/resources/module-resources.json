@@ -749,7 +749,7 @@
       "id": "projection:src/modules/kernel/index.ts",
       "source_path": "src/modules/kernel/index.ts",
       "resource_path": "resources/src/modules/kernel/index.ts",
-      "sha256": "bb7275639ad31a4f7217c9b6b5663572c69c9a045dceb2c7e289eedeae88c522",
+      "sha256": "c8c9980c6155237907dc4724c613632d4af4fb6f76b8870dfde5d9e62e7ed5bb",
       "projection_dependency": true
     },
     {
@@ -766,6 +766,14 @@
       "source_path": "src/modules/kernel/workflows/module-manifest.ts",
       "resource_path": "resources/src/modules/kernel/workflows/module-manifest.ts",
       "sha256": "7c102e6c73028135def92f5fcc2a1c2ccda9b673e2d220f8dede19fdc0ed4c87",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/path-containment.ts",
+      "source_path": "src/modules/kernel/workflows/path-containment.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/path-containment.ts",
+      "sha256": "2f430a7222489414d7f5ece14772548ee1902c3d6fd1f2360c4e15214a183518",
       "projection_dependency": true
     },
     {

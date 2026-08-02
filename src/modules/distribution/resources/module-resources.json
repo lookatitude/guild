@@ -92,7 +92,7 @@
       "id": "lib/command-registry",
       "source_path": "scripts/lib/command-registry.ts",
       "resource_path": "resources/scripts/lib/command-registry.ts",
-      "sha256": "1344f1b4d2fbbdc445943957c033dee447997481615b4f4003834f2672213ece"
+      "sha256": "3daaeffd629847c82bf798020d0461a8ddb59b216a97d5d02ee913bf38d9a40f"
     },
     {
       "category": "scripts",
@@ -155,7 +155,7 @@
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "resource_path": "resources/scripts/lib/skill-source-transform.ts",
-      "sha256": "917365be01690f997e909d7be651baef771c9a6d42989254a86c163d17cd5075"
+      "sha256": "b607ce70d995680675ec558752693f2ce21be5d838287d90d6d6e28cb712c334"
     },
     {
       "category": "scripts",

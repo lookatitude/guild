@@ -40,6 +40,10 @@ import * as path from "node:path";
 import { instantiateTemplate, type InstantiateResult } from "./lib/template-schema";
 import { validateExploreV1 } from "./lib/explore-schema";
 import { validateDefineV1 } from "./lib/define-schema";
+import {
+  canonicalizeRealPath,
+  isWithin,
+} from "../src/modules/kernel/workflows/path-containment";
 
 // ---------------------------------------------------------------------------
 // Pure core (no IO — exported for tests / the eval harness)
@@ -147,23 +151,14 @@ export function safeSlug(slug: string): string {
 }
 
 /**
- * Resolve the real path of `targetDir` WITHOUT creating it — realpath the deepest existing
- * ancestor (so a symlinked ancestor is followed) then re-append the missing tail. Lets the
- * containment check see through a `.guild/explore -> ../skills/...` symlink BEFORE any mkdir
- * side effect (FINDING-3 symlink escape).
+ * MIGRATED to the shared path-containment primitive
+ * (`src/modules/kernel/workflows/path-containment.ts`). This was the third home of
+ * one shape — the other two were `canonicalAbs` in `lib/command-registry.ts` and a
+ * byte-identical `canonicalAbs` in `lib/skill-source-transform.ts`. All three
+ * climbed with `existsSync`, which FOLLOWS symlinks, so a DANGLING symlink read as
+ * "does not exist" and the resolved target was not where a write would land.
  */
-function resolveRealTarget(targetDir: string): string {
-  let cur = path.resolve(targetDir);
-  const tail: string[] = [];
-  while (!fs.existsSync(cur)) {
-    tail.unshift(path.basename(cur));
-    const parent = path.dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-  const realBase = fs.existsSync(cur) ? fs.realpathSync(cur) : cur;
-  return tail.length ? path.join(realBase, ...tail) : realBase;
-}
+const resolveRealTarget = canonicalizeRealPath;
 
 /**
  * Runtime surface sub-trees the producer must NEVER write into, anchored at ANY repo root
@@ -202,9 +197,9 @@ function canonSegment(seg: string): string {
  */
 function isForbiddenRuntimeSubtree(real: string, root: string | null | undefined): boolean {
   if (!root) return false;
-  const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : path.resolve(root);
+  const realRoot = canonicalizeRealPath(root);
   const rel = path.relative(realRoot, real);
-  if (rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return false; // outside this root
+  if (!isWithin(real, realRoot)) return false; // outside this root
   const segs = rel === "" ? [] : rel.split(path.sep);
   const first = canonSegment(segs[0] ?? "");
   if (FORBIDDEN_FIRST_SEGMENTS.has(first)) return true;
@@ -235,12 +230,12 @@ export function assertNotRuntimeTree(
   const real = resolveRealTarget(targetDir);
   // Realpath the plugin root too — else a symlinked root component (e.g. macOS
   // /var → /private/var) makes the resolved target read as "outside" and bypasses the guard.
-  const realRoot = fs.existsSync(pluginRoot) ? fs.realpathSync(pluginRoot) : path.resolve(pluginRoot);
+  const realRoot = canonicalizeRealPath(pluginRoot);
   const rel = path.relative(realRoot, real);
   // Genuinely OUTSIDE the plugin root: rel is "..", a "../…" traversal, or absolute (different
   // drive). NB: test the path SEGMENT, not `startsWith("..")` — a sibling dir literally named
   // "..guild" yields rel "..guild/…" which starts with ".." yet is INSIDE the root (must NOT escape).
-  const outsidePluginRoot = rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel);
+  const outsidePluginRoot = !isWithin(real, realRoot);
   if (!outsidePluginRoot) {
     // Inside the plugin root: ONLY the .guild artifact tree is a legitimate write target.
     const first = rel === "" ? "" : rel.split(path.sep)[0];

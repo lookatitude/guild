@@ -1030,6 +1030,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-path-containment",
+      "source_path": "scripts/check-path-containment.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-plugin-root-fallback",
       "source_path": "scripts/check-plugin-root-fallback.ts",
       "kind": "cli"
@@ -1907,6 +1912,16 @@
     {
       "id": "lib/parity-contract",
       "source_path": "scripts/lib/parity-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/path-containment-registry",
+      "source_path": "scripts/lib/path-containment-registry.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/path-containment-scan",
+      "source_path": "scripts/lib/path-containment-scan.ts",
       "kind": "lib"
     },
     {

@@ -40,10 +40,31 @@
     },
     {
       "category": "scripts",
+      "id": "check-path-containment",
+      "source_path": "scripts/check-path-containment.ts",
+      "resource_path": "resources/scripts/check-path-containment.ts",
+      "sha256": "217d84a508222eaea28cd8692beabf0bfc515b4422a200cb2048caacba0b8a9b"
+    },
+    {
+      "category": "scripts",
       "id": "lib/module-manifest",
       "source_path": "scripts/lib/module-manifest.ts",
       "resource_path": "resources/scripts/lib/module-manifest.ts",
       "sha256": "4a6affdbf4a05bec7191b796f8259fc9f475662ad3beae9df761a3e1f19a3d3f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/path-containment-registry",
+      "source_path": "scripts/lib/path-containment-registry.ts",
+      "resource_path": "resources/scripts/lib/path-containment-registry.ts",
+      "sha256": "968a220f880dd3f5735f7b2609960adf746cddecae6c59928340e14ae024fe5c"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/path-containment-scan",
+      "source_path": "scripts/lib/path-containment-scan.ts",
+      "resource_path": "resources/scripts/lib/path-containment-scan.ts",
+      "sha256": "ca747ee1f7ab3a482e5694ed08b3b16b7f72b3819f244499e57441cb54168a44"
     },
     {
       "category": "scripts",
