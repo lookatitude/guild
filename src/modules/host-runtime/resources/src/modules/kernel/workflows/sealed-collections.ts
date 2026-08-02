@@ -176,7 +176,20 @@ export function isSealedCollection(value: unknown): boolean {
   return (brand === "set" || brand === "map") && Object.isFrozen(value);
 }
 
-/** The values a sealed facade holds, or `undefined` when `value` is not one. */
+/**
+ * The values a sealed facade holds, or `undefined` when `value` is not one.
+ *
+ * THE SPREAD IS SAFE ONLY BECAUSE THE FACADE IS FROZEN, and that is load-bearing rather
+ * than incidental. Spreading goes through `Symbol.iterator`, and a Proxy `get` trap could
+ * otherwise return an empty generator — hiding the whole element graph from this walk and
+ * from the rail, which is round-1 P2 #4. But `Symbol.iterator` is a NON-WRITABLE,
+ * NON-CONFIGURABLE own data property of a frozen facade, and for such a property the ES
+ * proxy invariant requires a `get` trap to return the same value or throw a `TypeError`.
+ * `isSealedCollection` above therefore checks `Object.isFrozen` as part of the brand, not
+ * as a nicety: a merely-sealed facade, or one with a configurable mutator left behind,
+ * would reopen the hole. The rail pins the invariant directly, so weakening the freeze
+ * fails there instead of silently.
+ */
 export function sealedCollectionValues(value: unknown): unknown[] | undefined {
   if (!isSealedCollection(value)) return undefined;
   return [...(value as Iterable<unknown>)];

@@ -95,71 +95,71 @@ export interface ContainmentSite {
  * The rail rejected both on exactly that ground.
  */
 export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
-  {
+  Object.freeze({
     path: "src/modules/kernel/workflows/path-containment.ts",
     status: "home",
     note: "THE primitive. Kernel is the substrate module — placing it in any of the four discovering modules (capability, learning, teams, distribution) would make it that module's property and re-create the problem it solves.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/lib/command-registry.ts",
     status: "adopted",
     note: "`canonicalAbs`/`isUnderOrEqual` were byte-identical to skill-source-transform.ts; both now alias the primitive.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/lib/skill-source-transform.ts",
     status: "adopted",
     note: "The byte-identical twin of command-registry.ts. Two files, one shape, one fix that had to be applied twice.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/instantiate-template.ts",
     status: "adopted",
     note: "`resolveRealTarget` was the third copy of the same climb.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/learn/extract-structural.ts",
     status: "adopted",
     note: "Its private `assertContained` climbed with existsSync and tested containment with `rel.startsWith('..')`, which calls a sibling named `..guild` an escape.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/lib/roster.ts",
     status: "adopted",
     note: "The same inline climb appeared THREE times in this one file.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/learn/lib/similarity.ts",
     status: "adopted",
     note: "`resolveUnderRoot` realpath'd only the LEAF, so a symlinked ancestor with a not-yet-created leaf passed.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/check-bundle-determinism.ts",
     status: "adopted",
     note: "VARIANT 3's production adoption. A symlinked hooks/node_modules baked out-of-package paths into 66 committed bundles; this rail found it only from the fingerprint left behind. It now asks the primitive up front, with `policy: \"physical\"`. The esbuild METAFILE paths it checks afterwards are recorded strings with nothing on disk to resolve, and are deliberately left alone.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "src/modules/lifecycle/workflows/run-lifecycle.ts",
     status: "adopted",
     note: "THE TENTH HOME, and the rail found it — not a human sweep. Its `assertContained` was PURELY LEXICAL (path.resolve + startsWith(base + sep)), guarding a mkdirSync + write into `.guild/runs`: a symlinked runs directory walked straight through it while it reported success. Its own docstring said it mirrored a further copy in `promote-upstream.ts`. Now `policy: \"physical\"`, since a run tree whose realpath is load-bearing provenance must be physically real; the strict-subdirectory half stays local because containment permits equality.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/dot-guild/audit.ts",
     status: "waived",
     note: "WAIVER: its boolean-returning path helper classifies LEAK CANDIDATES for a read-only audit — a verdict about whether a file is exposed, not about whether a write is contained. There is no root-bounded write in this file. Unlike the two waivers this registry rejected earlier, this one has something to feel it: the scanner DOES see the site, so `registration-without-site` keeps the waiver honest.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "src/modules/teams/workflows/station-signals.ts",
     status: "adopted",
     note: "Had already rebuilt the whole pre/post pairing locally, in a comment saying it was doing so 'without widening the shared helper's contract'. Now a caller, with `policy: \"physical\"` preserving its stricter stance.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/lib/capability/profile-emit.ts",
     status: "adopted",
     note: "THE ELEVENTH HOME, and it was invisible to the sweep that found the first ten: it lives on feature/cap-loc-learn, which is not an ancestor of this registry's branch, so the two only met at the six-branch integration (task #30). It was the STRICTEST of the four rediscoveries — the one that FOUND the dangling-symlink defect (`lstat`, not `existsSync`) — and it carried a project-root escape hatch so a symlinked project root still worked. Both survive adoption: the dangling catch as the `dangling-symlink` refusal, the root exception generalised into matching realpath at every node. Default `policy: \"resolve\"`, the behaviour this lane shipped and tested.",
-  },
-  {
+  }),
+  Object.freeze({
     path: "scripts/lib/capability/adoption-migrate.ts",
     status: "adopted",
     note: "THE TWELFTH HOME, from feature/cap-loc-resolver, and likewise unreachable from this registry's base until the integration merged both. Adopting it CLOSES A HOLE rather than merely deduplicating: its climb probed with `existsSync`, which follows symlinks, so a DANGLING symlink read as absent and the climb proved containment of the in-root PARENT instead — the exact defect the learn lane had already found and fixed in its own copy, still live here. Two lanes, one shape, one fixed and one not: the case for a single primitive, made concrete.",
-  },
+  }),
 ]);
 
 /** Repo-relative path of the one file that may hold `status: "home"`. */

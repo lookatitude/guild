@@ -1,14 +1,14 @@
 {
-  "note": "Pinned closed-collection identities (file::exportName). The rail asserts the live scan is a SUPERSET of this list, so an identity disappearing fails BY NAME. Regenerate with GUILD_PIN_CLOSED_COLLECTIONS=1 and review the diff.",
+  "note": "Pinned closed-collection identities (file::exportName). The rail asserts the live scan is a SUPERSET of this list, so an identity disappearing fails BY NAME. Regenerate with GUILD_PIN_CLOSED_COLLECTIONS=1 and review the diff. Regeneration REFUSES to drop a pinned identity unless GUILD_PIN_ALLOW_SHRINK=1 is also set.",
   "measured_at": "feature/deep-freeze-collections (task #22)",
   "removed": [
     {
       "identity": "scripts/lib/core/contracts/adoption-manifest.ts::LEGACY_HOMES",
-      "removed_at": "feature/cap-loc-integrated (task #30, five-branch integration)",
-      "reason": "NOT a coverage loss — the identity moved populations. fix/s3-open-defects collapsed LEGACY_HOMES from its own frozen literal into a re-export of DEFINITION_LAYERS (task #27, one vocabulary for both ends of a hop). The STATIC scan indexes declaration-site literals, so an alias is no longer a declaration and drops out by construction. The concern is still enforced: DEFINITION_LAYERS is Object.freeze'd at its declaration site in project-definition-ref.ts (that identity is pinned), and this rail's own 'every ALIAS resolves to a target that IS frozen or sealed somewhere in the scan' test covers the alias and passes. Removed with a reason, which is what the rail's comment prescribes."
+      "removed_at": "feature/cap-loc-integrated (task #30, six-branch integration)",
+      "reason": "NOT a coverage loss — the identity moved populations. fix/s3-open-defects collapsed LEGACY_HOMES from its own frozen literal into a re-export of DEFINITION_LAYERS (task #27, one vocabulary for both ends of a hop). The STATIC scan indexes declaration-site literals, so an alias is no longer a declaration and drops out by construction. The concern is still enforced: DEFINITION_LAYERS is Object.freeze'd at its declaration site in project-definition-ref.ts (that identity is pinned), and this rail's own 'every ALIAS resolves to a target that IS frozen or sealed somewhere in the scan' test covers the alias and passes. Removed with a reason, which is what the rail's comment prescribes. NOTE: fix/collection-rail-p2 later made regeneration REFUSE to drop a pinned identity without GUILD_PIN_ALLOW_SHRINK=1 — this deletion predates that guard and is exactly the kind it exists to force a reason for, which is why the reason is recorded here rather than in a commit message alone."
     }
   ],
-  "count": 267,
+  "count": 269,
   "identities": [
     "hooks/emit-learning-checkpoint.ts::ALLOWED_NODE_PREFIXES",
     "hooks/emit-learning-checkpoint.ts::DECISION_TARGETS",
@@ -20,6 +20,7 @@
     "hooks/lib/lifecycle-gate.ts::LIFECYCLE_SKILLS",
     "hooks/lib/lifecycle-gate.ts::REQUIRED_RECEIPT_ENVELOPE_KEYS",
     "hooks/lib/reanchor.ts::REANCHOR_SESSION_SOURCES",
+    "scripts/build-verify.ts::MCP_SERVERS",
     "scripts/check-entrypoint-packaging.ts::ALL_CHECKED_HOST_IDS",
     "scripts/config-cmd.ts::CONFIG_SUBCOMMANDS",
     "scripts/desktop-app-smoke.ts::DESKTOP_APP_HOSTS",
@@ -80,6 +81,7 @@
     "scripts/lib/core/contracts/task-cell-backend.ts::TERMINAL_STATES",
     "scripts/lib/define-traceability.ts::TRACE_STAGES",
     "scripts/lib/guild-run-wrapper.ts::AUTONOMY_ORDER",
+    "scripts/lib/host-adapters/app-host.ts::APP_HOSTS",
     "scripts/lib/host-public-state.ts::DISPLAY_SUPPORT",
     "scripts/lib/host-public-state.ts::PUBLIC_STATES",
     "scripts/lib/host-public-state.ts::VERIFICATION_STATUS",
