@@ -58,7 +58,7 @@ export const DEGRADATION_EVENT_TYPE = "feature_degraded" as const;
  * signal table (FDC rows). Do NOT add new values without a corresponding FDC
  * row or v2.x deferred-item number.
  */
-export const DEGRADATION_KINDS = [
+export const DEGRADATION_KINDS = Object.freeze([
   /** FDC-5: coordination lost host-native parallelism; parallelism field set. */
   "coordination.parallelism",
   /** FDC-5: backend rung explicitly recorded on a dispatch attempt. */
@@ -73,7 +73,7 @@ export const DEGRADATION_KINDS = [
   "tier_degraded",
   /** Per-surface: a degraded_reason string emitted alongside a degraded artifact. */
   "degraded_reason",
-] as const;
+] as const);
 
 export type DegradationKind = (typeof DEGRADATION_KINDS)[number];
 
@@ -83,12 +83,12 @@ export type DegradationKind = (typeof DEGRADATION_KINDS)[number];
  * Closed set of `coordination.parallelism` values (FDC-5 coordination.yaml
  * contract). Matches the `parallelism` field in the FDC-5 artifact signal.
  */
-export const PARALLELISM_MODES = [
+export const PARALLELISM_MODES = Object.freeze([
   "host_native",
   "tmux",
   "subagent",
   "serial",
-] as const;
+] as const);
 export type ParallelismMode = (typeof PARALLELISM_MODES)[number];
 
 // ── Backend rung ──────────────────────────────────────────────────────────────
@@ -107,11 +107,11 @@ export type BackendRung = 1 | 2 | 3 | 4;
  * Closed set of retrieval fallback values (FDC-1 / FDC-3 `degraded_retrieval`).
  * `fs_bm25` is the primary fallback when MCP is unavailable.
  */
-export const RETRIEVAL_FALLBACK_KINDS = [
+export const RETRIEVAL_FALLBACK_KINDS = Object.freeze([
   "fs_bm25",
   "fs_scan",
   "inline_advisory",
-] as const;
+] as const);
 export type RetrievalFallbackKind = (typeof RETRIEVAL_FALLBACK_KINDS)[number];
 
 // ── Shared row shape ──────────────────────────────────────────────────────────

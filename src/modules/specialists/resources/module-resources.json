@@ -12,6 +12,13 @@
     },
     {
       "category": "agents",
+      "id": "context-manager",
+      "source_path": "agents/context-manager.md",
+      "resource_path": "resources/agents/context-manager.md",
+      "sha256": "87acdf9f6663aa176297af6501026bee805d1da447dc133ccc7a4694f373a0e1"
+    },
+    {
+      "category": "agents",
       "id": "developer",
       "source_path": "agents/developer.md",
       "resource_path": "resources/agents/developer.md",
@@ -22,7 +29,7 @@
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",
       "resource_path": "resources/scripts/lib/roster.ts",
-      "sha256": "66fcd3c99be81d83cdf074775e0b577ba346dcd90d241d66d3d7a3c9aaf7fb08"
+      "sha256": "963bd27c0f8a4b562040a78c2caeed3b74cdae4d4d9b6bba4e0cddf9cde07209"
     },
     {
       "category": "scripts",

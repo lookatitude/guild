@@ -21,6 +21,7 @@ import {
   type ConfigValueType,
 } from "./config-reconcile-contract";
 import { DEFAULTS } from "../read-guild-config";
+import { deepFreeze } from "../../src/modules/kernel/workflows/sealed-collections";
 // S5: the capability vocabularies live beside the DEFAULTS they describe, so the
 // enum members and the shipped default cannot drift apart. Imported through the
 // CANONICAL shared entrypoint (R-DIST canonicality rail forbids reaching past it
@@ -227,7 +228,7 @@ const PLAIN_ENUM_OVERRIDES: Record<string, PlainEnumOverride> = {
  * Rich enum validation for the other keys stays in read-guild-config's closed-key
  * validators (validateDefaults), which the reconciler does not replace.
  */
-export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
+export const CONFIG_SCHEMA: readonly ConfigFieldSpec[] = deepFreeze((() => {
   const flat = flattenSettings(DEFAULTS as unknown as Record<string, unknown>);
   return Object.entries(flat).map(([key, def]) => {
     const override = SECURITY_ENUM_OVERRIDES[key];
@@ -256,7 +257,7 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
     }
     return spec;
   });
-})();
+})());
 
 /** Lookup a field spec by dotted key. */
 export function getFieldSpec(key: string): ConfigFieldSpec | undefined {

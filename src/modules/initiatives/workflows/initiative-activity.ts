@@ -13,7 +13,7 @@ import * as path from "path";
 export const ACTIVITY_SCHEMA = "guild.initiative_activity.v1";
 
 /** Closed activity-event vocabulary. */
-export const ACTIVITY_EVENTS = [
+export const ACTIVITY_EVENTS = Object.freeze([
   "created",
   "status_change",
   "definition_updated",
@@ -25,7 +25,7 @@ export const ACTIVITY_EVENTS = [
   "closed",
   "archived",
   "note",
-] as const;
+] as const);
 export type ActivityEvent = (typeof ACTIVITY_EVENTS)[number];
 
 export interface ActivityRow {

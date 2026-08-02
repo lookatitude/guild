@@ -1,6 +1,7 @@
 # Guild — repo orientation
 
-Guild is a cross-host plugin that ships 2 machinery agents (advisor, developer),
+Guild is a cross-host plugin that ships 3 machinery agents (advisor, context-manager,
+developer),
 15 domain specialist type templates (minted into a project's `.guild/agents/` on
 demand by team composition), and 111 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
@@ -19,7 +20,8 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy.
   The former `fallback/` tier no longer exists — its skills were promoted into `meta/`
   (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review`.
-- `agents/*.md` — the 2 machinery agents (`advisor`, `developer`), the only
+- `agents/*.md` — the 3 machinery agents (`advisor`, `context-manager`,
+  `developer`), the only
   host-registered agents the plugin ships. Populated and authored.
 - `templates/specialists/*.md` — the 15 domain specialist type templates
   (`guild.specialist_template.v1`; architect … sales, incl. `doc-writer`),

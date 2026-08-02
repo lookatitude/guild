@@ -48,11 +48,11 @@ export const ADVISORY_RECORD_SCHEMA = "guild.advisory.v1" as const;
 // ── Closed enums ──────────────────────────────────────────────────────────────
 
 /** Advisory panel execution backends (mirrors workflow-operating-model.md). */
-export const ADVISORY_BACKENDS = [
+export const ADVISORY_BACKENDS = Object.freeze([
   "tmux_team",
   "host_subagents",
   "single_agent",
-] as const;
+] as const);
 export type AdvisoryBackend = (typeof ADVISORY_BACKENDS)[number];
 
 /**
@@ -66,7 +66,7 @@ export type AdvisoryBackend = (typeof ADVISORY_BACKENDS)[number];
  * The routing change (populate from roles.advisory) lands in P1-L8; the schema field
  * is the P1-L0 additive migration.
  */
-export const ADVISORY_SUBSTRATES = [
+export const ADVISORY_SUBSTRATES = Object.freeze([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -82,18 +82,18 @@ export const ADVISORY_SUBSTRATES = [
   ".agents",
   "pi",
   "antigravity",
-] as const;
+] as const);
 export type AdvisorySubstrate = (typeof ADVISORY_SUBSTRATES)[number];
 
 /** Default advisory substrate when none is recorded (back-compat: absent ⇒ local Claude). */
 export const DEFAULT_ADVISORY_SUBSTRATE: AdvisorySubstrate = "claude-code-cli";
 
 /** Overall (and per-advisor) confidence scale. */
-export const ADVISORY_CONFIDENCE = ["high", "medium", "low"] as const;
+export const ADVISORY_CONFIDENCE = Object.freeze(["high", "medium", "low"] as const);
 export type AdvisoryConfidence = (typeof ADVISORY_CONFIDENCE)[number];
 
 /** Lifecycle phase tokens (superset — advisory panels may run across phases). */
-export const ADVISORY_PHASES = [
+export const ADVISORY_PHASES = Object.freeze([
   "init",
   "ideation",
   "planning",
@@ -101,7 +101,7 @@ export const ADVISORY_PHASES = [
   "review",
   "ops",
   "reflect",
-] as const;
+] as const);
 export type AdvisoryPhase = (typeof ADVISORY_PHASES)[number];
 
 // ── Sub-shapes ────────────────────────────────────────────────────────────────

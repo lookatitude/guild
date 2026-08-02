@@ -70,7 +70,7 @@ import { types as nodeTypes } from "util";
 export const PROJECT_DEFINITION_REF_SCHEMA = "guild.project_definition_ref.v1" as const;
 
 /** The closed `kind` set. An agent definition or a skill body — nothing else. */
-export const DEFINITION_KINDS = ["agent", "skill"] as const;
+export const DEFINITION_KINDS = Object.freeze(["agent", "skill"] as const);
 export type DefinitionKind = (typeof DEFINITION_KINDS)[number];
 
 const DEFINITION_KIND_SET: ReadonlySet<string> = new Set<string>(DEFINITION_KINDS);
@@ -98,12 +98,12 @@ const DEFINITION_KIND_SET: ReadonlySet<string> = new Set<string>(DEFINITION_KIND
  * discovered later: nothing stops a producer declaring `project-guild` for a path
  * under `.claude/`, and such a ref is self-inconsistent but valid.
  */
-export const DEFINITION_LAYERS = [
+export const DEFINITION_LAYERS = Object.freeze([
   "plugin-shipped",
   "dot-claude-agents",
   "project-guild",
   "umbrella-guild",
-] as const;
+] as const);
 export type DefinitionLayer = (typeof DEFINITION_LAYERS)[number];
 
 const DEFINITION_LAYER_SET: ReadonlySet<string> = new Set<string>(DEFINITION_LAYERS);
@@ -320,16 +320,44 @@ export const MAX_DEFINITION_ID = 128;
  */
 export const MAX_RELATIVE_PATH = 1024;
 /**
- * A commit-ish: a sha, a tag, a `git describe` string. Never a document.
+ * DEAD BOUND. Not consulted by the validator, and `source_commit` is not a
+ * commit-ish: it is an OBJECT NAME, 7-64 lowercase hex, per the hex-only ruling.
+ * `SOURCE_COMMIT_RE` below bounds the length as a side effect of bounding the
+ * SHAPE, so nothing needs a byte cap.
  *
- * WAS 128, AND THAT REJECTED THE DOCUMENTED INPUT (codex round 1 on this fix, #4).
- * A real `git describe --tags --long` over a 126-character tag is 137 characters —
- * `<tag>-<n>-g<abbrev>` — so the bound refused a value the field's own doc promises
- * to accept. A bound that rejects the documented input is a defect in the bound.
- * 512 clears any realistic tag-plus-describe suffix (git ref components are
- * conventionally under 255) while staying orders of magnitude below a body.
+ * READ THE RULING, NOT THIS CONSTANT. The rule and its reason live at
+ * `SOURCE_COMMIT_RE` and at the `source_commit` branch of
+ * `validateProjectDefinitionRefV1`; the inverted tests
+ * (`adoption-manifest-open-defects.test.ts`, "a movable name cannot pin bytes")
+ * are what enforce it.
+ *
+ * HISTORY, kept because it records why the number is 512 and not 128, and stated
+ * in the PAST TENSE on purpose. While the field still accepted a symbolic ref, the
+ * bound was 128, and that rejected the documented input (codex round 1, #4): a real
+ * `git describe --tags --long` over a 126-character tag is 137 characters —
+ * `<tag>-<n>-g<abbrev>` — so the bound refused a value the field's own doc then
+ * promised to accept. A bound that rejects its documented input is a defect in the
+ * bound, so it was raised to 512. The hex-only ruling later removed the input class
+ * that reasoning was about; 512 survives only as the outer limit a future
+ * symbolic-ref field — a DIFFERENT field, if one is ever added — would inherit.
+ *
+ * The two-block form this replaced put that history FIRST, in the present tense
+ * ("A commit-ish: a sha, a tag, a `git describe` string"), with the supersession
+ * below it. A reader grepping for the rule hit the superseded sentence and read a
+ * declaration as the constraint — which is the exact failure class this contract
+ * exists to close, so it does not get to live in this contract's own comments.
  */
 export const MAX_SOURCE_COMMIT = 512;
+
+/**
+ * An OBJECT NAME: 7-64 lowercase hex. Lower bound is git's minimum useful
+ * abbreviation; upper bound admits a full sha256 object name, so this does not
+ * become the thing that breaks when git finishes moving off sha1.
+ *
+ * The shape IS the bound — nothing 65 characters long is an object name — which is
+ * why no separate length check follows it.
+ */
+const SOURCE_COMMIT_RE = /^[0-9a-f]{7,64}$/;
 
 /**
  * Rule 6's universal shape gate, spelled exactly as `adoption-manifest.ts` spells
@@ -374,8 +402,18 @@ function isBoundedScalar(v: unknown, max: number): v is string {
  * the adoption manifest and illegal on the other. That is exactly the disagreement
  * D4 removed inside S3, reappearing across the S2/S3 boundary.
  *
- * NOT applied to `source_commit`: a git ref legitimately contains `/`
- * (`refs/tags/v2.5.0`), and over-tightening it would be its own defect.
+ * NOT applied to `source_commit` — because that field is STRICTER, not looser.
+ * It takes `SOURCE_COMMIT_RE` (7-64 lowercase hex), which this token rule would
+ * only ever widen, so applying it here would be redundant at best.
+ *
+ * THE EARLIER VERSION OF THIS LINE SAID THE OPPOSITE and was load-bearingly wrong:
+ * "a git ref legitimately contains `/` (`refs/tags/v2.5.0`), and over-tightening it
+ * would be its own defect." That was true while the field accepted symbolic refs
+ * and false the moment `SOURCE_COMMIT_RE` landed. The distinction it missed is the
+ * whole ruling: the objection to `refs/tags/v2.5.0` is not that it is MALFORMED —
+ * it is a perfectly well-formed ref — but that it is MOVABLE, and a field whose job
+ * is to pin bytes cannot accept a name that denotes different bytes tomorrow. A ref
+ * grammar is the right shape for a ref field and the wrong shape for a commit field.
  */
 const IDENTITY_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -387,24 +425,20 @@ function isIdentityToken(v: unknown, max: number): v is string {
 /** The canonical skill-body filename, in both the project and plugin layouts. */
 const SKILL_BODY_FILENAME = "SKILL.md";
 
-/**
- * Characters `git check-ref-format` forbids in a ref name.
- *
- * MY FIRST GRAMMAR WAS A GUESS AND IT WAS WRONG IN BOTH DIRECTIONS (codex round 6,
- * #2). `/^[A-Za-z0-9][A-Za-z0-9._\/+-]*$/` REJECTED the real tags
- * `refs/tags/release@2026` and `refs/tags/rélease-v1`, and ACCEPTED the invalid
- * `refs/tags/release..v1`, `refs//tags/v1`, `refs/tags/v1.lock`, `refs/tags/v1/` and
- * `refs/tags/.hidden`. An allowlist invented from the examples in front of me is
- * exactly the narrow-rule habit this file punishes — the D6 claim "every scalar is
- * SHAPE-CHECKED" does not license inventing the shape.
- *
- * The rule is now git's own, expressed the way git expresses it: a DENYLIST of what
- * a ref name may not contain, rather than a guess at what it may. Non-ASCII tags are
- * legal (git allows them) and the five invalid spellings above are not, without this
- * contract pretending to own a grammar it does not.
- */
-// eslint-disable-next-line no-control-regex
-const REF_FORBIDDEN_CHARS = /[\u0000-\u0020\u007f~^:?*\[\\]/;
+// THE REF-NAME DENYLIST IS GONE, and the reason it went is worth keeping.
+//
+// It encoded `git check-ref-format` as a denylist, after a first attempt at an
+// allowlist grammar was wrong in BOTH directions (codex round 6, #2) — it rejected
+// the real tags `refs/tags/release@2026` and `refs/tags/release-v1` while accepting
+// the invalid `refs/tags/release..v1`, `refs//tags/v1`, `refs/tags/v1.lock`,
+// `refs/tags/v1/` and `refs/tags/.hidden`. Replacing that guess with git's own rule
+// was the right correction TO THE GRAMMAR.
+//
+// The grammar was never the question. `source_commit` pins BYTES, and no ref grammar
+// however faithful can make a movable name immutable — a validator that admits
+// `main` is correct about git and wrong about this field. Object names are hex, so
+// the entire denylist became unreachable the moment SOURCE_COMMIT_RE landed, and a
+// dead denylist reads as a rule someone still relies on.
 
 const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
 
@@ -710,21 +744,39 @@ function validateProjectDefinitionRefV1Inner(obj: unknown): ProjectDefinitionRef
   if (!isProjectRelativePath(pathProp.value)) return null;
   if (!isValidContentHash(hashProp.value)) return null;
 
-  // `source_commit`: a non-empty string or explicit null. `undefined` is NOT
-  // accepted — an absent commit must be stated, not implied.
+  // `source_commit`: an OBJECT NAME or explicit null. `undefined` is NOT accepted —
+  // an absent commit must be stated, not implied.
+  //
+  // HEX-ONLY, BY OPERATOR RULING during the eight-branch integration, REVERSING a
+  // widening this file had made to git's own ref rules.
+  //
+  // The ruling is a correctness argument, not a preference: THIS FIELD EXISTS TO PIN
+  // BYTES, and git's ref grammar admits branch and tag names, which are MUTABLE. A
+  // ref-shaped `source_commit: "main"` satisfies a ref-rule validator today and
+  // denotes different bytes tomorrow — the same declaration-versus-thing failure
+  // class this contract exists to close, reintroduced in the one field whose whole
+  // job is immutability. `refs/tags/v2.5.0` is the same hazard wearing a version
+  // number: a tag is movable.
+  //
+  // WITHDRAWN REASONING, recorded rather than deleted, because it was not silly.
+  // The widening argued that over-tightening this the way `id` was tightened would
+  // be its own defect, since `refs/tags/v1` and `release-2.5.0-1-g02bcf9f` are
+  // ordinary git spellings. True — but ordinary is not the bar. A `git describe`
+  // output only pins bytes through its trailing `g<sha>`, and the honest way to
+  // record one is a SEPARATE field with a name that says what it is, not a widened
+  // commit field that accepts both the thing and a pointer to it.
+  //
+  // MIGRATION COST: NONE, and this was checked rather than assumed — no producer in
+  // the tree emits a non-null `source_commit` for this contract
+  // (`buildProjectDefinitionRef` writes `null`), and the one real commit producer,
+  // build-release-candidate.ts, already resolves `rev-parse --verify HEAD^{commit}`
+  // and asserts 40-hex before use. This is the "unconsumed contract, pay for the
+  // honest shape now" argument the root amendment used, applied again.
+  //
+  // 7-64 hex: an abbreviated object name through a full sha256 one.
   if (commitProp.value !== null) {
-    if (!isBoundedScalar(commitProp.value, MAX_SOURCE_COMMIT)) return null;
-    const commit = commitProp.value;
-    if (REF_FORBIDDEN_CHARS.test(commit)) return null;
-    // `..` ANYWHERE, not merely as a whole segment — the previous `split("/")` form
-    // caught `refs/../x`, let `release..v1` through, and claimed to do both.
-    if (commit.includes("..")) return null;
-    if (commit.includes("//")) return null;
-    if (commit.startsWith("/") || commit.endsWith("/")) return null;
-    if (commit.startsWith(".") || commit.includes("/.")) return null;
-    if (commit.endsWith(".")) return null;
-    if (commit.endsWith(".lock") || commit.includes(".lock/")) return null;
-    if (commit === "@" || commit.includes("@{")) return null;
+    if (typeof commitProp.value !== "string") return null;
+    if (!SOURCE_COMMIT_RE.test(commitProp.value)) return null;
   }
 
   // Identity hashes are raw sha256 hex (the shape hashSpecialistProfile emits —
@@ -808,14 +860,14 @@ export function isProjectDefinitionRefV1(value: unknown): boolean {
 // ── Verification helper (pure — the artifact service supplies the bytes) ─────
 
 /** Why a ref failed to verify. Maps 1:1 onto frozen EXECUTION_REASON_CODES. */
-export const REF_VERIFICATION_FAILURES = [
+export const REF_VERIFICATION_FAILURES = Object.freeze([
   /** The ref itself is malformed → transport `invalid_request`. */
   "invalid_ref",
   /** Bytes were supplied but their hash does not match → transport `invalid_request`. */
   "hash_mismatch",
   /** The definition could not be read at `relative_path` → transport `capability_absent`. */
   "bytes_absent",
-] as const;
+] as const);
 export type RefVerificationFailure = (typeof REF_VERIFICATION_FAILURES)[number];
 
 export interface RefVerification {

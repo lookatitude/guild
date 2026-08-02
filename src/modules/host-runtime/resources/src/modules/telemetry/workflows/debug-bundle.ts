@@ -82,14 +82,14 @@ import {
 // Closed section vocabulary — MH-06 acceptance 4, in contract order
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const DEBUG_BUNDLE_SECTION_KINDS = [
+export const DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
   "capability_snapshot",
   "normalized_event",
   "policy_decision",
   "transport_attempt",
   "artifact",
   "conformance",
-] as const;
+] as const);
 export type DebugSectionKind = (typeof DEBUG_BUNDLE_SECTION_KINDS)[number];
 
 /** Media types that are human presentation, never machine truth (BR-10). */

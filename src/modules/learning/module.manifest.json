@@ -5,7 +5,7 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns repo scanning, taxonomy, structural analysis, knowledge graph construction, staleness, diagrams, and onboarding maps.",
-  "depends_on": ["knowledge", "state"],
+  "depends_on": ["kernel", "knowledge", "state"],
   "owns": {
     "scripts": [],
     "script_id_prefixes": ["learn/"]

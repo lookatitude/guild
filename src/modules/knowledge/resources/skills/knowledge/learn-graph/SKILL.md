@@ -74,8 +74,13 @@ operations**, not project roles. Each names the *operation* it performs
 (semantic typing, layer naming, domain narration, spec synthesis) and the
 **tier** it runs at (`cheap`/`mid`/`powerful`, table below) — never a specialist
 from the project's roster. The executor is the **installed learning machinery**:
-the `context-manager` agent once it is installed, and until then the
-orchestrating session running the operation itself at the stated tier. A project
+the **`context-manager` agent** (`agents/context-manager.md`, `mid` tier, shipped
+since decision `cap-loc-D01`), which is exactly what it exists for — assembling
+and summarizing bounded context under its own window, inside the write bounds its
+contract enforces (`scripts/lib/capability/context-manager-contract.ts`: it may
+write run-scoped context and artifact material and nothing else). On a host where
+`context-manager` is not dispatchable, the orchestrating session runs the
+operation itself at the stated tier — the graceful fallback, not the default. A project
 with **zero project agents** therefore runs the full Learn pipeline unchanged —
 Learn never depends on a `researcher` or `architect` existing, which would make
 the bootstrap circular (you would need a learned project to compose the team

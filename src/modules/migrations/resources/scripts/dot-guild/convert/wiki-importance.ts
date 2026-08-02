@@ -35,6 +35,7 @@
  */
 
 import * as path from "path";
+import { sealSet } from "../../../src/modules/kernel/workflows/sealed-collections";
 import type { Fs, WikiGradeRecord, ImportanceGrade } from "./types";
 import { parseYaml } from "../../lib/frontmatter";
 
@@ -42,7 +43,7 @@ import { parseYaml } from "../../lib/frontmatter";
 export const GRADED_BY_STAMP = "guild-migrate";
 
 /** Structural (non-knowledge) basenames — never graded. (Shared with wiki-lint-checks.ts.) */
-export const STRUCTURAL_BASENAMES = new Set(["index.md", "readme.md", "log.md", "query.md", "transfer-manifest.md"]);
+export const STRUCTURAL_BASENAMES = sealSet(["index.md", "readme.md", "log.md", "query.md", "transfer-manifest.md"], "STRUCTURAL_BASENAMES");
 
 /** Path segments that mark a provenance / exploratory (confidence-only) page. */
 const PROVENANCE_SEGMENTS = new Set(["research", "ideation", "sources"]);

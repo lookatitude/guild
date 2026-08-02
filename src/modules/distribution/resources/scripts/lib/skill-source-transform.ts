@@ -61,6 +61,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import {
+  canonicalizeRealPath,
+  isWithin,
+} from "../../src/modules/kernel/workflows/path-containment";
+
 import { splitFrontmatter } from "./frontmatter";
 
 // ---------------------------------------------------------------------------
@@ -438,37 +443,19 @@ const REAL_PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 const LIVE_SURFACE_DIRS = ["skills", ".claude-plugin", "commands"] as const;
 
 /**
- * Canonicalize a path to an absolute real path, resolving symlinks on the longest
- * EXISTING ancestor (the target file itself may not exist yet). Defeats a symlink
- * bypass — e.g. a `stagingRoot` that is itself a symlink into the live `skills/`
- * tree resolves to the real live path and is rejected.
+ * MIGRATED to the shared path-containment primitive
+ * (`src/modules/kernel/workflows/path-containment.ts`).
+ *
+ * The private `canonicalAbs`/`isUnderOrEqual` pair that used to live here was
+ * BYTE-IDENTICAL to the pair in `command-registry.ts` and near-identical to
+ * `resolveRealTarget` in `instantiate-template.ts` — three homes for one shape,
+ * each a place a fix could stop. All three climbed with `existsSync`, which
+ * FOLLOWS symlinks, so all three read a DANGLING symlink as "does not exist",
+ * walked past it, and returned a canonical path that was not where a write would
+ * land. The shared climb uses `lstat`, so that hole is closed in one place.
  */
-function canonicalAbs(p: string): string {
-  const abs = path.resolve(p);
-  let existing = abs;
-  const tail: string[] = [];
-  while (!fs.existsSync(existing)) {
-    tail.unshift(path.basename(existing));
-    const parent = path.dirname(existing);
-    if (parent === existing) return abs; // hit filesystem root without existence
-    existing = parent;
-  }
-  try {
-    const realExisting = fs.realpathSync(existing);
-    return tail.length ? path.join(realExisting, ...tail) : realExisting;
-  } catch {
-    return abs;
-  }
-}
-
-/** Segment-aware containment: is `child` the same as, or nested under, `parent`? */
-function isUnderOrEqual(child: string, parent: string): boolean {
-  const rel = path.relative(parent, child);
-  return (
-    rel === "" ||
-    (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel))
-  );
-}
+const canonicalAbs = canonicalizeRealPath;
+const isUnderOrEqual = isWithin;
 
 /**
  * Guard: assert `target` is a staging/temp path, NOT the live install surface.
@@ -530,13 +517,13 @@ export function renderSkillToStaging(
 // ---------------------------------------------------------------------------
 
 /** The five invocation-driving skills with a committed SKILL.md (F-5: using-guild excluded). */
-export const WAVE2_SKILL_IDS = [
+export const WAVE2_SKILL_IDS = Object.freeze([
   "review-broker",
   "execute-plan",
   "systematic-debug",
   "tdd",
   "verify-done",
-] as const;
+] as const);
 
 interface CliArgs {
   registryPath: string;

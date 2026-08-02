@@ -15,7 +15,9 @@
  */
 
 /** Keys that must never be merged into any object (prototype pollution guard). */
-export const PROTO_POISON_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+import { sealSet } from "../../kernel";
+
+export const PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
 
 /** True when `key` is a dangerous prototype-pollution key name. */
 export function isProtoPoisonKey(key: string): boolean {

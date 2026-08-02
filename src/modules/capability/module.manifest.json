@@ -5,13 +5,23 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Ranks and resolves task capability, model tier, backend selection, and role/capability metadata.",
-  "depends_on": ["config", "dispatch", "host-runtime", "review"],
+  "depends_on": [
+    "config",
+    "dispatch",
+    "host-runtime",
+    "review"
+  ],
   "owns": {
     "scripts": [
-      "score-tier",
+      "capability-adopt",
+      "capability-profile",
+      "lib/core/contracts/project-capability-profile",
       "lib/role-model-schema",
-      "lib/role-resolver"
+      "lib/role-resolver",
+      "score-tier"
     ],
-    "script_id_prefixes": ["lib/capability/"]
+    "script_id_prefixes": [
+      "lib/capability/"
+    ]
   }
 }

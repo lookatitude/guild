@@ -149,7 +149,7 @@ export type SecurityEventInput = Omit<SecurityEventV1, "schema_version" | "ts" |
  * The 9 canonical registry host ids Guild's host-adapter contract supports (HK-10).
  * This intentionally mirrors the host registry, not the legacy HostKind union.
  */
-export const KNOWN_GUILD_HOST_KINDS = [
+export const KNOWN_GUILD_HOST_KINDS = Object.freeze([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -159,7 +159,7 @@ export const KNOWN_GUILD_HOST_KINDS = [
   "claude-code-web",
   "codex-app",
   "claude-ai-connector",
-] as const;
+] as const);
 
 const KNOWN_GUILD_HOST_ID_SET = new Set<string>(KNOWN_GUILD_HOST_KINDS);
 const LEGACY_HOST_ALIASES: Record<string, string> = {

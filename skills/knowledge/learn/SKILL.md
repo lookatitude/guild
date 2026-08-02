@@ -122,6 +122,66 @@ Implements brief §178-201 ordered flow, SC-A:
 12. **Extract durable knowledge candidates.** Emit wiki-page candidates, decision
     candidates, open questions, risks, standards, patterns, anti-patterns to
     `.guild/runs/<run-id>/learn/candidates.json`.
+12b. **Emit the capability profile (D1 — report-only).** Write
+    `guild.project_capability_profile.v1` for this run:
+
+    ```bash
+    npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts emit \
+      --cwd <root> --run-id <id> --project-id <id> --generated-at <rfc3339> \
+      [--facts .guild/runs/<run-id>/learn/capability-facts.json] \
+      --baseline .guild/runs/<run-id>/capability/baseline.json \
+      --resolver-mode <resolved capability.resolver_mode>
+    ```
+
+    **THE INVARIANT: zero live agent/skill/registry/config mutations.** The
+    emitter hashes `.guild/agents/**`, `.guild/skills/**`, and both registry
+    projections before and after, refuses to emit if they differ, and deletes the
+    profile if the emission itself moved one. It is a REPORT — `mutation_performed`
+    is the literal `false` and no field can express a change made.
+
+    **`--baseline` is what makes the window the WHOLE RUN**, and it is why step 1
+    captures it. Without it the emitter can only bracket its own execution, so a
+    stage that wrote to `.guild/agents/` back at step 8 would be measured across a
+    window in which nothing happened. Capture the baseline at **step 1**, right
+    after `startRun`, before any scan:
+
+    ```bash
+    npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts hash-tree \
+      --cwd <root> --json --for-run <run-id> > .guild/runs/<run-id>/capability/baseline.json
+    ```
+
+    **`--for-run <run-id>` is required**, not decorative: it BINDS the baseline to
+    this project root and this run. Without it the emitter refuses the baseline
+    rather than treating an unbound hash triple as a run-start capture — a
+    cross-project baseline was otherwise accepted and reported whole-run coverage
+    it never had.
+
+    A malformed, foreign or wrong-run baseline is a REFUSAL (`invalid_baseline`),
+    never a silent fall-back to the narrow window — falling back would quietly
+    downgrade the claim the emitted profile makes.
+
+    **What the binding cannot prove: CAPTURE TIME.** Capturing at step 8 and
+    passing it here yields `mutation_window: "run"` for a window that began at
+    step 8. `"run"` therefore means "the caller asserts this is from run start";
+    only `"emission"` is established unaided. Capture it at step 1 as written
+    above and the assertion is true.
+
+    Mode behaviour, all one implementation:
+    - `capability.resolver_mode: legacy` → **no emission** (typed refusal
+      `resolver_mode_disabled`); the project has not opted into localization.
+    - `observe` (the default, D04) and beyond → emit. Under an interactive
+      `/guild:learn`, offer **review / create-one / defer / dismiss**; creation
+      itself is `guild:create-specialist` / `guild:create-skill` behind the human
+      gate, never this step.
+    - `/guild:init --learn` → same profile, **summary line only, NO extra blocking
+      gate** — init's gates are unchanged by this step.
+    - `defaults.auto_learn` → **report-only, no prompt**. Candidates surface later
+      via `/guild:status` (F7). That surfacing is what makes the `observe` default
+      honest rather than a silent accumulator.
+    - `/guild:learn map` → this step does **not** run. Map emits no proposals.
+    - **Workspace Learn** → each child's profile stays under that child's
+      `.guild/runs/`; the umbrella records **references only**, never child bodies
+      (the query-not-copy rule, S4).
 13. **Update derived indexes.** Write/refresh `codebase-map.json`,
     `knowledge-graph.json`, `knowledge-links.json`.
 14. **Write provenance.** Assemble `provenance.json` — scanned_count,

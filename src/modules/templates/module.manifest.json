@@ -5,7 +5,7 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns template instantiation and template schema helpers used by skills, agents, and product scaffolds.",
-  "depends_on": ["evals", "security"],
+  "depends_on": ["evals", "kernel", "security"],
   "owns": {
     "skills": ["guild-create-skill"],
     "scripts": ["instantiate-template", "lib/template-schema"]

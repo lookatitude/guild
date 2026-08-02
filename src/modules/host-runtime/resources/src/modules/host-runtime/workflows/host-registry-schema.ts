@@ -33,6 +33,8 @@
  * L11 (adapters), Ltest (RED→GREEN).
  */
 
+import { deepFreeze } from "../../kernel";
+
 import { UPDATE_COMMANDS,
   GuildHostCapabilitiesV1,
   validateHostCapabilitiesV1,
@@ -51,7 +53,7 @@ import { UPDATE_COMMANDS,
  * generated support matrix. Legacy inputs normalize into this set via
  * host-id-namespace.ts; legacy aliases are never authoritative registry ids.
  */
-export const HOST_IDS = [
+export const HOST_IDS = Object.freeze([
   // keep CLI/file (5)
   "claude-code-cli",
   "codex-cli",
@@ -73,7 +75,7 @@ export const HOST_IDS = [
   "kiro",
   "qoder",
   "trae",
-] as const;
+] as const);
 export type HostId = (typeof HOST_IDS)[number];
 
 /**
@@ -82,7 +84,7 @@ export type HostId = (typeof HOST_IDS)[number];
  * verified_multi_host L0 ADR §2.2. `FAMILY_SET` below is `new Set(HOST_FAMILIES)`, so it
  * auto-derives — no separate edit. `gemini` was sunset 2026-06-14 (Antigravity replaced it).
  */
-export const HOST_FAMILIES = [
+export const HOST_FAMILIES = Object.freeze([
   "claude",
   "codex",
   "agents",
@@ -92,7 +94,7 @@ export const HOST_FAMILIES = [
   "copilot",
   "opencode",
   "rovo",
-] as const;
+] as const);
 export type HostFamilyId = (typeof HOST_FAMILIES)[number];
 
 // ---------------------------------------------------------------------------
@@ -123,14 +125,14 @@ export type Installability = "native" | "target" | "none";
  *   - "opencode_stored_or_env": opencode auth config present OR a provider env key set.
  *   - "acli_stored":            `acli` Atlassian auth present (`acli rovodev` reachable).
  */
-export const AUTH_PROBES = [
+export const AUTH_PROBES = Object.freeze([
   "codex_stored_or_env",
   "none",
   "cursor_stored",
   "gh_auth",
   "opencode_stored_or_env",
   "acli_stored",
-] as const;
+] as const);
 export type AuthProbe = (typeof AUTH_PROBES)[number];
 
 /** The file/IDE detection recipe for `adapter_binding: "agents-file"` rows (null for CLI hosts). */
@@ -708,7 +710,7 @@ const TRAE_ENTRY: HostRegistryEntry = {
 };
 
 /** The registry rows, keyed by host_id. The single design-time SoT for L7 (16 hosts). */
-export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
+export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = deepFreeze({
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
   "pi-cli": PI_ENTRY,
@@ -725,7 +727,7 @@ export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
   kiro: KIRO_ENTRY,
   qoder: QODER_ENTRY,
   trae: TRAE_ENTRY,
-};
+});
 
 // ---------------------------------------------------------------------------
 // Validation

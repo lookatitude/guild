@@ -111,14 +111,14 @@ import {
 export const ADOPTION_MANIFEST_SCHEMA = "guild.adoption_manifest.v1" as const;
 
 /** Why an entry exists. CLOSED — never free-text classification. */
-export const ADOPTION_REASONS = [
+export const ADOPTION_REASONS = Object.freeze([
   "migrated",
   "collapsed",
   "rehomed",
   "renamed",
   "removed",
   "rolled_back",
-] as const;
+] as const);
 export type AdoptionReason = (typeof ADOPTION_REASONS)[number];
 
 const ADOPTION_REASON_SET: ReadonlySet<string> = new Set<string>(ADOPTION_REASONS);
@@ -140,6 +140,12 @@ const DETAIL_REQUIRED: ReadonlySet<string> = new Set<string>([
  * The names are kept for compatibility: `LEGACY_HOMES` / `LegacyHome` describe the
  * OLD world on the `from` side, `DEFINITION_LAYERS` / `DefinitionLayer` the current
  * one on the `to` side. Same set, two readings.
+ *
+ * INTEGRATION NOTE: this file previously declared its own `Object.freeze`d literal
+ * (contracts rule 10 / XF, "freeze all 13 exported vocabularies"). Collapsing to the
+ * re-export is right — one definition beats two — but the runtime freeze must not be
+ * lost with the literal, so `DEFINITION_LAYERS` itself is now frozen at its
+ * declaration site in the locator contract. Both intents survive.
  */
 export const LEGACY_HOMES = DEFINITION_LAYERS;
 export type LegacyHome = DefinitionLayer;
@@ -1209,7 +1215,7 @@ export function validateAdoptionManifestV1(obj: unknown): AdoptionManifestV1 | n
 
 // ── Reader contract (the part gap-audit F1 says is missing) ─────────────────
 
-export const ADOPTION_RESOLUTIONS = [
+export const ADOPTION_RESOLUTIONS = Object.freeze([
   "resolved",
   /** Deliberately removed with no successor — DISTINCT from `not_found`. */
   "removed",
@@ -1217,7 +1223,7 @@ export const ADOPTION_RESOLUTIONS = [
   "not_found",
   /** A fork, a cycle, or a malformed manifest. Never a guess. */
   "ambiguous",
-] as const;
+] as const);
 export type AdoptionResolutionStatus = (typeof ADOPTION_RESOLUTIONS)[number];
 
 export interface AdoptionResolution {

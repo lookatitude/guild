@@ -32,7 +32,6 @@ import {
   MAX_RELATIVE_PATH,
   MAX_SKILLS,
   DEFINITION_LAYERS,
-  MAX_SOURCE_COMMIT,
   PROJECT_DEFINITION_REF_SCHEMA,
   layerAgreesWithPath,
   validateProjectDefinitionRefV1,
@@ -747,7 +746,7 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
     project_id: MAX_PROJECT_ID,
     id: MAX_DEFINITION_ID,
     relative_path: MAX_RELATIVE_PATH,
-    source_commit: MAX_SOURCE_COMMIT,
+    source_commit: 64, // HEX-ONLY RULING: the SHAPE bounds it — 7-64 hex
     content_hash: 71, // "sha256:" + 64 hex, fixed by regex
     specialist_profile_hash: 64, // raw hex, fixed by regex
     specialist_type_hash: 64,
@@ -808,11 +807,17 @@ describe("D6 — every scalar at every nesting level is byte-bounded, by registr
     expect(validateProjectDefinitionRefV1({ ...validRef(), id: at + "i" })).toBeNull();
   });
 
-  it("accepts source_commit at exactly MAX_SOURCE_COMMIT and rejects at +1", () => {
-    const at = "c".repeat(MAX_SOURCE_COMMIT);
+  it("accepts source_commit at exactly 64 hex and rejects at +1", () => {
+    // REWRITTEN BY THE HEX-ONLY RULING (eight-branch integration). This pinned the
+    // 512-byte cap; the field is now 7-64 hex, so the SHAPE bounds the length and
+    // the byte cap is unreachable. Still a real boundary pin — it reddens if the
+    // upper bound moves — and 64 is deliberate: a full sha256 object name.
+    const at = "c".repeat(64);
     expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at })).not.toBeNull();
     expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at + "c" })).toBeNull();
-    // …and an explicit null is still the way to say "outside a git tree".
+    // and the LOWER bound, which the byte cap never expressed at all
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: "abc123" })).toBeNull();
+    expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: "abc1234" })).not.toBeNull();
     expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: null })).not.toBeNull();
   });
 
@@ -1233,26 +1238,40 @@ describe("D6-R1 — S2 identities are TOKEN-shaped, and the commit bound fits re
     ).not.toBeNull();
   });
 
-  it("accepts a real 137-char `git describe --tags --long` output", () => {
+  it("REJECTS a real 137-char `git describe --tags --long` output — hex-only ruling", () => {
+    // INVERTED, not deleted. This asserted the 512 bound existed to ACCEPT a describe
+    // string, because the field's doc then promised "a sha, a tag, a describe string".
+    // The operator ruling withdrew that promise: the field pins BYTES, and a describe
+    // string pins them only through its trailing `g<sha>` — the rest is a movable tag
+    // name. Keeping the case inverted preserves the evidence that a real 137-char
+    // value exists and is now deliberately out of scope, rather than losing the fact.
     const describe137 = "release-" + "c".repeat(118) + "-1-g02bcf9f";
     expect(describe137.length).toBe(137);
     expect(
       validateProjectDefinitionRefV1({ ...validRef(), source_commit: describe137 })
+    ).toBeNull();
+    // The ABBREVIATED OBJECT NAME inside it is what the field wants, and it validates.
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), source_commit: "02bcf9f" })
     ).not.toBeNull();
   });
 
-  it("…and source_commit is still bounded, exactly at MAX_SOURCE_COMMIT", () => {
-    const at = "c".repeat(MAX_SOURCE_COMMIT);
+  it("…and source_commit is still bounded — now by its SHAPE, at 64 hex", () => {
+    // The byte cap is unreachable under the hex-only ruling; 64 hex is the real edge.
+    const at = "c".repeat(64);
     expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at })).not.toBeNull();
     expect(validateProjectDefinitionRefV1({ ...validRef(), source_commit: at + "c" })).toBeNull();
   });
 
-  it("source_commit is NOT token-shaped — a git ref legitimately contains `/`", () => {
-    // Over-tightening this the way ids were tightened would be its own defect:
-    // `refs/tags/v1` and `feature/x-1-gabc1234` are ordinary values.
+  it("source_commit REFUSES a qualified ref — a movable name cannot pin bytes", () => {
+    // SUPERSEDED AND INVERTED. This argued that over-tightening the field would be its
+    // own defect, since `refs/tags/v1` is an ordinary git value. Ordinary was never the
+    // bar: a TAG IS MOVABLE, so `refs/tags/v2.5.0` satisfies a ref-grammar validator
+    // today and denotes different bytes tomorrow — the declaration-versus-thing class
+    // this contract exists to close, in the one field whose job is immutability.
     expect(
       validateProjectDefinitionRefV1({ ...validRef(), source_commit: "refs/tags/v2.5.0" })
-    ).not.toBeNull();
+    ).toBeNull();
   });
 });
 
@@ -1793,8 +1812,14 @@ describe("R5 — codex round 5: both halves of every hash/no-hash pairing", () =
 
   /**
    * R5 #3 (P2). D6 claimed "every scalar is BOUNDED and SHAPE-CHECKED"; this one was
-   * only bounded. The grammar deliberately still admits `/`, which is why the token
-   * shape was withheld from this field in the first place.
+   * only bounded.
+   *
+   * REWRITTEN BY THE HEX-ONLY RULING (eight-branch integration). The original pair
+   * rejected non-commit-ish prose and accepted "every real git spelling", including
+   * qualified refs and describe output. The rejection half stands unchanged — hex-only
+   * subsumes it. The acceptance half is now SPLIT, because "a real git spelling" and
+   * "a value that pins bytes" turned out to be different sets, and only the second is
+   * what this field means.
    */
   it.each([
     ["prose with spaces", "not a commit"],
@@ -1808,14 +1833,30 @@ describe("R5 — codex round 5: both halves of every hash/no-hash pairing", () =
 
   it.each([
     ["abbreviated sha", "abc1234"],
-    ["full sha", "a".repeat(40)],
-    ["qualified ref", "refs/tags/v2.5.0"],
-    ["describe output", "release-2.5.0-1-g02bcf9f"],
-    ["prerelease tag", "v2.5.0-beta.1"],
-  ])("R5#3 …and every real git spelling still validates — %s", (_label, good) => {
+    ["full sha1", "a".repeat(40)],
+    ["full sha256", "b".repeat(64)],
+  ])("R5#3 …and an OBJECT NAME validates — %s", (_label, good) => {
     expect(
       validateProjectDefinitionRefV1({ ...validRef(), source_commit: good })
     ).not.toBeNull();
+  });
+
+  it.each([
+    ["qualified ref", "refs/tags/v2.5.0"],
+    ["describe output", "release-2.5.0-1-g02bcf9f"],
+    ["prerelease tag", "v2.5.0-beta.1"],
+    ["bare branch name", "main"],
+    ["too short to be an object name", "abc123"],
+    ["uppercase hex", "ABC1234"],
+  ])("R5#3 …and a MOVABLE NAME is refused, however real — %s", (_label, symbolic) => {
+    // These were all ASSERTED TO VALIDATE before the ruling, and they are all genuine
+    // git spellings. That is exactly why the row is kept rather than deleted: the point
+    // is not that they are malformed, it is that a name which can be repointed cannot
+    // pin bytes. `main` is the clearest case — perfectly valid, and it denotes whatever
+    // it denotes tomorrow.
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), source_commit: symbolic })
+    ).toBeNull();
   });
 });
 
@@ -1851,21 +1892,40 @@ describe("R6 — codex round 6: the locator's ROOT, and git's own ref rules", ()
   /**
    * R6 #2 (P2). My round-5 grammar was an allowlist invented from the examples in
    * front of me, and it disagreed with `git check-ref-format` in BOTH directions —
-   * rejecting real tags and accepting invalid ones. The rule is now git's own,
+   * rejecting real tags and accepting invalid ones. The rule became git's own,
    * expressed as git expresses it: a denylist of what a ref name may not contain.
+   *
+   * SUPERSEDED BY THE HEX-ONLY RULING (eight-branch integration), and the supersession
+   * is narrower than it looks. R6#2's finding was CORRECT — the invented grammar really
+   * was wrong in both directions, and git's own rule really was the right correction TO
+   * A REF GRAMMAR. What the ruling changed is whether this field should hold a ref at
+   * all. It should not: `source_commit` pins BYTES, and every value below that is not
+   * an object name is a MOVABLE NAME, which cannot.
+   *
+   * So the rows survive with their verdicts flipped rather than being deleted. They are
+   * still the best catalogue anyone has of real git spellings, and a future symbolic-ref
+   * field — which is where a describe string or a tag honestly belongs — should start
+   * from exactly this list.
    */
   it.each([
-    ["at-sign tag", "refs/tags/release@2026"],
-    ["non-ASCII tag", "refs/tags/rélease-v1"],
     ["abbreviated sha", "abc1234"],
     ["full sha", "a".repeat(40)],
-    ["qualified ref", "refs/tags/v2.5.0"],
-    ["describe output", "release-2.5.0-1-g02bcf9f"],
-    ["prerelease tag", "v2.5.0-beta.1"],
-  ])("R6#2 a REAL git ref is accepted — %s", (_label, good) => {
+  ])("R6#2 an OBJECT NAME is accepted — %s", (_label, good) => {
     expect(
       validateProjectDefinitionRefV1({ ...validRef(), source_commit: good })
     ).not.toBeNull();
+  });
+
+  it.each([
+    ["at-sign tag", "refs/tags/release@2026"],
+    ["non-ASCII tag", "refs/tags/rélease-v1"],
+    ["qualified ref", "refs/tags/v2.5.0"],
+    ["describe output", "release-2.5.0-1-g02bcf9f"],
+    ["prerelease tag", "v2.5.0-beta.1"],
+  ])("R6#2 …and a REAL git ref is now REFUSED, because it is movable — %s", (_label, ref_) => {
+    expect(
+      validateProjectDefinitionRefV1({ ...validRef(), source_commit: ref_ })
+    ).toBeNull();
   });
 
   it.each([

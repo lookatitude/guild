@@ -33,6 +33,7 @@
  */
 
 import * as fs from "fs";
+import { sealSet } from "../../../src/modules/kernel/workflows/sealed-collections";
 import * as path from "path";
 import * as crypto from "crypto";
 import type {
@@ -49,13 +50,13 @@ export type {
 // ---------------------------------------------------------------------------
 
 // 21 canonical node types (frozen schema §"KnowledgeGraph").
-export const NODE_TYPES = new Set([
+export const NODE_TYPES = sealSet([
   "file", "function", "class", "module", "concept",
   "config", "document", "service", "table", "endpoint",
   "pipeline", "schema", "resource",
   "domain", "flow", "step",
   "article", "entity", "topic", "claim", "source",
-]);
+], "NODE_TYPES");
 
 // ---------------------------------------------------------------------------
 // v2 — expanded node type set (breaking bump)
@@ -68,11 +69,11 @@ export const NODE_TYPES = new Set([
 // reached via a `subtopic_of` edge (per spec § Schema Design).
 // subtopic_of edges form a TREE (each topic has at most one parent).
 // Multi-parent subtopic_of is REJECTED (violates tree invariant).
-export const NODE_TYPES_V2 = new Set([
+export const NODE_TYPES_V2 = sealSet([
   ...NODE_TYPES,
   "wiki_page",  // first-class in v2; v1 aliased this to article — alias removed
   "diagram",    // new in v2: fenced mermaid blocks, .svg files
-]);
+], "NODE_TYPES_V2");
 
 // ---------------------------------------------------------------------------
 // v1 — closed edge type set (frozen)
@@ -81,7 +82,7 @@ export const NODE_TYPES_V2 = new Set([
 // Canonical edge types: the forked UA 35-type closed set across 8 categories,
 // PLUS `implemented_by` which the frozen Guild schema names explicitly and
 // the LOCKED invariant marks as NOT aliased.
-export const EDGE_TYPES = new Set([
+export const EDGE_TYPES = sealSet([
   // Structural
   "imports", "exports", "contains", "inherits", "implements", "implemented_by",
   // Behavioral
@@ -100,7 +101,7 @@ export const EDGE_TYPES = new Set([
   "contains_flow", "flow_step", "cross_domain",
   // Knowledge
   "cites", "contradicts", "builds_on", "exemplifies", "categorized_under", "authored_by",
-]);
+], "EDGE_TYPES");
 
 // ---------------------------------------------------------------------------
 // v2 — expanded edge type set (breaking bump)
@@ -108,7 +109,7 @@ export const EDGE_TYPES = new Set([
 
 // guild.knowledge_graph.v2 adds new knowledge edge types that survive the
 // validator (in v1 these were aliased or dropped as unknown).
-export const EDGE_TYPES_V2 = new Set([
+export const EDGE_TYPES_V2 = sealSet([
   ...EDGE_TYPES,
   "subtopic_of",       // hierarchy; acyclic, tree (single-parent), depth-monotone (SC-2)
   "relates_to",        // weighted, LLM-judged (SC-3)
@@ -117,7 +118,7 @@ export const EDGE_TYPES_V2 = new Set([
   "mentions",          // modality bridge (SC-3)
   "defines",           // modality bridge (first-class v2 — NOT aliased to defines_schema)
   // NOTE: "related" is already in v1 EDGE_TYPES (wikilink edges use it)
-]);
+], "EDGE_TYPES_V2");
 
 // ---------------------------------------------------------------------------
 // v2 — category enum (closed set, SC-6)
@@ -126,7 +127,7 @@ export const EDGE_TYPES_V2 = new Set([
 // Frozen category enum for knowledge nodes. Validator REQUIRES category on
 // all v2 knowledge node types (topic/concept/claim/entity/wiki_page/diagram)
 // and REJECTS any value not in this set.
-export const NODE_CATEGORIES = new Set([
+export const NODE_CATEGORIES = sealSet([
   // Code structure
   "function", "class", "module", "config", "endpoint", "pipeline", "schema",
   // Knowledge
@@ -137,7 +138,7 @@ export const NODE_CATEGORIES = new Set([
   "decision", "standard", "recipe", "checklist",
   // Content
   "component", "domain", "diagram", "index", "note",
-]);
+], "NODE_CATEGORIES");
 
 // ---------------------------------------------------------------------------
 // v2 — config defaults (models.knowledge.*, SC-2/SC-15)
@@ -256,8 +257,8 @@ export const sha8 = sha8Hash;
 // v1 — alias tables (forked from Understand-Anything, MIT)
 // ---------------------------------------------------------------------------
 
-export const DIRECTIONS = new Set(["out", "in", "bi"]);
-export const CONFIDENCE = new Set(["high", "medium", "low"]);
+export const DIRECTIONS = sealSet(["out", "in", "bi"], "DIRECTIONS");
+export const CONFIDENCE = sealSet(["high", "medium", "low"], "CONFIDENCE");
 
 // ---- Forked alias tables (Understand-Anything, MIT). DATA, not logic. ----
 

@@ -597,6 +597,22 @@ describe("extractFromHarvestFile — malformed arrays → graceful skip (Finding
     );
   }
 
+  /**
+   * ORDERING REGRESSION PIN (task #31).
+   *
+   * The strict-subdirectory check must run BEFORE anything touches the filesystem.
+   * When the containment migration first landed it ran AFTER
+   * `prepareContainedWrite`, which creates directories — reintroducing variant 2(a)
+   * (mkdir before the check) inside the migration whose whole purpose is that
+   * ordering. Reproduced then, pinned now: a run-id that escapes the runs base but
+   * stays inside the workspace root must be refused with NOTHING created.
+   *
+   * The assertion is on the SIDE EFFECT, not on the exit code, because the exit
+   * code was already 1 in the broken version — the refusal was never missing, only
+   * the "nothing was created" half of it. Asserting the status alone would have
+   * passed on the defect, which is the whole failure mode this suite exists to
+   * avoid.
+   */
   function makeWorkspaceJson(workspaceRoot: string, childNames: string[]): void {
     const guildDir = path.join(workspaceRoot, ".guild");
     fs.mkdirSync(guildDir, { recursive: true });
@@ -685,6 +701,53 @@ describe("extractFromHarvestFile — malformed arrays → graceful skip (Finding
 });
 
 // ── Finding #6 — CLI manifest writer integration tests ───────────────────────
+
+/**
+ * ORDERING PIN (task #31) — STRUCTURAL, and the reason it is structural matters.
+ *
+ * The strict-subdirectory check must run BEFORE `prepareContainedWrite`, which
+ * creates directories. When the containment migration first landed it ran after,
+ * reintroducing variant 2(a) — mkdir before the check — inside the migration whose
+ * whole purpose is that ordering.
+ *
+ * I FIRST WROTE THIS AS A BEHAVIOURAL TEST AND IT WAS VACUOUS. It drove the CLI
+ * with `--run-id ../evil` and asserted nothing was created. It passed — and it
+ * passed on the BROKEN order too, which is how I found out. `validateRunId` is a
+ * total upstream guard (no slashes, no "..", no ".", no empty), so no run-id that
+ * reaches the containment code can escape the runs base. The test was measuring
+ * `validateRunId`, not the ordering, and would have defended the defect while
+ * looking like proof against it.
+ *
+ * So the honest position: the ordering defect is UNREACHABLE THROUGH THE CLI as
+ * long as `validateRunId` is correct, and the strict-subdirectory check is defence
+ * in depth against that guard being wrong. The fix is principle-preserving rather
+ * than defect-closing, and this pin is on the SOURCE ORDER — the property actually
+ * being protected — which is a thing that can fail, and did fail when I checked it
+ * against the deliberately-reordered variant.
+ */
+describe("promote-upstream — check ordering (variant 2a)", () => {
+  const SRC = path.resolve(
+    __dirname,
+    "..",
+    "..",
+    "src",
+    "modules",
+    "workspace",
+    "workflows",
+    "promote-upstream.ts",
+  );
+
+  it("the pure strict-subdirectory check precedes the directory-creating call", () => {
+    const code = fs.readFileSync(SRC, "utf8");
+    const strictAt = code.indexOf("resolvedRunsDir === runsBase");
+    const prepareAt = code.indexOf("prepareContainedWrite(workspaceRoot");
+    expect(strictAt).toBeGreaterThan(-1);
+    expect(prepareAt).toBeGreaterThan(-1);
+    // Non-vacuity: both anchors must exist, so a rename that removes either fails
+    // here rather than silently making the comparison meaningless.
+    expect(strictAt).toBeLessThan(prepareAt);
+  });
+});
 
 describe("promote-upstream CLI — manifest writer integration (Finding #6)", () => {
   let tmpDir: string;

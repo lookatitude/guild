@@ -46,6 +46,8 @@
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+
 export type HandoffTier = "cheap" | "mid" | "powerful";
 export type HandoffStatus = "done" | "blocked" | "escalate";
 
@@ -98,11 +100,11 @@ export const SUMMARY_MAX_CHARS = 600;
 export const NOTES_MAX_CHARS = 200;
 
 /** HK-08 additive-optional values; absence is interpreted as unverified. */
-export const ALLOWED_INJECTION_CLEAN_VALUES: ReadonlySet<string> = new Set([
+export const ALLOWED_INJECTION_CLEAN_VALUES: ReadonlySet<string> = sealSet([
   "clean",
   "flagged",
   "unverified",
-]);
+], "ALLOWED_INJECTION_CLEAN_VALUES");
 
 const VALID_TIERS = new Set<string>(["cheap", "mid", "powerful"]);
 const VALID_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
@@ -111,7 +113,7 @@ const VALID_STATUSES = new Set<string>(["done", "blocked", "escalate"]);
  * Exhaustive allowed top-level key set (spec §2). Any key not in this set is
  * rejected — catches `schema:` (p2-3 drift) and any misspelled/extra key.
  */
-export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
+export const ALLOWED_TOP_LEVEL_KEYS = sealSet([
   "schema_version",
   "task_id",
   "tier",
@@ -123,7 +125,7 @@ export const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "learnings",
   "notes",
   "injection_clean", // HK-08 additive-optional
-]);
+], "ALLOWED_TOP_LEVEL_KEYS");
 
 // ── Validation result ──────────────────────────────────────────────────────
 

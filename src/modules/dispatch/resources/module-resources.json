@@ -15,28 +15,28 @@
       "id": "lib/core/contracts/adoption-manifest",
       "source_path": "scripts/lib/core/contracts/adoption-manifest.ts",
       "resource_path": "resources/scripts/lib/core/contracts/adoption-manifest.ts",
-      "sha256": "9d4a0f56e562b1d9b0063e82120a505bb2902965f817cfe1d9055814f6fcaf34"
+      "sha256": "9a5cfb81e97bd858a45d7d3c2072eb396ae6ce1f0d516a4119d5477dad084a7c"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/project-definition-ref",
       "source_path": "scripts/lib/core/contracts/project-definition-ref.ts",
       "resource_path": "resources/scripts/lib/core/contracts/project-definition-ref.ts",
-      "sha256": "de755f99394aeaa90a747aedcda51443911b89bc5c6501d2071bce23a75137ff"
+      "sha256": "1b8fffb935c5b669b39e2f4b7cc45b95c4d4e442b894b03aef43c90ed11dca28"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/specialist-identity",
       "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
       "resource_path": "resources/scripts/lib/core/contracts/specialist-identity.ts",
-      "sha256": "71013a384205271bb970e1f1a67e150ca232a33db89d5e8d3a74d9c60a80e762"
+      "sha256": "4c56826dccbc789e37b2e60143e4a9673ef34c431478ae14a8690e249cc778c0"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/task-cell-backend",
       "source_path": "scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/task-cell-backend.ts",
-      "sha256": "92cb28d53275269d8a315162647d72bd42a545cc611f31455049896aa9127952"
+      "sha256": "3981b150984555d7458350b4a5b9932d2c398509bf31e26cf39f99109acf1171"
     },
     {
       "category": "scripts",

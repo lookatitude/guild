@@ -62,7 +62,7 @@ import {
   type CapabilityAutoCreatePolicy,
   type CapabilityResolverMode,
 } from "./config-defaults";
-import { loadYamlApi } from "../../kernel";
+import { loadYamlApi, sealSet } from "../../kernel";
 
 const yaml = loadYamlApi() as { load: (src: string) => unknown };
 
@@ -441,7 +441,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
  * cannot be read is config that does not exist. `config-schema-resolver-parity.test.ts`
  * is the guard that stops the next key being inert the same way.
  */
-export const RESOLVER_TIER1_KEYS: ReadonlySet<string> = new Set([
+export const RESOLVER_TIER1_KEYS: ReadonlySet<string> = sealSet([
   "rigor", "auto_approve", "review", "host", "host_mode", "roles", "host_profiles", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace",
   "models", "security", "secrets_policy", "mcp",
@@ -449,7 +449,7 @@ export const RESOLVER_TIER1_KEYS: ReadonlySet<string> = new Set([
   "statusline",                  // R-009
   "adversarial_review_provider", // R-008
   "loops", "loop_cap", "codex_cap", "defaults",
-]);
+], "RESOLVER_TIER1_KEYS");
 
 /** S5 — closed sub-key set for `capability.*`, mirroring the CLI loader's. */
 const VALID_CAPABILITY_KEYS = new Set([
@@ -882,8 +882,17 @@ function assembleLayers(
   layers: Array<Partial<ResolvedConfig>>,
   flagsLayer: Partial<ResolvedConfig>
 ): ResolvedConfig {
-  // Start from built-in defaults (as a plain object for deepMerge)
-  let accumulated = DEFAULTS as unknown as Record<string, unknown>;
+  // Start from a COPY of the built-in defaults.
+  //
+  // This used to start from `DEFAULTS` itself. `deepMerge` returns a fresh object, so on
+  // any repo WITH configuration the copy happened by accident — but on a repo with no
+  // settings at all (no layers, no flags) every loop was skipped and this function
+  // returned the module-level `DEFAULTS` OBJECT. The caller then did
+  // `assembled.workspace = resolvedWorkspaceMode`, writing into the shipped defaults for
+  // the remaining life of the process; the next resolve in the same process read the
+  // mutated value as if it were the default. Deep-freezing DEFAULTS is what surfaced it —
+  // the assignment started throwing instead of silently succeeding.
+  let accumulated = deepMerge(Object.create(null) as Record<string, unknown>, DEFAULTS as unknown as Record<string, unknown>);
 
   for (const layer of layers) {
     if (Object.keys(layer).length === 0) continue;

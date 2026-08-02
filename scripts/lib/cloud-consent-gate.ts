@@ -52,7 +52,7 @@
  * Closed set: new cloud reviewers must be added here explicitly — an
  * unrecognized host string is never silently promoted to cloud status.
  */
-export const CLOUD_REVIEWER_HOSTS = ["codex-cloud"] as const;
+export const CLOUD_REVIEWER_HOSTS = Object.freeze(["codex-cloud"] as const);
 
 /** A member of the closed cloud-reviewer host set. */
 export type CloudReviewerHost = (typeof CLOUD_REVIEWER_HOSTS)[number];
