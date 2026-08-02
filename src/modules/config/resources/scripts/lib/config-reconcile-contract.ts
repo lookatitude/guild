@@ -35,7 +35,7 @@
  *   - "repair": additionally coerce a MALFORMED value back to a schema-valid one;
  *               still NEVER clobbers a VALID user choice.
  */
-export const RECONCILE_MODES = ["check", "sync", "repair"] as const;
+export const RECONCILE_MODES = Object.freeze(["check", "sync", "repair"] as const);
 export type ReconcileMode = (typeof RECONCILE_MODES)[number];
 
 // ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ export type ReconcileMode = (typeof RECONCILE_MODES)[number];
  * decide whether a key is clobberable: ONLY "default"/"reconciled" values may be
  * rewritten; a "user" value is immutable to the reconciler.
  */
-export const FIELD_PROVENANCE = ["default", "user", "reconciled"] as const;
+export const FIELD_PROVENANCE = Object.freeze(["default", "user", "reconciled"] as const);
 export type FieldProvenance = (typeof FIELD_PROVENANCE)[number];
 
 // ---------------------------------------------------------------------------
@@ -238,7 +238,7 @@ export interface ReconcileResult {
  * caller supplies); L0 ships a structural default below.
  */
 export function reconcile(
-  schema: ConfigFieldSpec[],
+  schema: readonly ConfigFieldSpec[],
   current: Record<string, MaterializedField>,
   mode: ReconcileMode,
   now: string,

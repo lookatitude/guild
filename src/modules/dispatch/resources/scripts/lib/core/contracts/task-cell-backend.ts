@@ -43,7 +43,7 @@ import * as path from "path";
  *     → terminating → terminated
  *          (alt terminal: failed | cancelled | timed_out | rejected)
  */
-export const TASK_CELL_STATES = [
+export const TASK_CELL_STATES = Object.freeze([
   "declared",
   "instantiated",
   "ready",
@@ -59,18 +59,18 @@ export const TASK_CELL_STATES = [
   "cancelled",
   "timed_out",
   "rejected",
-] as const;
+] as const);
 
 export type TaskCellState = (typeof TASK_CELL_STATES)[number];
 
 /** D4 — terminal states are IMMUTABLE. A retry mints a new attempt; it never revives one of these. */
-export const TERMINAL_STATES = [
+export const TERMINAL_STATES = Object.freeze([
   "terminated",
   "failed",
   "cancelled",
   "timed_out",
   "rejected",
-] as const;
+] as const);
 
 export type TerminalState = (typeof TERMINAL_STATES)[number];
 
@@ -93,31 +93,43 @@ export function isTerminal(state: TaskCellState): state is TerminalState {
  * passes; a receipt that fails validation stays `handoff_submitted` until it is
  * rejected. It can never reach `handoff_accepted` (D5, adversarial test 5).
  */
+/**
+ * DEEP-FROZEN BY HAND, not via the kernel `deepFreeze` primitive.
+ *
+ * This file is MIRRORED verbatim into `src/modules/dispatch/resources/scripts/lib/...`
+ * and re-exported from there by the dispatch module's public index. A relative import
+ * reaching out of the `scripts/` tree resolves in the LIVE location and NOT in the
+ * mirrored one (the mirror sits three directories deeper), so the module index would
+ * fail to load — which is exactly what happened before this was written out longhand.
+ * Every transition list is frozen individually: the outer freeze alone left each state's
+ * successor list mutable, so `LEGAL_TRANSITIONS.terminated.push("running")` would have
+ * reopened a terminal state.
+ */
 export const LEGAL_TRANSITIONS: Readonly<Record<TaskCellState, readonly TaskCellState[]>> =
   Object.freeze({
-    declared: ["instantiated", "failed", "cancelled"],
-    instantiated: ["ready", "failed", "cancelled", "timed_out"],
-    ready: ["assigned", "failed", "cancelled", "timed_out"],
-    assigned: ["assignment_acknowledged", "failed", "cancelled", "timed_out"],
+    declared: Object.freeze(["instantiated", "failed", "cancelled"]),
+    instantiated: Object.freeze(["ready", "failed", "cancelled", "timed_out"]),
+    ready: Object.freeze(["assigned", "failed", "cancelled", "timed_out"]),
+    assigned: Object.freeze(["assignment_acknowledged", "failed", "cancelled", "timed_out"]),
     // The ack gate: `running` has exactly ONE inbound edge.
-    assignment_acknowledged: ["running", "failed", "cancelled", "timed_out"],
-    running: ["handoff_submitted", "failed", "cancelled", "timed_out"],
-    handoff_submitted: ["handoff_validated", "rejected", "failed", "cancelled", "timed_out"],
-    handoff_validated: ["handoff_accepted", "rejected", "failed", "cancelled", "timed_out"],
+    assignment_acknowledged: Object.freeze(["running", "failed", "cancelled", "timed_out"]),
+    running: Object.freeze(["handoff_submitted", "failed", "cancelled", "timed_out"]),
+    handoff_submitted: Object.freeze(["handoff_validated", "rejected", "failed", "cancelled", "timed_out"]),
+    handoff_validated: Object.freeze(["handoff_accepted", "rejected", "failed", "cancelled", "timed_out"]),
     // Only a durable acceptance record authorizes termination (D5). After
     // acceptance the ONLY legal path is `terminating -> terminated`; there is no
     // edge to `failed` — a post-acceptance teardown problem parks in
     // `terminating` for the reaper, it never terminal-fails the accepted work.
-    handoff_accepted: ["terminating"],
+    handoff_accepted: Object.freeze(["terminating"]),
     // A failed teardown leaves the instance HERE, orphaned, for the reaper to
     // retry until it reaches `terminated`. `terminating` therefore has no
     // `failed` edge (the reaper never abandons an accepted instance to failed).
-    terminating: ["terminated"],
-    terminated: [],
-    failed: [],
-    cancelled: [],
-    timed_out: [],
-    rejected: [],
+    terminating: Object.freeze(["terminated"]),
+    terminated: Object.freeze([]),
+    failed: Object.freeze([]),
+    cancelled: Object.freeze([]),
+    timed_out: Object.freeze([]),
+    rejected: Object.freeze([]),
   } as Record<TaskCellState, readonly TaskCellState[]>);
 
 export class IllegalTransitionError extends Error {
@@ -774,11 +786,11 @@ export interface HandoffValidationV1 {
 }
 
 /** Resolved decision 3 — the acceptance authorities, on a mandatory deterministic floor. */
-export const ACCEPTANCE_AUTHORITIES = [
+export const ACCEPTANCE_AUTHORITIES = Object.freeze([
   "deterministic_floor",
   "team_lead",
   "reviewer_cell",
-] as const;
+] as const);
 
 export type AcceptanceAuthority = (typeof ACCEPTANCE_AUTHORITIES)[number];
 

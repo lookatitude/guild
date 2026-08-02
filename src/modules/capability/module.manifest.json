@@ -13,6 +13,8 @@
   ],
   "owns": {
     "scripts": [
+      "capability-adopt",
+      "capability-profile",
       "lib/core/contracts/project-capability-profile",
       "lib/role-model-schema",
       "lib/role-resolver",

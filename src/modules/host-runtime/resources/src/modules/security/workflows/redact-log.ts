@@ -31,6 +31,8 @@
 // pins the source strings match.
 
 /** Sentinel for token-shape redactions (group 1). */
+import { sealSet } from "../../kernel";
+
 export const TOKEN_REDACTED = "[REDACTED_TOKEN]";
 
 /** Sentinel for home-dir path suffixes (group 2). */
@@ -64,17 +66,34 @@ export const FIELD_SIZE_CAP_BYTES = 4 * 1024; // 4 KiB
  * list. The schema doc §"Redaction policy" #1 names the prefix list
  * (sk-, eyJ, Bearer, ghp_, etc.) — this is the canonical implementation.
  */
-export const TOKEN_SHAPE_PATTERNS: readonly RegExp[] = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
-] as const;
+/**
+ * DEEP-FROZEN — array AND every RegExp element.
+ *
+ * CORRECTION (adversarial review, #18). I first left the elements mutable, reasoning
+ * that `.exec()`/`.test()` on a frozen `/g` RegExp throws when it writes `lastIndex`.
+ * That hazard is real IN GENERAL but does NOT apply here, and I verified the wrong
+ * thing: `redactTokenShapes` builds `new RegExp(re.source, re.flags)` — a FRESH CLONE
+ * per use — so the frozen original's `lastIndex` is never written. The comment two
+ * functions below says exactly that, and I read past it.
+ *
+ * Leaving the elements extensible was therefore not a justified exception, it was a
+ * hole in a security control. Reproduced against the shipped code: with the array
+ * frozen, redefining one element's `source` to `(?!)` turned
+ * `redactTokenShapes("sk-AAAA…")` from "[REDACTED_TOKEN]" back into the raw secret.
+ * Freezing the array alone stops a pattern being ADDED or REMOVED; it does nothing
+ * about a pattern being NEUTERED in place.
+ */
+export const TOKEN_SHAPE_PATTERNS: readonly RegExp[] = Object.freeze([
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g),
+] as const);
 
 /** Apply group 1 — token-shape redaction. */
 export function redactTokenShapes(input: string): string {
@@ -98,13 +117,13 @@ export function redactTokenShapes(input: string): string {
  * Sensitive directory names matched as path components. The leading dot
  * is mandatory; e.g., `.claude` matches but `claude` does not.
  */
-export const SENSITIVE_HOME_DIRS = [
+export const SENSITIVE_HOME_DIRS = Object.freeze([
   ".claude",
   ".codex",
   ".ssh",
   ".aws",
   ".gnupg",
-] as const;
+] as const);
 
 /**
  * Home-dir match regex. Captures:
@@ -370,14 +389,33 @@ export function redactField(
  * Set of JSONL field names that carry redactable free-text content.
  * Used by the JSONL writer's pre-serialize sweep.
  */
-export const REDACTABLE_FIELDS: ReadonlySet<string> = new Set([
+/**
+ * SEALED SET (adversarial review, #18).
+ *
+ * `ReadonlySet<string>` is a COMPILE-TIME type. At runtime this is an ordinary `Set`
+ * with a working `delete`, and `Object.freeze(set)` does NOT freeze Set membership —
+ * freeze only seals own properties, while entries live in an internal slot. So the
+ * freeze sweep's whole technique is inapplicable here, and the type annotation bought
+ * nothing.
+ *
+ * Reproduced against shipped code: `REDACTABLE_FIELDS.delete("result")` made
+ * `redactEventFields` return an API token VERBATIM instead of redacting it — the
+ * redactor still ran, still reported success, and simply stopped covering that field.
+ *
+ * Sealing it means neutering the mutators on the instance, which is the only thing that
+ * actually stops the attack. The frozen source array is the declaration of record.
+ */
+const REDACTABLE_FIELD_NAMES = Object.freeze([
   "command_redacted",
   "result_excerpt_redacted",
   "payload_excerpt_redacted",
   "prompt_excerpt",
   "assumption_text",
   "result",
-]);
+] as const);
+
+
+export const REDACTABLE_FIELDS: ReadonlySet<string> = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
 
 /**
  * Apply field-level redaction to every redactable string in `event`.

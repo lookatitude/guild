@@ -98,6 +98,26 @@ jobs:
         run: |
           cd scripts && npm run check:modules -- --root .. && npm run check:module-resources -- --root ..
 
+      # Path-containment rail (task #28).
+      #
+      # ONE containment shape — "prove this write lands inside that root, and keep it true
+      # across the mkdir" — was independently rediscovered FOUR times by lanes that did not
+      # know about each other, and before the shared primitive existed it lived in eight
+      # places (six of which climbed with `existsSync`, so six carried the same
+      # dangling-symlink hole). Fixing any one of them would have left five.
+      #
+      # This rail is a TypeScript AST scan of src/**, scripts/**, hooks/** AND every
+      # resources/ mirror, joined against a registry. It fails when a NEW containment home
+      # appears unregistered, when a registered site drops the primitive, when a registered
+      # site RE-GROWS a private climb while keeping the import, or when a resources mirror
+      # of an unregistered file surfaces — the last being how the S3 lane's second mirror
+      # escaped every gate and showed up in `git status` instead.
+      #
+      # Read-only.
+      - name: Path-containment rail (no unregistered home for the containment primitive)
+        run: |
+          cd scripts && npm run check:path-containment -- --root ..
+
       # Install-channel flip (G7) — the generated tree is now the AUTHORITATIVE install surface.
       # Enforces SC-2 full-tree equivalence + SC-7b subset + the Claude install-surface render
       # (.claude-plugin/plugin.json + marketplace.json must equal the inventory render) + the

@@ -60,7 +60,7 @@ guide to getting set up, understanding the repo layout, and submitting changes.
 - `.claude-plugin/` — plugin + marketplace manifests.
 - `skills/` — 111 skills across six tiers (`core`, `meta`, `knowledge`,
   `specialists`, `guild-operations`, `guild-quality`).
-- `agents/` — the 2 machinery agents (advisor, developer).
+- `agents/` — the 3 machinery agents (advisor, context-manager, developer).
 - `templates/specialists/` — the 15 domain specialist type templates minted
   into projects on demand; `templates/products/` and `templates/{skills,agents}/`
   hold the product and authoring scaffolds.

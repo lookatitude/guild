@@ -34,6 +34,7 @@ const DEF_BODY = "You are the plugin-runtime-architect. Adopt these boundaries."
 const REF: DefinitionRefLike = {
   schema_version: "guild.project_definition_ref.v1",
   project_id: "plugin",
+  layer: "project-guild",
   kind: "agent",
   id: "plugin-runtime-architect",
   relative_path: ".guild/agents/plugin-runtime-architect.md",

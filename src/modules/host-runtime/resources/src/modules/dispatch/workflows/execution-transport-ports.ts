@@ -471,6 +471,22 @@ export interface ExecutionHandle {
 export interface DefinitionRefLike {
   readonly schema_version: string;
   readonly project_id: string;
+  /**
+   * The owning layer. Added when `guild.project_definition_ref.v1` gained it, and
+   * the reason this line has a comment is that it was MISSED for a whole amendment.
+   *
+   * This shape is a deliberate STRUCTURAL duplicate of the contract (see above: the
+   * module stays free of contract imports), which means a type check can never link
+   * the two — the contract's own type graph does not reach here. So the amendment
+   * shipped, every construction site inside the contract was updated, and this stayed
+   * layerless with its suite green.
+   *
+   * The duplication is kept because the boundary rule is right; the DRIFT is what was
+   * wrong. `definition-ref-conformance.test.ts` now imports both shapes and fails the
+   * build if the contract grows a field this does not have, or if `refsConflict`
+   * stops comparing one. A future field cannot repeat this silently.
+   */
+  readonly layer: string;
   readonly kind: string;
   readonly id: string;
   readonly relative_path: string;
@@ -1135,6 +1151,7 @@ function refsConflict(a?: DefinitionRefLike, b?: DefinitionRefLike): boolean {
   return (
     a.schema_version !== b.schema_version ||
     a.project_id !== b.project_id ||
+    a.layer !== b.layer ||
     a.kind !== b.kind ||
     a.id !== b.id ||
     a.relative_path !== b.relative_path ||

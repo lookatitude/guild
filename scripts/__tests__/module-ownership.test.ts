@@ -80,7 +80,9 @@ describe("src/modules ownership manifests", () => {
     // Machinery agents only (machinery-vs-template-library ADR): advisor +
     // developer. The 15 domain roles are templates/specialists/*.md, not
     // inventoried agents.
-    expect(inventory.agents.length).toBe(2);
+    // cap-loc-D01 added `context-manager` as the third machinery agent, gated on
+    // its written contract (scripts/lib/capability/context-manager-contract.ts).
+    expect(inventory.agents.length).toBe(3);
     expect(inventory.hooks.length).toBeGreaterThanOrEqual(10);
     expect(inventory.scripts.length).toBeGreaterThanOrEqual(200);
   });

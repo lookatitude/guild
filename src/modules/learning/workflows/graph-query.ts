@@ -84,6 +84,7 @@
  */
 
 import * as fs from "fs";
+import { sealSet } from "../../kernel";
 import * as path from "path";
 
 import type { GraphNode, GraphEdge } from "./knowledge-graph-contract";
@@ -118,7 +119,7 @@ function lineRefs(refs: unknown): string[] {
 }
 
 /** Conventional program entry-point simple names (see header). */
-export const ENTRY_POINT_NAMES = new Set<string>(["main", "__main__"]);
+export const ENTRY_POINT_NAMES = sealSet(["main", "__main__"], "ENTRY_POINT_NAMES");
 
 /** The two structural views this library reads. */
 export interface GraphView {

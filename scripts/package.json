@@ -8,6 +8,7 @@
     "build:hosts": "npx tsx build-host-packages.ts",
     "check:docs-architecture": "npx tsx check-docs-architecture.ts",
     "check:modules": "npx tsx check-module-ownership.ts",
+    "check:path-containment": "npx tsx check-path-containment.ts",
     "sync:module-resources": "npx tsx sync-module-resources.ts",
     "check:module-resources": "npx tsx sync-module-resources.ts --check",
     "sync:live-resources": "npx tsx sync-live-resources.ts",

@@ -85,8 +85,39 @@ if (require.main === module && /^classify-proposal\.[cm]?[jt]s$/.test((process.a
   runClassifyProposalCli();
 }
 
+// ../src/modules/initiatives/workflows/initiative.ts
+var DEFINITION_STATUS = Object.freeze(["incomplete", "assumed", "complete"]);
+var EXECUTION_STATUS = Object.freeze(["not_started", "active", "blocked", "done"]);
+var RELEASE_STATUS = Object.freeze(["not_released", "release_candidate", "released", "rollback_required"]);
+var DOCUMENTATION_STATUS = Object.freeze(["not_assessed", "no_update_required", "update_required", "updated", "stale"]);
+var DERIVED_STATUS = Object.freeze([
+  "proposed",
+  "defining",
+  "ready",
+  "in_progress",
+  "review",
+  "release_ready",
+  "released",
+  "docs_update_pending",
+  "closed",
+  "paused",
+  "cancelled"
+]);
+var DEFINITION_CATEGORIES = Object.freeze([
+  "goal",
+  "outcome",
+  "scope",
+  "non_goal",
+  "acceptance",
+  "constraint",
+  "risk",
+  "assumption",
+  "open_question"
+]);
+var DEFINITION_ITEM_STATUS = Object.freeze(["defined", "needs_definition", "assumed", "superseded"]);
+
 // ../src/modules/initiatives/workflows/initiative-activity.ts
-var ACTIVITY_EVENTS = [
+var ACTIVITY_EVENTS = Object.freeze([
   "created",
   "status_change",
   "definition_updated",
@@ -98,11 +129,11 @@ var ACTIVITY_EVENTS = [
   "closed",
   "archived",
   "note"
-];
+]);
 var SET = new Set(ACTIVITY_EVENTS);
 
 // ../src/modules/initiatives/workflows/initiative-workitems.ts
-var WORK_ITEM_TYPES = [
+var WORK_ITEM_TYPES = Object.freeze([
   "research",
   "design",
   "implementation",
@@ -111,8 +142,8 @@ var WORK_ITEM_TYPES = [
   "docs",
   "release",
   "cleanup"
-];
-var WORK_ITEM_STATUS = [
+]);
+var WORK_ITEM_STATUS = Object.freeze([
   "proposed",
   "ready",
   "in_progress",
@@ -120,7 +151,7 @@ var WORK_ITEM_STATUS = [
   "done",
   "deferred",
   "cancelled"
-];
+]);
 var TYPES = new Set(WORK_ITEM_TYPES);
 var STATUS = new Set(WORK_ITEM_STATUS);
 
@@ -413,7 +444,7 @@ function classifyPhase(artifacts) {
 
 // emit-learning-checkpoint.ts
 var SCHEMA_VERSION = "guild.learning_checkpoint.v1";
-var VALID_PHASES = [
+var VALID_PHASES = Object.freeze([
   "init",
   "ideation",
   "planning",
@@ -421,8 +452,8 @@ var VALID_PHASES = [
   "quality",
   "operations",
   "reflection"
-];
-var DECISION_TARGETS = [
+]);
+var DECISION_TARGETS = Object.freeze([
   "memory",
   "wiki",
   "knowledge_graph",
@@ -435,11 +466,11 @@ var DECISION_TARGETS = [
   "task_tracking",
   "workflow_rules",
   "review_policy"
-];
+]);
 var ALL_NONE_DECISIONS = Object.fromEntries(
   DECISION_TARGETS.map((k) => [k, "none"])
 );
-var VALID_EDGE_TYPES = [
+var VALID_EDGE_TYPES = Object.freeze([
   "decided_by",
   "used_for",
   "produced",
@@ -449,21 +480,21 @@ var VALID_EDGE_TYPES = [
   "constrains",
   "opens_question",
   "resolves"
-];
-var ALLOWED_NODE_PREFIXES = [
+]);
+var ALLOWED_NODE_PREFIXES = Object.freeze([
   "task:",
   "run:",
   "decision:",
   "skill:",
   "agent:",
   "feature:"
-];
-var FORBIDDEN_NODE_PREFIXES = [
+]);
+var FORBIDDEN_NODE_PREFIXES = Object.freeze([
   "wiki:",
   "file:",
   "domain:",
   "component:"
-];
+]);
 function assertPhase(phase) {
   if (!VALID_PHASES.includes(phase)) {
     throw new Error(

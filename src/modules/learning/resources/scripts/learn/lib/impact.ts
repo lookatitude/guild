@@ -80,6 +80,7 @@
  */
 
 import type { GraphNode, GraphEdge } from "./schema";
+import { sealSet } from "../../../src/modules/kernel/workflows/sealed-collections";
 
 export type { GraphNode, GraphEdge } from "./schema";
 
@@ -117,7 +118,7 @@ export const EVIDENCE_TIER = "trusted" as const;
 export type EvidenceTier = "trusted" | "untrusted";
 
 /** Conventional program entry-point simple names. */
-export const ENTRY_POINT_NAMES = new Set<string>(["main", "__main__"]);
+export const ENTRY_POINT_NAMES = sealSet(["main", "__main__"], "ENTRY_POINT_NAMES");
 
 /** Matches a well-formed `path#Lx-Ly` line anchor (the only provenance we trust). */
 const LINE_REF_RE = /#L\d+-L\d+$/;

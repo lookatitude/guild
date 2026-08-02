@@ -39,6 +39,15 @@ import {
   validateProjectCapabilityProfileV1,
   isProjectCapabilityProfileV1,
   type ProjectCapabilityProfileV1,
+  MAX_ABSENT,
+  MAX_COVERAGE_ENTRIES,
+  MAX_EVIDENCE_REFS,
+  MAX_FACTS,
+  MAX_ID_LEN,
+  MAX_JUSTIFIED_BY,
+  MAX_LABEL_LEN,
+  MAX_PROSE_LEN,
+  MAX_PROFILE_BYTES,
 } from "../lib/core/contracts/project-capability-profile";
 
 import { PROJECT_DEFINITION_REF_SCHEMA } from "../lib/core/contracts/project-definition-ref";
@@ -55,6 +64,13 @@ const IDENT_T = "2".repeat(64);
 const coveringRef = () => ({
   schema_version: PROJECT_DEFINITION_REF_SCHEMA,
   project_id: "plugin",
+  // INTEGRATION (five-branch stack): S2 grew a REQUIRED `layer` while this lane was
+  // in flight (task #27, second half). This fixture is an EMBEDDED S2 ref, so the
+  // amendment reaches it through `coverage.covered[].covered_by` — the same
+  // delegation path the bounds work above exercises. `project-guild` is not free
+  // choice: the contract cross-checks the declaration against `relative_path` with
+  // `layerAgreesWithPath`, and this path is under `.guild/`.
+  layer: "project-guild" as const,
   kind: "agent" as const,
   id: "plugin-runtime-architect",
   relative_path: ".guild/agents/plugin-runtime-architect.md",
@@ -123,6 +139,7 @@ function profile(over: Partial<ProjectCapabilityProfileV1> = {}): any {
     ],
     resolver_mode: "observe",
     mutation_performed: false,
+    mutation_window: "emission",
     mutation_evidence: {
       agents_tree_hash_before: TREE_A,
       agents_tree_hash_after: TREE_A,
@@ -800,5 +817,337 @@ describe("anti-vacuity — the fixture is not passing by accident", () => {
     expect(src).not.toContain('from "fs"');
     expect(src).not.toContain("Date.now");
     expect(src).not.toContain("new Date");
+  });
+});
+
+describe("XC / rule 6 — every free-text scalar is BOUNDED and SHAPE-CHECKED", () => {
+  /**
+   * The defect this closes: `proposed_id`, `defer_reason`, `owning_layer`, `label`
+   * and `rationale` were validated by `isNonEmptyStr` ALONE — no length bound, no
+   * control-character rejection. That is the S4 `child_commit` class (a schema
+   * claiming "no body field" that carried 12 KB of agent definition), and it had a
+   * second consequence documented on CONTROL_CHARS: an ANSI erase-line sequence
+   * validated and was printed by `/guild:status`, letting untrusted repo content
+   * rewrite the operator's evidence that nothing was mutated (R6).
+   *
+   * Fixed by SWEEP, not by patching the five fields that were reported.
+   */
+  const ESC = String.fromCharCode(27);
+  const CONTROL_PAYLOAD = `evil${ESC}[2K\rAPPROVED`;
+  const LONG = "a".repeat(5000);
+
+  it("XC.2 — a control character is rejected in EVERY string field", () => {
+    expect(ok(profile({ project_id: CONTROL_PAYLOAD } as never))).toBeNull();
+    expect(ok(profile({ run_id: CONTROL_PAYLOAD } as never))).toBeNull();
+
+    const withDomain = (over: Record<string, unknown>) => {
+      const p = profile();
+      Object.assign(p.domains[0], over);
+      return ok(p);
+    };
+    expect(withDomain({ id: CONTROL_PAYLOAD })).toBeNull();
+    expect(withDomain({ label: CONTROL_PAYLOAD })).toBeNull();
+
+    const p1 = profile();
+    p1.boundaries[0].rationale = CONTROL_PAYLOAD;
+    expect(ok(p1)).toBeNull();
+
+    const p2 = profile();
+    p2.repeated_methods[0].label = CONTROL_PAYLOAD;
+    expect(ok(p2)).toBeNull();
+
+    const p3 = profile();
+    p3.candidates[0].proposed_id = CONTROL_PAYLOAD;
+    expect(ok(p3)).toBeNull();
+
+    const p4 = profile();
+    p4.candidates[0].owning_layer = CONTROL_PAYLOAD;
+    expect(ok(p4)).toBeNull();
+
+    const p5 = profile();
+    p5.candidates[0].action = "observe";
+    p5.candidates[0].defer_reason = CONTROL_PAYLOAD;
+    expect(ok(p5)).toBeNull();
+  });
+
+  it("XC.1 — a 5 KB payload is rejected in EVERY string field", () => {
+    expect(ok(profile({ project_id: LONG } as never))).toBeNull();
+    expect(ok(profile({ run_id: LONG } as never))).toBeNull();
+
+    const p1 = profile();
+    p1.domains[0].label = LONG;
+    expect(ok(p1)).toBeNull();
+
+    const p2 = profile();
+    p2.boundaries[0].rationale = LONG;
+    expect(ok(p2)).toBeNull();
+
+    const p3 = profile();
+    p3.candidates[0].proposed_id = LONG;
+    expect(ok(p3)).toBeNull();
+
+    const p4 = profile();
+    p4.candidates[0].action = "defer";
+    p4.candidates[0].defer_reason = LONG;
+    expect(ok(p4)).toBeNull();
+  });
+
+  it("XC.5 — a SLUG field is not path-shaped: `proposed_id` cannot be a location", () => {
+    // `proposed_id` becomes `.guild/agents/<id>.md`. If it could contain `/`, an
+    // approved candidate could name a path instead of a role.
+    for (const bad of ["../../etc/passwd", "a/b", "a\\b", ".hidden", "-leading", "with space"]) {
+      const p = profile();
+      p.candidates[0].proposed_id = bad;
+      expect(ok(p)).toBeNull();
+    }
+  });
+
+  it("a NAMESPACED fact id keeps `/` but rejects traversal and alias spellings", () => {
+    // `domain/dispatch` is the established convention and must keep working;
+    // traversal and non-canonical spellings must not.
+    const good = profile();
+    expect(ok(good)).not.toBeNull();
+    expect(good.domains[0].id).toContain("/");
+
+    for (const bad of ["domain/../escape", "domain//dispatch", "domain/./x", "/leading", "trailing/"]) {
+      const p = profile();
+      p.domains[0].id = bad;
+      p.coverage.covered[0].fact_id = bad;
+      p.coverage.uncovered = [];
+      expect(ok(p)).toBeNull();
+    }
+  });
+
+  it("XC.4 — `generated_at` is RFC3339-shaped, not merely non-empty", () => {
+    for (const bad of ["yesterday", "2026-08-01", "", "2026-08-01T05:00:00", "not-a-time"]) {
+      expect(ok(profile({ generated_at: bad } as never))).toBeNull();
+    }
+    for (const good of ["2026-08-01T05:00:00Z", "2026-08-01T05:00:00.123Z", "2026-08-01T05:00:00+02:00"]) {
+      expect(ok(profile({ generated_at: good } as never))).not.toBeNull();
+    }
+  });
+
+  it("XC.3 — `source_commit` is 7-64 hex, the S4 `child_commit` lesson applied", () => {
+    for (const bad of ["not-a-sha", "abc", "A".repeat(40), LONG, "an entire agent definition"]) {
+      expect(ok(profile({ source_commit: bad } as never))).toBeNull();
+    }
+    expect(ok(profile({ source_commit: "a".repeat(40) } as never))).not.toBeNull();
+    expect(ok(profile({ source_commit: null } as never))).not.toBeNull();
+  });
+
+  it("rule 7 — the ARRAY levels are bounded too, not just their elements", () => {
+    // Body capacity is the product of field size and field count: bounding the
+    // parts does not bound the whole.
+    const many = (n: number, f: (i: number) => unknown) => Array.from({ length: n }, (_, i) => f(i));
+
+    const pDomains = profile();
+    pDomains.domains = many(MAX_FACTS + 1, (i) => ({
+      id: `domain/d${i}`,
+      label: "x",
+      evidence_refs: ["codebase_map:a.ts"],
+      confidence: "high",
+    }));
+    expect(ok(pDomains)).toBeNull();
+
+    const pRefs = profile();
+    pRefs.domains[0].evidence_refs = many(MAX_EVIDENCE_REFS + 1, (i) => `codebase_map:f${i}.ts`);
+    expect(ok(pRefs)).toBeNull();
+
+    const pJust = profile();
+    pJust.candidates[0].justified_by = many(MAX_JUSTIFIED_BY + 1, (i) => `method/m${i}`);
+    expect(ok(pJust)).toBeNull();
+
+    const pAbsent = profile();
+    pAbsent.feedstock.absent = many(MAX_ABSENT + 1, (i) => `input${i}`);
+    expect(ok(pAbsent)).toBeNull();
+
+    const pUncovered = profile();
+    pUncovered.coverage.uncovered = many(MAX_COVERAGE_ENTRIES + 1, (i) => `domain/x${i}`);
+    expect(ok(pUncovered)).toBeNull();
+  });
+
+  it("`occurrence_count` cannot exceed the evidence-array cap (ONE limit, not two)", () => {
+    const p = profile();
+    p.repeated_methods[0].occurrence_count = MAX_EVIDENCE_REFS + 1;
+    p.repeated_methods[0].evidence_refs = Array.from(
+      { length: MAX_EVIDENCE_REFS + 1 },
+      (_, i) => `run:run-2026080${1}-00000${0}-r${i}`
+    );
+    expect(ok(p)).toBeNull();
+  });
+
+  it("ANTI-VACUITY: the reference fixture and realistic content still VALIDATE", () => {
+    // A sweep that rejected everything would satisfy every row above while
+    // breaking the contract for real producers. The fixture uses namespaced fact
+    // ids, a prose rationale with punctuation, and a hyphenated proposed_id.
+    expect(ok(profile())).not.toBeNull();
+
+    const realistic = profile();
+    realistic.boundaries[0].rationale =
+      "Adapters own discovery; the core owns policy — a change to one should not force a change to the other.";
+    realistic.candidates[0].action = "observe";
+    realistic.candidates[0].defer_reason = "only 2 occurrences so far; watch for a third";
+    realistic.candidates[0].owning_layer = "workspace";
+    realistic.candidates[0].proposed_id = "host-integrator_v2.1";
+    expect(ok(realistic)).not.toBeNull();
+  });
+
+  it("the bound CONSTANTS are exported so consumers cannot guess a different number", () => {
+    expect(MAX_ID_LEN).toBe(128);
+    expect(MAX_LABEL_LEN).toBe(200);
+    expect(MAX_PROSE_LEN).toBe(500);
+    expect(MAX_EVIDENCE_REFS).toBe(64);
+    expect(MAX_FACTS).toBe(200);
+    expect(MAX_JUSTIFIED_BY).toBe(32);
+    expect(MAX_ABSENT).toBe(16);
+    expect(MAX_COVERAGE_ENTRIES).toBe(500);
+  });
+});
+
+
+describe("CODEX ROUND 3 — regressions for the reported counterexamples", () => {
+  const CSI = String.fromCharCode(0x9b);
+  const DEL = String.fromCharCode(0x7f);
+
+  it("finding 1 — `source_commit` is NOT coerced, and a toString getter never fires", () => {
+    // `String(value)` fired caller code AFTER the closed-key check, mutating the
+    // artifact mid-validation and admitting a NUMBER into a `string | null` field.
+    expect(ok(profile({ source_commit: 1234567 } as never))).toBeNull();
+
+    const p: Record<string, unknown> = profile();
+    let fired = 0;
+    p.source_commit = {
+      toString() {
+        fired += 1;
+        p.smuggled = "after-key-check";
+        return "abcdef0";
+      },
+    };
+    expect(ok(p)).toBeNull();
+    expect(fired).toBe(0);
+    expect(p.smuggled).toBeUndefined();
+  });
+
+  it("finding 2 — the delegated `covered_by` is bounded too", () => {
+    const withRef = (over: Record<string, unknown>) => {
+      const p = profile();
+      Object.assign(p.coverage.covered[0].covered_by, over);
+      return ok(p);
+    };
+    expect(withRef({ project_id: "x".repeat(5000) })).toBeNull();
+    expect(withRef({ id: "../../etc/passwd" })).toBeNull();
+    expect(withRef({ relative_path: `.guild/agents/evil${CSI}.md` })).toBeNull();
+    expect(withRef({ source_commit: "x".repeat(5000) })).toBeNull();
+    expect(
+      withRef({
+        skills: Array.from({ length: 5000 }, (_, i) => ({
+          id: `s${i}`,
+          relative_path: `.guild/skills/s${i}/SKILL.md`,
+          content_hash: `sha256:${"a".repeat(64)}`,
+        })),
+      })
+    ).toBeNull();
+  });
+
+  it("finding 3 — an oversized array is capped BEFORE it is enumerated", () => {
+    // A million-entry array was rejected only after a million descriptor reads.
+    // A bound checked after the work bounds the result, not the work.
+    const p = profile();
+    p.domains = new Array(1_000_000).fill(null);
+    const started = process.hrtime.bigint();
+    expect(ok(p)).toBeNull();
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    expect(elapsedMs).toBeLessThan(150);
+  });
+
+  it("finding 4 — the AGGREGATE budget binds, and agrees with the consumer limit", () => {
+    // Per-level caps multiplied out to ~24.8 MB against a 256 KiB reader.
+    const p = profile();
+    p.domains = Array.from({ length: 100 }, (_, i) => ({
+      id: `domain/d${i}`,
+      label: "x".repeat(MAX_LABEL_LEN),
+      evidence_refs: Array.from(
+        { length: 40 },
+        (_, j) => `codebase_map:${"f".repeat(400)}${i}-${j}.ts`
+      ),
+      confidence: "high",
+    }));
+    expect(ok(p)).toBeNull();
+    expect(MAX_PROFILE_BYTES).toBe(256 * 1024);
+  });
+
+  it("finding 5 — a SLUG is lowercase, so backend and Backend cannot both exist", () => {
+    // On case-insensitive filesystems both name ONE agent file, while raw-string
+    // dedup would treat them as two.
+    const p = profile();
+    p.candidates[0].proposed_id = "Backend";
+    expect(ok(p)).toBeNull();
+    p.candidates[0].proposed_id = "backend";
+    expect(ok(p)).not.toBeNull();
+  });
+
+  it("finding 6 — the timestamp is RANGE-checked, not just punctuation-checked", () => {
+    for (const bad of [
+      "2026-99-99T99:99:99+99:99",
+      "2026-13-01T00:00:00Z",
+      "2026-01-32T00:00:00Z",
+      "2026-01-01T24:00:00Z",
+      "2026-01-01T00:61:00Z",
+      "2026-01-01T00:00:00+24:00",
+    ]) {
+      expect(ok(profile({ generated_at: bad } as never))).toBeNull();
+    }
+    // RFC3339 permits lowercase t/z and a leap second.
+    expect(ok(profile({ generated_at: "2026-01-01t00:00:00z" } as never))).not.toBeNull();
+    expect(ok(profile({ generated_at: "2026-12-31T23:59:60Z" } as never))).not.toBeNull();
+  });
+
+  it("finding 8 — absent is a CLOSED vocabulary that must AGREE with the hashes", () => {
+    const withFeedstock = (over: Record<string, unknown>) => {
+      const p = profile();
+      Object.assign(p.feedstock, over);
+      return ok(p);
+    };
+    expect(withFeedstock({ knowledge_graph_hash: null, absent: [] })).toBeNull();
+    expect(withFeedstock({ knowledge_graph_hash: TREE_A, absent: ["knowledge_graph"] })).toBeNull();
+    expect(withFeedstock({ absent: ["invented_input"] })).toBeNull();
+    expect(
+      withFeedstock({ knowledge_graph_hash: null, absent: ["knowledge_graph"] })
+    ).not.toBeNull();
+  });
+
+  it("finding 9 — the exported ref parser rejects DEL and C1, not just C0", () => {
+    expect(parseEvidenceRef(`run:evil${CSI}2K`)).toBeNull();
+    expect(parseEvidenceRef(`run:evil${DEL}`)).toBeNull();
+    expect(isEvidenceRef(`run:evil${CSI}2K`)).toBe(false);
+    expect(parseEvidenceRef("run:run-20260801-000000-ok")).not.toBeNull();
+  });
+
+  it("ANTI-VACUITY: the reference fixture still validates after all of the above", () => {
+    expect(ok(profile())).not.toBeNull();
+  });
+});
+
+
+describe("mutation_window — the artifact records WHAT its hashes bracket", () => {
+  it("is REQUIRED — a profile that omits it is invalid, never defaulted", () => {
+    // A missing window would be read as the stronger claim by every reader who did
+    // not know to check, which is the exact over-reading the field prevents.
+    const p = profile();
+    delete (p as Record<string, unknown>).mutation_window;
+    expect(ok(p)).toBeNull();
+  });
+
+  it("accepts exactly the two windows and nothing else", () => {
+    expect(ok(profile({ mutation_window: "run" } as never))).not.toBeNull();
+    expect(ok(profile({ mutation_window: "emission" } as never))).not.toBeNull();
+    for (const bad of ["whole", "", null, true, "RUN"]) {
+      expect(ok(profile({ mutation_window: bad } as never))).toBeNull();
+    }
+  });
+
+  it("survives the round trip — the value is carried, not normalised away", () => {
+    expect(ok(profile({ mutation_window: "emission" } as never))!.mutation_window).toBe("emission");
+    expect(ok(profile({ mutation_window: "run" } as never))!.mutation_window).toBe("run");
   });
 });

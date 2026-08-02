@@ -52,13 +52,13 @@ import type { NeutralOutcome } from "./neutral-runtime-contracts";
  * of putting it under the closure rule; the accompanying test fails if the
  * declaration and the supplied file set disagree in either direction.
  */
-export const NEUTRAL_CORE_MEMBERS = [
+export const NEUTRAL_CORE_MEMBERS = Object.freeze([
   "neutral-runtime-contracts.ts",
   "neutral-gate-policy.ts",
   "neutral-lifecycle-machine.ts",
   "neutral-conformance-core.ts",
   "neutral-core-boundary.ts",
-] as const;
+] as const);
 
 export type NeutralCoreMember = (typeof NEUTRAL_CORE_MEMBERS)[number];
 

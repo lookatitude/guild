@@ -485,7 +485,13 @@ describe("writeTeamPlan / readTeamPlan", () => {
     fs.mkdirSync(runDir, { recursive: true });
     // Plant a symlink at team-plan → outside the run tree.
     fs.symlinkSync(outside, path.join(runDir, "team-plan"), "dir");
-    expect(() => writeTeamPlan(tmp, "run-sym", VALID_PLAN)).toThrow(/symlink/i);
+    // Asserts the REFUSAL CODE, not the prose. This used to match /symlink/i, which
+    // is the weakest possible assertion: any refusal message mentioning symlinks
+    // passed it, including one produced by an unrelated rule. The message now
+    // carries a code from the shared primitive's closed vocabulary, so the test can
+    // name WHICH rule refused. A link pointing OUT of the tree is `outside-root` —
+    // the containment fact, which is the stronger statement.
+    expect(() => writeTeamPlan(tmp, "run-sym", VALID_PLAN)).toThrow(/\[outside-root\]/);
     // The plan must NOT have been followed through the link.
     expect(fs.existsSync(path.join(outside, "build.json"))).toBe(false);
   });
@@ -497,7 +503,7 @@ describe("writeTeamPlan / readTeamPlan", () => {
     fs.mkdirSync(runsDir, { recursive: true });
     // Plant a symlink at the run ROOT → outside.
     fs.symlinkSync(outside, path.join(runsDir, "run-symroot"), "dir");
-    expect(() => writeTeamPlan(tmp, "run-symroot", VALID_PLAN)).toThrow(/symlink/i);
+    expect(() => writeTeamPlan(tmp, "run-symroot", VALID_PLAN)).toThrow(/\[outside-root\]/);
     expect(fs.existsSync(path.join(outside, "team-plan", "build.json"))).toBe(false);
   });
 
@@ -507,7 +513,7 @@ describe("writeTeamPlan / readTeamPlan", () => {
     const guildDir = path.join(tmp, ".guild");
     fs.mkdirSync(guildDir, { recursive: true });
     fs.symlinkSync(outside, path.join(guildDir, "runs"), "dir");
-    expect(() => writeTeamPlan(tmp, "run-link", VALID_PLAN)).toThrow(/symlink/i);
+    expect(() => writeTeamPlan(tmp, "run-link", VALID_PLAN)).toThrow(/\[outside-root\]/);
     expect(fs.existsSync(path.join(outside, "run-link", "team-plan", "build.json"))).toBe(false);
   });
 
@@ -516,8 +522,26 @@ describe("writeTeamPlan / readTeamPlan", () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "station-guild-link-"));
     // Plant a symlink at the .guild root itself → outside.
     fs.symlinkSync(outside, path.join(tmp, ".guild"), "dir");
-    expect(() => writeTeamPlan(tmp, "run-link", VALID_PLAN)).toThrow(/symlink/i);
+    expect(() => writeTeamPlan(tmp, "run-link", VALID_PLAN)).toThrow(/\[outside-root\]/);
     expect(fs.existsSync(path.join(outside, "runs", "run-link", "team-plan", "build.json"))).toBe(false);
+  });
+
+  test("refuses an IN-TREE symlinked kind dir — `policy: \"physical\"` is load-bearing, not decorative", () => {
+    // Every other symlink fixture in this file points OUTSIDE, so plain containment
+    // already refuses all of them and the stricter physical policy would be a
+    // parameter that changes nothing — a guard subsumed by another guard, which is
+    // one of the three ways a sweep tests nothing.
+    //
+    // Here the link resolves back INSIDE the run tree. Containment is satisfied. It
+    // is refused anyway, because a run tree whose realpath is load-bearing evidence
+    // must be physically real, and ONLY the physical policy says so.
+    const tmp = mkTmp();
+    const runDir = path.join(tmp, ".guild", "runs", "run-inlink");
+    const realDir = path.join(runDir, "_team-plan");
+    fs.mkdirSync(realDir, { recursive: true });
+    fs.symlinkSync(realDir, path.join(runDir, "team-plan"), "dir");
+    expect(() => writeTeamPlan(tmp, "run-inlink", VALID_PLAN)).toThrow(/\[physical-symlink\]/);
+    expect(fs.existsSync(path.join(realDir, "build.json"))).toBe(false);
   });
 });
 

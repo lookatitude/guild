@@ -14,6 +14,8 @@
 // Event types — exhaustive union per schema doc §"Event types" (12)
 // ──────────────────────────────────────────────────────────────────────────
 
+import { sealSet } from "../../kernel";
+
 export type Phase =
   | "brainstorm"
   | "team-compose"
@@ -30,7 +32,7 @@ export type LoopLayer = "L1" | "L2" | "L3" | "L4" | "security-review";
  * Closed enum for `tool_call.tool`. 17 values per schema doc §7. Validators
  * reject other values; future tools require a schema bump.
  */
-export const TOOL_CALL_TOOL_VALUES = [
+export const TOOL_CALL_TOOL_VALUES = Object.freeze([
   "Read",
   "Write",
   "Edit",
@@ -48,14 +50,14 @@ export const TOOL_CALL_TOOL_VALUES = [
   "NotebookEdit",
   "BashOutput",
   "KillShell",
-] as const;
+] as const);
 export type ToolCallTool = (typeof TOOL_CALL_TOOL_VALUES)[number];
 
 /**
  * The 12 canonical Claude Code hook events per schema doc §8. Validators
  * reject other values; future hooks require a schema bump.
  */
-export const HOOK_EVENT_NAMES = [
+export const HOOK_EVENT_NAMES = Object.freeze([
   "SessionStart",
   "SessionEnd",
   "UserPromptSubmit",
@@ -68,7 +70,7 @@ export const HOOK_EVENT_NAMES = [
   "TaskCreated",
   "TaskCompleted",
   "TeammateIdle",
-] as const;
+] as const);
 export type HookEventName = (typeof HOOK_EVENT_NAMES)[number];
 
 export interface PhaseStartEvent {
@@ -217,7 +219,7 @@ export type JsonlEvent =
   | CodexReviewRoundEvent;
 
 /** Set of valid `event` field values. The validator uses this. */
-export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = new Set([
+export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = sealSet([
   "phase_start",
   "phase_end",
   "specialist_dispatch",
@@ -230,7 +232,7 @@ export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = new Set([
   "assumption_logged",
   "escalation",
   "codex_review_round",
-]);
+], "EVENT_TYPES");
 
 export const RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 export const LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;

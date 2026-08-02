@@ -92,22 +92,22 @@ export const PROJECT_CAPABILITY_PROFILE_SCHEMA = "guild.project_capability_profi
 export const DEFAULT_SUGGESTION_BUDGET = 4;
 
 /** The five resolver modes (S5 / decision cap-loc-D04). Recorded, never inferred. */
-export const RESOLVER_MODES = ["legacy", "observe", "shadow", "project-local", "strict"] as const;
+export const RESOLVER_MODES = Object.freeze(["legacy", "observe", "shadow", "project-local", "strict"] as const);
 export type ResolverMode = (typeof RESOLVER_MODES)[number];
 const RESOLVER_MODE_SET: ReadonlySet<string> = new Set<string>(RESOLVER_MODES);
 
 /** Confidence grades. Closed. */
-export const CONFIDENCE_GRADES = ["high", "medium", "low"] as const;
+export const CONFIDENCE_GRADES = Object.freeze(["high", "medium", "low"] as const);
 export type Confidence = (typeof CONFIDENCE_GRADES)[number];
 const CONFIDENCE_SET: ReadonlySet<string> = new Set<string>(CONFIDENCE_GRADES);
 
 /** What a human is being asked to do with a candidate. Closed. */
-export const CANDIDATE_ACTIONS = ["propose", "observe", "defer"] as const;
+export const CANDIDATE_ACTIONS = Object.freeze(["propose", "observe", "defer"] as const);
 export type CandidateAction = (typeof CANDIDATE_ACTIONS)[number];
 const CANDIDATE_ACTION_SET: ReadonlySet<string> = new Set<string>(CANDIDATE_ACTIONS);
 
 /** A candidate is an agent or a skill. Nothing else. */
-export const CANDIDATE_KINDS = ["agent", "skill"] as const;
+export const CANDIDATE_KINDS = Object.freeze(["agent", "skill"] as const);
 export type CandidateKind = (typeof CANDIDATE_KINDS)[number];
 const CANDIDATE_KIND_SET: ReadonlySet<string> = new Set<string>(CANDIDATE_KINDS);
 
@@ -118,18 +118,46 @@ const CANDIDATE_KIND_SET: ReadonlySet<string> = new Set<string>(CANDIDATE_KINDS)
  * is load-bearing: a `MethodFact`'s `occurrence_count` is a claim about how often
  * something happened, so it must cite history and not code (A1.11).
  */
-export const EVIDENCE_SOURCES = [
+export const EVIDENCE_SOURCES = Object.freeze([
   "codebase_map",
   "knowledge_graph",
   "run",
   "reflection",
   "roster",
-] as const;
+] as const);
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
 const EVIDENCE_SOURCE_SET: ReadonlySet<string> = new Set<string>(EVIDENCE_SOURCES);
 
+/**
+ * HOW WIDE THE NO-MUTATION COMPARISON ACTUALLY WAS. Closed vocabulary.
+ *
+ *   "run"      — the `before` hashes were captured at RUN START, so the compared
+ *                window covers the WHOLE Learn run.
+ *   "emission" — `before` was captured inside the emitter, so the window covers
+ *                only the emission. Everything the pipeline did earlier is
+ *                OUTSIDE the comparison.
+ *
+ * ── WHY THIS FIELD EXISTS, AND WHY ITS ABSENCE WAS THE SAME CLASS OF DEFECT ──
+ * `mutation_evidence` proves the hashes it contains are equal. It never said what
+ * those hashes BRACKET. A reader of the file alone therefore could not distinguish
+ * "nothing changed during this entire Learn run" from "nothing changed during the
+ * last few milliseconds of it" — and would naturally assume the stronger one,
+ * because that is what the artifact is for.
+ *
+ * A shape that cannot express the weaker claim forces every reader to over-read
+ * the evidence. That is the same failure as an unbounded scalar: the artifact
+ * quietly means less than it appears to.
+ */
+// INTEGRATION (five-branch stack): frozen at the export site. `as const` is a
+// COMPILE-TIME narrowing and leaves the array mutable at runtime, so any caller
+// could widen this closed vocabulary process-wide. Added by the learn lane, caught
+// by the freeze lane's repo-wide rail once both were on one tip.
+export const MUTATION_WINDOWS = Object.freeze(["run", "emission"] as const);
+export type MutationWindow = (typeof MUTATION_WINDOWS)[number];
+const MUTATION_WINDOW_SET: ReadonlySet<string> = new Set<string>(MUTATION_WINDOWS);
+
 /** The subset of sources that may back a `MethodFact.occurrence_count` (A1.11). */
-export const HISTORICAL_EVIDENCE_SOURCES = ["run", "reflection"] as const;
+export const HISTORICAL_EVIDENCE_SOURCES = Object.freeze(["run", "reflection"] as const);
 const HISTORICAL_SOURCE_SET: ReadonlySet<string> = new Set<string>(HISTORICAL_EVIDENCE_SOURCES);
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
@@ -300,6 +328,15 @@ export interface ProjectCapabilityProfileV1 {
 
   /** Before/after tree hashes proving the assertion above. */
   mutation_evidence: MutationEvidence;
+
+  /**
+   * WHAT `mutation_evidence` BRACKETS — the whole run, or only the emission.
+   *
+   * Required, and deliberately not defaulted: a missing window would be read as
+   * the stronger claim by every reader who did not know to check, which is the
+   * exact over-reading the field exists to prevent.
+   */
+  mutation_window: MutationWindow;
 }
 
 // ── Hardening primitives ─────────────────────────────────────────────────────
@@ -326,6 +363,215 @@ function ownDataProp(
   return { kind: "data", value: desc.value };
 }
 
+// ── THE CONTAINMENT LADDER (spec README rules 6 and 7) ───────────────────────
+//
+// ⚠️ FIXED AFTER A REPORTED DEFECT. Every scalar below was previously validated by
+// `isNonEmptyStr` ALONE: no length bound, no control-character rejection. That is
+// the same class that let a 12 KB agent definition ride through S4's `child_commit`
+// while its schema claimed "no body field" — an unbounded free-text scalar IS a
+// body field, whatever the field name says.
+//
+// It also had a second consequence that is worse than smuggling, and is the reason
+// this fix is not merely tidiness. See the R6 note on `MAX_LABEL_LEN` below.
+//
+// Enumerated explicitly, because a level that is not named is the level that turns
+// out to be unbounded:
+//
+//   SCALARS
+//     id-shaped   id, fact_id, project_id, run_id, proposed_id, owning_layer  128
+//     label       DomainFact/BoundaryFact/MethodFact.label                    200
+//     prose       rationale, defer_reason                                     500
+//     locator     EvidenceRef locator                                         512
+//     anchor      EvidenceRef anchor                                           64
+//     ref         the whole `<source>:<locator>#<anchor>` wire string         640
+//     commitish   source_commit                                         7–64 hex
+//     timestamp   generated_at                                     RFC3339, ≤ 64
+//     hash        every *_tree_hash_*, feedstock hashes         already 64 hex
+//
+//   ARRAYS
+//     domains / boundaries / repeated_methods                             200 each
+//     evidence_refs (per fact)                                                  64
+//     occurrence_count                                    1 … MAX_EVIDENCE_REFS
+//     coverage.covered / uncovered / unmatched_roles                      500 each
+//     justified_by (per candidate)                                              32
+//     feedstock.absent                                                          16
+//     candidates                              capability.suggestion_budget (A1.1)
+//
+// `occurrence_count`'s ceiling is not a separate number: A1.4 requires it to equal
+// `evidence_refs.length`, so bounding the array bounds the count by construction.
+// Two independently-chosen limits could disagree; one cannot.
+
+/**
+ * A SLUG names something FILESYSTEM-BACKED, so it inherits the canonical
+ * role-slug rules: lowercase and ≤ 64. Reported defect — with uppercase allowed,
+ * `backend` and `Backend` are two spellings that name ONE file on macOS and
+ * Windows, so raw-string dedup would count them as distinct while the filesystem
+ * would not. Lowercase-only makes "one referent, one spelling" true rather than
+ * aspirational.
+ */
+export const MAX_SLUG_LEN = 64;
+/** A NAMESPACED fact id is internal to the artifact, so it may be longer. */
+export const MAX_ID_LEN = 128;
+/** A short human label. */
+export const MAX_LABEL_LEN = 200;
+/** A sentence or two of human prose (`rationale`, `defer_reason`). */
+export const MAX_PROSE_LEN = 500;
+export const MAX_LOCATOR_LEN = 512;
+export const MAX_ANCHOR_LEN = 64;
+export const MAX_REF_LEN = 640;
+export const MAX_TIMESTAMP_LEN = 64;
+export const MAX_FACTS = 200;
+export const MAX_EVIDENCE_REFS = 64;
+export const MAX_COVERAGE_ENTRIES = 500;
+export const MAX_JUSTIFIED_BY = 32;
+export const MAX_ABSENT = 16;
+
+/**
+ * THE AGGREGATE BUDGET, and the reason the per-level caps above are not enough.
+ *
+ * Reported: the declared caps multiply out to roughly 24.8 MB of accepted profile
+ * (3 fact arrays × 200 × (id + label + 64 refs)), while the consumer that reads
+ * these files refuses anything over 256 KiB. A contract that accepts two orders of
+ * magnitude more than its only reader can load is not bounded in any useful sense
+ * — the per-field caps were "one level behind the next enclosing container" yet
+ * again, this time at the top.
+ *
+ * Set EQUAL to the consumer's limit deliberately, so the two cannot disagree:
+ * `candidate-surface.ts` refuses a larger file, and this refuses a larger object,
+ * and neither can drift into accepting what the other rejects.
+ *
+ * DERIVED BY TRAVERSAL, not by a registration table. The spec README recommends
+ * exactly this ("derive the total rather than enumerate it… safe specifically
+ * because it runs AFTER the closed-key check"): a new string-valued field is
+ * counted automatically, so there is no registration test to forget to update and
+ * no second copy of the accounting to drift.
+ */
+export const MAX_PROFILE_BYTES = 256 * 1024;
+
+/**
+ * Total string bytes in a VALIDATED profile. Runs after the closed-key check, so
+ * the traversal cannot be steered by unknown keys. Depth-capped as a matter of
+ * course — the input is already known-shaped, but an unbounded recursion in a
+ * validator is its own defect.
+ */
+function measuredBytes(value: unknown, depth = 0): number {
+  if (depth > 8) return Number.POSITIVE_INFINITY;
+  if (typeof value === "string") return value.length;
+  if (value === null || typeof value !== "object") return 8; // numbers, booleans
+  let total = 0;
+  if (Array.isArray(value)) {
+    for (const entry of value) total += measuredBytes(entry, depth + 1);
+    return total;
+  }
+  for (const k of Object.getOwnPropertyNames(value)) {
+    total += k.length + measuredBytes((value as Record<string, unknown>)[k], depth + 1);
+  }
+  return total;
+}
+
+/**
+ * C0 / C1 / DEL. THE SHARP UNIVERSAL GUARD: an id, label, reason, sha, run id or
+ * timestamp never contains a newline or an escape byte; a payload always does.
+ *
+ * ── R6, IN A FORM THE PLAN DID NOT ANTICIPATE ───────────────────────────────
+ * Risk R6 is "Learn turns untrusted repo content into trusted execution state".
+ * The anticipated shape was state mutation. This is the other shape: a candidate
+ * carrying an ANSI erase-line sequence VALIDATED, and `/guild:status` printed it —
+ * so untrusted repo content could erase the line reading
+ *
+ *     "report-only — nothing is created without approval"
+ *
+ * and print its own in its place. Not mutating state: REWRITING THE OPERATOR'S
+ * EVIDENCE THAT STATE WAS NOT MUTATED.
+ *
+ * That is the strongest argument in this initiative for why the no-mutation marker
+ * has to be STRUCTURAL (`mutation_performed` as the literal `false`, checked
+ * before/after hashes) rather than printed. A printed assurance is only as
+ * trustworthy as the least-validated string on the same terminal.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+
+/**
+ * TWO id shapes, because this contract genuinely has two kinds of id and
+ * collapsing them would either break the namespacing convention or leave a path
+ * where a filename belongs.
+ *
+ *   SLUG — names something that becomes a FILE or a config value:
+ *          `proposed_id` (→ `.guild/agents/<id>.md`), `project_id`, `run_id`,
+ *          `owning_layer`, role names. NO `/` at all: a `proposed_id` of
+ *          `../../etc/passwd` must not be expressible (XC.5).
+ *
+ *   NAMESPACED ID — names a FACT inside this artifact: `domain/dispatch`,
+ *          `method/adversarial-review`, `cand/1`. `/` is the established
+ *          namespace separator here, so forbidding it would be a gratuitous
+ *          break. Traversal is what actually matters, and it is forbidden:
+ *          no `.` or `..` segment, no leading/trailing/doubled slash — the same
+ *          discipline `isCanonicalLocator` applies, so one referent has exactly
+ *          one spelling and raw-string comparison stays sound.
+ *
+ * Both are bounded and control-character-free.
+ */
+const SLUG_SHAPE = /^[a-z0-9][a-z0-9._-]*$/;
+
+function isBoundedSlug(v: unknown): v is string {
+  return (
+    typeof v === "string" &&
+    v.length > 0 &&
+    v.length <= MAX_SLUG_LEN &&
+    !CONTROL_CHARS.test(v) &&
+    SLUG_SHAPE.test(v)
+  );
+}
+
+function isBoundedNamespacedId(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_ID_LEN) return false;
+  if (CONTROL_CHARS.test(v)) return false;
+  if (v.includes("\\")) return false; // one separator convention only
+  for (const seg of v.split("/")) {
+    if (!SLUG_SHAPE.test(seg)) return false; // also rejects "", ".", ".." by shape
+  }
+  return true;
+}
+
+/** Human text: bounded and control-character-free, but otherwise unrestricted. */
+function isBoundedText(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.length > 0 && v.length <= max && !CONTROL_CHARS.test(v);
+}
+
+/**
+ * `source_commit`: 7–64 hex, or null. Previously any non-empty string, which is
+ * exactly the S4 `child_commit` defect — a commit id that accepts prose accepts a
+ * body (XC.3).
+ */
+const COMMITISH_RE = /^[0-9a-f]{7,64}$/;
+
+/**
+ * RFC3339, shape-checked AND range-checked (XC.4).
+ *
+ * A shape-only regex accepted `"2026-99-99T99:99:99+99:99"` — reported. A regex
+ * that admits month 99 is checking punctuation, not time. Ranges are checked in
+ * code rather than crammed into the pattern, because an unreadable regex is how
+ * the next range gets forgotten. `:60` seconds is permitted (leap second).
+ */
+const RFC3339_RE =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?([Zz]|[+-]\d{2}:\d{2})$/;
+
+function isRfc3339(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_TIMESTAMP_LEN) return false;
+  const m = RFC3339_RE.exec(v);
+  if (m === null) return false;
+  const [mo, d, h, mi, sec] = [+m[2], +m[3], +m[4], +m[5], +m[6]];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  if (h > 23 || mi > 59 || sec > 60) return false;
+  const offset = m[8];
+  if (offset.length > 1) {
+    const [oh, om] = [+offset.slice(1, 3), +offset.slice(4, 6)];
+    if (oh > 23 || om > 59) return false;
+  }
+  return true;
+}
+
 const isNonEmptyStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
 /** Exactly the closed key set — no extras, no symbols. */
@@ -350,7 +596,7 @@ function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): bool
  * `length` is read EXACTLY ONCE through its own data descriptor so a Proxy cannot
  * shrink it mid-loop to hide a later entry.
  */
-function readDataArray(v: unknown): unknown[] | null {
+function readDataArray(v: unknown, maxItems?: number): unknown[] | null {
   if (!Array.isArray(v)) return null;
   if (nodeTypes.isProxy(v)) return null;
   if (Object.getOwnPropertySymbols(v).length > 0) return null;
@@ -366,6 +612,11 @@ function readDataArray(v: unknown): unknown[] | null {
   ) {
     return null;
   }
+
+  // CAP BEFORE ENUMERATING. Reported: `Array(1_000_000).fill(null)` was rejected
+  // — after a million descriptor reads and copies, ~1.6s. A bound checked after
+  // the work is a bound on the RESULT, not on the work.
+  if (maxItems !== undefined && lenDesc.value > maxItems) return null;
 
   for (const k of Object.getOwnPropertyNames(v)) {
     if (k === "length") continue;
@@ -383,14 +634,31 @@ function readDataArray(v: unknown): unknown[] | null {
   return out;
 }
 
-/** Array of non-empty strings, single-pass, no duplicates permitted when `unique`. */
-function readStrArray(v: unknown, opts: { unique?: boolean } = {}): string[] | null {
-  const raw = readDataArray(v);
+/**
+ * Array of bounded strings, single-pass, no duplicates permitted when `unique`.
+ *
+ * `maxItems` and `maxLen` are REQUIRED by every caller. Bounding the element and
+ * leaving the array unbounded is rule 7's exact failure — body capacity is the
+ * product of field size and field count, so bounding the parts does not bound the
+ * whole. The array cap is checked BEFORE the per-entry scan, so an over-long array
+ * fails as over-long rather than on whatever its 500th entry happens to get wrong.
+ */
+function readStrArray(
+  v: unknown,
+  opts: { unique?: boolean; maxItems: number; maxLen: number; idKind?: "slug" | "namespaced" }
+): string[] | null {
+  const raw = readDataArray(v, opts.maxItems);
   if (raw === null) return null;
   const out: string[] = [];
   const seen = new Set<string>();
   for (const entry of raw) {
-    if (!isNonEmptyStr(entry)) return null;
+    if (opts.idKind === "slug") {
+      if (!isBoundedSlug(entry)) return null;
+    } else if (opts.idKind === "namespaced") {
+      if (!isBoundedNamespacedId(entry)) return null;
+    } else if (!isBoundedText(entry, opts.maxLen)) {
+      return null;
+    }
     if (opts.unique) {
       if (seen.has(entry)) return null;
       seen.add(entry);
@@ -431,8 +699,8 @@ export function isTreeHash(v: unknown): v is string {
  */
 export function parseEvidenceRef(v: unknown): EvidenceRef | null {
   if (!isNonEmptyStr(v)) return null;
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f]/.test(v)) return null;
+  if (v.length > MAX_REF_LEN) return null; // the whole wire string is bounded
+  if (CONTROL_CHARS.test(v)) return null; // C0 + DEL + C1, not C0 alone
 
   const colon = v.indexOf(":");
   if (colon <= 0) return null; // no source, or empty source
@@ -449,7 +717,8 @@ export function parseEvidenceRef(v: unknown): EvidenceRef | null {
     rest = rest.slice(0, hash);
     if (anchor.length === 0) return null; // trailing `#` with no anchor
   }
-  if (rest.length === 0) return null; // empty locator
+  if (rest.length === 0 || rest.length > MAX_LOCATOR_LEN) return null;
+  if (anchor !== null && anchor.length > MAX_ANCHOR_LEN) return null;
   if (!isCanonicalLocator(rest)) return null;
 
   return { source: source as EvidenceSource, locator: rest, anchor };
@@ -506,7 +775,7 @@ export function isEvidenceRef(v: unknown): boolean {
  * about how often something happened has to cite history, not code (A1.11).
  */
 function readEvidenceRefArray(v: unknown, opts: { historicalOnly?: boolean } = {}): string[] | null {
-  const raw = readStrArray(v, { unique: true });
+  const raw = readStrArray(v, { unique: true, maxItems: MAX_EVIDENCE_REFS, maxLen: MAX_REF_LEN });
   if (raw === null) return null;
   for (const entry of raw) {
     const parsed = parseEvidenceRef(entry);
@@ -596,8 +865,32 @@ function validateFeedstockInner(obj: unknown): FeedstockBinding | null {
   if (kg.value !== null && !isFeedstockHash(kg.value)) return null;
   if (roster.value !== null && !isFeedstockHash(roster.value)) return null;
 
-  const absent = readStrArray(absentProp.value, { unique: true });
+  // `absent` names members of the CLOSED feedstock vocabulary, so it is id-shaped
+  // and small — an "absent" list longer than the input list is nonsense.
+  const absent = readStrArray(absentProp.value, {
+    unique: true,
+    maxItems: MAX_ABSENT,
+    maxLen: MAX_ID_LEN,
+    idKind: "slug",
+  });
   if (absent === null) return null;
+
+  // A1.9 has TWO halves and only one was checked. Reported: `absent: []` with a
+  // null hash validated (absence silently omitted), a non-null hash with the input
+  // named absent validated (absence falsely asserted), and `absent: ["invented"]`
+  // validated (a name outside the declared feedstock). An absence record that can
+  // disagree with the hashes it describes records nothing.
+  const declared: ReadonlyArray<readonly [string, unknown]> = [
+    ["codebase_map", cm.value],
+    ["knowledge_graph", kg.value],
+    ["roster", roster.value],
+  ];
+  const names = new Set(declared.map(([n]) => n));
+  for (const name of absent) if (!names.has(name)) return null; // closed vocabulary
+  const absentSet = new Set(absent);
+  for (const [name, hash] of declared) {
+    if ((hash === null) !== absentSet.has(name)) return null; // exact correlation
+  }
 
   return {
     codebase_map_hash: cm.value as string | null,
@@ -622,7 +915,7 @@ function validateDomainFactInner(obj: unknown): DomainFact | null {
   if (id.kind !== "data" || label.kind !== "data") return null;
   if (refs.kind !== "data" || conf.kind !== "data") return null;
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(label.value)) return null;
+  if (!isBoundedNamespacedId(id.value) || !isBoundedText(label.value, MAX_LABEL_LEN)) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
 
   const evidence = readEvidenceRefArray(refs.value);
@@ -648,10 +941,11 @@ function validateBoundaryFactInner(obj: unknown): BoundaryFact | null {
   if (id.kind !== "data" || label.kind !== "data" || rationale.kind !== "data") return null;
   if (refs.kind !== "data" || conf.kind !== "data") return null;
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(label.value)) return null;
+  if (!isBoundedNamespacedId(id.value) || !isBoundedText(label.value, MAX_LABEL_LEN)) return null;
   // A boundary asserts a JUDGMENT seam; an unexplained one is an unfalsifiable
-  // claim, so the rationale is required rather than optional.
-  if (!isNonEmptyStr(rationale.value)) return null;
+  // claim, so the rationale is required rather than optional — and bounded, since
+  // "required prose" is precisely where an unbounded body would be welcome.
+  if (!isBoundedText(rationale.value, MAX_PROSE_LEN)) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
 
   const evidence = readEvidenceRefArray(refs.value);
@@ -678,10 +972,14 @@ function validateMethodFactInner(obj: unknown): MethodFact | null {
   if (id.kind !== "data" || label.kind !== "data" || count.kind !== "data") return null;
   if (refs.kind !== "data" || conf.kind !== "data") return null;
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(label.value)) return null;
+  if (!isBoundedNamespacedId(id.value) || !isBoundedText(label.value, MAX_LABEL_LEN)) return null;
   if (typeof count.value !== "number" || !Number.isInteger(count.value) || count.value < 1) {
     return null;
   }
+  // The ceiling is MAX_EVIDENCE_REFS, not a separate number: A1.4 forces the count
+  // to equal `evidence_refs.length`, so one limit bounds both and they cannot
+  // disagree. Checked early so an absurd count fails as absurd.
+  if (count.value > MAX_EVIDENCE_REFS) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
 
   // A1.11 — a recurrence claim must cite HISTORY (run / reflection), not code.
@@ -710,7 +1008,7 @@ function validateCoveredEntryInner(obj: unknown): CoveredEntry | null {
   const factId = ownDataProp(obj, "fact_id");
   const coveredBy = ownDataProp(obj, "covered_by");
   if (factId.kind !== "data" || coveredBy.kind !== "data") return null;
-  if (!isNonEmptyStr(factId.value)) return null;
+  if (!isBoundedNamespacedId(factId.value)) return null;
 
   // A1.8 — coverage is HASH-BOUND. Delegated to S2's validator rather than
   // re-implemented: a second implementation of the same contract is exactly the
@@ -734,7 +1032,7 @@ function validateCoverageInner(obj: unknown): CoverageVerdict | null {
   if (coveredProp.kind !== "data") return null;
   if (uncoveredProp.kind !== "data" || unmatchedProp.kind !== "data") return null;
 
-  const rawCovered = readDataArray(coveredProp.value);
+  const rawCovered = readDataArray(coveredProp.value, MAX_COVERAGE_ENTRIES);
   if (rawCovered === null) return null;
   const covered: CoveredEntry[] = [];
   const seenFacts = new Set<string>();
@@ -748,9 +1046,19 @@ function validateCoverageInner(obj: unknown): CoverageVerdict | null {
     covered.push(parsed);
   }
 
-  const uncovered = readStrArray(uncoveredProp.value, { unique: true });
+  const uncovered = readStrArray(uncoveredProp.value, {
+    unique: true,
+    maxItems: MAX_COVERAGE_ENTRIES,
+    maxLen: MAX_ID_LEN,
+    idKind: "namespaced", // fact ids
+  });
   if (uncovered === null) return null;
-  const unmatchedRoles = readStrArray(unmatchedProp.value, { unique: true });
+  const unmatchedRoles = readStrArray(unmatchedProp.value, {
+    unique: true,
+    maxItems: MAX_COVERAGE_ENTRIES,
+    maxLen: MAX_ID_LEN,
+    idKind: "slug", // role names become files
+  });
   if (unmatchedRoles === null) return null;
 
   // A fact cannot be both covered and uncovered.
@@ -788,8 +1096,11 @@ function validateCandidateInner(obj: unknown): CapabilityCandidate | null {
     return null;
   }
 
-  if (!isNonEmptyStr(id.value) || !isNonEmptyStr(proposedId.value)) return null;
-  if (!isNonEmptyStr(owningLayer.value)) return null;
+  // `proposed_id` names a FILE a human may approve into existence, and
+  // `owning_layer` names the workspace or a child. Both id-shaped: bounded, not
+  // path-shaped, no control characters.
+  if (!isBoundedNamespacedId(id.value) || !isBoundedSlug(proposedId.value)) return null;
+  if (!isBoundedSlug(owningLayer.value)) return null;
   if (typeof kind.value !== "string" || !CANDIDATE_KIND_SET.has(kind.value)) return null;
   if (typeof action.value !== "string" || !CANDIDATE_ACTION_SET.has(action.value)) return null;
   if (typeof conf.value !== "string" || !CONFIDENCE_SET.has(conf.value)) return null;
@@ -800,7 +1111,12 @@ function validateCandidateInner(obj: unknown): CapabilityCandidate | null {
   // A1.2 — no evidence, no candidate. This is the "no invented professions" guard
   // as code rather than prose. `justified_by` cites fact ids, not evidence refs,
   // so it is a plain non-empty unique string array.
-  const justified = readStrArray(justifiedBy.value, { unique: true });
+  const justified = readStrArray(justifiedBy.value, {
+    unique: true,
+    maxItems: MAX_JUSTIFIED_BY,
+    maxLen: MAX_ID_LEN,
+    idKind: "namespaced", // cites fact ids
+  });
   if (justified === null || justified.length === 0) return null;
 
   // A1.3 — a low-confidence finding may be surfaced, but it may NOT be proposed.
@@ -812,7 +1128,7 @@ function validateCandidateInner(obj: unknown): CapabilityCandidate | null {
   if (actionValue === "propose") {
     if (deferReason.value !== null) return null;
   } else {
-    if (!isNonEmptyStr(deferReason.value)) return null;
+    if (!isBoundedText(deferReason.value, MAX_PROSE_LEN)) return null;
   }
 
   return {
@@ -844,6 +1160,7 @@ const PROFILE_KEYS = [
   "resolver_mode",
   "mutation_performed",
   "mutation_evidence",
+  "mutation_window",
 ] as const;
 
 export interface ValidateProfileOptions {
@@ -932,6 +1249,7 @@ function validateProjectCapabilityProfileV1Inner(
   const resolverModeProp = ownDataProp(obj, "resolver_mode");
   const mutationPerformedProp = ownDataProp(obj, "mutation_performed");
   const mutationEvidenceProp = ownDataProp(obj, "mutation_evidence");
+  const mutationWindowProp = ownDataProp(obj, "mutation_window");
 
   if (projectId.kind !== "data" || runId.kind !== "data") return null;
   if (generatedAt.kind !== "data" || sourceCommit.kind !== "data") return null;
@@ -940,11 +1258,29 @@ function validateProjectCapabilityProfileV1Inner(
   if (coverageProp.kind !== "data" || candidatesProp.kind !== "data") return null;
   if (resolverModeProp.kind !== "data") return null;
   if (mutationPerformedProp.kind !== "data" || mutationEvidenceProp.kind !== "data") return null;
+  if (mutationWindowProp.kind !== "data") return null;
+  if (
+    typeof mutationWindowProp.value !== "string" ||
+    !MUTATION_WINDOW_SET.has(mutationWindowProp.value)
+  ) {
+    return null;
+  }
 
-  if (!isNonEmptyStr(projectId.value)) return null;
-  if (!isNonEmptyStr(runId.value)) return null;
-  if (!isNonEmptyStr(generatedAt.value)) return null;
-  if (sourceCommit.value !== null && !isNonEmptyStr(sourceCommit.value)) return null;
+  if (!isBoundedSlug(projectId.value)) return null;
+  if (!isBoundedSlug(runId.value)) return null;
+  // XC.4 — a timestamp is shape-checked. `"yesterday"` is not a timestamp.
+  if (!isRfc3339(generatedAt.value)) return null;
+  // XC.3 — a commitish is 7-64 hex. S4 shipped a `child_commit` validated as any
+  // non-empty string and it carried a 12 KB agent definition; the same field name
+  // gets the same treatment here.
+  // NO COERCION. `String(value)` here fired `toString` on caller data AFTER the
+  // closed-key check — the exact TOCTOU this contract hardens against everywhere
+  // else, and it also let a NUMBER through into a `string | null` field. Reported
+  // with a working reproduction that mutated the artifact mid-validation.
+  if (sourceCommit.value !== null) {
+    if (typeof sourceCommit.value !== "string") return null;
+    if (!COMMITISH_RE.test(sourceCommit.value)) return null;
+  }
 
   if (
     typeof resolverModeProp.value !== "string" ||
@@ -966,7 +1302,7 @@ function validateProjectCapabilityProfileV1Inner(
   const mutationEvidence = validateMutationEvidenceInner(mutationEvidenceProp.value);
   if (mutationEvidence === null) return null;
 
-  const rawDomains = readDataArray(domainsProp.value);
+  const rawDomains = readDataArray(domainsProp.value, MAX_FACTS);
   if (rawDomains === null) return null;
   const domains: DomainFact[] = [];
   const domainIds = new Set<string>();
@@ -978,7 +1314,7 @@ function validateProjectCapabilityProfileV1Inner(
     domains.push(parsed);
   }
 
-  const rawBoundaries = readDataArray(boundariesProp.value);
+  const rawBoundaries = readDataArray(boundariesProp.value, MAX_FACTS);
   if (rawBoundaries === null) return null;
   const boundaries: BoundaryFact[] = [];
   const boundaryIds = new Set<string>();
@@ -990,7 +1326,7 @@ function validateProjectCapabilityProfileV1Inner(
     boundaries.push(parsed);
   }
 
-  const rawMethods = readDataArray(methodsProp.value);
+  const rawMethods = readDataArray(methodsProp.value, MAX_FACTS);
   if (rawMethods === null) return null;
   const repeatedMethods: MethodFact[] = [];
   const methodIds = new Set<string>();
@@ -1005,7 +1341,7 @@ function validateProjectCapabilityProfileV1Inner(
   const coverage = validateCoverageInner(coverageProp.value);
   if (coverage === null) return null;
 
-  const rawCandidates = readDataArray(candidatesProp.value);
+  const rawCandidates = readDataArray(candidatesProp.value, budget);
   if (rawCandidates === null) return null;
 
   // A1.1 — the budget ceiling. Checked BEFORE per-entry validation so an
@@ -1041,7 +1377,7 @@ function validateProjectCapabilityProfileV1Inner(
     if (!knownFactIds.has(factId)) return null;
   }
 
-  return {
+  const result: ProjectCapabilityProfileV1 = {
     schema_version: PROJECT_CAPABILITY_PROFILE_SCHEMA,
     project_id: projectId.value,
     run_id: runId.value,
@@ -1056,7 +1392,15 @@ function validateProjectCapabilityProfileV1Inner(
     resolver_mode: resolverModeProp.value as ResolverMode,
     mutation_performed: false,
     mutation_evidence: mutationEvidence,
+    mutation_window: mutationWindowProp.value as MutationWindow,
   };
+
+  // THE AGGREGATE BUDGET, measured on the SANITIZED result rather than the input:
+  // the input could still be exotic, the result cannot. See MAX_PROFILE_BYTES for
+  // why per-level caps alone left ~24.8 MB reachable against a 256 KiB reader.
+  if (measuredBytes(result) > MAX_PROFILE_BYTES) return null;
+
+  return result;
 }
 
 /**

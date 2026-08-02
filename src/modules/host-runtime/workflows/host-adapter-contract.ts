@@ -26,7 +26,7 @@ import {
   resolveRung,
 } from "./adapter-fallback-ladders";
 
-export const HOST_ADAPTER_OPERATIONS = [
+export const HOST_ADAPTER_OPERATIONS = Object.freeze([
   "capabilities",
   "bootstrap",
   "preflight",
@@ -37,7 +37,7 @@ export const HOST_ADAPTER_OPERATIONS = [
   "renderPermissionDecision",
   "resolveModelParams",
   "memory",
-] as const;
+] as const);
 
 export type HostAdapterOperation = (typeof HOST_ADAPTER_OPERATIONS)[number];
 export type HostAdapterStatus = "ok" | "degraded" | "unavailable";

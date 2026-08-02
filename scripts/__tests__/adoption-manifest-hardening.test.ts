@@ -34,6 +34,7 @@ const IDENT = (c: string) => c.repeat(64);
 function ref(id: string, hash = "a"): ProjectDefinitionRefV1 {
   return {
     schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+    layer: "project-guild" as const,
     project_id: "plugin",
     kind: "agent",
     id,
@@ -49,9 +50,10 @@ function ref(id: string, hash = "a"): ProjectDefinitionRefV1 {
 function loc(id: string, hash = "f") {
   return {
     id,
-    historical_path: `/Users/miguelp/Projects/guild/.claude/agents/${id}.md`,
+    project_id: "plugin",
+    historical_path: `/plugin/.guild/agents/${id}.md`,
     content_hash: H(hash),
-    home: "dot-claude-agents" as const,
+    home: "project-guild" as const,
   };
 }
 
@@ -152,7 +154,7 @@ describe("#2 — absence of a hash is not agreement", () => {
       // Same id, NO recorded hash — previously a wildcard that hijacked the chain
       // and resolved a historical run to WRONG's bytes.
       {
-        from: { id: "B", historical_path: "/g/other/B.md", content_hash: null, home: "project-guild" },
+        from: { project_id: "plugin", id: "B", historical_path: "/g/.guild/other/B.md", content_hash: null, home: "project-guild" },
         to: ref("WRONG"),
       },
     ]);
@@ -164,7 +166,7 @@ describe("#2 — absence of a hash is not agreement", () => {
   it("a supplied query hash is not satisfied by an entry with a null hash", () => {
     const m = chain([
       {
-        from: { id: "A", historical_path: "/g/A.md", content_hash: null, home: "project-guild" },
+        from: { project_id: "plugin", id: "A", historical_path: "/g/.guild/A.md", content_hash: null, home: "project-guild" },
         to: ref("B"),
       },
     ]);
@@ -184,6 +186,7 @@ describe("#3 — a rollback proves reversal, not just its starting point", () =>
       {
         from: {
           id: "B",
+          project_id: "plugin",
           historical_path: "/g/.guild/agents/B.md",
           content_hash: b.content_hash,
           home: "project-guild",
@@ -232,8 +235,20 @@ describe("#4 — the query boundary is hardened, own-data only", () => {
   it("a symbol-keyed query field is rejected (getOwnPropertyNames does not see symbols)", () => {
     const q: Record<string | symbol, unknown> = { kind: "agent", id: "A" };
     q[Symbol("x")] = 1;
-    // isPlainDataObject's symbol check is what catches this.
-    expect(resolveHistorical(m(), q).status).toBe("resolved");
+    // ASSERTION CORRECTED (codex round 5, #7). This read `resolved`, and its comment
+    // read "isPlainDataObject's symbol check is what catches this" — but
+    // `isPlainDataObject` in `adoption-manifest.ts` has NO symbol check
+    // (null/type/array/Proxy/prototype, and nothing else). So the assertion pinned
+    // behaviour the author believed came from somewhere it does not exist, against a
+    // title that already stated the intended rule.
+    //
+    // The rest of the file was never in doubt: `hasExactKeys`, which validates the
+    // locator, the entry and the manifest, opens with
+    // `getOwnPropertySymbols(o).length > 0 → false`. The query was the only closed
+    // key set checked by a hand-rolled `getOwnPropertyNames` loop, and the only one
+    // that let a symbol-keyed payload through. The rule was right and this line was
+    // wrong. Further cases in adoption-manifest-open-defects.test.ts (D7).
+    expect(resolveHistorical(m(), q).status).toBe("ambiguous");
   });
 
   it("a Proxy query does not escape the never-throws contract", () => {

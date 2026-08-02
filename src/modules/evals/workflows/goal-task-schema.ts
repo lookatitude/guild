@@ -4,6 +4,8 @@
  * Versioned contracts for P.O.V.E.R. goals and host-portable task groups.
  */
 
+import { deepFreeze } from "../../kernel";
+
 export const GOAL_SCHEMA_VERSION = "guild.goal.v1" as const;
 export const TASK_GROUP_SCHEMA_VERSION = "guild.task_group.v1" as const;
 
@@ -221,7 +223,7 @@ export function isTaskGroupV1(value: unknown): value is TaskGroupV1 {
   return validateTaskGroupV1(value).valid;
 }
 
-export const GOAL_V1_EXAMPLE: PoverGoalV1 = {
+export const GOAL_V1_EXAMPLE: PoverGoalV1 = deepFreeze({
   schema_version: GOAL_SCHEMA_VERSION,
   id: "G-1",
   title: "Route ambient prompts into lifecycle phases",
@@ -232,9 +234,9 @@ export const GOAL_V1_EXAMPLE: PoverGoalV1 = {
   risks: ["Over-routing unrelated host prompts into Guild lifecycle."],
   acceptance_criteria_ids: ["AC-1"],
   project_scope: ["plugin"],
-};
+});
 
-export const TASK_GROUP_V1_EXAMPLE: TaskGroupV1 = {
+export const TASK_GROUP_V1_EXAMPLE: TaskGroupV1 = deepFreeze({
   schema_version: TASK_GROUP_SCHEMA_VERSION,
   id: "TG-1",
   title: "Fallback ordered tasks for hosts without /goal",
@@ -251,4 +253,4 @@ export const TASK_GROUP_V1_EXAMPLE: TaskGroupV1 = {
   acceptance_criteria_ids: ["AC-1"],
   project_scope: ["plugin"],
   team_ref: ".guild/team/prompt-intake.plan.yaml",
-};
+});

@@ -122,22 +122,25 @@ describe("S5 — PLAIN_ENUM_OVERRIDES (the table without which enum typing is si
 });
 
 describe("S5 — the shipped resolver_mode default and the F7 precondition", () => {
-  it("ships `legacy`, NOT `observe` — F7 (candidate surfacing) has not landed", () => {
-    // S5 §"Hard precondition (from D04)": do not ship the `observe` default until F7
-    // lands, because an observe install that emits candidates nobody surfaces is a
-    // silent no-op — worse than no default.
-    expect(CAPABILITY_RESOLVER_MODE_DEFAULT).toBe("legacy");
-    expect(DEFAULTS.capability.resolver_mode).toBe("legacy");
-    expect(getFieldSpec("capability.resolver_mode")!.default).toBe("legacy");
+  it("ships `observe` — F7 (candidate surfacing) HAS landed", () => {
+    // S5 §"Hard precondition (from D04)" held this at `legacy` until candidate
+    // surfacing existed, because an observe install that emits candidates nobody
+    // surfaces is a silent no-op — worse than no default. That surface now ships
+    // (scripts/lib/capability/candidate-surface.ts, printed by commands/status.md,
+    // round-tripped from a real emission in capability-candidate-surface.test.ts),
+    // so the honest default is D04's `observe`.
+    expect(CAPABILITY_RESOLVER_MODE_DEFAULT).toBe("observe");
+    expect(DEFAULTS.capability.resolver_mode).toBe("observe");
+    expect(getFieldSpec("capability.resolver_mode")!.default).toBe("observe");
   });
 
-  it("THE F7 FLIP: when candidate surfacing lands, this constant becomes `observe`", () => {
-    // This test documents the transition so the flip is one line plus one expectation
-    // rather than a remembered intention. When F7 lands: change
-    // CAPABILITY_RESOLVER_MODE_DEFAULT to CAPABILITY_RESOLVER_MODE_AFTER_F7 and swap
-    // the assertion above.
+  it("THE F7 FLIP: candidate surfacing landed, so the default IS the post-F7 value", () => {
+    // The test that was pre-written for the transition, now asserting it happened.
+    // The two constants are bound by definition rather than by two copies of the
+    // same literal, so they cannot drift into disagreeing about what F7 unlocked.
     expect(CAPABILITY_RESOLVER_MODE_AFTER_F7).toBe("observe");
     expect(CAPABILITY_RESOLVER_MODES).toContain(CAPABILITY_RESOLVER_MODE_AFTER_F7);
+    expect(CAPABILITY_RESOLVER_MODE_DEFAULT).toBe(CAPABILITY_RESOLVER_MODE_AFTER_F7);
   });
 
   it("the ladder is ORDERED least→most localized, so progress is comparable", () => {

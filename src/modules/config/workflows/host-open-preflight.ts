@@ -15,6 +15,7 @@
  */
 
 import * as fs from "fs";
+import { sealSet } from "../../kernel";
 import * as path from "path";
 import type { ScaffoldEntry } from "./init-scaffold-manifest";
 import { requiredEntriesFor } from "./init-scaffold-manifest";
@@ -465,7 +466,7 @@ export const HOST_OPEN_PREFLIGHT_SCHEMA_VERSION = "guild.host_open_preflight.v1"
  * file-surface via agents-file) — is non-blocked (its native render degrades honestly
  * when unverified, but it is not an app/connector refusal).
  */
-export const CLI_NATIVE_HOSTS: ReadonlySet<string> = new Set([
+export const CLI_NATIVE_HOSTS: ReadonlySet<string> = sealSet([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -480,7 +481,7 @@ export const CLI_NATIVE_HOSTS: ReadonlySet<string> = new Set([
   "kiro",
   "qoder",
   "trae",
-]);
+], "CLI_NATIVE_HOSTS");
 
 /** What the adapter should do next — DATA, not a rendered surface. */
 export type PreflightAction = "proceed" | "offer_init" | "offer_repair" | "blocked";
