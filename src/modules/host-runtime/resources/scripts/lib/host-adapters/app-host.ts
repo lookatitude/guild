@@ -25,12 +25,15 @@ import { progressScenariosForPair } from "../review-pairing";
 
 export type AppSupportState = "verified" | "unavailable" | "enqueue_only" | "manual_instruction";
 
-const APP_HOSTS = [
+// `as const` erases at runtime — the emitted value is a plain, push-able array, and this
+// one is exported (`export { APP_HOSTS }` at the foot of the file). Frozen at the
+// declaration site; the `as const` is kept for the `AppHostId` union below.
+const APP_HOSTS = Object.freeze([
   "claude-code-app",
   "claude-code-web",
   "codex-app",
   "claude-ai-connector",
-] as const satisfies readonly HostId[];
+] as const satisfies readonly HostId[]);
 
 export type AppHostId = (typeof APP_HOSTS)[number];
 

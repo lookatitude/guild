@@ -92,7 +92,7 @@
       "id": "lib/host-adapters/app-host",
       "source_path": "scripts/lib/host-adapters/app-host.ts",
       "resource_path": "resources/scripts/lib/host-adapters/app-host.ts",
-      "sha256": "9593436c0ed51f0aa3834b83a1b1f059e61e3e2533667ab11a459dfc36845829"
+      "sha256": "6259c7b53bc2590f175d5aa524b1b0e25bff9756125f74871193a046569018bb"
     },
     {
       "category": "scripts",
@@ -773,7 +773,7 @@
       "id": "projection:src/modules/kernel/workflows/sealed-collections.ts",
       "source_path": "src/modules/kernel/workflows/sealed-collections.ts",
       "resource_path": "resources/src/modules/kernel/workflows/sealed-collections.ts",
-      "sha256": "6ab58159d839b3db136f3ca6e8a09702b6844e5f19c9215043c4f2907ac1f7f2",
+      "sha256": "8fa9aa0b18e2d7cda69151d7eae0aecbd89f4a176e3f61f121b7d34e4d63ac1c",
       "projection_dependency": true
     },
     {
@@ -965,7 +965,7 @@
       "id": "projection:src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
-      "sha256": "6f338f9d6918991a1fcd8957d2d32a36f63ae98377ee9f614de966aff21ca4d6",
+      "sha256": "8a7b578bcf4e884e2289a517a306bf112721e2b059cfa1252cc528ee79dca0fe",
       "projection_dependency": true
     },
     {
