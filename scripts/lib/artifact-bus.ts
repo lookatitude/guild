@@ -34,23 +34,23 @@ export const CAS_META_SCHEMA = "guild.cas_meta.v1" as const;
 export const BUS_SUBSCRIBER_SCHEMA = "guild.bus_subscriber.v1" as const;
 
 /** Topic type prefix — `<type>/<scope>/<resource>`. */
-export const TOPIC_TYPES = [
+export const TOPIC_TYPES = Object.freeze([
   "handoff",
   "status",
   "context",
   "review",
   "approval",
   "heartbeat",
-] as const;
+] as const);
 export type TopicType = (typeof TOPIC_TYPES)[number];
 
 /** Event values are the ADR's canonical `artifact.<kind>` forms (D-BUS-1, D-BUS-4). */
-export const BUS_EVENT_KINDS = [
+export const BUS_EVENT_KINDS = Object.freeze([
   "artifact.published",
   "artifact.streaming",
   "artifact.closed",
   "artifact.retracted",
-] as const;
+] as const);
 export type BusEventKind = (typeof BUS_EVENT_KINDS)[number];
 export type SubscriberCallback = "hook" | "poll" | "webhook-url";
 

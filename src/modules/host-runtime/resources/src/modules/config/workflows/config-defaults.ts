@@ -9,7 +9,9 @@
  */
 
 /** Default escalation marker phrases for the cost auto-scorer. */
-export const DEFAULT_ESCALATION_MARKERS: string[] = [
+import { sealSet, deepFreeze } from "../../kernel";
+
+export const DEFAULT_ESCALATION_MARKERS: readonly string[] = Object.freeze([
   "I'm not sure",
   "unclear",
   "cannot determine",
@@ -17,13 +19,13 @@ export const DEFAULT_ESCALATION_MARKERS: string[] = [
   "ambiguous",
   "uncertain",
   "not enough information",
-];
+]);
 
 /** Keys excluded from workspace-to-child inheritance (OD-1 + detection-only). */
-export const NON_INHERITABLE_KEYS: ReadonlySet<string> = new Set<string>([
+export const NON_INHERITABLE_KEYS: ReadonlySet<string> = sealSet([
   "initiative_default", // OD-1: attach-to-wrong-initiative risk
   "workspace",          // workspace.mode is root-detection-only
-]);
+], "NON_INHERITABLE_KEYS");
 
 /** Default rotation threshold for JSONL log files — 10 MiB. */
 export const LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
@@ -31,13 +33,165 @@ export const LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 /** Default sidecar file cap — 1 MiB. */
 export const SIDECAR_MAX_BYTES = 1024 * 1024;
 
+// ---------------------------------------------------------------------------
+// Project-capability localization vocabularies (spec S5; cap-loc-D03/D04)
+// ---------------------------------------------------------------------------
+
+/**
+ * D03's migration ladder, ordered least→most localized. `resolver_mode` records
+ * WHERE A PROJECT IS on this ladder; it never encodes whether it may advance —
+ * advance conditions are gate criteria the initiative evaluates, and a mode change
+ * is always a deliberate write.
+ *
+ * Ordered on purpose: a consumer comparing progress must not re-derive the order
+ * from a set, and `indexOf` here is the only ranking anyone should use.
+ */
+export const CAPABILITY_RESOLVER_MODES = Object.freeze([
+  "legacy",
+  "observe",
+  "shadow",
+  "project-local",
+  "strict",
+] as const);
+export type CapabilityResolverMode = (typeof CAPABILITY_RESOLVER_MODES)[number];
+
+/** Whether an approved proposal may auto-advance the resolver mode (D04). */
+export const CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"] as const);
+export type CapabilityAutoCreatePolicy = (typeof CAPABILITY_AUTO_CREATE_POLICIES)[number];
+
+/**
+ * D04's intended default, now REACHED. Kept as a distinct name rather than folded
+ * away: it records WHY the default is what it is, and it is what
+ * `CAPABILITY_RESOLVER_MODE_DEFAULT` is defined as, so the two cannot drift apart
+ * into a silent disagreement about which value F7 unlocked.
+ */
+export const CAPABILITY_RESOLVER_MODE_AFTER_F7: CapabilityResolverMode = "observe";
+
+/**
+ * Shipped default for `capability.resolver_mode`.
+ *
+ * ── F7 HAS LANDED, SO THIS IS `observe` ─────────────────────────────────────
+ * S5 §"Hard precondition (from D04)" was explicit: *"Do not ship the `observe`
+ * default until F7 (candidate surfacing in `/guild:status`) lands. An `observe`
+ * install that emits candidates nobody surfaces is a silent no-op — worse than no
+ * default."* That precondition is what held this constant at `legacy`.
+ *
+ * F7 is now closed. `scripts/lib/capability/candidate-surface.ts` reads the newest
+ * emitted profile and renders a candidate block, `commands/status.md` prints it,
+ * and `capability-candidate-surface.test.ts` proves the round trip from a REAL
+ * emission through to the rendered text. Candidates therefore reach a human, so
+ * `observe` — "profile and propose, change nothing" — is now the honest default
+ * rather than a silent accumulator.
+ *
+ * ── WHAT WOULD REVERT IT ────────────────────────────────────────────────────
+ * Removing the surfacing path. If `/guild:status` ever stops printing the
+ * candidate block, this constant must go back to `legacy` in the same change —
+ * the default and the surface are one decision, not two.
+ */
+export const CAPABILITY_RESOLVER_MODE_DEFAULT: CapabilityResolverMode =
+  CAPABILITY_RESOLVER_MODE_AFTER_F7;
+
+/**
+ * Inclusive bounds for `capability.suggestion_budget` (D04/F10: fixed at 4, not
+ * "3–4"). The ceiling matches the one S1's profile validator enforces so the two
+ * cannot disagree; `0` is legal and means "profile but never propose".
+ */
+export const CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
+export const CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
+
+/**
+ * Maximum length of a role slug. A slug names a file under `.guild/agents/`; an
+ * unbounded "non-empty string" is a smuggling channel (a sibling lane found a 12KB
+ * agent body riding in a field schema-d as a commit id).
+ */
+export const CAPABILITY_ROLE_SLUG_MAX_LEN = 64;
+
+/**
+ * The CANONICAL role-slug form. One referent, one spelling.
+ *
+ * Shape-checked rather than merely "non-empty string": bounded, no control characters
+ * (a slug never contains a newline — that is the sharp universal guard against body
+ * smuggling), and no whitespace or path separators, since the slug names a file.
+ */
+const ROLE_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+
+export function isCanonicalRoleSlug(v: unknown): v is string {
+  return (
+    typeof v === "string" &&
+    v.length > 0 &&
+    v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN &&
+    !CONTROL_CHARS.test(v) &&
+    ROLE_SLUG.test(v)
+  );
+}
+
+/**
+ * Lower-case, because the roster is FILESYSTEM-BACKED: `.guild/agents/QA.md` and
+ * `.guild/agents/qa.md` are the same file on macOS and Windows. Accepting both
+ * spellings would let one role appear twice in a roster that can only hold it once.
+ * Slugs are therefore required lower-case and deduped case-insensitively — REJECTED
+ * when non-canonical, never silently lower-cased.
+ */
+export function roleSlugDedupKey(slug: string): string {
+  return slug.toLowerCase();
+}
+
+/**
+ * SEMANTIC validity of one flattened `capability.*` value, for the reconciler.
+ *
+ * Returns `undefined` for any non-capability key so the caller falls through to the
+ * generic structural check.
+ *
+ * Why this exists (adversarial-review finding): `reconcile repair` classifies a value
+ * as malformed via `defaultIsValidValue`, which is STRUCTURAL — it accepts any finite
+ * number and any array. So `suggestion_budget: 9` and
+ * `starter_roles: ["qa","qa"]` were considered valid and survived `repair`, even at
+ * `reconciled` provenance where the reconciler is allowed to write. That made S5's
+ * "budget over-range ⇒ repair → 4" conformance row false.
+ *
+ * Never-clobber is unaffected: a `user`-provenance value is still immutable, because
+ * the reconciler consults provenance before it ever consults validity.
+ */
+export function isValidCapabilityValue(key: string, value: unknown): boolean | undefined {
+  switch (key) {
+    case "capability.resolver_mode":
+      return CAPABILITY_RESOLVER_MODES.includes(value as CapabilityResolverMode);
+    case "capability.auto_create_policy":
+      return CAPABILITY_AUTO_CREATE_POLICIES.includes(value as CapabilityAutoCreatePolicy);
+    case "capability.suggestion_budget":
+      return (
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        value >= CAPABILITY_SUGGESTION_BUDGET_MIN &&
+        value <= CAPABILITY_SUGGESTION_BUDGET_MAX
+      );
+    case "capability.starter_roles": {
+      if (!Array.isArray(value)) return false;
+      const seen = new Set<string>();
+      for (const entry of value) {
+        // ONE slug contract, shared by validate / repair / resolve, so the three can
+        // never disagree about what a well-formed roster looks like.
+        if (!isCanonicalRoleSlug(entry)) return false;
+        const key = roleSlugDedupKey(entry);
+        if (seen.has(key)) return false;
+        seen.add(key);
+      }
+      return true;
+    }
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Canonical Guild settings default tree.
  *
  * Keep this file free of internal runtime imports: config defaults must remain
  * usable by both core settings code paths without pulling host/runtime layers upward.
  */
-export const DEFAULTS = {
+export const DEFAULTS = deepFreeze({
   rigor: "standard",
   auto_approve: [],
   review: "local",
@@ -124,6 +278,50 @@ export const DEFAULTS = {
     http_available: false,
     bridge_package: null,
   },
+  /**
+   * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+   * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+   * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+   *
+   * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+   * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+   * What a lane may DO stays with `capability_scope` and the permission keys.
+   *
+   * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+   * already emits unconditionally — capability ownership is per project by
+   * definition (the umbrella and each child answer "what roles do I need"
+   * independently, and D03 has the four repos migrating at different rates). Per
+   * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+   * out with zero generator change, and adding it would touch every existing key.
+   */
+  capability: {
+    /**
+     * Which resolver mode this project is in on D03's migration ladder. Config
+     * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+     * gate criteria the initiative evaluates, and a mode change is a deliberate
+     * write.
+     *
+     * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
+     * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
+     * silently defaulted: an unset value resolves with provenance `default`, so
+     * `config show --sources` shows it was never chosen.
+     */
+    resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+    /**
+     * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+     * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+     * the two cannot disagree. 0 is legal: "profile but never propose".
+     */
+    suggestion_budget: 4,
+    /**
+     * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+     * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+     * Learn proposes.
+     */
+    starter_roles: [],
+    /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+    auto_create_policy: "on_approval",
+  },
   statusline: false,
   adversarial_review_provider: "auto",
   loops: null,
@@ -171,4 +369,4 @@ export const DEFAULTS = {
      */
     lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
   },
-} as const;
+} as const);

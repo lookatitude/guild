@@ -23,6 +23,7 @@ export {
   validateMcp,
   validateRoles,
   validateHostProfiles,
+  validateCapability,
   validateCrossHostBlock,
   validateDefaults,
   scaffold,

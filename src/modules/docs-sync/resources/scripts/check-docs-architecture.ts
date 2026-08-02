@@ -819,16 +819,44 @@ function parseArgs(args: readonly string[]): CliOptions {
   return { root, docs, ifPresent, print };
 }
 
+const SPINE_RELATIVE_PATH = "docs/v2/architecture/architecture-spine.html";
+
+/**
+ * Ancestor walk for the umbrella docs root.
+ *
+ * A normal checkout puts the umbrella exactly one level above the plugin root,
+ * but a git WORKTREE does not: `plugin/.worktrees/<name>` resolves `..` to
+ * `plugin/.worktrees`, so the single-level default missed the document entirely.
+ * Combined with `--if-present` (how doc-sync.yml invokes this) that turned a
+ * drift gate into a silent SKIP — the rail reported success from every worktree
+ * without reading anything. Walking ancestors finds the umbrella from a plain
+ * checkout AND from any worktree depth, and changes nothing for the plain case
+ * because the parent directory is the first candidate tried.
+ *
+ * Returns the first ancestor that actually HAS the document. If none does, fall
+ * back to the single-level default so the "genuinely absent" error/skip message
+ * still names the path a reader expects.
+ */
+export function findSpineInAncestors(start: string): string | undefined {
+  let dir = path.resolve(start);
+  for (;;) {
+    const candidate = path.join(dir, "..", SPINE_RELATIVE_PATH);
+    if (fs.existsSync(candidate)) return path.resolve(candidate);
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
 function resolveDocsPath(options: CliOptions): string {
   if (options.docs) return options.docs;
   if (process.env.GUILD_UMBRELLA_DOCS) return path.resolve(process.env.GUILD_UMBRELLA_DOCS);
   if (process.env.GUILD_UMBRELLA_ROOT) {
-    return path.resolve(
-      process.env.GUILD_UMBRELLA_ROOT,
-      "docs/v2/architecture/architecture-spine.html",
-    );
+    return path.resolve(process.env.GUILD_UMBRELLA_ROOT, SPINE_RELATIVE_PATH);
   }
-  return path.resolve(options.root, "../docs/v2/architecture/architecture-spine.html");
+  return (
+    findSpineInAncestors(options.root) ?? path.resolve(options.root, "..", SPINE_RELATIVE_PATH)
+  );
 }
 
 function errnoCode(error: unknown): string {

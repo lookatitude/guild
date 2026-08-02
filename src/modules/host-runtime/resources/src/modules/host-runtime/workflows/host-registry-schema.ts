@@ -33,6 +33,8 @@
  * L11 (adapters), Ltest (RED→GREEN).
  */
 
+import { deepFreeze } from "../../kernel";
+
 import { UPDATE_COMMANDS,
   GuildHostCapabilitiesV1,
   validateHostCapabilitiesV1,
@@ -51,7 +53,7 @@ import { UPDATE_COMMANDS,
  * generated support matrix. Legacy inputs normalize into this set via
  * host-id-namespace.ts; legacy aliases are never authoritative registry ids.
  */
-export const HOST_IDS = [
+export const HOST_IDS = Object.freeze([
   // keep CLI/file (5)
   "claude-code-cli",
   "codex-cli",
@@ -73,7 +75,7 @@ export const HOST_IDS = [
   "kiro",
   "qoder",
   "trae",
-] as const;
+] as const);
 export type HostId = (typeof HOST_IDS)[number];
 
 /**
@@ -82,7 +84,7 @@ export type HostId = (typeof HOST_IDS)[number];
  * verified_multi_host L0 ADR §2.2. `FAMILY_SET` below is `new Set(HOST_FAMILIES)`, so it
  * auto-derives — no separate edit. `gemini` was sunset 2026-06-14 (Antigravity replaced it).
  */
-export const HOST_FAMILIES = [
+export const HOST_FAMILIES = Object.freeze([
   "claude",
   "codex",
   "agents",
@@ -92,7 +94,7 @@ export const HOST_FAMILIES = [
   "copilot",
   "opencode",
   "rovo",
-] as const;
+] as const);
 export type HostFamilyId = (typeof HOST_FAMILIES)[number];
 
 // ---------------------------------------------------------------------------
@@ -123,14 +125,14 @@ export type Installability = "native" | "target" | "none";
  *   - "opencode_stored_or_env": opencode auth config present OR a provider env key set.
  *   - "acli_stored":            `acli` Atlassian auth present (`acli rovodev` reachable).
  */
-export const AUTH_PROBES = [
+export const AUTH_PROBES = Object.freeze([
   "codex_stored_or_env",
   "none",
   "cursor_stored",
   "gh_auth",
   "opencode_stored_or_env",
   "acli_stored",
-] as const;
+] as const);
 export type AuthProbe = (typeof AUTH_PROBES)[number];
 
 /** The file/IDE detection recipe for `adapter_binding: "agents-file"` rows (null for CLI hosts). */
@@ -255,7 +257,17 @@ const CODEX_ENTRY: HostRegistryEntry = {
 function inferredCaps(
   host_kind: string,
   family: string,
-  surface_kind: "cli" | "app" | "file" = "cli"
+  surface_kind: "cli" | "app" | "file" = "cli",
+  /**
+   * CODEX-REVIEW FIX (S6 round 1, HIGH-3): injection facts derive from whether a
+   * lane can actually be DISPATCHED here, NOT from the surface kind. The previous
+   * `surface_kind === "cli"` test relied on an undocumented correlation: a
+   * non-selectable CLI would have been handed `target`/`prompt_text`, and a
+   * selectable non-CLI `absent`/`none`, with nothing to catch either. Callers pass
+   * the SAME value they put on the registry entry's `dispatch_selectable`, and
+   * `validateHostRegistryEntry` now cross-checks that they agree.
+   */
+  dispatch_selectable: boolean = surface_kind === "cli"
 ): GuildHostCapabilitiesV1 {
   return {
     schema_version: "guild.host_capabilities.v1",
@@ -288,6 +300,41 @@ function inferredCaps(
     commands: { slash_commands: false, command_files: "none" },
     skills: { native_skills: false, skill_dir: null },
     agents: { native_agents: false, agent_format: null },
+    // cap-loc-D11 — injection facts derived STRUCTURALLY from the surface kind.
+    // A `cli` surface has somewhere to dispatch a lane, so injection is an
+    // unproven TARGET. An `app` or `file` surface has no pane to dispatch into
+    // (see the AGENTS_FILE / kiro / qoder / trae rows: `dispatch_selectable:
+    // false`), so there is nothing to inject INTO — `absent`, and nothing to
+    // degrade to either. That is a structural fact, not pessimism.
+    //
+    // NO ROW STARTS `verified`: injection is unbuilt, so no probe of it has ever
+    // run on any host. A row flips only on a real probe receipt (E3 / cap-loc-D12).
+    injection:
+      dispatch_selectable
+        ? {
+            definition_injection: false,
+            definition_injection_support: "target" as const,
+            skill_bundle_injection: false,
+            skill_bundle_injection_support: "target" as const,
+            dynamic_registration: false,
+            dynamic_registration_support: "absent" as const,
+            fallback: "prompt_text" as const,
+            definition_injection_verified_by: null,
+            skill_bundle_injection_verified_by: null,
+            dynamic_registration_verified_by: null,
+          }
+        : {
+            definition_injection: false,
+            definition_injection_support: "absent" as const,
+            skill_bundle_injection: false,
+            skill_bundle_injection_support: "absent" as const,
+            dynamic_registration: false,
+            dynamic_registration_support: "absent" as const,
+            fallback: "none" as const,
+            definition_injection_verified_by: null,
+            skill_bundle_injection_verified_by: null,
+            dynamic_registration_verified_by: null,
+          },
     hooks: {
       session_start: false,
       user_prompt_submit: false,
@@ -349,7 +396,30 @@ const AGENTS_FILE_ENTRY: HostRegistryEntry = {
   detection: { bin: null, requires_auth: false, auth_probe: "none" },
   installability: "target",
   result_adapter: false, // INFERRED — no cross-review adapter; verify at live-host availability.
-  dispatch_selectable: true, // INFERRED — a host consuming AGENTS.md can run a lane.
+  // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
+  // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
+  // The prior value was annotated INFERRED with the rationale "a host consuming
+  // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
+  // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
+  // THIS row", and under that reading it is false by construction:
+  //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
+  //     TeamBackend/pane path can name it;
+  //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
+  //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
+  //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
+  //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
+  //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
+  //     package target, not a process launcher".
+  // The G4b lane carved this row out as a documented exception rather than flipping it.
+  // That carve-out is superseded here because the field has REAL per-row consumers that
+  // read it as selectability: config-cli.ts builds the operator-pinnable host set from
+  // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
+  // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
+  // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
+  // and then dispatch into an adapter that returns `command: null`. A concrete
+  // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
+  // this row is the render TARGET, never a dispatch destination.
+  dispatch_selectable: false,
   capabilities: AGENTS_FILE_CAPABILITIES, // file surface — matches top-level surface_kind.
   provenance: "inferred",
 };
@@ -640,7 +710,7 @@ const TRAE_ENTRY: HostRegistryEntry = {
 };
 
 /** The registry rows, keyed by host_id. The single design-time SoT for L7 (16 hosts). */
-export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
+export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = deepFreeze({
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
   "pi-cli": PI_ENTRY,
@@ -657,7 +727,7 @@ export const HOST_REGISTRY_ROWS: Record<HostId, HostRegistryEntry> = {
   kiro: KIRO_ENTRY,
   qoder: QODER_ENTRY,
   trae: TRAE_ENTRY,
-};
+});
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -816,6 +886,55 @@ export function validateHostRegistryEntry(value: unknown): ValidationResult {
     }
   }
 
+  // CODEX-REVIEW FIX (S6 round 1, HIGH-2): the structural injection invariant is
+  // CROSS-FIELD, so it can only be checked HERE — `validateHostCapabilitiesV1` sees
+  // the capabilities object alone and never sees `dispatch_selectable`. Without
+  // this, a row with `dispatch_selectable: false` but `"target"`/`"prompt_text"`
+  // injection facts passed both validators while violating the rule outright.
+  //
+  // The invariant, in one place: a pane-less surface has nothing to inject INTO
+  // (⇒ `absent`, `none`), and a dispatchable surface is never structurally absent.
+  {
+    const caps = o["capabilities"];
+    const selectable = o["dispatch_selectable"];
+    if (
+      typeof selectable === "boolean" &&
+      typeof caps === "object" &&
+      caps !== null &&
+      !Array.isArray(caps)
+    ) {
+      const inj = (caps as Record<string, unknown>)["injection"];
+      if (typeof inj === "object" && inj !== null && !Array.isArray(inj)) {
+        const i = inj as Record<string, unknown>;
+        const supports = [
+          "definition_injection_support",
+          "skill_bundle_injection_support",
+          "dynamic_registration_support",
+        ] as const;
+        if (!selectable) {
+          for (const k of supports) {
+            if (i[k] !== "absent") {
+              errors.push(
+                `dispatch_selectable is false but injection.${k} is ${JSON.stringify(i[k])} — ` +
+                  `a host with no dispatch surface has nothing to inject into (must be "absent")`
+              );
+            }
+          }
+          if (i["fallback"] !== "none") {
+            errors.push(
+              `dispatch_selectable is false but injection.fallback is ` +
+                `${JSON.stringify(i["fallback"])} — there is no lane to fall back to (must be "none")`
+            );
+          }
+        } else if (i["definition_injection_support"] === "absent") {
+          errors.push(
+            "dispatch_selectable is true but injection.definition_injection_support is " +
+              '"absent" — a dispatchable surface is never structurally absent'
+          );
+        }
+      }
+    }
+  }
   return { valid: errors.length === 0, errors };
 }
 

@@ -26,7 +26,11 @@ describe("host-registry compatibility shim", () => {
     expect(shim.getRegistryEntryForHostKind("gemini")).toBeNull();
     expect(shim.resultAdapterForFamily("codex")).toBe(true);
     expect(shim.resultAdapterForFamily("claude")).toBe(false);
-    expect(shim.dispatchSelectableForHostId("agents-file")).toBe(true);
+    // gap-audit C-agents-file: flipped from true — a pane-less file surface is not a
+    // dispatch destination. `codex-cli` keeps this assertion non-vacuous by pinning a
+    // genuine true alongside the false.
+    expect(shim.dispatchSelectableForHostId("codex-cli")).toBe(true);
+    expect(shim.dispatchSelectableForHostId("agents-file")).toBe(false);
     expect(shim.dispatchSelectableForHostId("unknown")).toBe(false);
     expect(shim.installabilityForHostId("unknown")).toBe("none");
   });

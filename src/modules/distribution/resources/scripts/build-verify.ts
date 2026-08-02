@@ -65,7 +65,9 @@ const HOOKS_DIR = join(PLUGIN_ROOT, "hooks");
 const MCP_DIR = join(PLUGIN_ROOT, "mcp-servers");
 
 /** The MCP servers that ship an esbuild `build` script (AC-BLD-3 — bundling preserved). */
-const MCP_SERVERS = ["guild-memory", "guild-telemetry"];
+// Exported via `export { MCP_SERVERS }` at the foot of the file, so it is a closed
+// vocabulary any in-process caller could widen. Frozen at the declaration site.
+const MCP_SERVERS = Object.freeze(["guild-memory", "guild-telemetry"]);
 
 /**
  * A step is either a spawned subprocess (reusing an existing per-step script) or an

@@ -50,8 +50,19 @@ import { normalizeHostId } from "../../host-runtime";
 import { filterHostProfiles } from "../../host-runtime";
 // Canonical single-source prototype-pollution guard (re-arch WAVE 1).
 import { PROTO_POISON_KEYS } from "../../security";
-import { DEFAULTS as SHARED_DEFAULTS, NON_INHERITABLE_KEYS } from "./config-defaults";
-import { loadYamlApi } from "../../kernel";
+import {
+  DEFAULTS as SHARED_DEFAULTS,
+  NON_INHERITABLE_KEYS,
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+  CAPABILITY_SUGGESTION_BUDGET_MAX,
+  CAPABILITY_SUGGESTION_BUDGET_MIN,
+  isCanonicalRoleSlug,
+  roleSlugDedupKey,
+  type CapabilityAutoCreatePolicy,
+  type CapabilityResolverMode,
+} from "./config-defaults";
+import { loadYamlApi, sealSet } from "../../kernel";
 
 const yaml = loadYamlApi() as { load: (src: string) => unknown };
 
@@ -194,6 +205,13 @@ interface McpBlock {
   http_available?: boolean;
   bridge_package?: string | null;
 }
+/** S5 (cap-loc-D04/D03) — project-capability localization policy. */
+interface CapabilityBlock {
+  resolver_mode: CapabilityResolverMode;
+  suggestion_budget: number;
+  starter_roles: string[];
+  auto_create_policy: CapabilityAutoCreatePolicy;
+}
 interface IndexBlock {
   enabled: boolean;
   kg_node_threshold: number;
@@ -244,6 +262,18 @@ export interface ResolvedConfig {
   security: SecurityBlock;
   secrets_policy: SecretsPolicyBlock;
   mcp: McpBlock;
+  /**
+   * S5 (cap-loc-D04/D03) — project-capability localization policy. Selects WHICH
+   * DEFINITIONS RESOLVE; never widens what a lane may do.
+   *
+   * Registered here as well as in the schema/CLI loader because THIS is the resolver
+   * every runtime consumer reads. Its TIER1_KEYS and this interface are a second,
+   * independent closed set: a key known to CONFIG_SCHEMA but absent here resolves to
+   * the shipped default no matter what the project configured — config that cannot be
+   * read is config that does not exist. (Found by adversarial review; the first cut
+   * registered the key everywhere except here.)
+   */
+  capability: CapabilityBlock;
   /** R-009: status-line pane enable. Default false. --statusline CLI flag or config set statusline true. */
   statusline: boolean;
   /** R-008: cross-review provider pin. "auto" = provider-detect selects best. Default "auto". */
@@ -400,14 +430,89 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "update",                         // plugin-update-lifecycle AC-6
   "lean_lead", "lifecycle_gate",    // rf-wi-01 (G1)
 ]);
-const TIER1_KEYS = new Set([
+/**
+ * The resolver's OWN closed top-level key set.
+ *
+ * EXPORTED so a test can assert it agrees with CONFIG_SCHEMA's top-level keys. This is
+ * a C5-style dual home WITHOUT a sync script: two hand-maintained copies of the config
+ * surface, and they drifted silently — S5's `capability` block was registered in the
+ * schema, the CLI loader, the UI metadata and the persist matrix, but NOT here, so it
+ * resolved to the shipped default no matter what a project configured. Config that
+ * cannot be read is config that does not exist. `config-schema-resolver-parity.test.ts`
+ * is the guard that stops the next key being inert the same way.
+ */
+export const RESOLVER_TIER1_KEYS: ReadonlySet<string> = sealSet([
   "rigor", "auto_approve", "review", "host", "host_mode", "roles", "host_profiles", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace",
   "models", "security", "secrets_policy", "mcp",
+  "capability",                  // S5 (cap-loc-D04) — capability localization policy
   "statusline",                  // R-009
   "adversarial_review_provider", // R-008
   "loops", "loop_cap", "codex_cap", "defaults",
+], "RESOLVER_TIER1_KEYS");
+
+/** S5 — closed sub-key set for `capability.*`, mirroring the CLI loader's. */
+const VALID_CAPABILITY_KEYS = new Set([
+  "resolver_mode",
+  "suggestion_budget",
+  "starter_roles",
+  "auto_create_policy",
 ]);
+
+/**
+ * Coerce a raw `capability` block into a valid one (S5's `repair` semantics, applied
+ * at RESOLVE time so a malformed file still yields a usable config rather than a
+ * crash or a silently-dropped block).
+ *
+ * Mirrors coerceCapabilityBlock in config-cli.ts: an out-of-range budget CLAMPS to
+ * the ceiling (an operator who wrote 9 wanted "as many as possible", and 4 is that);
+ * an unknown enum member falls back to the shipped default; `starter_roles` are
+ * trimmed, blank-stripped and DEDUPED in first-seen order so the resolved config is
+ * stable across runs.
+ */
+function coerceCapability(raw: unknown): CapabilityBlock {
+  const base = SHARED_DEFAULTS.capability;
+  const out: CapabilityBlock = {
+    resolver_mode: base.resolver_mode as CapabilityResolverMode,
+    suggestion_budget: base.suggestion_budget,
+    starter_roles: [...base.starter_roles],
+    auto_create_policy: base.auto_create_policy as CapabilityAutoCreatePolicy,
+  };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  const r = raw as Record<string, unknown>;
+
+  if (CAPABILITY_RESOLVER_MODES.includes(r["resolver_mode"] as CapabilityResolverMode)) {
+    out.resolver_mode = r["resolver_mode"] as CapabilityResolverMode;
+  }
+  if (CAPABILITY_AUTO_CREATE_POLICIES.includes(r["auto_create_policy"] as CapabilityAutoCreatePolicy)) {
+    out.auto_create_policy = r["auto_create_policy"] as CapabilityAutoCreatePolicy;
+  }
+  const b = r["suggestion_budget"];
+  if (typeof b === "number" && Number.isFinite(b)) {
+    out.suggestion_budget = Math.min(
+      CAPABILITY_SUGGESTION_BUDGET_MAX,
+      Math.max(CAPABILITY_SUGGESTION_BUDGET_MIN, Math.trunc(b)),
+    );
+  }
+  const roles = r["starter_roles"];
+  if (Array.isArray(roles)) {
+    // The SHARED slug contract (isCanonicalRoleSlug), so resolve agrees with validate
+    // and repair. Non-canonical entries are DROPPED, not normalized: inventing a
+    // canonical spelling would silently change which role the project asked for.
+    // Dedup is case-insensitive — the roster is filesystem-backed.
+    const seen = new Set<string>();
+    const acc: string[] = [];
+    for (const entry of roles) {
+      if (!isCanonicalRoleSlug(entry)) continue;
+      const key = roleSlugDedupKey(entry);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      acc.push(entry);
+    }
+    out.starter_roles = acc;
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -725,6 +830,18 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
       sparseMcp.bridge_package = rawMcp["bridge_package"] as string | null;
     out.mcp = sparseMcp as McpBlock;
   }
+  // S5 — capability localization policy. Coerced (never passed through raw) so a
+  // malformed block resolves to something usable instead of poisoning every consumer.
+  // Unknown sub-keys are DROPPED here rather than rejected: this is the resolve path,
+  // and `config validate` owns surfacing them as errors.
+  if (isPlainObject(parsed["capability"])) {
+    const rawCapability = parsed["capability"] as Record<string, unknown>;
+    const known: Record<string, unknown> = {};
+    for (const k of Object.keys(rawCapability)) {
+      if (VALID_CAPABILITY_KEYS.has(k)) known[k] = rawCapability[k];
+    }
+    out.capability = coerceCapability(known);
+  }
   // R-009: statusline
   if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
   // R-008: adversarial_review_provider — open string
@@ -765,8 +882,17 @@ function assembleLayers(
   layers: Array<Partial<ResolvedConfig>>,
   flagsLayer: Partial<ResolvedConfig>
 ): ResolvedConfig {
-  // Start from built-in defaults (as a plain object for deepMerge)
-  let accumulated = DEFAULTS as unknown as Record<string, unknown>;
+  // Start from a COPY of the built-in defaults.
+  //
+  // This used to start from `DEFAULTS` itself. `deepMerge` returns a fresh object, so on
+  // any repo WITH configuration the copy happened by accident — but on a repo with no
+  // settings at all (no layers, no flags) every loop was skipped and this function
+  // returned the module-level `DEFAULTS` OBJECT. The caller then did
+  // `assembled.workspace = resolvedWorkspaceMode`, writing into the shipped defaults for
+  // the remaining life of the process; the next resolve in the same process read the
+  // mutated value as if it were the default. Deep-freezing DEFAULTS is what surfaced it —
+  // the assignment started throwing instead of silently succeeding.
+  let accumulated = deepMerge(Object.create(null) as Record<string, unknown>, DEFAULTS as unknown as Record<string, unknown>);
 
   for (const layer of layers) {
     if (Object.keys(layer).length === 0) continue;

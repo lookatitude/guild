@@ -248,10 +248,10 @@ const HOST_RENDERERS: ReadonlyArray<{ host: string; render: HostRenderFn }> = [
 
 /** Every host id {@link checkHostPackages} checks — pinned so a test can assert the
  * exact set, catching a future edit that silently shrinks (or forgets to grow) it. */
-export const ALL_CHECKED_HOST_IDS: readonly string[] = [
+export const ALL_CHECKED_HOST_IDS: readonly string[] = Object.freeze([
   ...HOST_RENDERERS.map((r) => r.host),
   "codex-marketplace",
-];
+]);
 
 /** A directory looks like a real, buildable plugin root (vs. a synthetic unit-test fixture). */
 export function looksLikeRealPluginRoot(root: string): boolean {

@@ -73,33 +73,33 @@ export const NEUTRAL_CONTRACT_VERSION = 1;
 // ---------------------------------------------------------------------------
 
 /** The six canonical lifecycle phases. */
-export const NEUTRAL_LIFECYCLE_PHASES = ["init", "ideate", "plan", "build", "qa", "ops"] as const;
+export const NEUTRAL_LIFECYCLE_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"] as const);
 export type NeutralLifecyclePhase = (typeof NEUTRAL_LIFECYCLE_PHASES)[number];
 
 /** Terminal dispositions. Exactly one per typed outcome. */
-export const NEUTRAL_DISPOSITIONS = [
+export const NEUTRAL_DISPOSITIONS = Object.freeze([
   "succeeded",
   "refused",
   "unsupported",
   "failed",
   "degraded",
-] as const;
+] as const);
 export type NeutralDisposition = (typeof NEUTRAL_DISPOSITIONS)[number];
 
 /**
  * Observation states. BR-07: an absent or untrustworthy observation MUST NOT be
  * read as success, cleanliness, support, or conformance.
  */
-export const NEUTRAL_OBSERVATION_STATES = [
+export const NEUTRAL_OBSERVATION_STATES = Object.freeze([
   "checked_clean",
   "not_applicable",
   "not_observed",
   "observation_failed",
-] as const;
+] as const);
 export type NeutralObservationState = (typeof NEUTRAL_OBSERVATION_STATES)[number];
 
 /** The ten typed outcome envelopes. */
-export const NEUTRAL_OUTCOME_TYPES = [
+export const NEUTRAL_OUTCOME_TYPES = Object.freeze([
   "guild.lifecycle_outcome.v1",
   "guild.normalized_event_outcome.v1",
   "guild.support_transition_outcome.v1",
@@ -110,7 +110,7 @@ export const NEUTRAL_OUTCOME_TYPES = [
   "guild.boundary_outcome.v1",
   "guild.migration_outcome.v1",
   "guild.version_compatibility_outcome.v1",
-] as const;
+] as const);
 export type NeutralOutcomeType = (typeof NEUTRAL_OUTCOME_TYPES)[number];
 
 /**
@@ -120,7 +120,7 @@ export type NeutralOutcomeType = (typeof NEUTRAL_OUTCOME_TYPES)[number];
  * vocabulary is core-owned — their DURABILITY, ordering, and reconciliation
  * semantics belong to W1/MH-06 and are not implemented by this core.
  */
-export const NEUTRAL_EVENT_NAMES = [
+export const NEUTRAL_EVENT_NAMES = Object.freeze([
   "session.start",
   "prompt.submit",
   "tool.before",
@@ -140,31 +140,31 @@ export const NEUTRAL_EVENT_NAMES = [
   "migration.shadow",
   "migration.cutover",
   "migration.rollback",
-] as const;
+] as const);
 export type NeutralEventName = (typeof NEUTRAL_EVENT_NAMES)[number];
 
 /** The six orthogonal support-evidence dimensions. Never collapse them. */
-export const NEUTRAL_SUPPORT_STATES = [
+export const NEUTRAL_SUPPORT_STATES = Object.freeze([
   "recognized",
   "rendered",
   "installed",
   "activated",
   "updated",
   "conformant",
-] as const;
+] as const);
 export type NeutralSupportState = (typeof NEUTRAL_SUPPORT_STATES)[number];
 
 /** Per-dimension status. `not_evaluated` is not a soft `satisfied`. */
-export const NEUTRAL_SUPPORT_STATUS_VALUES = [
+export const NEUTRAL_SUPPORT_STATUS_VALUES = Object.freeze([
   "not_evaluated",
   "unsupported",
   "failed",
   "satisfied",
-] as const;
+] as const);
 export type NeutralSupportStatus = (typeof NEUTRAL_SUPPORT_STATUS_VALUES)[number];
 
 /** Conformance scenario categories. */
-export const NEUTRAL_SCENARIO_CATEGORIES = [
+export const NEUTRAL_SCENARIO_CATEGORIES = Object.freeze([
   "lifecycle",
   "normalized_event",
   "support_state",
@@ -173,7 +173,7 @@ export const NEUTRAL_SCENARIO_CATEGORIES = [
   "module_boundary",
   "strangler_migration",
   "version_drift",
-] as const;
+] as const);
 export type NeutralScenarioCategory = (typeof NEUTRAL_SCENARIO_CATEGORIES)[number];
 
 /**
@@ -182,7 +182,7 @@ export type NeutralScenarioCategory = (typeof NEUTRAL_SCENARIO_CATEGORIES)[numbe
  * no) from FAILED (it was tried and could not be trusted). There is deliberately
  * no undifferentiated `supported` / `ok` code.
  */
-export const NEUTRAL_REASON_CODES = [
+export const NEUTRAL_REASON_CODES = Object.freeze([
   // lifecycle + gate
   "gate_unsatisfied",
   "unknown_event",
@@ -288,7 +288,7 @@ export const NEUTRAL_REASON_CODES = [
   // ALIAS is any later use of a value that flowed from one.
   "boundary_capability_reach",
   "boundary_capability_alias",
-] as const;
+] as const);
 export type NeutralReasonCode = (typeof NEUTRAL_REASON_CODES)[number];
 
 // ---------------------------------------------------------------------------
@@ -602,19 +602,74 @@ export interface NeutralOutcomeInput {
   readonly facts?: Readonly<Record<string, unknown>>;
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
-
-/** Freeze a value and everything it transitively owns. Exported for core reuse. */
+/**
+ * Freeze a value and everything it transitively owns. Exported for core reuse.
+ *
+ * DELIBERATELY DUPLICATED from `src/modules/kernel/workflows/sealed-collections.ts`, and
+ * deliberately WEAKER than it. This file is a declared member of the IMPORT-CLOSED
+ * neutral core: zero imports, and — per `neutral-core-boundary.ts` — no ambient binding
+ * outside `NEUTRAL_PURE_INTRINSIC_ROOTS`. That rules out `WeakSet`, `Reflect`,
+ * `Object.defineProperty` and `Object.getOwnPropertyDescriptor`, so this copy CANNOT seal
+ * a Set or Map (sealing means neutering `add`/`delete`/`clear` as non-writable own
+ * properties, which needs `defineProperty`). The trade is deliberate: the core keeps its
+ * mechanically-checked capability closure, and the rail enforces the consequence — NO Set
+ * or Map may be reachable from a neutral-core export, because freezing one would close
+ * nothing while `Object.isFrozen` reported success.
+ *
+ * The previous implementation guarded recursion with `Object.isFrozen(value)` and bailed
+ * out on the first frozen node. That is backwards: a SHALLOW-frozen node reports
+ * `isFrozen === true`, so the walk stopped at the boundary and left its children — the
+ * mutable half — untouched, which is the very defect it existed to prevent. Recursion is
+ * now guarded by a `Set` of visited objects (an intrinsic the core IS allowed) and the
+ * walk keeps descending through already-frozen nodes.
+ */
 export function neutralFreeze<T>(value: T): T {
-  return deepFreeze(value);
+  const seen = new Set<unknown>();
+  const walk = (node: unknown): void => {
+    if (node === null || typeof node !== "object") return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof RegExp) {
+      // Freezing a global/sticky pattern makes `.exec()`/`.test()` throw on the
+      // `lastIndex` write; freezing any other pattern is always safe.
+      if (!node.global && !node.sticky) Object.freeze(node);
+      return;
+    }
+    if (node instanceof Set || node instanceof Map) {
+      // ROUND-1 P2 #6. This copy cannot SEAL a Set or Map, so it used to fall through to
+      // `Object.freeze` — which closes nothing while `Object.isFrozen` reports `true`.
+      // That is the exact false green the whole rail exists to catch, and it was reachable
+      // through `neutralOutcome({ facts: { allowed: new Set([...]) } })`: the caller kept a
+      // live reference and could `clear()`/`add()` the "machine truth" afterwards. The
+      // prohibition on Sets in the neutral core was enforced only over STATIC `NEUTRAL_*`
+      // exports, so nothing constrained a value handed in at runtime.
+      //
+      // Refusing is the honest move and needs no capability this core lacks: it makes the
+      // unrepresentable case a loud error at construction instead of a silent one at use.
+      throw new TypeError(
+        "neutralFreeze: refusing to 'freeze' a Set/Map — freeze does not close membership, " +
+          "and the neutral core cannot build a sealed facade. Pass a frozen array or a plain " +
+          "record instead (outside the core, use sealSet()/sealMap()).",
+      );
+    }
+    Object.freeze(node);
+    // ENUMERABLE OWN STRING KEYS ONLY, and read by [[Get]] — which INVOKES getters.
+    //
+    // This is the residue of round-1 P2 #6 that CANNOT be closed here, and the reason is
+    // mechanical rather than an oversight. Reaching a symbol-keyed or non-enumerable child
+    // needs `Object.getOwnPropertySymbols` / `getOwnPropertyNames`, and avoiding the getter
+    // invocation needs `Object.getOwnPropertyDescriptor` — all three are in
+    // `NEUTRAL_REFLECTION_METHOD_NAMES`, which `neutral-core-boundary.ts` rejects as a
+    // `reflection_call_reach`. Using them turns the core's import closure RED. The core's
+    // mechanically-checked capability closure is the stronger property, so the divergence
+    // from the kernel primitive stays, and the rail PINS it by name and by shape rather
+    // than leaving it as an unstated gap. Do not "fix" this without moving the boundary.
+    for (const key of Object.keys(node as Record<string, unknown>)) {
+      walk((node as Record<string, unknown>)[key]);
+    }
+  };
+  walk(value);
+  return value;
 }
 
 /**
@@ -648,7 +703,7 @@ export function neutralOutcome(input: NeutralOutcomeInput): NeutralOutcome {
     }
   }
 
-  return deepFreeze({
+  return neutralFreeze({
     schema_version: NEUTRAL_CONTRACTS_SCHEMA_VERSION,
     type: input.type,
     disposition: input.disposition,
@@ -668,11 +723,11 @@ export function neutralOutcome(input: NeutralOutcomeInput): NeutralOutcome {
 // ---------------------------------------------------------------------------
 
 /** How a superseded (v1) event name relates to the normative (v2) vocabulary. */
-export const NEUTRAL_EVENT_COMPATIBILITY_KINDS = [
+export const NEUTRAL_EVENT_COMPATIBILITY_KINDS = Object.freeze([
   "unchanged",
   "renamed",
   "ambiguous_split",
-] as const;
+] as const);
 export type NeutralEventCompatibilityKind = (typeof NEUTRAL_EVENT_COMPATIBILITY_KINDS)[number];
 
 export interface NeutralEventCompatibilityRule {
@@ -689,7 +744,7 @@ export interface NeutralEventCompatibilityRule {
  * function: `task.transition` has two normative images and therefore NO lossless
  * mapping, which is recorded as `ambiguous_split` rather than resolved by guess.
  */
-export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibilityRule[] = [
+export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibilityRule[] = neutralFreeze([
   { from: "session.start", to: "session.start", kind: "unchanged", candidates: [] },
   { from: "prompt.submit", to: "prompt.submit", kind: "unchanged", candidates: [] },
   { from: "context.compact", to: "context.compact", kind: "unchanged", candidates: [] },
@@ -703,10 +758,10 @@ export const NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly NeutralEventCompatibili
     kind: "ambiguous_split",
     candidates: ["task.dispatch", "task.collect"],
   },
-];
+]);
 
 /** The superseded 8-name list, exactly as `guild.normalized_event.v1` declared it. */
-export const NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = [
+export const NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = Object.freeze([
   "session.start",
   "session.resume",
   "prompt.submit",
@@ -715,19 +770,19 @@ export const NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = [
   "context.compact",
   "task.transition",
   "session.stop",
-] as const;
+] as const);
 
 /**
  * v2 names with NO v1 preimage at all. A name reachable only as an ambiguous
  * `candidate` (`task.dispatch`, `task.collect`) is deliberately NOT counted as
  * introduced: it has a v1 preimage, just not an invertible one.
  */
-export const NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2: readonly string[] = NEUTRAL_EVENT_NAMES.filter(
+export const NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2: readonly string[] = Object.freeze(NEUTRAL_EVENT_NAMES.filter(
   (name) =>
     !NEUTRAL_EVENT_COMPATIBILITY_RULES.some(
       (rule) => rule.to === name || rule.candidates.indexOf(name) !== -1
     )
-);
+));
 
 /**
  * The shared normative block. This object is mirrored BYTE-FOR-BYTE by the

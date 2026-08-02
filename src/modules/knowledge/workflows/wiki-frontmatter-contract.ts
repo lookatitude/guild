@@ -43,7 +43,7 @@
 
 // ── type: ─────────────────────────────────────────────────────────────────────
 
-export const WIKI_PAGE_TYPES = [
+export const WIKI_PAGE_TYPES = Object.freeze([
   "context",
   "standard",
   "product",
@@ -51,7 +51,7 @@ export const WIKI_PAGE_TYPES = [
   "concept",
   "decision",
   "source",
-] as const;
+] as const);
 
 export type WikiPageType = (typeof WIKI_PAGE_TYPES)[number];
 
@@ -76,7 +76,7 @@ export const WIKI_TYPE_TO_DIR: Readonly<Record<WikiPageType, string>> = {
 
 // ── confidence: ────────────────────────────────────────────────────────────────
 
-export const WIKI_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
+export const WIKI_CONFIDENCE_LEVELS = Object.freeze(["low", "medium", "high"] as const);
 export type WikiConfidenceLevel = (typeof WIKI_CONFIDENCE_LEVELS)[number];
 
 export function isWikiConfidenceLevel(v: unknown): v is WikiConfidenceLevel {
@@ -85,7 +85,7 @@ export function isWikiConfidenceLevel(v: unknown): v is WikiConfidenceLevel {
 
 // ── sensitivity: ───────────────────────────────────────────────────────────────
 
-export const WIKI_SENSITIVITY_LEVELS = ["public", "internal", "confidential", "secret"] as const;
+export const WIKI_SENSITIVITY_LEVELS = Object.freeze(["public", "internal", "confidential", "secret"] as const);
 export type WikiSensitivityLevel = (typeof WIKI_SENSITIVITY_LEVELS)[number];
 
 export function isWikiSensitivityLevel(v: unknown): v is WikiSensitivityLevel {
@@ -95,7 +95,7 @@ export function isWikiSensitivityLevel(v: unknown): v is WikiSensitivityLevel {
 // ── The full field-name vocabulary (documentation / drift-guard use) ──────────
 
 /** Every §10.1.1 required-frontmatter field name, in the canonical order. */
-export const WIKI_FRONTMATTER_FIELDS = [
+export const WIKI_FRONTMATTER_FIELDS = Object.freeze([
   "type",
   "owner",
   "confidence",
@@ -105,6 +105,6 @@ export const WIKI_FRONTMATTER_FIELDS = [
   "expires_at",
   "supersedes",
   "sensitivity",
-] as const;
+] as const);
 
 export type WikiFrontmatterField = (typeof WIKI_FRONTMATTER_FIELDS)[number];

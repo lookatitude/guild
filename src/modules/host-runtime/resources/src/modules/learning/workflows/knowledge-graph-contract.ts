@@ -5,6 +5,8 @@
  * learn/lib/schema.ts validator remains the runtime schema surface for now.
  */
 
+import { sealSet } from "../../kernel";
+
 export interface GraphNode {
   id: string;
   type: string;
@@ -29,10 +31,10 @@ export interface GraphEdge {
   [k: string]: unknown;
 }
 
-export const NODE_CATEGORIES = new Set([
+export const NODE_CATEGORIES = sealSet([
   "function", "class", "module", "config", "endpoint", "pipeline", "schema",
   "concept", "fact", "claim", "principle", "definition", "example",
   "guide", "tutorial", "reference", "overview", "changelog", "architecture",
   "decision", "standard", "recipe", "checklist",
   "component", "domain", "diagram", "index", "note",
-]);
+], "NODE_CATEGORIES");

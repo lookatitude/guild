@@ -11,17 +11,17 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { redact } from "./lib/shared/scrub-redact";
 
-export const DESKTOP_APP_HOSTS = ["claude-code-app", "codex-app"] as const;
+export const DESKTOP_APP_HOSTS = Object.freeze(["claude-code-app", "codex-app"] as const);
 export type DesktopAppHost = (typeof DESKTOP_APP_HOSTS)[number];
 
-export const DESKTOP_SMOKE_RESULTS = [
+export const DESKTOP_SMOKE_RESULTS = Object.freeze([
   "codex-slash-forwarded",
   "codex-slash-rejected-fallback-ok",
   "claude-native-slash-ok",
   "claude-native-slash-missing-fallback-ok",
   "blocked",
   "failed",
-] as const;
+] as const);
 export type DesktopSmokeResult = (typeof DESKTOP_SMOKE_RESULTS)[number];
 
 export interface DesktopAppSmokeReceipt {

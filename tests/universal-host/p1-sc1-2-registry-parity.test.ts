@@ -113,7 +113,11 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
       "codex-cli": { installability: "target", result_adapter: true, dispatch_selectable: true },
       "pi-cli": { installability: "target", result_adapter: false, dispatch_selectable: true },
       "antigravity-cli": { installability: "target", result_adapter: false, dispatch_selectable: true },
-      "agents-file": { installability: "target", result_adapter: false, dispatch_selectable: true },
+      // gap-audit C-agents-file: dispatch_selectable FLIPPED from true. This row is the
+      // universal AGENTS.md render TARGET (kiro/qoder/trae dereference it), a pane-less
+      // file surface with no HostKind member and no PaneAdapter; its own adapter's
+      // dispatch() returns degraded/command:null. Same G4b rule as the 3 IDE rows below.
+      "agents-file": { installability: "target", result_adapter: false, dispatch_selectable: false },
       // App/web/connector surfaces: no install path, no result adapter, not dispatch-selectable.
       "claude-code-app": { installability: "none", result_adapter: false, dispatch_selectable: false },
       "claude-code-web": { installability: "none", result_adapter: false, dispatch_selectable: false },
@@ -143,17 +147,27 @@ describe("P1 SC-2 — independent capability columns (replace hasAdapter)", () =
     }
   });
 
-  it("the columns are genuinely INDEPENDENT — codex-cli is dispatch_selectable AND result_adapter, agents-file is dispatch_selectable WITHOUT result_adapter", () => {
+  it("the columns are genuinely INDEPENDENT — codex-cli is dispatch_selectable AND result_adapter, pi-cli is dispatch_selectable WITHOUT result_adapter", () => {
     const codex = HOST_REGISTRY_ROWS["codex-cli"];
     expect(codex.dispatch_selectable).toBe(true);
     expect(codex.result_adapter).toBe(true); // the only cross reviewer today
     expect(codex.installability).toBe("target"); // renderer exists, install unproven
 
-    const agents = HOST_REGISTRY_ROWS["agents-file"];
-    expect(agents.dispatch_selectable).toBe(true); // a lane can run there
-    expect(agents.result_adapter).toBe(false); // but no cross-review path back
+    // Witness swapped from agents-file (gap-audit C-agents-file flipped it to
+    // dispatch_selectable:false, so it is false/false and no longer separates the two
+    // columns). pi-cli is the same shape agents-file used to supply here: a real
+    // dispatch surface with no cross-review path back.
+    const pi = HOST_REGISTRY_ROWS["pi-cli"];
+    expect(pi.dispatch_selectable).toBe(true); // a lane can run there
+    expect(pi.result_adapter).toBe(false); // but no cross-review path back
     // ⇒ the two columns are NOT the same flag (the SC-2 split is real).
-    expect(agents.dispatch_selectable).not.toBe(agents.result_adapter);
+    expect(pi.dispatch_selectable).not.toBe(pi.result_adapter);
+
+    // And the split holds in the other direction too: installability is independent of
+    // dispatch_selectable — agents-file is installable ("target") yet NOT dispatchable.
+    const agents = HOST_REGISTRY_ROWS["agents-file"];
+    expect(agents.installability).toBe("target");
+    expect(agents.dispatch_selectable).toBe(false);
   });
 
   it("claude-code-cli is the reference author host: native install, NOT a self cross-reviewer", () => {

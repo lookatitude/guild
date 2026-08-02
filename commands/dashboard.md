@@ -45,6 +45,24 @@ while the server is alive reuses it (no second server). No `.guild/` data
 writes (only `.guild/cache/`: PID record + log always; `benchmark/` under a
 confirmed `--install`).
 
+## Capability candidates (F7)
+
+Alongside the URL, print the capability-candidate surface — the same read-only
+block `/guild:status` shows:
+
+```bash
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts candidates \
+  --cwd "$(pwd)"
+```
+
+Scoped deliberately to the **terminal output**, not the web UI. The dashboard's
+pages are served by the benchmark repo, so a UI panel is a cross-repo change and
+is **not** the cheap option F7 asked for; printing the block here surfaces the
+same information with no cross-repo coupling. `/guild:status` remains the
+canonical F7 surface and the one D04's default depends on — this is a
+convenience echo, so its absence would not by itself revert the `observe`
+default.
+
 ## Run recording
 
 Before launch, start a lightweight run (SC-B, §435):

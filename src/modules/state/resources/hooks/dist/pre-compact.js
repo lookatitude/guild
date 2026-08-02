@@ -3071,8 +3071,8 @@ __export(pre_compact_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_compact_exports);
-var fs8 = __toESM(require("node:fs"));
-var path10 = __toESM(require("node:path"));
+var fs9 = __toESM(require("node:fs"));
+var path11 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -3105,17 +3105,466 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/reanchor.ts
-var fs7 = __toESM(require("node:fs"));
-var path9 = __toESM(require("node:path"));
+var fs8 = __toESM(require("node:fs"));
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+function refuseMutator(label, method) {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+    );
+  };
+}
+function sealSet(values, label = "this Set") {
+  const inner = new Set(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value) => inner.has(value),
+    keys: () => inner.keys(),
+    values: () => inner.values(),
+    entries: () => inner.entries(),
+    forEach: (callback, thisArg) => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade));
+    },
+    [Symbol.iterator]: () => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear")
+  };
+  return Object.freeze(facade);
+}
+function isSealedCollection(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues(value) {
+  if (!isSealedCollection(value)) return void 0;
+  return [...value];
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
+// lib/reanchor.ts
+var path10 = __toESM(require("node:path"));
 var yaml2 = __toESM(require_js_yaml());
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 var fsNode = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
+var path9 = __toESM(require("path"));
+
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/yaml-loader.ts
+var path2 = __toESM(require("node:path"));
+function pluginLocalScriptsRoots() {
+  return [
+    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "..", "..", "scripts"),
+    // Bundled hook layout: hooks/dist -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "scripts"),
+    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
+    path2.resolve(__dirname, "..", "..", "..", "scripts")
+  ];
+}
+function tryScriptsRoot(scriptsRoot) {
+  try {
+    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+  } catch {
+    return null;
+  }
+}
+function loadYamlApi() {
+  const tried = [];
+  for (const scriptsRoot of pluginLocalScriptsRoots()) {
+    tried.push(scriptsRoot);
+    const api2 = tryScriptsRoot(scriptsRoot);
+    if (api2) return api2;
+  }
+  try {
+    return require_js_yaml();
+  } catch {
+  }
+  const cwdRoot = path2.resolve(process.cwd(), "scripts");
+  tried.push(cwdRoot);
+  const api = tryScriptsRoot(cwdRoot);
+  if (api) return api;
+  throw new Error(
+    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
+  );
+}
+
+// ../src/modules/kernel/workflows/path-containment.ts
+var fs2 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
+function isRefused(r) {
+  return "code" in r;
+}
+function escapes(rel) {
+  return rel === ".." || rel.startsWith(`..${path3.sep}`) || path3.isAbsolute(rel);
+}
+function refuse(code, detail) {
+  return Object.freeze({ contained: false, code, detail });
+}
+function hasParentSegment(p) {
+  return p.split(/[\\/]/).includes("..");
+}
+function lstatOrNull(p) {
+  try {
+    return fs2.lstatSync(p);
+  } catch {
+    return null;
+  }
+}
+function isWithin(child, parent) {
+  const rel = path3.relative(parent, child);
+  return rel === "" || !escapes(rel);
+}
+function checkContained(root, target, options = {}) {
+  const policy = options.policy ?? "resolve";
+  let realRoot;
+  try {
+    realRoot = fs2.realpathSync(path3.resolve(root));
+  } catch {
+    return refuse("root-unresolvable", `project root ${root} does not resolve`);
+  }
+  if (hasParentSegment(target)) {
+    return refuse(
+      "parent-traversal",
+      `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
+    );
+  }
+  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot, target);
+  let probe = abs;
+  let probeStat = null;
+  for (; ; ) {
+    probeStat = lstatOrNull(probe);
+    if (probeStat !== null) break;
+    const parent = path3.dirname(probe);
+    if (parent === probe) {
+      return refuse("no-existing-ancestor", `no existing ancestor of ${abs}`);
+    }
+    probe = parent;
+  }
+  if (options.requireRegularFileLeaf && probe === abs && !probeStat.isFile()) {
+    const what = probeStat.isSymbolicLink() ? "symlink" : probeStat.isDirectory() ? "directory" : "special file";
+    return refuse(
+      "leaf-not-regular-file",
+      `${abs} exists and is not a regular file (${what}); refusing to write through it`
+    );
+  }
+  let realProbe;
+  try {
+    realProbe = fs2.realpathSync(probe);
+  } catch {
+    return refuse(
+      "dangling-symlink",
+      `${probe} is a symlink that does not resolve; refusing to write through it`
+    );
+  }
+  const rel = path3.relative(realRoot, realProbe);
+  if (rel !== "" && escapes(rel)) {
+    return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
+  }
+  if (policy === "physical") {
+    const parsed = path3.parse(abs);
+    let walk = parsed.root;
+    for (const seg of abs.slice(parsed.root.length).split(path3.sep)) {
+      if (seg === "" || seg === ".") continue;
+      walk = path3.join(walk, seg);
+      const st = lstatOrNull(walk);
+      if (st === null || !st.isSymbolicLink()) continue;
+      let segReal;
+      try {
+        segReal = fs2.realpathSync(walk);
+      } catch {
+        return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
+      }
+      const segRel = path3.relative(realRoot, segReal);
+      const strictlyInside = segRel !== "" && !escapes(segRel);
+      if (strictlyInside) {
+        return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
+      }
+    }
+  }
+  const tail = path3.relative(probe, abs);
+  const realPath = tail === "" ? realProbe : path3.join(realProbe, tail);
+  return Object.freeze({ contained: true, realRoot, realPath });
+}
 
 // ../src/modules/config/workflows/config-defaults.ts
+var DEFAULT_ESCALATION_MARKERS = Object.freeze([
+  "I'm not sure",
+  "unclear",
+  "cannot determine",
+  "I don't know",
+  "ambiguous",
+  "uncertain",
+  "not enough information"
+]);
+var NON_INHERITABLE_KEYS = sealSet([
+  "initiative_default",
+  // OD-1: attach-to-wrong-initiative risk
+  "workspace"
+  // workspace.mode is root-detection-only
+], "NON_INHERITABLE_KEYS");
 var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
 var SIDECAR_MAX_BYTES = 1024 * 1024;
+var CAPABILITY_RESOLVER_MODES = Object.freeze([
+  "legacy",
+  "observe",
+  "shadow",
+  "project-local",
+  "strict"
+]);
+var CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
+var CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
+var CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
+var DEFAULTS = deepFreeze({
+  rigor: "standard",
+  auto_approve: [],
+  review: "local",
+  host: "auto",
+  /**
+   * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+   * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+   * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+   * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+   * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+   * this top-level placement (sibling of the `host` dispatch selector) is the registered
+   * replacement. One of only three keys ever legitimately null-typed at the top level.
+   */
+  host_mode: null,
+  roles: { host: null, advisory: null, adversarial: null },
+  host_profiles: {},
+  initiative_default: null,
+  index: "auto",
+  record_status_runs: true,
+  codex_skip_enforcement: "warn",
+  agent_mode: "auto",
+  workspace: { mode: "auto" },
+  models: {
+    enabled: true,
+    // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+    // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+    // own contract, stated in the module doc comment above, is to stay free of
+    // internal runtime imports so core settings code can load it before the
+    // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+    // roster (host-registry-schema.ts) enumerated by hand; a jest test
+    // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+    // stay in sync so this can never silently drift again the way it had (7 of
+    // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+    // non-null model — every other host's registry row carries `models.<tier>.model:
+    // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+    // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+    // equivalent this static scaffold mirrors).
+    tiers: {
+      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+      mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+      powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
+    },
+    scoreWeights: {
+      workType: 0,
+      blastRadius: 1,
+      dependsOn: 1,
+      security: 1,
+      priorEscalation: 1
+    },
+    thresholds: { mid: 1, powerful: 3 },
+    advisorRounds: 2,
+    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+    recallBeforeRead: true,
+    recallScoreThreshold: 0.4,
+    structuredOutputRequired: true,
+    cacheTTL: { coordinator: "1h", leaf: "5m" },
+    importanceGate: 3,
+    compositeRecall: true,
+    importanceAtIngest: true,
+    ingestSimilarityGate: 0.8,
+    shortOutputThreshold: {},
+    knowledge: {
+      maxDepth: 8,
+      maxBranching: 12,
+      minTopicImportance: 0.4,
+      relMinConf: 0.5,
+      maxFiles: 3e3,
+      maxTokens: 1e6,
+      batchSize: 20
+    }
+  },
+  security: {
+    bypass_permissions_policy: "audit"
+  },
+  secrets_policy: {
+    env_allowlist: [],
+    redaction_patterns: [],
+    fail_mode_durable: "closed",
+    fail_mode_telemetry: "open"
+  },
+  mcp: {
+    tool_description_hashes: {},
+    stdio_available: true,
+    http_available: false,
+    bridge_package: null
+  },
+  /**
+   * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+   * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+   * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+   *
+   * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+   * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+   * What a lane may DO stays with `capability_scope` and the permission keys.
+   *
+   * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+   * already emits unconditionally — capability ownership is per project by
+   * definition (the umbrella and each child answer "what roles do I need"
+   * independently, and D03 has the four repos migrating at different rates). Per
+   * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+   * out with zero generator change, and adding it would touch every existing key.
+   */
+  capability: {
+    /**
+     * Which resolver mode this project is in on D03's migration ladder. Config
+     * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+     * gate criteria the initiative evaluates, and a mode change is a deliberate
+     * write.
+     *
+     * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
+     * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
+     * silently defaulted: an unset value resolves with provenance `default`, so
+     * `config show --sources` shows it was never chosen.
+     */
+    resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+    /**
+     * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+     * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+     * the two cannot disagree. 0 is legal: "profile but never propose".
+     */
+    suggestion_budget: 4,
+    /**
+     * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+     * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+     * Learn proposes.
+     */
+    starter_roles: [],
+    /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+    auto_create_policy: "on_approval"
+  },
+  statusline: false,
+  adversarial_review_provider: "auto",
+  loops: null,
+  loop_cap: 16,
+  codex_cap: 5,
+  defaults: {
+    auto_learn: false,
+    adversarial: "on",
+    team: { size: null, always_include: [] },
+    review_workflow: "standard",
+    skill_policy: "standard",
+    gates: { auto_approve: [] },
+    wiki: { share_mode: "team", autopromote: false },
+    quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+    reporting: "standard",
+    index: {
+      enabled: true,
+      kg_node_threshold: 2e3,
+      kg_size_threshold_mb: 1,
+      links_edge_threshold: 2e3,
+      runs_threshold: 20,
+      wiki_file_threshold: 500
+    },
+    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+    retry: { max_attempts: 1, backoff: "exponential" },
+    resume: { enabled: true },
+    heartbeat_timeout_ms: 6e5,
+    capability_manifest_ttl_s: 3600,
+    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+    // the SessionStart signal; `auto` additionally stages the host apply path;
+    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+    update: { mode: "notify", cadence_hours: 24 },
+    allowed_tools: [],
+    /**
+     * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+     * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+     * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+     * "Inline shortcut under high autonomy").
+     */
+    lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+    /**
+     * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+     * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+     * activity count before the lifecycle gate advisory fires.
+     */
+    lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS = {
@@ -3123,6 +3572,8 @@ var UPDATE_COMMANDS = {
   self_update: "guild-run update",
   reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
 };
+var INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+var INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
 var CLAUDE_CAPABILITIES = {
   schema_version: "guild.host_capabilities.v1",
   host_kind: "claude",
@@ -3143,6 +3594,20 @@ var CLAUDE_CAPABILITIES = {
   commands: { slash_commands: true, command_files: "markdown" },
   skills: { native_skills: true, skill_dir: ".claude/skills" },
   agents: { native_agents: true, agent_format: "claude-md" },
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "target",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: {
     // All ten events are bound in the live hooks/hooks.json (verified).
     session_start: true,
@@ -3254,6 +3719,20 @@ var CODEX_CAPABILITIES = {
   // Verified (per-host-packaging).
   agents: { native_agents: false, agent_format: null },
   // Verified (per-host-packaging flags agents unsupported).
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: {
     // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
     // Claude-equivalent hooks" claim was empirically false. Codex accepts a
@@ -3388,6 +3867,19 @@ var AGENTS_FILE_CAPABILITIES = {
   commands: { slash_commands: false, command_files: "none" },
   skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
   agents: { native_agents: false, agent_format: null },
+  injection: {
+    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+    definition_injection: false,
+    definition_injection_support: "absent",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "absent",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "none",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
   hooks: NO_HOOKS,
   permissions: {
     deny: false,
@@ -3436,9 +3928,21 @@ var AGENTS_FILE_CAPABILITIES = {
     powerful: { model: null }
   }
 };
+var REQUIRED_HOOK_EVENTS = Object.freeze([
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+  "post_tool_use",
+  "stop",
+  "pre_compact",
+  "subagent_stop",
+  "task_created",
+  "task_completed",
+  "teammate_idle"
+]);
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
-var HOST_IDS = [
+var HOST_IDS = Object.freeze([
   // keep CLI/file (5)
   "claude-code-cli",
   "codex-cli",
@@ -3460,8 +3964,8 @@ var HOST_IDS = [
   "kiro",
   "qoder",
   "trae"
-];
-var HOST_FAMILIES = [
+]);
+var HOST_FAMILIES = Object.freeze([
   "claude",
   "codex",
   "agents",
@@ -3471,15 +3975,15 @@ var HOST_FAMILIES = [
   "copilot",
   "opencode",
   "rovo"
-];
-var AUTH_PROBES = [
+]);
+var AUTH_PROBES = Object.freeze([
   "codex_stored_or_env",
   "none",
   "cursor_stored",
   "gh_auth",
   "opencode_stored_or_env",
   "acli_stored"
-];
+]);
 var CLAUDE_ENTRY = {
   schema_version: "guild.host_registry.v1",
   host_id: "claude-code-cli",
@@ -3510,7 +4014,7 @@ var CODEX_ENTRY = {
   provenance: "verified"
   // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
 };
-function inferredCaps(host_kind, family, surface_kind = "cli") {
+function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
     host_kind,
@@ -3537,6 +4041,38 @@ function inferredCaps(host_kind, family, surface_kind = "cli") {
     commands: { slash_commands: false, command_files: "none" },
     skills: { native_skills: false, skill_dir: null },
     agents: { native_agents: false, agent_format: null },
+    // cap-loc-D11 — injection facts derived STRUCTURALLY from the surface kind.
+    // A `cli` surface has somewhere to dispatch a lane, so injection is an
+    // unproven TARGET. An `app` or `file` surface has no pane to dispatch into
+    // (see the AGENTS_FILE / kiro / qoder / trae rows: `dispatch_selectable:
+    // false`), so there is nothing to inject INTO — `absent`, and nothing to
+    // degrade to either. That is a structural fact, not pessimism.
+    //
+    // NO ROW STARTS `verified`: injection is unbuilt, so no probe of it has ever
+    // run on any host. A row flips only on a real probe receipt (E3 / cap-loc-D12).
+    injection: dispatch_selectable ? {
+      definition_injection: false,
+      definition_injection_support: "target",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "target",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "prompt_text",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    } : {
+      definition_injection: false,
+      definition_injection_support: "absent",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "absent",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "none",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    },
     hooks: {
       session_start: false,
       user_prompt_submit: false,
@@ -3598,8 +4134,30 @@ var AGENTS_FILE_ENTRY = {
   installability: "target",
   result_adapter: false,
   // INFERRED — no cross-review adapter; verify at live-host availability.
-  dispatch_selectable: true,
-  // INFERRED — a host consuming AGENTS.md can run a lane.
+  // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
+  // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
+  // The prior value was annotated INFERRED with the rationale "a host consuming
+  // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
+  // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
+  // THIS row", and under that reading it is false by construction:
+  //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
+  //     TeamBackend/pane path can name it;
+  //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
+  //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
+  //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
+  //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
+  //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
+  //     package target, not a process launcher".
+  // The G4b lane carved this row out as a documented exception rather than flipping it.
+  // That carve-out is superseded here because the field has REAL per-row consumers that
+  // read it as selectability: config-cli.ts builds the operator-pinnable host set from
+  // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
+  // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
+  // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
+  // and then dispatch into an adapter that returns `command: null`. A concrete
+  // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
+  // this row is the render TARGET, never a dispatch destination.
+  dispatch_selectable: false,
   capabilities: AGENTS_FILE_CAPABILITIES,
   // file surface — matches top-level surface_kind.
   provenance: "inferred"
@@ -3861,7 +4419,7 @@ var TRAE_ENTRY = {
   capabilities: inferredCaps("trae", "agents", "file"),
   provenance: "inferred"
 };
-var HOST_REGISTRY_ROWS = {
+var HOST_REGISTRY_ROWS = deepFreeze({
   "claude-code-cli": CLAUDE_ENTRY,
   "codex-cli": CODEX_ENTRY,
   "pi-cli": PI_ENTRY,
@@ -3878,7 +4436,7 @@ var HOST_REGISTRY_ROWS = {
   kiro: KIRO_ENTRY,
   qoder: QODER_ENTRY,
   trae: TRAE_ENTRY
-};
+});
 var HOST_ID_SET = new Set(HOST_IDS);
 var FAMILY_SET = new Set(HOST_FAMILIES);
 var AUTH_PROBE_SET = new Set(AUTH_PROBES);
@@ -3903,13 +4461,32 @@ function normalizeHostId(value) {
 }
 
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
-var RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"];
-var ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"];
+var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
+var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+var INFERRED_HOSTS = sealSet([
+  "agents-file",
+  "pi-cli",
+  "antigravity-cli",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  "kiro",
+  "qoder",
+  "trae"
+], "INFERRED_HOSTS");
 var RUNG_SET = new Set(RUNGS);
 var SURFACE_SET = new Set(ADAPTER_SURFACES);
 
 // ../src/modules/host-runtime/workflows/host-profiles-validate.ts
 var KNOWN_HOST_IDS = new Set(HOST_IDS);
+var VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
+var VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
 
 // ../src/modules/host-runtime/workflows/host-registry.ts
 function deriveCapabilityRow(row) {
@@ -3957,11 +4534,25 @@ var PROVIDER_REGISTRY = [
   { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
 ];
 
+// ../src/modules/host-runtime/workflows/host-adapter-contract.ts
+var HOST_ADAPTER_OPERATIONS = Object.freeze([
+  "capabilities",
+  "bootstrap",
+  "preflight",
+  "dispatch",
+  "collect",
+  "renderCommandSurface",
+  "renderPackage",
+  "renderPermissionDecision",
+  "resolveModelParams",
+  "memory"
+]);
+
 // ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
 var import_node_crypto = require("node:crypto");
 var HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
 var HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
-var HOST_CAPABILITY_IDS = [
+var HOST_CAPABILITY_IDS = Object.freeze([
   "host.artifacts.direct_filesystem",
   "host.artifacts.file_bus",
   "host.bootstrap.context_injection",
@@ -3992,7 +4583,7 @@ var HOST_CAPABILITY_IDS = [
   "host.result_adapter",
   "host.sessions.resume_by_id",
   "host.structured_output.native_json"
-];
+]);
 var CAPABILITY_READERS = {
   "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
   "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
@@ -4036,15 +4627,6 @@ var CAPABILITY_READERS = {
   "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
 };
 var UNKNOWN_HOST_VERSION = "unknown";
-function deepFreeze(value) {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value)) {
-    deepFreeze(value[key]);
-  }
-  return value;
-}
 function canonicalJson(value) {
   if (value === null) return "null";
   const kind = typeof value;
@@ -4343,19 +4925,19 @@ var HOST_ADAPTER_REASON_CODES = Object.freeze([
   "execution_failed",
   "unknown_event"
 ]);
-var HOST_ADAPTER_OWNED_CONCERNS = [
+var HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
   "host_identity_resolution",
   "host_entry_point_binding",
   "host_capability_snapshot",
   "host_native_event_normalization"
-];
-var HOST_ADAPTER_NOT_OWNED_CONCERNS = [
+]);
+var HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
   "lifecycle_state",
   "gate_policy",
   "artifact_semantics",
   "document_rendering",
   "transport_execution"
-];
+]);
 var CONCERN_OWNERS = Object.freeze({
   host_identity_resolution: "host-adapters",
   host_entry_point_binding: "host-adapters",
@@ -4405,9 +4987,12 @@ var HOST_ENTRY_POINTS = Object.freeze(
 );
 var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
 
+// ../src/modules/security/workflows/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+
 // ../src/modules/security/workflows/scrubbed-write.ts
-var fs6 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
+var fs7 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
 var crypto = __toESM(require("node:crypto"));
 
 // ../src/modules/security/workflows/redact-log.ts
@@ -4417,17 +5002,17 @@ var KV_REDACTED = "[REDACTED]";
 var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
 var TRUNCATION_SUFFIX = "... [TRUNCATED]";
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
-];
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+]);
 function redactTokenShapes(input) {
   let out = input;
   for (const re of TOKEN_SHAPE_PATTERNS) {
@@ -4435,6 +5020,13 @@ function redactTokenShapes(input) {
   }
   return out;
 }
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
 var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
 function redactHomeDirPaths(input) {
   return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
@@ -4537,7 +5129,7 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
   out = truncateToCap(out, cap);
   return out;
 }
-var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
+var REDACTABLE_FIELD_NAMES = Object.freeze([
   "command_redacted",
   "result_excerpt_redacted",
   "payload_excerpt_redacted",
@@ -4545,6 +5137,7 @@ var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
   "assumption_text",
   "result"
 ]);
+var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
 function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   const out = { ...event };
   for (const [k, v] of Object.entries(out)) {
@@ -4580,65 +5173,41 @@ function applySecretsPolicy(value, policy, opts) {
 }
 
 // ../src/modules/security/workflows/config.ts
-var fs4 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var fs5 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
 
-// ../src/modules/kernel/workflows/yaml-loader.ts
-var path2 = __toESM(require("node:path"));
-function pluginLocalScriptsRoots() {
-  return [
-    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "..", "..", "scripts"),
-    // Bundled hook layout: hooks/dist -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "scripts"),
-    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "..", "scripts")
-  ];
-}
-function tryScriptsRoot(scriptsRoot) {
-  try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
-  } catch {
-    return null;
-  }
-}
-function loadYamlApi() {
-  const tried = [];
-  for (const scriptsRoot of pluginLocalScriptsRoots()) {
-    tried.push(scriptsRoot);
-    const api2 = tryScriptsRoot(scriptsRoot);
-    if (api2) return api2;
-  }
-  try {
-    return require_js_yaml();
-  } catch {
-  }
-  const cwdRoot = path2.resolve(process.cwd(), "scripts");
-  tried.push(cwdRoot);
-  const api = tryScriptsRoot(cwdRoot);
-  if (api) return api;
-  throw new Error(
-    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
-  );
-}
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
 
 // ../src/modules/state/workflows/guild-root.ts
-var fs2 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+var fs3 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
 function resolveGuildRoot2(startDir) {
-  const resolvedStart = path3.resolve(startDir);
+  const resolvedStart = path4.resolve(startDir);
   let current = resolvedStart;
   let nearestGuildDir = null;
   for (; ; ) {
-    if (fs2.existsSync(path3.join(current, ".git"))) return current;
+    if (fs3.existsSync(path4.join(current, ".git"))) return current;
     if (nearestGuildDir === null) {
-      const guildDir = path3.join(current, ".guild");
+      const guildDir = path4.join(current, ".guild");
       try {
-        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+        if (fs3.existsSync(guildDir) && fs3.statSync(guildDir).isDirectory()) nearestGuildDir = current;
       } catch {
       }
     }
-    const parent = path3.dirname(current);
+    const parent = path4.dirname(current);
     if (parent === current) return nearestGuildDir ?? resolvedStart;
     current = parent;
   }
@@ -4646,8 +5215,8 @@ function resolveGuildRoot2(startDir) {
 
 // ../src/modules/migrations/workflows/index-migrate.ts
 var import_node_child_process = require("node:child_process");
-var fs3 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
@@ -4662,12 +5231,12 @@ function resolveGuildRoot3(cwd) {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const abs = path4.isAbsolute(raw) ? raw : path4.resolve(cwd, raw);
-    const root = path4.dirname(abs);
-    if (fs3.existsSync(root)) return root;
+    const abs = path5.isAbsolute(raw) ? raw : path5.resolve(cwd, raw);
+    const root = path5.dirname(abs);
+    if (fs4.existsSync(root)) return root;
   } catch {
   }
-  return path4.resolve(cwd);
+  return path5.resolve(cwd);
 }
 var MIGRATIONS = [
   // ── v1: core tables ───────────────────────────────────────────────────────
@@ -4835,7 +5404,7 @@ function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
   try {
-    fs3.mkdirSync(path4.dirname(dbPath), { recursive: true });
+    fs4.mkdirSync(path5.dirname(dbPath), { recursive: true });
     db = openDatabase(dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA synchronous = NORMAL");
@@ -4900,7 +5469,7 @@ function runIndexMigrateCli() {
   }
   if (!dbPath) {
     const guildRoot = resolveGuildRoot3(cwd);
-    dbPath = path4.join(guildRoot, ".guild", "index.sqlite");
+    dbPath = path5.join(guildRoot, ".guild", "index.sqlite");
   }
   const result = runMigrations(dbPath);
   if (result.ok) {
@@ -4917,6 +5486,15 @@ function runIndexMigrateCli() {
 if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   runIndexMigrateCli();
 }
+
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
 
 // ../src/modules/security/workflows/config.ts
 function securityDefaults() {
@@ -4993,10 +5571,10 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path5.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
+  const settingsPath = path6.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs4.readFileSync(settingsPath, "utf8");
+    raw = fs5.readFileSync(settingsPath, "utf8");
   } catch {
     return securityDefaults();
   }
@@ -5010,10 +5588,10 @@ function readSecurityConfig(cwd) {
 }
 
 // ../src/modules/security/workflows/events.ts
-var fs5 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var fs6 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
-var KNOWN_GUILD_HOST_KINDS = [
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -5023,7 +5601,7 @@ var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-web",
   "codex-app",
   "claude-ai-connector"
-];
+]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 var LEGACY_HOST_ALIASES2 = {
   claude: "claude-code-cli",
@@ -5076,9 +5654,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir2, record) {
   try {
-    const logsDir = path6.join(runDir2, "logs");
-    fs5.mkdirSync(logsDir, { recursive: true });
-    fs5.appendFileSync(path6.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    const logsDir = path7.join(runDir2, "logs");
+    fs6.mkdirSync(logsDir, { recursive: true });
+    fs6.appendFileSync(path7.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -5091,12 +5669,12 @@ function appendSecurityEvent(runDir2, record) {
 
 // ../src/modules/security/workflows/scrubbed-write.ts
 function guildRootFromRunDir(runDir2) {
-  return path7.resolve(runDir2, "../../..");
+  return path8.resolve(runDir2, "../../..");
 }
 function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId) {
   try {
-    const approvalDir = path7.join(runDir2, "agent-bus", "approvals");
-    fs6.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path8.join(runDir2, "agent-bus", "approvals");
+    fs7.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-scrub-blocked.json`;
@@ -5105,7 +5683,7 @@ function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId) {
       ts,
       run_id: runId,
       tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path7.basename(outPath)}`,
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path8.basename(outPath)}`,
       permission_mode: "blocked",
       surface
     };
@@ -5118,7 +5696,7 @@ function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId) {
       content = scrubResult.value;
     } catch {
     }
-    fs6.writeFileSync(path7.join(approvalDir, fileName), content, "utf8");
+    fs7.writeFileSync(path8.join(approvalDir, fileName), content, "utf8");
   } catch {
   }
 }
@@ -5140,8 +5718,8 @@ function scrubbedWrite(outPath, content, opts) {
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
-      fs6.mkdirSync(path7.dirname(outPath), { recursive: true });
-      fs6.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs7.mkdirSync(path8.dirname(outPath), { recursive: true });
+      fs7.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
@@ -5157,12 +5735,12 @@ function scrubbedWrite(outPath, content, opts) {
   }
   if (failMode === "open") {
     process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path7.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path8.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
 `
     );
     try {
-      fs6.mkdirSync(path7.dirname(outPath), { recursive: true });
-      fs6.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs7.mkdirSync(path8.dirname(outPath), { recursive: true });
+      fs7.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
@@ -5177,7 +5755,7 @@ function scrubbedWrite(outPath, content, opts) {
         event_type: "secret_scrub_blocked",
         decision: "degraded",
         tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path7.basename(outPath)}. Built-in-redacted content written.`,
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path8.basename(outPath)}. Built-in-redacted content written.`,
         permission_mode: "degraded"
       });
       appendSecurityEvent(opts.runDir, evt);
@@ -5200,7 +5778,7 @@ function scrubbedWrite(outPath, content, opts) {
       event_type: "secret_scrub_blocked",
       decision: "blocked",
       tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path7.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path8.basename(outPath)} \u2014 write blocked (fail-closed).`,
       permission_mode: "blocked"
     });
     appendSecurityEvent(opts.runDir, evt);
@@ -5210,6 +5788,16 @@ function scrubbedWrite(outPath, content, opts) {
   return { written: false, blocked: true };
 }
 
+// ../src/modules/security/workflows/share-set.ts
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+
 // ../src/modules/config/workflows/settings-reader.ts
 var yaml = loadYamlApi();
 var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
@@ -5217,14 +5805,112 @@ var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
 var DISPATCH_HOST_IDS = new Set(
   HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
 );
+var RESOLVER_TIER1_KEYS = sealSet([
+  "rigor",
+  "auto_approve",
+  "review",
+  "host",
+  "host_mode",
+  "roles",
+  "host_profiles",
+  "initiative_default",
+  "index",
+  "record_status_runs",
+  "codex_skip_enforcement",
+  "agent_mode",
+  "workspace",
+  "models",
+  "security",
+  "secrets_policy",
+  "mcp",
+  "capability",
+  // S5 (cap-loc-D04) — capability localization policy
+  "statusline",
+  // R-009
+  "adversarial_review_provider",
+  // R-008
+  "loops",
+  "loop_cap",
+  "codex_cap",
+  "defaults"
+], "RESOLVER_TIER1_KEYS");
+
+// ../src/modules/telemetry/workflows/guild-trace-events.ts
+var GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
+  "guild.trace.dispatch.v1",
+  "guild.trace.recall.v1",
+  "guild.trace.recall_decision.v1",
+  "guild.trace.config_resolution.v1",
+  "guild.trace.security_decision.v1",
+  "guild.trace.degradation.v1"
+]);
+
+// ../src/modules/telemetry/workflows/receipt-journal.ts
+var RECEIPT_DISPOSITIONS = Object.freeze([
+  "succeeded",
+  "refused",
+  "unsupported",
+  "failed",
+  "degraded"
+]);
+var OBSERVATION_STATES = Object.freeze([
+  "checked_clean",
+  "not_applicable",
+  "not_observed",
+  "observation_failed"
+]);
+var RECEIPT_EVENT_NAMES = Object.freeze([
+  "session.start",
+  "prompt.submit",
+  "tool.before",
+  "tool.after",
+  "context.compact",
+  "task.dispatch",
+  "task.collect",
+  "run.resume",
+  "run.stop",
+  "package.render",
+  "package.install",
+  "package.activate",
+  "package.update",
+  "runtime.verify",
+  "receipt.append",
+  "receipt.reconcile",
+  "migration.shadow",
+  "migration.cutover",
+  "migration.rollback"
+]);
+var RECEIPT_OUTCOME_TYPES = Object.freeze([
+  "guild.lifecycle_outcome.v1",
+  "guild.normalized_event_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.capability_outcome.v1",
+  "guild.policy_outcome.v1",
+  "guild.receipt_outcome.v1",
+  "guild.reconciliation_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.version_compatibility_outcome.v1"
+]);
+
+// ../src/modules/telemetry/workflows/debug-bundle.ts
+var DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
+  "capability_snapshot",
+  "normalized_event",
+  "policy_decision",
+  "transport_attempt",
+  "artifact",
+  "conformance"
+]);
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 function runDir(root, runId) {
-  return path8.join(root, ".guild", "runs", runId);
+  return path9.join(root, ".guild", "runs", runId);
 }
 function resolvedSettingsPath(root, runId) {
-  return path8.join(runDir(root, runId), "resolved-settings.json");
+  return path9.join(runDir(root, runId), "resolved-settings.json");
 }
+var CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
   if (runId.includes("\0")) return false;
@@ -5235,19 +5921,25 @@ function validateRunId(runId) {
   if (runId.includes("..")) return false;
   return true;
 }
-function assertContained(target, base, label) {
-  const resolvedTarget = path8.resolve(target);
-  const resolvedBase = path8.resolve(base);
-  if (!resolvedTarget.startsWith(resolvedBase + path8.sep)) {
+function assertContained(target, cwd, label) {
+  const r = checkContained(cwd, target, { policy: "physical" });
+  if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" escapes runs base "${resolvedBase}"`
+      `[run-lifecycle] ${label}: resolved path "${path9.resolve(target)}" escapes the project root "${path9.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
+    );
+  }
+  const runsBase = path9.resolve(cwd, ".guild", "runs");
+  const resolvedTarget = path9.resolve(target);
+  if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
+    throw new Error(
+      `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" is not a strict subdirectory of the runs base "${runsBase}"`
     );
   }
 }
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path8.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path9.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -5266,15 +5958,15 @@ function realProvenanceFsSeam() {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs9 = fsSeam ?? realProvenanceFsSeam();
+  const fs10 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path8.resolve(cwd, ".guild", "runs");
+  const runsBase = path9.resolve(cwd, ".guild", "runs");
   try {
-    assertContained(filePath, runsBase, "readResolvedSettingsSnapshot");
+    assertContained(filePath, cwd, "readResolvedSettingsSnapshot");
   } catch {
     return null;
   }
-  const raw = fs9.readFile(filePath);
+  const raw = fs10.readFile(filePath);
   if (raw === null) return null;
   try {
     return JSON.parse(raw);
@@ -5304,24 +5996,25 @@ function isPassedGateRecord(record) {
   if (typeof outcome !== "string") return false;
   return PASSED_GATE_OUTCOMES.has(outcome.trim().toLowerCase());
 }
+var REANCHOR_SESSION_SOURCES = sealSet(["compact", "resume"], "REANCHOR_SESSION_SOURCES");
 function resolveActiveRunId(guildRoot) {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.trim().length > 0) {
     return envRunId.trim();
   }
-  const sentinel = path9.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinel = path10.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs7.readFileSync(sentinel, "utf8").trim();
+    const value = fs8.readFileSync(sentinel, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
   }
 }
 function readRunYamlFacts(guildRoot, runId) {
-  const runYamlPath = path9.join(guildRoot, ".guild", "runs", runId, "run.yaml");
+  const runYamlPath = path10.join(guildRoot, ".guild", "runs", runId, "run.yaml");
   let raw;
   try {
-    raw = fs7.readFileSync(runYamlPath, "utf8");
+    raw = fs8.readFileSync(runYamlPath, "utf8");
   } catch {
     return null;
   }
@@ -5382,16 +6075,16 @@ function reanchorGraceMs() {
   return DEFAULT_REANCHOR_GRACE_MS;
 }
 function newestRunSignalMs(guildRoot, runId) {
-  const dir = path9.join(guildRoot, ".guild", "runs", runId);
+  const dir = path10.join(guildRoot, ".guild", "runs", runId);
   const candidates = [
-    path9.join(dir, "run.yaml"),
-    path9.join(dir, "events.ndjson"),
-    path9.join(dir, "provenance.json")
+    path10.join(dir, "run.yaml"),
+    path10.join(dir, "events.ndjson"),
+    path10.join(dir, "provenance.json")
   ];
   for (const sub of ["logs", "handoffs", "in-progress"]) {
     try {
-      for (const name of fs7.readdirSync(path9.join(dir, sub))) {
-        candidates.push(path9.join(dir, sub, name));
+      for (const name of fs8.readdirSync(path10.join(dir, sub))) {
+        candidates.push(path10.join(dir, sub, name));
       }
     } catch {
     }
@@ -5399,7 +6092,7 @@ function newestRunSignalMs(guildRoot, runId) {
   let newest = 0;
   for (const p of candidates) {
     try {
-      newest = Math.max(newest, fs7.statSync(p).mtimeMs);
+      newest = Math.max(newest, fs8.statSync(p).mtimeMs);
     } catch {
     }
   }
@@ -5479,6 +6172,53 @@ function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstruct
 }
 
 // ../src/modules/lifecycle/workflows/event-log-schema.ts
+var TOOL_CALL_TOOL_VALUES = Object.freeze([
+  "Read",
+  "Write",
+  "Edit",
+  "Grep",
+  "Glob",
+  "Bash",
+  "Agent",
+  "Skill",
+  "AskUserQuestion",
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskList",
+  "WebFetch",
+  "WebSearch",
+  "NotebookEdit",
+  "BashOutput",
+  "KillShell"
+]);
+var HOOK_EVENT_NAMES = Object.freeze([
+  "SessionStart",
+  "SessionEnd",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "Notification",
+  "Stop",
+  "SubagentStop",
+  "PreCompact",
+  "TaskCreated",
+  "TaskCompleted",
+  "TeammateIdle"
+]);
+var EVENT_TYPES = sealSet([
+  "phase_start",
+  "phase_end",
+  "specialist_dispatch",
+  "specialist_receipt",
+  "loop_round_start",
+  "loop_round_end",
+  "tool_call",
+  "hook_event",
+  "gate_decision",
+  "assumption_logged",
+  "escalation",
+  "codex_review_round"
+], "EVENT_TYPES");
 var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function isSafeRunId(id) {
@@ -5519,11 +6259,11 @@ function exclusionSentinelPath(runDir2) {
   return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir2) {
-  const path11 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path11), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path11)) return;
+  const path12 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path12), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path12)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path11, "wx");
+    const fd = (0, import_node_fs.openSync)(path12, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -5636,9 +6376,9 @@ function appendEvent(runDir2, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId = opts.laneId ?? "global";
-    const path11 = laneFallbackPath(runDir2, laneId);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path11), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path11, "a");
+    const path12 = laneFallbackPath(runDir2, laneId);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path12), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path12, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -5730,11 +6470,11 @@ function resolveLaneAttribution(env = process.env) {
 
 // pre-compact.ts
 async function readStdin() {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve7(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve7(""));
+    process.stdin.on("end", () => resolve8(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve8(""));
   });
 }
 function payloadExcerpt(payload) {
@@ -5747,9 +6487,9 @@ function payloadExcerpt(payload) {
   }
 }
 function readCurrentRunId(guildRoot) {
-  const sentinelPath = path10.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinelPath = path11.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs8.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs9.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -5800,7 +6540,7 @@ async function main() {
     );
     return;
   }
-  const runDir2 = process.env["GUILD_RUN_DIR"] ?? path10.join(guildRoot, ".guild", "runs", runId);
+  const runDir2 = process.env["GUILD_RUN_DIR"] ?? path11.join(guildRoot, ".guild", "runs", runId);
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   const event = {
     ts,

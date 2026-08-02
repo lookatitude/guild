@@ -93,7 +93,14 @@ function expectAcceptedByAll(value: Record<string, unknown>): void {
 }
 
 function expectExactKeyParity(name: string, value: unknown): void {
-  expect(value).toBeInstanceOf(Set);
+  // NOT `toBeInstanceOf(Set)`. A sealed vocabulary is deliberately NOT a Set: a branded
+  // Set can never be closed, because `Set.prototype.delete.call(x, k)` reaches the
+  // internal slot past any neutered own method. `sealSet` returns a frozen facade that
+  // satisfies `ReadonlySet` structurally, which is what this parity check actually needs.
+  const readable = value as ReadonlySet<string>;
+  expect(typeof readable?.has).toBe("function");
+  expect(typeof readable?.size).toBe("number");
+  expect(typeof (readable as unknown as Iterable<string>)[Symbol.iterator]).toBe("function");
 
   const mirror = value as ReadonlySet<string>;
   const missing = [...ALLOWED_TOP_LEVEL_KEYS].filter((key) => !mirror.has(key));

@@ -35,11 +35,34 @@
  *      whose row requires no auth has nothing to authenticate, so it is
  *      authenticated by the same declared fact — never by optimism.
  *
+ * NAME DISAMBIGUATION (gap-audit C8). Three near-identical schema names exist and
+ * are routinely confused for each other — an external audit read this one as a
+ * typo for the others. They are three DIFFERENT artifacts:
+ *
+ *   guild.host_capabilities.v1         static design-time capability MATRIX row,
+ *                                      authored per host; `host-capabilities-schema.ts`.
+ *   guild.host_capability.v1           the per-host runtime MANIFEST probed onto disk
+ *                                      at `.guild/hosts/<host-id>/capability.json`;
+ *                                      `host-capability-manifest.ts`.
+ *   guild.host_capability_snapshot.v1  THIS FILE — the per-(run_id, host_id) IMMUTABLE
+ *                                      snapshot a single run is bound to, frozen from
+ *                                      the registry row plus supplied observations.
+ *
+ * Matrix = what a host is declared to do. Manifest = what this installation found.
+ * Snapshot = what THIS RUN is bound to and cannot change under it. Do not "correct"
+ * one name to another; all three are live contract identifiers.
+ *
  * Pure library module; there is no CLI entrypoint. Reached through the
  * host-runtime module's public index.
  */
 
 import { createHash } from "node:crypto";
+
+// The local deepFreeze this file used to carry guarded recursion with
+// `Object.isFrozen`, so it stopped at any SHALLOW-frozen node and left that node's
+// children mutable — the exact defect it existed to prevent. The kernel primitive
+// uses a WeakSet visited-guard and seals Sets/Maps instead of merely freezing them.
+import { deepFreeze } from "../../kernel";
 
 import { normalizeHostId } from "./host-id-namespace";
 import { HOST_REGISTRY_ROWS, type HostId, type HostRegistryEntry } from "./host-registry-schema";
@@ -67,7 +90,7 @@ export const HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_sna
  * consumer read "absent" as "fine", which is the exact confusion BR-07 forbids.
  * Every id maps to a pure reader over the frozen registry row below.
  */
-export const HOST_CAPABILITY_IDS = [
+export const HOST_CAPABILITY_IDS = Object.freeze([
   "host.artifacts.direct_filesystem",
   "host.artifacts.file_bus",
   "host.bootstrap.context_injection",
@@ -98,7 +121,7 @@ export const HOST_CAPABILITY_IDS = [
   "host.result_adapter",
   "host.sessions.resume_by_id",
   "host.structured_output.native_json",
-] as const;
+] as const);
 
 export type HostCapabilityId = (typeof HOST_CAPABILITY_IDS)[number];
 
@@ -215,15 +238,6 @@ export interface HostCapabilitySnapshotResult {
 
 const UNKNOWN_HOST_VERSION = "unknown";
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object") return value;
-  if (Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
 
 /** Canonical JSON: sorted keys, dropped `undefined`, significant array order. */
 function canonicalJson(value: unknown): string {

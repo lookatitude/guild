@@ -19,6 +19,7 @@
  */
 
 import { DocumentIssue, pushIssue, sortIssues } from "./document-safe";
+import { deepFreeze } from "../../kernel";
 import { hashDocumentRecord } from "./document-hash";
 import { DocumentRecord, validateDocumentRecord } from "./document-records";
 import { DocumentProjection, projectValidatedRecord } from "./document-projection";
@@ -301,7 +302,7 @@ export type DocumentHtmlBindingResult =
   | { ok: true; binding: DocumentHtmlBinding; errors?: never }
   | { ok: false; binding?: never; errors: DocumentIssue[] };
 
-const META_KEYS: ReadonlyArray<[keyof DocumentHtmlBinding, string]> = Object.freeze([
+const META_KEYS: ReadonlyArray<[keyof DocumentHtmlBinding, string]> = deepFreeze([
   ["record_id", "guild.record_id"],
   ["record_kind", "guild.record_kind"],
   ["schema_version", "guild.schema_version"],

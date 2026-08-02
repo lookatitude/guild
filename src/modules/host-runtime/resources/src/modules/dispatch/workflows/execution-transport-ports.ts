@@ -71,7 +71,7 @@ export function isExecutionContractCompatible(major: unknown): boolean {
  * answers ALL SEVEN — a port that cannot perform one answers `unsupported`, which
  * is an explicit typed outcome, never a missing method or a thrown error.
  */
-export const EXECUTION_OPERATIONS = [
+export const EXECUTION_OPERATIONS = Object.freeze([
   "spawn",
   "send",
   "wait",
@@ -79,17 +79,17 @@ export const EXECUTION_OPERATIONS = [
   "close",
   "connect",
   "probe",
-] as const;
+] as const);
 export type ExecutionOperation = (typeof EXECUTION_OPERATIONS)[number];
 
 /** The closed outcome set: success, failure, cancellation, timeout, unsupported. */
-export const EXECUTION_OUTCOME_STATUSES = [
+export const EXECUTION_OUTCOME_STATUSES = Object.freeze([
   "succeeded",
   "failed",
   "cancelled",
   "timed_out",
   "unsupported",
-] as const;
+] as const);
 export type ExecutionOutcomeStatus = (typeof EXECUTION_OUTCOME_STATUSES)[number];
 
 /**
@@ -102,7 +102,7 @@ export type ExecutionOutcomeStatus = (typeof EXECUTION_OUTCOME_STATUSES)[number]
  * There is deliberately NO policy code here. Policy denial belongs to the neutral
  * core (BR-04); a transport that could emit one would be deciding gate policy.
  */
-export const EXECUTION_REASON_CODES = [
+export const EXECUTION_REASON_CODES = Object.freeze([
   "operation_unsupported",
   "transport_unavailable",
   "capability_absent",
@@ -117,7 +117,7 @@ export const EXECUTION_REASON_CODES = [
   "remote_unreachable",
   "cancelled_by_caller",
   "deadline_exceeded",
-] as const;
+] as const);
 export type ExecutionReasonCode = (typeof EXECUTION_REASON_CODES)[number];
 
 /**
@@ -126,14 +126,14 @@ export type ExecutionReasonCode = (typeof EXECUTION_REASON_CODES)[number];
  * substrate. `pane` covers BOTH the bespoke PaneAdapters and the generic
  * wrapped-CLI adapter — one bounded adapter, not one branch per host.
  */
-export const EXECUTION_TRANSPORT_IDS = [
+export const EXECUTION_TRANSPORT_IDS = Object.freeze([
   "pane",
   "in-process",
   "serial",
   "tmux",
   "remote",
   "runtime",
-] as const;
+] as const);
 export type ExecutionTransportId = (typeof EXECUTION_TRANSPORT_IDS)[number];
 
 function includes(list: readonly string[], value: unknown): boolean {
@@ -458,6 +458,47 @@ export interface ExecutionHandle {
   readonly invocation: ExecutionInvocation | null;
 }
 
+/**
+ * A pinned definition bundle riding with a spawn (`guild.project_definition_ref.v1`,
+ * cap-loc-D05). Structural, not an import: this module stays free of contract
+ * imports, and the shipped ref satisfies this shape.
+ *
+ * CARRIED, NOT INTERPRETED. The transport moves these bytes and binds their hash
+ * into the receipt; it never reads the definition's meaning. Profession semantics
+ * belong to the capability service (BR-04: a transport that interpreted them would
+ * be deciding policy).
+ */
+export interface DefinitionRefLike {
+  readonly schema_version: string;
+  readonly project_id: string;
+  /**
+   * The owning layer. Added when `guild.project_definition_ref.v1` gained it, and
+   * the reason this line has a comment is that it was MISSED for a whole amendment.
+   *
+   * This shape is a deliberate STRUCTURAL duplicate of the contract (see above: the
+   * module stays free of contract imports), which means a type check can never link
+   * the two — the contract's own type graph does not reach here. So the amendment
+   * shipped, every construction site inside the contract was updated, and this stayed
+   * layerless with its suite green.
+   *
+   * The duplication is kept because the boundary rule is right; the DRIFT is what was
+   * wrong. `definition-ref-conformance.test.ts` now imports both shapes and fails the
+   * build if the contract grows a field this does not have, or if `refsConflict`
+   * stops comparing one. A future field cannot repeat this silently.
+   */
+  readonly layer: string;
+  readonly kind: string;
+  readonly id: string;
+  readonly relative_path: string;
+  readonly content_hash: string;
+  readonly source_commit: string | null;
+  readonly skills: readonly {
+    readonly id: string;
+    readonly relative_path: string;
+    readonly content_hash: string;
+  }[];
+}
+
 /** The pane fields the transports read. Structurally satisfied by `PaneSpec`. */
 export interface PaneSpecLike {
   readonly name: string;
@@ -469,6 +510,19 @@ export interface PaneSpecLike {
   readonly taskId?: string;
   readonly capability_scope?: readonly string[];
   readonly specialist?: string;
+  /**
+   * ADDITIVE (cap-loc-D11 / D9): the pinned definition bundle, carried as a FIELD.
+   *
+   * Before this, the pane path had `prompt` and nothing else — so a project-local
+   * definition rode as PROMPT TEXT: unhashed, unverifiable, and invisible to the
+   * transport. The plan's cross-backend conformance row ("definition survives
+   * in-process / team / tmux / serial / remote") therefore failed BY CONSTRUCTION
+   * on tmux and remote. This field is that fix.
+   *
+   * Optional, exactly like `capability_scope` and `specialist` above — the same
+   * additive shape already precedented under contract major 1.
+   */
+  readonly definition_ref?: DefinitionRefLike;
 }
 
 export interface ExecutionSpawnRequest {
@@ -481,6 +535,26 @@ export interface ExecutionSpawnRequest {
   readonly pane?: PaneSpecLike;
   /** Present for the in-process and serial seams: the team launch request. */
   readonly payload?: unknown;
+  /**
+   * ADDITIVE (cap-loc-D11): the pinned definition + skill bundle for this lane.
+   *
+   * WHY THIS IS A FIELD AND NOT AN OPERATION. `EXECUTION_OPERATIONS` is a closed
+   * seven-name set and `isExecutionContractCompatible` is EXACT equality, so an
+   * eighth operation would be a major bump — a flag-day fork across six transport
+   * ids, both dual-homed trees, the registry, the adapters, and 16 host rows.
+   * Injection is also not a lifecycle mechanic: the seven describe how you start,
+   * feed, await, stop, and reach a lane; this describes what a lane is started
+   * WITH. Modelling it as an operation would be a category error that permanently
+   * widens a vocabulary the contract went to trouble to close.
+   *
+   * SAFETY IS NEGOTIATED, NOT VERSIONED. An optional field a port could ignore
+   * would silently omit the definition — the one outcome the plan forbids
+   * ("unsupported hosts explicitly defer/refuse — never silently omit the
+   * method"). So a port must DECLARE support via
+   * `ExecutionTransportPort.supports_definition_injection`, and the runtime
+   * REFUSES rather than strips when it has not. See `resolveInjectionSupport`.
+   */
+  readonly definition_ref?: DefinitionRefLike;
 }
 
 export interface ExecutionWaitOptions {
@@ -641,6 +715,19 @@ export interface ExecutionTransportPort {
   readonly contract_version: number;
   readonly transport_id: ExecutionTransportId;
   supports(operation: ExecutionOperation): boolean;
+  /**
+   * ADDITIVE (cap-loc-D11): does this port carry a pinned definition bundle?
+   *
+   * ABSENT ⇒ FALSE. Fail-closed, and that default is the whole safety argument:
+   * an un-updated port REFUSES a bundle-carrying spawn rather than ignoring the
+   * field and launching a stripped lane. That is what lets injection ship
+   * additively under contract major 1 instead of forcing a version fork.
+   *
+   * Deliberately NOT a member of `EXECUTION_OPERATIONS`, and `supports()` keeps
+   * its exact signature and its closed seven-name domain (see
+   * `ExecutionSpawnRequest.definition_ref` for why injection is not an operation).
+   */
+  readonly supports_definition_injection?: boolean;
   spawn(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle>;
   send(handle: ExecutionHandle, payload: string): ExecutionOutcome<undefined>;
   wait(handle: ExecutionHandle, options: ExecutionWaitOptions): ExecutionOutcome<undefined>;
@@ -770,7 +857,7 @@ export interface TeamDispatchTarget {
   readonly scope: "session" | "window";
 }
 
-export const TEAM_DISPATCH_SCOPES = ["session", "window"] as const;
+export const TEAM_DISPATCH_SCOPES = Object.freeze(["session", "window"] as const);
 
 export function isTeamDispatchScope(value: unknown): value is "session" | "window" {
   return includes(TEAM_DISPATCH_SCOPES, value);
@@ -880,7 +967,7 @@ export function isTeamLaunchRequestLike(value: unknown): value is TeamLaunchRequ
 // core and generic launchers"). The launcher now only READS host facts through the
 // probe below and reports what this table decided.
 
-export const EXECUTION_DISPATCH_MODES = ["team", "agent", "subagent"] as const;
+export const EXECUTION_DISPATCH_MODES = Object.freeze(["team", "agent", "subagent"] as const);
 export type ExecutionDispatchMode = (typeof EXECUTION_DISPATCH_MODES)[number];
 
 /**
@@ -1014,4 +1101,153 @@ export interface HostExecutionRuntime {
   ): ExecutionOutcome<ExecutionSubstrateSelection>;
   /** Bind to a registered transport, or return `unsupported` — never a fallback. */
   transportFor(transport_id: string): ExecutionOutcome<ExecutionTransportPort>;
+}
+
+// ── Definition-injection negotiation (cap-loc-D11) ───────────────────────────
+
+/**
+ * The verdict on whether a spawn request carrying a pinned definition bundle may
+ * proceed on a given port.
+ *
+ * THE RULE THIS ENCODES: **refuse, never strip.** A runtime asked to dispatch a
+ * bundle-carrying spawn to a port that has not declared injection support returns
+ * `unsupported` / `capability_absent` — it does NOT drop `definition_ref` and
+ * launch a lane without it. Silent omission is the one outcome the plan forbids
+ * ("unsupported hosts explicitly defer/refuse — never silently omit the method"),
+ * and it is the failure a major-version bump would otherwise be needed to prevent.
+ *
+ * This is DETERMINISTIC CODE on the real dispatch path, not a documented
+ * convention: a rule of this kind expressed only in prose is not enforced.
+ */
+export type InjectionVerdict =
+  /** No bundle on the request — every existing port behaves exactly as before. */
+  | { readonly kind: "not_requested" }
+  /** Bundle present and the port declared support: carry it. */
+  | { readonly kind: "carry" }
+  /** Bundle present, support not declared: REFUSE. Never a stripped spawn. */
+  | {
+      readonly kind: "refuse";
+      readonly status: ExecutionOutcomeStatus;
+      readonly reason_code: ExecutionReasonCode;
+    };
+
+/**
+ * Do the request-borne and pane-borne refs agree?
+ *
+ * CODEX-REVIEW FIX (adversarial round 1, HIGH): presence was negotiated as a
+ * single boolean, so a request carrying TWO DIFFERENT refs — one on the request,
+ * one on the pane — returned `carry` with no defined precedence. A transport that
+ * reads only one location would then silently discard the other, which is the
+ * silent-omission failure this whole design exists to prevent, reintroduced one
+ * level up.
+ *
+ * Fail-closed: a conflict is `invalid_request`, never a precedence guess. If both
+ * are present they must be the SAME ref (compared on the fields that identify the
+ * bytes — a differing `content_hash` or `relative_path` is a different definition).
+ */
+function refsConflict(a?: DefinitionRefLike, b?: DefinitionRefLike): boolean {
+  if (a === undefined || b === undefined) return false;
+  if (a === b) return false;
+  return (
+    a.schema_version !== b.schema_version ||
+    a.project_id !== b.project_id ||
+    a.layer !== b.layer ||
+    a.kind !== b.kind ||
+    a.id !== b.id ||
+    a.relative_path !== b.relative_path ||
+    a.content_hash !== b.content_hash ||
+    a.source_commit !== b.source_commit ||
+    a.skills.length !== b.skills.length ||
+    a.skills.some((s, i) => {
+      const o = b.skills[i];
+      return (
+        o === undefined ||
+        s.id !== o.id ||
+        s.relative_path !== o.relative_path ||
+        s.content_hash !== o.content_hash
+      );
+    })
+  );
+}
+
+/**
+ * Decide whether `request.definition_ref` may ride on `port`. PURE — no I/O, no
+ * clock, never throws.
+ *
+ * Note the asymmetry, which is intentional: absence of a bundle is always fine
+ * (`not_requested` — full backward compatibility), while presence of a bundle
+ * without a declaration is always a refusal. There is no third answer and no
+ * "best effort" path.
+ *
+ * `supports_definition_injection` is read as a STRICT `=== true`: `undefined`,
+ * `null`, a truthy non-boolean, or any other value all mean "not declared". A
+ * port must opt in explicitly and unambiguously.
+ */
+export function resolveInjectionSupport(
+  request: Pick<ExecutionSpawnRequest, "definition_ref" | "pane">,
+  port: Pick<ExecutionTransportPort, "supports_definition_injection">
+): InjectionVerdict {
+  // A bundle may arrive on the request itself OR on the pane (the pane path is
+  // the one that previously had no field at all — gap-audit D9). Either presence
+  // demands a declaration; checking only the request would leave the pane path
+  // silently unprotected, which is exactly the hole this closes.
+  const onRequest = request.definition_ref;
+  const onPane = request.pane?.definition_ref;
+  const requested = onRequest !== undefined || onPane !== undefined;
+  if (!requested) return { kind: "not_requested" };
+
+  // CODEX-REVIEW FIX (round 1, HIGH): two DIFFERENT refs is a malformed request,
+  // not a precedence question. Checked BEFORE the support check so a conflicting
+  // request is refused even on a declaring port.
+  if (refsConflict(onRequest, onPane)) {
+    return {
+      kind: "refuse",
+      status: "unsupported",
+      reason_code: "invalid_request",
+    };
+  }
+
+  if (port.supports_definition_injection === true) return { kind: "carry" };
+
+  return {
+    kind: "refuse",
+    status: "unsupported",
+    reason_code: "capability_absent",
+  };
+}
+
+/**
+ * The PORT-SIDE obligation that `supports_definition_injection: true` asserts.
+ *
+ * CODEX-REVIEW FIX (round 1, CRITICAL-2): declaring support proves an assertion,
+ * not carriage — a port could declare `true` and still drop the bundle in its
+ * serializer, remote protocol, or substrate hand-off. The contract cannot make
+ * that impossible, so it makes it CHECKABLE: a port that declares support MUST
+ * satisfy this predicate against the request it actually handed on.
+ *
+ * Conformance (matrix A7.6 / B4) runs this against EVERY REAL transport adapter,
+ * not a test-local facade — that is the difference between proving the helper and
+ * proving the wiring.
+ *
+ * @param original  the spawn request the runtime negotiated
+ * @param forwarded what the port actually passed to the substrate
+ */
+export function portHonoredInjection(
+  original: Pick<ExecutionSpawnRequest, "definition_ref" | "pane">,
+  forwarded: Pick<ExecutionSpawnRequest, "definition_ref" | "pane"> | undefined
+): boolean {
+  // CODEX-REVIEW FIX (round 2, HIGH-4): pick-one-with-`??` hid an internal
+  // conflict. If `forwarded.definition_ref` were correct but
+  // `forwarded.pane.definition_ref` had been swapped, the old check returned true
+  // — approving a request carrying two different definitions, which is exactly the
+  // ambiguity `resolveInjectionSupport` refuses on the way in. Reject internal
+  // conflicts on BOTH sides first, then compare the canonical refs.
+  if (refsConflict(original.definition_ref, original.pane?.definition_ref)) return false;
+  const wanted = original.definition_ref ?? original.pane?.definition_ref;
+  if (wanted === undefined) return true; // nothing to honor
+  if (forwarded === undefined) return false; // dropped the whole request
+  if (refsConflict(forwarded.definition_ref, forwarded.pane?.definition_ref)) return false;
+  const got = forwarded.definition_ref ?? forwarded.pane?.definition_ref;
+  if (got === undefined) return false; // STRIPPED — the failure this detects
+  return !refsConflict(wanted, got); // and not swapped for a different one
 }

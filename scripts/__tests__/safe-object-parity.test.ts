@@ -65,9 +65,15 @@ describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
     const SKIP = new Set(["node_modules", "dist", ".git", "build", "coverage"]);
     const definers: string[] = [];
 
-    // A DEFINITION = a `new Set([... "__proto__" ... ])` literal that lists the
-    // dangerous keys. Re-exports / imports of PROTO_POISON_KEYS do not match.
-    const DEF_RE = /new Set\s*\(\s*\[[^\]]*["']__proto__["'][^\]]*\]/;
+    // A DEFINITION = a Set constructed over a literal that lists the dangerous keys.
+    // Re-exports / imports of PROTO_POISON_KEYS do not match.
+    //
+    // `sealSet(...)` is now the construction form: task #22 established that
+    // `new Set([...])` yields a runtime-mutable Set no type annotation or Object.freeze
+    // can close, so `PROTO_POISON_KEYS.delete("__proto__")` re-opened prototype
+    // pollution. This regex accepts either spelling so it tracks DEFINITIONS rather
+    // than one particular constructor.
+    const DEF_RE = /(?:new Set|sealSet)\s*(?:<[^>]*>)?\s*\(\s*\[[^\]]*["']__proto__["'][^\]]*\]/;
 
     function walk(dir: string): void {
       let entries: fs.Dirent[];

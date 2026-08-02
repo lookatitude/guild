@@ -231,9 +231,21 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
     // static, bare side-effect `import "net"`, dynamic `import("net")`, require.
     expect(SIMILARITY_CODE).not.toMatch(/\b(fetch|XMLHttpRequest)\s*\(/);
     expect(SIMILARITY_CODE).not.toMatch(NET_IMPORT_RE);
-    // Only fs + path + sibling lib imports are permitted.
+    // Only fs + path + sibling lib imports + the shared path-containment primitive
+    // are permitted. The primitive was added deliberately: `resolveUnderRoot`'s
+    // layer-2 realpath check was the fourth private copy of one shape, and the copy
+    // realpath'd only the LEAF, so a symlinked ANCESTOR with a not-yet-created leaf
+    // passed. It is a kernel workflow importing nothing but `node:fs`/`node:path`,
+    // and the TRANSITIVE closure test below is what proves that rather than this
+    // allowlist entry.
     const imports = [...SIMILARITY_CODE.matchAll(/from ["']([^"']+)["']/g)].map((m) => m[1]).sort();
-    expect(imports).toEqual(["./schema", "./structural", "fs", "path"]);
+    expect(imports).toEqual([
+      "../../../src/modules/kernel/workflows/path-containment",
+      "./schema",
+      "./structural",
+      "fs",
+      "path",
+    ]);
   });
 
   test("TRANSITIVE local import closure opens no socket and pulls no model client", () => {
@@ -244,6 +256,10 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
     expect(closure.length).toBeGreaterThan(3);
     expect(closure.some((f) => f.endsWith(path.join("lib", "structural.ts")))).toBe(true);
     expect(closure.some((f) => f.endsWith(path.join("lib", "schema.ts")))).toBe(true);
+    // …and into the shared primitive, so the cost proof covers it too.
+    expect(
+      closure.some((f) => f.endsWith(path.join("workflows", "path-containment.ts"))),
+    ).toBe(true);
     for (const file of closure) {
       const code = stripComments(fs.readFileSync(file, "utf8"));
       expect(code).not.toMatch(/anthropic|openai|embedding|@ai-sdk|langchain/i);

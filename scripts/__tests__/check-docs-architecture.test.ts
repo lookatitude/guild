@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import {
   deriveSpineTables,
   diffSpine,
+  findSpineInAncestors,
   parseSpineDoc,
   renderSpineSnippet,
 } from "../check-docs-architecture";
@@ -517,4 +518,76 @@ describe("check:docs-architecture", () => {
       expect(diffSpine(deriveSpineTables(pluginRoot), parseSpineDoc(mutated)).ok).toBe(false);
     });
   }
+});
+
+/**
+ * Umbrella-doc resolution (gap-audit C6 / P-103).
+ *
+ * The CLI's default resolution used to be a single level up from the plugin
+ * root. In a git WORKTREE (`plugin/.worktrees/<name>`) that resolves to
+ * `plugin/.worktrees`, which has no `docs/`, so the checker found nothing —
+ * and because doc-sync.yml invokes it with `--if-present`, "found nothing"
+ * degraded to a silent SKIP. A drift gate that reports success without reading
+ * the document is worse than no gate. The ancestor walk fixes that; these
+ * cases pin both the found and not-found halves.
+ */
+describe("check:docs-architecture — umbrella doc resolution", () => {
+  const made: string[] = [];
+
+  afterAll(() => {
+    for (const dir of made.reverse()) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function scratch(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "spine-resolve-"));
+    made.push(dir);
+    // realpath: macOS tmpdir is a /var -> /private/var symlink, and the walk
+    // compares resolved paths.
+    return fs.realpathSync(dir);
+  }
+
+  function plantSpine(umbrella: string): string {
+    const docDir = path.join(umbrella, "docs", "v2", "architecture");
+    fs.mkdirSync(docDir, { recursive: true });
+    const file = path.join(docDir, "architecture-spine.html");
+    fs.writeFileSync(file, "<!doctype html><p>fixture</p>", "utf8");
+    return file;
+  }
+
+  it("finds the doc one level up (the plain-checkout layout, unchanged)", () => {
+    const umbrella = scratch();
+    const planted = plantSpine(umbrella);
+    const pluginDir = path.join(umbrella, "plugin");
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    expect(findSpineInAncestors(pluginDir)).toBe(planted);
+  });
+
+  it("finds the doc from a nested worktree root (the case that silently SKIPped)", () => {
+    const umbrella = scratch();
+    const planted = plantSpine(umbrella);
+    const worktree = path.join(umbrella, "plugin", ".worktrees", "some-branch");
+    fs.mkdirSync(worktree, { recursive: true });
+
+    expect(findSpineInAncestors(worktree)).toBe(planted);
+  });
+
+  it("prefers the NEAREST ancestor when two umbrellas nest", () => {
+    const outer = scratch();
+    plantSpine(outer);
+    const inner = path.join(outer, "nested", "umbrella");
+    fs.mkdirSync(inner, { recursive: true });
+    const innerPlanted = plantSpine(inner);
+    const pluginDir = path.join(inner, "plugin");
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    expect(findSpineInAncestors(pluginDir)).toBe(innerPlanted);
+  });
+
+  it("ANTI-VACUITY: returns undefined when no ancestor has the document", () => {
+    const lonely = path.join(scratch(), "plugin");
+    fs.mkdirSync(lonely, { recursive: true });
+
+    expect(findSpineInAncestors(lonely)).toBeUndefined();
+  });
 });

@@ -1,6 +1,7 @@
 # Guild — repo orientation
 
-Guild is a cross-host plugin that ships 2 machinery agents (advisor, developer),
+Guild is a cross-host plugin that ships 3 machinery agents (advisor, context-manager,
+developer),
 15 domain specialist type templates (minted into a project's `.guild/agents/` on
 demand by team composition), and 111 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
@@ -19,7 +20,8 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy.
   The former `fallback/` tier no longer exists — its skills were promoted into `meta/`
   (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review`.
-- `agents/*.md` — the 2 machinery agents (`advisor`, `developer`), the only
+- `agents/*.md` — the 3 machinery agents (`advisor`, `context-manager`,
+  `developer`), the only
   host-registered agents the plugin ships. Populated and authored.
 - `templates/specialists/*.md` — the 15 domain specialist type templates
   (`guild.specialist_template.v1`; architect … sales, incl. `doc-writer`),
@@ -177,6 +179,17 @@ Branches are distribution channels (marketplace installs track a git ref):
 Every merge to a channel branch ships to its followers immediately, so both are
 PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
 `.guild/wiki/standards/release-discipline.md`.
+
+**The channel must be legible from the manifest** (gap-audit B5, decision
+cap-loc-D12). `next` carries a **prerelease identifier** on the *next* target
+version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.5.0-beta.1`), bumped when beta
+picks up a materially new surface; `main` carries the bare release triple.
+Without this, `next` and `main` can report the same `"version"` while dozens of
+commits apart, and a user cannot determine which runtime they have from the
+version alone — which is exactly what happened at `2.4.0`. Under SemVer §11 a
+prerelease sorts *below* the same triple, so `2.5.0-beta.1` is correctly ahead
+of `2.4.0` and behind an eventual `2.5.0`; `check:channel-integrity` enforces
+the ordering. The release cut's version-bump commit drops the identifier.
 
 Day-to-day workflow (features, fixes, docs — everything non-release):
 1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.

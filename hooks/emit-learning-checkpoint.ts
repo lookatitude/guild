@@ -52,7 +52,7 @@ import { classifyPhase, type ArtifactSet } from "../scripts/lib/learning-signatu
 export const SCHEMA_VERSION = "guild.learning_checkpoint.v1" as const;
 
 /** Closed 7-value phase enum per architect contract. */
-export const VALID_PHASES = [
+export const VALID_PHASES = Object.freeze([
   "init",
   "ideation",
   "planning",
@@ -60,7 +60,7 @@ export const VALID_PHASES = [
   "quality",
   "operations",
   "reflection",
-] as const;
+] as const);
 
 export type CheckpointPhase = (typeof VALID_PHASES)[number];
 
@@ -68,7 +68,7 @@ export type CheckpointPhase = (typeof VALID_PHASES)[number];
  * 12-target decision set (VC-K4). Machine-checked by `DECISION_TARGETS.length === 12`.
  * Each value is a freeform string; `none` = no action warranted.
  */
-export const DECISION_TARGETS = [
+export const DECISION_TARGETS = Object.freeze([
   "memory",
   "wiki",
   "knowledge_graph",
@@ -81,7 +81,7 @@ export const DECISION_TARGETS = [
   "task_tracking",
   "workflow_rules",
   "review_policy",
-] as const;
+] as const);
 
 export type DecisionTarget = (typeof DECISION_TARGETS)[number];
 
@@ -93,7 +93,7 @@ export const ALL_NONE_DECISIONS: CheckpointDecisions = Object.fromEntries(
 ) as CheckpointDecisions;
 
 /** Closed 9-edge type set for `knowledge_links_batch`. */
-export const VALID_EDGE_TYPES = [
+export const VALID_EDGE_TYPES = Object.freeze([
   "decided_by",
   "used_for",
   "produced",
@@ -103,31 +103,31 @@ export const VALID_EDGE_TYPES = [
   "constrains",
   "opens_question",
   "resolves",
-] as const;
+] as const);
 
 export type EdgeType = (typeof VALID_EDGE_TYPES)[number];
 
 /** Allowed node-id prefixes in the work/decision space (closed set per contract §3). */
-export const ALLOWED_NODE_PREFIXES = [
+export const ALLOWED_NODE_PREFIXES = Object.freeze([
   "task:",
   "run:",
   "decision:",
   "skill:",
   "agent:",
   "feature:",
-] as const;
+] as const);
 
 /**
  * Forbidden node-id prefixes — cross-space references that bridge work/decision
  * space to code/wiki/domain space, violating the no-node-space-overlap invariant.
  * Any edge whose `from` or `to` starts with one of these is rejected before write.
  */
-export const FORBIDDEN_NODE_PREFIXES = [
+export const FORBIDDEN_NODE_PREFIXES = Object.freeze([
   "wiki:",
   "file:",
   "domain:",
   "component:",
-] as const;
+] as const);
 
 export interface KnowledgeLink {
   from: string;

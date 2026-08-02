@@ -32,6 +32,7 @@ import {
   isTeamDispatchScope,
   isTeamLaunchRequestLike,
   redactExecutionDetail,
+  resolveInjectionSupport,
   selectExecutionSubstrate,
   unsupportedExecutionOutcome,
   validateRemoteProbeFacts,
@@ -134,6 +135,14 @@ abstract class BaseExecutionTransport implements ExecutionTransportPort {
   readonly schema_version = EXECUTION_TRANSPORT_SCHEMA_VERSION;
   readonly contract_version = EXECUTION_TRANSPORT_CONTRACT_VERSION;
   abstract readonly transport_id: ExecutionTransportId;
+  /**
+   * Definition-injection support (cap-loc-D11). Declared here and left UNSET, so
+   * every shipped transport inherits "not declared" ⇒ refuses a bundle-carrying
+   * spawn. A transport opts in only by overriding this to `true` AND actually
+   * forwarding the bundle (see `portHonoredInjection`). Fail-closed by default is
+   * the property that lets injection ship additively under contract major 1.
+   */
+  readonly supports_definition_injection?: boolean;
   protected readonly sink: ExecutionObservationSink;
   /** Per-instance, so one transport's re-entrant sink cannot gag another's. */
   private readonly observationGate: ObservationGate = { delivering: false };
@@ -161,14 +170,76 @@ abstract class BaseExecutionTransport implements ExecutionTransportPort {
     return outcome;
   }
 
+  /**
+   * THE REAL-PATH INJECTION GUARD (cap-loc-D11).
+   *
+   * CODEX-REVIEW FIX (round 1, CRITICAL-1): `resolveInjectionSupport` was exported
+   * but never wired in, so `port.spawn(request)` remained directly callable with a
+   * bundle on an undeclaring port — and the conformance test built its OWN facade,
+   * proving the helper rather than the wiring. A green isolation test over a
+   * hand-built seam is the recurring way a guarantee ships unenforced here.
+   *
+   * Every concrete `spawn` calls this FIRST. `null` means "proceed"; a non-null
+   * outcome is a refusal that must be returned unchanged — no stripping, no
+   * best-effort spawn. Because it lives on the base class, a NEW transport
+   * inherits the guard rather than having to remember it.
+   */
+  /**
+   * TEMPLATE METHOD (codex round 2, CRITICAL-1). The base class OWNS `spawn`, so
+   * the guard cannot be forgotten: a subclass implements `spawnGuarded` and never
+   * sees an unnegotiated request. Previously each subclass had to remember to call
+   * `guardInjection()` first — a new transport that omitted the call would silently
+   * ship the hole, which is precisely the class of defect this contract exists to
+   * make unfakeable.
+   *
+   * `guardInjection` is PRIVATE for the same reason: a `protected` hook is
+   * dynamically dispatched, so a subclass could override it to return `null` and
+   * disable its own guard.
+   */
+  spawn(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
+    const refused = this.guardInjection(request);
+    if (refused) return refused;
+    return this.spawnGuarded(request);
+  }
+
+  /**
+   * The substrate-specific spawn. Reached ONLY through `spawn` above, so the
+   * request has already passed injection negotiation.
+   *
+   * Default: `unsupported` — a transport that cannot spawn says so through the
+   * closed vocabulary rather than inheriting a silent no-op.
+   */
+  protected spawnGuarded(_request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
+    return this.unsupportedOp<ExecutionHandle>("spawn");
+  }
+
+  private guardInjection(
+    request: ExecutionSpawnRequest
+  ): ExecutionOutcome<ExecutionHandle> | null {
+    const verdict = resolveInjectionSupport(request, this);
+    if (verdict.kind !== "refuse") return null;
+    return this.observed(
+      executionOutcome<ExecutionHandle>({
+        operation: "spawn",
+        transport_id: this.transport_id,
+        status: verdict.status,
+        reason_code: verdict.reason_code,
+        detail:
+          verdict.reason_code === "invalid_request"
+            ? "conflicting definition_ref on request and pane — refused, never resolved by precedence"
+            : `transport ${this.transport_id} does not declare definition injection`,
+        assertions: [
+          "a pinned definition bundle is never silently omitted",
+          "an undeclared port refuses rather than spawning a stripped lane",
+        ],
+      })
+    );
+  }
+
   protected unsupportedOp<T>(operation: ExecutionOperation): ExecutionOutcome<T> {
     return this.observed(
       unsupportedExecutionOutcome<T>(this.transport_id, operation, this.unsupportedDetail)
     );
-  }
-
-  spawn(_request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
-    return this.unsupportedOp<ExecutionHandle>("spawn");
   }
 
   send(_handle: ExecutionHandle, _payload: string): ExecutionOutcome<undefined> {
@@ -245,7 +316,7 @@ export class PaneExecutionTransport extends BaseExecutionTransport {
     this.baseEnv = opts.baseEnv ?? process.env;
   }
 
-  override spawn(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
+  protected override spawnGuarded(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
     const pane = request.pane;
     if (!pane) {
       return this.observed(
@@ -392,7 +463,7 @@ export class InProcessExecutionTransport extends BaseExecutionTransport {
     this.transport_id = opts.transport_id ?? "in-process";
   }
 
-  override spawn(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
+  protected override spawnGuarded(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
     if (!isTeamLaunchRequestLike(request.payload)) {
       return this.observed(
         executionOutcome<ExecutionHandle>({
@@ -534,7 +605,7 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
     return result.status === 0;
   }
 
-  override spawn(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
+  protected override spawnGuarded(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
     const command = request.command ?? "";
     if (command.length === 0) {
       return this.observed(
@@ -990,7 +1061,7 @@ export class RemoteExecutionTransport extends BaseExecutionTransport {
     );
   }
 
-  override spawn(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
+  protected override spawnGuarded(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
     const command = request.command ?? "";
     if (command.length === 0) {
       return this.observed(
@@ -1653,7 +1724,7 @@ export class TeamDispatchExecutionTransport
    * The generic seven-operation `spawn`: the SAME run-scoped launch, reported as
    * a handle. There is one launch implementation, reached two ways.
    */
-  override spawn(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
+  protected override spawnGuarded(request: ExecutionSpawnRequest): ExecutionOutcome<ExecutionHandle> {
     const launched = this.launch(request.payload as TeamLaunchRequestLike);
     if (launched.status !== "succeeded") {
       return this.observed(

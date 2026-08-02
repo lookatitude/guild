@@ -594,6 +594,81 @@ export function readStamp(raw: string): string {
     expect(warns).toEqual([]);
   });
 
+  // ── Digest-literal exclusion (pattern 3) ────────────────────────────────
+  //
+  // Regression for the false positive that blocked the capability-localization
+  // integration: scripts/lib/capability/adoption-migrate.ts reads its YAML through
+  // the shared parseFrontmatter and contains exactly one anchored-key-looking
+  // regex — /^sha256:[0-9a-f]{64}$/ — which VALIDATES a content-address digest.
+  // `sha256:` is a scheme in the same sense as `data:`/`mailto:`, already excluded.
+  it("does NOT warn: sha256 digest-shape validator in a file with a real YAML surface", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/lib/adoption-migrate.ts",
+      `
+import { parseFrontmatter } from "../frontmatter";
+
+const MANIFEST = ".guild/adoption/manifest.yaml";
+
+function adoptedSourceHash(raw: string): string | null {
+  const fm = parseFrontmatter(raw);
+  if (fm === null) return null;
+  const v = fm["adopted_source_hash"];
+  return typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v) ? v : null;
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns).toEqual([]);
+  });
+
+  // Companion true-positive. The exclusion is scoped to the DIGEST-VALIDATOR
+  // idiom (algorithm + ':' + hex character class), not to the identifier. A real
+  // hand-rolled extractor for a frontmatter key that happens to be named `sha256`
+  // must still be flagged — otherwise the narrowing would have carved a hole any
+  // reader could walk through by renaming its key. THIS test is what the
+  // exclusion has to feel: widen it to a bare `sha256` identifier and it fails.
+  it("warns: hand-rolled extractor for a key NAMED sha256 is still flagged", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/read-lockfile.ts",
+      `
+const LOCK = ".guild/lock.yaml";
+
+function readDigest(raw: string): string {
+  return raw.match(/^sha256:\\s*(.*)$/m)?.[1]?.trim() ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+    expect(warns[0].message).toMatch(/line-anchored YAML key regex literal/);
+  });
+
+  // The exclusion must not generalise to "anything followed by a character class".
+  // A non-hex class after a real key is an ordinary extractor and stays flagged.
+  it("warns: anchored key followed by a NON-hex character class is still flagged", () => {
+    const base = tmpDir();
+    const srcPath = writeFile(
+      base,
+      "scripts/read-status.ts",
+      `
+const TEAM = ".guild/team/current.yaml";
+
+function readStatus(raw: string): string {
+  return raw.match(/^status:[A-Za-z ]+/m)?.[0] ?? "";
+}
+`
+    );
+    const findings = lintCommsFormat({ paths: [srcPath] });
+    const warns = findings.filter((f) => f.check === "b");
+    expect(warns.length).toBeGreaterThan(0);
+  });
+
   it("does NOT warn: fixture/legacy-example source file even if it hand-rolls YAML", () => {
     const base = tmpDir();
     const srcPath = writeFile(

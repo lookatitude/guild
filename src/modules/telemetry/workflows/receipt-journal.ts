@@ -136,24 +136,24 @@ import { atomicWrite } from "../../state";
 /** Public API id this module implements (runtime-boundary-contract.v1). */
 export const RECEIPT_CONTRACT_VERSION = "guild.observability.v1";
 
-export const RECEIPT_DISPOSITIONS = [
+export const RECEIPT_DISPOSITIONS = Object.freeze([
   "succeeded",
   "refused",
   "unsupported",
   "failed",
   "degraded",
-] as const;
+] as const);
 export type ReceiptDisposition = (typeof RECEIPT_DISPOSITIONS)[number];
 
-export const OBSERVATION_STATES = [
+export const OBSERVATION_STATES = Object.freeze([
   "checked_clean",
   "not_applicable",
   "not_observed",
   "observation_failed",
-] as const;
+] as const);
 export type ObservationState = (typeof OBSERVATION_STATES)[number];
 
-export const RECEIPT_EVENT_NAMES = [
+export const RECEIPT_EVENT_NAMES = Object.freeze([
   "session.start",
   "prompt.submit",
   "tool.before",
@@ -173,10 +173,10 @@ export const RECEIPT_EVENT_NAMES = [
   "migration.shadow",
   "migration.cutover",
   "migration.rollback",
-] as const;
+] as const);
 export type ReceiptEventName = (typeof RECEIPT_EVENT_NAMES)[number];
 
-export const RECEIPT_OUTCOME_TYPES = [
+export const RECEIPT_OUTCOME_TYPES = Object.freeze([
   "guild.lifecycle_outcome.v1",
   "guild.normalized_event_outcome.v1",
   "guild.support_transition_outcome.v1",
@@ -187,7 +187,7 @@ export const RECEIPT_OUTCOME_TYPES = [
   "guild.boundary_outcome.v1",
   "guild.migration_outcome.v1",
   "guild.version_compatibility_outcome.v1",
-] as const;
+] as const);
 export type ReceiptOutcomeType = (typeof RECEIPT_OUTCOME_TYPES)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────

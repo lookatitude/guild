@@ -14,17 +14,18 @@
  */
 
 import { HOST_IDS, type HostId } from "./host-registry-schema";
+import { sealSet } from "../../kernel";
 
 // ---------------------------------------------------------------------------
 // Rungs + surfaces
 // ---------------------------------------------------------------------------
 
 /** The minimum-loss ladder, strongest -> weakest. Lower index = less loss. */
-export const RUNGS = ["native", "wrapped", "bridged", "emulated", "degraded"] as const;
+export const RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"] as const);
 export type Rung = (typeof RUNGS)[number];
 
 /** The four adapter surfaces P1 fills. */
-export const ADAPTER_SURFACES = ["interaction", "session", "semantic_tool", "browser"] as const;
+export const ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"] as const);
 export type AdapterSurface = (typeof ADAPTER_SURFACES)[number];
 
 /** Loss rank for a rung (0 = native/no-loss ... 4 = degraded/total-loss). */
@@ -130,7 +131,7 @@ export const FALLBACK_LADDER_TABLE: Record<AdapterSurface, Record<HostId, Rung>>
  * The hosts with at least one still-INFERRED rung (not fully live-verified).
  * Remove a host here once ALL its cells are live-verified.
  */
-export const INFERRED_HOSTS = new Set<HostId>([
+export const INFERRED_HOSTS = sealSet([
   "agents-file",
   "pi-cli",
   "antigravity-cli",
@@ -146,7 +147,7 @@ export const INFERRED_HOSTS = new Set<HostId>([
   "kiro",
   "qoder",
   "trae",
-]);
+], "INFERRED_HOSTS");
 
 export function isHostInferred(host: HostId): boolean {
   return INFERRED_HOSTS.has(host);

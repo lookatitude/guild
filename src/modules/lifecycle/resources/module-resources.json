@@ -71,14 +71,14 @@
       "id": "status",
       "source_path": "commands/status.md",
       "resource_path": "resources/commands/status.md",
-      "sha256": "0b596798041bc42d4ee2365b14b54e41855470ae9d1150e102c2d526531a58c1"
+      "sha256": "5841bc2754be80f7ced96f6d7bdb57e8f01a3d010eb217bcb9f5f75964a8fdd4"
     },
     {
       "category": "hooks",
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "1417b7a3e11178b2329a71cfd7c3c6c03a1fa38c73d885e8e6a879c7c9d088b4"
+      "sha256": "8fb56e92dae9f6ef4e951a970d5236de71130ac88b52c16770d6c8ab1cd28650"
     },
     {
       "category": "scripts",

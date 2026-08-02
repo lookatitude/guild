@@ -1,11 +1,11 @@
 {
   "schema_version": "guild.inventory.v1",
   "generated_at": "1970-01-01T00:00:00.000Z",
-  "plugin_version": "2.4.0",
+  "plugin_version": "2.5.0-beta.1",
   "manifest": {
     "name": "guild",
-    "version": "2.4.0",
-    "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 2 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
+    "version": "2.5.0-beta.1",
+    "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
     "author": {
@@ -305,7 +305,7 @@
       "id": "guild-create-skill",
       "source_path": "skills/meta/create-skill/SKILL.md",
       "tier": "meta",
-      "description": "Gated mint of a NEW skill — the capability parallel to `guild:create-specialist` (`§12`) for skills, not agents; the path phase-aware composition (G-PHASE-COMPOSE) / `guild:team-compose` takes when a phase needs a missing CAPABILITY, not a role. Interview → draft under `.guild/skills/proposed-<name>/` (never the plugin install dir) → trigger boundary scan with `DO NOT TRIGGER` edits gated via `guild:evolve-skill` → paired evals + shadow mode (A=no-skill, B=proposed) → register by a move within `.guild/`. Minted only when a phase gap or `§11.2.1` extraction signals show a recurring capability gap. TRIGGER for \"create a new skill for <capability>\", \"mint a skill for a capability gap\", \"write a new skill from scratch for <X>\", \"phase-compose flagged a skill gap — create the skill\". DO NOT TRIGGER for minting a specialist/agent (`guild:create-specialist`), evolving or re-tuning an existing skill (`guild:evolve-skill`), composing a team (`guild:team-compose`), or rolling back a skill (`guild:rollback-skill`)."
+      "description": "Gated mint of a NEW skill — the capability parallel to `guild:create-specialist` for skills, not agents; what phase-aware composition (G-PHASE-COMPOSE) / `guild:team-compose` takes when a phase needs a missing CAPABILITY, not a role. Interview → draft under `.guild/skills/proposed-<name>/` → boundary scan with `DO NOT TRIGGER` edits gated via `guild:evolve-skill` → paired evals + shadow mode → register within `.guild/`. Creation authority is human-requested (explicit request or team-compose option A; no historical extraction prerequisite) or evolution-proposed (all `§11.2.1` signals required). TRIGGER for \"create a new skill for <capability>\", \"mint a skill for a capability gap\", \"write a new skill from scratch for <X>\", \"phase-compose flagged a skill gap — create the skill\". DO NOT TRIGGER for minting a specialist/agent (`guild:create-specialist`), evolving or re-tuning an existing skill (`guild:evolve-skill`), composing a team (`guild:team-compose`), or rolling back a skill (`guild:rollback-skill`)."
     },
     {
       "id": "guild-create-specialist",
@@ -807,6 +807,11 @@
       "description": "The on-demand `powerful` supervisor a stuck low-tier agent consults. Answers EXACTLY ONE escalated sub-question, seeing only the draft + question + a compact critique instruction — NEVER the raw file/project context (that withholding keeps the call cheap). Returns a `guild.handoff.v2` envelope; the cheap/mid agent continues with the answer folded in. The §3 advisor-escalation net (cost-aware-tiering ADR), NOT a standalone reviewer (O-1: no reviewer type ships). TRIGGER only via escalation: an agent emits `status: escalate` + `escalate_reason`, OR the coordinator detects an uncertainty marker / short output and routes one sub-question here. DO NOT TRIGGER for: a fresh task lane (developer/backend/frontend/mobile); a systems-design or ADR pass (architect designs, advisor critiques a slice); G6 receipt review (guild:review); the quality gate (guild:guild-quality); whole-transcript review or wholesale re-runs; direct use as a general critic. The advisor sees a draft + a question, never a repo."
     },
     {
+      "id": "context-manager",
+      "source_path": "agents/context-manager.md",
+      "description": "The `mid`-tier installed machinery agent that ASSEMBLES bounded context and emits run-scoped capability evidence — the executor for Learn's semantic operations and for per-lane context bundles, so a project-local role is never also the thing that assembles its own context. Writes ONLY under `.guild/context/**`, `.guild/artifacts/**`, `.guild/runs/**`; its contract (`scripts/lib/capability/context-manager-contract.ts`) forbids the rest structurally. TRIGGER for \\\"assemble the context bundle for this lane\\\", \\\"run the Learn semantic stage\\\", \\\"emit the capability profile\\\", \\\"resolve this recall query\\\", \\\"summarize this feedstock into a bundle\\\". DO NOT TRIGGER for: writing agent or skill definitions (guild:create-specialist / guild:create-skill, human-gated); promoting knowledge to the wiki (guild:wiki-ingest, human gate); approving a capability candidate or advancing the resolver mode (operator only); deciding a project question (architect designs, advisor critiques, the operator decides); implementing a task lane (developer / domain specialists); reviewing work (guild:review). It assembles evidence and never exercises authority over it."
+    },
+    {
       "id": "developer",
       "source_path": "agents/developer.md",
       "description": "The generic `mid`-tier task-lane implementer: takes a settled plan lane and writes/refactors its code (draft, reason, build), escalating to the advisor when above its tier. The default ephemeral worker for implementation lanes that are NOT domain-recognizable. TRIGGER for \\\"implement this lane\\\", \\\"build this task\\\", \\\"write the code for X\\\", \\\"refactor this module\\\" where the work has no clear domain home. DO NOT TRIGGER for: API/data-layer/migrations/integrations/queue/worker code (backend); web frontend (frontend); iOS/Android/RN/Expo (mobile); systems design, tradeoffs, ADRs (architect — developer implements after the design); test strategy / suite shape (qa — developer writes pinning tests only); deploy/CI/CD/IaC/observability (devops); security audits, threat models, auth review (security); content/commercial work (writing/commercial groups); skill/hook/command authoring — dev-team. If a lane is domain-recognizable, hand off, not absorb. A `powerful` need escalates to advisor, never self-promote."
@@ -1000,6 +1005,16 @@
       "kind": "cli"
     },
     {
+      "id": "capability-adopt",
+      "source_path": "scripts/capability-adopt.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "capability-profile",
+      "source_path": "scripts/capability-profile.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-bundle-determinism",
       "source_path": "scripts/check-bundle-determinism.ts",
       "kind": "cli"
@@ -1027,6 +1042,11 @@
     {
       "id": "check-module-ownership",
       "source_path": "scripts/check-module-ownership.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "check-path-containment",
+      "source_path": "scripts/check-path-containment.ts",
       "kind": "cli"
     },
     {
@@ -1485,13 +1505,48 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/adoption-migrate",
+      "source_path": "scripts/lib/capability/adoption-migrate.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/backend-factory",
       "source_path": "scripts/lib/capability/backend-factory.ts",
       "kind": "lib"
     },
     {
+      "id": "lib/capability/candidate-surface",
+      "source_path": "scripts/lib/capability/candidate-surface.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/compatibility-catalog",
+      "source_path": "scripts/lib/capability/compatibility-catalog.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/compatibility-usage",
+      "source_path": "scripts/lib/capability/compatibility-usage.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/context-manager-contract",
+      "source_path": "scripts/lib/capability/context-manager-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/profile-emit",
+      "source_path": "scripts/lib/capability/profile-emit.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/rank",
       "source_path": "scripts/lib/capability/rank.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/resolver-mode",
+      "source_path": "scripts/lib/capability/resolver-mode.ts",
       "kind": "lib"
     },
     {
@@ -1562,6 +1617,21 @@
     {
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/adoption-manifest",
+      "source_path": "scripts/lib/core/contracts/adoption-manifest.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/project-capability-profile",
+      "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/project-definition-ref",
+      "source_path": "scripts/lib/core/contracts/project-definition-ref.ts",
       "kind": "lib"
     },
     {
@@ -1887,6 +1957,16 @@
     {
       "id": "lib/parity-contract",
       "source_path": "scripts/lib/parity-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/path-containment-registry",
+      "source_path": "scripts/lib/path-containment-registry.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/path-containment-scan",
+      "source_path": "scripts/lib/path-containment-scan.ts",
       "kind": "lib"
     },
     {

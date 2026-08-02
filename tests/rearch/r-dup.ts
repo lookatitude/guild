@@ -63,7 +63,19 @@ export const DUP_SIGS: DupSig[] = [
   },
   {
     id: "proto-poison-keys",
-    signature: 'new Set(["__proto__", "prototype", "constructor"])',
+    // MATCHES THE KEY LIST, NOT ITS WRAPPER — the same brittleness lesson recorded
+    // for scrub-share-set directly above, learned again the same way. This read
+    // `new Set([...])` until feature/deep-freeze-collections sealed the canonical
+    // body into `sealSet([...], "PROTO_POISON_KEYS")` (#22). The wrapper changed,
+    // the signature did not, and the rail went RED reporting ZERO hits — "dedup lost
+    // the canonical body" — when nothing had been lost at all.
+    //
+    // That branch is RED on this rail on its own tip, before any merge; the
+    // integration only surfaced it. The list itself is what a copy-paste duplicate
+    // actually carries, so matching it is both wrapper-proof and STRICTLY STRONGER
+    // than the old signature: an inline `new Set([...])` copy, a `sealSet([...])`
+    // copy, and a bare array copy all now hit, where only the first did before.
+    signature: '["__proto__", "prototype", "constructor"]',
     canonical: "src/modules/security/workflows/safe-object.ts",
   },
 ];

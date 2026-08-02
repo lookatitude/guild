@@ -134,6 +134,12 @@
     "http_available": false,
     "bridge_package": null
   },
+  "capability": {
+    "resolver_mode": "observe",
+    "suggestion_budget": 4,
+    "starter_roles": [],
+    "auto_create_policy": "on_approval"
+  },
   "statusline": false,
   "adversarial_review_provider": "auto",
   "loops": null,

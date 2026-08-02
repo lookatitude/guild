@@ -96,13 +96,13 @@ export const DEFAULT_CONFIRMATION_FOR_SAFETY_CLASS: Readonly<Record<SafetyClass,
   security_sensitive: "strongest",
 } as const;
 
-export const CONFIRMATION_ORDER: readonly ConfirmationStrength[] = [
+export const CONFIRMATION_ORDER: readonly ConfirmationStrength[] = Object.freeze([
   "none",
   "normal",
   "advanced",
   "danger",
   "strongest",
-];
+]);
 
 function confirmationRank(c: ConfirmationStrength): number {
   return CONFIRMATION_ORDER.indexOf(c);
@@ -180,6 +180,41 @@ const EXPLICIT: Record<string, ConfigUiMeta> = {
   loops: meta({ group: "startup", label: "Active loops (CSV)", control: "text", safety_class: "normal" }),
   loop_cap: meta({ group: "startup", label: "Loop cap", control: "number", safety_class: "normal" }),
   codex_cap: meta({ group: "startup", label: "Codex review round cap", control: "number", safety_class: "normal" }),
+
+  // ── Capability localization (S5 — cap-loc-D04/D03) ─────────────────────
+  // Not `security_sensitive`: these select WHICH DEFINITIONS RESOLVE, never what a
+  // lane may DO (that stays with capability_scope + the permission keys), so
+  // isSecuritySensitiveKey correctly matches none of them.
+  //
+  // resolver_mode is RAISED to `danger` above its `advanced` safety-class floor
+  // (raise-only per V9): changing it changes which definitions a project resolves —
+  // every lane's roster and skill set shifts under it — so it warrants a stronger
+  // confirmation than a normal advanced toggle even though it grants no autonomy.
+  "capability.resolver_mode": meta({
+    group: "startup",
+    label: "Capability resolver mode",
+    control: "enum",
+    safety_class: "advanced",
+    confirmation_strength: "danger",
+  }),
+  "capability.suggestion_budget": meta({
+    group: "startup",
+    label: "Capability proposal budget",
+    control: "number",
+    safety_class: "normal",
+  }),
+  "capability.starter_roles": meta({
+    group: "startup",
+    label: "Starter roles",
+    control: "string_array",
+    safety_class: "normal",
+  }),
+  "capability.auto_create_policy": meta({
+    group: "startup",
+    label: "Capability auto-create policy",
+    control: "enum",
+    safety_class: "normal",
+  }),
 
   // ── Host & roles ───────────────────────────────────────────────────────
   host: meta({ group: "host_roles", label: "Execution host", control: "enum", safety_class: "advanced" }),

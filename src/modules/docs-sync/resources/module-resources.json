@@ -8,7 +8,7 @@
       "id": "check-docs-architecture",
       "source_path": "scripts/check-docs-architecture.ts",
       "resource_path": "resources/scripts/check-docs-architecture.ts",
-      "sha256": "1347e42ff311d497320827127d4419a85567536400997d6088ea754ceb2c03a0"
+      "sha256": "964855ff87fccdf210c09abbcc8e907e015ac8df92b1c9a5d7f1a743ed15394b"
     },
     {
       "category": "scripts",

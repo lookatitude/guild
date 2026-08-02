@@ -48,7 +48,19 @@ describe("settings-resolver shim — parity after W3 split", () => {
   it("exports rigorProfile()", () => expect(typeof rigorProfile).toBe("function"));
   it("exports initiativeIsWorkspaceScoped()", () => expect(typeof initiativeIsWorkspaceScoped).toBe("function"));
   it("exports the exact original runtime shim surface", () => {
+    // This list is a PIN, not a description: it exists so an accidental export (an
+    // internal helper, a `__main` leak) is caught. An ADDITION is a deliberate act that
+    // must be recorded here WITH ITS REASON — never a list refreshed reflexively to make
+    // the pin green again.
     expect(Object.keys(settingsResolverExports).sort()).toEqual([
+      // S5 (cap-loc-D04): the resolver's own closed top-level key set, exported so
+      // config-schema-resolver-parity.test.ts can assert it equals CONFIG_SCHEMA's
+      // top-level keys. That rail exists because the two are a C5-style dual home with
+      // NO sync script between them, and they had already drifted — `capability` was
+      // registered in the schema, the CLI loader, the UI metadata and the persist matrix
+      // but not here, so a project could configure it and the runtime would silently
+      // ignore it. The rail cannot exist without this export.
+      "RESOLVER_TIER1_KEYS",
       "deepMerge",
       "initiativeIsWorkspaceScoped",
       "isPlainObject",

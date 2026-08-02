@@ -43,32 +43,55 @@ import {
 } from "../lib/host-registry-schema";
 import { normalizeHostId, registryIdToCanonicalHostKind } from "../lib/host-id-namespace";
 import { buildAdapters } from "../lib/pane-adapter";
+import { createAgentsFileAdapter } from "../lib/host-adapters/agents-file";
 import { DERIVED_HOST_CAPABILITY_ROWS } from "../lib/host-registry";
 import type { HostKind } from "../lib/host-types";
 
-// "agents-file" itself is dispatch_selectable:true but surface_kind:"file" — it is
-// the ABSTRACT universal package target ("a host consuming AGENTS.md can run a
-// lane" — its own registry comment), not a concrete pane-dispatchable host. It
-// matches neither the wrapped-CLI PaneAdapter loop (surface_kind must be "cli") nor
-// the kiro/qoder/trae agents-file-DEREFERENCE pattern (those dereference THIS row;
-// this row has adapter_binding:"self", it IS the target). No real host ever routes
-// to "agents-file" as a host_kind — a concrete AGENTS.md-consuming host would carry
-// its OWN row. This is a pre-existing, documented exception (unrelated to the 7
-// hosts this lane fixes), excluded from the per-row PaneAdapter/DERIVED_HOST_CAPABILITY_ROWS
-// assertions below on that basis — asserted explicitly, not silently skipped.
+// "agents-file" WAS this file's one documented dispatch_selectable:true exception,
+// carved out rather than flipped because the row is the ABSTRACT universal package
+// target, not a concrete pane-dispatchable host. That carve-out is RETIRED (gap-audit
+// C-agents-file): the row now reads dispatch_selectable:false, applying the same G4b
+// rule that flipped kiro/qoder/trae, so there is no exception left to document.
+//
+// Why the carve-out did not hold: its rationale ("a host consuming AGENTS.md can run
+// a lane") is a claim about the CLASS of consuming hosts, but the field has real
+// per-ROW consumers that read it as selectability — config-cli.ts builds the
+// operator-pinnable host set from `dispatch_selectable === true`, and
+// role-model-schema.ts picks the host/advisory substrate from
+// `installability !== "none" && dispatch_selectable`. Under those, `true` +
+// `installability:"target"` let Guild select `agents-file` as a run's host substrate
+// and dispatch into an adapter that returns `command: null`.
 const PANE_DISPATCHABLE_IDS = HOST_IDS.filter(
   (id) => HOST_REGISTRY_ROWS[id].dispatch_selectable && HOST_REGISTRY_ROWS[id].surface_kind === "cli"
 );
 const NON_DISPATCH_SELECTABLE_IDS = HOST_IDS.filter((id) => !HOST_REGISTRY_ROWS[id].dispatch_selectable);
 
-describe("G4b contract — the one documented dispatch_selectable exception (agents-file)", () => {
-  it('"agents-file" is dispatch_selectable:true but surface_kind:"file", not "cli" — never pane-dispatched directly', () => {
+describe("G4b contract — the retired agents-file exception (gap-audit C-agents-file)", () => {
+  it('"agents-file" is dispatch_selectable:FALSE — a pane-less file surface is never a dispatch destination', () => {
     const row = HOST_REGISTRY_ROWS["agents-file"];
-    expect(row.dispatch_selectable).toBe(true);
+    expect(row.dispatch_selectable).toBe(false);
     expect(row.surface_kind).toBe("file");
+    // adapter_binding "self": this row IS the render target kiro/qoder/trae dereference.
     expect(row.adapter_binding).toBe("self");
-    // Confirms it is excluded from PANE_DISPATCHABLE_IDS by the surface_kind filter.
     expect(PANE_DISPATCHABLE_IDS).not.toContain("agents-file");
+    expect(NON_DISPATCH_SELECTABLE_IDS).toContain("agents-file");
+  });
+
+  it("the row's OWN adapter refuses to dispatch — the evidence the flip rests on", () => {
+    // Not a proxy assertion: if some wrapper path ever makes agents-file a real
+    // process launcher, this is the test that must go red first.
+    const adapter = createAgentsFileAdapter();
+    const dispatched = adapter.dispatch({ taskRun: { id: "t1" } } as never) as {
+      receipt: { status: string };
+      value: { command: string | null; dispatch_kind: string };
+    };
+    expect(dispatched.receipt.status).toBe("degraded");
+    expect(dispatched.value.command).toBeNull();
+    expect(dispatched.value.dispatch_kind).toBe("instruction_file");
+  });
+
+  it('"agents-file" is not a HostKind, so no TeamBackend/pane path can name it', () => {
+    expect(registryIdToCanonicalHostKind(normalizeHostId("agents-file")!)).toBeNull();
   });
 });
 
@@ -137,13 +160,17 @@ describe("G4b contract — every pane-dispatchable (dispatch_selectable + surfac
   }
 });
 
-describe("G4b contract — every dispatch_selectable:false row is an honest app/connector or agents-file surface", () => {
+describe("G4b contract — every dispatch_selectable:false row is an honest app/connector or file surface", () => {
   for (const id of NON_DISPATCH_SELECTABLE_IDS) {
-    it(`registry row "${id}" (dispatch_selectable:false) is app/connector OR agents-file — never unexplained`, () => {
+    it(`registry row "${id}" (dispatch_selectable:false) is app/connector OR a file surface — never unexplained`, () => {
       const row = HOST_REGISTRY_ROWS[id];
       const isAppConnector = row.surface_kind === "app";
-      const isAgentsFile = row.adapter_binding === "agents-file";
-      expect(isAppConnector || isAgentsFile).toBe(true);
+      // Two honest file-surface shapes: the IDE rows that DEREFERENCE the universal
+      // agents-file adapter, and (since gap-audit C-agents-file) that adapter's own
+      // `adapter_binding:"self"` target row. Both are pane-less by construction, so
+      // `surface_kind:"file"` is the property that actually explains the false.
+      const isFileSurface = row.adapter_binding === "agents-file" || row.surface_kind === "file";
+      expect(isAppConnector || isFileSurface).toBe(true);
     });
   }
 });
