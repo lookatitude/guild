@@ -64,7 +64,7 @@
       "id": "lib/capability/profile-emit",
       "source_path": "scripts/lib/capability/profile-emit.ts",
       "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
-      "sha256": "ded67aca9ca17ce0ea2d27a8ee9cd4f822874a20d9719142a26c9bc37ef214d2"
+      "sha256": "3bf510fca84ee8f11d7f3c6c99ca38d6beb66967534ab4beb5e9783b1138aba7"
     },
     {
       "category": "scripts",
@@ -106,7 +106,7 @@
       "id": "lib/core/contracts/project-capability-profile",
       "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
       "resource_path": "resources/scripts/lib/core/contracts/project-capability-profile.ts",
-      "sha256": "a49d51171651978bf14e2c65b9c6b42c69558b57ce56600db38bc639498662b4"
+      "sha256": "f6ee17c88bc2daed49d43965f1669f15ed53bc5b82fb517de9957e20755f514a"
     },
     {
       "category": "scripts",

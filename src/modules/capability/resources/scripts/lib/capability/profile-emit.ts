@@ -364,10 +364,16 @@ function sameHashes(a: TreeHashes, b: TreeHashes): boolean {
  * what land in `feedstock.absent`, so they are frozen: an absence record whose
  * vocabulary drifts cannot be compared across runs.
  */
+// INTEGRATION (five-branch stack): the ELEMENTS are frozen too, not just the array.
+// feature/deep-freeze-collections' repo-wide rail (#22) landed on the same tip as
+// this lane and caught it: 3 object literals, 0 frozen. An array-level freeze over
+// mutable objects is the "half-truth" that rail exists to name — `push` was barred
+// while `FEEDSTOCK_INPUTS[0].rel = "…"` stayed open, and `rel` is a path this module
+// hashes. Caught by integration; neither branch could see it alone.
 export const FEEDSTOCK_INPUTS = Object.freeze([
-  { name: "codebase_map", rel: ".guild/indexes/codebase-map.json" },
-  { name: "knowledge_graph", rel: ".guild/indexes/knowledge-graph.json" },
-  { name: "roster", rel: ".guild/agents/registry.yaml" },
+  Object.freeze({ name: "codebase_map", rel: ".guild/indexes/codebase-map.json" }),
+  Object.freeze({ name: "knowledge_graph", rel: ".guild/indexes/knowledge-graph.json" }),
+  Object.freeze({ name: "roster", rel: ".guild/agents/registry.yaml" }),
 ] as const);
 
 export interface FeedstockSnapshot {

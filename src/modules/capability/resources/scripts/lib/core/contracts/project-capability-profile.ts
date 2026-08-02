@@ -148,7 +148,11 @@ const EVIDENCE_SOURCE_SET: ReadonlySet<string> = new Set<string>(EVIDENCE_SOURCE
  * the evidence. That is the same failure as an unbounded scalar: the artifact
  * quietly means less than it appears to.
  */
-export const MUTATION_WINDOWS = ["run", "emission"] as const;
+// INTEGRATION (five-branch stack): frozen at the export site. `as const` is a
+// COMPILE-TIME narrowing and leaves the array mutable at runtime, so any caller
+// could widen this closed vocabulary process-wide. Added by the learn lane, caught
+// by the freeze lane's repo-wide rail once both were on one tip.
+export const MUTATION_WINDOWS = Object.freeze(["run", "emission"] as const);
 export type MutationWindow = (typeof MUTATION_WINDOWS)[number];
 const MUTATION_WINDOW_SET: ReadonlySet<string> = new Set<string>(MUTATION_WINDOWS);
 
