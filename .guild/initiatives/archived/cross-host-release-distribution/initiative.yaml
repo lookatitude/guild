@@ -1,0 +1,77 @@
+# schema_version: guild.initiative.v1
+initiative:
+  id: cross-host-release-distribution
+  title: "Cross-host release distribution — one version SoT, remote registration for remote-capable hosts, and a host-neutral staleness signal so every registry host tracks the released version"
+  summary_ref: goals.md
+  created_at: "2026-07-25T20:11:58Z"
+  updated_at: "2026-07-27T05:10:00Z"
+  closed_at: "2026-07-27T05:10:00Z"
+  definition_status: complete
+  execution_status: done
+  release_status: released
+  released_in: "v2.4.0"
+  documentation_status: updated
+  status: closed
+  project_id: plugin
+  scope: plugin
+  owner: miguelp
+  risk_level: medium
+  primary_branch: next
+
+  goal: >-
+    REVISED 2026-07-25 after G1 (xhrd-wi-01) refuted the opening thesis.
+    Guild wires REMOTE-CAPABLE hosts to local snapshots. `install.sh` renders
+    `dist/` and registers a local filesystem path for `codex-cli`, `pi-cli`, and
+    `antigravity-cli` — all three of whose plugin managers accept a remote/git
+    source — and the README documents that frozen path as official. Guild's own
+    Codex marketplace points at a GITIGNORED `dist/codex-marketplace`, which
+    `codex plugin marketplace upgrade` refuses to refresh because it is not a
+    Git marketplace; hence 2.2.0 while stable shipped 2.3.2. Separately, every
+    host but `claude-code-cli` lacks a staleness signal. Close the gap: one
+    version source-of-truth with a drift gate, remote registration for the three
+    remote-capable hosts, a reachable staleness signal per host, a working
+    per-host update command, and channel-integrity enforcement.
+    NOT a publish-infrastructure build — Codex needs none.
+
+  evidence:
+    canonical: ".guild/wiki/standards/host-distribution-matrix.md (G1 deliverable, PR #97) — the authoritative statement; this manifest summarizes it."
+    observed: "Codex plugin cache pinned at guild/2.2.0 while origin/main is 2.3.2; operator reported the Codex app stuck three releases behind."
+    refuted: >-
+      G1 REFUTED the opening thesis that non-Claude hosts cannot pull a release.
+      Verified in an isolated CODEX_HOME against the public repo, no Guild change:
+      `codex plugin marketplace add lookatitude/guild --ref main` +
+      `codex plugin add guild@guild` installs 2.3.2, and `marketplace upgrade`
+      refreshes the git snapshot. Do NOT build Codex publish infrastructure.
+    mechanism: >-
+      ~/.codex/config.toml [marketplaces.guild] is source_type = "local" pointing at
+      a gitignored dist/codex-marketplace (last_updated 2026-07-05); marketplace
+      upgrade refuses a local source. pi (npm:/git:/https/ssh) and antigravity
+      (plugin@marketplace) likewise have unused remote mechanisms. Generated
+      codex-hooks.json wires ONLY UserPromptSubmit, so hooks/update-check.ts has no
+      Codex counterpart. ~/.guild/receipts/ is empty because receipts are written by
+      install.sh only (install.sh:479), never by a host-native install.
+    channel_defect: "origin/next is at 2.3.1 while origin/main is at 2.3.2 — the release-discipline rule-8 sync-back for v2.3.2 never landed, so the beta channel silently trails stable."
+
+  goals_index:
+    G1: "DONE (xhrd-wi-01, PR #97) — host distribution matrix for all 16 hosts with V/S/U evidence marking. Refuted the initiating thesis; closed openq-1 (2.2.0 was never published); openq-2 PARTIAL (4 hosts unavailable). Two UNVERIFIED items carried forward: Codex upgrade propagation on a moving branch ref, and the cursor/github-copilot/opencode/rovo-dev contracts — both block final G3/G4/G5 acceptance."
+    G2: "Single version source-of-truth — one canonical version field, with EVERY host manifest (.claude-plugin/plugin.json, marketplace.json, dist/*/.codex-plugin/plugin.json, per-host *-manifest.json, guild.inventory.json) generated from it, plus a CI drift gate that fails a release whose host manifests disagree with the SoT."
+    G3: "REVISED after G1 — Remote-registration switch, NOT a publish-infrastructure build. Point install.sh + README at the repo's git marketplace for codex-cli (verified working today), and evaluate the same for pi (git:/npm:) and antigravity (plugin@marketplace). Channel switching needs `marketplace remove` + `add` (in-place re-point is rejected). Must preserve install.sh:428's checkout-is-source dev path. A per-host Release artifact is OPTIONAL and only for genuinely file-surface hosts."
+    G4: "Host-neutral staleness signal — the update-check semantics behind hooks/update-check.ts reach every host: hook-capable hosts get a SessionStart-equivalent wiring (codex-hooks.json today wires only UserPromptSubmit), hook-less hosts get an agents-file/preamble fallback. The signal must name installed version, latest version, channel, and the exact update command FOR THAT HOST."
+    G5: "Update-path parity — every install path writes a guild.install_receipt.v1 receipt (including host-native plugin installs the installer never ran), install.sh --update discovers and refreshes non-installer-managed hosts or refuses with a host-specific instruction, and each of the 16 registry hosts has a documented, tested update command."
+    G6: "Channel-integrity enforcement — mechanize release-discipline rule 8's sync-back clause (rule 4 in the standard is documentation completeness). NOTE: the gate DETECTS, it cannot PREVENT — release.yml publishes on the merged-PR event, so a push-triggered workflow cannot block a release; CI check that fails when origin/next's version trails origin/main's. `next` is advanced by FAST-FORWARD when the release point is a descendant of it, otherwise by a DELTA-COPY sync-back PR; only a merge-commit release PR preserves that ancestry (squash and rebase both rewrite SHAs). Backfill the missing v2.3.2 sync-back."
+
+  sequencing:
+    - "G1 DONE (PR #97). Its findings rewrote G3's scope in place; G2, G4, G5, G6 proceed against the matrix."
+    - "G2 and G6 are independent starters and can run in parallel with G1 (both are mechanical + self-contained)."
+    - "G3 depends on G2 (a trustworthy version SoT); its G1 dependency is satisfied."
+    - "G4 depends on G1 (per-host hook surfaces) and G2 (a version to compare against); it can start once the matrix is drafted."
+    - "G5 depends on G1 + G4 (the signal must be able to name a real update command)."
+    - "Cut a validation release at the end: publish a version and verify EVERY host in the matrix observes it — the initiative does not close on code review alone. DONE 2026-07-27: v2.4.0 cut (release/v2.4.0 → #106 MERGE COMMIT, squash divergence healed in-PR; channels now share commit 1eb30e3, check-channel-integrity OK at 2.4.0 both). Validation pass 5/5: (1) main ref carries 2.4.0; (2) fresh isolated codex git install resolves 2.4.0; (3) REAL unseeded staleness signal on the reporting machine's 2.2.0 cache — '2.2.0 → v2.4.0 — run: install.sh --update' (option-A command; cosmetic v-prefix residual); (4) live guild-run update swap on a 2.3.2-receipted 2.4.0-rendered pi package → 'updated to 1eb30e3 (v2.4.0)'; (5) propagation probe: `marketplace upgrade` ALONE moved installed 2.3.2 → 2.4.0, `plugin add` materialized the version-keyed cache — G1's last unknown CLOSED. FINDING: wrappers rendered ≤2.3.2 carry the pre-#105 updater and cannot self-update (observed live); remedy = install.sh --update once; self-heals from 2.4.0 onward."
+
+  notes:
+    - "Created 2026-07-25 from an operator report (Codex app on 2.2.0 vs stable 2.3.2); root-cause mechanism verified on-machine before the initiative was opened."
+    - "Host scope: ALL 16 registry hosts (operator-confirmed). But G1 established the hosts do NOT share one defect — see goals.md §Scope decision for the 5-situation table (1 correctly wired + 3 remote-capable-wired-local + 4 file-surface + 4 unknown + 4 refused)."
+    - "RESOLVED by G1: 2.2.0 reached Codex through a `local` marketplace registered into a gitignored dist/ — it was never published anywhere. openq-1 closed."
+    - "dist/ is gitignored by design (CI regenerates it). Any release artifact attaches to the Release; never commit dist/. After G1, such artifacts are optional and file-surface-only."
+    - "Codex adversarial review implicitly always-on per lane (self-build)."
+    - "D8 docs leg: docs/v2 install/distribution + release-discipline pages, .guild/wiki/standards/release-discipline.md, and README/install docs must reconcile to shipped reality before close."

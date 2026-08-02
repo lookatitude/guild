@@ -106,6 +106,25 @@ import {
   buildTaskAssignment,
   writeTaskAssignment,
 } from "../src/modules/dispatch/workflows/task-assignment";
+// MH-04: the substrate DECISION lives behind the versioned execution port
+// (`guild.execution.transports.v1`), never in this launcher. The launcher reads
+// host FACTS through the capability probe below and reports what the port decided.
+// MH-04 BF-2: execution MECHANICS live there too — every dispatch rung resolves
+// its transport through `HostExecutionRuntime.transportFor()` and runs through
+// the resolved port. See the composition seam below (§MH-04 transport wiring).
+import {
+  isTeamDispatchPort,
+  selectExecutionSubstrate,
+  type ExecutionCapabilityProbe,
+  type ExecutionDispatchMode,
+  type ExecutionTransportPort,
+  type HostExecutionRuntime,
+  type TeamDispatchPort,
+} from "../src/modules/dispatch/workflows/execution-transport-ports";
+import {
+  TeamDispatchExecutionTransport,
+  createHostExecutionRuntime,
+} from "../src/modules/dispatch/workflows/execution-transport-adapters";
 // task-cell-runtime G3: the authoritative `guild.task_assignment.v2` channel
 // (per-attempt, one immutable file per task a specialist owns; no representative-
 // first-task collapse). Replaces v1 as the PRODUCTION write; v1 is retained above
@@ -855,10 +874,9 @@ interface CrossHostConfig {
 function loadCrossHostConfig(cwd: string): CrossHostConfig {
   try {
     const { config } = resolveSettings({ cwd });
-    const ch = config.defaults.cross_host as Record<string, unknown> | undefined;
+    const ch = config.defaults.cross_host;
     // R-018: capability_manifest_ttl_s lives under defaults.*, not under cross_host.
-    const defs = config.defaults as Record<string, unknown>;
-    const rawTtl = defs["capability_manifest_ttl_s"];
+    const rawTtl = config.defaults.capability_manifest_ttl_s;
     return {
       enabled: ch?.enabled === true,
       hosts: isPlainObject(ch?.hosts)
@@ -908,17 +926,20 @@ function applyStatuslineEnv(cwd: string): void {
 
 // ── D5 dispatch ladder ─────────────────────────────────────────────────────
 //
-// Resolves the execution backend per D5 (v2x-command-surface-dispatch-and-
-// internalization.md). Explicit `agent_mode` wins over auto-detection.
-// auto resolution order:
-//   1. $TMUX set → team (in-session window — PRESERVE shipped in-session fix)
-//   2. tmux installed → team (new detached session)
-//   3. Host (claude|codex) signals independent agent support → agent
-//   4. Fallback → subagent
+// The ladder itself (D5, v2x-command-surface-dispatch-and-internalization.md) is
+// NOT decided here. MH-04 moved it behind `selectExecutionSubstrate` in the
+// versioned execution port, because a generic launcher may not own substrate,
+// lifecycle, or gate policy (runtime-boundary contract BR-04 / MHRC-MOD-003).
+//
+// What stays here is the launcher's legitimate half: reading host FACTS
+// (`$TMUX`, tmux availability, the host's independent-agent signal) and printing
+// whatever the port decided. The facts are read LAZILY, through the probe below,
+// so the port performs exactly the probes the shipped ladder performed — an
+// explicit `--agent-mode` pin still spawns no `tmux -V` subprocess.
 
 type AgentModeExplicit = "team" | "agent" | "subagent" | "auto";
 interface ResolvedMode {
-  mode: "team" | "agent" | "subagent";
+  mode: ExecutionDispatchMode;
   reason: string;
 }
 
@@ -942,54 +963,120 @@ function hostSupportsIndependentAgents(): boolean {
 }
 
 /**
- * Resolve the D5 ladder. `dryRun=true` still checks $TMUX and tmux availability
- * so the dry-run output accurately reflects what a real launch would choose.
- *
- * When `explicit` is non-null and not "auto", that value is used directly
- * (subject to availability: pinning "team" on a tmux-less host warns + falls
- * back to "subagent" for real runs; dry-run leaves team as-is to show intent).
+ * The launcher's host-fact probe. Every member is a FACT read, not a decision:
+ * am I inside a multiplexer, is one installed, does this host signal independent
+ * agents. The port calls only the ones its ladder needs.
  */
-function resolveAgentMode(explicit: AgentModeExplicit | null, dryRun: boolean): ResolvedMode {
-  const val: AgentModeExplicit = explicit ?? "auto";
+const executionCapabilityProbe: ExecutionCapabilityProbe = {
+  insideMultiplexer: () => !!process.env["TMUX"],
+  multiplexerAvailable: () => probeTmuxAvailable(),
+  independentAgents: () => hostSupportsIndependentAgents(),
+};
 
-  if (val === "team") {
-    // Pinned team: validate tmux availability for real launches.
-    if (!dryRun && !probeTmuxAvailable()) {
-      process.stderr.write(
-        "[agent-team-launcher] WARN: agent_mode=team pinned but tmux is not available — " +
-          "falling back to subagent. Install tmux or use agent_mode=auto.\n"
-      );
-      return { mode: "subagent", reason: "agent_mode=team pinned but tmux unavailable → subagent fallback" };
-    }
-    return { mode: "team", reason: "explicit agent_mode=team" };
+// ── MH-04 transport wiring — the launcher's ONLY substrate construction site ──
+//
+// BF-2: no dispatch path below constructs or drives a backend. Each rung asks
+// this seam for the bounded transport PORT its substrate is behind, hands it to
+// the versioned runtime, resolves it through `transportFor()`, and executes
+// through the resolved port. The functions here exist solely to inject a shipped
+// substrate into a bounded adapter — they perform no dispatch themselves.
+
+/** The in-process (Agent-tool) substrate, behind the versioned dispatch port. */
+function inProcessTransportPort(): ExecutionTransportPort {
+  return new TeamDispatchExecutionTransport({
+    transport_id: "in-process",
+    backend: new InProcessTeamBackend(),
+  });
+}
+
+/** The remote (ssh) substrate, behind the versioned dispatch port. */
+function remoteTransportPort(opts: {
+  resolveHostTarget: (spec: Specialist) => RemoteHostTarget;
+  warn?: (message: string) => void;
+}): ExecutionTransportPort {
+  return new TeamDispatchExecutionTransport({
+    transport_id: "remote",
+    backend: new RemoteTeamBackend({
+      transport: new SshRemoteTransport(),
+      resolveHostTarget: opts.resolveHostTarget,
+      resolveAdapter: resolveAdapter(),
+      warn: opts.warn,
+    }),
+  });
+}
+
+/**
+ * The tmux substrate, behind the versioned dispatch port. tmux is the one
+ * substrate that owns an addressable session namespace, so the SAME backend is
+ * injected twice: once as the launch backend, once as the session seam that
+ * carries availability, collision, preflight and session identity.
+ */
+function tmuxTransportPort(adapterBacked: boolean): ExecutionTransportPort {
+  const backend = new TmuxTeamBackend(
+    adapterBacked ? { resolveAdapter: resolveAdapter() } : {}
+  );
+  return new TeamDispatchExecutionTransport({
+    transport_id: "tmux",
+    backend,
+    session: backend,
+  });
+}
+
+interface ResolvedDispatchPort {
+  port: TeamDispatchPort | null;
+  detail: string;
+}
+
+/**
+ * Resolve a transport through the versioned runtime.
+ *
+ * EVERY failure is a closed typed outcome the launcher translates into its own
+ * UX: an unregistered transport, a port pinned to a foreign contract major, and
+ * a port that cannot perform run-scoped dispatch all come back refused. There is
+ * no fallback to direct construction — a launcher that could fall back would not
+ * actually depend on the runtime.
+ */
+function resolveDispatchPort(
+  runtime: HostExecutionRuntime,
+  transportId: string
+): ResolvedDispatchPort {
+  const bound = runtime.transportFor(transportId);
+  if (bound.status !== "succeeded" || !bound.value) {
+    return {
+      port: null,
+      detail:
+        bound.detail ??
+        `the runtime refused transport "${transportId}" (${bound.status}/${bound.reason_code ?? "no reason"})`,
+    };
   }
-
-  if (val === "agent") {
-    return { mode: "agent", reason: "explicit agent_mode=agent" };
+  if (!isTeamDispatchPort(bound.value)) {
+    return {
+      port: null,
+      detail: `transport "${transportId}" resolved but does not implement run-scoped dispatch`,
+    };
   }
+  return { port: bound.value, detail: "" };
+}
 
-  if (val === "subagent") {
-    return { mode: "subagent", reason: "explicit agent_mode=subagent" };
-  }
-
-  // auto — D5 ladder
-  // Step 1: inside a tmux session → team in-session (preserves shipped fix)
-  if (process.env["TMUX"]) {
-    return { mode: "team", reason: "auto: $TMUX set → team in-session" };
-  }
-
-  // Step 2: tmux installed but not currently inside one → team new-session
-  if (probeTmuxAvailable()) {
-    return { mode: "team", reason: "auto: tmux installed → team new-session" };
-  }
-
-  // Step 3: host signals independent agent support → agent
-  if (hostSupportsIndependentAgents()) {
-    return { mode: "agent", reason: "auto: host supports independent agents → agent" };
-  }
-
-  // Step 4: fallback
-  return { mode: "subagent", reason: "auto: no tmux, no independent-agent support → subagent" };
+/**
+ * Ask the execution port which substrate this dispatch gets, then report it.
+ *
+ * `dryRun=true` reports intent: the port leaves a pinned `team` alone rather than
+ * degrading it, exactly as the shipped ladder did. The degradation WARNING is
+ * authored by the port (it is part of the decision); the launcher only writes it
+ * to stderr, which is the launcher's own job.
+ */
+function resolveAgentMode(
+  explicit: AgentModeExplicit | null,
+  dryRun: boolean,
+  probe: ExecutionCapabilityProbe = executionCapabilityProbe
+): ResolvedMode {
+  const selection = selectExecutionSubstrate(
+    { requested_mode: explicit, dry_run: dryRun },
+    probe
+  );
+  if (selection.warning) process.stderr.write(selection.warning);
+  return { mode: selection.dispatch_mode, reason: selection.reason };
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
@@ -1352,13 +1439,10 @@ async function main(): Promise<void> {
     if (resolvedMode === "agent") {
       // D5 rung 3 (in-process / independent agents, no tmux). dispatch.md
       // §"In-process dispatchPlan consumption" + SKILL.md §"Backend + routing"
-      // both document that the launcher actually CONSTRUCTS InProcessTeamBackend
-      // and returns its declarative dispatchPlan here — this rung was previously
-      // half-built (the launcher only ever emitted {backend,reason,slug} and
-      // exited, never constructing the backend). InProcessTeamBackend.launch()
-      // is a pure, synchronous computation (no live session, no subprocess) —
-      // fully usable from this one-shot CLI process, so there is no need to
-      // fall back to hand-rolling the descriptors: construct the real backend.
+      // both document that this rung returns the backend's declarative
+      // dispatchPlan. MH-04 BF-2: it no longer constructs the backend — it
+      // resolves the in-process transport through HostExecutionRuntime and
+      // launches through the resolved port. The emitted signal is unchanged.
       const slug = slugFromTeamPath(args.team);
       // Reuse the caller's run-id when supplied (--run-id) so GUILD_RUN_ID inside
       // each dispatchPlan descriptor's env matches the run directory the caller
@@ -1367,8 +1451,17 @@ async function main(): Promise<void> {
       const runId = args.runId ?? makeRunId();
       const cwd = path.resolve(args.cwd);
       const orchestratorHostKind = resolveOrchestratorHostKind(process.env) ?? undefined;
-      const inProcess = new InProcessTeamBackend();
-      const result = inProcess.launch({
+      const runtime = createHostExecutionRuntime({
+        transports: { "in-process": inProcessTransportPort() },
+      });
+      const resolved = resolveDispatchPort(runtime, "in-process");
+      if (!resolved.port) {
+        process.stderr.write(
+          `[agent-team-launcher] ERROR: in-process dispatch is unavailable — ${resolved.detail}\n`
+        );
+        process.exit(1);
+      }
+      const launched = resolved.port.launch({
         slug,
         runId,
         cwd,
@@ -1379,14 +1472,22 @@ async function main(): Promise<void> {
         orchestratorHostKind,
         teamPath: args.team,
       });
+      const result = launched.value;
+      if (!result) {
+        process.stderr.write(
+          `[agent-team-launcher] ERROR: in-process dispatch failed — ` +
+            `${launched.detail ?? launched.status}\n`
+        );
+        process.exit(1);
+      }
       const signal = {
         backend: resolvedMode,
         reason,
         slug,
         ok: result.ok,
-        dispatchPlan: result.dispatchPlan,
-        orchestratorPaneId: result.orchestratorPaneId,
-        teammatePaneIds: result.teammatePaneIds,
+        dispatchPlan: result.dispatch_plan,
+        orchestratorPaneId: result.orchestrator_pane_id,
+        teammatePaneIds: result.teammate_pane_ids,
         notes: result.notes,
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
@@ -1750,17 +1851,31 @@ async function main(): Promise<void> {
             };
           };
 
-          const remoteBackend = new RemoteTeamBackend({
-            transport: new SshRemoteTransport(),
-            resolveHostTarget,
-            resolveAdapter: resolveAdapter(),
-            // rf-wi-04 item 2 (codex review Q2a) — route the orphaned-lane
-            // warning to a DURABLE run-scoped sink. launch() is wrapped in
-            // bounded retry below; a later successful attempt discards the
-            // failed attempt's envelope, so the orphan must be persisted at
-            // detection time (NDJSON events log + trace), not left on stderr.
-            warn: (msg) => emitRemoteOrphan(cwd, runId, msg),
+          // MH-04 BF-2: the remote rung resolves the remote transport through the
+          // versioned runtime and dispatches through the resolved port. A runtime
+          // that refuses the transport refuses the dispatch — it never falls back
+          // to constructing RemoteTeamBackend here.
+          const remoteRuntime = createHostExecutionRuntime({
+            transports: {
+              remote: remoteTransportPort({
+                resolveHostTarget,
+                // rf-wi-04 item 2 (codex review Q2a) — route the orphaned-lane
+                // warning to a DURABLE run-scoped sink. launch() is wrapped in
+                // bounded retry below; a later successful attempt discards the
+                // failed attempt's envelope, so the orphan must be persisted at
+                // detection time (NDJSON events log + trace), not left on stderr.
+                warn: (msg) => emitRemoteOrphan(cwd, runId, msg),
+              }),
+            },
           });
+          const resolvedRemote = resolveDispatchPort(remoteRuntime, "remote");
+          if (!resolvedRemote.port) {
+            process.stderr.write(
+              `[agent-team-launcher] ERROR: remote dispatch is unavailable — ${resolvedRemote.detail}\n`
+            );
+            process.exit(1);
+          }
+          const remotePort = resolvedRemote.port;
 
           // R-016a: wrap the ONE real TS-level dispatch call site in bounded retry.
           // RemoteTeamBackend.launch() returns { ok:false } on transient SSH connection
@@ -1780,7 +1895,7 @@ async function main(): Promise<void> {
                 // W2-A2: task_runs for remote specialists are already written in the
                 // pre-routing block above (single-source: written file drives routing).
                 // Do NOT re-write here; on retry the existing files are correct.
-                const res = remoteBackend.launch({
+                const attempt = remotePort.launch({
                   slug,
                   runId,
                   cwd,
@@ -1788,12 +1903,14 @@ async function main(): Promise<void> {
                   targetName,
                   mode,
                   dryRun: args.dryRun,
-                  teamPath: args.team, // C13: resolved per-phase path → orchestrator prompt
+                  teamPath: args.team ?? undefined, // C13: resolved per-phase path → orchestrator prompt
                 });
-                if (!res.ok) {
+                const res = attempt.value;
+                if (!res || !res.ok) {
                   // Throw so runWithRetry retries; carry the notes for the final error.
                   throw new Error(
-                    `remote dispatch failed — ${res.notes?.join("; ") ?? "unknown"}`
+                    `remote dispatch failed — ` +
+                      `${res?.notes?.join("; ") ?? attempt.detail ?? "unknown"}`
                   );
                 }
                 return Promise.resolve(res);
@@ -1854,7 +1971,7 @@ async function main(): Promise<void> {
             process.stdout.write(
               `[agent-team-launcher] dry-run — remote dispatch (${remoteSpecialists.length} specialist(s)):\n`
             );
-            for (const cmd of remoteResult.plannedCommands ?? []) {
+            for (const cmd of remoteResult.planned_commands ?? []) {
               process.stdout.write(`  ${cmd}\n`);
             }
           } else {
@@ -1880,7 +1997,7 @@ async function main(): Promise<void> {
               lanes: remoteSpecialists.map((s) => ({
                 specialist: s.name,
                 taskId: s.taskId,
-                paneId: remoteResult.teammatePaneIds?.[s.name],
+                paneId: remoteResult.teammate_pane_ids?.[s.name],
               })),
             });
             if (emittedRemote > 0) {
@@ -1935,18 +2052,47 @@ async function main(): Promise<void> {
     ...team.specialists.map((s) => s.host_kind ?? orchestratorHostKind),
   ].some((hostKind) => hostKind !== "claude");
 
-  // RE-4: the tmux spawn logic lives behind the TeamBackend seam. The launcher
-  // drives one TmuxTeamBackend for probes (availability, collision), pure
-  // command composition (plan), and the spawn/teardown loop. The launcher keeps
-  // the CLI-specific UX (exact error messages, exit codes, manifest, attach).
-  const tmux = new TmuxTeamBackend(adapterBacked ? { resolveAdapter: resolveAdapter() } : {});
+  // RE-4: the tmux spawn logic lives behind the TeamBackend seam. MH-04 BF-2:
+  // that seam is now reached ONLY through the versioned execution runtime — the
+  // launcher resolves the tmux transport and drives probes (availability,
+  // collision, preflight), the run-scoped launch, and session identity through
+  // the resolved port. The launcher keeps the CLI-specific UX (exact error
+  // messages, exit codes, manifest, attach).
+  const tmuxRuntime = createHostExecutionRuntime({
+    transports: { tmux: tmuxTransportPort(adapterBacked) },
+  });
+  const resolvedTmux = resolveDispatchPort(tmuxRuntime, "tmux");
+  if (!resolvedTmux.port) {
+    process.stderr.write(
+      `[agent-team-launcher] ERROR: tmux dispatch is unavailable — ${resolvedTmux.detail}\n`
+    );
+    process.exit(1);
+  }
+  const tmuxPort = resolvedTmux.port;
+
+  // The one run-scoped launch request, shared by the preflight probe and the
+  // launch itself so the two can never describe different runs.
+  const launchRequest = {
+    mode,
+    targetName,
+    cwd,
+    slug,
+    runId,
+    specialists: team.specialists,
+    dryRun: args.dryRun,
+    orchestratorHostKind,
+    // C13: the path the launcher was handed (--team, already resolved by the
+    // dispatch layer via resolveTeamFile) IS the resolved per-phase team file —
+    // thread it into the orchestrator prompt so the persisted reference matches.
+    teamPath: args.team,
+  };
 
   // For real (non-dry-run) launches: tmux must be installed, and the target must
   // not already exist (refuse to clobber). Which collision we check depends on
   // the mode: a session name (new-session) or a team window in the current
   // session (in-session). dry-run skips this — it never invokes tmux.
   if (!args.dryRun) {
-    if (!tmux.isAvailable()) {
+    if (tmuxPort.available().status !== "succeeded") {
       process.stderr.write(
         "[agent-team-launcher] ERROR: `tmux` is not installed or not on PATH.\n" +
           "  Install tmux (macOS: `brew install tmux`; Debian/Ubuntu: `apt install tmux`),\n" +
@@ -1955,10 +2101,23 @@ async function main(): Promise<void> {
       );
       process.exit(1);
     }
+    // A collision probe that does not come back succeeded is NOT "no collision":
+    // an unreadable namespace is refused rather than treated as a free name.
+    const collisionFor = (scope: "session" | "window"): boolean => {
+      const probed = tmuxPort.collision({ target_name: targetName, scope });
+      if (probed.status !== "succeeded" || !probed.value) {
+        process.stderr.write(
+          `[agent-team-launcher] ERROR: could not probe the tmux ${scope} namespace — ` +
+            `${probed.detail ?? probed.status}\n`
+        );
+        process.exit(1);
+      }
+      return probed.value.exists;
+    };
     if (mode === "in-session") {
       // One-team-per-session guard (§7.3): refuse to clobber an existing team
       // window of the same name in the current session.
-      if (tmux.windowExists(targetName)) {
+      if (collisionFor("window")) {
         process.stderr.write(
           `[agent-team-launcher] ERROR: a Guild team window "${targetName}" already exists ` +
             `in the current tmux session.\n` +
@@ -1969,7 +2128,7 @@ async function main(): Promise<void> {
         );
         process.exit(1);
       }
-    } else if (tmux.sessionExists(targetName)) {
+    } else if (collisionFor("session")) {
       process.stderr.write(
         `[agent-team-launcher] ERROR: tmux session "${targetName}" already exists.\n` +
           `  Refusing to clobber. Re-run with --session-name <unique-name>.\n`
@@ -1983,10 +2142,18 @@ async function main(): Promise<void> {
     // dependency, with ZERO panes opened (no partial spawn). No-op for a
     // pure-claude team (no resolver wired → preflight returns ok).
     if (adapterBacked) {
-      const pf = tmux.preflight(team.specialists, orchestratorHostKind);
+      const probed = tmuxPort.preflight(launchRequest);
+      if (probed.status !== "succeeded" || !probed.value) {
+        process.stderr.write(
+          `[agent-team-launcher] ERROR: mixed-host preflight could not run — ` +
+            `${probed.detail ?? probed.status}\n`
+        );
+        process.exit(1);
+      }
+      const pf = probed.value;
       if (!pf.ok) {
         const lines = pf.failures
-          .map((f) => `    - ${f.specialist} [${f.hostKind}]: ${f.message}`)
+          .map((f) => `    - ${f.specialist} [${f.host_kind}]: ${f.message}`)
           .join("\n");
         process.stderr.write(
           `[agent-team-launcher] ERROR: mixed-host preflight failed ` +
@@ -1997,21 +2164,18 @@ async function main(): Promise<void> {
     }
   }
 
-  const plan = tmux.plan({
-    mode,
-    targetName,
-    cwd,
-    slug,
-    runId,
-    specialists: team.specialists,
-    dryRun: args.dryRun,
-    orchestratorHostKind,
-    // C13: the path the launcher was handed (--team, already resolved by the
-    // dispatch layer via resolveTeamFile) IS the resolved per-phase team file —
-    // thread it into the orchestrator prompt so the persisted reference matches.
-    teamPath: args.team,
-  });
-  const commands = plan.commands;
+  // MH-04 BF-2: ONE run-scoped launch through the resolved port. A dry run asks
+  // the port for the launch it WOULD perform (the substrate is planned, never
+  // invoked); a real run asks it to perform one. Either way the launcher reads a
+  // closed typed outcome and owns only the UX.
+  const launched = tmuxPort.launch(launchRequest);
+  const launchResult = launched.value;
+  if (!launchResult) {
+    process.stderr.write(
+      `[agent-team-launcher] tmux dispatch failed: ${launched.detail ?? launched.status}\n`
+    );
+    process.exit(2);
+  }
 
   // W2-A2: task_runs for local specialists are already written in the pre-routing
   // block above (single-source: written file drives routing). No re-write here.
@@ -2022,7 +2186,7 @@ async function main(): Promise<void> {
     process.stdout.write(
       "[agent-team-launcher] dry-run — would execute the following tmux commands:\n"
     );
-    for (const c of commands) process.stdout.write(`  ${c.display}\n`);
+    for (const c of launchResult.planned_commands) process.stdout.write(`  ${c}\n`);
     // new-session mode finishes by attaching the terminal; in-session mode does
     // NOT attach (the select-window above already surfaced the team window).
     if (mode === "new-session") {
@@ -2050,17 +2214,23 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Real run: execute the plan through the backend. The backend runs each tmux
-  // command, tears down the partial target on first failure (kill-window
-  // in-session / kill-session new-session), and collects teammate pane ids.
-  const outcome = tmux.spawn(plan);
-  if (!outcome.ok) {
+  // Real run: the port executed the plan through the substrate, tearing down the
+  // partial target on first failure (kill-window in-session / kill-session
+  // new-session) and collecting teammate pane ids. The exact failed command and
+  // its stderr survive as typed fields, so this message is unchanged.
+  if (!launchResult.ok) {
     process.stderr.write(
-      `[agent-team-launcher] tmux command failed: ${outcome.failedCommand?.display ?? "(unknown)"}\n` +
-        `  stderr: ${outcome.stderr}\n`
+      `[agent-team-launcher] tmux command failed: ${launchResult.failed_command ?? "(unknown)"}\n` +
+        `  stderr: ${launchResult.failure_detail ?? ""}\n`
     );
     process.exit(2);
   }
+
+  const currentSessionName = (): string | null => {
+    const identity = tmuxPort.sessionIdentity();
+    if (identity.status !== "succeeded" || !identity.value) return null;
+    return identity.value.session_name;
+  };
 
   // ── #76: pane dispatch → the ORCHESTRATING run's trace ───────────────────
   // The panes are separate interactive host sessions; their own hooks write
@@ -2078,7 +2248,7 @@ async function main(): Promise<void> {
       lanes: team.specialists.map((s) => ({
         specialist: s.name,
         taskId: s.taskId,
-        paneId: outcome.teammatePaneIds[s.name],
+        paneId: launchResult.teammate_pane_ids[s.name],
       })),
     });
     if (emitted > 0) {
@@ -2105,14 +2275,14 @@ async function main(): Promise<void> {
       mode,
       sessionName:
         mode === "in-session"
-          ? tmux.currentSessionName() ?? "(current tmux session)"
+          ? currentSessionName() ?? "(current tmux session)"
           : targetName,
       windowName: mode === "in-session" ? targetName : null,
       specialists: team.specialists,
       dryRun: false,
       realPaneIds: {
-        orchestrator: outcome.orchestratorPaneId,
-        teammates: outcome.teammatePaneIds,
+        orchestrator: launchResult.orchestrator_pane_id ?? "",
+        teammates: launchResult.teammate_pane_ids,
       },
       orchestratorHostKind,
     })

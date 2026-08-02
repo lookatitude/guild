@@ -35,7 +35,7 @@ import {
   type TaskAssignmentV2,
   type TaskAttemptV1,
   type ToolPermissionProjection,
-} from "../../../../scripts/lib/core/contracts/task-cell-backend";
+} from "./task-cell-contract";
 
 /**
  * The launcher-facing dispatch descriptor for ONE task attempt. The launcher

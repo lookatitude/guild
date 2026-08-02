@@ -8,28 +8,28 @@
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "resource_path": "resources/hooks/dist/post-tool-use.js",
-      "sha256": "a8b5b5bb810acddbfc35289846e723d294b2c0f77880ac77a5d419994f4d964b"
+      "sha256": "e90e66a1bf3a3ada35ec9c066265563cea7a1630aaee1db9d0f66c362cba38e6"
     },
     {
       "category": "hooks",
       "id": "PreToolUse:pre-tool-use.js",
       "source_path": "hooks/dist/pre-tool-use.js",
       "resource_path": "resources/hooks/dist/pre-tool-use.js",
-      "sha256": "bf4525f7c510b7b8a9775ccdcf78b2dbc7ae17bdbc7714b02933d316149c9216"
+      "sha256": "d33e226d0a4fc89495be7a96c70a4590468511821f11b15ee6e19438ac8932a0"
     },
     {
       "category": "scripts",
       "id": "lib/cloud-consent-gate",
       "source_path": "scripts/lib/cloud-consent-gate.ts",
       "resource_path": "resources/scripts/lib/cloud-consent-gate.ts",
-      "sha256": "6e5037e148d940bfb78bc00b4d4e33029aa11ae6f2651706c627aecb6833c214"
+      "sha256": "1ba273bccaeb9afaaf419b5206001fde4efa8932a46d061f993f128b8aee701f"
     },
     {
       "category": "scripts",
       "id": "lib/cloud-task-packet",
       "source_path": "scripts/lib/cloud-task-packet.ts",
       "resource_path": "resources/scripts/lib/cloud-task-packet.ts",
-      "sha256": "515f0127e081dbac5987f5ed1d49ec4d946f32c84f77ef675174701448b1949c"
+      "sha256": "d948c46213c1fca35c6ff3bd8847f651ec072d34f152136a9ffb28b9a040ae1e"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "lib/permission-policy-schema",
       "source_path": "scripts/lib/permission-policy-schema.ts",
       "resource_path": "resources/scripts/lib/permission-policy-schema.ts",
-      "sha256": "56917bbaae7ca2625e3d5949bd201c28f3a2d2e4c1e0568368b5a12a3b82836d"
+      "sha256": "48c0f12546eb3999caa21d63507fd7db648756981a9fbfe954c260cb23b8d2f5"
     },
     {
       "category": "scripts",

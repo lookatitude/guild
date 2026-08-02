@@ -18,6 +18,8 @@
  * `requiredEntriesFor(mode)` for the "complete enough" gate (V1).
  */
 
+import { deepFreeze } from "../../kernel";
+
 /** Schema version stamped on this manifest contract. */
 export const INIT_SCAFFOLD_SCHEMA_VERSION = "guild.init_scaffold.v1" as const;
 
@@ -94,7 +96,15 @@ export interface ScaffoldEntry {
  * readers/writers while `.guild/knowledge/indexes/` becomes the structured
  * knowledge-layer home for new consumers.
  */
-const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = [
+/**
+ * DEEP-FROZEN, and the freeze here is what protects the three EXPORTED arrays.
+ * `singleProject`, `workspaceRoot` and `repairRequired` are all built by spreading or
+ * filtering this array, so they share ELEMENT OBJECT IDENTITY with it: before this,
+ * `singleProject[0].path = "x"` also changed `repairRequired[0].path`, because they are
+ * the same object. Freezing the three exported arrays only closes the arrays; the shared
+ * element graph has to be frozen at its source.
+ */
+const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
   {
     path: ".guild/guild.yaml",
     kind: "file",
@@ -347,13 +357,14 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = [
     version: "guild.architecture_map.v1",
     description: "Brownfield-only architecture-map stub. Seeded for brownfield init; absence is not a broken install.",
   },
-] as const;
+] as const);
 
 // ---------------------------------------------------------------------------
 // Workspace-root-only additions (spec §O line 110 — "Workspace mode additionally creates")
 // ---------------------------------------------------------------------------
 
-const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = [
+/** Deep-frozen for the same shared-identity reason as STANDARD_ROOT_FLOOR. */
+const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = deepFreeze([
   {
     path: ".guild/workspace.json",
     kind: "file",
@@ -407,21 +418,21 @@ const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = [
     version: "guild.initiatives_registry.v1",
     description: "Workspace initiative registry (scope resolution for initiative_default inheritance).",
   },
-] as const;
+] as const);
 
 // ---------------------------------------------------------------------------
 // Exported manifest arrays (spec §O line 110 — "exports three arrays")
 // ---------------------------------------------------------------------------
 
 /** Complete scaffold for a single-project install. */
-export const singleProject: readonly ScaffoldEntry[] = [...STANDARD_ROOT_FLOOR];
+export const singleProject: readonly ScaffoldEntry[] = Object.freeze([...STANDARD_ROOT_FLOOR]);
 
 /**
  * Complete scaffold for a workspace-root install — the standard root floor PLUS
  * the workspace-only additions. Self-contained: consumers do not concat with
  * `singleProject`.
  */
-export const workspaceRoot: readonly ScaffoldEntry[] = [...STANDARD_ROOT_FLOOR, ...WORKSPACE_EXTRAS];
+export const workspaceRoot: readonly ScaffoldEntry[] = Object.freeze([...STANDARD_ROOT_FLOOR, ...WORKSPACE_EXTRAS]);
 
 /**
  * The mode-independent required floor — entries whose absence marks ANY install
@@ -433,8 +444,8 @@ export const workspaceRoot: readonly ScaffoldEntry[] = [...STANDARD_ROOT_FLOOR, 
  * Note `.guild/workspace.json` is NOT here: its presence is the very signal that
  * selects workspace_root mode, so it is required only in that mode.
  */
-export const repairRequired: readonly ScaffoldEntry[] = STANDARD_ROOT_FLOOR.filter(
-  (e) => e.repair_required,
+export const repairRequired: readonly ScaffoldEntry[] = Object.freeze(
+  STANDARD_ROOT_FLOOR.filter((e) => e.repair_required),
 );
 
 // ---------------------------------------------------------------------------

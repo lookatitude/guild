@@ -116,6 +116,12 @@ const VALUE_OVERRIDES: Record<string, string> = {
   "defaults.retry.backoff": "exponential",
   "defaults.wiki.autopromote": "false", // always-false invariant (agents emit candidates only) — true is rejected
 
+  // S5 (cap-loc-D04) — capability localization enums. Values differ from their
+  // defaults on purpose: this matrix persists a value and reads it back, so a value
+  // equal to the default would pass vacuously.
+  "capability.resolver_mode": "shadow",
+  "capability.auto_create_policy": "never",
+
   "security.bypass_permissions_policy": "allow",
   "secrets_policy.fail_mode_durable": "open",
   "secrets_policy.fail_mode_telemetry": "closed",
@@ -183,7 +189,9 @@ describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () 
     expect(KEY_EDITS.length).toBe(Object.keys(CONFIG_UI_METADATA).length);
     // rf-wi-01 (G1): +5 — host_mode, defaults.lean_lead.{enabled,hands_on_edit_threshold},
     // defaults.lifecycle_gate.{enabled,adhoc_activity_threshold}.
-    expect(KEY_EDITS.length).toBe(137);
+    // S5 (cap-loc-D04): +4 — capability.{resolver_mode,suggestion_budget,
+    // starter_roles,auto_create_policy}.
+    expect(KEY_EDITS.length).toBe(141);
     // every enum/object_editor key resolved to a concrete value (no generator throw)
     for (const e of KEY_EDITS) expect(typeof e.value).toBe("string");
   });

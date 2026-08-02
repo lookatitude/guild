@@ -1,0 +1,27 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: xhrd-wi-02
+initiative_id: cross-host-release-distribution
+title: "G2 — single version source-of-truth: generate every host manifest from one canonical version field + a red-first CI drift gate"
+type: implementation
+status: done
+owner: tooling-engineer
+depends_on: []
+acceptance:
+  - "per goals.md §G2 — one canonical version field; .claude-plugin/plugin.json, marketplace.json, guild.inventory.json, dist/codex/.codex-plugin/plugin.json and every dist/<host>/<host>-manifest.json are generated from it"
+  - "CI drift gate fails a release whose generated host manifests disagree with the SoT — proven RED FIRST with a deliberately skewed manifest fixture, then green"
+  - "SERIALIZED lane: no other lane touching .claude-plugin/**, guild.inventory.json, or scripts/build-host-packages.ts runs concurrently (xhrd-def-risk-2)"
+  - "full determinism + equivalence suites re-run before merge: SC-2 Claude full-tree equivalence, check-bundle-determinism, live-surface guards p2-w2-sc5 / p2-w3-sc6"
+  - "the release-branch two-commit shape (bump + changelog) still works end-to-end after the change — release-discipline rules 1-3 unchanged"
+  - "codex adversarial review RAN; PR to next"
+evidence_refs:
+  - "PR #98 (feature/xhrd-wi-02-version-sot -> next) — awaiting review/merge"
+  - "receipt: .guild/runs/run-3de5c1bb-5ee7-42ba-851f-6e0aa9190477/handoffs/tooling-engineer-xhrd-wi-02.md"
+  - "FINDING: the SoT + generation + marketplace drift gate ALREADY existed; the real gap was (a) build-inventory.ts --check wired nowhere, (b) the release procedure hand-editing TWO manifests"
+  - "LIVE DEFECT FIXED: origin/next guild.inventory.json was missing lib/emit-remote-orphan.ts (added by PR #88) with CI green"
+  - "red-first: version-source-of-truth.test.ts skews committed marketplace.json -> --check-claude-install rejects; inventory-drift-gate.test.ts proves --check non-vacuous + pins CI step ordering by parsing the workflow"
+  - "release collapsed to ONE hand edit: bump plugin.json, then sync:claude-install + build:inventory (AGENTS.md + release-discipline rule 1 + checklist)"
+  - "codex adversarial review: round 1 raised 2 blockers + 1 major, all fixed; round 2 TIMED OUT — fixes not gate-re-reviewed, confirming pass requested in the PR"
+  - "goals.md §G2"
+  - ".claude-plugin/plugin.json + .claude-plugin/marketplace.json (version hand-bumped in two places today)"
+  - "scripts/build-host-packages.ts:530 (codex manifest generation), :726-768 (wrapped-CLI manifests)"
+  - "scripts/build-inventory.ts, guild.inventory.json"

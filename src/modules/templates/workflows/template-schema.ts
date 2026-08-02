@@ -33,6 +33,8 @@
  * Owned by tooling-engineer (LW3-1); consumed by LW3-5 (producer skill), LW3-6 (negatives).
  */
 
+import { deepFreeze } from "../../kernel";
+
 import {
   EXPLORE_SCHEMA_VERSION,
   validateExploreV1,
@@ -340,7 +342,7 @@ export function instantiateTemplate(template: unknown): InstantiateResult {
 // ---------------------------------------------------------------------------
 
 /** A valid `guild.template.v1` sample. Frozen, deterministic — no clock/random. */
-export const TEMPLATE_V1_EXAMPLE: TemplateV1 = {
+export const TEMPLATE_V1_EXAMPLE: TemplateV1 = deepFreeze({
   schema_version: TEMPLATE_SCHEMA_VERSION,
   id: "cli-tool",
   specialists: ["architect", "backend", "qa", "doc-writer"],
@@ -371,7 +373,7 @@ export const TEMPLATE_V1_EXAMPLE: TemplateV1 = {
   default_checks: ["unit tests green", "`--help` snapshot matches"],
   docs_expectations: ["a README with a quickstart", "a man-page / `--help` reference"],
   release_gates: ["all tests pass", "changelog entry written"],
-};
+});
 
 // ---------------------------------------------------------------------------
 // Import-pure self-check (NO process IO at module scope — F8-F11). LW3-6 may call it.

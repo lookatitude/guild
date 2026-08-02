@@ -262,7 +262,13 @@ export function createWrappedCliAdapter(config: WrappedCliAdapterConfig): HostAd
       const wrapperArgs = Array.isArray(taskRun["args"]) ? (taskRun["args"] as unknown[]).map(String) : null;
       const wrapperEnv =
         taskRun["env"] && typeof taskRun["env"] === "object" ? (taskRun["env"] as Record<string, string>) : {};
-      const plainArgs = [...(subcommand ? [subcommand] : []), prompt];
+      // opencode: a bare positional is a PROJECT PATH — `opencode "<prompt>"`
+      // opens the interactive TUI (VERIFIED 2026-07-30, opencode 1.18.5,
+      // issue #104); its non-interactive form is the `run` subcommand.
+      const plainArgs =
+        HOST_ID === "opencode"
+          ? ["run", prompt]
+          : [...(subcommand ? [subcommand] : []), prompt];
       return makeResult(
         HOST_ID,
         "dispatch",

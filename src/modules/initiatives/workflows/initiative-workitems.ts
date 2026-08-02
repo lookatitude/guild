@@ -11,12 +11,12 @@
  */
 import type { D8Result, DocumentationStatus } from "./initiative";
 
-export const WORK_ITEM_TYPES = [
+export const WORK_ITEM_TYPES = Object.freeze([
   "research", "design", "implementation", "review", "validation", "docs", "release", "cleanup",
-] as const;
-export const WORK_ITEM_STATUS = [
+] as const);
+export const WORK_ITEM_STATUS = Object.freeze([
   "proposed", "ready", "in_progress", "blocked", "done", "deferred", "cancelled",
-] as const;
+] as const);
 export type WorkItemType = (typeof WORK_ITEM_TYPES)[number];
 export type WorkItemStatus = (typeof WORK_ITEM_STATUS)[number];
 

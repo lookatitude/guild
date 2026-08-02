@@ -22,7 +22,7 @@
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "34ce282127af25a7422b9ae21a0993503a205c7bab22e87f9b8d2949a1684222"
+      "sha256": "9c39f1e1e5371f00d60f09d33a338054d7464b35d98de43a2bb4b10cf0743fea"
     },
     {
       "category": "hooks",
@@ -40,10 +40,31 @@
     },
     {
       "category": "scripts",
+      "id": "check-path-containment",
+      "source_path": "scripts/check-path-containment.ts",
+      "resource_path": "resources/scripts/check-path-containment.ts",
+      "sha256": "217d84a508222eaea28cd8692beabf0bfc515b4422a200cb2048caacba0b8a9b"
+    },
+    {
+      "category": "scripts",
       "id": "lib/module-manifest",
       "source_path": "scripts/lib/module-manifest.ts",
       "resource_path": "resources/scripts/lib/module-manifest.ts",
       "sha256": "4a6affdbf4a05bec7191b796f8259fc9f475662ad3beae9df761a3e1f19a3d3f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/path-containment-registry",
+      "source_path": "scripts/lib/path-containment-registry.ts",
+      "resource_path": "resources/scripts/lib/path-containment-registry.ts",
+      "sha256": "976449640031a068e2aa9c7e9e08bee62a1df9a8a260bb74c5c9df2b32c275d3"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/path-containment-scan",
+      "source_path": "scripts/lib/path-containment-scan.ts",
+      "resource_path": "resources/scripts/lib/path-containment-scan.ts",
+      "sha256": "e502de0e6347cbca8e1acd0fc55ce95fa9856bbde5da2d5628dcc6355b3d9a8d"
     },
     {
       "category": "scripts",

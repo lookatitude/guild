@@ -8,7 +8,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "2cad389c7451df1188544496f80b53472e8c2df86ea9781ed9add7b7ce5ae497"
+      "sha256": "9da9f0b2d6bedf47fb370120ee022bff16710d63cd87552078f1fff7b66f50a5"
     },
     {
       "category": "scripts",
@@ -19,17 +19,24 @@
     },
     {
       "category": "scripts",
+      "id": "build-release-candidate",
+      "source_path": "scripts/build-release-candidate.ts",
+      "resource_path": "resources/scripts/build-release-candidate.ts",
+      "sha256": "07297774a0f7a413f27dd78234a53f9ea13555a09cdd872ae7ec102da503dadc"
+    },
+    {
+      "category": "scripts",
       "id": "build-verify",
       "source_path": "scripts/build-verify.ts",
       "resource_path": "resources/scripts/build-verify.ts",
-      "sha256": "424842e8b8e90b2aaaeae5c6176a02ba6e2361db40fe5722343bb0ac1e6f6daf"
+      "sha256": "3e32b95074258e99bbe9b63399d180249a22eedcd6c19396abd0ef6d7e680d1d"
     },
     {
       "category": "scripts",
       "id": "check-bundle-determinism",
       "source_path": "scripts/check-bundle-determinism.ts",
       "resource_path": "resources/scripts/check-bundle-determinism.ts",
-      "sha256": "c4d24dd72680f658c18e17b02a4328919410b26a5b63ef10c9d98c4d67167a33"
+      "sha256": "4784ec576452c93df36ac0cc372d512a01b631564cdb024719a8341432eb34af"
     },
     {
       "category": "scripts",
@@ -43,7 +50,7 @@
       "id": "check-entrypoint-packaging",
       "source_path": "scripts/check-entrypoint-packaging.ts",
       "resource_path": "resources/scripts/check-entrypoint-packaging.ts",
-      "sha256": "9b334ed148f0fda88ff7ecc6f00e9d9df2c899cf50be00e28656ab6ebbf8e975"
+      "sha256": "c7bf4739bbfebf84782416efa57369cec7b5e54926b42363d48ddbba23d115f8"
     },
     {
       "category": "scripts",
@@ -85,7 +92,7 @@
       "id": "lib/command-registry",
       "source_path": "scripts/lib/command-registry.ts",
       "resource_path": "resources/scripts/lib/command-registry.ts",
-      "sha256": "1344f1b4d2fbbdc445943957c033dee447997481615b4f4003834f2672213ece"
+      "sha256": "3daaeffd629847c82bf798020d0461a8ddb59b216a97d5d02ee913bf38d9a40f"
     },
     {
       "category": "scripts",
@@ -124,6 +131,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/release-distribution-contract",
+      "source_path": "scripts/lib/release-distribution-contract.ts",
+      "resource_path": "resources/scripts/lib/release-distribution-contract.ts",
+      "sha256": "4f1782d8f00cb454f5341c695047bcb288eb43ddfc1d5c1420ff495c3b2fe2cd"
+    },
+    {
+      "category": "scripts",
       "id": "lib/result-contracts",
       "source_path": "scripts/lib/result-contracts.ts",
       "resource_path": "resources/scripts/lib/result-contracts.ts",
@@ -141,7 +155,7 @@
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "resource_path": "resources/scripts/lib/skill-source-transform.ts",
-      "sha256": "917365be01690f997e909d7be651baef771c9a6d42989254a86c163d17cd5075"
+      "sha256": "89577b0e0aa3af1011de629475437f0bb399c5683e8cf466102ccf2771a695bd"
     },
     {
       "category": "scripts",
@@ -155,7 +169,15 @@
       "id": "lib/update-check",
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
-      "sha256": "341fd133d15f130300587f72bffb9d386f9f01beafd123c048a2563606784e52"
+      "sha256": "9179ac56a28d7725706280b20488fc78c21a7ace7dd19475796d619d6ada0226"
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-distribution-contract.ts",
+      "source_path": "src/modules/distribution/workflows/release-distribution-contract.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-distribution-contract.ts",
+      "sha256": "ebe668778c60434010d73f2d546ddd891fb9dcabfa54ee2b20a85d4123cdd789",
+      "projection_dependency": true
     },
     {
       "category": "scripts",

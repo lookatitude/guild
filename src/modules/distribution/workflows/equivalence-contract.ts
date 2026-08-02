@@ -39,6 +39,8 @@
  * empty in one side but populated in the other is a mismatch unless covered by
  * an INTENTIONAL_EXCLUSION.
  */
+import { sealSet, deepFreeze } from "../../kernel";
+
 export interface LogicalPackage {
   /** Parsed .claude-plugin/plugin.json object. */
   manifest: Record<string, unknown>;
@@ -59,7 +61,7 @@ export interface LogicalPackage {
 }
 
 /** The eight logical surfaces, in scope for SC-2. Iterated by the checker. */
-export const EQUIVALENCE_SURFACES = [
+export const EQUIVALENCE_SURFACES = Object.freeze([
   "manifest",
   "commands",
   "skills",
@@ -68,7 +70,7 @@ export const EQUIVALENCE_SURFACES = [
   "bootstrap_sh",
   "mcp_json",
   "script_refs",
-] as const;
+] as const);
 
 // ---------------------------------------------------------------------------
 // Enumerated INTENTIONAL exclusions (SC-2 "or every omission enumerated")
@@ -87,7 +89,7 @@ export interface IntentionalExclusion {
  * The CLOSED set of intentional exclusions for Phase 1. Any delta NOT on this
  * list is a SC-2 failure. Adding to this list is an explicit, reviewed decision.
  */
-export const INTENTIONAL_EXCLUSIONS: IntentionalExclusion[] = [
+export const INTENTIONAL_EXCLUSIONS: readonly IntentionalExclusion[] = deepFreeze([
   {
     path: "hooks_json.SessionStart (using-guild additionalContext injection)",
     reason:
@@ -112,21 +114,21 @@ export const INTENTIONAL_EXCLUSIONS: IntentionalExclusion[] = [
       "normalizeJson() sorts arrays of path-strings for these manifest fields " +
       "(see SORTED_MANIFEST_ARRAYS) so order deltas are not failures.",
   },
-];
+]);
 
 // ---------------------------------------------------------------------------
 // Normalization
 // ---------------------------------------------------------------------------
 
 /** Render-provenance keys stripped from every JSON object before comparison. */
-export const PROVENANCE_FIELDS = new Set<string>([
+export const PROVENANCE_FIELDS = sealSet([
   "_rendered_at",
   "_source_version",
   "generated_at",
-]);
+], "PROVENANCE_FIELDS");
 
 /** Manifest array fields whose element order is normalized (sorted) before compare. */
-export const SORTED_MANIFEST_ARRAYS = new Set<string>(["skills", "commands", "agents"]);
+export const SORTED_MANIFEST_ARRAYS = sealSet(["skills", "commands", "agents"], "SORTED_MANIFEST_ARRAYS");
 
 /**
  * Recursively canonicalize a JSON value: drop provenance fields, sort object keys,

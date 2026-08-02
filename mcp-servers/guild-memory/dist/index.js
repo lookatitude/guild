@@ -28,6 +28,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
@@ -9834,6 +9835,13 @@ var require_js_yaml = __commonJS({
 });
 
 // src/index.ts
+var index_exports = {};
+__export(index_exports, {
+  PayloadScopedRootError: () => PayloadScopedRootError,
+  RelativeProjectRootError: () => RelativeProjectRootError,
+  UnresolvedProjectRootError: () => UnresolvedProjectRootError
+});
+module.exports = __toCommonJS(index_exports);
 var fs = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
@@ -24124,12 +24132,107 @@ function bm25Score(queryTokens, docs) {
 }
 
 // src/index.ts
+var NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
+var CWD_PARAM_DESCRIPTION = NO_CWD_FALLBACK ? "REQUIRED here \u2014 absolute path of the consuming project root. This server runs outside the project and has no default; calls without it fail." : "Override consuming-repo root (defaults to the server's working directory).";
+var UnresolvedProjectRootError = class extends Error {
+  constructor() {
+    super(
+      "guild-memory: no project root available. This host launches the MCP server outside the consuming project (--no-cwd-fallback), so the working directory cannot be used. Pass `cwd` with the absolute path of the project root on the tool call, or set GUILD_MEMORY_WIKI_ROOT to the wiki directory."
+    );
+    this.name = "UnresolvedProjectRootError";
+  }
+};
+var RelativeProjectRootError = class extends Error {
+  constructor(source, value) {
+    super(
+      `guild-memory: ${source} must be an ABSOLUTE path here (got "${value}"). This server runs outside the consuming project, so a relative path would resolve against the plugin payload and return the plugin's own data. Pass the absolute project root.`
+    );
+    this.name = "RelativeProjectRootError";
+  }
+};
+var PayloadScopedRootError = class extends Error {
+  constructor(source, value) {
+    super(
+      `guild-memory: ${source} resolves inside this server's own plugin payload ("${value}"). That would return the plugin's bundled data instead of the consuming project's. Pass the absolute root of the project you are working in.`
+    );
+    this.name = "PayloadScopedRootError";
+  }
+};
+var PAYLOAD_ROOT = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
+var PAYLOAD_FS_CASE_INSENSITIVE = (() => {
+  if (PAYLOAD_ROOT === null) return false;
+  const flipped = PAYLOAD_ROOT.split("").map((ch) => ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()).join("");
+  if (flipped === PAYLOAD_ROOT) return false;
+  try {
+    const a = fs.statSync(PAYLOAD_ROOT);
+    const b = fs.statSync(flipped);
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false;
+  }
+})();
+function realpathOrSelf(p) {
+  let cur = path.resolve(p);
+  const tail = [];
+  for (; ; ) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p);
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+function sameDirectory(a, b) {
+  try {
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
+function assertNotPayloadScoped(candidate, source) {
+  if (PAYLOAD_ROOT === null) return;
+  const real = realpathOrSelf(candidate);
+  let cur = real;
+  for (; ; ) {
+    if (sameDirectory(cur, PAYLOAD_ROOT)) {
+      throw new PayloadScopedRootError(source, candidate);
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  const compare = (v) => PAYLOAD_FS_CASE_INSENSITIVE ? v.toLowerCase() : v;
+  const c = compare(real);
+  const pay = compare(PAYLOAD_ROOT);
+  if (c === pay || c.startsWith(pay + path.sep)) {
+    throw new PayloadScopedRootError(source, candidate);
+  }
+}
 function resolveWikiRoot(cwdArg) {
   if (cwdArg) {
-    return path.join(path.resolve(cwdArg), ".guild", "wiki");
+    if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
+      throw new RelativeProjectRootError("cwd", cwdArg);
+    }
+    const wikiRoot = path.join(path.resolve(cwdArg), ".guild", "wiki");
+    assertNotPayloadScoped(wikiRoot, "cwd");
+    return wikiRoot;
   }
-  if (process.env.GUILD_MEMORY_WIKI_ROOT) {
-    return path.resolve(process.env.GUILD_MEMORY_WIKI_ROOT);
+  const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
+  if (envRoot) {
+    if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
+      throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
+    }
+    const envWiki = path.resolve(envRoot);
+    assertNotPayloadScoped(envWiki, "GUILD_MEMORY_WIKI_ROOT");
+    return envWiki;
+  }
+  if (NO_CWD_FALLBACK) {
+    throw new UnresolvedProjectRootError();
   }
   return path.join(process.cwd(), ".guild", "wiki");
 }
@@ -24245,7 +24348,10 @@ function buildServer() {
   const server = new McpServer(
     { name: "guild-memory", version: "0.1.0" },
     {
-      instructions: "BM25 search, read, and list over .guild/wiki/. Read-only. Pass `cwd` to override the consuming repo root per-tool, or set GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory."
+      // Flag-aware: under --no-cwd-fallback there is no default root at all, so
+      // the instructions must say REQUIRED, not "override". A caller reading the
+      // old text would have its first call fail (gate r3 finding).
+      instructions: NO_CWD_FALLBACK ? "BM25 search, read, and list over .guild/wiki/. Read-only. IMPORTANT: this server was launched OUTSIDE the consuming project, so it has no default root. You MUST pass `cwd` (absolute path of the project root) on EVERY tool call, or set GUILD_MEMORY_WIKI_ROOT. Calls without it fail." : "BM25 search, read, and list over .guild/wiki/. Read-only. Pass `cwd` to override the consuming repo root per-tool, or set GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory."
     }
   );
   server.registerTool(
@@ -24257,7 +24363,7 @@ function buildServer() {
         query: external_exports.string().min(1).describe("Free-text query"),
         category: external_exports.string().optional().describe("Restrict to a single wiki category (e.g. 'decisions')"),
         limit: external_exports.number().int().min(1).max(200).optional().describe("Max number of results (default 20)"),
-        cwd: external_exports.string().optional().describe("Override consuming-repo root (defaults to server cwd)")
+        cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION)
       }
     },
     async ({ query, category, limit, cwd }) => {
@@ -24290,7 +24396,7 @@ function buildServer() {
       description: "Return the full content and parsed YAML frontmatter for a wiki page. `path` must be a relative path inside the wiki root.",
       inputSchema: {
         path: external_exports.string().min(1).describe("Wiki-relative path, e.g. 'decisions/foo.md'"),
-        cwd: external_exports.string().optional().describe("Override consuming-repo root")
+        cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION)
       }
     },
     async ({ path: rel, cwd }) => {
@@ -24315,7 +24421,7 @@ function buildServer() {
       inputSchema: {
         category: external_exports.string().optional().describe("Filter by category"),
         updated_since: external_exports.string().optional().describe("ISO date/time; keep pages with `updated_at` (or legacy `updated`) on/after this"),
-        cwd: external_exports.string().optional().describe("Override consuming-repo root")
+        cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION)
       }
     },
     async ({ category, updated_since, cwd }) => {
@@ -24358,4 +24464,10 @@ main().catch((err) => {
   process.stderr.write(`[guild-memory] fatal: ${err?.stack ?? err}
 `);
   process.exit(1);
+});
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  PayloadScopedRootError,
+  RelativeProjectRootError,
+  UnresolvedProjectRootError
 });

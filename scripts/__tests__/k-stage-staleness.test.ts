@@ -206,9 +206,16 @@ describe("Section A — file type classifiers", () => {
   });
 
   it("A35: CODE_EXTENSIONS, DOC_EXTENSIONS, DIAGRAM_EXTENSIONS are Sets of strings", () => {
-    expect(CODE_EXTENSIONS).toBeInstanceOf(Set);
-    expect(DOC_EXTENSIONS).toBeInstanceOf(Set);
-    expect(DIAGRAM_EXTENSIONS).toBeInstanceOf(Set);
+    // The CONTRACT is "a closed, iterable, membership-queryable vocabulary of strings",
+    // not "an instance of Set". These are sealed vocabularies, which are deliberately not
+    // Sets — `Set.prototype.delete.call(x, k)` reaches a real Set's internal slot past any
+    // neutered own method, so a branded Set cannot be closed at all.
+    for (const vocabulary of [CODE_EXTENSIONS, DOC_EXTENSIONS, DIAGRAM_EXTENSIONS]) {
+      expect(typeof vocabulary.has).toBe("function");
+      expect(typeof vocabulary.size).toBe("number");
+      expect(typeof (vocabulary as unknown as Iterable<string>)[Symbol.iterator]).toBe("function");
+      expect([...vocabulary].every((v) => typeof v === "string")).toBe(true);
+    }
     expect([...CODE_EXTENSIONS].every((e) => e.startsWith("."))).toBe(true);
     expect(DIAGRAM_EXTENSIONS.has(".svg")).toBe(true);
   });

@@ -1,5 +1,38 @@
 # schema_version: guild.initiatives_registry.v1
 initiatives:
+  - id: cross-host-release-distribution
+    title: "Cross-host release distribution — one version SoT, remote registration for remote-capable hosts, and a host-neutral staleness signal so every registry host tracks the released version"
+    status: closed
+    execution_status: done
+    closed_at: 2026-07-27
+    released_in: v2.4.0
+    path: .guild/initiatives/archived/cross-host-release-distribution
+    created_at: 2026-07-25
+    target_repo: plugin
+    goals_doc: .guild/initiatives/archived/cross-host-release-distribution/goals.md
+    evidence: "operator report — Codex app pinned at 2.2.0 while stable shipped 2.3.2. G1 (xhrd-wi-01, PR #97) REFUTED the publish-infrastructure thesis: `codex plugin marketplace add lookatitude/guild --ref main` installs 2.3.2 today. Real defect: install.sh registers a LOCAL path into a gitignored dist/ for the 3 remote-capable hosts (codex/pi/antigravity); no staleness signal outside claude-code-cli; ~/.guild/receipts empty; origin/next 2.3.1 trails origin/main 2.3.2. Canonical: .guild/wiki/standards/host-distribution-matrix.md"
+  - id: run-tooling-hardening
+    title: "Run-tooling hardening — close the 5 reflect findings from the v2.3.0 wave (#72–#76)"
+    status: closed
+    execution_status: done
+    closed_at: 2026-07-23
+    released_in: v2.3.1
+    path: .guild/initiatives/archived/run-tooling-hardening
+    created_at: 2026-07-22
+    target_repo: plugin
+    goals_doc: .guild/initiatives/archived/run-tooling-hardening/goals.md
+    evidence: "issues #72–#76 (guild-learning, plugin-level); source: guild:reflect on run-37739fa5 + consented feedback-triage filing"
+  - id: open-issues-remediation
+    title: "Open-issues remediation — close all 8 open GitHub issues (#36, #54–#60): compaction drift hardening + dist/wiring defects"
+    status: closed
+    execution_status: done
+    closed_at: 2026-07-22
+    released_in: v2.3.0
+    path: .guild/initiatives/archived/open-issues-remediation
+    created_at: 2026-07-21
+    target_repo: plugin
+    goals_doc: .guild/initiatives/active/open-issues-remediation/goals.md
+    evidence: "github.com/lookatitude/guild issues #36 #54 #55 #56 #57 #58 #59 #60 (adversarially-verified forensic findings from the new-infra-migration run)"
   - id: plugin-audit-remediation
     title: "Plugin audit remediation — close the 47 confirmed findings of the 2026-07-12 full implementation audit"
     status: closed

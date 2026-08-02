@@ -59,12 +59,202 @@ import { WikiPageType, isWikiPageType } from "../../../src/modules/knowledge/wor
 
 // ─── Wiki root resolution ────────────────────────────────────────────────
 
+/**
+ * `--no-cwd-fallback` — set by a host whose launch cwd is NOT the consuming
+ * project.
+ *
+ * A Codex plugin install must declare `cwd: "."` so Codex can resolve the server
+ * path (measured: `${CLAUDE_PLUGIN_ROOT}`, bare-relative and `./`-relative args
+ * all fail to start; only an absolute path or a relative path plus `cwd` works,
+ * and an absolute path cannot be published from a version-keyed cache root).
+ * That cwd is the PLUGIN payload root, and Codex hands the child a scrubbed env
+ * with no workspace signal at all (measured: no PWD, no CODEX_*), so
+ * `process.cwd()` would silently resolve to Guild's OWN bundled `.guild/wiki`
+ * inside the install cache and serve Guild's self-build knowledge to the
+ * consumer.
+ *
+ * This cannot be detected by inspecting paths: a Guild DEVELOPER working in the
+ * guild checkout has cwd == plugin root too, and there the repo's own wiki is
+ * exactly what they want. The two cases are path-identical, so the host that
+ * knows the difference declares it — hence an explicit flag rather than a guess.
+ *
+ * With the flag set, the cwd fallback is removed: a root must arrive per-call
+ * (`cwd` argument) or via the env override, else the tool fails closed with an
+ * actionable message. Without it, behavior is unchanged (Claude Code and a dev
+ * checkout both launch the server in the consuming project).
+ */
+const NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
+
+/**
+ * The `cwd` parameter description the tools expose. Flag-aware for the same
+ * reason as the server instructions: under --no-cwd-fallback it is REQUIRED in
+ * practice, and a schema that calls it an optional override sends the caller
+ * into a guaranteed first-call failure.
+ */
+const CWD_PARAM_DESCRIPTION = NO_CWD_FALLBACK
+  ? "REQUIRED here — absolute path of the consuming project root. This server runs " +
+    "outside the project and has no default; calls without it fail."
+  : "Override consuming-repo root (defaults to the server's working directory).";
+
+/** Thrown when no project root can be determined and guessing would be wrong. */
+export class UnresolvedProjectRootError extends Error {
+  constructor() {
+    super(
+      "guild-memory: no project root available. This host launches the MCP server " +
+        "outside the consuming project (--no-cwd-fallback), so the working directory " +
+        "cannot be used. Pass `cwd` with the absolute path of the project root on the " +
+        "tool call, or set GUILD_MEMORY_WIKI_ROOT to the wiki directory."
+    );
+    this.name = "UnresolvedProjectRootError";
+  }
+}
+
+/** Thrown when a root arrives but is RELATIVE, which would resolve to the payload. */
+export class RelativeProjectRootError extends Error {
+  constructor(source: string, value: string) {
+    super(
+      `guild-memory: ${source} must be an ABSOLUTE path here (got "${value}"). This server runs ` +
+        "outside the consuming project, so a relative path would resolve against the plugin " +
+        "payload and return the plugin's own data. Pass the absolute project root."
+    );
+    this.name = "RelativeProjectRootError";
+  }
+}
+
+/** Thrown when a root points AT (or inside) this server's own payload tree. */
+export class PayloadScopedRootError extends Error {
+  constructor(source: string, value: string) {
+    super(
+      `guild-memory: ${source} resolves inside this server's own plugin payload ("${value}"). ` +
+        "That would return the plugin's bundled data instead of the consuming project's. " +
+        "Pass the absolute root of the project you are working in."
+    );
+    this.name = "PayloadScopedRootError";
+  }
+}
+
+/**
+ * The payload tree this server was launched from, canonicalized once.
+ * Only meaningful in flagged mode, where cwd IS the plugin payload.
+ */
+const PAYLOAD_ROOT: string | null = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
+
+/**
+ * Whether the payload lives on a case-insensitive filesystem, decided by
+ * MEASUREMENT rather than by platform guess: flip the case of the path and see
+ * whether it resolves to the same (device, inode). Only then may the string
+ * backstop fold case — otherwise it would reject legitimate sibling paths that
+ * differ only in case.
+ */
+const PAYLOAD_FS_CASE_INSENSITIVE: boolean = (() => {
+  if (PAYLOAD_ROOT === null) return false;
+  const flipped = PAYLOAD_ROOT.split("")
+    .map((ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()))
+    .join("");
+  if (flipped === PAYLOAD_ROOT) return false; // no cased characters to test with
+  try {
+    const a = fs.statSync(PAYLOAD_ROOT);
+    const b = fs.statSync(flipped);
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false; // flipped path does not resolve ⇒ case-sensitive
+  }
+})();
+
+/**
+ * Canonicalize a path that may not exist yet: realpath the nearest EXISTING
+ * ancestor and re-append the remainder. A plain realpath on a missing directory
+ * throws and would leave symlinked ancestors unresolved.
+ */
+function realpathOrSelf(p: string): string {
+  let cur = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p); // reached the filesystem root
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+/**
+ * Reject a root that is the payload itself, lives beneath it, or reaches it
+ * through a symlink. `path.isAbsolute` alone is not enough: an absolute path
+ * naming the payload (directly or via a link) still returned the plugin's own
+ * wiki/runs (gate r5, reproduced live against the shipped bundles).
+ */
+function sameDirectory(a: string, b: string): boolean {
+  // Identity by (device, inode) — the only comparison that is correct on a
+  // CASE-INSENSITIVE filesystem, where "…/Payload" and "…/payload" are one
+  // directory but two different strings (a case-variant path defeated the
+  // string compare and leaked payload data), and which also collapses
+  // symlinks and hardlinks for free.
+  try {
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
+
+function assertNotPayloadScoped(candidate: string, source: string): void {
+  if (PAYLOAD_ROOT === null) return;
+  const real = realpathOrSelf(candidate);
+  // Walk the candidate's existing ancestry: the payload is off-limits whether
+  // the candidate IS it or lives beneath it.
+  let cur = real;
+  for (;;) {
+    if (sameDirectory(cur, PAYLOAD_ROOT)) {
+      throw new PayloadScopedRootError(source, candidate);
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  // String backstop for paths that do not exist yet (stat cannot compare them).
+  // Case folding is applied ONLY where the filesystem is actually
+  // case-insensitive: on a case-SENSITIVE filesystem "/srv/Guild" and
+  // "/srv/guild/project" are unrelated directories, and folding would reject the
+  // second as payload-scoped — a legitimate root refused.
+  const compare = (v: string): string => (PAYLOAD_FS_CASE_INSENSITIVE ? v.toLowerCase() : v);
+  const c = compare(real);
+  const pay = compare(PAYLOAD_ROOT);
+  if (c === pay || c.startsWith(pay + path.sep)) {
+    throw new PayloadScopedRootError(source, candidate);
+  }
+}
+
 function resolveWikiRoot(cwdArg?: string): string {
   if (cwdArg) {
-    return path.join(path.resolve(cwdArg), ".guild", "wiki");
+    // In flagged mode a RELATIVE root would be path.resolve()d against the
+    // process cwd — which is the plugin payload — reopening the exact leak this
+    // guard exists to close (`cwd: "."` served the payload's own wiki).
+    if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
+      throw new RelativeProjectRootError("cwd", cwdArg);
+    }
+    // Check the EFFECTIVE data dir, not the project root: a root outside the
+    // payload whose `.guild/wiki` symlinks back INTO the payload would otherwise
+    // pass (gate r6). Checking the final target subsumes the root check.
+    const wikiRoot = path.join(path.resolve(cwdArg), ".guild", "wiki");
+    assertNotPayloadScoped(wikiRoot, "cwd");
+    return wikiRoot;
   }
-  if (process.env.GUILD_MEMORY_WIKI_ROOT) {
-    return path.resolve(process.env.GUILD_MEMORY_WIKI_ROOT);
+  const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
+  if (envRoot) {
+    if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
+      throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
+    }
+    const envWiki = path.resolve(envRoot);
+    assertNotPayloadScoped(envWiki, "GUILD_MEMORY_WIKI_ROOT");
+    return envWiki;
+  }
+  if (NO_CWD_FALLBACK) {
+    throw new UnresolvedProjectRootError();
   }
   return path.join(process.cwd(), ".guild", "wiki");
 }
@@ -289,10 +479,17 @@ function buildServer(): McpServer {
   const server = new McpServer(
     { name: "guild-memory", version: "0.1.0" },
     {
-      instructions:
-        "BM25 search, read, and list over .guild/wiki/. Read-only. " +
-        "Pass `cwd` to override the consuming repo root per-tool, or set " +
-        "GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory.",
+      // Flag-aware: under --no-cwd-fallback there is no default root at all, so
+      // the instructions must say REQUIRED, not "override". A caller reading the
+      // old text would have its first call fail (gate r3 finding).
+      instructions: NO_CWD_FALLBACK
+        ? "BM25 search, read, and list over .guild/wiki/. Read-only. " +
+          "IMPORTANT: this server was launched OUTSIDE the consuming project, so it has " +
+          "no default root. You MUST pass `cwd` (absolute path of the project root) on " +
+          "EVERY tool call, or set GUILD_MEMORY_WIKI_ROOT. Calls without it fail."
+        : "BM25 search, read, and list over .guild/wiki/. Read-only. " +
+          "Pass `cwd` to override the consuming repo root per-tool, or set " +
+          "GUILD_MEMORY_WIKI_ROOT to point directly at a wiki directory.",
     }
   );
 
@@ -322,7 +519,7 @@ function buildServer(): McpServer {
         cwd: z
           .string()
           .optional()
-          .describe("Override consuming-repo root (defaults to server cwd)"),
+          .describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ query, category, limit, cwd }) => {
@@ -364,7 +561,10 @@ function buildServer(): McpServer {
           .string()
           .min(1)
           .describe("Wiki-relative path, e.g. 'decisions/foo.md'"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z
+          .string()
+          .optional()
+          .describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ path: rel, cwd }) => {
@@ -398,7 +598,10 @@ function buildServer(): McpServer {
           .string()
           .optional()
           .describe("ISO date/time; keep pages with `updated_at` (or legacy `updated`) on/after this"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z
+          .string()
+          .optional()
+          .describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ category, updated_since, cwd }) => {

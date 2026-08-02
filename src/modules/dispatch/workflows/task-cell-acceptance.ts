@@ -53,7 +53,7 @@ import {
   type TaskAssignmentV2,
   type TaskAttemptV1,
   type TerminalState,
-} from "../../../../scripts/lib/core/contracts/task-cell-backend";
+} from "./task-cell-contract";
 
 // ── Path ids the run-tree records are keyed by (D6) ──────────────────────────
 

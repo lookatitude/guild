@@ -1,0 +1,24 @@
+{
+  "name": "guild",
+  "version": "2.5.0",
+  "mcpServers": {
+    "guild-memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "mcp-servers/guild-memory/dist/index.js",
+        "--no-cwd-fallback"
+      ],
+      "cwd": "."
+    },
+    "guild-telemetry": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "mcp-servers/guild-telemetry/dist/index.js",
+        "--no-cwd-fallback"
+      ],
+      "cwd": "."
+    }
+  }
+}

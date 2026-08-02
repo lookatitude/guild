@@ -33,8 +33,8 @@ __export(pre_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_tool_use_exports);
-var fs9 = __toESM(require("node:fs"));
-var path8 = __toESM(require("node:path"));
+var fs11 = __toESM(require("node:fs"));
+var path10 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -66,8 +66,116 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// lib/v1.4/log-jsonl-schema.ts
-var TOOL_CALL_TOOL_VALUES = [
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+function refuseMutator(label, method) {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+    );
+  };
+}
+function sealSet(values, label = "this Set") {
+  const inner = new Set(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value) => inner.has(value),
+    keys: () => inner.keys(),
+    values: () => inner.values(),
+    entries: () => inner.entries(),
+    forEach: (callback, thisArg) => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade));
+    },
+    [Symbol.iterator]: () => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear")
+  };
+  return Object.freeze(facade);
+}
+function isSealedCollection(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues(value) {
+  if (!isSealedCollection(value)) return void 0;
+  return [...value];
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
+// ../src/modules/kernel/workflows/path-containment.ts
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
+
+// ../src/modules/lifecycle/workflows/event-log-schema.ts
+var TOOL_CALL_TOOL_VALUES = Object.freeze([
   "Read",
   "Write",
   "Edit",
@@ -85,7 +193,35 @@ var TOOL_CALL_TOOL_VALUES = [
   "NotebookEdit",
   "BashOutput",
   "KillShell"
-];
+]);
+var HOOK_EVENT_NAMES = Object.freeze([
+  "SessionStart",
+  "SessionEnd",
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "Notification",
+  "Stop",
+  "SubagentStop",
+  "PreCompact",
+  "TaskCreated",
+  "TaskCompleted",
+  "TeammateIdle"
+]);
+var EVENT_TYPES = sealSet([
+  "phase_start",
+  "phase_end",
+  "specialist_dispatch",
+  "specialist_receipt",
+  "loop_round_start",
+  "loop_round_end",
+  "tool_call",
+  "hook_event",
+  "gate_decision",
+  "assumption_logged",
+  "escalation",
+  "codex_review_round"
+], "EVENT_TYPES");
 var RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function isSafeRunId(id) {
@@ -105,27 +241,35 @@ function assertSafeLaneId(id) {
   }
 }
 
-// lib/v1.4/log-jsonl-writer.ts
+// ../src/modules/lifecycle/workflows/event-log-writer.ts
 var import_node_path2 = require("node:path");
 
-// lib/v1.4/redact-log.ts
+// ../src/modules/security/workflows/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+
+// ../src/modules/security/workflows/scrubbed-write.ts
+var fs6 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
+var crypto = __toESM(require("node:crypto"));
+
+// ../src/modules/security/workflows/redact-log.ts
 var TOKEN_REDACTED = "[REDACTED_TOKEN]";
 var PATH_REDACTED = "[REDACTED]";
 var KV_REDACTED = "[REDACTED]";
 var HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
 var TRUNCATION_SUFFIX = "... [TRUNCATED]";
 var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = [
-  /Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g,
-  /\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g,
-  /\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g,
-  /\bghp_[A-Za-z0-9]{36}\b/g,
-  /\bgh[suor]_[A-Za-z0-9]{36}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{82}\b/g,
-  /\bxox[bp]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
-];
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+]);
 function redactTokenShapes(input) {
   let out = input;
   for (const re of TOKEN_SHAPE_PATTERNS) {
@@ -133,6 +277,13 @@ function redactTokenShapes(input) {
   }
   return out;
 }
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
 var HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
 function redactHomeDirPaths(input) {
   return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
@@ -235,7 +386,7 @@ function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
   out = truncateToCap(out, cap);
   return out;
 }
-var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
+var REDACTABLE_FIELD_NAMES = Object.freeze([
   "command_redacted",
   "result_excerpt_redacted",
   "payload_excerpt_redacted",
@@ -243,6 +394,7 @@ var REDACTABLE_FIELDS = /* @__PURE__ */ new Set([
   "assumption_text",
   "result"
 ]);
+var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
 function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   const out = { ...event };
   for (const [k, v] of Object.entries(out)) {
@@ -253,139 +405,355 @@ function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   return out;
 }
 
-// lib/v1.4/v1.4-lock.ts
-var import_node_fs = require("node:fs");
-var import_node_path = require("node:path");
-function stableLockPath(runDir) {
-  return (0, import_node_path.join)(runDir, "logs", ".lock");
-}
-function exclusionSentinelPath(runDir) {
-  return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
-}
-function initStableLockfile(runDir) {
-  const path9 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path9), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path9)) return;
-  try {
-    const fd = (0, import_node_fs.openSync)(path9, "wx");
-    (0, import_node_fs.closeSync)(fd);
-  } catch (err) {
-    if (err?.code !== "EEXIST") throw err;
+// ../src/modules/security/workflows/secrets.ts
+function applySecretsPolicy(value, policy, opts) {
+  if (typeof value !== "string") {
+    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
   }
-}
-var DEFAULT_BACKOFF_MS = [2, 5, 10, 25, 50, 100, 200];
-var DEFAULT_TIMEOUT_MS = 5e3;
-function sleepSyncMs(ms) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-  }
-}
-function withStableLock(runDir, fn, opts = {}) {
-  initStableLockfile(runDir);
-  const sentinel = exclusionSentinelPath(runDir);
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
-  const start = Date.now();
-  let attempt = 0;
-  for (; ; ) {
+  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
+  const failures = [];
+  for (const pat of policy.redaction_patterns) {
+    let re;
     try {
-      const fd = (0, import_node_fs.openSync)(sentinel, "wx");
-      try {
-        (0, import_node_fs.writeSync)(fd, `${process.pid}
-`);
-      } catch {
-      }
-      (0, import_node_fs.closeSync)(fd);
-      try {
-        return fn();
-      } finally {
-        try {
-          (0, import_node_fs.unlinkSync)(sentinel);
-        } catch {
-        }
-      }
+      re = new RegExp(pat, "g");
     } catch (err) {
-      const code = err?.code;
-      if (code !== "EEXIST") throw err;
-      if (Date.now() - start > timeoutMs) {
-        throw new Error(
-          `v1.4-lock: timed out waiting for ${sentinel} (${timeoutMs}ms). Stale lock? Remove the file if you are sure no other process holds it.`
-        );
-      }
-      const idx = Math.min(attempt, backoff.length - 1);
-      sleepSyncMs(backoff[idx]);
-      attempt += 1;
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    try {
+      out = out.replace(re, "[REDACTED]");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  return { value: out, ok: failures.length === 0, failures };
 }
 
-// lib/trace-v2.ts
-var crypto = __toESM(require("crypto"));
-var SIDECAR_MAX_BYTES = 16 * 1024;
-function genSpanId(runId, eventType, ts, actorId) {
-  const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
-  return crypto.createHash("sha256").update(material).digest("hex").slice(0, 16);
-}
+// ../src/modules/security/workflows/config.ts
+var fs4 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
 
-// lib/v1.4/log-jsonl-writer.ts
-function sidecarPath(runDir) {
-  return (0, import_node_path2.join)(runDir, "logs", "tool-call-pre.jsonl");
-}
-var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
 
-// lib/v1.4/log-jsonl-sidecar.ts
-var import_node_fs2 = require("node:fs");
-var import_node_path3 = require("node:path");
-var SIDECAR_MAX_BYTES2 = 1024 * 1024;
-function validateSidecarEntry(entry) {
-  assertSafeRunId(entry.run_id);
-  if (entry.lane_id !== void 0) assertSafeLaneId(entry.lane_id);
-}
-function capSidecarText(existing, incomingLine, maxBytes) {
-  if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
-    throw new Error(`log-jsonl: sidecar maxBytes must be positive; got ${maxBytes}`);
-  }
-  const combined = existing + incomingLine;
-  if (Buffer.byteLength(combined, "utf8") <= maxBytes) return combined;
-  const lines = combined.split("\n").filter((line) => line.length > 0);
-  const kept = [];
-  let total = 0;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
-    if (line === void 0) continue;
-    const bytes = Buffer.byteLength(line + "\n", "utf8");
-    if (kept.length > 0 && total + bytes > maxBytes) break;
-    if (bytes > maxBytes) {
-      return "";
-    }
-    kept.unshift(line);
-    total += bytes;
-  }
-  return kept.length === 0 ? "" : kept.join("\n") + "\n";
-}
-function appendSidecarPre(runDir, entry, opts = {}) {
-  validateSidecarEntry(entry);
-  const path9 = sidecarPath(runDir);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path9), { recursive: true });
-  const redacted = redactEventFields(entry, opts.fieldCap);
-  const line = JSON.stringify(redacted) + "\n";
-  const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
-  const appendCapped = () => {
-    const existing = (0, import_node_fs2.existsSync)(path9) ? (0, import_node_fs2.readFileSync)(path9, "utf8") : "";
-    (0, import_node_fs2.writeFileSync)(path9, capSidecarText(existing, line, maxBytes));
-  };
-  if (process.platform === "win32") {
-    appendCapped();
-    return;
-  }
-  withStableLock(runDir, () => {
-    appendCapped();
-  });
-}
-
-// lib/security/config.ts
+// ../src/modules/state/workflows/guild-root.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
+function resolveGuildRoot2(startDir) {
+  const resolvedStart = path2.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs2.existsSync(path2.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path2.join(current, ".guild");
+      try {
+        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path2.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// ../src/modules/migrations/workflows/index-migrate.ts
+var import_node_child_process = require("node:child_process");
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function openDatabase(dbPath) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
+}
+var CURRENT_SCHEMA_VERSION = 3;
+function resolveGuildRoot3(cwd) {
+  try {
+    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const abs = path3.isAbsolute(raw) ? raw : path3.resolve(cwd, raw);
+    const root = path3.dirname(abs);
+    if (fs3.existsSync(root)) return root;
+  } catch {
+  }
+  return path3.resolve(cwd);
+}
+var MIGRATIONS = [
+  // ── v1: core tables ───────────────────────────────────────────────────────
+  {
+    version: 1,
+    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+      db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+      }
+    }
+  },
+  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+  //
+  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+  //
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
+  {
+    version: 2,
+    tables: ["federation_wiki_cache"],
+    up(db) {
+      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+      db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+    }
+  },
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
+    }
+  }
+];
+function runMigrations(dbPath) {
+  let db;
+  let fromVersion = 0;
+  try {
+    fs3.mkdirSync(path3.dirname(dbPath), { recursive: true });
+    db = openDatabase(dbPath);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA synchronous = NORMAL");
+    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
+    for (const mig of MIGRATIONS) {
+      if (mig.version <= fromVersion) continue;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        mig.up(db);
+        db.exec(`PRAGMA user_version = ${mig.version}`);
+        db.exec("COMMIT");
+        fromVersion = mig.version;
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+        }
+        for (const tbl of mig.tables) {
+          try {
+            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
+          } catch {
+          }
+        }
+        db.close();
+        return {
+          ok: false,
+          fromVersion,
+          toVersion: fromVersion,
+          dbPath,
+          message: `migration to v${mig.version} failed: ${err.message}`
+        };
+      }
+    }
+    db.close();
+    return {
+      ok: true,
+      fromVersion,
+      toVersion: CURRENT_SCHEMA_VERSION,
+      dbPath
+    };
+  } catch (err) {
+    try {
+      db?.close();
+    } catch {
+    }
+    return {
+      ok: false,
+      fromVersion,
+      toVersion: fromVersion,
+      dbPath,
+      message: `migration runner error: ${err.message}`
+    };
+  }
+}
+function runIndexMigrateCli() {
+  const argv = process.argv.slice(2);
+  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
+  let dbPath;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
+  }
+  if (!dbPath) {
+    const guildRoot = resolveGuildRoot3(cwd);
+    dbPath = path3.join(guildRoot, ".guild", "index.sqlite");
+  }
+  const result = runMigrations(dbPath);
+  if (result.ok) {
+    process.stdout.write(
+      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
+`
+    );
+  } else {
+    process.stderr.write(`[index-migrate] WARN: ${result.message}
+`);
+    process.exit(1);
+  }
+}
+if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runIndexMigrateCli();
+}
+
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
+// ../src/modules/security/workflows/config.ts
 function parseAutonomyMode(v) {
   if (v === "interactive" || v === "autonomous_after_plan_approval" || v === "auto_approve") {
     return v;
@@ -466,10 +834,10 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path4.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs2.readFileSync(settingsPath, "utf8");
+    raw = fs4.readFileSync(settingsPath, "utf8");
   } catch {
     return securityDefaults();
   }
@@ -484,7 +852,7 @@ function readSecurityConfig(cwd) {
 var TASK_RUN_AUTONOMY_RE = /^\s*autonomy_policy:\s*["']?(interactive|autonomous_after_plan_approval|auto_approve)["']?\s*$/m;
 function readTaskRunAutonomyPolicy(filePath) {
   try {
-    const raw = fs2.readFileSync(filePath, "utf8");
+    const raw = fs4.readFileSync(filePath, "utf8");
     const m = TASK_RUN_AUTONOMY_RE.exec(raw);
     return m ? parseAutonomyMode(m[1]) : null;
   } catch {
@@ -493,8 +861,8 @@ function readTaskRunAutonomyPolicy(filePath) {
 }
 function readSettingsAutoApprove(cwd) {
   try {
-    const settingsPath = path2.join(resolveGuildRoot(cwd), ".guild", "settings.json");
-    const parsed = JSON.parse(fs2.readFileSync(settingsPath, "utf8"));
+    const settingsPath = path4.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
+    const parsed = JSON.parse(fs4.readFileSync(settingsPath, "utf8"));
     if (!isPlainObject(parsed)) return [];
     const defaults = parsed["defaults"];
     if (!isPlainObject(defaults)) return [];
@@ -515,8 +883,8 @@ function resolveRunAutonomyMode(opts) {
   if (runId.length > 0 && taskId.length > 0) {
     const safe = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
     if (safe.test(runId) && safe.test(taskId)) {
-      const taskRunPath = path2.join(
-        resolveGuildRoot(opts.cwd),
+      const taskRunPath = path4.join(
+        resolveGuildRoot2(opts.cwd),
         ".guild",
         "runs",
         runId,
@@ -531,40 +899,11 @@ function resolveRunAutonomyMode(opts) {
   return "interactive";
 }
 
-// lib/security/scrubbed-write.ts
-var fs4 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
-var crypto2 = __toESM(require("node:crypto"));
-
-// lib/security/secrets.ts
-function applySecretsPolicy(value, policy, opts) {
-  if (typeof value !== "string") {
-    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
-  }
-  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
-  const failures = [];
-  for (const pat of policy.redaction_patterns) {
-    let re;
-    try {
-      re = new RegExp(pat, "g");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
-      continue;
-    }
-    try {
-      out = out.replace(re, "[REDACTED]");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  return { value: out, ok: failures.length === 0, failures };
-}
-
-// lib/security/events.ts
-var fs3 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+// ../src/modules/security/workflows/events.ts
+var fs5 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 var SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
-var KNOWN_GUILD_HOST_KINDS = [
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
   "claude-code-cli",
   "codex-cli",
   "pi-cli",
@@ -574,7 +913,7 @@ var KNOWN_GUILD_HOST_KINDS = [
   "claude-code-web",
   "codex-app",
   "claude-ai-connector"
-];
+]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 var LEGACY_HOST_ALIASES = {
   claude: "claude-code-cli",
@@ -627,9 +966,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir, record) {
   try {
-    const logsDir = path3.join(runDir, "logs");
-    fs3.mkdirSync(logsDir, { recursive: true });
-    fs3.appendFileSync(path3.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    const logsDir = path5.join(runDir, "logs");
+    fs5.mkdirSync(logsDir, { recursive: true });
+    fs5.appendFileSync(path5.join(logsDir, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -641,17 +980,17 @@ function appendSecurityEvent(runDir, record) {
 }
 function resolveRunDir(cwd, runId, explicitRunDir) {
   if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
-  return path3.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  return path5.join(resolveGuildRoot2(cwd), ".guild", "runs", runId);
 }
 
-// lib/security/scrubbed-write.ts
+// ../src/modules/security/workflows/scrubbed-write.ts
 function guildRootFromRunDir(runDir) {
-  return path4.resolve(runDir, "../../..");
+  return path6.resolve(runDir, "../../..");
 }
 function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
   try {
-    const approvalDir = path4.join(runDir, "agent-bus", "approvals");
-    fs4.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path6.join(runDir, "agent-bus", "approvals");
+    fs6.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-scrub-blocked.json`;
@@ -660,7 +999,7 @@ function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
       ts,
       run_id: runId,
       tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path4.basename(outPath)}`,
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path6.basename(outPath)}`,
       permission_mode: "blocked",
       surface
     };
@@ -673,7 +1012,7 @@ function writeScrubApprovalRequest(runDir, runId, surface, outPath, laneId) {
       content = scrubResult.value;
     } catch {
     }
-    fs4.writeFileSync(path4.join(approvalDir, fileName), content, "utf8");
+    fs6.writeFileSync(path6.join(approvalDir, fileName), content, "utf8");
   } catch {
   }
 }
@@ -695,8 +1034,8 @@ function scrubbedWrite(outPath, content, opts) {
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
-      fs4.mkdirSync(path4.dirname(outPath), { recursive: true });
-      fs4.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs6.mkdirSync(path6.dirname(outPath), { recursive: true });
+      fs6.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
@@ -706,18 +1045,18 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result.sha256 = crypto.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result;
   }
   if (failMode === "open") {
     process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path4.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path6.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
 `
     );
     try {
-      fs4.mkdirSync(path4.dirname(outPath), { recursive: true });
-      fs4.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs6.mkdirSync(path6.dirname(outPath), { recursive: true });
+      fs6.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
@@ -732,7 +1071,7 @@ function scrubbedWrite(outPath, content, opts) {
         event_type: "secret_scrub_blocked",
         decision: "degraded",
         tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path4.basename(outPath)}. Built-in-redacted content written.`,
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path6.basename(outPath)}. Built-in-redacted content written.`,
         permission_mode: "degraded"
       });
       appendSecurityEvent(opts.runDir, evt);
@@ -740,7 +1079,7 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result.sha256 = crypto2.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result.sha256 = crypto.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result;
   }
@@ -755,7 +1094,7 @@ function scrubbedWrite(outPath, content, opts) {
       event_type: "secret_scrub_blocked",
       decision: "blocked",
       tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path4.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path6.basename(outPath)} \u2014 write blocked (fail-closed).`,
       permission_mode: "blocked"
     });
     appendSecurityEvent(opts.runDir, evt);
@@ -765,8 +1104,148 @@ function scrubbedWrite(outPath, content, opts) {
   return { written: false, blocked: true };
 }
 
+// ../src/modules/security/workflows/share-set.ts
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+
+// ../src/modules/lifecycle/workflows/stable-lock.ts
+var import_node_fs = require("node:fs");
+var import_node_path = require("node:path");
+function stableLockPath(runDir) {
+  return (0, import_node_path.join)(runDir, "logs", ".lock");
+}
+function exclusionSentinelPath(runDir) {
+  return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
+}
+function initStableLockfile(runDir) {
+  const path11 = stableLockPath(runDir);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path11), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path11)) return;
+  try {
+    const fd = (0, import_node_fs.openSync)(path11, "wx");
+    (0, import_node_fs.closeSync)(fd);
+  } catch (err) {
+    if (err?.code !== "EEXIST") throw err;
+  }
+}
+var DEFAULT_BACKOFF_MS = [2, 5, 10, 25, 50, 100, 200];
+var DEFAULT_TIMEOUT_MS = 5e3;
+function sleepSyncMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+  }
+}
+function withStableLock(runDir, fn, opts = {}) {
+  initStableLockfile(runDir);
+  const sentinel = exclusionSentinelPath(runDir);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
+  const start = Date.now();
+  let attempt = 0;
+  for (; ; ) {
+    try {
+      const fd = (0, import_node_fs.openSync)(sentinel, "wx");
+      try {
+        (0, import_node_fs.writeSync)(fd, `${process.pid}
+`);
+      } catch {
+      }
+      (0, import_node_fs.closeSync)(fd);
+      try {
+        return fn();
+      } finally {
+        try {
+          (0, import_node_fs.unlinkSync)(sentinel);
+        } catch {
+        }
+      }
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") throw err;
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(
+          `v1.4-lock: timed out waiting for ${sentinel} (${timeoutMs}ms). Stale lock? Remove the file if you are sure no other process holds it.`
+        );
+      }
+      const idx = Math.min(attempt, backoff.length - 1);
+      sleepSyncMs(backoff[idx]);
+      attempt += 1;
+    }
+  }
+}
+
+// ../src/modules/lifecycle/workflows/trace-v2.ts
+var crypto2 = __toESM(require("crypto"));
+var SIDECAR_MAX_BYTES = 16 * 1024;
+function genSpanId(runId, eventType, ts, actorId) {
+  const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
+  return crypto2.createHash("sha256").update(material).digest("hex").slice(0, 16);
+}
+
+// ../src/modules/lifecycle/workflows/event-log-writer.ts
+function sidecarPath(runDir) {
+  return (0, import_node_path2.join)(runDir, "logs", "tool-call-pre.jsonl");
+}
+var ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+
+// ../src/modules/lifecycle/workflows/event-log-sidecar.ts
+var import_node_fs2 = require("node:fs");
+var import_node_path3 = require("node:path");
+var SIDECAR_MAX_BYTES2 = 1024 * 1024;
+function validateSidecarEntry(entry) {
+  assertSafeRunId(entry.run_id);
+  if (entry.lane_id !== void 0) assertSafeLaneId(entry.lane_id);
+}
+function capSidecarText(existing, incomingLine, maxBytes) {
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) {
+    throw new Error(`log-jsonl: sidecar maxBytes must be positive; got ${maxBytes}`);
+  }
+  const combined = existing + incomingLine;
+  if (Buffer.byteLength(combined, "utf8") <= maxBytes) return combined;
+  const lines = combined.split("\n").filter((line) => line.length > 0);
+  const kept = [];
+  let total = 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line === void 0) continue;
+    const bytes = Buffer.byteLength(line + "\n", "utf8");
+    if (kept.length > 0 && total + bytes > maxBytes) break;
+    if (bytes > maxBytes) {
+      return "";
+    }
+    kept.unshift(line);
+    total += bytes;
+  }
+  return kept.length === 0 ? "" : kept.join("\n") + "\n";
+}
+function appendSidecarPre(runDir, entry, opts = {}) {
+  validateSidecarEntry(entry);
+  const path11 = sidecarPath(runDir);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path3.dirname)(path11), { recursive: true });
+  const redacted = redactEventFields(entry, opts.fieldCap);
+  const line = JSON.stringify(redacted) + "\n";
+  const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES2;
+  const appendCapped = () => {
+    const existing = (0, import_node_fs2.existsSync)(path11) ? (0, import_node_fs2.readFileSync)(path11, "utf8") : "";
+    (0, import_node_fs2.writeFileSync)(path11, capSidecarText(existing, line, maxBytes));
+  };
+  if (process.platform === "win32") {
+    appendCapped();
+    return;
+  }
+  withStableLock(runDir, () => {
+    appendCapped();
+  });
+}
+
 // lib/security/enforce.ts
-var fs5 = __toESM(require("node:fs"));
+var fs7 = __toESM(require("node:fs"));
 function effectiveBypassPolicy(configured, autonomyMode) {
   if (autonomyMode === "auto_approve" || autonomyMode === "autonomous_after_plan_approval") {
     return { policy: "deny", forced: true, autonomyMode };
@@ -851,7 +1330,7 @@ function isInScope(scope, toolName, toolInput) {
 function readScopeFile(filePath, baseline = []) {
   let raw;
   try {
-    raw = fs5.readFileSync(filePath, "utf8");
+    raw = fs7.readFileSync(filePath, "utf8");
   } catch {
     return null;
   }
@@ -1049,9 +1528,9 @@ function describeViolation(v, role, attr) {
 }
 
 // lib/backend-degradation.ts
-var import_node_child_process = require("node:child_process");
-var fs6 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var import_node_child_process2 = require("node:child_process");
+var fs8 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
 var OVERRIDE_ENV = "GUILD_ALLOW_BACKEND_DEGRADE";
 var BLOCK_UNMARKED_ENV = "GUILD_BLOCK_UNMARKED_LANES";
 var BACKEND_DEGRADATION_EVENT = "backend_degradation";
@@ -1112,10 +1591,10 @@ function isLeadProcess(env) {
   });
 }
 function readSnapshotAgentMode(guildRoot, runId) {
-  const file = path5.join(guildRoot, ".guild", "runs", runId, "resolved-settings.json");
+  const file = path7.join(guildRoot, ".guild", "runs", runId, "resolved-settings.json");
   let raw;
   try {
-    raw = fs6.readFileSync(file, "utf8");
+    raw = fs8.readFileSync(file, "utf8");
   } catch {
     return null;
   }
@@ -1150,12 +1629,12 @@ function dispatchAssertsRunId(toolInput, runId) {
   return typeof v === "string" && v.trim() === runId;
 }
 function newestRunSignalMs(guildRoot, runId) {
-  const dir = path5.join(guildRoot, ".guild", "runs", runId);
-  const candidates = [path5.join(dir, "resolved-settings.json")];
+  const dir = path7.join(guildRoot, ".guild", "runs", runId);
+  const candidates = [path7.join(dir, "resolved-settings.json")];
   for (const sub of ["handoffs", "in-progress"]) {
     try {
-      for (const name of fs6.readdirSync(path5.join(dir, sub))) {
-        candidates.push(path5.join(dir, sub, name));
+      for (const name of fs8.readdirSync(path7.join(dir, sub))) {
+        candidates.push(path7.join(dir, sub, name));
       }
     } catch {
     }
@@ -1163,7 +1642,7 @@ function newestRunSignalMs(guildRoot, runId) {
   let newest = 0;
   for (const p of candidates) {
     try {
-      newest = Math.max(newest, fs6.statSync(p).mtimeMs);
+      newest = Math.max(newest, fs8.statSync(p).mtimeMs);
     } catch {
     }
   }
@@ -1177,7 +1656,7 @@ function isRunFresh(guildRoot, runId, source, nowMs = Date.now(), graceMs = back
 }
 function probeTmuxAvailable() {
   try {
-    return (0, import_node_child_process.spawnSync)("tmux", ["-V"], { stdio: "ignore", timeout: 2e3 }).status === 0;
+    return (0, import_node_child_process2.spawnSync)("tmux", ["-V"], { stdio: "ignore", timeout: 2e3 }).status === 0;
   } catch {
     return false;
   }
@@ -1300,9 +1779,9 @@ function buildBackendDegradationEvent(input) {
 }
 function appendBackendDegradationEvent(runDir, event) {
   try {
-    const file = path5.join(runDir, RECEIPT_RELATIVE_PATH);
-    fs6.mkdirSync(path5.dirname(file), { recursive: true });
-    fs6.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+    const file = path7.join(runDir, RECEIPT_RELATIVE_PATH);
+    fs8.mkdirSync(path7.dirname(file), { recursive: true });
+    fs8.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -1314,8 +1793,8 @@ function appendBackendDegradationEvent(runDir, event) {
 }
 
 // lib/tier-dispatch.ts
-var fs7 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var fs9 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
 var OVERRIDE_ENV2 = "GUILD_ALLOW_UNTIERED_DISPATCH";
 var TIER_DISPATCH_EVENT = "tier_dispatch";
 var TIER_DISPATCH_SCHEMA = "guild.tier_dispatch.v1";
@@ -1413,7 +1892,7 @@ function readConfiguredTierModels(guildRoot, hostId) {
   };
   let doc;
   try {
-    doc = JSON.parse(fs7.readFileSync(path6.join(guildRoot, ".guild", "settings.json"), "utf8"));
+    doc = JSON.parse(fs9.readFileSync(path8.join(guildRoot, ".guild", "settings.json"), "utf8"));
   } catch {
     return out;
   }
@@ -1571,9 +2050,9 @@ function buildTierDispatchEvent(input) {
 }
 function appendTierDispatchEvent(runDir, event) {
   try {
-    const file = path6.join(runDir, RECEIPT_RELATIVE_PATH2);
-    fs7.mkdirSync(path6.dirname(file), { recursive: true });
-    fs7.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+    const file = path8.join(runDir, RECEIPT_RELATIVE_PATH2);
+    fs9.mkdirSync(path8.dirname(file), { recursive: true });
+    fs9.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -1585,8 +2064,8 @@ function appendTierDispatchEvent(runDir, event) {
 }
 
 // lib/tool-turn-bound.ts
-var fs8 = __toESM(require("node:fs"));
-var path7 = __toESM(require("node:path"));
+var fs10 = __toESM(require("node:fs"));
+var path9 = __toESM(require("node:path"));
 var DEFAULT_TOOL_TURN_MAX = 40;
 function toolTurnMax(env = process.env) {
   const raw = env["GUILD_TOOL_TURN_MAX"];
@@ -1599,7 +2078,7 @@ function toolTurnMax(env = process.env) {
 function loadTurnEventLines(eventsFile) {
   let content;
   try {
-    content = fs8.readFileSync(eventsFile, "utf8");
+    content = fs10.readFileSync(eventsFile, "utf8");
   } catch {
     return [];
   }
@@ -1628,7 +2107,7 @@ function countToolCallsThisTurn(events) {
 }
 function evaluateToolTurnBound(runDir, env = process.env) {
   const threshold = toolTurnMax(env);
-  const eventsFile = path7.join(runDir, "logs", "v1.4-events.jsonl");
+  const eventsFile = path9.join(runDir, "logs", "v1.4-events.jsonl");
   const events = loadTurnEventLines(eventsFile);
   const countSoFar = countToolCallsThisTurn(events);
   const wouldBeCount = countSoFar + 1;
@@ -1640,11 +2119,11 @@ function buildToolTurnAskReason(result, toolName) {
 
 // lib/guild-hook-event.ts
 async function readHookStdin() {
-  return new Promise((resolve4) => {
+  return new Promise((resolve6) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve4(""));
+    process.stdin.on("end", () => resolve6(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve6(""));
   });
 }
 function emitClaudeHookEvent(raw) {
@@ -1670,9 +2149,9 @@ function isKnownTool(name) {
   return TOOL_CALL_TOOL_VALUES.includes(name);
 }
 function readCurrentRunId(cwd) {
-  const sentinelPath = path8.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path10.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
-    const value = fs9.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs11.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -1704,8 +2183,8 @@ function readHostCapability(cwd) {
   addCandidate(candidates, legacyByRegistry[hostRes.id]);
   for (const hostId of candidates) {
     try {
-      const manifestPath = path8.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
-      const raw = fs9.readFileSync(manifestPath, "utf8");
+      const manifestPath = path10.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const raw = fs11.readFileSync(manifestPath, "utf8");
       return JSON.parse(raw);
     } catch {
     }
@@ -1714,8 +2193,8 @@ function readHostCapability(cwd) {
 }
 function writeApprovalRequest(runDir, opts) {
   try {
-    const approvalDir = path8.join(runDir, "agent-bus", "approvals");
-    fs9.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path10.join(runDir, "agent-bus", "approvals");
+    fs11.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-${opts.tool.toLowerCase()}.json`;
@@ -1730,7 +2209,7 @@ function writeApprovalRequest(runDir, opts) {
     if (opts.laneId) record["lane_id"] = opts.laneId;
     if (opts.dispatchRung) record["dispatch_rung"] = opts.dispatchRung;
     const content = JSON.stringify(record, null, 2) + "\n";
-    scrubbedWrite(path8.join(approvalDir, fileName), content, {
+    scrubbedWrite(path10.join(approvalDir, fileName), content, {
       surface: "bus",
       runDir,
       runId: opts.runId,
@@ -1758,7 +2237,7 @@ function hasGuildSignature(content) {
   return false;
 }
 function isInsideGuildDir(absPath) {
-  return path8.resolve(absPath).split(path8.sep).includes(".guild");
+  return path10.resolve(absPath).split(path10.sep).includes(".guild");
 }
 function runBoundaryGuard(payload, cwd, ctx) {
   const tool = payload.tool_name;
@@ -1782,7 +2261,7 @@ ${e.new_string}`;
     }
   }
   if (!hasGuildSignature(content)) return false;
-  const abs = path8.isAbsolute(filePath) ? filePath : path8.resolve(cwd, filePath);
+  const abs = path10.isAbsolute(filePath) ? filePath : path10.resolve(cwd, filePath);
   if (isInsideGuildDir(abs)) return false;
   const guardReason = `Guild-owned-file boundary (P5-boundary-001): a Guild-signed artifact would be written OUTSIDE the consuming repo's .guild/ (${abs}). Guild-owned files belong under .guild/ (or .guild/agents/proposed/, .guild/skills/proposed-*). Confirm this write is intentional.`;
   const toolName = payload.tool_name ?? "";
@@ -1837,8 +2316,8 @@ function readMcpDescription(payload, runDir, toolName) {
   }
   if (runDir !== void 0) {
     try {
-      const p = path8.join(runDir, "logs", "mcp-tool-descriptions.json");
-      const map = JSON.parse(fs9.readFileSync(p, "utf8"));
+      const p = path10.join(runDir, "logs", "mcp-tool-descriptions.json");
+      const map = JSON.parse(fs11.readFileSync(p, "utf8"));
       const d = map[toolName];
       if (typeof d === "string") return d;
     } catch {
@@ -1854,7 +2333,7 @@ function runSecurityEnforcement(payload, cwd) {
     const envRunId = process.env["GUILD_RUN_ID"];
     const envTaskId = process.env["GUILD_TASK_ID"];
     if (typeof envRunId === "string" && envRunId.length > 0 && typeof envTaskId === "string" && envTaskId.length > 0) {
-      const scopeFilePath = path8.join(
+      const scopeFilePath = path10.join(
         resolveGuildRoot(cwd),
         ".guild",
         "runs",
@@ -2232,7 +2711,7 @@ async function main() {
     const bgHostCap = readHostCapability(cwd);
     const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
     const bgRunId = resolveRunId(cwd);
-    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path8.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
+    const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path10.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
     const bgLaneId = typeof bgLaneEnv === "string" && bgLaneEnv.length > 0 ? bgLaneEnv : void 0;
     const bgDispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || void 0;
@@ -2266,7 +2745,7 @@ async function main() {
     );
     return;
   }
-  const runDir = process.env["GUILD_RUN_DIR"] ?? path8.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runDir = process.env["GUILD_RUN_DIR"] ?? path10.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
   const entry = {
     run_id: runId,
@@ -2282,7 +2761,7 @@ async function main() {
     );
   }
   try {
-    fs9.mkdirSync(path8.join(runDir, "logs"), { recursive: true });
+    fs11.mkdirSync(path10.join(runDir, "logs"), { recursive: true });
     appendSidecarPre(runDir, entry);
   } catch (err) {
     process.stderr.write(

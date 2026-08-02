@@ -5,17 +5,29 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Transports prompts to Agent, tmux, in-process, remote, and deferred execution backends.",
-  "depends_on": ["communication", "host-runtime", "prompting", "state"],
+  "depends_on": [
+    "communication",
+    "host-runtime",
+    "lifecycle",
+    "prompting",
+    "state"
+  ],
   "owns": {
-    "skills": ["dispatching-parallel-agents"],
+    "skills": [
+      "dispatching-parallel-agents"
+    ],
     "scripts": [
       "agent-team-launcher",
       "lib/core/contracts/team-backend",
       "lib/core/contracts/task-cell-backend",
       "lib/core/contracts/specialist-identity",
+      "lib/core/contracts/project-definition-ref",
+      "lib/core/contracts/adoption-manifest",
       "lib/emit-remote-orphan",
       "lib/team-backend"
     ],
-    "script_id_prefixes": ["lib/host/"]
+    "script_id_prefixes": [
+      "lib/host/"
+    ]
   }
 }

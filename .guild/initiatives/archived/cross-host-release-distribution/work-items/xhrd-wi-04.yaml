@@ -1,0 +1,22 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: xhrd-wi-04
+initiative_id: cross-host-release-distribution
+title: "G4 — host-neutral staleness signal: port update-check to every host surface (hook wiring + agents-file fallback), verified live on Codex"
+type: implementation
+status: done
+owner: hook-engineer
+depends_on: [xhrd-wi-01, xhrd-wi-02]
+acceptance:
+  - "per goals.md §G4 — update-check semantics reach every host: hook-capable hosts get a SessionStart-equivalent wiring, hook-less hosts get an agents-file/preamble fallback"
+  - "the generated Codex hook manifest wires the update-check (today codex-hooks.json wires ONLY UserPromptSubmit -> prompt bridge)"
+  - "the signal names installed version, latest version, channel, AND the exact update command FOR THAT HOST — a generic 'run install.sh' is not acceptable"
+  - "LIVE verification: a stale Codex session actually surfaces the signal — inference does not count (xhrd-def-acceptance-4)"
+  - "honors the existing ~/.guild/update-check.json cache TTL, degrades silently offline, never blocks a session (xhrd-def-risk-3)"
+  - "hooks edits: `cd hooks && npm run build` with the rebuilt dist committed in the SAME commit — R-DIST replays the real build flags and fails stale bundles"
+  - "codex adversarial review RAN; PR to next"
+evidence_refs:
+  - "CLOSED via PR #102 (signal) + PR #105 (all-host coverage + option A + live verification). Signal per host class: claude SessionStart (pre-existing) · codex SessionStart (live-verified TWICE: once by the implementer, once independently by the gate — a real codex exec session quoted the injected line verbatim) · wrapper hosts guild-run launch notice · file surfaces shipped update-check.js + honest AGENTS.md preamble. Codex capability rows corrected to truth (session_start/user_prompt_submit true) through schema, adapters, support-matrix projection, ADR supersession note, and the SC-8 golden."
+  - "goals.md §G4"
+  - "hooks/update-check.ts + hooks/hooks.json:16 (Claude-only SessionStart wiring)"
+  - "scripts/lib/update-check.ts (CACHE_SCHEMA guild.update_check_cache.v1; stable=semver vs latest tag, beta=SHA staleness)"
+  - "~/.codex/plugins/cache/guild/guild/2.2.0/hooks/codex-hooks.json (UserPromptSubmit only — verified 2026-07-25)"

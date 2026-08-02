@@ -284,7 +284,7 @@ export function createClaudeCodeCliAdapter(entry: HostRegistryEntry = ENTRY): Ho
           resolveRung("semantic_tool", HOST_ID)
         );
       }
-      const modelParams = { ...configured, model };
+      const modelParams: Record<string, unknown> = { ...configured, model };
       const unsupported = unsupportedModelParamKeys(modelParams, ["model", "effort"]);
       const argv = [
         "--model",

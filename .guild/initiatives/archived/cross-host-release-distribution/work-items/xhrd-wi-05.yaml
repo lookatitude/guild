@@ -1,0 +1,29 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: xhrd-wi-05
+initiative_id: cross-host-release-distribution
+title: "G5 — update-path parity: receipts from every install path, --update discovery for host-native installs, a tested update command per host"
+type: implementation
+status: done
+owner: tooling-engineer
+depends_on: [xhrd-wi-01, xhrd-wi-04]
+acceptance:
+  - "per goals.md §G5 — every install path writes a guild.install_receipt.v1 receipt, INCLUDING host-native plugin installs the installer never ran"
+  - "install.sh --update discovers and refreshes non-installer-managed hosts, or refuses with a HOST-SPECIFIC instruction — never a bare 'no install receipts found' (the reporting machine had Guild on Codex and zero receipts)"
+  - "each of the 16 registry hosts has a documented, tested update command, cross-checked against xhrd-wi-01's matrix — the correct command DIFFERS BY CLASS (`marketplace update`/`upgrade` · `guild-run update` · `install.sh --update`), and file-surface hosts are refused `guild-run update` by the AC-7 honesty guard (self-update.ts:104-113 — any host whose capability row is not apply=self_update is told its real command)"
+  - "BLOCKED-BY-UNKNOWN: cursor/github-copilot/opencode/rovo-dev contracts are UNVERIFIED in xhrd-wi-01 (hosts not available). Either install and exercise them, or close with an explicit per-host documented carve-out + filed followup issue — never an assumed row"
+  - "Codex upgrade-propagation is STILL UNVERIFIED. The re-test trigger G1 named (install from `--ref next` BEFORE the v2.3.2 sync-back, observe after) PASSED UNEXPLOITED on 2026-07-26 — PR #100 landed with no probe pre-installed, and a remote branch cannot be rewound to recreate the window. NEXT OPPORTUNITY: the next version bump, i.e. the next release cut. Install from `--ref next` at the current 2.3.2 BEFORE that cut, then run `marketplace upgrade` + `plugin add` after and record whether the installed version moves. Still a required acceptance test."
+  - "the four REFUSE app/connector surfaces stay refused with exit 4 — AC-INS-5 / security S-M3 unchanged (xhrd-def-nongoal-3)"
+  - "no silent multi-host write: consent gating (--yes / TTY) is preserved on every new path (xhrd-def-nongoal-4)"
+  - "red-first regression proving the pre-fix behavior (Guild installed, no receipt, --update finds nothing) is detected"
+  - "codex adversarial review RAN; PR to next"
+evidence_refs:
+  - "CLOSED via PRs #103 + #105. Receipts: per-host versions; installed-cache placement (newest-by-mtime, GNU-safe); minted package-locally by the SessionStart hook for host-native installs (identification-only — managed_by/channel_confidence markers; arms nothing, per option A). guild-run update FIXED FOR ALL WRAPPER HOSTS (nested-npm childEnv denylist + cwd-form npm ci; live-verified end to end twice) and REFUSED for codex before any subprocess (option A: reinstall_command row). --update detects host-native installs via parsed registries (v1+v2 shapes) and a four-form TOML reader, advising per source type. 16-host README matrix + doc↔registry rail with branch-execution floor. Residuals by design: #104 carve-out (4 hosts), propagation probe at ~/.guild/probes/codex-propagation."
+  - "PR #103 MERGED to next 2026-07-26 (partial): per-host receipt versions, receipt into the installed Codex cache (newest-by-mtime, GNU-safe), host-native discovery on --update (real payload manifest + parsed installed_plugins.json + source_type-aware advice), AND the codex self-update swap-source fix (distDirForHost payload path — the receipt had ARMED a corrupting swap; disarmed with an executing swap test before ship)"
+  - "codex gate on #103: 8 rounds to SATISFIED — R1 both fixes non-functional; R2 five findings; R3 corrupting swap + nondeterministic cache selection; R4 GNU stat trap + real-cache pollution by tests; R5 shim BSD dependency; R6 fixture wording; R7-R8 PR-body accuracy"
+  - "STILL OPEN in this item: receipts written BY host-native install paths; Claude-discovery entry validation (accepts [{}] and other-project scoped entries — disclosed deferral); general TOML header predicate (disclosed deferral); documented+tested update command for all 16 hosts; the four UNVERIFIED host contracts; the Codex upgrade-propagation probe before the next release cut"
+  - "PROPAGATION PROBE EXECUTED 2026-07-27 (v2.4.0 cut) — acceptance CLOSED. Probe at ~/.guild/probes/codex-propagation (installed --ref next @2.3.2 pre-cut), list-BETWEEN-upgrade-and-add ordering: `marketplace upgrade` ALONE moved the installed version to 2.4.0 (list read 2.4.0 before any add); `plugin add` then materialized plugins/cache/guild/guild/2.4.0/ (full payload incl. .codex-plugin/). Native recipe = upgrade && add. Recorded in host-distribution-matrix.md + probe README. Option-A row (reinstall_command, auto_capable:false) unchanged — its rationale is manager-state ownership, no longer propagation uncertainty."
+  - "v2.4.0 VALIDATION FINDING (wrapper class): guild-run update executes the INSTALLED package's updater, so packages rendered ≤2.3.2 carry the pre-#105 broken updater (npm ci --prefix + env poison) and fail — observed live against a genuine pre-#105 2.3.2 package. Forward path proven live: a 2.4.0-rendered package receipted at 2.3.2 ran the full clone→render→gates PASS→staged swap → 'updated to 1eb30e3 (v2.4.0)'. Remedy for ≤2.3.2 wrappers: install.sh --update once (noted in v2.4.0 release notes)."
+  - "goals.md §G5"
+  - "install.sh:212-241 (--update mode, receipt-driven), :465-493 (write_receipt, guild.install_receipt.v1)"
+  - "install.sh:151 (is_refuse_host predicate) + install.sh:320-336 (the refuse block that exits 4)"
+  - "scripts/lib/self-update.ts, scripts/lib/host-public-state.ts:272 (receipt-age staleness)"

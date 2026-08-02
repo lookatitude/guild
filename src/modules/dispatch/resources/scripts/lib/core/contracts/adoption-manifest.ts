@@ -1,0 +1,1793 @@
+/**
+ * scripts/lib/core/contracts/adoption-manifest.ts
+ *
+ * Capability localization — `guild.adoption_manifest.v1`: the IMMUTABLE,
+ * APPEND-ONLY, HASH-CHAINED map from an old role/skill identity to its new
+ * project-local reference, so a historical run record still resolves after ids,
+ * paths, and homes have moved.
+ *
+ * WHY THIS EXISTS (gap-audit F1, plan risk R11)
+ *
+ * F1: the manifest was "load-bearing for G3, G4, R11, and historical replay" but
+ * had only a PROSE MENTION — no schema id, no versioning rule, no reader contract.
+ * R11: "old team/run artifacts become unreadable after ids move."
+ *
+ * Three decisions gate role moves on this existing FIRST: cap-loc-D07 (16
+ * template-derived umbrella roles), D09 (10 self-build roles out of
+ * `.claude/agents/`), D10 (4 duplicated agents collapse or change home).
+ *
+ * ── THE FOUR PROPERTIES ─────────────────────────────────────────────────────
+ *
+ * 1. APPEND-ONLY — HASH-CHAINED, WITH AN HONEST LIMIT. Each entry carries
+ *    `prev_digest`, the digest of the entry before it (`null` at sequence 1), so
+ *    deleting an entry and RENUMBERING the rest — the only deletion anyone would
+ *    actually perform by hand — breaks every digest after the cut. A gap-free
+ *    1..N check alone caught only deletion WITHOUT renumbering, i.e. the case
+ *    nobody hits.
+ *
+ *    WHAT THIS DOES NOT DO (codex #1, stated rather than implied). The chain is
+ *    SELF-DERIVED and UNKEYED: the validator recomputes it from the manifest it
+ *    was handed. So it detects tampering by anyone who does not also recompute —
+ *    accidental corruption, a partial edit, a naive delete — but NOT a
+ *    deliberate rewrite by an actor who re-chains the whole file, and NOT
+ *    TRUNCATION (dropping the final entries re-chains trivially).
+ *
+ *    Closing that needs an EXTERNAL commitment the contract cannot hold: the tip
+ *    digest recorded somewhere the rewriter does not control (the run record, a
+ *    signed commit, the receipt journal). `manifestCommitment()` computes the value
+ *    to commit — binding schema, project_id, entry count and chain tip under a
+ *    domain separator — and `verifyAgainstTip()` checks it; WHO commits it is the
+ *    caller's job. Until a caller does, the honest claim is "tamper-EVIDENT against
+ *    non-adversarial edits", not "append-only proven".
+ *
+ * 2. `not_found` IS A REAL ANSWER AND NEVER FALLS BACK TO CURRENT CONTENT (R11).
+ *    A reader that silently resolved an unknown id to today's file would make
+ *    every historical run quietly WRONG rather than loudly unresolvable.
+ *
+ * 3. ROLLBACK IS A FORWARD APPEND, NEVER A REWIND (cap-loc-D03). Undoing an
+ *    adoption appends a NEW entry in the opposite direction. Runs recorded BETWEEN
+ *    the adoption and the rollback genuinely used the new location; deleting the
+ *    entry would strand them and rewinding would resolve them to the wrong bytes.
+ *
+ * 4. TRAVERSAL MATCHES IDENTITY, NOT BARE IDS. A later, unrelated definition
+ *    reusing a successor's id must not hijack the chain — that would resolve a
+ *    historical run to the WRONG BYTES, the exact R11 failure this file prevents.
+ *    Hops are matched on `(kind, id)`, the predecessor's BYTE identity, AND the
+ *    PROJECT ROOT it lives in.
+ *
+ *    THE ROOT WAS ADDED BY AMENDMENT (task #27), and the reason is that the first
+ *    three components were not enough to keep this very promise. In a manifest for
+ *    `umbrella`, `umbrella/A@a → sub-one/X@3` followed by an unrelated
+ *    `umbrella/X@3 → sub-two/Y@e` validated, and resolving `A` returned
+ *    `sub-two/Y` — a later definition sharing a successor's id AND bytes hijacked
+ *    the chain, because identity could not say WHERE anything lived. `from` now
+ *    carries `project_id`, pairing with the successor's own, so both ends of a hop
+ *    are comparable in one vocabulary.
+ *
+ *    The schema was frozen but UNMERGED and UNCONSUMED, so the amendment cost
+ *    nothing a release would have made expensive; shipping a frozen contract with a
+ *    known wrong-bytes path would have been the worse trade. The alternative —
+ *    refusing any multi-hop continuation whose root continuity cannot be proven —
+ *    was rejected: it trades a wrong answer for NO answer, and D06 contemplates
+ *    exactly those cross-root histories.
+ *
+ * ── THE THREE STANDING DEFECT CLASSES (spec README rules 4-6) ───────────────
+ *
+ * This surface was written with all three built in, not retrofitted:
+ *
+ *   Rule 5 (alias dedup):  every path-like scalar is CANONICAL-ONLY. `a/./x`,
+ *     `a//x`, `..`, trailing slash and backslashes are REJECTED, never normalized.
+ *     Once one spelling validates, keying and dedup are sound BY CONSTRUCTION —
+ *     which matters most here, since this manifest is keyed by old id and path and
+ *     an alias could split or double-map an entry.
+ *   Rule 6 (scalar smuggling): every scalar is BOUNDED and SHAPE-CHECKED. Control
+ *     characters are rejected everywhere — an id, sha, run-id or timestamp never
+ *     contains a newline; a smuggled body always does. Malformed entries REJECT,
+ *     never skip (no accept-by-attrition).
+ *   Rule 4 (opts-TOCTOU): N/A — no validator here takes an options argument. If
+ *     one is ever added, resolve options FIRST via own-data descriptors.
+ *
+ * CONTRACT: pure types + fail-closed validators + a PURE resolver. No I/O, no
+ * clock, NEVER throws. Byte fetching is the artifact service's job (see S2).
+ *
+ * C5 DIRECTION: `scripts/lib` is the SoT; the `src/modules/<m>/resources` tree is
+ * GENERATED. Edit HERE, then run `sync:module-resources`. Never hand-edit the
+ * resources copy — the next sync overwrites it, so the edit is silently lost.
+ */
+
+import * as crypto from "crypto";
+import { types as nodeTypes } from "util";
+
+import {
+  DEFINITION_LAYERS,
+  layerAgreesWithPath,
+  validateProjectDefinitionRefV1,
+  type DefinitionLayer,
+  type ProjectDefinitionRefV1,
+} from "./project-definition-ref";
+
+// ── Frozen schema string ─────────────────────────────────────────────────────
+
+export const ADOPTION_MANIFEST_SCHEMA = "guild.adoption_manifest.v1" as const;
+
+/** Why an entry exists. CLOSED — never free-text classification. */
+export const ADOPTION_REASONS = Object.freeze([
+  "migrated",
+  "collapsed",
+  "rehomed",
+  "renamed",
+  "removed",
+  "rolled_back",
+] as const);
+export type AdoptionReason = (typeof ADOPTION_REASONS)[number];
+
+const ADOPTION_REASON_SET: ReadonlySet<string> = new Set<string>(ADOPTION_REASONS);
+
+/** Reasons whose information loss demands an explicit note. */
+const DETAIL_REQUIRED: ReadonlySet<string> = new Set<string>([
+  "collapsed",
+  "removed",
+  "rolled_back",
+]);
+
+/**
+ * The owning-layer vocabulary, RE-EXPORTED from the locator contract rather than
+ * declared twice (task #27, second half). `LegacyLocator.home` and
+ * `ProjectDefinitionRefV1.layer` must be the same four values or the two ends of a
+ * hop cannot be compared — and two copies of a vocabulary is precisely how D4's
+ * identity disagreement happened. One definition, two users.
+ *
+ * The names are kept for compatibility: `LEGACY_HOMES` / `LegacyHome` describe the
+ * OLD world on the `from` side, `DEFINITION_LAYERS` / `DefinitionLayer` the current
+ * one on the `to` side. Same set, two readings.
+ *
+ * INTEGRATION NOTE: this file previously declared its own `Object.freeze`d literal
+ * (contracts rule 10 / XF, "freeze all 13 exported vocabularies"). Collapsing to the
+ * re-export is right — one definition beats two — but the runtime freeze must not be
+ * lost with the literal, so `DEFINITION_LAYERS` itself is now frozen at its
+ * declaration site in the locator contract. Both intents survive.
+ */
+export const LEGACY_HOMES = DEFINITION_LAYERS;
+export type LegacyHome = DefinitionLayer;
+
+const LEGACY_HOME_SET: ReadonlySet<string> = new Set<string>(LEGACY_HOMES);
+
+// ── Scalar bounds (Rule 6) ───────────────────────────────────────────────────
+// Every bound is deliberate: a value near these limits is already suspicious, and
+// a smuggled body is orders of magnitude past them.
+
+const MAX_ID = 128;
+const MAX_PATH = 1024;
+const MAX_DETAIL = 2048;
+const MAX_RUN_ID = 128;
+const MAX_AUTHORIZED_BY = 128;
+const MAX_TIMESTAMP = 64;
+
+/**
+ * The COLLECTION bound — the containment ladder one level out.
+ *
+ * Per-scalar caps bound each field but say nothing about how many fields there
+ * are, so smuggling simply reopens as CHUNKING: a caller barred from one oversized
+ * `detail` supplies ten thousand small ones. The array itself must be bounded, and
+ * bounded BEFORE any per-entry work, or the rejection costs as much as acceptance.
+ *
+ * It is also the traversal bound. Resolution walks at most one entry per hop, so an
+ * unbounded log is unbounded work per query.
+ *
+ * 4096 is far above any real adoption history (D07/D09/D10 together move dozens of
+ * roles, not thousands) and far below a denial-of-service quantity.
+ */
+export const MAX_ENTRIES = 4096;
+
+/** `sha256:` + 64 lowercase hex, matching S2's byte-hash spelling. */
+const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
+/** Bare 64-hex — the digest spelling used by the chain. */
+const DIGEST_RE = /^[0-9a-f]{64}$/;
+/** RFC3339-shaped UTC. Not a full parser; a shape gate that a body cannot pass. */
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+/** A decision-record / run id: no whitespace, no path separators, no controls. */
+const TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/**
+ * Rule 6's sharpest universal guard: an identifier, sha, run-id, or timestamp
+ * NEVER contains a control character; a smuggled body always does.
+ */
+function isCleanScalar(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.length > 0 && v.length <= max && !CONTROL_RE.test(v);
+}
+
+/**
+ * Rule 5 — a CANONICAL path spelling, rejected rather than normalized.
+ *
+ * Applies to `historical_path` too, with ONE deliberate difference: a historical
+ * path MAY be absolute, because its job is to match what old run records literally
+ * cite (many cite `/Users/…/.claude/agents/<role>.md`, gap-audit C2). Everything
+ * else — `.`, `..`, `//`, trailing slash, backslashes, controls — is still
+ * rejected, so two spellings of one file can never both validate and split a key.
+ */
+function isCanonicalPath(v: unknown, opts: { allowAbsolute: boolean }): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_PATH) return false;
+  if (CONTROL_RE.test(v)) return false;
+  if (v.includes("\\")) return false; // one separator convention only
+  if (/^[A-Za-z]:/.test(v)) return false; // Windows drive absolute — never canonical here
+  const isAbs = v.startsWith("/");
+  // CODEX #5: allowing BOTH spellings meant `agents/a.md` and `/proj/agents/a.md`
+  // could identify one file while both validated — the alias hole one level up
+  // from the segment check. A historical path is therefore ABSOLUTE-ONLY (it cites
+  // what an old record literally wrote, and those are absolute), and a successor
+  // path is RELATIVE-ONLY (S2's rule). Exactly one spelling is legal per field.
+  if (opts.allowAbsolute && !isAbs) return false;
+  if (!opts.allowAbsolute && isAbs) return false;
+  if (v.endsWith("/")) return false; // directory form is not a definition
+  const segments = (isAbs ? v.slice(1) : v).split("/");
+  for (const seg of segments) {
+    if (seg.length === 0) return false; // `//` or a trailing/leading empty segment
+    if (seg === "." || seg === "..") return false; // alias spellings — REJECT, never normalize
+  }
+  return true;
+}
+
+// ── Shapes ───────────────────────────────────────────────────────────────────
+
+export interface LegacyLocator {
+  /**
+   * WHICH PROJECT ROOT this historical definition belonged to — the identity
+   * component the schema was amended to add (task #27).
+   *
+   * Without it, identity was (kind, id, bytes) and traversal could not tell two
+   * byte-identical definitions in different roots apart. Reproduced: in a manifest
+   * for `umbrella`, the chain `umbrella/A@a → sub-one/X@3` plus an unrelated
+   * `umbrella/X@3 → sub-two/Y@e` validated, and resolving `A` returned
+   * `sub-two/Y` — the WRONG BYTES, which is exactly the R11 failure this file
+   * exists to prevent. A contract that resolves to the wrong bytes is not
+   * preserving its own reason to exist.
+   *
+   * It pairs with `ProjectDefinitionRefV1.project_id` on the successor side, so the
+   * two ends of a hop are comparable in ONE vocabulary. `home` stays what it always
+   * was — descriptive metadata about the owning LAYER — and is deliberately not
+   * identity-bearing: it has four fixed values and cannot name a root.
+   *
+   * REQUIRED, not nullable. An optional root would reintroduce exactly the hole it
+   * closes: absent would either wildcard (the defect) or match nothing (breaking
+   * legitimate chains). This contract is unconsumed, so there is no migration cost
+   * to paying for the honest shape now.
+   */
+  project_id: string;
+  /** The id the old world used. Token-shaped, never path-shaped (Rule 6). */
+  id: string;
+  /** The path as historical records cite it — CANONICAL, but may be absolute. */
+  historical_path: string;
+  /** Byte hash of the old definition if recoverable, else null. */
+  content_hash: string | null;
+  home: LegacyHome;
+}
+
+export interface AdoptionEntry {
+  /** Monotonic, gap-free from 1. Assigned by the writer, never the caller. */
+  sequence: number;
+  kind: "agent" | "skill";
+  from: LegacyLocator;
+  /** The successor, or NULL for a removal. */
+  to: ProjectDefinitionRefV1 | null;
+  reason: AdoptionReason;
+  /** Required for `collapsed`, `removed`, `rolled_back`. */
+  detail: string | null;
+  /**
+   * The sequence this entry REVERSES. Non-null IFF `reason === "rolled_back"`.
+   * A typed field, not prose in `detail`: the manifest validator proves the target
+   * exists, is EARLIER, and that this entry genuinely reverses it.
+   */
+  reverses_sequence: number | null;
+  /** RFC3339 UTC, caller-supplied — no clock in the contract. */
+  adopted_at: string;
+  run_id: string;
+  /** The decision record authorizing it, e.g. "cap-loc-D09". */
+  authorized_by: string;
+  /** Digest of the PRECEDING entry; null at sequence 1. The append-only proof. */
+  prev_digest: string | null;
+}
+
+export interface AdoptionManifestV1 {
+  schema_version: typeof ADOPTION_MANIFEST_SCHEMA;
+  project_id: string;
+  /** APPEND-ONLY, ordered by `sequence`, chained by `prev_digest`. */
+  entries: AdoptionEntry[];
+}
+
+// ── Hardening primitives (the specialist-identity.ts idiom) ──────────────────
+
+function isPlainDataObject(v: unknown): v is Record<string, unknown> {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  if (nodeTypes.isProxy(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+function ownDataProp(
+  o: object,
+  key: string
+): { kind: "absent" } | { kind: "accessor" } | { kind: "data"; value: unknown } {
+  const desc = Object.getOwnPropertyDescriptor(o, key);
+  if (!desc) return { kind: "absent" };
+  if (!("value" in desc)) return { kind: "accessor" };
+  return { kind: "data", value: desc.value };
+}
+
+function hasExactKeys(o: Record<string, unknown>, keys: readonly string[]): boolean {
+  if (Object.getOwnPropertySymbols(o).length > 0) return false;
+  const own = Object.getOwnPropertyNames(o);
+  if (own.length !== keys.length) return false;
+  for (const k of keys) if (!own.includes(k)) return false;
+  return true;
+}
+
+/**
+ * A genuine, unpolluted array of at most `max` elements. Returns its snapshotted
+ * length, or null.
+ *
+ * `max` IS A PARAMETER, NOT A LATER CHECK BY THE CALLER (codex round 5, #5). The
+ * bound used to be applied after this function returned, so `getOwnPropertyNames`
+ * had already materialised one string per own property — an n-element array the
+ * caller never allocated — before anything asked how big n was. Measured on the
+ * pristine tip, rejecting a dense array against a cap of 4096:
+ *
+ *   250k → 111.8ms · 500k → 361.2ms · 1M → 728.2ms · 2M → 1636.5ms · 4M → 2374.9ms
+ *
+ * Linear in the INPUT, which is precisely what a collection bound exists to stop:
+ * a rejection cost as much as an acceptance. The round-4 fix moved that cost one
+ * step earlier without eliminating it. It is now O(1) for the oversized case.
+ *
+ * WHAT REMAINS, stated rather than claimed closed. An object whose `length` is
+ * small but which carries a huge number of own properties still costs one full
+ * enumeration — and that is true of SYMBOL keys exactly as it is of NAMED ones
+ * (codex round 5, #4): an array with `length === 0` and 300,000 symbol properties
+ * passes the cap and then scans every symbol, ~46ms against ~0.014ms bare. Moving
+ * the cap ahead of both scans bounds the OVERSIZED case, which is the one a count
+ * bound is for; it does not and cannot bound the in-bounds-length case, because JS
+ * has no early-exit own-key enumerator for either kind of key.
+ *
+ * Neither shape can come from `JSON.parse`, which is this contract's actual input
+ * path — a parsed array has only index keys plus `length`, and no symbols at all.
+ * The residual is one enumeration over properties the caller already allocated, with
+ * no amplification beyond that. It is documented rather than claimed bounded.
+ */
+function arrayLength(v: unknown, max: number): number | null {
+  if (!Array.isArray(v)) return null;
+  if (nodeTypes.isProxy(v)) return null;
+  if (Object.getPrototypeOf(v) !== Array.prototype) return null;
+  // `length` FIRST, and the cap immediately after it — see the bound below. The
+  // symbol scan used to run ahead of both, and `getOwnPropertySymbols` is an
+  // enumeration too: an oversized array carrying 100,000 symbol keys cost 160.6ms to
+  // reject where the same array without them cost ~0.5ms (codex round 4, #4). Moving
+  // the cap ahead of `getOwnPropertyNames` but not ahead of this left the defect
+  // intact through a second door.
+  const lenDesc = Object.getOwnPropertyDescriptor(v, "length");
+  if (
+    !lenDesc ||
+    !("value" in lenDesc) ||
+    typeof lenDesc.value !== "number" ||
+    !Number.isInteger(lenDesc.value) ||
+    lenDesc.value < 0
+  ) {
+    return null;
+  }
+  // THE BOUND, BEFORE THE ENUMERATION IT BOUNDS — and it is now the ONLY place the
+  // entry cap is applied, the caller's later `len > MAX_ENTRIES` line having been
+  // removed as the duplicate it became. So unlike its sibling in
+  // `project-definition-ref.ts` this one is load-bearing for OUTCOME as well as
+  // cost: weakening it accepts a 4097-entry log.
+  if (lenDesc.value > max) return null;
+  if (Object.getOwnPropertySymbols(v).length > 0) return null;
+  const len = lenDesc.value;
+  for (const k of Object.getOwnPropertyNames(v)) {
+    if (k === "length") continue;
+    const n = Number(k);
+    if (!Number.isInteger(n) || n < 0 || String(n) !== k || n >= len) return null;
+  }
+  return len;
+}
+
+// ── The hash chain (append-only, provably) ──────────────────────────────────
+
+function canonicalize(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(canonicalize);
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+    out[k] = canonicalize((value as Record<string, unknown>)[k]);
+  }
+  return out;
+}
+
+/**
+ * The canonical digest of ONE entry, over every field INCLUDING `prev_digest`.
+ *
+ * Including the predecessor's digest is what makes this a CHAIN rather than a set
+ * of independent checksums: altering entry N changes N's digest, which is data
+ * inside N+1's digest, and so on to the tip. There is no edit that repairs itself.
+ */
+export function entryDigest(entry: AdoptionEntry): string {
+  // CODEX #4: this is an EXPORTED boundary, and a compile-time type is not a
+  // runtime guarantee. `canonicalize` + `JSON.stringify` will happily traverse a
+  // Proxy, fire a throwing getter, recurse a cyclic object, or hit a bigint — any
+  // of which escapes the file-wide NEVER-throws contract. Validate first, exactly
+  // as `manifestCommitment` does, and return a sentinel rather than throwing.
+  //
+  // The sentinel is a fixed non-hex string, so it can never collide with a real
+  // digest and any chain built on it fails `DIGEST_RE` immediately.
+  try {
+    const valid = validateAdoptionEntry(entry);
+    if (valid === null) return INVALID_DIGEST;
+    return crypto
+      .createHash("sha256")
+      .update(JSON.stringify(canonicalize(valid)), "utf8")
+      .digest("hex");
+  } catch {
+    return INVALID_DIGEST;
+  }
+}
+
+/** Never matches DIGEST_RE, so a chain built on an invalid entry cannot validate. */
+export const INVALID_DIGEST = "invalid-entry";
+
+/**
+ * The result of computing a manifest's external commitment.
+ *
+ * A DISCRIMINATED result, not a bare string: codex round 3 (#2) noted that
+ * returning `null` conflated "this manifest is invalid" with "this manifest is
+ * validly empty" — two facts a committer must never confuse, because committing
+ * the second is correct and committing the first is meaningless.
+ */
+export type ManifestCommitment =
+  | { readonly ok: true; readonly digest: string; readonly empty: boolean }
+  | { readonly ok: false; readonly digest: null; readonly empty: false };
+
+/** Domain separator — this digest is never confusable with a bare entry digest. */
+const COMMITMENT_DOMAIN = "guild.adoption_manifest.v1/commitment\u0000";
+
+/**
+ * The value a caller commits EXTERNALLY to close the truncation/rewrite gap
+ * documented at the top of this file.
+ *
+ * BINDS THE WHOLE ENVELOPE, not just the chain tip (codex round 3, #1). An earlier
+ * version digested only the last entry, so an attacker could change `project_id`
+ * to another valid token, keep every entry, and REPLAY a valid commitment under a
+ * different project namespace — which matters precisely because successor paths
+ * are project-RELATIVE and only `project_id` says which root they resolve against.
+ * The commitment therefore covers `schema_version`, `project_id`, the entry count,
+ * and the tip digest, under a domain separator.
+ *
+ * Takes `unknown` and validates (codex round 3, #2): a typed parameter is a
+ * compile-time hint, not a runtime guarantee, and this is an exported boundary. A
+ * Proxy or throwing getter yields `{ ok: false }`, never an exception.
+ */
+export function manifestCommitment(manifest: unknown): ManifestCommitment {
+  try {
+    const m = validateAdoptionManifestV1(manifest);
+    if (m === null) return { ok: false, digest: null, empty: false };
+    const last = m.entries[m.entries.length - 1];
+    const tip = last === undefined ? "" : entryDigest(last);
+    const payload =
+      COMMITMENT_DOMAIN +
+      JSON.stringify([m.schema_version, m.project_id, m.entries.length, tip]);
+    return {
+      ok: true,
+      digest: crypto.createHash("sha256").update(payload, "utf8").digest("hex"),
+      empty: m.entries.length === 0,
+    };
+  } catch {
+    return { ok: false, digest: null, empty: false };
+  }
+}
+
+/**
+ * Verify a manifest against an EXTERNALLY COMMITTED digest from
+ * `manifestCommitment`.
+ *
+ * This is the check the self-derived chain cannot perform. `expected` must come
+ * from OUTSIDE the manifest — a run record, a signed commit, the receipt journal —
+ * otherwise it proves nothing an attacker could not also rewrite.
+ *
+ * Fail-closed: an invalid manifest, a malformed expectation, or any mismatch is
+ * `false`. Never throws.
+ */
+export function verifyAgainstTip(manifest: unknown, expected: string | null): boolean {
+  const c = manifestCommitment(manifest);
+  if (!c.ok) return false;
+  if (expected === null) return false; // a commitment always exists; null commits nothing
+  if (typeof expected !== "string" || !DIGEST_RE.test(expected)) return false;
+  return c.digest === expected;
+}
+
+// ── Validators (fail-closed: typed | null, NEVER throw) ──────────────────────
+
+const LOCATOR_KEYS = ["project_id", "id", "historical_path", "content_hash", "home"] as const;
+
+const ENTRY_KEYS = [
+  "sequence",
+  "kind",
+  "from",
+  "to",
+  "reason",
+  "detail",
+  "reverses_sequence",
+  "adopted_at",
+  "run_id",
+  "authorized_by",
+  "prev_digest",
+] as const;
+
+const MANIFEST_KEYS = ["schema_version", "project_id", "entries"] as const;
+
+function validateLegacyLocatorInner(obj: unknown): LegacyLocator | null {
+  if (!isPlainDataObject(obj)) return null;
+  if (!hasExactKeys(obj, LOCATOR_KEYS)) return null;
+
+  const projP = ownDataProp(obj, "project_id");
+  const idP = ownDataProp(obj, "id");
+  const pathP = ownDataProp(obj, "historical_path");
+  const hashP = ownDataProp(obj, "content_hash");
+  const homeP = ownDataProp(obj, "home");
+  if (projP.kind !== "data") return null;
+  if (idP.kind !== "data") return null;
+  if (pathP.kind !== "data") return null;
+  if (hashP.kind !== "data") return null;
+  if (homeP.kind !== "data") return null;
+
+  // The root is token-shaped exactly like the manifest's own `project_id` and S2's,
+  // so one root name cannot be spelled two ways across the three contracts.
+  if (!isCleanScalar(projP.value, MAX_ID)) return null;
+  if (!TOKEN_RE.test(projP.value)) return null;
+
+  // Rule 6: an id is a TOKEN — bounded, control-free, and NOT path-shaped, so it
+  // can never smuggle a body or masquerade as a locator.
+  if (!isCleanScalar(idP.value, MAX_ID)) return null;
+  if (!TOKEN_RE.test(idP.value)) return null;
+
+  // Rule 5: canonical-only, absolute permitted (this is history's spelling).
+  if (!isCanonicalPath(pathP.value, { allowAbsolute: true })) return null;
+
+  if (hashP.value !== null) {
+    if (typeof hashP.value !== "string" || !CONTENT_HASH_RE.test(hashP.value)) return null;
+  }
+  if (typeof homeP.value !== "string" || !LEGACY_HOME_SET.has(homeP.value)) return null;
+  // THE SAME RULE ON THE LEGACY SIDE, through the SAME function. `home` is identity-
+  // bearing now, so a declared `home` that contradicts `historical_path` is the exact
+  // second-opinion hole the successor side had — one class, closed on both ends
+  // rather than at the site where it was demonstrated.
+  if (!layerAgreesWithPath(homeP.value, pathP.value as string)) return null;
+
+  return {
+    project_id: projP.value,
+    id: idP.value,
+    historical_path: pathP.value,
+    content_hash: hashP.value as string | null,
+    home: homeP.value as LegacyHome,
+  };
+}
+
+export function validateLegacyLocator(obj: unknown): LegacyLocator | null {
+  try {
+    return validateLegacyLocatorInner(obj);
+  } catch {
+    return null;
+  }
+}
+
+function validateAdoptionEntryInner(obj: unknown): AdoptionEntry | null {
+  if (!isPlainDataObject(obj)) return null;
+  if (!hasExactKeys(obj, ENTRY_KEYS)) return null;
+
+  const seqP = ownDataProp(obj, "sequence");
+  const kindP = ownDataProp(obj, "kind");
+  const fromP = ownDataProp(obj, "from");
+  const toP = ownDataProp(obj, "to");
+  const reasonP = ownDataProp(obj, "reason");
+  const detailP = ownDataProp(obj, "detail");
+  const revP = ownDataProp(obj, "reverses_sequence");
+  const atP = ownDataProp(obj, "adopted_at");
+  const runP = ownDataProp(obj, "run_id");
+  const authP = ownDataProp(obj, "authorized_by");
+  const prevP = ownDataProp(obj, "prev_digest");
+  if (seqP.kind !== "data") return null;
+  if (kindP.kind !== "data") return null;
+  if (fromP.kind !== "data") return null;
+  if (toP.kind !== "data") return null;
+  if (reasonP.kind !== "data") return null;
+  if (detailP.kind !== "data") return null;
+  if (revP.kind !== "data") return null;
+  if (atP.kind !== "data") return null;
+  if (runP.kind !== "data") return null;
+  if (authP.kind !== "data") return null;
+  if (prevP.kind !== "data") return null;
+
+  if (typeof seqP.value !== "number" || !Number.isInteger(seqP.value) || seqP.value < 1) {
+    return null;
+  }
+  if (kindP.value !== "agent" && kindP.value !== "skill") return null;
+  if (typeof reasonP.value !== "string" || !ADOPTION_REASON_SET.has(reasonP.value)) return null;
+  const reason = reasonP.value as AdoptionReason;
+
+  const from = validateLegacyLocatorInner(fromP.value);
+  if (from === null) return null;
+
+  let to: ProjectDefinitionRefV1 | null;
+  if (toP.value === null) {
+    if (reason !== "removed") return null;
+    to = null;
+  } else {
+    if (reason === "removed") return null;
+    to = validateProjectDefinitionRefV1(toP.value);
+    if (to === null) return null;
+    // The successor's KIND must match the entry's. A `kind:"agent"` adoption whose
+    // successor is a skill ref would corrupt identity-matched traversal.
+    if (to.kind !== kindP.value) return null;
+    // NO SELF-ADOPTION REFUSAL HERE — one was added for defect 9 and WITHDRAWN by
+    // operator ruling. `isUnstampedAdoption` documents the whole history and the
+    // known defect that remains.
+  }
+
+  if (detailP.value !== null && !isCleanScalar(detailP.value, MAX_DETAIL)) return null;
+  if (DETAIL_REQUIRED.has(reason) && detailP.value === null) return null;
+
+  // `reverses_sequence` is non-null IFF rolled_back. Cross-entry proof (exists,
+  // earlier, actually reverses) happens in the MANIFEST validator, which can see
+  // the other entries.
+  if (reason === "rolled_back") {
+    if (
+      typeof revP.value !== "number" ||
+      !Number.isInteger(revP.value) ||
+      revP.value < 1 ||
+      revP.value >= seqP.value // must be EARLIER — a forward or self reference is invalid
+    ) {
+      return null;
+    }
+  } else if (revP.value !== null) {
+    return null;
+  }
+
+  if (!isCleanScalar(atP.value, MAX_TIMESTAMP) || !RFC3339_RE.test(atP.value)) return null;
+  if (!isCleanScalar(runP.value, MAX_RUN_ID) || !TOKEN_RE.test(runP.value)) return null;
+  if (!isCleanScalar(authP.value, MAX_AUTHORIZED_BY) || !TOKEN_RE.test(authP.value)) return null;
+
+  if (prevP.value !== null) {
+    if (typeof prevP.value !== "string" || !DIGEST_RE.test(prevP.value)) return null;
+  }
+  // Sequence 1 has no predecessor; every later entry MUST chain.
+  if (seqP.value === 1 && prevP.value !== null) return null;
+  if (seqP.value > 1 && prevP.value === null) return null;
+
+  return {
+    sequence: seqP.value,
+    kind: kindP.value,
+    from,
+    to,
+    reason,
+    detail: detailP.value as string | null,
+    reverses_sequence: (reason === "rolled_back" ? revP.value : null) as number | null,
+    adopted_at: atP.value,
+    run_id: runP.value,
+    authorized_by: authP.value,
+    prev_digest: prevP.value as string | null,
+  };
+}
+
+export function validateAdoptionEntry(obj: unknown): AdoptionEntry | null {
+  try {
+    return validateAdoptionEntryInner(obj);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Does this entry's successor sit at the SAME IDENTITY as its source?
+ *
+ * ── KNOWN DEFECT (D9), OPEN. An advisory, NOT a rejection. ──────────────────
+ *
+ * A location-only rehome is INEXPRESSIBLE: it validates and then resolves
+ * `ambiguous`, because `identityOf` is (kind, id, bytes, project, layer) and the two
+ * ends of such a move are one identity, so traversal's cycle guard sees the walk
+ * return to where it started. Reproduced:
+ *
+ *     /plugin/.guild/agents/archive/architect.md -> .guild/agents/architect.md
+ *     same root, same layer, same id, same bytes
+ *     validates: TRUE · resolve: ambiguous · continue: no · roll back: no
+ *
+ * THE FULL HISTORY, because a silent revert would lose it. An entry-validator
+ * REFUSAL was added for exactly this, on the reasoning that turning a silent
+ * write-then-unreadable into an explicit rejection costs nothing that exists. Two
+ * amendments later — the project root, then the owning layer — adversarial review
+ * showed the refusal had become an OVER-REJECTION: it refused
+ * `.claude/agents/<role>.md -> .guild/agents/<role>.md`, which is not an edge case in
+ * decision D09 but IS D09, the central migration this initiative exists to enable.
+ *
+ * The layer amendment unblocked that specific move, but the refusal still rejected the
+ * residual same-layer class above, so it was WITHDRAWN by operator ruling: a
+ * regression that blocks the initiative's own purpose is worse than a known, named,
+ * documented defect that does not. Tried, measured, found to over-reject, withdrawn.
+ *
+ * WHY THE PREDICATE SURVIVED THE REFUSAL. It is now MORE useful, not less. While the
+ * shape was refused, a producer learned of it from a `null` return; now the shape is
+ * ACCEPTED and fails only at read time, so a producer that wants to avoid writing an
+ * unresolvable entry has no other way to detect it. This contract returns `T | null`
+ * and never throws, so a predicate is the only channel available either way.
+ *
+ * THE REAL FIX IS NOT ANOTHER COMPONENT. Identity has been completed one component per
+ * adversarial round — bytes, then project, then layer — and each round found the next
+ * one missing; the path is the fourth. The `from` side carries an ABSOLUTE
+ * `historical_path` and the `to` side a project-RELATIVE `relative_path`, the same
+ * vocabulary asymmetry the layer amendment just resolved for the third component. The
+ * structural answer is ONE VALIDATED PLACEMENT LOCATOR rather than N independent
+ * scalars, and that is a design decision, deliberately not taken here.
+ *
+ * Never throws: takes `unknown` and reads through own-data descriptors.
+ */
+export function isUnstampedAdoption(entry: unknown): boolean {
+  try {
+    if (!isPlainDataObject(entry)) return false;
+    const kindP = ownDataProp(entry, "kind");
+    const fromP = ownDataProp(entry, "from");
+    const toP = ownDataProp(entry, "to");
+    if (kindP.kind !== "data" || fromP.kind !== "data" || toP.kind !== "data") return false;
+    if (kindP.value !== "agent" && kindP.value !== "skill") return false;
+    const from = validateLegacyLocatorInner(fromP.value);
+    if (from === null) return false;
+    const to = validateProjectDefinitionRefV1(toP.value);
+    if (to === null) return false;
+    return (
+      identityOf(kindP.value, from.id, from.content_hash, from.project_id, from.home) ===
+      identityOf(to.kind, to.id, to.content_hash, to.project_id, to.layer)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The liveness/reversal identity: kind + id + BYTES. Shared by the liveness rule
+ * and the rollback proof so the two can never disagree about what "the same
+ * definition" means — they did once, and the fork survived it (merged codex #1).
+ * A null hash is its own value, distinct from any recorded hash.
+ */
+function identityOf(
+  kind: string,
+  id: string,
+  hash: string | null,
+  projectId: string,
+  layer: string
+): string {
+  return `${kind}\u0000${id}\u0000${hash ?? ""}\u0000${projectId}\u0000${layer}`;
+}
+
+function validateAdoptionManifestV1Inner(obj: unknown): AdoptionManifestV1 | null {
+  if (!isPlainDataObject(obj)) return null;
+  if (!hasExactKeys(obj, MANIFEST_KEYS)) return null;
+
+  const schemaP = ownDataProp(obj, "schema_version");
+  if (schemaP.kind !== "data" || schemaP.value !== ADOPTION_MANIFEST_SCHEMA) return null;
+
+  const projP = ownDataProp(obj, "project_id");
+  const entriesP = ownDataProp(obj, "entries");
+  if (projP.kind !== "data" || entriesP.kind !== "data") return null;
+  if (!isCleanScalar(projP.value, MAX_ID) || !TOKEN_RE.test(projP.value)) return null;
+
+  // The cap is passed IN, so it is consulted before the own-property enumeration
+  // rather than after it — see `arrayLength`. An oversized log costs O(1) to
+  // reject, not a full pass over the caller's array.
+  const len = arrayLength(entriesP.value, MAX_ENTRIES);
+  if (len === null) return null;
+
+  const raw = entriesP.value as unknown[];
+  const entries: AdoptionEntry[] = [];
+  let expectedPrev: string | null = null;
+
+  for (let i = 0; i < len; i++) {
+    const desc = Object.getOwnPropertyDescriptor(raw, i);
+    if (!desc || !("value" in desc)) return null;
+    // Rule 6 sub-pattern: a malformed entry REJECTS the whole manifest. Skipping
+    // to find a benign one would be accept-by-attrition.
+    const entry = validateAdoptionEntryInner(desc.value);
+    if (entry === null) return null;
+    if (entry.sequence !== i + 1) return null; // monotonic, gap-free from 1
+    // THE CHAIN. Deleting an entry and renumbering breaks this at the cut.
+    if (entry.prev_digest !== expectedPrev) return null;
+    expectedPrev = entryDigest(entry);
+    entries.push(entry);
+  }
+
+  // ── THE LIVENESS RULE — make the undecidable states UNREPRESENTABLE ────────
+  //
+  // Rather than adjudicate a one-to-many "fork" at READ time, forbid it at WRITE
+  // time. An entry's `from` identity must be LIVE at that sequence, and its `to`
+  // identity must not already be live. Concretely, walking the log in order:
+  //
+  //   a `from` identity is live if it has never been adopted away, or was restored
+  //   by an intervening proven rollback;
+  //   a `to` identity must be dead, unless this entry IS that proven rollback.
+  //
+  // What this dissolves, without any read-time special case:
+  //
+  //   A->B(1), A->C(2)          the "fork". A was adopted away at 1 and never
+  //                             restored, so entry 2 is REJECTED. There is no
+  //                             ambiguity to resolve because the state cannot exist.
+  // What it deliberately does NOT dissolve: an UNLABELLED loop (A->B, B->A as a
+  // plain migration) stays representable, because every rule that would forbid it
+  // also forbids collapse or re-adoption. That case is caught at READ time by the
+  // authorization-based revisit guard instead — validation and traversal each take
+  // the half they can express without collateral damage.
+  //
+  // What it preserves — every history D03 contemplates:
+  //
+  //   A->B(1), B->C(2)                   sequential migration
+  //   A->B(1), B->A(2 rollback)          forward-append rollback
+  //   A->B(1), B->A(2 rb), A->B(3)       RE-ADOPTION: the rollback restored A, so A
+  //                                      is live again at 3
+  //   U->X(1), N->X(2)                   collapse: two distinct live sources
+  //
+  // The payoff is that traversal needs NO discriminator: multiple forward matches
+  // from one source identity can now only be a re-adoption, so earliest-forward-
+  // match is correct by construction. Three earlier attempts at a read-time rule
+  // were each wrong in a different way (one broke re-adoption, one resolved to the
+  // WRONG BYTES, one mis-scoped identity) — the state is better removed than judged.
+  //
+  // KNOWN LIMITATION, stated rather than discovered later, and now ENFORCED rather
+  // than merely asserted (codex round 5, #3): a `removed` identity cannot be
+  // re-created and re-adopted, because nothing restores it. If that history is ever
+  // needed it wants an explicit `restored` reason, not a hole here.
+  //
+  // It was a claim the code did not keep. Reproduced against the pristine tip:
+  // `A→null(1 removed)`, `B→A(2)`, `A→C(3)` VALIDATED, because every entry with a
+  // non-null destination ran `deadIds.delete(toKey)` — so an ordinary `migrated`
+  // entry resurrected `A`, and entry 3 adopted it away again. A comment a validator
+  // contradicts is worse than no comment: it is the thing readers plan against.
+  //
+  // `removedIds` is therefore a SEPARATE, MONOTONIC set. `deadIds` is revocable by
+  // design (that is what makes re-adoption expressible); removal is not, so the two
+  // facts cannot share one set. The check sits at the LANDING — the moment an entry
+  // would re-create the identity — not at the later re-adoption that made the hole
+  // visible, so no `reason` can smuggle a resurrection through.
+  {
+    const liveIds = new Set<string>();
+    const deadIds = new Set<string>();
+    /** Identities a `removed` entry retired. NEVER revoked — the whole point. */
+    const removedIds = new Set<string>();
+    /** (kind,id) retired by a removal whose BYTES were unrecoverable. Also never revoked. */
+    const removedAnyHash = new Set<string>();
+    /** (kind,id) retired by a removal that DID record its bytes. Also never revoked. */
+    const removedKnownHash = new Set<string>();
+    // CODEX (merged round) #1: this keyed on (kind, id) only, so `A@h1` and `A@h2`
+    // were ONE identity — and combined with the blanket resurrect below, the fork
+    // this rule exists to forbid stayed representable. The liveness identity must
+    // include the BYTES, exactly like traversal's.
+    for (const entry of entries) {
+      const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash, entry.from.project_id, entry.from.home);
+
+      // `from` must be live. An identity is live until adopted away; the first
+      // time we see it as a source it is live by default (it pre-dates the log).
+      if (deadIds.has(fromKey)) return null;
+      // …EXCEPT THAT DEFAULT LIVENESS IS EXACTLY WHERE THE TOMBSTONE LEAKED (codex
+      // round 4, #1). The hash-less tombstone was checked only against `to`, so
+      // `A@null→removed(1)`, `A@a→C(2)` validated: `A@a` had never been SEEN as dead,
+      // so it was presumed live and departed straight out of the log. The claim "a
+      // hash-less removal tombstones the whole (kind, id)" was true on the landing
+      // side and false on the source side — the reported instance fixed, the class
+      // left open, which is the failure this task exists to stop repeating.
+      if (removedAnyHash.has(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}\u0000${entry.from.home}`)) return null;
+      // …AND THE MIRROR OF IT (codex round 5, #1). The rule above covers "the removal
+      // did not know its bytes"; this covers "the LATER ENTRY does not know its
+      // bytes". `A@a→null(removed)`, `A@null→C(2)` validated, because `A@null` is a
+      // different `identityOf` key from `A@a` and nothing had marked it dead. But
+      // unknown bytes could BE the retired bytes — the same "absence is not evidence
+      // of difference" this file applies everywhere else. Both directions of the
+      // hash/no-hash pairing are now closed; only known-vs-known, where the two
+      // hashes actually differ, still passes.
+      if (
+        entry.from.content_hash === null &&
+        removedKnownHash.has(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}\u0000${entry.from.home}`)
+      ) {
+        return null;
+      }
+
+      // NOTE — there is deliberately NO liveness rule on `to`. Two tempting ones
+      // were tried and both rejected LEGITIMATE histories:
+      //   "to must not be live"  breaks COLLAPSE (U->X, N->X land on one survivor
+      //                          by design — D10's whole shape).
+      //   "to must not be dead"  breaks RE-ADOPTION (A->B, B->A rollback, A->B:
+      //                          the third entry necessarily resurrects B).
+      // Constraining the SOURCE is enough to make the fork unrepresentable, and
+      // constraining the destination costs more than it buys.
+      if (entry.to !== null) {
+        const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id, entry.to.layer);
+        // A removal is FINAL. Landing on a retired identity re-creates it, whatever
+        // the reason claims to be doing, so that is where it rejects. Note this keys
+        // on BYTES like everything else: retiring `A@h1` says nothing about `A@h2`,
+        // which is a different definition that merely shares an id.
+        if (removedIds.has(toKey)) return null;
+        // …AND ABSENCE IS NOT EVIDENCE OF DIFFERENT BYTES (codex round 3, #3). When a
+        // removal could not recover the bytes it retired, `A@null→removed(1)` followed
+        // by `B→A@a(2)` slipped past, because the tombstone was keyed on `A@null` and
+        // the landing was `A@a`. If A's unrecoverable bytes WERE `a`, that re-created
+        // exactly the removed definition with no `restored` reason. "Unknown hash" is
+        // absence of evidence, so finality is conservative: a hash-less removal
+        // tombstones the whole (kind, id). This is the same rule the rollback proof
+        // already applies to a null target hash, and that `identityOf` encodes by
+        // treating null as distinct from every recorded hash.
+        if (removedAnyHash.has(`${entry.to.kind}\u0000${entry.to.id}\u0000${entry.to.project_id}\u0000${entry.to.layer}`)) return null;
+        liveIds.add(toKey);
+        // CODEX (merged round) #1 was really TWO issues, and only one of them was
+        // here. The fork survived because `identityOf` ignored BYTES, so `A@h1` and
+        // `A@h2` were one identity and `B->A@h2` resurrected `A@h1`. With the key now
+        // byte-aware that path is closed: in `A@h1->B`, `B->A@h2`, `A@h1->C`, entry 2
+        // lands on A@h2 and leaves A@h1 dead, so entry 3 is rejected.
+        //
+        // Restricting restoration to rollbacks ALSO closed it, but over-broadly: it
+        // rejected a legitimate re-creation (`B` adopted away, then landed on again
+        // by a later migration), which broke a two-round-trip chain. An identity is
+        // live wherever an entry places it — the SOURCE constraint is what forbids
+        // the fork, and it is sufficient on its own.
+        deadIds.delete(toKey);
+      }
+
+      // The source is now adopted away.
+      deadIds.add(fromKey);
+      liveIds.delete(fromKey);
+      // …and if it was REMOVED, it is retired for good. `deadIds` alone cannot carry
+      // this: a later entry's `to` legitimately revokes death, and must never
+      // legitimately revoke removal.
+      if (entry.to === null) {
+        removedIds.add(fromKey);
+        // A hash-less removal cannot say WHICH bytes it retired, so it retires the id.
+        if (entry.from.content_hash === null) {
+          removedAnyHash.add(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}\u0000${entry.from.home}`);
+        } else {
+          removedKnownHash.add(`${entry.kind}\u0000${entry.from.id}\u0000${entry.from.project_id}\u0000${entry.from.home}`);
+        }
+      }
+    }
+  }
+
+  // Cross-entry rollback proof, now that every entry is in hand.
+  //
+  // Beyond "it structurally reverses its target", rollbacks form an UNDO STACK:
+  //
+  //   LIFO  each adoption with a destination PUSHES; a rollback must POP the TOP —
+  //         the outstanding adoption whose effect is still in force — and must name
+  //         it. Reversing anything else is a stale claim, and at read time a stale
+  //         claim buys the cycle exemption, so this is load-bearing rather than
+  //         bookkeeping.
+  //
+  // An earlier formulation — "the target must be the LATEST edge that landed on my
+  // source identity" — was WRONG, and the codex round caught it. It conflates
+  // "which edge put us here" with "which edge is being undone". In `A->B(1)`,
+  // `B->C(2)`, `C->B(3 rb 2)`, `B->A(4 rb 1)`, entry 3 is the latest edge landing on
+  // B, yet entry 4 legitimately unwinds entry 1, still outstanding. That rule made
+  // sequential rollback of a multi-step migration UNREPRESENTABLE. "Outstanding" is
+  // the real predicate, and LIFO expresses it.
+  //
+  // "NO ENTRY IS REVERSED TWICE" falls out rather than being checked separately: a
+  // popped sequence is never on top again, so a second rollback naming it finds a
+  // different top and is rejected. Saying so matters because the traversal guard's
+  // comment asserted that property while nothing enforced it; it is now proven
+  // end-to-end by the D19.2 / D19-R1.2 rejection tests, not by prose.
+  //
+  // THE STACK IS PER LINEAGE, NOT GLOBAL. A single global stack made unrelated
+  // lineages contend: `A->B(1)`, `X->Y(2)`, `B->A(3 rb 1)` was REJECTED because
+  // sequence 2 sat on top, though it belongs to a completely different role. Real
+  // manifests interleave constantly — D07/D09/D10 move dozens of roles — so that
+  // would have rejected the ordinary case. Found by the codex round on this file.
+  //
+  // Each adoption is keyed by its DESTINATION identity, which is exactly where a
+  // rollback of it must depart from, so a lineage's stack contains only its own
+  // outstanding adoptions.
+  /**
+   * Per destination identity, a STACK OF ERAS; each era is the list of adoptions
+   * outstanding on that identity during that era, innermost era last.
+   *
+   * A flat list was wrong (D1's first rule) and DESTRUCTIVELY clearing it on reuse
+   * was wrong too (codex round 2, #1) — see `departed` below for both.
+   */
+  const undoStacks = new Map<string, number[][]>();
+  /** The era currently in force for `key`, or undefined if nothing rides it. */
+  const currentEra = (key: string): number[] | undefined => {
+    const eras = undoStacks.get(key);
+    return eras === undefined || eras.length === 0 ? undefined : eras[eras.length - 1];
+  };
+  const pushAdoption = (key: string, seq: number, newEra: boolean): void => {
+    const eras = undoStacks.get(key);
+    if (eras === undefined) undoStacks.set(key, [[seq]]);
+    else if (newEra) eras.push([seq]);
+    else if (eras.length === 0) eras.push([seq]);
+    else eras[eras.length - 1].push(seq);
+  };
+  /**
+   * Identities adopted away and not since restored — the ERA boundary marker.
+   *
+   * A destination's stack is not a record for all time; it records the adoptions
+   * RIDING THAT DESTINATION RIGHT NOW. Found by codex against the first version of
+   * the D1 rule below, and reproduced before this was written:
+   *
+   *   A→X(1), X→Y(2), B→X(3), X→B(4 rb 3)
+   *
+   * gave X the stack [1,3] and so failed `length === 1`, rejecting a LEGITIMATE
+   * history. Sequence 1 was outstanding but no longer riding X — that lineage
+   * departed to Y at 2. `length === 1` was therefore NOT equivalent to "no other
+   * lineage rides this destination", which is the property D1 actually claims.
+   *
+   * So an identity that is adopted away and later RE-CREATED by a fresh adoption
+   * begins a NEW ERA: the adoptions of the era beneath cannot be unwound through it,
+   * because what stands there now is not what they landed on. A ROLLBACK landing on
+   * it restores the SAME era instead — and that distinction is exactly what preserves
+   * sequential rollback of a multi-step migration (`A→X, X→Y, Y→X rb, X→A rb`), which
+   * a blanket clear breaks.
+   *
+   * SUSPENDED, NOT DESTROYED (codex round 2, #1). The first version of this rule
+   * DELETED the stale stack, and that was the fifth wrong rule on this file — it lost
+   * an era a later rollback legitimately restores. Reproduced before rewriting:
+   *
+   *   A→X(1), X→Y(2), B→X(3), X→B(4 rb 3), Y→X(5 rb 2), X→A(6 rb 1)
+   *
+   * is strict LIFO with no collapse anywhere: 3 occupies the vacated X, 4 undoes it,
+   * 5 restores X's ORIGINAL era, and 6 then unwinds 1. Prefixes 1-5 validated and the
+   * whole history did not, because `undoStacks.delete(X)` at 3 had destroyed `[1]`.
+   *
+   * Hence a STACK of eras. A fresh adoption onto a departed identity PUSHES an era;
+   * exhausting an era POPS it, bringing the suspended era back into force. Nothing is
+   * ever discarded, so "which adoptions ride this identity right now" stays answerable
+   * at every depth.
+   */
+  const departed = new Set<string>();
+  for (const entry of entries) {
+    const fromKey = identityOf(entry.kind, entry.from.id, entry.from.content_hash, entry.from.project_id, entry.from.home);
+    if (entry.reason !== "rolled_back") {
+      // An adoption with a destination is an outstanding effect a later rollback may
+      // unwind. A removal has no destination, so there is nothing to return to.
+      if (entry.to !== null) {
+        const toKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id, entry.to.layer);
+        // ERA BOUNDARY: a fresh adoption onto a departed identity re-creates it, and
+        // SUSPENDS the era beneath rather than destroying it.
+        pushAdoption(toKey, entry.sequence, departed.has(toKey));
+        departed.delete(toKey);
+      }
+      departed.add(fromKey);
+      continue;
+    }
+    const target = entries[(entry.reverses_sequence as number) - 1];
+    // UNREACHABLE BY CONSTRUCTION, kept as a belt-and-braces guard: the entry-level
+    // validator already rejects `reverses_sequence >= sequence`, and every entry has
+    // been proven `sequence === index + 1` above, so the index is always in range.
+    // Noted explicitly because the anti-vacuity sweep flags it as uncovered — it is
+    // dead code by design, NOT a guard someone forgot to test. Do not write a test
+    // that appears to cover it; no valid input can reach it.
+    if (target === undefined) return null; // referenced sequence does not exist
+    if (target.sequence !== entry.reverses_sequence) return null;
+    // It must genuinely REVERSE the target: this entry's `from` is where the target
+    // landed, and it is the same kind. Without this, "rolled_back" is a label
+    // anyone could attach to an unrelated edge.
+    if (target.to === null) return null; // a removal has nothing to roll back to
+    if (entry.kind !== target.kind) return null;
+    if (entry.from.id !== target.to.id) return null;
+    // NO `entry.from.project_id === target.to.project_id` LINE HERE, and it is not an
+    // omission — one was written and DELETED as provably redundant, rather than
+    // shipped untested. The LIFO pop below looks up `currentEra(fromKey)` with a
+    // root-bearing identity and requires the top to be `target.sequence`; an entry
+    // pushes exactly once, under its OWN `to` identity, so `target.sequence` exists
+    // in no other stack. The pop therefore cannot succeed unless the departing
+    // identity — root included — already equals `target.to`. Confirmed by sweep:
+    // weakening that line changed no outcome, including on a fixture built
+    // specifically to isolate it.
+    //
+    // Its mirror on the LANDING side below is NOT redundant, and the difference is
+    // measured rather than assumed.
+    if (target.to.content_hash !== entry.from.content_hash) return null;
+    // CODEX #3: the previous check proved only where the rollback STARTED, so
+    // `A → B` followed by `B → C` could be labelled "rolled_back" against entry 1
+    // and validate. A reversal must also LAND back on the target's source identity.
+    if (entry.to === null) return null; // a rollback always has a destination
+    if (entry.to.id !== target.from.id) return null;
+    // LOAD-BEARING, unlike its departure-side mirror. The R3 landing rule below only
+    // requires the restored identity to be DEPARTED, and another entry can have
+    // departed a same-id, same-bytes definition in a DIFFERENT root — so without this
+    // line, `umbrella/A@a → sub-one/B@b(1)`, `website/A@a → sub-one/C@c(2)`,
+    // `sub-one/B@b → website/A@a (3 rb 1)` validates and unwinds entry 1 into the
+    // WRONG ROOT. Verified by sweeping this line alone against that fixture.
+    if (entry.to.project_id !== target.from.project_id) return null; // back to the ROOT it left
+    if (entry.to.layer !== target.from.home) return null; // …and the LAYER it left
+    // The rollback must land on the target's SOURCE BYTES. When the target recorded
+    // none, that is unprovable — and skipping the check let a rollback claim ARBITRARY
+    // replacement bytes and then collect the read-time cycle exemption on a reversal
+    // it never demonstrated. Absence is not agreement: the same rule traversal already
+    // applies to a null hash, and the same rule `identityOf` encodes by treating null
+    // as distinct from every recorded hash. An adoption whose legacy bytes were
+    // unrecoverable therefore cannot be rolled back — fail-closed, and stated rather
+    // than discovered later.
+    // A validated `to` ALWAYS carries a real hash, so when the target recorded none
+    // this inequality is unconditionally true and the rollback is rejected — which
+    // is the intended rule (an adoption whose legacy bytes were unrecoverable cannot
+    // be rolled back, because the reversal is unprovable; absence is not agreement,
+    // exactly as traversal and `identityOf` already treat a null hash). An explicit
+    // `target.from.content_hash === null` line was written to say so, and deleted
+    // when the sweep proved it unreachable behind this one.
+    if (entry.to.content_hash !== target.from.content_hash) return null;
+
+    // LIFO within this destination — pop its top, and it must be the named target.
+    // An absent or empty stack needs no separate check: the lookup yields
+    // `undefined`, which never equals a validated sequence, so "nothing outstanding
+    // here" rejects through the same line. An explicit emptiness guard was written,
+    // shown redundant by the anti-vacuity sweep, and removed rather than shipped
+    // untested.
+    //
+    // AND IT MUST BE THE *ONLY* THING OUTSTANDING (codex round 5, #1).
+    //
+    // Keying by destination is correct — a rollback departs from exactly where its
+    // target landed — but it is NOT the same thing as keying by lineage, and COLLAPSE
+    // is where the two come apart. `U→X(1)`, `N→X(2)`, `X→N(3 rb 2)` gave X the stack
+    // [1,2]; popping 2 satisfied LIFO while 1 was still outstanding. Two things then
+    // went wrong at once, and both were reproduced against the tip before this line
+    // was written:
+    //
+    //   • resolving `U` walked 1,3 and answered `resolved → N`. `U` was never rolled
+    //     back; it landed on the bytes `N` had just been given back.
+    //   • sequence 1 became permanently UN-unwindable: entry 3 marks `X` dead, so a
+    //     later `X→U (rb 1)` is rejected by the liveness rule. The log had reached a
+    //     state with an outstanding effect that nothing could ever undo.
+    //
+    // The reason is structural, not a missing side-condition. A rollback edge is a
+    // WHOLE-IDENTITY move — `X→N` says everything at X is now at N — but under
+    // collapse X is shared, so no such edge can be true for one participant and false
+    // for the other. The entry shape simply cannot express "un-collapse N only".
+    //
+    // So the state is made UNREPRESENTABLE rather than adjudicated, exactly as the
+    // liveness rule above does with the fork. `length === 1` is precisely "no other
+    // lineage is riding on this destination": a second outstanding adoption on one
+    // destination can only come from a DIFFERENT source, because re-adopting the same
+    // source requires an intervening rollback, and that rollback already popped.
+    //
+    // KNOWN LIMITATION, stated rather than discovered later — and it is not a
+    // NARROWING. The pristine tip could not express a collapse rollback either: it
+    // accepted the first half (`X→N rb 2`) and then rejected the second (`X→U rb 1`),
+    // leaving a half-unwound log and a lineage resolving to another role's bytes. The
+    // rule below refuses the same history EARLY and WHOLE instead of late and torn. If
+    // un-collapsing one participant is ever genuinely needed it wants its own reason
+    // and its own edge shape — a `split` that names WHICH source it releases — not a
+    // hole here.
+    const lineage = currentEra(fromKey);
+    if (lineage === undefined || lineage[lineage.length - 1] !== target.sequence) return null;
+    if (lineage.length !== 1) return null; // another lineage still rides this era
+    lineage.pop();
+    // An exhausted era is over: pop it so the era SUSPENDED beneath comes back into
+    // force. This is what makes a suspended era restorable rather than lost.
+    const eras = undoStacks.get(fromKey);
+    if (eras !== undefined && eras.length > 0 && eras[eras.length - 1].length === 0) eras.pop();
+    // A ROLLBACK MAY ONLY RESTORE AN IDENTITY THAT IS ACTUALLY GONE (codex round 3,
+    // #1). D1 guards the DEPARTURE side — no partial un-collapse out of a shared
+    // destination — and this is the same rule on the LANDING side, which was
+    // unguarded. Reproduced:
+    //
+    //   A→X(1), B→A(2), X→A(3 rb 1), A→B(4 rb 2)
+    //
+    // validated, and resolving A answered `resolved → B` on trail [1,3,4] when A's
+    // own rollback should have left it at A. Entry 2 had already re-created `A`, so
+    // entry 3 restored `A` on top of a live occupant; the era recorded only sequence
+    // 2, and entry 4 then passed `length === 1` while performing exactly the partial
+    // un-collapse D1 exists to forbid.
+    //
+    // Departure is not merely a precondition, it is the definition of a restoration:
+    // a rollback's `to` is its target's `from`, which necessarily departed when the
+    // target was applied. So this can only fail when something re-created that
+    // identity in between — which is precisely the collision. It does NOT touch the
+    // ordinary cases, where the landing identity is still gone: `A→B, B→A rb`, the
+    // multi-step sequential rollback, and the suspend-and-restore history all land on
+    // identities that departed and were never re-created.
+    if (entry.to !== null) {
+      const restoreKey = identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id, entry.to.layer);
+      if (!departed.has(restoreKey)) return null;
+    }
+    // This rollback departs its source and RESTORES its destination into the era
+    // that destination already had — never a new one, so no stack is cleared here.
+    departed.add(fromKey);
+    if (entry.to !== null) {
+      departed.delete(identityOf(entry.to.kind, entry.to.id, entry.to.content_hash, entry.to.project_id, entry.to.layer));
+    }
+  }
+
+  return {
+    schema_version: ADOPTION_MANIFEST_SCHEMA,
+    project_id: projP.value,
+    entries,
+  };
+}
+
+/**
+ * Fail-closed validation of a `guild.adoption_manifest.v1`. Returns a FRESH,
+ * sanitized manifest or NULL — never throws, never repairs.
+ */
+export function validateAdoptionManifestV1(obj: unknown): AdoptionManifestV1 | null {
+  try {
+    return validateAdoptionManifestV1Inner(obj);
+  } catch {
+    return null;
+  }
+}
+
+// ── Reader contract (the part gap-audit F1 says is missing) ─────────────────
+
+export const ADOPTION_RESOLUTIONS = Object.freeze([
+  "resolved",
+  /** Deliberately removed with no successor — DISTINCT from `not_found`. */
+  "removed",
+  /** No record of this identity. NEVER a fallback to current content. */
+  "not_found",
+  /** A fork, a cycle, or a malformed manifest. Never a guess. */
+  "ambiguous",
+] as const);
+export type AdoptionResolutionStatus = (typeof ADOPTION_RESOLUTIONS)[number];
+
+export interface AdoptionResolution {
+  status: AdoptionResolutionStatus;
+  ref: ProjectDefinitionRefV1 | null;
+  /** Every entry consulted, in order — the receipt for this resolution. */
+  trail: number[];
+}
+
+/** What a caller knows about the historical definition it is trying to resolve. */
+export interface HistoricalQuery {
+  kind: "agent" | "skill";
+  id: string;
+  /**
+   * Which project root the historical definition belonged to. OPTIONAL and
+   * DISAMBIGUATING, exactly like `content_hash`: supply it and only that root's
+   * lineage matches; omit it and the root becomes known from the first matched
+   * entry, so an un-pinned query still resolves when the id is unambiguous.
+   *
+   * It has to exist for the amended identity to be pinnable at all — a caller
+   * holding a receipt from `sub-one` had no way to say so, which is half of why the
+   * cross-project conflation was invisible from the outside.
+   */
+  project_id?: string;
+  /** Which owning layer it lived in. Optional and disambiguating, like the root. */
+  layer?: DefinitionLayer;
+  /** Optional, and DISAMBIGUATING when present. */
+  historical_path?: string;
+  /** Optional byte identity of the old definition. */
+  content_hash?: string;
+}
+
+/**
+ * Resolve a historical identity to its current reference. PURE — no I/O, no clock.
+ *
+ * SELF-VALIDATING AND SNAPSHOTTING. It takes `unknown`, re-validates, and works
+ * only from the fresh sanitized copy, returning a DEEP-FROZEN ref. A caller cannot
+ * hand it a previously-validated-then-mutated manifest, sneak a Proxy through a
+ * type assertion, or mutate the manifest afterwards through the returned `ref`.
+ * The hardened validators protected the parse boundary; this protects the API one.
+ *
+ * IDENTITY, NOT BARE IDS. Hops match `(kind, id)` and — when the predecessor
+ * recorded a `content_hash` — the byte identity too. A later unrelated definition
+ * reusing an id cannot hijack the chain into the wrong bytes.
+ *
+ * FORWARD-ONLY. A next hop must have a HIGHER sequence: in an append-only log a
+ * later entry supersedes an earlier one, so walking backwards would re-apply
+ * superseded history. This is also what makes the rollback `A→B→A'` resolve
+ * cleanly instead of looping.
+ */
+export function resolveHistorical(
+  manifest: unknown,
+  query: unknown
+): AdoptionResolution {
+  try {
+    return resolveHistoricalInner(manifest, query);
+  } catch {
+    // The file-wide NEVER-throws contract holds at the API boundary too: a Proxy
+    // or throwing getter on either argument yields a typed answer, not an escape.
+    return { status: "ambiguous", ref: null, trail: [] };
+  }
+}
+
+/**
+ * CODEX #4: the query boundary was UNHARDENED — it took a typed `HistoricalQuery`
+ * and read it with plain property access. A polluted `Object.prototype` could
+ * supply `kind` and `id` to an otherwise empty object and resolve an identity the
+ * caller never provided; a Proxy or throwing getter escaped the never-throws
+ * contract.
+ *
+ * This is the STANDING opts-TOCTOU class (spec README rule 4) — and it applied to
+ * this file's own new API. The query is now accepted as `unknown` and SNAPSHOTTED
+ * through own-data descriptors BEFORE anything about the manifest is walked.
+ */
+/**
+ * The key a lineage's position is tracked by: kind + id + exact bytes. ONE helper
+ * builds every key so the two construction sites can never spell the separator
+ * differently — a guard whose two keys disagree is a guard that silently never
+ * fires. `\u0000` cannot occur in a validated id or a `sha256:<hex>`, so no two
+ * distinct positions collide.
+ */
+function identityKey(
+  kind: string,
+  id: string,
+  contentHash: string,
+  projectId: string,
+  layer: string
+): string {
+  return `${kind}\u0000${id}\u0000${contentHash}\u0000${projectId}\u0000${layer}`;
+}
+
+function resolveHistoricalInner(manifest: unknown, query: unknown): AdoptionResolution {
+  const NO_ANSWER: AdoptionResolution = { status: "ambiguous", ref: null, trail: [] };
+
+  // ── QUERY FIRST, own-data only, closed key set ──
+  if (!isPlainDataObject(query)) return NO_ANSWER;
+  const QUERY_KEYS = ["kind", "id", "project_id", "layer", "historical_path", "content_hash"];
+  // SYMBOLS FIRST (codex round 5, #7). `getOwnPropertyNames` does not see symbol
+  // keys, so `{kind, id, [Symbol("payload")]: huge}` sailed through a check whose
+  // entire job is "closed key set". The query was the ONLY closed shape here
+  // validated by a hand-rolled loop; `hasExactKeys` — used for the locator, the
+  // entry and the manifest — has opened with exactly this line all along. One rule,
+  // one file.
+  if (Object.getOwnPropertySymbols(query).length > 0) return NO_ANSWER;
+  for (const k of Object.getOwnPropertyNames(query)) {
+    if (!QUERY_KEYS.includes(k)) return NO_ANSWER; // unknown key ⇒ reject, never ignore
+  }
+  const qKind = ownDataProp(query, "kind");
+  const qId = ownDataProp(query, "id");
+  const qProject = ownDataProp(query, "project_id");
+  const qLayer = ownDataProp(query, "layer");
+  const qPath = ownDataProp(query, "historical_path");
+  const qHash = ownDataProp(query, "content_hash");
+  if (qKind.kind !== "data" || qId.kind !== "data") return NO_ANSWER;
+  if (qPath.kind === "accessor" || qHash.kind === "accessor") return NO_ANSWER;
+  if (qProject.kind === "accessor" || qLayer.kind === "accessor") return NO_ANSWER;
+  if (qKind.value !== "agent" && qKind.value !== "skill") return NO_ANSWER;
+  if (!isCleanScalar(qId.value, MAX_ID) || !TOKEN_RE.test(qId.value)) return NO_ANSWER;
+  const snapPath = qPath.kind === "data" ? qPath.value : undefined;
+  if (snapPath !== undefined && !isCanonicalPath(snapPath, { allowAbsolute: true })) {
+    return NO_ANSWER;
+  }
+  const snapProject = qProject.kind === "data" ? qProject.value : undefined;
+  if (
+    snapProject !== undefined &&
+    (!isCleanScalar(snapProject, MAX_ID) || !TOKEN_RE.test(snapProject))
+  ) {
+    return NO_ANSWER;
+  }
+  const snapLayer = qLayer.kind === "data" ? qLayer.value : undefined;
+  if (snapLayer !== undefined && !LEGACY_HOME_SET.has(snapLayer as string)) return NO_ANSWER;
+  const snapHash = qHash.kind === "data" ? qHash.value : undefined;
+  if (snapHash !== undefined && (typeof snapHash !== "string" || !CONTENT_HASH_RE.test(snapHash))) {
+    return NO_ANSWER;
+  }
+
+  const m = validateAdoptionManifestV1(manifest);
+  // A manifest that does not validate yields NO answer — never a partial walk.
+  if (m === null) return NO_ANSWER;
+
+  /**
+   * PER-HOP COST (D19.3). Both the forward-match filter and the `hasNext` lookahead
+   * scanned the WHOLE array on every hop. Indexing once by the source identity an
+   * entry departs FROM makes each hop proportional to the entries sharing that
+   * identity.
+   *
+   * WHAT THIS DOES AND DOES NOT BUY — stated precisely, because the first version
+   * of this comment claimed the quadratic term was gone and the codex round showed
+   * it was not. For a chain over DISTINCT identities each bucket holds one entry and
+   * traversal is linear. For a history that keeps returning to the SAME identities
+   * — `A->B, B->A(rb), A->B, ...` — both buckets are Theta(n) and every hop filters
+   * one of them, so the quadratic term REMAINS. Measured, 256 -> 2048 entries:
+   * distinct 2.3 -> 15.6ms, alternating 4.3 -> 44.1ms.
+   *
+   * `MAX_ENTRIES` is therefore still doing the real containment work, and the index
+   * is a constant-factor win on the common shape rather than a change of complexity
+   * class. Making the pathological case linear needs a per-bucket cursor that only
+   * advances (`minSequence` is monotonic, buckets are in sequence order); it is not
+   * done here because the bound already caps the damage and an untested optimisation
+   * is worth less than an honest comment.
+   *
+   * Keyed on (kind, from.id) rather than the full identity because a hash-less
+   * query must still find its candidates; the byte check stays in the filter.
+   */
+  const byFromId = new Map<string, AdoptionEntry[]>();
+  for (const e of m.entries) {
+    const key = `${e.kind}\u0000${e.from.id}`;
+    const bucket = byFromId.get(key);
+    if (bucket === undefined) byFromId.set(key, [e]);
+    else bucket.push(e);
+  }
+  /** Entries departing from (kind, id), in sequence order. Never null. */
+  const departingFrom = (kind: string, id: string): AdoptionEntry[] =>
+    byFromId.get(`${kind}\u0000${id}`) ?? [];
+
+  /**
+   * Every sequence at which the log INTRODUCED an identity (each entry whose `to`
+   * it is), in order.
+   *
+   * The origin's stamp used to be a hard-coded 0, which made it immune to EVERY
+   * rewind — including one unwinding the very entry that created it. Codex found
+   * the consequence: `A->B(1), B->A(2 rb 1), A->B(3)` queried at B reported
+   * `ambiguous`, because B survived a rewind of the entry that introduced it, while
+   * the SAME manifest queried at A resolved. One manifest cannot have two answers.
+   *
+   * The stamp must be the introduction the walk STARTS FROM — the latest one
+   * strictly BEFORE the first hop. Taking the earliest instead (or ignoring the
+   * bound) picks up a FUTURE re-introduction and rewinds an origin that had not yet
+   * been re-created: that regressed `A->B, B->C, C->B(rb 2), B->A`, where A is
+   * introduced only by entry 4, long after the walk began at it.
+   */
+  const introducedAt = new Map<string, number[]>();
+  for (const e of m.entries) {
+    if (e.to === null) continue;
+    const k = identityKey(e.to.kind, e.to.id, e.to.content_hash, e.to.project_id, e.to.layer);
+    const seqs = introducedAt.get(k);
+    if (seqs === undefined) introducedAt.set(k, [e.sequence]);
+    else seqs.push(e.sequence);
+  }
+  /** Latest introduction strictly before `before`; 0 ⇒ pre-dates the log. */
+  const originStamp = (key: string, before: number): number => {
+    const seqs = introducedAt.get(key);
+    if (seqs === undefined) return 0;
+    let best = 0;
+    for (const q of seqs) {
+      if (q >= before) break; // ascending
+      best = q;
+    }
+    return best;
+  };
+
+  const trail: number[] = [];
+  /**
+   * IDENTITY-CYCLE GUARD.
+   *
+   * Forward-only traversal (`minSequence`) guarantees TERMINATION, so there is no
+   * hang — but it does not detect a lineage that comes back to a position it has
+   * already occupied. `A@h1 → B@h2 → A@h1` walks forward the whole way and reports
+   * `resolved` at A@h1, which is not a terminal at all: it is where the walk
+   * started. The chain closed a loop, so its endpoint is genuinely indeterminate
+   * and the honest answer is `ambiguous`.
+   *
+   * This is precisely what separates the two round trips S3 cares about: a
+   * rollback to DIFFERENT bytes (`A@h1 → B@h2 → A@h3`) is legal and must resolve,
+   * while a return to IDENTICAL bytes is a closed loop. Both directions are
+   * asserted, so the rule cannot be satisfied by always answering `ambiguous`.
+   *
+   * REWIND, NOT CLEAR (D19.1). A rollback undoes ONE era — the span its target
+   * opened — so it may forget only what that era introduced. A blanket clear also
+   * forgot every ANCESTOR, including the walk's origin, so `A->B, B->C, C->B(rb 2),
+   * B->A` returned `resolved` on a closed loop: the origin had been erased by a
+   * rollback that had no authority over it.
+   *
+   * Each identity therefore carries the SEQUENCE that introduced it, and a rollback
+   * of target T drops exactly those introduced at or after `T.sequence`. Identities
+   * older than the reversed era survive, because the rollback did not undo them.
+   * The ORIGIN is stamped by when the log actually introduced it (see
+   * `originStamp`), NOT by a hard-coded 0 — an earlier version of this comment said
+   * 0 and claimed the origin could never be dropped, and both halves stopped being
+   * true when that changed. An origin that pre-dates the log stamps 0 and is indeed
+   * undroppable; one the log introduced can be rewound past, which is the point.
+   */
+  const visitedIdentities = new Map<string, number>();
+  /**
+   * Record an identity, keeping the EARLIEST sequence that introduced it.
+   *
+   * CURRENTLY UNOBSERVABLE, kept deliberately and said out loud: under the LIFO
+   * undo-stack rule an identity can only be re-introduced by a rollback's `to`, and
+   * the anti-vacuity sweep confirms that swapping this for last-write-wins changes
+   * no test. It is kept because the two differ in FAILURE DIRECTION — earliest-wins
+   * holds an ancestor longer, so a rewind that should not forget it cannot, which
+   * fails toward `ambiguous`; last-write-wins fails toward `resolved` on bytes the
+   * lineage already occupied. The house rule is fail-closed, so the conservative
+   * one stays. Do not write a test that merely appears to cover this: the fixture
+   * that used to (a rollback of a rollback) is no longer a representable history.
+   */
+  const seeIdentity = (key: string, seq: number): void => {
+    if (!visitedIdentities.has(key)) visitedIdentities.set(key, seq);
+  };
+  let currentKind: "agent" | "skill" = qKind.value;
+  let currentId: string = qId.value;
+  let currentHash: string | undefined = snapHash as string | undefined;
+  /** The root the lineage currently sits in; becomes known at the first hop if unpinned. */
+  let currentProject: string | undefined = snapProject as string | undefined;
+  /** The owning layer it sits in — the same contract, one tier down. */
+  let currentLayer: string | undefined = snapLayer as string | undefined;
+  let firstHopPath: string | undefined = snapPath as string | undefined;
+  let minSequence = 0;
+  /**
+   * The sequence that introduced the walk's ORIGIN position, or 0 when the origin
+   * pre-dates the log (or its bytes never became known). Part of the rollback
+   * AUTHORITY set alongside `trail`: a query entering a lineage mid-way inherits
+   * the provenance of where it entered.
+   */
+  let originSequence = 0;
+
+  // Seed the ORIGIN position when the caller pinned it. Without a seed, a two-link
+  // round trip back to the starting bytes has nothing to compare against.
+  // The origin seed is deferred to the first hop: its stamp depends on which entry
+  // the walk actually starts from.
+
+  for (let step = 0; step <= m.entries.length; step++) {
+    const matches = departingFrom(currentKind, currentId).filter((e) => {
+      if (e.sequence <= minSequence) return false; // never walk backwards in time
+      // Byte identity when BOTH sides recorded one — this is what stops an
+      // id-reusing later definition from hijacking the chain.
+      // CODEX #2: `content_hash === null` was a WILDCARD — `A → B@hash1` followed
+      // by an unrelated `B@null → C` traversed as one chain and resolved to C, the
+      // wrong bytes. When the caller's identity is KNOWN, an entry that records no
+      // hash cannot match it: absence is not agreement.
+      if (currentHash !== undefined) {
+        if (e.from.content_hash !== currentHash) return false;
+      }
+      // THE ROOT, on exactly the same terms as the bytes (task #27). After the first
+      // hop `currentProject` is the successor's own `project_id`, so a later entry
+      // departing an identically-named, identically-hashed definition in a DIFFERENT
+      // root is not a continuation of this chain. That is the whole wrong-bytes fix:
+      // `umbrella/A@a → sub-one/X@3` no longer chains into `umbrella/X@3 → sub-two/Y`.
+      if (currentProject !== undefined) {
+        if (e.from.project_id !== currentProject) return false;
+      }
+      // …and the LAYER, on the same terms. Without it a move within one root —
+      // `.claude/agents → .guild/agents`, cap-loc-D09's own shape — has identical
+      // identities on both ends and reads as going nowhere.
+      if (currentLayer !== undefined) {
+        if (e.from.home !== currentLayer) return false;
+      }
+      // A supplied path disambiguates the FIRST hop only; later hops are reached
+      // through the successor's identity, not through history's spelling.
+      if (step === 0 && firstHopPath !== undefined) {
+        return e.from.historical_path === firstHopPath;
+      }
+      return true;
+    });
+
+    if (matches.length === 0) {
+      return trail.length === 0
+        ? { status: "not_found", ref: null, trail } // NEVER a fallback to live content
+        : { status: "ambiguous", ref: null, trail }; // dead end mid-chain
+    }
+    // MULTIPLE FORWARD MATCHES — now a SETTLED case, because the state that made
+    // it hard is unrepresentable.
+    //
+    // The LIVENESS RULE (validation) rejects a one-to-many fork outright: a source
+    // adopted away and never restored cannot appear as a source again. So multiple
+    // forward matches from one identity can ONLY be a re-adoption reached through a
+    // rollback — one history, in order. Take the EARLIEST and keep walking; the
+    // chain replays the real sequence and the trail is the full provenance.
+    //
+    // Three read-time rules were tried before this and each was wrong differently:
+    // "ambiguous always" broke re-adoption; "same destination, take earliest"
+    // resolved to the WRONG BYTES; "take latest" fixed that but needed a growing
+    // pile of sameness checks (source hash, destination path, whole locator) to stop
+    // conflicts masquerading as re-adoptions. Removing the state beat judging it —
+    // the whole discriminator is gone, not merely corrected.
+    // The liveness rule removes the FORK, but not the case where a query names an
+    // identity loosely: a hash-less query for "A" can match `A@h1->B` and `A@h2->B`,
+    // which are two genuinely different sources the caller has not distinguished.
+    // Multiple matches are one history ONLY if they are one IDENTITY.
+    //
+    // AND IDENTITY HAS EXACTLY ONE DEFINITION HERE (codex round 5, #4). This used to
+    // compare the whole source LOCATOR — `historical_path` and `home` as well — while
+    // liveness compared `identityOf` = (kind, id, bytes). Reproduced against the
+    // pristine tip: `A@h/p1→B(1)`, `B→A@h(2 rb 1)`, `A@h/p2→C(3)` VALIDATED, because
+    // the write side called those one identity and let the rollback restore it — yet
+    // a query pinned to `A@h` without a path answered `ambiguous`, because the read
+    // side re-litigated the question with a stricter rule.
+    //
+    // Two claims broke at once: the file's identity definition, and the doc on
+    // `historical_path` ("Optional, and DISAMBIGUATING when present") — a field is
+    // not optional if omitting it changes a `resolved` into an `ambiguous`. The two
+    // sites now share `identityOf`, so they cannot drift again; that is the same
+    // consolidation the merged codex round made when they disagreed before.
+    //
+    // What this does NOT relax: differing BYTES are still two sources, because bytes
+    // are IN the identity. `A@h1` and `A@h2` under a hash-less query stay ambiguous,
+    // and pinning `content_hash` still disambiguates them — which is what that field
+    // is for, and what a path was never able to mean.
+    if (matches.length > 1) {
+      const head = matches[0].from;
+      const headKey = identityOf(
+        currentKind,
+        head.id,
+        head.content_hash,
+        head.project_id,
+        head.home
+      );
+      const oneSource = matches.every(
+        (x) =>
+          identityOf(
+            currentKind,
+            x.from.id,
+            x.from.content_hash,
+            x.from.project_id,
+            x.from.home
+          ) === headKey
+      );
+      if (!oneSource) {
+        return {
+          status: "ambiguous",
+          ref: null,
+          trail: [...trail, ...matches.map((x) => x.sequence)],
+        };
+      }
+    }
+    const entry = matches.reduce((a, b) => (a.sequence <= b.sequence ? a : b));
+
+    trail.push(entry.sequence);
+    minSequence = entry.sequence;
+
+    // The caller supplies an id but often no hash, so the first matched entry's
+    // `from` is the only place the ORIGIN bytes become known. Recovering them here
+    // extends the cycle guard to the common un-pinned query.
+    if (step === 0) {
+      // Seed the ORIGIN now that the first hop is known. The caller may have pinned
+      // the bytes; otherwise the first entry's `from` is where they become known.
+      const originHash = currentHash ?? entry.from.content_hash;
+      // The root is recovered here for the same reason the bytes are: an un-pinned
+      // caller only learns where the lineage started once the first hop is chosen.
+      const originProject = currentProject ?? entry.from.project_id;
+      const originLayer = currentLayer ?? entry.from.home;
+      if (originHash !== null && originHash !== undefined) {
+        const k = identityKey(currentKind, currentId, originHash, originProject, originLayer);
+        // The SAME stamp feeds the cycle guard and the rollback-authority set, so
+        // "which entry put this walk where it started" has exactly one answer. 0 ⇒
+        // the origin pre-dates the log, and no rollback can claim to have unwound it.
+        originSequence = originStamp(k, entry.sequence);
+        seeIdentity(k, originSequence);
+      }
+    }
+
+    if (entry.to === null) return { status: "removed", ref: null, trail };
+
+    const next = entry.to;
+
+    // A position already occupied ⇒ the lineage closed a loop — UNLESS this edge is
+    // a PROVEN rollback.
+    //
+    // That exemption is load-bearing, and finding it is why this guard is written
+    // this way. `rolled_back` entries are REQUIRED by the cross-entry proof above to
+    // land back on the reversed entry's `from` identity (id AND, when recorded,
+    // content_hash). So every well-formed rollback returns to bytes the lineage has
+    // already occupied — a naive "revisited position ⇒ cycle" rule would flag EVERY
+    // legal rollback as ambiguous, breaking the central forward-append semantic S3
+    // exists to express (`A → B → A'` is a chain, never a rewind).
+    //
+    // The distinction is AUTHORIZATION, not geometry. A rollback is an authorized
+    // return: the validator has already proven it references a real, strictly
+    // earlier entry, that it genuinely reverses it in both directions, and that the
+    // entry it names is the OPERATIVE one (from which "no entry is reversed twice"
+    // follows). That last clause used to be asserted here and enforced nowhere.
+    // An UNLABELLED edge back to an occupied position has
+    // proven none of that — it is a corrupt or mislabelled loop with an
+    // indeterminate endpoint, and that is what `ambiguous` is for.
+    //
+    // Checked BEFORE the `hasNext` lookahead: a loop is a loop whether or not it
+    // continues.
+    const nextIdentity = identityKey(
+      next.kind,
+      next.id,
+      next.content_hash,
+      next.project_id,
+      next.layer
+    );
+    // A proven rollback REWINDS the lineage, so the era it undid stops counting as
+    // occupied — a later RE-ADOPTION is new history, not a loop. Exempting only the
+    // rollback EDGE (and not the era) left `A->B, B->A rollback, A->B` tripping on
+    // entry 3, i.e. the legitimate re-adoption still reported `ambiguous`, just from
+    // a different guard. Found by repo-prep while checking this guard against the
+    // liveness rule; their patch, their reasoning.
+    //
+    // THE EXEMPTION IS PER LINEAGE — IT IS NOT A PROPERTY OF THE EDGE (codex round
+    // 5, #2). It used to be unconditional: ANY walk that reached a `rolled_back`
+    // edge skipped the revisit check and took its rewind. But a rollback is proven
+    // against exactly ONE earlier entry, and that proof only says something about
+    // the lineage that entry belongs to. Reproduced against the pristine tip:
+    //
+    //   U→N(1), N→Z(2), C→N(3), Z→X(4), N→X(5), X→N(6 rb 5)
+    //   resolving U walked 1,2,4,6 and answered `resolved` — a closed loop back to
+    //   the N it occupied at step 1, concealed by an exemption earned by sequence 5,
+    //   an entry U's lineage never touched. The rewind boundary 5 correctly
+    //   PRESERVED that N (seen at 1), so the guard would have caught it; the
+    //   unconditional exemption is what skipped the guard entirely.
+    //
+    // A walk may still FOLLOW a foreign rollback — that is not the defect, and
+    // requiring trail membership to follow was tried and REGRESSED a real history:
+    // `A→B(1), B→C(2), C→B(3 rb 2), B→A(4 rb 1)` queried at B must resolve to A, and
+    // entry 4 reverses sequence 1, which a walk starting at B never traversed.
+    // Following is about where the bytes went; the EXEMPTION is a claim of
+    // authority, and only the reversed entry's own lineage holds it.
+    //
+    // THE AUTHORITY SET IS THE TRAIL *PLUS THE ORIGIN'S INTRODUCTION*, and getting
+    // that wrong is the trap this rule sits in. A bare `trail.includes(...)` was
+    // written first and reddened D19-R1.1: `A→B(1), B→A(2 rb 1), A→B(3)` queried at
+    // B, where entry 2 legitimately unwinds the entry that CREATED the walk's own
+    // starting position — but the walk never traversed entry 1, because it began
+    // after it. A query entering mid-lineage inherits its origin's provenance;
+    // `originSequence` below is exactly the stamp `originStamp` already computes for
+    // the cycle guard, so the two cannot drift apart. The pre-existing test was
+    // right and this rule was wrong — it is recorded here rather than quietly
+    // relaxed, because that test is the only thing that said so.
+    const authorizedRewind =
+      entry.reason === "rolled_back" &&
+      ((entry.reverses_sequence as number) === originSequence ||
+        trail.includes(entry.reverses_sequence as number));
+    if (authorizedRewind) {
+      // Rewind to the era boundary: forget only what the reversed entry's era
+      // introduced. `reverses_sequence` is non-null here (the validator proves it
+      // IFF `rolled_back`) and names a real, unique, operative target.
+      const boundary = entry.reverses_sequence as number;
+      for (const [key, seq] of visitedIdentities) {
+        if (seq >= boundary) visitedIdentities.delete(key);
+      }
+    } else if (visitedIdentities.has(nextIdentity)) {
+      // Includes the unauthorized-rollback case: no rewind is taken either, because
+      // forgetting an era is the same privilege as skipping the check. Fail-closed.
+      return { status: "ambiguous", ref: null, trail };
+    }
+    seeIdentity(nextIdentity, entry.sequence);
+    const hasNext = departingFrom(next.kind, next.id).some(
+      (e) =>
+        e.sequence > minSequence &&
+        // CODEX #2: same wildcard, second site. `next.content_hash` is always
+        // known (it comes from a validated ref), so an entry with a null hash is
+        // NOT a continuation of this chain.
+        e.from.content_hash === next.content_hash &&
+        // …and the same root. `next.project_id` always exists (a validated ref), so
+        // an entry departing another root is NOT a continuation of this chain.
+        e.from.project_id === next.project_id &&
+        e.from.home === next.layer
+    );
+    if (!hasNext) {
+      return { status: "resolved", ref: deepFreeze(next), trail };
+    }
+    currentKind = next.kind as "agent" | "skill";
+    currentId = next.id;
+    currentHash = next.content_hash;
+    currentProject = next.project_id;
+    currentLayer = next.layer;
+    firstHopPath = undefined;
+  }
+
+  // ── DEAD BY CONSTRUCTION, and kept deliberately (codex round 5, #8) ────────
+  //
+  // The comment that stood here — "Exceeded the entry count ⇒ a cycle forward-only
+  // did not already exclude" — described a case that CANNOT OCCUR, and named a
+  // reason that is not true either: forward-only does not merely fail to exclude
+  // such a cycle, it makes one impossible.
+  //
+  // TERMINATION PROOF. `minSequence` starts at 0. Every iteration filters `matches`
+  // by `e.sequence > minSequence`; if none remain the loop returns. Otherwise the
+  // chosen entry satisfies `entry.sequence > minSequence` and immediately becomes
+  // the new `minSequence`, so it strictly increases by at least 1 per iteration.
+  // The manifest validator has already proven every sequence is an integer in
+  // [1, N] and gap-free, so after N iterations `minSequence >= N` and no entry can
+  // satisfy the filter. The loop therefore always returns through a typed branch
+  // within N iterations, and it is allowed N+1.
+  //
+  // MEASURED, not just argued: with this statement replaced by a sentinel, 200,855
+  // valid fuzzed manifests over 2,410,260 walks reached it ZERO times, as did a
+  // maximal linear chain at MAX_ENTRIES that consumes every one of its 4,096 hops,
+  // and the full 241-assertion S2/S3 suite was indifferent to the substitution.
+  //
+  // WHY IT IS KEPT RATHER THAN DELETED, since four sibling guards in this file were
+  // deleted for being untestable. Those four were removable with no behavioural
+  // change — an equivalent guard already covered each. This one is not: deleting the
+  // statement means changing the loop to `for (;;)` so TypeScript stops requiring a
+  // terminal return, which trades a provably-dead line for a HANG if the
+  // monotonicity invariant above is ever broken by a later edit. The house rule is
+  // fail-closed, and a typed `ambiguous` is the fail-closed answer where an infinite
+  // loop is the worst possible one. This follows the precedent already set (and
+  // documented) for the `target === undefined` guard in the rollback proof.
+  //
+  // Do not write a test that appears to cover this. No valid input can reach it;
+  // `D8` in adoption-manifest-open-defects.test.ts pins the INVARIANT that keeps it
+  // dead instead, which is the thing that could actually regress.
+  return { status: "ambiguous", ref: null, trail };
+}
+
+/** Deep-freeze so a caller cannot mutate the manifest through the returned ref. */
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  for (const k of Object.getOwnPropertyNames(value)) {
+    deepFreeze((value as Record<string, unknown>)[k]);
+  }
+  return Object.freeze(value);
+}

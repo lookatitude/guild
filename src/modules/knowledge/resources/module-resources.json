@@ -29,14 +29,14 @@
       "id": "knowledge-links-builder",
       "source_path": "scripts/knowledge-links-builder.ts",
       "resource_path": "resources/scripts/knowledge-links-builder.ts",
-      "sha256": "5b8ba984321c5743552a12276a2bfc2ddd2e39960d4f7ca1dd35b9c33dfe6d89"
+      "sha256": "a92d5d0c9fca7ddd8dcf569c65996112fefc1a90a0ce352dbe5034a76ebf60bf"
     },
     {
       "category": "scripts",
       "id": "knowledge-links-traverse",
       "source_path": "scripts/knowledge-links-traverse.ts",
       "resource_path": "resources/scripts/knowledge-links-traverse.ts",
-      "sha256": "20a64dae0a5f0a58ee4f5d472fe0a21bee5eea927c61715dfac616b41b5c71f8"
+      "sha256": "5e142d6965a185de3f52a07d13a30c9f08b4ca0d290d57e5a6b16ea25cf0946e"
     },
     {
       "category": "scripts",
@@ -85,7 +85,7 @@
       "id": "guild-learn",
       "source_path": "skills/knowledge/learn/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn/SKILL.md",
-      "sha256": "a3080841e61f888faad62def80283ffb2b9c4c530516292efb3772d50a1d6dd5"
+      "sha256": "9e4fcb59bbeb64506cd26ff8151f2ee8ce61970156519d0d61c0d923ad5d6a2c"
     },
     {
       "category": "skills",
@@ -106,7 +106,7 @@
       "id": "guild-learn-graph",
       "source_path": "skills/knowledge/learn-graph/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-graph/SKILL.md",
-      "sha256": "53ccaf9d05cbf3f99b75cd4880cbc8b1e768759062ac51a5e10667d0d4ec43f7"
+      "sha256": "9da7d08925a7efdcdd790ebe794e6ff3e6e969ecfe99353d4d462c28e8bd9414"
     },
     {
       "category": "skills",
@@ -127,7 +127,7 @@
       "id": "guild-learn-map",
       "source_path": "skills/knowledge/learn-map/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn-map/SKILL.md",
-      "sha256": "6b34fe3b8c4c779fc35c11887ad19f1346d8c331d2d0d8ef5ebc3d5ed61dbc4d"
+      "sha256": "9818bd209d68f2e2f93faf0e00aff9e7b5247db6fa4cd0b87f20f6bcbf7e2373"
     },
     {
       "category": "skills",

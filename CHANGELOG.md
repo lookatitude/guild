@@ -10,6 +10,61 @@ from v1.0.0 onward.
 
 _Entries are generated at the release cut by `scripts/release-changelog.ts`._
 
+## [2.5.0] — 2026-08-02
+
+### Added
+
+- runtime: complete multi-host runtime convergence ([#111](https://github.com/lookatitude/guild/pull/111)) — @lookatitude
+- registry: provenance flips for live-verified hosts — github-copilot + opencode (#110) ([#112](https://github.com/lookatitude/guild/pull/112)) — @lookatitude
+
+### Fixed
+
+- update, guild-run: v2.4.0 residuals — signal renders versions; opencode invocation corrected ([#109](https://github.com/lookatitude/guild/pull/109)) — @lookatitude
+- codex: git installs now get **working, correctly-scoped** `guild-memory` and `guild-telemetry` MCP servers ([#114](https://github.com/lookatitude/guild/pull/114)) — @lookatitude
+- codex: the generated root manifest is version-synced, so `codex plugin list` reports the real installed version ([#131](https://github.com/lookatitude/guild/pull/131)) — @lookatitude
+
+### Documentation
+
+- wiki: v2.4.0 validation record + propagation probe result ([#107](https://github.com/lookatitude/guild/pull/107)) — @lookatitude
+
+### Internal
+
+- initiatives: archive cross-host-release-distribution (closed, released in v2.4.0) ([#113](https://github.com/lookatitude/guild/pull/113)) — @lookatitude
+
+### Changed
+
+- Integrated capability-localization stack — eight branches, four defects that existed only in the combination ([#129](https://github.com/lookatitude/guild/pull/129)) — @lookatitude
+
+### Upgrade notes
+
+**Codex users gain MCP servers — and must pass `cwd`.** A Codex git-ref install
+(`codex plugin marketplace add lookatitude/guild --ref main`) now ships working
+`guild-memory` (wiki search) and `guild-telemetry` (run query) servers, which no
+prior install path delivered. Because Codex launches plugin MCP servers from the
+plugin's own installed directory and passes no workspace signal, each tool call
+**must include `cwd` set to your project's absolute path**. Without it the call
+returns a clear error rather than answering from the wrong project — the servers
+refuse to serve Guild's own bundled data. The tool descriptions state this.
+
+Installs made through `install.sh` (local marketplace) still declare no MCP
+servers; that path is tracked in
+[#115](https://github.com/lookatitude/guild/issues/115).
+
+**Wrapper hosts still on ≤2.3.2** (pi, antigravity, cursor, …) carry a
+pre-2.4.0 `guild-run update` that cannot self-update. Run the reinstall path
+once — `curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update` —
+after which `guild-run update` works normally.
+
+**A note on one commit message.** The squash commit for
+[#114](https://github.com/lookatitude/guild/pull/114) on `next` reads
+`WIP … BLOCKED on data-root scoping`. That title is stale: it was set while the
+PR was paused mid-review and not restored before merge. The scoping issue it
+names was *fixed* in that PR, not left open — the work shipped complete and
+gate-approved. The commit message could not be corrected without rewriting a
+protected channel branch.
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.4.0...v2.5.0
+
 ## [2.4.0] — 2026-07-27
 
 The cross-host release-distribution wave (initiative `cross-host-release-distribution`,

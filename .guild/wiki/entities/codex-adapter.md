@@ -11,7 +11,7 @@ source_refs:
 related: [host-adapter-contract, feature-degradation-contracts, phase-continuity-requirements, claude-code-adapter, codex-adapter, gemini-cli-adapter, pi-adapter, claude-code-desktop-adapter, claude-code-web-adapter, codex-app-adapter, antigravity-2-adapter, claude-ai-connector-adapter]
 applies_to: [plugin]
 created_at: 2026-05-28
-updated_at: 2026-05-28
+updated_at: 2026-07-30
 expires_at: null
 supersedes: null
 sensitivity: public
@@ -19,7 +19,7 @@ sensitivity: public
 
 # Codex CLI adapter
 
-Codex CLI is a local terminal coding agent (source: audit §"Source-backed platform facts / Codex CLI and Codex app") that offers native subagent dispatch, `codex exec` for non-interactive lane execution, MCP support (stdio and streamable HTTP), plugin hooks, and a `.codex-plugin/plugin.json` manifest format. It is the **strong parity target** for Guild's CLI track — the existing `CodexPaneAdapter` (`plugin/scripts/lib/pane-adapter.ts:111-168`) already emits `codex exec '<prompt>'` and exports `GUILD_RUN_ID`, establishing the skeleton. The key adaptation challenges relative to the Claude reference implementation are: hook `permissionDecision: ask` is unsupported in `PreToolUse` (Codex documents this as "parsed but not supported, causes hook failure"); a separate `PermissionRequest` event exists instead; and auth preflight must accept both `OPENAI_API_KEY` and `codex login` paths (audit §"Current local defects blocking generic tmux teams", LEAKS D-6).
+Codex CLI is a local terminal coding agent (source: audit §"Source-backed platform facts / Codex CLI and Codex app") that offers native subagent dispatch, `codex exec` for non-interactive lane execution, MCP support (stdio; streamable HTTP is NOT supported — corrected 2026-07-30, #114), plugin hooks, and a `.codex-plugin/plugin.json` manifest format. It is the **strong parity target** for Guild's CLI track — the existing `CodexPaneAdapter` (`plugin/scripts/lib/pane-adapter.ts:111-168`) already emits `codex exec '<prompt>'` and exports `GUILD_RUN_ID`, establishing the skeleton. The key adaptation challenges relative to the Claude reference implementation are: hook `permissionDecision: ask` is unsupported in `PreToolUse` (Codex documents this as "parsed but not supported, causes hook failure"); a separate `PermissionRequest` event exists instead; and auth preflight must accept both `OPENAI_API_KEY` and `codex login` paths (audit §"Current local defects blocking generic tmux teams", LEAKS D-6).
 
 ## Target host capabilities
 
@@ -68,7 +68,7 @@ model_tiers:
 
 mcp:
   stdio: true
-  http: true                  # streamable HTTP also supported
+  http: false                 # corrected 2026-07-30 (#114) to match host-capabilities-schema.ts mcp.http:false
   plugin_bundled: true
   core_provides_mcp: true
 
@@ -104,14 +104,14 @@ ttl_seconds: 3600
 | (4) Dispatch | Codex subagents + `codex exec` for tmux lanes | — | `DispatchAdapter` wraps `codex exec '<prompt>'` per lane. Receipt collection via `.guild/runs/<run-id>/handoffs/` unchanged. |
 | (5) Permissions | `PermissionRequest` event for ask; `PreToolUse` deny for hard deny | No in-line `PreToolUse ask` | `ScopePolicy.resolve()` runs identically; `PermissionEmitter` maps `ask` → `PermissionRequest`; if `PermissionRequest` unavailable → file-bus `approval_request` + pause (FDC-11). |
 | (6) Model tiers | `{ model: "default", reasoning: low/medium/high }` | — | `ModelResolver` maps Guild tiers; no Claude model names used (audit §"P0: Model tiers are Claude-specific"). |
-| (7) MCP | stdio + streamable HTTP; plugin-bundled MCP manifest block | — | `McpAdapter` emits MCP entries in `.codex-plugin/plugin.json`; `CLAUDE_PLUGIN_ROOT` compat OK for existing scripts (audit §"MCP support matrix"). |
+| (7) MCP | stdio (**streamable HTTP is NOT supported** — corrected 2026-07-30 to match the authoritative capability row `mcp.http: false` in host-capabilities-schema.ts); plugin-bundled MCP manifest block | — | `McpAdapter` emits MCP entries in `.codex-plugin/plugin.json`. **CORRECTED 2026-07-30 (#114): `CLAUDE_PLUGIN_ROOT` compat is NOT OK for MCP args** — Codex expands that placeholder for hooks but never for MCP server args (measured, codex 0.146.0). The resolvable form is plugin-relative args + `cwd: "."`, which additionally requires `--no-cwd-fallback` so the server does not take the plugin payload root as its data root. |
 | (8) Team visibility | Rung 1 (tmux + `codex exec` panes) → Rung 2 (Codex subagents) → Rung 4 (serial) | No `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env | Team env gate stays inside `ClaudePaneAdapter` only; Codex pane adapter does not set it (audit §"Current local defects" / D-4). |
 
 ## Per-feature degradation matrix
 
 | FDC | Full behavior | This host | Degradation contract |
 |---|---|---|---|
-| FDC-1 Memory | MCP stdio `guild-memory` | stdio or HTTP MCP available | No degradation; MCP bundled in plugin manifest. |
+| FDC-1 Memory | MCP stdio `guild-memory` | stdio MCP available (HTTP is NOT — see row (7)) | **PARTIAL, corrected 2026-07-30 (#114).** A git-ref install now bundles a working declaration (relative args + `cwd: "."` + `--no-cwd-fallback`), so `guild-memory` runs — but the caller MUST pass `cwd` per tool call, because Codex gives the child no workspace signal (scrubbed env, cwd = plugin root) and the server fails closed rather than serving Guild's own bundled wiki. The runtime adapter still reports `memory` as `degraded` with a filesystem-BM25 primary (`host-adapters/codex-cli.ts`); that row stands until the adapter is rewired to prefer the now-working MCP path. The rendered (local-marketplace) package still declares no MCP servers — tracked in #115. |
 | FDC-2 Knowledge-graph + recall | `guild-memory` MCP or fs scan | MCP available | No degradation expected; fallback to fs/BM25 if server fails. |
 | FDC-3 Context assembly | Context bundle always written | Full | Bundle written identically; `degraded_retrieval` only if FDC-1/2 degrade. |
 | FDC-4 Agent communication | File bus canonical | Full | File bus via `codex exec` pane writes; `SendMessage` not used (FDC-4 contract). |
@@ -123,7 +123,7 @@ ttl_seconds: 3600
 | FDC-10 Visuals / UI | Host-native | Codex CLI text / startup card | No degradation; visual renderer is Codex-specific. |
 | FDC-11 Security / permissions | Policy core + ask path | `PermissionRequest` replaces `PreToolUse ask` | `ScopePolicy` runs identically; emitter degraded for ask path. `permission_mode: degraded` recorded. |
 | FDC-12 Cost + subscription | Native billing path | `cost_path: native_process` (codex exec is native) | No degradation; `codex exec` is Codex's native lane path. |
-| FDC-13 MCP | stdio / HTTP | Full | MCP bundled; both transports supported. |
+| FDC-13 MCP | stdio only | Partial | **CORRECTED 2026-07-30 (#114).** Only stdio is supported (authoritative row `mcp: {stdio: true, http: false}`); the earlier "both transports" claim was wrong. MCP is bundled via the repo-root `.codex-plugin/plugin.json` for git installs, with plugin-relative args + `cwd: "."` + `--no-cwd-fallback`; the rendered local-marketplace package still declares none (#115). |
 | FDC-14 Host-native subagents | Parallel agents | Codex native subagents (Rung 2) | Subagent dispatch available; no tmux required for parallelism. |
 | FDC-15 Work isolation | Worktrees | Via shell/Git | All CLI hosts drive Git; approval policy needed for branch ops. |
 | FDC-16 Telemetry + replay | Normalized `guild.trace_event.v1` | Requires `GuildHookEvent` normalization layer | Codex has `turn_id`, `PermissionRequest`, `apply_patch` field names. `HookPayload` normalization (LEAKS H-1) must be applied. `source: host_hook`, `fidelity: full` when hooks present. |

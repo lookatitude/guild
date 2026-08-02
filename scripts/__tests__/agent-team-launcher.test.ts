@@ -48,11 +48,22 @@ function runScript(
   for (const [k, v] of Object.entries({ ...baseEnv, ...env })) {
     if (v !== undefined) finalEnv[k] = v;
   }
-  const result = spawnSync("npx", ["tsx", SCRIPT, ...args], {
-    encoding: "utf8",
-    env: finalEnv,
-    timeout: 120_000,
-  });
+  // GUILD_TSX_BIN pins the TypeScript runner for the spawned launcher. When it is
+  // unset the default `npx tsx` path is used, so the repository's own `npm test`
+  // is unchanged; when it is set (hermetic/offline runs against a pre-provisioned
+  // runner) the child is exec'd directly and npx never resolves or fetches tsx.
+  const tsxBin = process.env["GUILD_TSX_BIN"];
+  const result = tsxBin
+    ? spawnSync(tsxBin, [SCRIPT, ...args], {
+        encoding: "utf8",
+        env: finalEnv,
+        timeout: 120_000,
+      })
+    : spawnSync("npx", ["tsx", SCRIPT, ...args], {
+        encoding: "utf8",
+        env: finalEnv,
+        timeout: 120_000,
+      });
   return {
     exitCode: result.status ?? 1,
     stdout: result.stdout ?? "",
@@ -753,6 +764,89 @@ describe("agent-team-launcher.ts", () => {
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
       expect(signal.backend).toBe("agent");
+    });
+
+    // MH-04 selector reach. Every assertion above is satisfied by BOTH the old
+    // inline ladder and the port rewire, because the port reproduces the shipped
+    // reason strings verbatim — so none of them can tell the two apart. This one
+    // can: it intercepts module loading INSIDE the spawned launcher process and
+    // records each call to the port's `selectExecutionSubstrate`. On the pre-MH-04
+    // launcher the recording stays empty while stdout is byte-for-byte the same,
+    // which is exactly what makes this assertion the discriminating one.
+    it("the spawned launcher reaches the port-authored selector (not a launcher-local ladder)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
+      const recordPath = path.join(tmpDir, "selector-calls.jsonl");
+
+      // A CommonJS preload that wraps the port module's export in the CHILD
+      // process. tsx compiles the launcher to CJS, so the port import goes
+      // through Module._load; a Proxy is used because esbuild's export getters
+      // are non-configurable and cannot be redefined in place.
+      const hookPath = path.join(tmpDir, "selector-probe.cjs");
+      fs.writeFileSync(
+        hookPath,
+        [
+          'const Module = require("module");',
+          'const fsx = require("fs");',
+          "const out = process.env.GUILD_SELECTOR_PROBE_FILE;",
+          "const load = Module._load;",
+          "Module._load = function (request) {",
+          "  const exported = load.apply(this, arguments);",
+          '  if (typeof request === "string" && request.endsWith("execution-transport-ports") && exported) {',
+          "    return new Proxy(exported, {",
+          "      get(target, prop, receiver) {",
+          "        const value = Reflect.get(target, prop, receiver);",
+          '        if (prop === "selectExecutionSubstrate" && typeof value === "function") {',
+          "          return function (...callArgs) {",
+          "            const selection = value.apply(this, callArgs);",
+          '            fsx.appendFileSync(out, JSON.stringify(selection) + "\\n");',
+          "            return selection;",
+          "          };",
+          "        }",
+          "        return value;",
+          "      },",
+          "    });",
+          "  }",
+          "  return exported;",
+          "};",
+          "",
+        ].join("\n")
+      );
+
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
+        {
+          TMUX: undefined,
+          PATH: `${noTmuxBin}:${process.env.PATH ?? ""}`,
+          GUILD_INDEPENDENT_AGENTS_SUPPORTED: "1",
+          GUILD_SELECTOR_PROBE_FILE: recordPath,
+          NODE_OPTIONS: `--require "${hookPath}"`,
+        }
+      );
+
+      expect(exitCode).toBe(0);
+
+      // The port-authored selector actually RAN in the launcher process.
+      expect(fs.existsSync(recordPath)).toBe(true);
+      const calls = fs
+        .readFileSync(recordPath, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+
+      // It returned the versioned contract record — facts the inline ladder
+      // never produced, so these cannot be reproduced by copied reason strings.
+      const selection = calls[0];
+      expect(selection.schema_version).toBe("guild.execution.transports.v1");
+      expect(selection.contract_version).toBe(1);
+      expect(selection.dispatch_mode).toBe("agent");
+      expect(selection.transport_id).toBe("in-process");
+
+      // And the launcher PRINTED the port's decision rather than one of its own.
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe(selection.dispatch_mode);
+      expect(signal.reason).toBe(selection.reason);
     });
   });
 
@@ -2514,6 +2608,297 @@ describe("agent-team-launcher.ts", () => {
       expect(runIds.length).toBe(1);
       const scopeDir = path.join(runsDir, runIds[0], "scope");
       expect(fs.existsSync(scopeDir)).toBe(false);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // MH-04 BF-2 — production execution resolves through HostExecutionRuntime
+  // ─────────────────────────────────────────────────────────────
+  //
+  // These assert the PRODUCTION path inside the spawned launcher process, not a
+  // source grep: a CommonJS preload wraps `createHostExecutionRuntime` and the
+  // shipped backend classes in the CHILD, records every `transportFor()` call and
+  // every backend execution, and marks each backend execution with whether a
+  // resolved transport port was on the stack when it fired.
+  //
+  // That flag is the DISCRIMINATING control. A launcher that constructs a backend
+  // and calls `.launch()`/`.plan()`/`.spawn()` on it directly still produces the
+  // same stdout, the same manifest and the same exit code — but its backend
+  // executions carry `via_port: false`, and every test below fails.
+  describe("MH-04 BF-2: production dispatch resolves through HostExecutionRuntime", () => {
+    interface ProbeEvent {
+      event: string;
+      requested?: string;
+      status?: string;
+      method?: string;
+      kind?: string;
+      via_port?: boolean;
+      transports?: string[];
+    }
+
+    /**
+     * Write the child-process probe. `Module._load` is wrapped (tsx compiles the
+     * launcher to CJS, so every import goes through it) and a Proxy is used
+     * because esbuild's export getters are non-configurable.
+     */
+    function writeRuntimeProbe(dir: string): string {
+      const hookPath = path.join(dir, "runtime-probe.cjs");
+      fs.writeFileSync(
+        hookPath,
+        [
+          'const Module = require("module");',
+          'const fsx = require("fs");',
+          "const out = process.env.GUILD_RUNTIME_PROBE_FILE;",
+          'const emit = (rec) => fsx.appendFileSync(out, JSON.stringify(rec) + "\\n");',
+          "// Depth of resolved-transport-port calls currently on the stack.",
+          "let portDepth = 0;",
+          "const EXEC = new Set([",
+          '  "launch", "plan", "spawn", "isAvailable", "preflight",',
+          '  "sessionExists", "windowExists", "currentSessionName",',
+          "]);",
+          "const wrapPort = (id, port) =>",
+          "  new Proxy(port, {",
+          "    get(t, p, r) {",
+          "      const v = Reflect.get(t, p, r);",
+          '      if (typeof v !== "function") return v;',
+          "      return function (...args) {",
+          '        emit({ event: "port_call", requested: id, method: String(p) });',
+          "        portDepth += 1;",
+          "        try { return v.apply(t, args); } finally { portDepth -= 1; }",
+          "      };",
+          "    },",
+          "  });",
+          "const wrapRuntime = (rt) =>",
+          "  new Proxy(rt, {",
+          "    get(t, p, r) {",
+          "      const v = Reflect.get(t, p, r);",
+          '      if (p !== "transportFor" || typeof v !== "function") return v;',
+          "      return function (id) {",
+          "        const outcome = v.call(t, id);",
+          '        emit({ event: "transport_for", requested: String(id), status: outcome.status });',
+          '        if (outcome.status !== "succeeded" || !outcome.value) return outcome;',
+          "        return Object.assign({}, outcome, { value: wrapPort(String(id), outcome.value) });",
+          "      };",
+          "    },",
+          "  });",
+          "const wrapBackend = (Ctor, kind) =>",
+          "  new Proxy(Ctor, {",
+          "    construct(target, args, nt) {",
+          '      emit({ event: "backend_constructed", kind });',
+          "      const inst = Reflect.construct(target, args, nt);",
+          "      return new Proxy(inst, {",
+          "        get(t, p, r) {",
+          "          const v = Reflect.get(t, p, r);",
+          '          if (typeof v !== "function" || !EXEC.has(String(p))) return v;',
+          "          return function (...args) {",
+          '            emit({ event: "backend_exec", kind, method: String(p), via_port: portDepth > 0 });',
+          "            return v.apply(t, args);",
+          "          };",
+          "        },",
+          "      });",
+          "    },",
+          "  });",
+          "const BACKENDS = {",
+          '  InProcessTeamBackend: "in-process",',
+          '  RemoteTeamBackend: "remote",',
+          '  TmuxTeamBackend: "tmux",',
+          "};",
+          "const load = Module._load;",
+          "Module._load = function (request) {",
+          "  const exported = load.apply(this, arguments);",
+          '  if (typeof request !== "string" || !exported) return exported;',
+          '  if (request.endsWith("execution-transport-adapters")) {',
+          "    return new Proxy(exported, {",
+          "      get(t, p, r) {",
+          "        const v = Reflect.get(t, p, r);",
+          '        if (p !== "createHostExecutionRuntime" || typeof v !== "function") return v;',
+          "        return function (...args) {",
+          "          const rt = v.apply(this, args);",
+          '          emit({ event: "runtime_created", transports: Array.from(rt.transport_ids) });',
+          "          return wrapRuntime(rt);",
+          "        };",
+          "      },",
+          "    });",
+          "  }",
+          '  if (request.endsWith("lib/team-backend")) {',
+          "    return new Proxy(exported, {",
+          "      get(t, p, r) {",
+          "        const v = Reflect.get(t, p, r);",
+          '        if (typeof v === "function" && BACKENDS[String(p)]) return wrapBackend(v, BACKENDS[String(p)]);',
+          "        return v;",
+          "      },",
+          "    });",
+          "  }",
+          "  return exported;",
+          "};",
+          "",
+        ].join("\n")
+      );
+      return hookPath;
+    }
+
+    function readProbe(file: string): ProbeEvent[] {
+      if (!fs.existsSync(file)) return [];
+      return fs
+        .readFileSync(file, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as ProbeEvent);
+    }
+
+    function probeEnv(dir: string): { file: string; env: Record<string, string | undefined> } {
+      const file = path.join(dir, `runtime-probe-${Math.random().toString(36).slice(2)}.jsonl`);
+      const hook = writeRuntimeProbe(dir);
+      return { file, env: { GUILD_RUNTIME_PROBE_FILE: file, NODE_OPTIONS: `--require "${hook}"` } };
+    }
+
+    /** The control every migrated path must satisfy. */
+    function assertResolvedThroughRuntime(events: ProbeEvent[], transport: string): void {
+      // 1 · The runtime was built from injected ports, not branched on inline.
+      const created = events.filter((e) => e.event === "runtime_created");
+      expect(created.length).toBeGreaterThanOrEqual(1);
+
+      // 2 · The chosen transport was resolved through transportFor().
+      const resolved = events.filter(
+        (e) => e.event === "transport_for" && e.requested === transport
+      );
+      expect(resolved.length).toBeGreaterThanOrEqual(1);
+      expect(resolved.some((e) => e.status === "succeeded")).toBe(true);
+
+      // 3 · Execution actually went THROUGH the resolved port (not merely a
+      //     cosmetic transportFor() followed by direct backend execution).
+      const portCalls = events.filter(
+        (e) => e.event === "port_call" && e.requested === transport
+      );
+      expect(portCalls.length).toBeGreaterThanOrEqual(1);
+
+      // 4 · DIRECT-CONSTRUCTION CONTROL: no backend executed outside a port.
+      const backendExecs = events.filter((e) => e.event === "backend_exec");
+      expect(backendExecs.length).toBeGreaterThanOrEqual(1);
+      expect(backendExecs.filter((e) => e.via_port !== true)).toEqual([]);
+    }
+
+    it("agent rung: in-process dispatch resolves and executes through transportFor", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { file, env } = probeEnv(tmpDir);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-bf2-agent"],
+        env
+      );
+
+      expect(exitCode).toBe(0);
+      // Equivalence: the shipped agent-rung signal shape is unchanged.
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("agent");
+      expect(signal.reason).toBe("explicit agent_mode=agent");
+      expect(signal.slug).toBe("test-slug");
+      expect(signal.ok).toBe(true);
+      expect(Array.isArray(signal.dispatchPlan)).toBe(true);
+      expect(signal.dispatchPlan.length).toBeGreaterThanOrEqual(1);
+      expect(signal.dispatchPlan[0].env.GUILD_RUN_ID).toBe("run-bf2-agent");
+      expect(signal).toHaveProperty("orchestratorPaneId");
+      expect(signal).toHaveProperty("teammatePaneIds");
+      expect(signal).toHaveProperty("notes");
+
+      assertResolvedThroughRuntime(readProbe(file), "in-process");
+    });
+
+    it("remote path: remote dispatch resolves and executes through transportFor", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      fs.mkdirSync(path.join(tmpDir, ".guild"), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "settings.json"),
+        JSON.stringify(
+          {
+            defaults: {
+              cross_host: {
+                enabled: true,
+                hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
+              },
+            },
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+      const { file, env } = probeEnv(tmpDir);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+        { ...env, GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
+      );
+
+      expect(exitCode).toBe(0);
+      // Equivalence: the shipped remote dry-run UX is unchanged.
+      expect(stdout).toMatch(/dry-run.*remote dispatch/i);
+      expect(stdout).toMatch(/security/i);
+      expect(stdout).not.toMatch(/not yet wired/i);
+
+      assertResolvedThroughRuntime(readProbe(file), "remote");
+    });
+
+    it("tmux team path: tmux dispatch resolves and executes through transportFor", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const fakeBin = makeFakeTmuxBin(tmpDir, ["other-window"]);
+      const { file, env } = probeEnv(tmpDir);
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--run-id", "run-bf2-tmux"],
+        {
+          ...env,
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        }
+      );
+
+      expect(exitCode).toBe(0);
+      // Equivalence: collision/availability/attach UX and the manifest survive.
+      expect(stdout).toMatch(/team window "guild-test-slug" created/);
+      expect(stdout).toMatch(/manifest →/);
+      const manifest = path.join(
+        tmpDir,
+        ".guild",
+        "runs",
+        "run-bf2-tmux",
+        "agent-team",
+        "session.json"
+      );
+      expect(fs.existsSync(manifest)).toBe(true);
+      const parsed = JSON.parse(fs.readFileSync(manifest, "utf8"));
+      expect(parsed.mode).toBe("in-session");
+      expect(parsed.window_name).toBe("guild-test-slug");
+
+      const events = readProbe(file);
+      assertResolvedThroughRuntime(events, "tmux");
+      // The tmux rung must reach the port for the SPAWN, not only for probes.
+      const methods = events
+        .filter((e) => e.event === "port_call" && e.requested === "tmux")
+        .map((e) => e.method);
+      expect(methods).toContain("launch");
+    });
+
+    it("collision + availability UX still refuses through the port (no direct backend probe)", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const fakeBin = makeFakeTmuxBin(tmpDir, ["other-window", "guild-test-slug"]);
+      const { file, env } = probeEnv(tmpDir);
+      const { exitCode, stderr } = runScript(["--team", teamPath, "--cwd", tmpDir], {
+        ...env,
+        TMUX: "/tmp/tmux-1000/default,12345,0",
+        PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+      });
+
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/already exists|one team|clobber/i);
+      expect(stderr).toMatch(/select-window|kill-window/);
+
+      const events = readProbe(file);
+      const resolved = events.filter(
+        (e) => e.event === "transport_for" && e.requested === "tmux"
+      );
+      expect(resolved.some((e) => e.status === "succeeded")).toBe(true);
+      // The collision probe itself ran through the resolved port.
+      expect(events.filter((e) => e.event === "backend_exec" && e.via_port !== true)).toEqual([]);
     });
   });
 

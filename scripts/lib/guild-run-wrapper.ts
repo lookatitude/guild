@@ -148,13 +148,13 @@ export interface WrapperPlan {
 // ---------------------------------------------------------------------------
 
 /** Permission modes in ascending autonomy. Index ordering drives degradation. */
-export const AUTONOMY_ORDER: PermissionMode[] = [
+export const AUTONOMY_ORDER: readonly PermissionMode[] = Object.freeze([
   "read_only",
   "ask",
   "accept_edits",
   "auto",
   "bypass_all",
-];
+]);
 
 /**
  * Resolve launch flags for `requested` from caps.permissions.launch_modes.
@@ -396,6 +396,13 @@ export function planWrapperInvocation(
   }
   if (isClaudeCli(request.host as HostKind)) {
     args.push("-p", prompt);
+  } else if (request.host === "opencode") {
+    // VERIFIED 2026-07-30 on opencode 1.18.5 (issue #104 host verification):
+    // `-p` is silently IGNORED and the interactive TUI opens — the G4b `-p`
+    // convention does not hold here. The non-interactive form is the `run`
+    // subcommand with a positional message (`opencode run "<prompt>"`),
+    // confirmed live end to end.
+    args.push("run", prompt);
   } else if (
     isPiCli(request.host as HostKind) ||
     isAntigravityCli(request.host as HostKind) ||
@@ -403,6 +410,10 @@ export function planWrapperInvocation(
   ) {
     // G4b — same non-interactive print-mode convention as pi/antigravity
     // (WrappedCliPaneAdapter's `-p '<prompt>'`), not a fresh per-host guess.
+    // Live-verified 2026-07-30 for cursor (`cursor-agent -p`, flag accepted)
+    // and github-copilot (`gh copilot -p`, real completion). rovo-dev remains
+    // INFERRED — `acli rovodev` is auth-walled before help; its own error text
+    // names `acli rovodev run`, so treat this shape as suspect until verified.
     args.push("-p", prompt);
   } else {
     args.push(prompt);
