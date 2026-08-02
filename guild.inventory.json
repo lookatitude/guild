@@ -1000,6 +1000,11 @@
       "kind": "cli"
     },
     {
+      "id": "capability-adopt",
+      "source_path": "scripts/capability-adopt.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-bundle-determinism",
       "source_path": "scripts/check-bundle-determinism.ts",
       "kind": "cli"
@@ -1485,8 +1490,18 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/adoption-migrate",
+      "source_path": "scripts/lib/capability/adoption-migrate.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/backend-factory",
       "source_path": "scripts/lib/capability/backend-factory.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/compatibility-catalog",
+      "source_path": "scripts/lib/capability/compatibility-catalog.ts",
       "kind": "lib"
     },
     {
@@ -1497,6 +1512,11 @@
     {
       "id": "lib/capability/rank",
       "source_path": "scripts/lib/capability/rank.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/resolver-mode",
+      "source_path": "scripts/lib/capability/resolver-mode.ts",
       "kind": "lib"
     },
     {

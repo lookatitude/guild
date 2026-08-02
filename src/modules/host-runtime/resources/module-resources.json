@@ -341,7 +341,15 @@
       "id": "projection:src/modules/capability/index.ts",
       "source_path": "src/modules/capability/index.ts",
       "resource_path": "resources/src/modules/capability/index.ts",
-      "sha256": "6274cfcc9d65bcc50a7cc84e76feada1c403b04958c4994ea876903f2c9ffbe3",
+      "sha256": "bae38c6a8aa27cd242008ecdb119056e6968cd2ac4b98980bbb518ffda20c890",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/compatibility-catalog.ts",
+      "source_path": "src/modules/capability/workflows/compatibility-catalog.ts",
+      "resource_path": "resources/src/modules/capability/workflows/compatibility-catalog.ts",
+      "sha256": "90afa9ecd130557c73e5ca9d6c467f1e69bd0de2aed62b0784ff38be354b9ea8",
       "projection_dependency": true
     },
     {
@@ -358,6 +366,14 @@
       "source_path": "src/modules/capability/workflows/rank.ts",
       "resource_path": "resources/src/modules/capability/workflows/rank.ts",
       "sha256": "71d9bf9e1f1b85f49306d4489099e50a84b6f742305e62387cd87d4da185c5bb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/resolver-mode.ts",
+      "source_path": "src/modules/capability/workflows/resolver-mode.ts",
+      "resource_path": "resources/src/modules/capability/workflows/resolver-mode.ts",
+      "sha256": "46c28999043c5e50a5a1cf0d1d5752cd43a06d052eeb554d93fa896aa5e21ab0",
       "projection_dependency": true
     },
     {
