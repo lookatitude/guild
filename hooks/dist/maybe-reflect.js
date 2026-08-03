@@ -6540,8 +6540,8 @@ function tryRealSummarizer(cwd, runId) {
 var CODEX_SKIP_THRESHOLD = 3;
 var CODEX_SKIP_EXIT_CODE = 2;
 function reflectionRecordsCodexSkip(content) {
-  if (/^\s*codex_review:\s*SKIPPED\s*$/im.test(content)) return true;
-  if (/<!--\s*codex_review:\s*SKIPPED\s*-->/i.test(content)) return true;
+  const declared = content.match(/^[ \t]*codex_review:[ \t]*([A-Za-z][A-Za-z0-9_-]*)[ \t]*$/im) ?? content.match(/<!--[ \t]*codex_review:[ \t]*([A-Za-z][A-Za-z0-9_-]*)[ \t]*-->/i);
+  if (declared) return declared[1].toUpperCase() !== "RAN";
   const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
   if (m && m[1].includes("guild:codex-review")) return true;
   return false;
@@ -6578,6 +6578,22 @@ function evaluateCodexSkipGuard(guildRoot) {
     return { armed: true, streak };
   } catch {
     return { armed: false, streak: 0 };
+  }
+}
+function clearCodexSkipSentinel(guildRoot) {
+  try {
+    const sentinel = path7.join(guildRoot, ".guild", "codex-skip-streak.json");
+    if (!fs6.existsSync(sentinel)) return;
+    fs6.rmSync(sentinel);
+    process.stderr.write(
+      `[maybe-reflect] codex-skip streak broken \u2014 cleared stale sentinel: ${sentinel}
+`
+    );
+  } catch (err) {
+    process.stderr.write(
+      `[maybe-reflect] WARN: failed to clear codex-skip sentinel: ${err instanceof Error ? err.message : String(err)}
+`
+    );
   }
 }
 function writeCodexSkipSentinel(guildRoot, streak) {
@@ -6618,6 +6634,9 @@ async function main2() {
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
   const codexGuard = evaluateCodexSkipGuard(guildRoot);
+  if (codexGuard.armed && codexGuard.streak < CODEX_SKIP_THRESHOLD) {
+    clearCodexSkipSentinel(guildRoot);
+  }
   if (codexGuard.armed && codexGuard.streak >= CODEX_SKIP_THRESHOLD) {
     writeCodexSkipSentinel(guildRoot, codexGuard.streak);
     process.stderr.write(
