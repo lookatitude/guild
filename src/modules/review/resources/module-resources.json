@@ -78,7 +78,14 @@
       "id": "guild-codex-review",
       "source_path": "skills/meta/codex-review/SKILL.md",
       "resource_path": "resources/skills/meta/codex-review/SKILL.md",
-      "sha256": "665bb71e9a88c273d533577c253d8232c6e4abe584ed72f028a2e1f4a194c943"
+      "sha256": "a8f484f9a29bae89620cc27f4bf23a04a95d5347ac390c1430ea3d61eae11e38"
+    },
+    {
+      "category": "skills",
+      "id": "guild-codex-review/scenarios.json",
+      "source_path": "skills/meta/codex-review/scenarios.json",
+      "resource_path": "resources/skills/meta/codex-review/scenarios.json",
+      "sha256": "7b7f9c1a00e3f01aba5a6766b482e303a14a97f458e5799458a2fb986d0024b6"
     },
     {
       "category": "skills",

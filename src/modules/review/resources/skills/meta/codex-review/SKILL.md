@@ -177,8 +177,31 @@ For each round (1-indexed, up to `codex_cap`):
 5. Append round result to trail file `.guild/runs/<run-id>/codex-review/<gate>.md`.
 6. Emit `codex_review_round` event to `.guild/runs/<run-id>/logs/v1.4-events.jsonl` (see `## Telemetry`).
 7. If sentinel found → return `status: "satisfied"`.
-8. If round equals `codex_cap` → escalate (see `## Cap handling`).
-9. Otherwise → continue to next round, passing prior trail as context.
+8. **If the round produced NO VERDICT → return `status: "no_verdict"` immediately.**
+   A verdict-less round is NOT an unsatisfied round, and must never be counted
+   as one. Recognize it when the dispatch returned no reviewable response at
+   all — the provider refused the request, the subagent errored, or the
+   response contains neither the sentinel nor any findings. Do not consume
+   another round against a systematic refusal, and never let it fall through to
+   step 10.
+   **Provider refusals are the common case and have a known cause:** a prompt
+   that enumerates attack constructions while reviewing security or scoping
+   code can trip a provider's cyber-risk classifier (observed twice while
+   reviewing an MCP data-scoping guard: *"This content was flagged for possible
+   cybersecurity risk"*). The remedy is to re-issue the SAME review request
+   described in product terms — what the component does and must not do —
+   rather than as an attack catalogue. Record the refusal in the trail, then
+   retry once with the reframed prompt; that retry counts as the same round.
+9. If round equals `codex_cap` → escalate (see `## Cap handling`).
+10. Otherwise → continue to next round, passing prior trail as context.
+
+**Terminal-disposition rule.** `satisfied` is the ONLY status that means Codex
+reviewed the artifact and raised nothing. Every other terminal status means the
+gate did not clear, and they are not interchangeable: `cap_hit` asserts that
+substantive review happened and kept finding issues; `skipped` asserts Codex was
+unavailable; `no_verdict` asserts the review never produced a judgement. Never
+report a verdict-less round as `cap_hit` or `satisfied` — a caller reading
+`cap_hit` will believe the artifact was scrutinized N times.
 
 ## Adversarial prompt
 
@@ -225,45 +248,11 @@ Codex has not emitted ## SATISFIED. Options:
 
 Wait for an explicit user choice before proceeding.
 
-### The two named cap terminal states (the only clean ways to end at the cap)
-
-A review that reaches the cap WITHOUT a `## SATISFIED` may still terminate
-**cleanly** — but only through one of exactly TWO named terminal states, each of
-which leaves a complete audit trail. Anything else at the cap (a bare `cap_hit`,
-or `[force-pass]` with no recorded rationale) is an **audit exception**, not a
-clean terminal: it writes its value verbatim and DELIBERATELY fails
-`scripts/verify-codex-review-trail.ts` (`## Trail format`).
-
-1. **Cap + reasoned pushback recorded** — `final_status: cap-pushback-recorded`.
-   The cap was hit and, rather than an unaudited force-pass, the artifact author
-   recorded a **technical rebuttal** to Codex's remaining findings in the trail —
-   the same "push back only with technical evidence" discipline `guild:review`
-   uses. The disagreement is ON RECORD (each open finding + why it is judged a
-   non-blocker), so the trail is audit-complete and validates. Choose this when
-   the operator `[force-pass]`es *and* the reasons are captured; a force-pass with
-   no recorded rationale stays the `force_passed` audit exception.
-2. **Verification-only round beyond cap** — `final_status: cap-verification-only`.
-   The round(s) taken past the cap were **verification-only**: confirming a
-   just-applied fix, raising NO new adversarial surface. This is bounded (it ends
-   the moment Codex confirms — write `satisfied` then — or is exhausted) and is
-   distinct from `[extend-cap N]`, which re-opens a fresh adversarial round. Use
-   it to let Codex re-check the exact fix its last finding demanded without
-   treating that as an unbounded extension.
-
-Record the chosen terminal state's `final_status:` in the trail (`## Trail
-format`) and carry it in the in-memory `status` (`## Output shape`).
-
 ## Output shape
 
 ```typescript
 type CodexReviewOutput = {
-  // cap_pushback / cap_verify are the two NAMED cap terminal states (§Cap handling):
-  //   cap_pushback → trail final_status: cap-pushback-recorded
-  //   cap_verify   → trail final_status: cap-verification-only
-  // cap_hit remains the UN-audited cap exception (fails the trail validator).
-  status:
-    | "satisfied" | "skipped" | "cap_hit" | "force_passed" | "extended" | "rework"
-    | "cap_pushback" | "cap_verify";
+  status: "satisfied" | "skipped" | "cap_hit" | "no_verdict" | "force_passed" | "extended" | "rework";
   gate: string;
   rounds: number;               // total rounds executed
   trail_path: string;           // .guild/runs/<run-id>/codex-review/<gate>.md
@@ -302,23 +291,17 @@ rounds: 2
 `scripts/verify-codex-review-trail.ts` (per
 `.guild/wiki/standards/codex-adversarial-review.md`). It is the **persisted**
 disposition and is **distinct** from the in-memory `status` of the output shape.
-The validator accepts **exactly four clean terminal values** — two un-capped and
-the two named cap terminal states (`## Cap handling`) — write one of these:
+The validator accepts **exactly two clean terminal values** — write one of these:
 
 | in-memory `status` | trail `final_status:` |
 |---|---|
 | `satisfied` / `force_passed` *with a real sign-off* | `satisfied` |
 | `skipped` (codex unavailable / unauthenticated) | `skipped-codex-unavailable` |
-| `cap_pushback` (cap + reasoned pushback recorded) | `cap-pushback-recorded` |
-| `cap_verify` (verification-only round beyond cap) | `cap-verification-only` |
 
-A gate that ends **without** a clean disposition (a bare `cap_hit`, or a
-`force_passed` operator override **without** Codex sign-off *and without* a
-recorded rebuttal) writes that terminal value verbatim and **deliberately fails**
-the completeness validator — it is an audit exception that must be resolved, not
-papered over. The two `cap-*` values are the ONLY capped terminals that validate,
-precisely because each leaves a complete trail (a recorded rebuttal, or a bounded
-verification-only round). When the availability check skips the
+A gate that ends **without** a clean disposition (`cap_hit`, or a `force_passed`
+operator override **without** Codex sign-off) writes that terminal value verbatim
+and **deliberately fails** the completeness validator — it is an audit exception
+that must be resolved, not papered over. When the availability check skips the
 gate (returns `status: "skipped"`), still write the trail with
 `final_status: skipped-codex-unavailable` so the per-gate trail exists and
 validates.
@@ -329,7 +312,7 @@ Emit one `codex_review_round` event per round to
 `.guild/runs/<run-id>/logs/v1.4-events.jsonl` via the shared helper:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/emit-loop-event.ts \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/emit-loop-event.ts \
   --event codex_review_round \
   --gate <G-spec|G-plan|G-diagnose|G-lane:lane-id> \
   --round <N> \
