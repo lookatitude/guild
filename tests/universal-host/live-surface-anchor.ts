@@ -75,6 +75,16 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * reports, adversarial review — gate trails on the umbrella main). commands/
  * tree unchanged.
  *
+ * Re-ratified 2026-08-03 — guild:codex-review gains a `no_verdict` terminal
+ * (deterministic verdict-less predicate + bounded two-attempt retry), and
+ * guild:review-broker gains its fail-closed mapping for that status, plus the
+ * codex-review scenarios.json sidecar. DELIBERATE surface change, shipped
+ * through the evolve promotion gate after a G-lane review rejected the first
+ * attempt (6x P1 — a loose predicate that could swallow a substantive
+ * rejection, a contradictory retry rule, no broker mapping, undefined trail
+ * disposition, nonconforming eval evidence, and this very anchor left
+ * un-re-ratified). skills/ tree only; commands/ unchanged.
+ *
  * Re-ratified 2026-07-18 (integration fan-out 1) — three further codex-gated
  * skill evolutions merged on `evolve/integration-fanout-1`: guild:plan
  * (spine-lane declaration + non-waivable checkpoint,
@@ -336,7 +346,7 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "6e911d9f724f1d1bf831386509e4269254a78102",
-  skills: "931c854c3e1557857b3408d9e555ea875ee9661b",
+  skills: "2c3de59c7e56c98eeced695a71f5bbe236b7aa33",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
