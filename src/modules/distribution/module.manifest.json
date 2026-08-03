@@ -14,8 +14,13 @@
     "scripts": [
       "build-host-packages",
       "build-inventory",
+      "build-release-candidate",
       "build-verify",
+      "check-bundle-determinism",
+      "check-channel-integrity",
+      "check-entrypoint-packaging",
       "check-module-ownership",
+      "check-plugin-root-fallback",
       "check-roster-consistency",
       "codex-guild-prompt-bridge",
       "description-optimizer",
@@ -25,6 +30,7 @@
       "lib/module-resources",
       "lib/parity-contract",
       "lib/per-host-packaging",
+      "lib/release-distribution-contract",
       "lib/result-contracts",
       "lib/self-update",
       "lib/skill-source-transform",
@@ -37,5 +43,8 @@
       "verify-host-packages",
       "verify-installer"
     ]
-  }
+  },
+  "resource_projection_entrypoints": [
+    "build-release-candidate"
+  ]
 }

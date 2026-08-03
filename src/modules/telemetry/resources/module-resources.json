@@ -8,28 +8,28 @@
       "id": "stats",
       "source_path": "commands/stats.md",
       "resource_path": "resources/commands/stats.md",
-      "sha256": "cc8b247c509bfa512bc5e700d14ec8e60b12e2acb992fd2351b49b79886eebf3"
+      "sha256": "f3135addc1af398a4f1a6733683ae902b5f8e4411991dadda9991018a84646f8"
     },
     {
       "category": "hooks",
       "id": "PostToolUse:capture-telemetry.js",
       "source_path": "hooks/dist/capture-telemetry.js",
       "resource_path": "resources/hooks/dist/capture-telemetry.js",
-      "sha256": "be07af2523dc1f24987224b4110fb70ca96c2af99c51f29d635e760bdfaff1f2"
+      "sha256": "d742a9954dbd69b575048a67cfee1e9a650af0df66393ed26dc6fd035cabe558"
     },
     {
       "category": "hooks",
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "dc7faa39ccd3b09201c11403d039d9a82715976e84894d652402b57adcb00b2d"
+      "sha256": "46890fd833a7af02befbb5d23ca2b9ea4eb6afc4b28d37fc79c041f422003cb6"
     },
     {
       "category": "hooks",
       "id": "UserPromptSubmit:run-trace-start.js",
       "source_path": "hooks/dist/run-trace-start.js",
       "resource_path": "resources/hooks/dist/run-trace-start.js",
-      "sha256": "bdabcb55c0b0377a1dacd7ec582c7950b3ac4839d690529d167078607eff4bca"
+      "sha256": "0237b2757ca65e025958fbf950c5837fde7dd1a6b8e73800ae33a47b85978b63"
     },
     {
       "category": "mcp_servers",
@@ -40,10 +40,17 @@
     },
     {
       "category": "scripts",
+      "id": "audit-run-sinks",
+      "source_path": "scripts/audit-run-sinks.ts",
+      "resource_path": "resources/scripts/audit-run-sinks.ts",
+      "sha256": "a647ff8987bb1fbef12442c4648fa2655ff407c402f1acc505e164847afe507d"
+    },
+    {
+      "category": "scripts",
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "2b39478f498c95f265b1e0adcfa1a7ef834b0b34b436aafa207d29f0bef33d0f"
+      "sha256": "f58e1db3a8a0684ae99764890315613fba7072519e68f9bf80ea2740d1770600"
     },
     {
       "category": "scripts",
@@ -61,6 +68,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/run-sinks",
+      "source_path": "scripts/lib/run-sinks.ts",
+      "resource_path": "resources/scripts/lib/run-sinks.ts",
+      "sha256": "51bd73f702a264d6a2b6952a8eeee8f43a571290df6ebc74850088582079874e"
+    },
+    {
+      "category": "scripts",
       "id": "recall-stats",
       "source_path": "scripts/recall-stats.ts",
       "resource_path": "resources/scripts/recall-stats.ts",
@@ -71,14 +85,14 @@
       "id": "trace-summarize",
       "source_path": "scripts/trace-summarize.ts",
       "resource_path": "resources/scripts/trace-summarize.ts",
-      "sha256": "69baf65ed240bd90d02384a35278d5b1398523d301431cb092193c60216997b0"
+      "sha256": "0d3542e66e390260b2df5a24156e73d9481e339e6272d494285e1374be28ebd0"
     },
     {
       "category": "scripts",
       "id": "v1.4-log-validator",
       "source_path": "scripts/v1.4-log-validator.ts",
       "resource_path": "resources/scripts/v1.4-log-validator.ts",
-      "sha256": "89150236a77cf96a9b1527a340792ab4fbb629a8b742ffb0769bb38099babc2c"
+      "sha256": "ecc6b14672e522f3a6a505af84acfd00ec8e1b8a1b33cd02926289195cdc3bb1"
     }
   ]
 }

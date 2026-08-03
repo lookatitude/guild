@@ -142,7 +142,7 @@ When a brownfield `KnowledgeGraph` index exists
 before finalizing lanes (codebase-understanding spec §"Where it sits" plug point P2):
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/learn/diff-learn.ts --cwd <repo-root> \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/learn/diff-learn.ts --cwd <repo-root> \
   --base <merge-base-with-integration-branch> [--head HEAD] [--run-id <id>]
 ```
 

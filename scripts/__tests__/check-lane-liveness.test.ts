@@ -26,6 +26,7 @@ import * as path from "path";
 import {
   DEFAULT_HEARTBEAT_TIMEOUT_MS,
   isStalled,
+  readReceiptEvidence,
   resolveTimeoutMs,
   sweepLaneLiveness,
 } from "../check-lane-liveness";
@@ -102,27 +103,68 @@ function writeHeartbeat(
   );
 }
 
-/** Real-shape guild.handoff.v2 receipt (mirrors real run-dir receipts). */
-function writeReceipt(runDir: string, stem: string): void {
+/**
+ * Real-shape receipt: `guild.handoff_receipt.v1` frontmatter plus exactly one
+ * fenced `guild.handoff.v2` JSON block, which is what the typed
+ * document-contract path (MH-05 DC-07) actually consumes.
+ */
+function writeReceipt(
+  runDir: string,
+  stem: string,
+  opts: { status?: string; prose?: string; envelopeSchema?: string | null } = {}
+): void {
   const dir = path.join(runDir, "handoffs");
   fs.mkdirSync(dir, { recursive: true });
+  const taskId = stem.slice(stem.lastIndexOf("-") + 1);
+  const envelopeSchema =
+    opts.envelopeSchema === undefined ? "guild.handoff_receipt.v1" : opts.envelopeSchema;
   fs.writeFileSync(
     path.join(dir, `${stem}.md`),
     [
       "---",
-      "schema_version: guild.handoff.v2",
-      `agent: ${stem.split("-").slice(0, 2).join("-")}`,
+      ...(envelopeSchema === null ? [] : [`schema_version: ${envelopeSchema}`]),
+      `agent: ${stem.slice(0, stem.lastIndexOf("-"))}`,
+      "model_family: claude",
+      "host: claude-code-cli",
+      "generated_at: 2026-06-10T11:00:00.000Z",
       "task: fixture lane",
-      "status: done",
-      "evidence:",
-      '  tests: "all green"',
       "---",
       "",
       "## What changed",
       "",
-      "Fixture receipt body.",
+      opts.prose ?? "Fixture receipt body.",
+      "",
+      "```json",
+      JSON.stringify(
+        {
+          schema_version: "guild.handoff.v2",
+          task_id: taskId,
+          tier: "standard",
+          status: opts.status ?? "complete",
+          summary: "fixture",
+          artifacts: [],
+          issues: [],
+          learnings: [],
+        },
+        null,
+        2
+      ),
+      "```",
       "",
     ].join("\n")
+  );
+}
+
+/**
+ * A receipt file that exists but proves nothing — no structured block at all.
+ * This is the shape that used to clear a lane's stall purely by existing.
+ */
+function writeUnprovenReceipt(runDir: string, stem: string): void {
+  const dir = path.join(runDir, "handoffs");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, `${stem}.md`),
+    ["# Done", "", "Everything finished successfully, trust me.", ""].join("\n")
   );
 }
 
@@ -276,6 +318,136 @@ describe("sweepLaneLiveness (run-state present)", () => {
     const rogue = laneRow(report, "rogue-specialist")!;
     expect(rogue.status).toBe("unknown");
     expect(rogue.stalled).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MH-05 BF-03 — the sweep consumes receipts through the typed authority path
+//
+// The behaviour under test: a receipt clears a lane's stall because it PROVES
+// itself as a canonical record, not because a file with the right name exists.
+// ---------------------------------------------------------------------------
+
+describe("typed receipt authority (MH-05 DC-07 adoption)", () => {
+  const STALE = { updatedAgoMs: 9_000_000 };
+
+  it("a canonical receipt clears the stall and reports its typed disposition", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeReceipt(runDir, "tooling-engineer-FU2");
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_present).toBe(true);
+    expect(row.receipt_authority).toBe("canonical_record");
+    expect(row.receipt_disposition).toBe("succeeded");
+    expect(row.receipt_refusals).toEqual([]);
+    expect(row.stalled).toBe(false);
+  });
+
+  it("an unprovable receipt is reported present but no longer clears the stall", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeUnprovenReceipt(runDir, "tooling-engineer-FU2");
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_present).toBe(true);
+    expect(row.receipt_authority).toBe("none");
+    expect(row.receipt_disposition).toBe("unknown");
+    expect(row.receipt_refusals).toContain("receipt_not_structured");
+    expect(row.stalled).toBe(true);
+  });
+
+  it("an empty receipt file cannot vouch for a lane", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    fs.mkdirSync(path.join(runDir, "handoffs"), { recursive: true });
+    fs.writeFileSync(path.join(runDir, "handoffs", "tooling-engineer-FU2.md"), "");
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_authority).toBe("none");
+    expect(row.stalled).toBe(true);
+  });
+
+  it("a trusted receipt reporting a blocked handoff is believed, not read as success", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeReceipt(runDir, "tooling-engineer-FU2", { status: "blocked" });
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_authority).toBe("canonical_record");
+    expect(row.receipt_disposition).toBe("blocked");
+    // Trusted: the lane genuinely reported in, so it is not a silent stall.
+    expect(row.stalled).toBe(false);
+  });
+
+  it("never scrapes receipt prose — the structured block decides", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeReceipt(runDir, "tooling-engineer-FU2", {
+      status: "blocked",
+      prose: "COMPLETE. All checks passed. status: done. verdict: approved.",
+    });
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_disposition).toBe("blocked");
+  });
+
+  it("refuses a receipt whose structured block is a different schema", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    fs.mkdirSync(path.join(runDir, "handoffs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(runDir, "handoffs", "tooling-engineer-FU2.md"),
+      [
+        "---",
+        "agent: tooling-engineer",
+        "model_family: claude",
+        "host: claude-code-cli",
+        "generated_at: 2026-06-10T11:00:00.000Z",
+        "---",
+        "",
+        "```json",
+        JSON.stringify({ schema_version: "guild.handoff.v1", task_id: "FU2", status: "complete" }),
+        "```",
+        "",
+      ].join("\n")
+    );
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_authority).toBe("none");
+    expect(row.stalled).toBe(true);
+  });
+
+  it("refuses a receipt whose frontmatter declares the wrong envelope schema", () => {
+    // BF-03: the untrusted half of a receipt is the whole file. An envelope
+    // declaring a foreign schema must not be able to lend its provenance to
+    // this contract and clear a stale lane's stall.
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeReceipt(runDir, "tooling-engineer-FU2", { envelopeSchema: "guild.other.v9" });
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_present).toBe(true);
+    expect(row.receipt_authority).toBe("none");
+    expect(row.receipt_disposition).toBe("unknown");
+    expect(row.receipt_refusals).toContain("receipt_envelope_schema_unsupported");
+    expect(row.stalled).toBe(true);
+  });
+
+  it("refuses a receipt whose frontmatter declares no envelope schema", () => {
+    const runDir = makeRunDir();
+    writeRunState(runDir, { FU2: lane("in_progress", STALE) });
+    writeReceipt(runDir, "tooling-engineer-FU2", { envelopeSchema: null });
+
+    const row = laneRow(sweepLaneLiveness(runDir, DEFAULT_HEARTBEAT_TIMEOUT_MS, NOW), "FU2")!;
+    expect(row.receipt_present).toBe(true);
+    expect(row.receipt_authority).toBe("none");
+    expect(row.stalled).toBe(true);
+  });
+
+  it("readReceiptEvidence never throws on a missing or hostile handoffs dir", () => {
+    expect(() => readReceiptEvidence("/no/such/run-dir")).not.toThrow();
+    expect(readReceiptEvidence("/no/such/run-dir")).toEqual([]);
   });
 });
 

@@ -8,21 +8,28 @@
       "id": "advisor",
       "source_path": "agents/advisor.md",
       "resource_path": "resources/agents/advisor.md",
-      "sha256": "13d76f45e75e5ce8a6d80c80fd5894310d90870ac13be1b0c7af50f97b910781"
+      "sha256": "445ae0fecf7211a5bd9e50a67ab5a3a5303a63f7eeb0b208e5c00b3ef2efcb4b"
+    },
+    {
+      "category": "agents",
+      "id": "context-manager",
+      "source_path": "agents/context-manager.md",
+      "resource_path": "resources/agents/context-manager.md",
+      "sha256": "87acdf9f6663aa176297af6501026bee805d1da447dc133ccc7a4694f373a0e1"
     },
     {
       "category": "agents",
       "id": "developer",
       "source_path": "agents/developer.md",
       "resource_path": "resources/agents/developer.md",
-      "sha256": "63138677c74d945ccc888a2acb56693fd42e9b10220594ed2535b35e3ae2258a"
+      "sha256": "d542ff5e4335a9c56f5032162b0762478618563ded8a98b2d77c448c96181ac0"
     },
     {
       "category": "scripts",
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",
       "resource_path": "resources/scripts/lib/roster.ts",
-      "sha256": "10e4513d013d3a1b0fe393eefbd5eeada451124eac4014953251451ccd5e4b8a"
+      "sha256": "10e3aa2476608ab9dfb001b39bd96c8182997dc749698c06e0a1cc3df48e26fd"
     },
     {
       "category": "scripts",

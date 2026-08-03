@@ -37,6 +37,8 @@ import {
 } from "./config-reconcile-contract";
 import { CONFIG_SCHEMA, flattenSettings, setDotted } from "./config-schema";
 import { DEFAULTS, HELP } from "../read-guild-config";
+// S5: semantic validity for capability.* (canonical shared entrypoint — R-DIST).
+import { isValidCapabilityValue } from "./shared/config-defaults";
 
 // ---------------------------------------------------------------------------
 // Injectable IO (CI-safe + test-injectable; production uses node fs)
@@ -147,8 +149,15 @@ export function reconcileConfig(opts: ReconcileOptions): ReconcileRunResult {
   // deep-equals its own schema default is ALWAYS valid — this correctly classifies the
   // nullable/empty-object leaves (initiative_default:null, loops:null, {} maps) that the
   // structural type check alone would mis-flag as malformed.
-  const isValid = (spec: Parameters<typeof defaultIsValidValue>[0], value: unknown): boolean =>
-    JSON.stringify(value) === JSON.stringify(spec.default) || defaultIsValidValue(spec, value);
+  const isValid = (spec: Parameters<typeof defaultIsValidValue>[0], value: unknown): boolean => {
+    // S5: `capability.*` needs a SEMANTIC check. defaultIsValidValue is structural —
+    // it accepts any finite number and any array — so an out-of-range budget or a
+    // duplicated starter role survived `repair` (adversarial-review finding). Consulted
+    // FIRST so the range/slug contract is what decides, not the shape.
+    const semantic = isValidCapabilityValue(spec.key, value);
+    if (semantic !== undefined) return semantic;
+    return JSON.stringify(value) === JSON.stringify(spec.default) || defaultIsValidValue(spec, value);
+  };
   const result = reconcileReference(CONFIG_SCHEMA, current, opts.mode, opts.now, isValid);
 
   if (opts.mode === "check") {

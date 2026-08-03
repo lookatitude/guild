@@ -8,7 +8,28 @@
       "id": "models",
       "source_path": "commands/models.md",
       "resource_path": "resources/commands/models.md",
-      "sha256": "3bd6611670eded7836fc6d726354aae43789486680ba597c4af8538d7ae3972e"
+      "sha256": "d2e5e1cc302571fd5770eb0568ed93689f4334d39fb9b6889ecc7edf8f33e865"
+    },
+    {
+      "category": "scripts",
+      "id": "capability-adopt",
+      "source_path": "scripts/capability-adopt.ts",
+      "resource_path": "resources/scripts/capability-adopt.ts",
+      "sha256": "a1ea07faafdbdde215dcd2f55cae7063000805f4505c8fff7acbe0e452eae0c5"
+    },
+    {
+      "category": "scripts",
+      "id": "capability-profile",
+      "source_path": "scripts/capability-profile.ts",
+      "resource_path": "resources/scripts/capability-profile.ts",
+      "sha256": "55674fc362817e1f3c24c8a1cf8d47a588086985300b9ad2c529a65418860b6d"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/adoption-migrate",
+      "source_path": "scripts/lib/capability/adoption-migrate.ts",
+      "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
+      "sha256": "eccc409014da3e0365677f2c1a05d1dffbd663199469ac4de4b75ed535afe0bd"
     },
     {
       "category": "scripts",
@@ -19,10 +40,52 @@
     },
     {
       "category": "scripts",
+      "id": "lib/capability/candidate-surface",
+      "source_path": "scripts/lib/capability/candidate-surface.ts",
+      "resource_path": "resources/scripts/lib/capability/candidate-surface.ts",
+      "sha256": "4f2987e64cf8be211becc641e640e86d2ec7fba3a224a3a60a05ca1ca8f566a4"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/compatibility-catalog",
+      "source_path": "scripts/lib/capability/compatibility-catalog.ts",
+      "resource_path": "resources/scripts/lib/capability/compatibility-catalog.ts",
+      "sha256": "9625de56d19067d3e2cff71877f5a819a2fe7a96b990ec4cafde59ab52ccf196"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/compatibility-usage",
+      "source_path": "scripts/lib/capability/compatibility-usage.ts",
+      "resource_path": "resources/scripts/lib/capability/compatibility-usage.ts",
+      "sha256": "519d4e80cb148b574c71f74b6cc750ce8d9bd950eac412d61da94facd58f4b13"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/context-manager-contract",
+      "source_path": "scripts/lib/capability/context-manager-contract.ts",
+      "resource_path": "resources/scripts/lib/capability/context-manager-contract.ts",
+      "sha256": "8f3119891c3f204968ba7d822ae1a7b05a126b8fddc78bb159d734183defd348"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/profile-emit",
+      "source_path": "scripts/lib/capability/profile-emit.ts",
+      "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
+      "sha256": "89bb86ac54543dddfc97cc73002df138acc694e0a24197c1d2048e1e2af283ec"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/rank",
       "source_path": "scripts/lib/capability/rank.ts",
       "resource_path": "resources/scripts/lib/capability/rank.ts",
       "sha256": "9dcbacfb5d7e27f94205a956d69554cc9c5e127d2e9ca78d692a92b0be4582fd"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/resolver-mode",
+      "source_path": "scripts/lib/capability/resolver-mode.ts",
+      "resource_path": "resources/scripts/lib/capability/resolver-mode.ts",
+      "sha256": "c981358b71e42ddeaa3f2794f4135ea87a08505ef2481bf9be0034b1847b6ac6"
     },
     {
       "category": "scripts",
@@ -44,6 +107,13 @@
       "source_path": "scripts/lib/capability/tier-defaults.ts",
       "resource_path": "resources/scripts/lib/capability/tier-defaults.ts",
       "sha256": "5ef101edf750f81174430e4a3d0ab1f865494e3153cdee0cc3ffadab5234b6be"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/contracts/project-capability-profile",
+      "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/project-capability-profile.ts",
+      "sha256": "f6ee17c88bc2daed49d43965f1669f15ed53bc5b82fb517de9957e20755f514a"
     },
     {
       "category": "scripts",

@@ -32,16 +32,16 @@ import { HOST_REGISTRY_ROWS, type HostId } from "./host-registry-schema";
  * per-bucket categories. `PUBLIC_STATES` has NO `degraded`/`inferred`/`target`
  * member (R3 — planned degradation is never public).
  */
-export const PUBLIC_STATES = [
+export const PUBLIC_STATES = Object.freeze([
   "native",
   "verified_wrapped",
   "verified_bridged",
   "unsupported",
-] as const;
+] as const);
 export type PublicState = (typeof PUBLIC_STATES)[number];
 
 /** The three verified public categories (used by the gate). `unsupported` is honest, never verified. */
-export const VERIFIED_PUBLIC_STATES = ["native", "verified_wrapped", "verified_bridged"] as const;
+export const VERIFIED_PUBLIC_STATES = Object.freeze(["native", "verified_wrapped", "verified_bridged"] as const);
 function isVerifiedPublic(state: PublicState): boolean {
   return (VERIFIED_PUBLIC_STATES as readonly string[]).includes(state);
 }
@@ -58,7 +58,7 @@ function isVerifiedPublic(state: PublicState): boolean {
  *   - enqueue_only        — refuse cell.
  *   - manual_instruction  — refuse cell.
  */
-export const VERIFICATION_STATUS = [
+export const VERIFICATION_STATUS = Object.freeze([
   "verified",
   "inferred",
   "target",
@@ -67,7 +67,7 @@ export const VERIFICATION_STATUS = [
   "unavailable",
   "enqueue_only",
   "manual_instruction",
-] as const;
+] as const);
 export type VerificationStatus = (typeof VERIFICATION_STATUS)[number];
 
 // ---------------------------------------------------------------------------
@@ -410,13 +410,13 @@ export function deriveCurrentPublicState(
  * receipt); the label communicates the *degraded bootstrap* mechanism, not a verified
  * claim. "(beta)" / "(app)" / "(connector)" ARE the caveats, never "verified".
  */
-export const DISPLAY_SUPPORT = [
+export const DISPLAY_SUPPORT = Object.freeze([
   "supported",
   "supported_beta",
   "supported_app",
   "supported_connector",
   "unsupported",
-] as const;
+] as const);
 export type DisplaySupport = (typeof DISPLAY_SUPPORT)[number];
 
 export function deriveDisplaySupport(

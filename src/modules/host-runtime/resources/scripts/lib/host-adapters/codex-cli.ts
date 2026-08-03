@@ -120,13 +120,17 @@ export function createCodexCliAdapter(entry: HostRegistryEntry = ENTRY): HostAda
         HOST_ID,
         "preflight",
         "degraded",
-        "Codex CLI has no native Guild hooks; preflight is wrapper/instruction-file based",
+        "Codex fires SessionStart + UserPromptSubmit natively via codex-hooks.json; the remaining Claude hook events degrade to wrapper/instruction-file",
         {
           request: request ?? {},
+          // Two events are native (live-verified, wi-04); the rest of the
+          // Claude hook taxonomy has no Codex surface and degrades. The flag
+          // means "the FULL taxonomy is native", which stays false.
           native_hooks: false,
+          native_hook_events: ["SessionStart", "UserPromptSubmit"],
           bootstrap_file: "AGENTS.md",
           commands: ["codex --version", "codex login status"],
-          degradation: "no SessionStart/UserPromptSubmit hook surface",
+          degradation: "hook events beyond SessionStart/UserPromptSubmit have no Codex surface; they degrade through the HookEmitter",
         },
         resolveRung("session", HOST_ID)
       );
@@ -217,7 +221,7 @@ export function createCodexCliAdapter(entry: HostRegistryEntry = ENTRY): HostAda
           resolveRung("semantic_tool", HOST_ID)
         );
       }
-      const modelParams = { ...configured, model };
+      const modelParams: Record<string, unknown> = { ...configured, model };
       const unsupported = unsupportedModelParamKeys(modelParams, ["model", "effort", "reasoning"]);
       const reasoningEffort =
         typeof modelParams["reasoning"] === "string"

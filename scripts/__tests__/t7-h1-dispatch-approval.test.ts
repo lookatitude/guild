@@ -280,7 +280,7 @@ describe("T7-H1 — the REAL launcher blocks on a post-approval-tampered team fi
     // diverged. This is precisely what nothing checked before.
     fs.writeFileSync(teamPath, teamYaml([...APPROVED_WORKERS, "smuggled-agent"]), "utf8");
 
-    const run = launch(root, teamPath);
+    const run = launchWith(root, teamPath, { dryRun: false });
 
     expect(run.exitCode).toBe(1);
     expect(run.stderr).toContain("REFUSED (approve-before-dispatch gate");
@@ -295,7 +295,7 @@ describe("T7-H1 — the REAL launcher blocks on a post-approval-tampered team fi
     const { root, teamPath } = seed();
     fs.writeFileSync(teamPath, teamYaml(APPROVED_WORKERS.slice(0, 2)), "utf8");
 
-    const run = launch(root, teamPath);
+    const run = launchWith(root, teamPath, { dryRun: false });
 
     expect(run.exitCode).toBe(1);
     expect(run.stderr).toContain("participant_set_mismatch");
@@ -316,7 +316,7 @@ describe("T7-H1 — the REAL launcher blocks on a post-approval-tampered team fi
     const p = path.join(trail, proposalFile);
     fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace("tier: mid", "tier: powerful"), "utf8");
 
-    const run = launch(root, teamPath);
+    const run = launchWith(root, teamPath, { dryRun: false });
 
     expect(run.exitCode).toBe(1);
     expect(run.stderr).toContain("REFUSED (approve-before-dispatch gate");
@@ -331,7 +331,7 @@ describe("T7-H1 — the REAL launcher blocks on a post-approval-tampered team fi
       if (n.includes(".decision.")) fs.rmSync(path.join(trail, n));
     }
 
-    const run = launch(root, teamPath);
+    const run = launchWith(root, teamPath, { dryRun: false });
 
     expect(run.exitCode).toBe(1);
     expect(run.stderr).toContain("no_persisted_decision");
@@ -353,7 +353,7 @@ describe("T7-H1 — the REAL launcher blocks on a post-approval-tampered team fi
       "utf8",
     );
 
-    const run = launch(root, teamPath);
+    const run = launchWith(root, teamPath, { dryRun: false });
 
     expect(run.exitCode).toBe(1);
     expect(run.stderr).toContain("invalid_decision_artifact");

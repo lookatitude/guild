@@ -64,7 +64,7 @@ import type { PermissionDecision } from "./permission-policy-schema";
  * in the metadata but is missing here is appended (alphabetically) so a future group
  * is never silently dropped from the surface.
  */
-export const CONFIG_UI_GROUP_ORDER: readonly string[] = [
+export const CONFIG_UI_GROUP_ORDER: readonly string[] = Object.freeze([
   "startup",
   "host_roles",
   "models",
@@ -73,9 +73,12 @@ export const CONFIG_UI_GROUP_ORDER: readonly string[] = [
   "wiki_quality",
   "indexing",
   "cross_host_runtime",
+  // rf-wi-01 (G1): defaults.lean_lead.* + defaults.lifecycle_gate.* — session/run
+  // hygiene advisories, no security impact (see config-ui-metadata.ts).
+  "lifecycle_guards",
   "safety_platform",
   "workspace",
-];
+]);
 
 /** Stable key order = the canonical CONFIG_SCHEMA flatten order (never re-sorts). */
 const SCHEMA_KEY_ORDER: readonly string[] = CONFIG_SCHEMA.map((s) => s.key);

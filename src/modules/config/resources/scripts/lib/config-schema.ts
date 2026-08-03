@@ -21,6 +21,24 @@ import {
   type ConfigValueType,
 } from "./config-reconcile-contract";
 import { DEFAULTS } from "../read-guild-config";
+import { deepFreeze } from "../../src/modules/kernel/workflows/sealed-collections";
+// S5: the capability vocabularies live beside the DEFAULTS they describe, so the
+// enum members and the shipped default cannot drift apart. Imported through the
+// CANONICAL shared entrypoint (R-DIST canonicality rail forbids reaching past it
+// into src/modules/**, which would fork the shared module).
+import {
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+} from "./shared/config-defaults";
+
+/**
+ * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
+ * Duplicated here as a small closed literal union (mirrors config-cli.ts's/
+ * settings-reader.ts's existing inline-enum convention) rather than an import,
+ * since permission-policy-schema.ts has not been migrated into a src/modules/*
+ * workflow yet.
+ */
+const HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const;
 
 // ---------------------------------------------------------------------------
 // Security-sensitive key classification (load-bearing — Lsec asserts coverage)
@@ -40,7 +58,11 @@ export function isSecuritySensitiveKey(key: string): boolean {
     key.startsWith("security.") ||
     key.startsWith("secrets_policy.") ||
     key.startsWith("defaults.cross_host") ||
-    key === "mcp.tool_description_hashes"
+    key === "mcp.tool_description_hashes" ||
+    // rf-wi-01 (G1): host_mode governs P1-L10 host autonomy (bypass_all can disable a
+    // host's native tool-permission prompt) — the sanctioned, schema-registered
+    // replacement for the ad-hoc `security.host_mode` key the #54 lane reverted.
+    key === "host_mode"
   );
 }
 
@@ -144,6 +166,58 @@ const SECURITY_MOST_RESTRICTIVE_NONENUM: Record<string, unknown> = {
 };
 
 /**
+ * rf-wi-01 (G1 codex-review fix) — NULLABLE enum fields: `null` is ALSO a valid value
+ * (not just a schema default) alongside the enum members. `inferType(null)` would
+ * otherwise classify these as type "object", under which `defaultIsValidValue`
+ * requires `typeof value === "object"` — so a genuinely VALID enum string (e.g.
+ * `host_mode: "read_only"`) would be misclassified as malformed and `reconcile
+ * repair` would reset it back to `null` (P1 finding, reproduced: a user's real
+ * `host_mode` setting got silently clobbered on repair).
+ *
+ * `most_restrictive` is an EXPLICIT enum member, NOT `null` (round-2 codex-review
+ * P1 fix): `null` reads as "safest" in isolation, but for `host_mode` specifically
+ * it is NOT — `tmux-backend.ts`'s `resolveTeamPaneHostMode` lifts an unset/null
+ * host_mode to `"bypass_all"` for team panes (the #54 fix), so repairing a
+ * malformed value to `null` would fail-OPEN, not fail-closed, on that path.
+ * `"read_only"` is the genuinely most-restrictive HOST_MODES member regardless of
+ * consumer (it never grants edit/bypass autonomy to any host).
+ */
+interface NullableEnumOverride {
+  enum_values: readonly string[];
+  most_restrictive: string;
+}
+const NULLABLE_ENUM_OVERRIDES: Record<string, NullableEnumOverride> = {
+  host_mode: { enum_values: HOST_MODES, most_restrictive: "read_only" },
+};
+
+/**
+ * S5 (cap-loc-D04) — PLAIN enum fields: non-security AND non-nullable.
+ *
+ * The generator types a key as `enum` only when it appears in one of the override
+ * tables; otherwise `type` is `inferType(def)`, which classifies a string default as
+ * `"string"` and drops `enum_values` entirely — so the key would carry NO closed-set
+ * validation at all. `capability.resolver_mode` and `capability.auto_create_policy`
+ * are enums that fit NEITHER existing table: they are not security-sensitive
+ * (`isSecuritySensitiveKey` matches neither, correctly — they select WHICH
+ * DEFINITIONS RESOLVE, not what a lane may do) and they are not nullable (there is
+ * always a mode; "unset" is expressed by provenance `default`, not by `null`).
+ *
+ * Rejected alternative: reusing SECURITY_ENUM_OVERRIDES. It would mark these keys
+ * security-sensitive, which is false, and drag them into the F4 fail-closed repair
+ * semantics — repairing a malformed value to a "most restrictive" member. There is
+ * no meaningful most-restrictive resolver mode (`strict` is the most LOCALIZED, not
+ * the safest), so the concept does not apply. Hence a third table carrying
+ * `enum_values` ONLY: no `most_restrictive`, no `nullable`.
+ */
+interface PlainEnumOverride {
+  enum_values: readonly string[];
+}
+const PLAIN_ENUM_OVERRIDES: Record<string, PlainEnumOverride> = {
+  "capability.resolver_mode": { enum_values: CAPABILITY_RESOLVER_MODES },
+  "capability.auto_create_policy": { enum_values: CAPABILITY_AUTO_CREATE_POLICIES },
+};
+
+/**
  * The `guild.config_schema.v1` field registry, derived from the canonical DEFAULTS
  * tree. One ConfigFieldSpec per flattened leaf; `default` is the canonical value
  * (single source ⇒ no drift). Scope is "project" (today's settings.json target).
@@ -154,13 +228,15 @@ const SECURITY_MOST_RESTRICTIVE_NONENUM: Record<string, unknown> = {
  * Rich enum validation for the other keys stays in read-guild-config's closed-key
  * validators (validateDefaults), which the reconciler does not replace.
  */
-export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
+export const CONFIG_SCHEMA: readonly ConfigFieldSpec[] = deepFreeze((() => {
   const flat = flattenSettings(DEFAULTS as unknown as Record<string, unknown>);
   return Object.entries(flat).map(([key, def]) => {
     const override = SECURITY_ENUM_OVERRIDES[key];
+    const nullableEnum = NULLABLE_ENUM_OVERRIDES[key];
+    const plainEnum = PLAIN_ENUM_OVERRIDES[key];
     const spec: ConfigFieldSpec = {
       key,
-      type: override ? "enum" : inferType(def),
+      type: override || nullableEnum || plainEnum ? "enum" : inferType(def),
       default: def,
       scope: "project",
       security_sensitive: isSecuritySensitiveKey(key),
@@ -168,12 +244,20 @@ export const CONFIG_SCHEMA: ConfigFieldSpec[] = (() => {
     if (override) {
       spec.enum_values = override.enum_values;
       spec.most_restrictive = override.most_restrictive;
+    } else if (nullableEnum) {
+      spec.enum_values = nullableEnum.enum_values;
+      spec.nullable = true;
+      spec.most_restrictive = nullableEnum.most_restrictive;
+    } else if (plainEnum) {
+      // enum_values ONLY — see PLAIN_ENUM_OVERRIDES: not nullable, and
+      // `most_restrictive` is deliberately absent (no fail-closed repair target).
+      spec.enum_values = plainEnum.enum_values;
     } else if (key in SECURITY_MOST_RESTRICTIVE_NONENUM) {
       spec.most_restrictive = SECURITY_MOST_RESTRICTIVE_NONENUM[key];
     }
     return spec;
   });
-})();
+})());
 
 /** Lookup a field spec by dotted key. */
 export function getFieldSpec(key: string): ConfigFieldSpec | undefined {

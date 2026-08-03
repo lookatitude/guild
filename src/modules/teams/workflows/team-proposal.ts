@@ -35,20 +35,20 @@ export const PROPOSAL_HASH_SCOPE =
 
 // ── Vocabulary (frozen contract enums) ───────────────────────────────────────
 
-export const PARTICIPATION_KINDS = [
+export const PARTICIPATION_KINDS = Object.freeze([
   "worker",
   "advisor",
   "challenger",
   "reviewer_local",
   "reviewer_cross_host",
-] as const;
+] as const);
 export type ParticipationKind = (typeof PARTICIPATION_KINDS)[number];
 
-export const PROPOSAL_TIERS = ["cheap", "mid", "powerful"] as const;
+export const PROPOSAL_TIERS = Object.freeze(["cheap", "mid", "powerful"] as const);
 export type ProposalTier = (typeof PROPOSAL_TIERS)[number];
 
 /** model_policy §2 purpose enum (the closed set participants may carry). */
-export const PARTICIPANT_PURPOSES = [
+export const PARTICIPANT_PURPOSES = Object.freeze([
   "general",
   "implementation",
   "planning",
@@ -57,16 +57,16 @@ export const PARTICIPANT_PURPOSES = [
   "adversarial",
   "security",
   "adversarial-security",
-] as const;
+] as const);
 
-export const OBLIGATION_SOURCES = [
+export const OBLIGATION_SOURCES = Object.freeze([
   "success_criterion",
   "plan_item",
   "ownership_boundary",
   "risk",
   "implied_rule",
   "review_gate",
-] as const;
+] as const);
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

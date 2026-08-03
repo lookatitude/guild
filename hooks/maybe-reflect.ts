@@ -303,24 +303,42 @@ const CODEX_SKIP_THRESHOLD = 3;
 const CODEX_SKIP_EXIT_CODE = 2;
 
 /**
- * Marker contract — a reflection "records a codex-review skip" if ANY of:
+ * Marker contract — does a reflection record a codex-review skip?
  *
- *   1. Frontmatter field (CANONICAL, machine-readable — emit this going
- *      forward):                    codex_review: SKIPPED
- *   2. Legacy proposals list:       skill_improvement: [..., guild:codex-review, ...]
- *   3. Body marker (for prose-style reflections):  <!-- codex_review: SKIPPED -->
+ * PRECEDENCE IS THE WHOLE POINT. These sources are NOT peers, and ORing them
+ * is what made this guard unable to tell "ran" from "skipped":
  *
- * (1) is what new reflections SHOULD write — guild:reflect must emit
- * `codex_review: SKIPPED` (or `codex_review: RAN`) in frontmatter on every
- * self-build run. (2) and (3) are accepted for backward/forward compatibility
- * with the formats already on disk.
+ *   1. DECLARATION (authoritative) — an explicit `codex_review:` value, in
+ *      frontmatter or as a `<!-- codex_review: ... -->` body marker. When one
+ *      is present it DECIDES, and nothing below is consulted.
+ *   2. INFERENCE (fallback only) — the legacy proposals list
+ *      `skill_improvement: [..., guild:codex-review, ...]`, read as a hint that
+ *      review was deferred. Applies ONLY to documents carrying no declaration.
+ *
+ * An inference must never overrule a declaration. Before this ordering existed
+ * all three tests were ORed, so a reflection that declared `codex_review: RAN`
+ * was still counted as a skip whenever it ALSO proposed improving the
+ * guild:codex-review skill — i.e. engaging with the review discipline is what
+ * marked you as having evaded it. Three such reflections sat newest-first on
+ * disk, so the streak read 3/3 and the sentinel blocked, while every clearing
+ * path the banner offered was either already satisfied or a no-op. The only
+ * exit left was the operator override, which is how a rail teaches people that
+ * overriding it is routine.
+ *
+ * Unrecognised declared values (neither RAN nor SKIPPED) count as a SKIP. This
+ * guard is a discipline rail, so it fails CLOSED: a spurious block costs one
+ * conversation, a spurious pass ships unreviewed self-build work.
  */
 function reflectionRecordsCodexSkip(content: string): boolean {
-  // (1) Canonical frontmatter field.
-  if (/^\s*codex_review:\s*SKIPPED\s*$/im.test(content)) return true;
-  // (3) Body / prose marker.
-  if (/<!--\s*codex_review:\s*SKIPPED\s*-->/i.test(content)) return true;
-  // (2) Legacy skill_improvement list naming guild:codex-review.
+  // (1) DECLARATION — first explicit value wins (frontmatter sits at the top of
+  //     the document, so the first match is the document's own field rather
+  //     than any later prose that quotes the marker).
+  const declared =
+    content.match(/^[ \t]*codex_review:[ \t]*([A-Za-z][A-Za-z0-9_-]*)[ \t]*$/im) ??
+    content.match(/<!--[ \t]*codex_review:[ \t]*([A-Za-z][A-Za-z0-9_-]*)[ \t]*-->/i);
+  if (declared) return declared[1].toUpperCase() !== "RAN";
+
+  // (2) INFERENCE — legacy skill_improvement list, undeclared documents only.
   const m = content.match(/skill_improvement:\s*\[([^\]]*)\]/);
   if (m && m[1].includes("guild:codex-review")) return true;
   return false;
@@ -385,6 +403,41 @@ function evaluateCodexSkipGuard(guildRoot: string): {
   } catch {
     // Never let the guard's own failure block the hook.
     return { armed: false, streak: 0 };
+  }
+}
+
+/**
+ * Remove a stale sentinel once the streak has genuinely dropped below the
+ * threshold.
+ *
+ * Without this the sentinel is WRITE-ONLY, and two of the three clearing paths
+ * the banner prints are structurally incapable of working. Both "run a real
+ * review" and "record a reflection without a SKIPPED marker" act on the STREAK,
+ * which is recomputed from disk every run — but the blocking FILE was never
+ * removed by anything, so `blocked: true` outlived the condition that justified
+ * it and the next G-gate kept refusing. That left deletion (the operator
+ * override) as the only exit that actually worked, which is how a rail teaches
+ * people that overriding it is routine.
+ *
+ * Only ever called in self-build context with streak < threshold, so it cannot
+ * erase a sentinel that is still earning its place.
+ */
+function clearCodexSkipSentinel(guildRoot: string): void {
+  try {
+    const sentinel = path.join(guildRoot, ".guild", "codex-skip-streak.json");
+    if (!fs.existsSync(sentinel)) return;
+    fs.rmSync(sentinel);
+    process.stderr.write(
+      `[maybe-reflect] codex-skip streak broken — cleared stale sentinel: ${sentinel}\n`,
+    );
+  } catch (err) {
+    // Never throw from a Stop hook; a stale sentinel is a visible, recoverable
+    // state, whereas a crash here would take the whole reflection path down.
+    process.stderr.write(
+      `[maybe-reflect] WARN: failed to clear codex-skip sentinel: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
   }
 }
 
@@ -461,6 +514,12 @@ async function main(): Promise<void> {
   // This guard ONLY arms in self-build context (cwd has plugin/CLAUDE.md with
   // the orientation banner) so it never disturbs a consuming repo's session.
   const codexGuard = evaluateCodexSkipGuard(guildRoot);
+  if (codexGuard.armed && codexGuard.streak < CODEX_SKIP_THRESHOLD) {
+    // The streak is genuinely below threshold — retire any sentinel left over
+    // from a previous run, so paths 1 and 2 in the banner below actually clear
+    // the block instead of only claiming to.
+    clearCodexSkipSentinel(guildRoot);
+  }
   if (codexGuard.armed && codexGuard.streak >= CODEX_SKIP_THRESHOLD) {
     writeCodexSkipSentinel(guildRoot, codexGuard.streak);
     process.stderr.write(

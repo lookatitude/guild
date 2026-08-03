@@ -34,6 +34,8 @@ export type {
   RemoteConnectResult,
   RemotePaneHandle,
   RemoteProbeResult,
+  RemoteHookProbeResult,
+  TeardownVerdict,
   RemoteTransport,
   MockTransportOpts,
   RemoteTeamBackendOpts,

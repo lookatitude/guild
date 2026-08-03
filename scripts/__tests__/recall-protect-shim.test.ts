@@ -41,6 +41,6 @@ describe("recall-protect compatibility shim", () => {
     expect(modulePath).toMatch(/export\s+function\s+protectChunks/);
     expect(modulePath).toMatch(/export\s+function\s+classifyTrustTier/);
     expect(modulePath).toMatch(/emitTraceEvent/);
-    expect(modulePath).toMatch(/hooks\/lib\/security\/injection-guard/);
+    expect(modulePath).toMatch(/from\s+["']\.\.\/\.\.\/security["']/);
   });
 });

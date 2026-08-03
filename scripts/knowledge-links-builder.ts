@@ -41,6 +41,7 @@
  */
 
 import * as fs from "fs";
+import { sealSet } from "../src/modules/kernel/workflows/sealed-collections";
 import * as path from "path";
 import { readScalarField } from "./lib/frontmatter";
 import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from "../src/modules/knowledge/workflows/knowledge-links-contract";
@@ -78,7 +79,7 @@ export type ExtendedNodeKind =
  * The complete set of node kinds — all 19 brief §306-327 entity kinds.
  * ReadonlySet to prevent mutation.
  */
-export const EXTENDED_NODE_KINDS: ReadonlySet<string> = new Set<string>([
+export const EXTENDED_NODE_KINDS: ReadonlySet<string> = sealSet([
   "goal",
   "non_goal",
   "initiative",
@@ -98,7 +99,7 @@ export const EXTENDED_NODE_KINDS: ReadonlySet<string> = new Set<string>([
   "review",
   "verify",
   "reflection_evolution",
-]);
+], "EXTENDED_NODE_KINDS");
 
 /**
  * Extended closed edge-type set. Preserves the original 9 from
@@ -117,7 +118,7 @@ export const EXTENDED_NODE_KINDS: ReadonlySet<string> = new Set<string>([
  *   verified_by      — run/task is verified by verify evidence
  *   has_review       — run/task has a review artifact
  */
-export const EXTENDED_EDGE_TYPES: ReadonlySet<string> = new Set<string>([
+export const EXTENDED_EDGE_TYPES: ReadonlySet<string> = sealSet([
   // Original 9 (CR-A #2, locked — never removed)
   "decided_by",
   "used_for",
@@ -135,7 +136,7 @@ export const EXTENDED_EDGE_TYPES: ReadonlySet<string> = new Set<string>([
   "emits_candidate",
   "verified_by",
   "has_review",
-]);
+], "EXTENDED_EDGE_TYPES");
 
 // ── Extended node-kind classifier ─────────────────────────────────────────────
 

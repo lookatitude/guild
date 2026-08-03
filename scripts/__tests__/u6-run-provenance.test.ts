@@ -18,6 +18,8 @@
  *     {authorHost, detected, recommended, selected?}, and communication_contract.
  */
 
+import * as fsNode from "fs";
+import * as os from "os";
 import * as path from "path";
 import {
   createRunLifecycle,
@@ -78,7 +80,52 @@ function makeEnv(
   } as RunLifecycleEnv;
 }
 
-const ROOT = "/abs/workspace";
+/**
+ * THE PROJECT ROOT IS A REAL DIRECTORY. The writes are still in-memory.
+ *
+ * ── Why this changed (task #37) ────────────────────────────────────────────────
+ * `ROOT` used to be the fictional string "/abs/workspace". That worked while
+ * run-lifecycle's `assertContained` was purely lexical, and stopped working when
+ * feature/path-containment migrated it to `checkContained(..., {policy:
+ * "physical"})`. The primitive `realpathSync`es the ROOT, so a root that is not on
+ * disk is `root-unresolvable` and every call throws.
+ *
+ * That migration is CORRECT on the merits — the lexical guard walked straight
+ * through a symlinked `.guild/runs` — and it made the root's physical reality part
+ * of this function's contract. In production the root is the project root and is
+ * always real (`startRun` mkdirps under it before the guard ever runs). So the
+ * honest repair is on THIS side: the fixture root now IS a directory, which is what
+ * the contract has required since the migration.
+ *
+ * THE FS SEAM IS UNTOUCHED. Every write and read still goes through the in-memory
+ * `memFs`, including the HK-06 `scrubbedWriteDurable` fail-closed cases — nothing
+ * is written to the real filesystem by any test in this file. Only the ROOT is real,
+ * because only the ROOT is what the containment guard reads.
+ *
+ * ── What the fictional root was silently costing ──────────────────────────────
+ * It did not merely fail 16 tests. Under an unresolvable root, EVERY call threw
+ * (write) or returned null (read) regardless of its arguments — so the 28
+ * runId-validation cases below were passing VACUOUSLY: they asserted "throws" /
+ * "returns null" and got it from the containment root check, never reaching
+ * `validateRunId`. The tell was visible in the suite all along: the bad-id cases
+ * were green while "a valid runId still works" was red. Those cases now assert the
+ * MESSAGE, so they can only pass by way of the validator they are named for.
+ *
+ * ── The residual, NOT fixed here ───────────────────────────────────────────────
+ * `run-lifecycle.ts` is built around an injectable fs seam, and this one guard
+ * reaches past it to the real filesystem. Against a virtual fs the guard therefore
+ * describes a filesystem the writes never touch. That is a real inconsistency, it
+ * is pinned by an explicit test at the bottom of this file rather than left
+ * implicit, and it is deliberately NOT repaired here: every candidate repair
+ * (an fs seam on the kernel primitive; a lexical pre-check; a policy the seam
+ * selects) is a design change to the shared containment primitive while tasks #34
+ * and #35 are still deciding its authority contract. See task #37.
+ */
+const ROOT = fsNode.realpathSync(fsNode.mkdtempSync(path.join(os.tmpdir(), "guild-u6-root-")));
+
+afterAll(() => {
+  fsNode.rmSync(ROOT, { recursive: true, force: true });
+});
 
 function baseStartOpts(over: Partial<StartRunOpts> = {}): StartRunOpts {
   return {
@@ -446,9 +493,15 @@ describe("u6 — runId validation (path-traversal containment)", () => {
       it(`throws for runId ${JSON.stringify(badId)}`, () => {
         const mem = memFs();
         const snapshot = makeSnapshot();
+        // ASSERT THE MESSAGE, not merely "it threw". A bare toThrow() is satisfied
+        // by ANY throw, which is how these cases stayed green for months while the
+        // containment guard was rejecting the fixture root before `validateRunId`
+        // was ever reached. Naming the validator is what makes the case about the
+        // runId — swap `badId` for a valid one and this goes red, which a bare
+        // toThrow() would not have.
         expect(() =>
           writeResolvedSettingsSnapshot(badId, snapshot, { cwd: ROOT, fs: mem.env })
-        ).toThrow();
+        ).toThrow(/invalid runId/);
         // No file written outside .guild/runs/<safe-subdir>/
         const runsBase = path.join(ROOT, ".guild", "runs") + path.sep;
         for (const f of mem.files.keys()) {
@@ -550,5 +603,88 @@ describe("u6 — HK-06 resolved-settings.json scrubbed-write coverage", () => {
     expect(mem.files.has(expectedPath)).toBe(true);
     const parsed = JSON.parse(mem.files.get(expectedPath) as string);
     expect(parsed.schema_version).toBe("guild.resolved_settings.v1");
+  });
+});
+
+// ── The seam-bypass residual, PINNED rather than skipped (task #37) ────────────
+//
+// This block exists because the alternative was a skipped test, and a skipped test
+// is a defect nobody can see. It does not assert that the behaviour below is GOOD.
+// It asserts exactly what the behaviour IS, so that the day someone routes the
+// containment guard through the module's fs seam — or gives the kernel primitive a
+// seam of its own — these cases go red and force the decision to be re-recorded
+// here instead of silently changing under everyone.
+//
+// THE FACT: `run-lifecycle.ts` accepts an injectable fs seam for every read and
+// write, but `assertContained` calls the kernel's `checkContained` with
+// `policy: "physical"`, which reaches the REAL filesystem directly. So the guard
+// judges a filesystem the writes never touch. Against a virtual root the verdict is
+// `root-unresolvable` — not because anything escaped, but because the guard cannot
+// see the fs the caller injected.
+//
+// WHY IT IS NOT REPAIRED HERE, and why that is a waiver rather than a shrug:
+//   - Production is unaffected, and that was measured, not assumed:
+//     run-lifecycle.test.ts and write-run-manifest.test.ts drive the REAL fs
+//     (mkdtempSync / createRealEnv) and pass; on the startRun path
+//     env.fs.mkdirp(logsDir(...)) runs BEFORE writeResolvedSettingsSnapshot, so
+//     the root exists by the time the guard runs. The exposure is
+//     writeResolvedSettingsSnapshot as a STANDALONE export against a root that is
+//     not on disk.
+//   - Every candidate repair is a design change to the SHARED containment
+//     primitive: (a) an optional fs seam on `checkContained` is a public API
+//     change; (b) a lexical pre-check reintroduces exactly the lexical-guard shape
+//     whose absence the rail's signal is built to detect; (c) letting the seam
+//     select the policy is the authority question tasks #34 and #35 are open on.
+//     Picking one inside a merge-unblocking commit would be deciding #35 by
+//     accident.
+describe("u6 — KNOWN RESIDUAL (task #37): the containment guard bypasses the fs seam", () => {
+  const VIRTUAL_ROOT = "/abs/workspace-that-is-not-on-disk";
+
+  it("a virtual root is REFUSED even though the injected seam could serve it", () => {
+    const mem = memFs();
+    const snapshot = makeSnapshot();
+    // The seam is perfectly capable of this write — prove that first, so the
+    // refusal below cannot be mistaken for the seam being unable to cope.
+    const target = path.join(VIRTUAL_ROOT, ".guild", "runs", "run-virtual", "resolved-settings.json");
+    mem.env.writeFile(target, "{}");
+    expect(mem.files.has(target)).toBe(true);
+    mem.files.delete(target);
+
+    // ASSERT THE CODE, not just "it threw": `root-unresolvable` is the specific
+    // refusal that proves the guard is reading the real filesystem for the root.
+    // If someone routes it through the seam, the refusal disappears (or becomes a
+    // different code) and this goes red — which is the entire point.
+    expect(() =>
+      writeResolvedSettingsSnapshot("run-virtual", snapshot, { cwd: VIRTUAL_ROOT, fs: mem.env })
+    ).toThrow(/root-unresolvable/);
+    expect(mem.files.has(target)).toBe(false);
+  });
+
+  it("the read side degrades to null on the same virtual root (it does not throw)", () => {
+    const mem = memFs();
+    const filePath = path.join(
+      VIRTUAL_ROOT, ".guild", "runs", "run-virtual", "resolved-settings.json"
+    );
+    mem.env.writeFile(filePath, '{"schema_version":"guild.resolved_settings.v1"}');
+    // The bytes ARE in the seam; the read still reports nothing, because the guard
+    // refuses before the seam is consulted. Asserting the file is present first is
+    // what stops this being a vacuous "null because empty" case.
+    expect(mem.files.has(filePath)).toBe(true);
+    expect(readResolvedSettingsSnapshot("run-virtual", { cwd: VIRTUAL_ROOT, fs: mem.env })).toBeNull();
+  });
+
+  it("CONTROL: the identical call against a REAL root succeeds through the same seam", () => {
+    // Without this the two cases above would be consistent with "the seam is
+    // broken" or "run-virtual is a bad id". It is the root, and only the root.
+    const mem = memFs();
+    const snapshot = makeSnapshot();
+    const written = writeResolvedSettingsSnapshot("run-virtual", snapshot, {
+      cwd: ROOT,
+      fs: mem.env,
+    });
+    expect(written).toBe(
+      path.join(ROOT, ".guild", "runs", "run-virtual", "resolved-settings.json")
+    );
+    expect(mem.files.has(written)).toBe(true);
   });
 });

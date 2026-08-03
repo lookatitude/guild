@@ -8,56 +8,84 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "94581116d4dc2bbadce2522477f35cf3d72406baa4c9db7992df6465fa72a59d"
+      "sha256": "29bb20d1ba97f7b46e1827e85149b679d4ec99dbd7ce14aed8b7065f106e9888"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/contracts/adoption-manifest",
+      "source_path": "scripts/lib/core/contracts/adoption-manifest.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/adoption-manifest.ts",
+      "sha256": "9a5cfb81e97bd858a45d7d3c2072eb396ae6ce1f0d516a4119d5477dad084a7c"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/core/contracts/project-definition-ref",
+      "source_path": "scripts/lib/core/contracts/project-definition-ref.ts",
+      "resource_path": "resources/scripts/lib/core/contracts/project-definition-ref.ts",
+      "sha256": "1b8fffb935c5b669b39e2f4b7cc45b95c4d4e442b894b03aef43c90ed11dca28"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/specialist-identity",
       "source_path": "scripts/lib/core/contracts/specialist-identity.ts",
       "resource_path": "resources/scripts/lib/core/contracts/specialist-identity.ts",
-      "sha256": "71013a384205271bb970e1f1a67e150ca232a33db89d5e8d3a74d9c60a80e762"
+      "sha256": "4c56826dccbc789e37b2e60143e4a9673ef34c431478ae14a8690e249cc778c0"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/task-cell-backend",
       "source_path": "scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/task-cell-backend.ts",
-      "sha256": "92cb28d53275269d8a315162647d72bd42a545cc611f31455049896aa9127952"
+      "sha256": "3981b150984555d7458350b4a5b9932d2c398509bf31e26cf39f99109acf1171"
     },
     {
       "category": "scripts",
       "id": "lib/core/contracts/team-backend",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "3ae35568a21d7e671a81b3e0575a3e94ec570007d450abc586a7f6ce787a0e13"
+      "sha256": "de5837e48c59e9044a95c2625d4969e4c719d47e06d7f6922ae28e146ae2e2fd"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/emit-remote-orphan",
+      "source_path": "scripts/lib/emit-remote-orphan.ts",
+      "resource_path": "resources/scripts/lib/emit-remote-orphan.ts",
+      "sha256": "c7981e7179be977fc13e2e8b77c7ce7dcdeee8902dffb8a8b111eebabe8fc03b"
     },
     {
       "category": "scripts",
       "id": "lib/host/inprocess-backend",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "f5dc0f43450ea39b544a4b94c447f215c297feccec61b66c25682a6c62f29882"
+      "sha256": "f2686434ea2ee1b390473c5ef4c380541cbaaaf7fe67292408cb676fc8a4cc72"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/host/pane-dispatch-trace",
+      "source_path": "scripts/lib/host/pane-dispatch-trace.ts",
+      "resource_path": "resources/scripts/lib/host/pane-dispatch-trace.ts",
+      "sha256": "b1552e0d50f36eae8932b1e2f97558f7233d4eb7a67f536182c3d2f7761ea33a"
     },
     {
       "category": "scripts",
       "id": "lib/host/remote-backend",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "ea0756737c65c0227236eaaff34600086dae02d77cd395b67bfc0e027d43a5a8"
+      "sha256": "05f35cdf40ee2229fb3dd84edef92f0844d89548b3ebcb5dca0f3ebb54451e88"
     },
     {
       "category": "scripts",
       "id": "lib/host/tmux-backend",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "ba9cb9ba643dba3d63074e8ec9e33e8cb3561f66c890733bd0787fa1b49419f5"
+      "sha256": "3f02d2250a0c8d428fa8ebb8381a30acf45214f5ed4cba1bbdf6aa82b912bc87"
     },
     {
       "category": "scripts",
       "id": "lib/team-backend",
       "source_path": "scripts/lib/team-backend.ts",
       "resource_path": "resources/scripts/lib/team-backend.ts",
-      "sha256": "2aea429a4ca2b43b35b959964ea271ea772c991eb964b64294dc9846e4ddea70"
+      "sha256": "83106b4522c4045bbe4db5f93527c2749b56b6b216c2cbd3c8df921d97b90d4e"
     },
     {
       "category": "skills",

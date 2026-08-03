@@ -66,14 +66,14 @@ import { validateScheduleSets, type TeamScheduleV1 } from "./team-schedule";
  * `restructure` itself is the generic form. Every edit verb resolves to a
  * `decision: restructure` artifact - there is no fifth decision kind.
  */
-export const DECISION_VOCABULARY = [
+export const DECISION_VOCABULARY = Object.freeze([
   "approve",
   "add",
   "remove",
   "substitute",
   "edit_dependencies",
   "restructure",
-] as const;
+] as const);
 
 export type DecisionVerb = (typeof DECISION_VOCABULARY)[number];
 

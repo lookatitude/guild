@@ -60,7 +60,17 @@ import {
   validateDefaults,
   validateRoles,
   validateHostProfiles,
+  validateCapability,
 } from "./read-guild-config";
+// S5: the capability vocabularies + budget bounds, from the canonical shared
+// entrypoint (R-DIST canonicality). Reused verbatim by VALID_VALUES / NUMERIC_RANGE
+// below so the write path and the schema can never carry two different vocabularies.
+import {
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+  CAPABILITY_SUGGESTION_BUDGET_MAX,
+  CAPABILITY_SUGGESTION_BUDGET_MIN,
+} from "./lib/shared/config-defaults";
 // Closed registry host-id set (single SoT — host-registry-schema.ts HOST_IDS) for
 // validating roles.* / host_profiles.* values written via `config set`.
 import { HOST_IDS } from "./lib/host-registry-schema";
@@ -76,13 +86,17 @@ import {
 // the P1 permission model (host_mode × guild_gates baseline golden), the per-host config
 // renderer (LW1-6), and the never-clobber provenance type — all consumed READ-ONLY here.
 import {
-  resolveBaselineGolden,
   PHASES,
   GATE_TYPES,
   cellKey,
   type BypassPolicy,
   type PermissionDecision,
+  type HostMode,
 } from "./lib/permission-policy-schema";
+// rf-wi-01 (G1): resolvePermissionPolicy overlays the now-registered `host_mode` config
+// key onto the C2 baseline golden (host_mode ⊥ guild_gates orthogonality invariant) —
+// resolveBaselineGolden alone ignores host_mode entirely.
+import { resolvePermissionPolicy } from "./lib/permission-policy";
 import { renderAllHostConfigs } from "./lib/config-render";
 import type {
   RenderConfigLike,
@@ -119,6 +133,7 @@ const SCALAR_TIER1_KEYS = new Set([
   "auto_approve",
   "review",
   "host",
+  "host_mode", // rf-wi-01 (G1): nullable P1-L10 host-autonomy override
   "initiative_default",
   "index",
   "record_status_runs",
@@ -152,6 +167,12 @@ const TIER1_KEYS = new Set([
   // (Codex G-lane MUST-FIX). Their CONTENT is validated by validateRoles/validateHostProfiles.
   "roles",
   "host_profiles",
+  // S5 (cap-loc-D04): the capability-localization policy block. Same reasoning as
+  // roles/host_profiles above — it lives in DEFAULTS and is materialized by
+  // `reconcile sync`/`config init`, so the closed key set MUST accept it or
+  // `validate --effective` would reject keys config init itself writes. CONTENT is
+  // validated by validateCapability (config-cli.ts).
+  "capability",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -173,6 +194,9 @@ const ROLE_ALIASES = new Set(["host", "advisory", "adversarial"]);
 
 /** Known canonical registry host ids — value set for roles/host_profiles. */
 const KNOWN_HOST_IDS = new Set<string>(HOST_IDS);
+
+/** rf-wi-01 (G1): valid host_mode values (permission-policy-schema.ts HOST_MODES). */
+const HOST_MODES_SET = new Set<string>(["read_only", "ask", "accept_edits", "auto", "bypass_all"]);
 
 /** `host_profiles.<host_id>.enabled` — the one host_profiles leaf that must coerce to a boolean. */
 const HP_ENABLED_RE = /^host_profiles\.[^.]+\.enabled$/;
@@ -246,6 +270,17 @@ const MCP_KEYS = new Set([
   "bridge_package",    // R-019: string|null — MCP bridge package name
 ]);
 
+/**
+ * Valid sub-keys for capability.* (S5 — cap-loc-D04). Mirrors VALID_CAPABILITY_KEYS
+ * in config-cli.ts; that module owns VALUE validation, this one owns PATH validation.
+ */
+const CAPABILITY_KEYS = new Set([
+  "resolver_mode",
+  "suggestion_budget",
+  "starter_roles",
+  "auto_create_policy",
+]);
+
 /** Valid sub-keys for defaults.* */
 const DEFAULTS_ALLOWED_KEYS = new Set([
   "auto_learn",
@@ -265,7 +300,15 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "capability_manifest_ttl_s", // R-018
   "allowed_tools",             // R-020
   "update",                    // plugin-update-lifecycle AC-6
+  "lean_lead",                 // rf-wi-01 (G1)
+  "lifecycle_gate",            // rf-wi-01 (G1)
 ]);
+
+/** Valid sub-keys for defaults.lean_lead.* (rf-wi-01 / G1) */
+const DEFAULTS_LEAN_LEAD_KEYS = new Set(["enabled", "hands_on_edit_threshold"]);
+
+/** Valid sub-keys for defaults.lifecycle_gate.* (rf-wi-01 / G1) */
+const DEFAULTS_LIFECYCLE_GATE_KEYS = new Set(["enabled", "adhoc_activity_threshold"]);
 
 /** Valid sub-keys for defaults.team.* */
 const DEFAULTS_TEAM_KEYS = new Set(["size", "always_include"]);
@@ -421,6 +464,20 @@ function validateKeyPath(keyPath: string): string | null {
     return null;
   }
 
+  // capability.* — closed sub-key set (S5). Each sub-key is a scalar or a flat array;
+  // no deeper path exists, so a too-deep path is a distinct, nameable error rather
+  // than a silent accept. VALUES are validated by validateCapability at
+  // `validate --effective` time (single SoT in config-cli.ts, no vocabulary drift).
+  if (top === "capability") {
+    if (!CAPABILITY_KEYS.has(seg1)) {
+      return `unknown capability key "${seg1}" (closed key set — only: ${[...CAPABILITY_KEYS].join(", ")})`;
+    }
+    if (parts.length > 2) {
+      return `key path "${keyPath}" is too deep — capability.${seg1} is a scalar or flat array`;
+    }
+    return null;
+  }
+
   // roles.* — closed sub-key set {host, advisory, adversarial}; each a scalar host-id/null.
   if (top === "roles") {
     if (!ROLE_ALIASES.has(seg1)) {
@@ -507,6 +564,19 @@ function validateKeyPath(keyPath: string): string | null {
       }
       return null;
     }
+    // rf-wi-01 (G1): lean_lead.* and lifecycle_gate.* sub-paths
+    if (seg1 === "lean_lead") {
+      if (!DEFAULTS_LEAN_LEAD_KEYS.has(seg2)) {
+        return `unknown defaults.lean_lead key "${seg2}" (valid: ${[...DEFAULTS_LEAN_LEAD_KEYS].join(", ")})`;
+      }
+      return null;
+    }
+    if (seg1 === "lifecycle_gate") {
+      if (!DEFAULTS_LIFECYCLE_GATE_KEYS.has(seg2)) {
+        return `unknown defaults.lifecycle_gate key "${seg2}" (valid: ${[...DEFAULTS_LIFECYCLE_GATE_KEYS].join(", ")})`;
+      }
+      return null;
+    }
     // plugin-update-lifecycle AC-6: defaults.update.{mode,cadence_hours}
     if (seg1 === "update") {
       if (parts.length > 2 && seg2 !== "mode" && seg2 !== "cadence_hours") {
@@ -549,6 +619,8 @@ const BOOLEAN_PATHS = new Set([
   "models.structuredOutputRequired",
   "models.compositeRecall",       // boolean control in CONFIG_UI_METADATA — was uncoerced (persisted a string the resolver rejects)
   "models.importanceAtIngest",
+  "defaults.lean_lead.enabled",        // rf-wi-01 (G1)
+  "defaults.lifecycle_gate.enabled",   // rf-wi-01 (G1)
 ]);
 
 /** Paths that must be integers (whole number strings). */
@@ -575,7 +647,23 @@ const INTEGER_PATHS = new Set([
   "models.knowledge.maxFiles",
   "models.knowledge.maxTokens",
   "models.knowledge.batchSize",
+  "defaults.lean_lead.hands_on_edit_threshold",           // rf-wi-01 (G1)
+  "defaults.lifecycle_gate.adhoc_activity_threshold",     // rf-wi-01 (G1)
+  // S5: without this, `config set capability.suggestion_budget 2` persists the STRING
+  // "2", which the resolver then drops as a non-number (adversarial-review finding).
+  "capability.suggestion_budget",
 ]);
+
+/**
+ * Key paths whose value MUST be a JSON array (S5).
+ *
+ * Scoped deliberately to the key this lane introduces. The generic fall-through that
+ * persists a bare scalar for any array-typed key is a PRE-EXISTING weakness affecting
+ * other array keys too (`auto_approve`, `defaults.allowed_tools`, …); widening the
+ * rule to those is a separate change with its own blast radius, and is reported
+ * rather than smuggled in here.
+ */
+const JSON_ARRAY_PATHS = new Set(["capability.starter_roles"]);
 
 /** Paths that must be numbers (possibly non-integer). */
 const NUMBER_PATHS = new Set([
@@ -632,6 +720,16 @@ const NUMERIC_RANGE: Record<string, { min: number; max?: number; exclusiveMin?: 
   "defaults.index.links_edge_threshold": { min: 1 },
   "defaults.index.runs_threshold": { min: 1 },
   "defaults.index.wiki_file_threshold": { min: 1 },
+  // rf-wi-01 (G1): positive-integer thresholds — the guards ignore <1 (degrade to default).
+  "defaults.lean_lead.hands_on_edit_threshold": { min: 1 },
+  "defaults.lifecycle_gate.adhoc_activity_threshold": { min: 1 },
+  // S5 (cap-loc-D04/F10): the budget is fixed at 4 and 0 is legal ("profile but never
+  // propose"). Range-checked at WRITE time so persisted == effective — the resolver
+  // clamps, and a `config set 9` that silently became 4 would be a lie to the operator.
+  "capability.suggestion_budget": {
+    min: CAPABILITY_SUGGESTION_BUDGET_MIN,
+    max: CAPABILITY_SUGGESTION_BUDGET_MAX,
+  },
 };
 
 /** Range-check `n` for `keyPath`; returns an error string or null. */
@@ -668,6 +766,12 @@ const VALID_VALUES: Record<string, Set<string>> = {
   "models.cacheTTL.coordinator": new Set(["1h", "5m", "off"]),
   "models.cacheTTL.leaf": new Set(["1h", "5m", "off"]),
   "defaults.retry.backoff": new Set(["immediate", "linear", "exponential"]), // R-016
+  // S5 (cap-loc-D04). Registered here, not only in the schema: without a VALID_VALUES
+  // entry `config set capability.resolver_mode typo` PERSISTS the invalid enum, and
+  // the write path is exactly where a typo must be refused (adversarial-review finding).
+  // Sourced from the same frozen vocabularies the schema uses — no second list to drift.
+  "capability.resolver_mode": new Set<string>(CAPABILITY_RESOLVER_MODES),
+  "capability.auto_create_policy": new Set<string>(CAPABILITY_AUTO_CREATE_POLICIES),
 };
 
 /**
@@ -723,6 +827,16 @@ function validateValue(keyPath: string, rawValue: string): string | null {
     return rejects.length > 0 ? rejects[0] : null;
   }
 
+  // rf-wi-01 (G1): host_mode — nullable P1-L10 host-autonomy override. null/none clears
+  // the override (host default "ask" applies); otherwise must be a HOST_MODES member.
+  if (keyPath === "host_mode") {
+    if (rawValue === "null" || rawValue === "none") return null;
+    if (!HOST_MODES_SET.has(rawValue)) {
+      return `invalid value "${rawValue}" for key "host_mode" — valid: ${[...HOST_MODES_SET].join("|")} or null`;
+    }
+    return null;
+  }
+
   // Closed-enum check
   if (keyPath in VALID_VALUES) {
     const valid = VALID_VALUES[keyPath];
@@ -769,11 +883,24 @@ function validateValue(keyPath: string, rawValue: string): string | null {
   // JSON array / object: try-parse; reject if invalid JSON
   if (rawValue.startsWith("[") || rawValue.startsWith("{")) {
     try {
-      JSON.parse(rawValue);
+      const parsed: unknown = JSON.parse(rawValue);
+      // S5: a declared string[] key must not accept a JSON object/scalar either.
+      if (JSON_ARRAY_PATHS.has(keyPath) && !Array.isArray(parsed)) {
+        return `value for "${keyPath}" must be a JSON array (got ${rawValue})`;
+      }
     } catch {
       return `value for "${keyPath}" looks like JSON but failed to parse: ${rawValue}`;
     }
     return null;
+  }
+
+  // S5 (adversarial-review finding): a bare scalar for an ARRAY-typed key used to
+  // persist as a string, so `config set capability.starter_roles backend` wrote
+  // `"backend"` — which `config validate` then rejects. This file's own invariant is
+  // that the CLI/UI set path "can't persist a value `config validate` rejects", so the
+  // write is refused here with the syntax the operator actually needs.
+  if (JSON_ARRAY_PATHS.has(keyPath)) {
+    return `value for "${keyPath}" must be a JSON array (got "${rawValue}") — e.g. '["backend","qa"]'`;
   }
 
   return null;
@@ -796,6 +923,10 @@ function coerceValue(keyPath: string, rawValue: string): unknown {
     return rawValue === "true";
   }
   if (rawValue === "null" && (keyPath === "initiative_default" || keyPath === "loops")) {
+    return null;
+  }
+  // rf-wi-01 (G1): host_mode — null/none clears the override.
+  if (keyPath === "host_mode" && (rawValue === "null" || rawValue === "none")) {
     return null;
   }
   if (BOOLEAN_PATHS.has(keyPath)) {
@@ -998,6 +1129,11 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
   if (isPlainObject(config["host_profiles"])) {
     violations.push(...validateHostProfiles(config["host_profiles"] as Record<string, unknown>));
   }
+  // NOTE (S5): `capability` is deliberately NOT validated here. The resolver COERCES
+  // it, so by this point the block is always well-formed and a check would be
+  // vacuous — it could never fire. Its real gate is the RAW-FILE sweep below
+  // (collectRawRolesHostProfilesViolations), which is where the same problem was
+  // already solved for roles/host_profiles.
 
   return violations;
 }
@@ -1006,7 +1142,7 @@ function validateResolved(config: Record<string, unknown>, selfBuild = false): s
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
-export const CONFIG_SUBCOMMANDS = [
+export const CONFIG_SUBCOMMANDS = Object.freeze([
   "set",
   "role",
   "show",
@@ -1015,7 +1151,7 @@ export const CONFIG_SUBCOMMANDS = [
   "update-mcp-hashes",
   "reconcile",
   "ui",
-] as const;
+] as const);
 
 export type ConfigSubcommand = (typeof CONFIG_SUBCOMMANDS)[number];
 
@@ -1486,16 +1622,25 @@ function cmdShowSources(cwd: string): number {
 // Phase-permission decision layers (shared by show --sources and show --render)
 // ---------------------------------------------------------------------------
 
-/** The two config inputs the baseline-golden resolver reads (+ a safe default). */
+/** The config inputs the L10 policy resolver reads (+ safe defaults). */
 function permissionInputs(config: ReturnType<typeof resolveSettings>["config"]): {
   auto_approve: string[];
   bypass_permissions_policy: BypassPolicy;
+  host_mode?: HostMode;
 } {
   const auto_approve = Array.isArray(config.auto_approve) ? config.auto_approve : [];
   const bp = config.security?.bypass_permissions_policy;
   const bypass_permissions_policy: BypassPolicy =
     bp === "deny" || bp === "allow" || bp === "audit" ? bp : "audit";
-  return { auto_approve, bypass_permissions_policy };
+  // rf-wi-01 (G1): the now-registered top-level host_mode override. Absent/null ⇒
+  // omitted so resolvePermissionPolicy's default (no overlay) reproduces the C2
+  // baseline golden byte-for-byte, exactly like the pre-registration behavior.
+  const hm = (config as unknown as { host_mode?: unknown }).host_mode;
+  const host_mode: HostMode | undefined =
+    typeof hm === "string" && ["read_only", "ask", "accept_edits", "auto", "bypass_all"].includes(hm)
+      ? (hm as HostMode)
+      : undefined;
+  return { auto_approve, bypass_permissions_policy, ...(host_mode !== undefined ? { host_mode } : {}) };
 }
 
 /**
@@ -1510,24 +1655,27 @@ function appendPermissionSourceLines(
   config: ReturnType<typeof resolveSettings>["config"],
   sources: Record<string, Source>
 ): void {
-  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
-  const golden = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  const { auto_approve, bypass_permissions_policy, host_mode } = permissionInputs(config);
+  // rf-wi-01 (G1): resolvePermissionPolicy overlays the registered host_mode onto the
+  // golden (host_mode ⊥ guild_gates orthogonality invariant — guild_gates/bypass are
+  // NEVER touched by the overlay); absent host_mode reproduces the golden byte-for-byte.
+  const table = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
 
   const gatesSrc: Source = (sources["auto_approve"] as Source) ?? "builtin";
   const bypassSrc: Source = (sources["security"] as Source) ?? "builtin";
-  const hostModeSrc: Source = "builtin"; // baseline host_mode is the host default
+  const hostModeSrc: Source = (sources["host_mode"] as Source) ?? "builtin";
 
   lines.push("");
   lines.push("── phase-permission decisions (host_mode × guild_gates × bypass) ──");
   lines.push(
     `inputs: auto_approve=${JSON.stringify(auto_approve)} [${gatesSrc}]  ·  ` +
       `security.bypass_permissions_policy=${bypass_permissions_policy} [${bypassSrc}]  ·  ` +
-      `host_mode baseline=ask [${hostModeSrc}]`
+      `host_mode=${host_mode ?? "unset (host default: ask)"} [${hostModeSrc}]`
   );
   for (const phase of PHASES) {
     for (const gate of GATE_TYPES) {
       const key = cellKey(phase, gate);
-      const d: PermissionDecision = golden[key];
+      const d: PermissionDecision = table[key];
       lines.push(
         `${key.padEnd(18)} host_mode=${d.host_mode} [${hostModeSrc}]  ` +
           `guild_gates=${d.guild_gates} [${gatesSrc}]  bypass=${d.bypass} [${bypassSrc}]`
@@ -1561,8 +1709,10 @@ function cmdShowRender(cwd: string): number {
     return 1;
   }
   const { config, sources } = result;
-  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
-  const permissions = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  // rf-wi-01 (G1): overlay the registered host_mode (resolvePermissionPolicy; absent
+  // ⇒ byte-identical to the golden, same as before registration).
+  const { auto_approve, bypass_permissions_policy, host_mode } = permissionInputs(config);
+  const permissions = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
 
   const renderedAt = new Date().toISOString();
   const renders = renderAllHostConfigs({
@@ -1657,8 +1807,10 @@ function buildUiSurfaceFor(
     return { error: `could not resolve settings — ${(e as Error).message}` };
   }
   const { config, sources } = result;
-  const { auto_approve, bypass_permissions_policy } = permissionInputs(config);
-  const permissions = resolveBaselineGolden({ auto_approve, bypass_permissions_policy });
+  // rf-wi-01 (G1): overlay the registered host_mode (resolvePermissionPolicy; absent
+  // ⇒ byte-identical to the golden, same as before registration).
+  const { auto_approve, bypass_permissions_policy, host_mode } = permissionInputs(config);
+  const permissions = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
   const surface = buildHostConfigUiSurface({
     host,
     config: config as unknown as RenderConfigLike & Record<string, unknown>,
@@ -2023,6 +2175,17 @@ function collectRawRolesHostProfilesViolations(cwd: string): string[] {
     }
     if (isPlainObject(parsed["host_profiles"])) {
       for (const r of validateHostProfiles(parsed["host_profiles"] as Record<string, unknown>)) {
+        violations.push(`${r} — raw ${label} (${file})`);
+      }
+    }
+    // S5 (cap-loc-D04) — SAME failure mode, same remedy. The resolver coerces the
+    // capability block (clamping an out-of-range budget, dropping an unknown enum,
+    // deduping starter_roles), so `validateResolved` would inspect an
+    // already-repaired block and report VALID for a file that is plainly wrong.
+    // Validating the RAW block is what makes `validate --effective` honest about
+    // `{"capability":{"resolver_modee":"observe","suggestion_budget":9}}`.
+    if (isPlainObject(parsed["capability"])) {
+      for (const r of validateCapability(parsed["capability"] as Record<string, unknown>)) {
         violations.push(`${r} — raw ${label} (${file})`);
       }
     }

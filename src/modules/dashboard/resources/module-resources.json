@@ -8,7 +8,7 @@
       "id": "dashboard",
       "source_path": "commands/dashboard.md",
       "resource_path": "resources/commands/dashboard.md",
-      "sha256": "d0d0617f3ea2fec095b65231ebd6e7cf7c08853c224b42ee40ed8351bcecc6ba"
+      "sha256": "b03f5f74e214ddd02891d9bc93aa6ab40134f6d086239901630f31fa7502ee1a"
     },
     {
       "category": "scripts",
@@ -22,7 +22,7 @@
       "id": "guild-dashboard",
       "source_path": "skills/meta/dashboard/SKILL.md",
       "resource_path": "resources/skills/meta/dashboard/SKILL.md",
-      "sha256": "1681aefc57e8d4682a8e7e1a45b009f404b6694c058d18963222c5a41c9c847e"
+      "sha256": "328c3ffdebdda8b30057802cff2488a66f1ce18c5258eab8ab54ca71b8028983"
     }
   ]
 }

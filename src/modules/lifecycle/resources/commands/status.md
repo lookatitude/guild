@@ -51,7 +51,7 @@ At the very top of the command body — before any filesystem scan — record a
 lightweight status run (SC-B OQ6, §435):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js status \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js status \
   --cwd "$(pwd)"
 ```
 
@@ -63,6 +63,31 @@ wiki/decisions/indexes/initiatives. The "status is read-only" contract is
 preserved; only a lightweight replay trace is added. No `--initiative` flag;
 no `--run-class` flag (the `status` sub-command forces `lightweight`
 internally via B3).
+
+## Capability candidates (F7 — required, not optional)
+
+After the run-state block, print the capability-candidate surface:
+
+```bash
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts candidates \
+  --cwd "$(pwd)"
+```
+
+Print its output verbatim — it is already formatted, deterministic, and
+self-explaining (it states WHY the list is empty when it is empty, so "no
+candidates" and "never profiled" never read alike).
+
+**This step is load-bearing and may not be dropped.** Decision `cap-loc-D04`
+§Recommendation.5 makes candidate surfacing a **hard precondition** on shipping
+`capability.resolver_mode: observe` as the default: *"An `observe`-mode install
+that emits candidates nobody surfaces is a silent failure."* The default is now
+`observe` **because** this block exists. Remove it and
+`CAPABILITY_RESOLVER_MODE_DEFAULT` must go back to `legacy` in the same change —
+the default and the surface are one decision.
+
+The sub-command is **read-only** (`surfaceCapabilityCandidates` opens nothing for
+writing and creates no directory), so it does not violate status's read-only
+contract. It reports; approval stays with the operator, through `/guild:plan`.
 
 ## Dispatch
 

@@ -2,6 +2,7 @@
 
 ## decisions
 
+- [docs-v2-reconciliation-verifies-shipped-code](decisions/docs-v2-reconciliation-verifies-shipped-code.md) - 2026-07-25 - The D8 docs leg flips each docs/v2 "deferred" callout to what the merged code does (verified against the integration branch, citing the symbol/PR), never to what the lane brief/receipt claims; partial/gated/opt-in outcomes stay partial. Source: v23x-deferred-followups close (3 of ~10 callouts needed partial flips).
 - [task-cell-runtime-contract](decisions/task-cell-runtime-contract.md) - 2026-07-14 - Every lifecycle step emits a code-owned TaskCell (fan-out conditional: lead_only/plus_one/plus_many); three-layer specialist identity (type→profile→ephemeral instance, never reused); immutable terminal attempts; lifecycle-bearing backend replaces the launch()-only seam. Freeze record for the task-cell-runtime initiative.
 - [g-series-learn-clis-on-demand-only](decisions/g-series-learn-clis-on-demand-only.md) - 2026-07-13 - The G-series learn CLIs (extract-structural G1/G4, resolve-calls G2) are experimental/on-demand-only; learn-diff never calls them (KG-no-mutation contract) — false header claim corrected, files kept as tested test-fixture infrastructure.
 - [v2-final-design-and-doc-artifact-boundary](decisions/v2-final-design-and-doc-artifact-boundary.md) - 2026-06-18 - Keep `docs/v2/` as final design, `docs/knowledge/` as ADR/provenance, and remove historical drift/transfer/run artifacts from final docs while tracking live host/install gaps separately.
@@ -18,5 +19,6 @@
 
 ## standards
 
+- [host-distribution-matrix](standards/host-distribution-matrix.md) - 2026-07-25 - How a released version reaches each of the 16 registry hosts: what each host supports vs what Guild wires, per-host install/version/publish/update/staleness rows with V/S/U evidence marking. Key finding: Codex already has full Claude-parity git-marketplace distribution (verified: `codex plugin marketplace add lookatitude/guild --ref main` installs 2.3.2 today) — install.sh registers a LOCAL path instead, freezing it. Same gap for pi and antigravity.
 - [release-discipline](standards/release-discipline.md) - 2026-07-12 - Branch-backed channels (stable=main, beta=next), next-first PR flow, release/vX.Y.Z cut from next, automated tag+Release, sync-back; the numbered ruleset cited by pre-push, release.yml, and branch-policy.yml.
 - [shell-hook-json-parsing](standards/shell-hook-json-parsing.md) - 2026-05-02 - Shell hooks must use temp-file + python3 for JSON parsing; bash variable interpolation breaks silently.

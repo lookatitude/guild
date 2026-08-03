@@ -5,7 +5,7 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns permissions, cloud egress checks, security hooks, scrub boundaries, and safe-object/share-set helpers.",
-  "depends_on": ["config", "state", "host-runtime"],
+  "depends_on": ["config", "host-runtime", "kernel", "state"],
   "owns": {
     "hooks": ["PostToolUse:post-tool-use.js", "PreToolUse:pre-tool-use.js"],
     "scripts": [

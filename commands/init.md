@@ -88,7 +88,7 @@ As part of bootstrap, Init scaffolds the project config surface
 clobber operator config):
 
 ```bash
-test -f .guild/settings.json || npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/read-guild-config.ts --scaffold > .guild/settings.json
+test -f .guild/settings.json || npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/read-guild-config.ts --scaffold > .guild/settings.json
 ```
 
 It is written with every option = its default + a self-documenting `_help`
@@ -131,7 +131,7 @@ already on disk (or inherited from the workspace root).
 Before any `.guild/` inspection, start a run (SC-B, §435):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js start \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
   --command=/guild:init \
   --cwd "$(pwd)"
 # If --initiative=<id> was supplied by the user, add: --initiative=<id>
@@ -143,7 +143,7 @@ the lifecycle; `start` writes `current-run-id` synchronously so `phase`
 resolves the open run):
 
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/dist/run-trace.js phase \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js phase \
   --phase=init \
   --cwd "$(pwd)"
 ```
@@ -167,7 +167,7 @@ An advisory label is never a bypass, and Guild never auto-approves.
    roles, obligation coverage, and per-kind gate coverage:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/team-decide.ts review \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts review \
   --proposal .guild/runs/<run-id>/team-plan/init.proposal.v<n>.yaml
 ```
 
@@ -176,7 +176,7 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/team-decide.ts revie
    never edits approved bytes and never approves anything:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/team-decide.ts restructure \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts restructure \
   --proposal <parent-proposal> --edits <edits.json> \
   --decided-by user --channel interactive_prompt
 ```
@@ -191,7 +191,7 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/team-decide.ts restr
    in-memory or agent-asserted approval is never accepted:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/team-decide.ts gate \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts gate \
   --proposal <proposal> --cwd "$(pwd)"
 ```
 

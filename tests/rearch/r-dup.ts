@@ -9,11 +9,13 @@
  * present among the hits.
  *
  * SCOPING (codex G-lane fix #1):
- *   - Match scope = real source under scripts/ + mcp-servers/ + hooks/, EXCLUDING:
+ *   - Match scope = real source under scripts/ + mcp-servers/ + hooks/ + src/, EXCLUDING:
  *       · *.test.ts  — parity/equivalence tests legitimately re-state a signature (a
  *         REF copy, a DIVERGENT copy) to assert the canonical body matches; counting
  *         them is a false positive (the original substring matcher tripped on
  *         graph-scoring-parity.test.ts + safe-object-parity.test.ts).
+ *       · generated resources/ projections — installed-payload mirrors are checked
+ *         independently by R-DIST and are not a second canonical implementation.
  *       · canonical module homes are the surviving hits we ASSERT are present, not
  *         violations. During the module reorg, some canonical homes move under src/modules
  *         while scripts/lib/shared keeps compatibility shims.
@@ -61,7 +63,19 @@ export const DUP_SIGS: DupSig[] = [
   },
   {
     id: "proto-poison-keys",
-    signature: 'new Set(["__proto__", "prototype", "constructor"])',
+    // MATCHES THE KEY LIST, NOT ITS WRAPPER — the same brittleness lesson recorded
+    // for scrub-share-set directly above, learned again the same way. This read
+    // `new Set([...])` until feature/deep-freeze-collections sealed the canonical
+    // body into `sealSet([...], "PROTO_POISON_KEYS")` (#22). The wrapper changed,
+    // the signature did not, and the rail went RED reporting ZERO hits — "dedup lost
+    // the canonical body" — when nothing had been lost at all.
+    //
+    // That branch is RED on this rail on its own tip, before any merge; the
+    // integration only surfaced it. The list itself is what a copy-paste duplicate
+    // actually carries, so matching it is both wrapper-proof and STRICTLY STRONGER
+    // than the old signature: an inline `new Set([...])` copy, a `sealSet([...])`
+    // copy, and a bare array copy all now hit, where only the first did before.
+    signature: '["__proto__", "prototype", "constructor"]',
     canonical: "src/modules/security/workflows/safe-object.ts",
   },
 ];
@@ -81,6 +95,12 @@ export function isTestPath(relPath: string): boolean {
   return /\.test\.ts$/.test(p) || p.includes("/__tests__/");
 }
 
+/** A generated installed-resource projection is not canonical source. */
+export function isGeneratedResourceProjectionPath(relPath: string): boolean {
+  const p = relPath.replace(/\\/g, "/");
+  return p.startsWith("src/modules/") && p.includes("/resources/");
+}
+
 /**
  * Pure detector. `files` is filename→content over the REAL source scope (tests already
  * filtered by the caller). A concern is a violation when either:
@@ -93,6 +113,7 @@ export function detectDups(files: Map<string, string>, sigs: DupSig[]): DupFindi
     const hits: string[] = [];
     for (const [name, content] of files) {
       if (isTestPath(name)) continue; // exclude tests from the match scope
+      if (isGeneratedResourceProjectionPath(name)) continue;
       if (content.includes(sig.signature)) hits.push(name);
     }
     const canonicalPresent = hits.some((h) => h.replace(/\\/g, "/") === sig.canonical);
@@ -126,7 +147,7 @@ export function run(): RailResult {
     violations: [],
     notes: [
       `scanned ${files.size} .ts source files under ${SOURCE_DIRS.join(", ")} (test files excluded from match scope)`,
-      `${DUP_SIGS.length} concerns; GREEN when each lives in exactly the canonical file`,
+      `${DUP_SIGS.length} concerns; GREEN when each lives in exactly the canonical file (generated resources excluded)`,
     ],
   };
   for (const v of findings) {
@@ -194,10 +215,29 @@ function prove(): void {
     detectDups(withTest, [probeSig]).length === 0,
     "test files are EXCLUDED from the match scope (parity tests are not counted as duplicates)",
   );
+  const withGeneratedProjection = new Map<string, string>([
+    ["src/modules/knowledge/workflows/probe.ts", "export const __DUP_PROBE__ = 1;"],
+    [
+      "src/modules/host-runtime/resources/src/modules/knowledge/workflows/probe.ts",
+      "export const __DUP_PROBE__ = 1;",
+    ],
+  ]);
+  const generatedProbe: DupSig = {
+    ...probeSig,
+    canonical: "src/modules/knowledge/workflows/probe.ts",
+  };
+  proveAssert(
+    detectDups(withGeneratedProjection, [generatedProbe]).length === 0,
+    "generated resource projections are EXCLUDED from canonical-source duplication counts",
+  );
   proveAssert(
       isTestPath("scripts/__tests__/graph-scoring-parity.test.ts") &&
       isTestPath("scripts/foo.test.ts") &&
-      !isTestPath("src/modules/knowledge/workflows/graph-scoring.ts"),
+      !isTestPath("src/modules/knowledge/workflows/graph-scoring.ts") &&
+      isGeneratedResourceProjectionPath(
+        "src/modules/host-runtime/resources/src/modules/knowledge/workflows/graph-scoring.ts",
+      ) &&
+      !isGeneratedResourceProjectionPath("src/modules/knowledge/workflows/graph-scoring.ts"),
     "isTestPath classifies *.test.ts and /__tests__/ as tests, real source as non-test",
   );
 }

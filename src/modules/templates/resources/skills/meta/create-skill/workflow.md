@@ -2,6 +2,17 @@
 
 Detail for `guild:create-skill`. Implements the **G-CREATE-SKILL** capability from `dynamic-team-composition.md` OD-3 §2, mirroring `guild:create-specialist` and reusing the evolve/shadow gate. The SKILL.md carries the summary + DH-3 mint contract; this file carries the step-by-step procedure.
 
+## Creation authority
+
+Classify and record exactly one authority before the interview:
+
+- **Human-requested** — the user directly requested the capability, or explicitly approved option A for a team-compose capability gap. Human-requested skills do not require historical runs, reflections, or prior gap records. They still run the full interview and boundary scan, every applicable boundary-edit gate, and the new-skill gate before Register.
+- **Evolution-proposed** — reflection, evolution, or cross-run analysis proposed the capability without a current explicit creation request. All historical extraction signals below are mandatory.
+
+Human authority waives **only** extraction signals 1 (recurring gap across ≥3 unrelated tasks/phases) and 4 (≥3 reflections / phase-compose gap records). Signals 2 (distinct triggers + an adjacent skill needing a `DO NOT TRIGGER` clause), 3 (reusability) and 5 (≥3 positive + ≥3 negative eval cases derivable) are not history gates and remain mandatory on both authorities, as does the step-6 paired-eval gate.
+
+If a human-requested skill has no applicable historical corpus, do not fabricate history and do not call the creation an override. The prospective paired evals are the gate; the absence of an applicable historical corpus alone does not block registration.
+
 ## Input fields (step-1 interview)
 
 Capture all fields before drafting (ask the user until complete; do not guess — a skill is a routing surface, not a throwaway helper):
@@ -18,7 +29,7 @@ Capture all fields before drafting (ask the user until complete; do not guess �
 
 Each step's gate must pass before the next runs.
 
-1. **Interview.** Capture the Input fields. If any is missing or underspecified, ask until complete. Do not invent a capability on the user's behalf.
+1. **Interview.** Record `creation_authority` and capture the Input fields. If any is missing or underspecified, ask until complete. Do not invent a capability on the user's behalf.
 
 2. **Draft.** Write the proposed files under the incubation path **in the consuming repo's `.guild/`** — never the plugin install dir (a runtime write into plugin install state is the **v2 DH-3 defect being fixed**):
    - `.guild/skills/proposed-<name>/SKILL.md` — frontmatter (`name`, `description`, `when_to_use`, `type`, and `derived_from_template: guild.skill_template.v1` stamped **at draft time**) + body following the conventions of shipped skills in the chosen tier.
@@ -30,13 +41,13 @@ Each step's gate must pass before the next runs.
 
 5. **Gate boundary edits.** Each proposed edit from step 4 runs through `guild:evolve-skill` as its own paired-evals run (A = adjacent skill as-is, B = adjacent skill with the `DO NOT TRIGGER` clause). The gate verifies the adjacent skill still triggers correctly for its own domain but no longer matches the new skill's triggers. Any edit that fails its evolve gate stops this workflow (see Failure handling).
 
-6. **Gate new skill.** Paired evals on the new skill itself (A = no-skill baseline, B = proposed skill), followed by shadow-mode runs over historical runs in `.guild/runs/*/` to surface boundary collisions and trigger-accuracy issues before live routing. Both must pass; shadow mode is part of the gate, not advisory. Run the **description optimizer** to confirm the final `description` is ≤1024 chars with ≥3 trigger phrasings.
+6. **Gate new skill.** Paired evals on the new skill itself (A = no-skill baseline, B = proposed skill) always run and always gate, on at least 3 positive and 3 negative cases. For evolution-proposed creation, follow with shadow-mode runs over the historical runs in `.guild/runs/*/` that supplied the extraction evidence, to surface boundary collisions and trigger-accuracy issues before live routing; paired evals and shadow replay must both pass. For human-requested creation, replay any applicable historical runs from `.guild/runs/*/` when present; if the corpus is empty or none apply, record shadow replay as `not_applicable`. Missing history is not a failure on the human-requested path, but the paired eval gate remains mandatory. Run the **description optimizer** to confirm the final `description` is ≤1024 chars with ≥3 trigger phrasings.
 
 7. **Register.** On both gates passing, move the files **within `.guild/`**: `.guild/skills/proposed-<name>/` → `.guild/skills/<name>/`. Register is a move, not a rewrite — the `derived_from_template` stamp from step 2 is preserved unchanged. Commit the step-5 boundary edits to the adjacent skills. The skill is routable for subsequent sessions (see the same-session constraint in SKILL.md).
 
-## Extraction signals (capability-minting adaptation of §11.2.1)
+## Extraction signals (capability-minting adaptation of §11.2.1 — evolution-proposed only)
 
-Five thresholds that must **ALL** agree before minting proceeds past step 2. If any is missing, stop and report which — capabilities earn their slot, they are not granted on one task's enthusiasm:
+For evolution-proposed creation, five thresholds must **ALL** agree before minting proceeds past step 2. If any signal is missing, stop and report which — capabilities earn their slot, they are not granted on one task's enthusiasm. Human-requested creation does not run signals **1** and **4** as pass/fail gates: write `creation_authority: human-requested` + `status: not_required` to the extraction-check artifact and continue to the prospective gates. Signals **2**, **3** and **5** are prospective, not historical, and are gated on both authorities:
 
 1. **Recurring gap.** The same capability gap appears across ≥3 unrelated tasks/phases (walk `.guild/runs/*/summary.md`, `.guild/reflections/*.md`, and per-phase `team.<phase>.yaml` gap notes for co-occurrence).
 2. **Distinct triggers + boundaries.** The capability needs trigger rules that don't fit an existing skill's description, AND at least one adjacent skill needs a `DO NOT TRIGGER` clause — otherwise it is an **edit to an existing skill** and routes to `guild:evolve-skill`, not here.
@@ -44,7 +55,7 @@ Five thresholds that must **ALL** agree before minting proceeds past step 2. If 
 4. **≥3 reflections or phase-compose gaps.** The same proposed capability appears in ≥3 records (`proposals.missing_skill` in reflections, or phase-composition gap notes).
 5. **Enough eval cases.** ≥3 positive + ≥3 negative eval cases already derivable from the accumulated evidence (required to gate the skill in steps 5 and 6).
 
-Record the signal-check result at `.guild/evolve/<run-id>/extraction-check.json` so the gate is auditable.
+Record the signal-check result at `.guild/evolve/<run-id>/extraction-check.json` so the selected authority is auditable. Never synthesize historical evidence for a new human-requested capability.
 
 ## Incubation path
 
@@ -56,7 +67,7 @@ If any gate fails, **stop and surface refinement options to the user** — do no
 
 Surface:
 
-- **Which gate failed** (extraction-signal shortfall, boundary-edit evolve gate, or new-skill paired-evals / shadow-mode gate).
+- **Which gate failed** (evolution-proposed extraction-signal shortfall, applicable boundary-edit evolve gate, or new-skill paired-evals / required shadow-mode gate).
 - **The specific evidence** (missing extraction signal with count, failing eval case with trajectory, or shadow-mode collision with an adjacent skill).
 - **Refinement options** — narrow the trigger description, add/remove adjacent-boundary clauses, relocate to a different tier, re-interview for a sharper Input, or abandon. The user chooses; this skill does not pick.
 

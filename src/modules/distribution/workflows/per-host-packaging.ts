@@ -37,6 +37,8 @@
  * Owned by plugin-architect; consumed by future per-host packaging scripts.
  */
 
+import * as path from "node:path";
+
 // ---------------------------------------------------------------------------
 // Input type — the neutral Guild plugin manifest
 // ---------------------------------------------------------------------------
@@ -533,6 +535,133 @@ export function renderClaudeMarketplacePackage(
   };
 }
 
+/** One MCP server entry as a Codex git-install declaration. */
+export interface CodexGitInstallMcpEntry {
+  type: "stdio";
+  command: string;
+  /** PLUGIN-RELATIVE (no `${CLAUDE_PLUGIN_ROOT}`) — resolved against `cwd`. */
+  args: string[];
+  /** Always "." — Codex resolves a relative plugin MCP cwd beneath the plugin root. */
+  cwd: ".";
+}
+
+/** The committed repo-root Codex manifest (`.codex-plugin/plugin.json`). */
+export interface CodexGitInstallJson {
+  name: string;
+  version: string;
+  mcpServers: Record<string, CodexGitInstallMcpEntry>;
+}
+
+const CLAUDE_PLUGIN_ROOT_TOKEN = "${CLAUDE_PLUGIN_ROOT}/";
+/** Tells a server its launch cwd is the plugin payload, not the project. */
+const NO_CWD_FALLBACK_FLAG = "--no-cwd-fallback";
+
+/**
+ * Render the repo-root Codex manifest consumed by a Codex GIT-REF install
+ * (`codex plugin marketplace add lookatitude/guild --ref <ref>`), which
+ * materializes THE REPO as the plugin payload — not a rendered `dist/` tree.
+ *
+ * WHY IT EXISTS (issue #114). Without a Codex manifest at the repo root, Codex
+ * falls back to Claude's `.mcp.json`, whose args are `${CLAUDE_PLUGIN_ROOT}`-
+ * prefixed. Codex does NOT expand that placeholder for MCP server args, so it
+ * spawned `node '${CLAUDE_PLUGIN_ROOT}/…'` and every session opened with two
+ * "failed to start … connection closed" warnings.
+ *
+ * HOW THE PATH IS MADE RESOLVABLE. Measured on codex 0.146.0 (functional oracle:
+ * ask Codex to call `wiki_list`):
+ *
+ *   | declaration                                  | server starts? |
+ *   |----------------------------------------------|----------------|
+ *   | args `${CLAUDE_PLUGIN_ROOT}/mcp-servers/…`   | NO             |
+ *   | args `mcp-servers/…` (no cwd)                | NO             |
+ *   | args `./mcp-servers/…` (no cwd)              | NO             |
+ *   | args absolute                                | yes (unpublishable — version-keyed cache root) |
+ *   | args `mcp-servers/…` + `cwd: "."`            | YES            |
+ *
+ * Codex resolves a RELATIVE plugin MCP `cwd` beneath the plugin root, so
+ * `cwd: "."` + plugin-relative args is the one form that is both resolvable and
+ * publishable. An absolute path cannot be committed: the install root is
+ * `~/.codex/plugins/cache/guild/guild/<version>/`, unknown at publish time.
+ *
+ * NOTE the asymmetry with the RENDERED Codex package, whose `renderCodexPluginJson`
+ * emits no `mcpServers`: that package is silent because it ships no `.mcp.json` to
+ * fall back to — NOT because omission and `{}` mean the same thing. For a payload
+ * that DOES carry `.mcp.json` (the repo), omitting the field re-enables the broken
+ * fallback, so this renderer always emits the map explicitly.
+ *
+ * DELIBERATELY MINIMAL OTHERWISE — no `skills`/`hooks` keys. Codex defaults to
+ * `skills/` + `commands/` migration and root `hooks/hooks.json`, which is the
+ * behavior a git install already had (verified: 110 native skills + 3 migrated
+ * command skills still discovered). The rendered package points `skills` at
+ * `./.agents/skills/`, a layout that does not exist in the repo, so declaring it
+ * here would BREAK discovery.
+ *
+ * `version` is required: omitting it makes `codex plugin list` report the plugin as
+ * "local" instead of its real version (measured against a control install on a ref
+ * without this manifest, which reported correctly) — and that command is how an
+ * operator sees staleness at all. It is single-sourced from the neutral (canonical)
+ * manifest, and this file is part of the generated + drift-gated install surface in
+ * `build-host-packages.ts`, so it cannot be hand-bumped out of agreement (wi-02).
+ */
+export function renderCodexGitInstallManifest(
+  manifest: GuildPluginManifest,
+  _opts: RenderOptions
+): CodexGitInstallJson {
+  const mcpServers: Record<string, CodexGitInstallMcpEntry> = {};
+  for (const s of manifest.mcpServers ?? []) {
+    // Only stdio servers are launched by path; an http server has no cwd problem
+    // and no command to resolve, so it is not representable here.
+    if (s.transport !== "stdio" || !s.command) continue;
+    const args = (s.args ?? []).map((a) =>
+      a.startsWith(CLAUDE_PLUGIN_ROOT_TOKEN) ? a.slice(CLAUDE_PLUGIN_ROOT_TOKEN.length) : a
+    );
+    // A path we could not make plugin-relative would resolve against the wrong
+    // root at runtime — refuse rather than ship a silently broken declaration.
+    // Gate round-2 finding: rejecting only a leading "/" and "${…}" let through
+    // `../outside`, `./x`, and Windows absolute/UNC forms while still claiming
+    // every arg was plugin-relative. Check every escape shape after normalizing.
+    const unresolvable = args.find((a) => {
+      if (a.includes("${")) return true; // unexpanded placeholder
+      // Rooted on EITHER platform. posix catches "/x"; win32 catches "C:\\x", "C:/x",
+      // UNC "\\\\server\\share", AND the root-relative "\\x" form a hand-rolled
+      // two-backslash check missed (gate r3: `\rooted.js` is win32-absolute).
+      if (path.posix.isAbsolute(a) || path.win32.isAbsolute(a)) return true;
+      // Only ESCAPING traversal is unsafe. `./server.js` and internal
+      // normalization like `a/../server.js` both resolve fine beneath the
+      // declared cwd — verified by launching `node ./mcp-servers/.../index.js`
+      // from cwd ".". (An earlier revision rejected these on the strength of the
+      // NO-cwd experiment, which is a different configuration; gate r4.)
+      const norm = path.posix.normalize(a.replace(/\\/g, "/"));
+      if (norm === ".." || norm.startsWith("../")) return true;
+      return false;
+    });
+    if (unresolvable !== undefined) {
+      throw new Error(
+        `renderCodexGitInstallManifest: MCP server "${s.id}" has an arg that cannot be made ` +
+          `plugin-relative (${unresolvable}). Codex resolves relative args against cwd ".", so ` +
+          `every path arg must be relative to the plugin root.`
+      );
+    }
+    // `--no-cwd-fallback` is REQUIRED alongside `cwd: "."`: that cwd is the plugin
+    // payload root, and Codex passes a scrubbed env (measured: no PWD, no CODEX_*),
+    // so without the flag each server would default its data root to Guild's OWN
+    // bundled `.guild/` inside the install cache and serve Guild's self-build wiki
+    // and runs to the consumer. With it, the servers fail closed and demand an
+    // explicit per-call `cwd`. The two settings are one unit — never emit one alone.
+    mcpServers[s.id] = {
+      type: "stdio",
+      command: s.command,
+      args: [...args, NO_CWD_FALLBACK_FLAG],
+      cwd: ".",
+    };
+  }
+  return {
+    name: manifest.name,
+    version: manifest.version,
+    mcpServers,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // renderPiManifest
 // ---------------------------------------------------------------------------
@@ -770,8 +899,10 @@ export interface WrappedCliRenderSpec {
  * skill dirs passed through, native agents/hooks/MCP flagged in `_unsupported`).
  * `schema_version` is the host's own `manifest_format` so each host's package is
  * self-identifying. R1: a rendered manifest is NEVER support — `installability`
- * stays "target" and `_provenance` "inferred" until an operator-box receipt promotes
- * the derived public state (host-public-state.ts, L5/L7).
+ * stays "target"; `_provenance` mirrors the row (issue #110: github-copilot +
+ * opencode are "verified" from live on-box runs, cursor + rovo-dev remain
+ * "inferred"). Runtime promotion still comes only from an operator-box receipt
+ * on the derived public state (host-public-state.ts, L5/L7).
  */
 export interface WrappedCliPackage {
   /** Host-own package schema id, e.g. "cursor-package" (from manifest_format). */
@@ -799,10 +930,9 @@ export interface WrappedCliPackage {
   _source_version: string;
   /**
    * Registry provenance for the row that backed the render — "verified" or
-   * "inferred" (today always "inferred" per R1: these 4 rows are
-   * installability:"target" and have no operator-box receipt yet, but the value
-   * is DERIVED from `spec.provenance`, not hardcoded, so a future receipt-driven
-   * flip surfaces here automatically).
+   * "inferred". DERIVED from `spec.provenance`, not hardcoded, so registry
+   * flips surface here automatically (issue #110 flipped github-copilot +
+   * opencode to "verified"; cursor + rovo-dev remain "inferred").
    */
   _provenance: "verified" | "inferred";
 }
@@ -989,6 +1119,27 @@ export function renderAgentsPackage(
     `## Run the Guild CLI`,
     `A \`guild-run\` launcher is bundled at \`bin/guild-run\` (forwards to the bundled`,
     "`scripts/guild-run.ts`).",
+    ``,
+    `## Update check (once per session)`,
+    // File-surface hosts have no hook events, so the staleness signal cannot
+    // fire on its own — this preamble instruction IS the G4 fallback for them
+    // (xhrd-wi-04). The bundle ships in this package; the command degrades
+    // silently offline and never blocks.
+    `This package is a point-in-time copy and does not update itself. At the start`,
+    `of a session, if a Node runtime is available, run:`,
+    ``,
+    "```bash",
+    `node hooks/dist/update-check.js --host agents-file`,
+    "```",
+    ``,
+    `and surface any line it prints to the user verbatim — it names the installed`,
+    `version, the latest release, and the exact update command for this package.`,
+    `Silence is NOT proof of currency: the check needs the`,
+    `\`guild-install-receipt.json\` the installer writes beside this file. If that`,
+    `receipt is missing (for example, this tree was hand-copied without it), the`,
+    `check cannot run — treat the package's age as unknown and suggest re-running`,
+    `the installer when the user asks about updates. With the receipt present,`,
+    `silence means current-or-offline.`,
     ``,
     `<!-- rendered_at: ${opts.renderedAt} · source_version: ${manifest.version} -->`,
     ``,

@@ -230,7 +230,9 @@ export function createPiCliAdapter(entry: HostRegistryEntry = ENTRY): HostAdapte
       const configured = configuredModelParams(request);
       const registryModel = entry.capabilities.models[request.tier]?.model ?? null;
       const model = typeof configured["model"] === "string" ? configured["model"] : registryModel;
-      const modelParams = model ? { ...configured, model } : { ...configured };
+      const modelParams: Record<string, unknown> = model
+        ? { ...configured, model }
+        : { ...configured };
       const unsupported = unsupportedModelParamKeys(modelParams, ["model", "provider", "effort", "thinking"]);
       const thinking =
         typeof modelParams["thinking"] === "string"

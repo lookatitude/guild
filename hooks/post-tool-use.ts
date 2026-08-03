@@ -27,7 +27,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
-import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import {
   appendEvent,
   buildToolCallFromPair,
@@ -44,6 +43,8 @@ import {
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header + contract-map §B-post.
 import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/trace-v2.js";
+import { resolveDispatchAttribution } from "./lib/dispatch-attribution.js";
+import { resolveLaneAttribution } from "./lib/lane-attribution.js";
 // HK-06: durable-surface (wiki/review/handoffs/provenance) PostToolUse scrub-in-place (D-SECRETS).
 import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
 import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
@@ -255,20 +256,20 @@ function runGuildArtifactScrub(
 
 // ── Run ID helpers ────────────────────────────────────────────────────────────
 
-/**
- * T3b (session_context §5): run identity for this hook's WRITE legs (v1.4
- * tool_call events, heartbeats, run-state) resolves from the explicit binding
- * env and is verified against the run's minted binding — never a sentinel, so
- * a moved current-run-id cannot redirect a write (SC-1). A refused binding
- * returns undefined; callers fall through (no emit) as before.
- */
-function resolveRunId(guildRoot: string): string | undefined {
-  const auth = authorizeHookWrite(guildRoot);
-  if (auth.ok === false) {
-    process.stderr.write(formatBindingRejected("post-tool-use", auth));
+function readCurrentRunId(guildRoot: string): string | undefined {
+  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
     return undefined;
   }
-  return auth.run_id;
+}
+
+function resolveRunId(guildRoot: string): string | undefined {
+  const envRunId = process.env["GUILD_RUN_ID"];
+  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
+  return readCurrentRunId(guildRoot);
 }
 
 export async function main(): Promise<void> {
@@ -292,12 +293,9 @@ export async function main(): Promise<void> {
   // sets them per lane), every PostToolUse refreshes the lane's structured
   // heartbeat at <runDir>/in-progress/<specialist>.json — the write side of
   // ADR-RE-3 that makes stall detection backend-agnostic (not tmux-only).
-  // T3b rework F2: writeHeartbeatFromEnv verifies the COMPLETE hook binding
-  // envelope (GUILD_RUN_ID + GUILD_RUN_BINDING_REF via authorizeHookWrite)
-  // BEFORE touching the filesystem — an absent/blank/closed/mismatched ref
-  // refuses (reason binding_rejected:<...>) with no heartbeat and no temp
-  // file. Fail-open by contract (never throws) and near-zero cost when the
-  // env vars are absent.
+  // Fail-open by contract (writeHeartbeatFromEnv never throws) and near-zero
+  // cost when the env vars are absent. Placed BEFORE the run-id gate: the
+  // heartbeat keys off its own env contract, not the sentinel file.
   {
     const hb = writeHeartbeatFromEnv({ toolName: payload.tool_name, cwd });
     if (!hb.written && hb.reason !== null && hb.reason !== "env-absent") {
@@ -322,13 +320,14 @@ export async function main(): Promise<void> {
     const earlyRunDir = earlyRunIdSafe
       ? (process.env["GUILD_RUN_DIR"] ?? path.join(guildRoot, ".guild", "runs", earlyRunIdSafe))
       : undefined;
-    const earlyRawLaneId = process.env["GUILD_LANE_ID"];
-    const earlyLaneId =
-      typeof earlyRawLaneId === "string" &&
-      earlyRawLaneId.length > 0 &&
-      isSafeLaneId(earlyRawLaneId)
-        ? earlyRawLaneId
-        : undefined;
+    // oir-wi-57: GUILD_LANE_ID has no producer anywhere in this codebase — every
+    // real dispatch backend (inprocess-backend.ts, tmux-backend.ts,
+    // pane-adapter.ts) threads `GUILD_TASK_ID` into a dispatched lane's own
+    // process env instead. resolveLaneAttribution tries GUILD_LANE_ID first,
+    // then GUILD_TASK_ID — each independently validated, so a blank/unsafe
+    // GUILD_LANE_ID never masks a valid GUILD_TASK_ID (round-5 fix; a bare
+    // `??` would have silently done exactly that).
+    const earlyLaneId = resolveLaneAttribution();
     try {
       runGuildArtifactScrub(payload, guildRoot, earlyRunDir, earlyRunIdSafe, earlyLaneId);
     } catch (err) {
@@ -358,6 +357,15 @@ export async function main(): Promise<void> {
   const runDir =
     process.env["GUILD_RUN_DIR"] ??
     path.join(guildRoot, ".guild", "runs", runId);
+  // Sidecar PAIRING key — MUST stay GUILD_LANE_ID-only, matching
+  // hooks/pre-tool-use.ts's own resolution byte-for-byte (that file is a
+  // sibling lane's and out of scope here). Broadening this to include
+  // GUILD_TASK_ID would desync the Pre/Post lane_id used as part of the
+  // sidecar match key (log-jsonl-sidecar.ts SidecarMatchKey), since
+  // pre-tool-use.ts's own sidecar "pre" write would still key off
+  // GUILD_LANE_ID alone — every real lane-worker call would then miss its
+  // pairing, falling through as an orphaned pre-entry PLUS a degraded
+  // post-only event (oir-wi-57 round-2 regression, caught by review).
   const rawLaneId = process.env["GUILD_LANE_ID"];
   const laneId =
     typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId)
@@ -368,6 +376,16 @@ export async function main(): Promise<void> {
       "warn: [post-tool-use] invalid GUILD_LANE_ID — omitting lane_id.\n",
     );
   }
+  // oir-wi-57: the ATTRIBUTION stamped onto the FINAL emitted event's
+  // lane_id — separate from the pairing key above. GUILD_TASK_ID is the
+  // real per-lane env var every shipped dispatch backend actually threads
+  // into a dispatched lane's own process (GUILD_LANE_ID has zero producers
+  // anywhere in this codebase). resolveLaneAttribution evaluates each
+  // candidate independently (round-5 fix: a bare `??` would let a blank/
+  // unsafe GUILD_LANE_ID mask a valid GUILD_TASK_ID) and never leaves an
+  // identified worker's event lane-less. Applied AFTER pairing/latency
+  // computation below, so it never touches sidecar lookup/matching.
+  const attributionLaneId = resolveLaneAttribution();
   const tsPost = new Date().toISOString();
 
   // Always run the orphan sweep first — flushes stale Pre entries from
@@ -427,7 +445,7 @@ export async function main(): Promise<void> {
         run_id: runId,
         tool: toolName,
         result_excerpt_redacted: resultExcerpt(payload),
-        ...(laneId !== undefined ? { lane_id: laneId } : {}),
+        ...(attributionLaneId !== undefined ? { lane_id: attributionLaneId } : {}),
         ...(typeof payload.duration_ms === "number"
           ? { latency_ms_override: payload.duration_ms }
           : {}),
@@ -439,6 +457,13 @@ export async function main(): Promise<void> {
         status: isOk(payload),
         result_excerpt_redacted: resultExcerpt(payload),
       });
+      // oir-wi-57: buildToolCallFromPair otherwise inherits pre.lane_id (the
+      // PRE sidecar's own GUILD_LANE_ID-only resolution, always absent in
+      // production today) — override with the broader attribution AFTER
+      // pairing so a real lane worker's paired event still carries it.
+      if (attributionLaneId !== undefined) {
+        event.lane_id = attributionLaneId;
+      }
     }
     // D-OBS-1/6: attach guild.trace_event.v2 fields. tokens only for LLM-call
     // tools (Agent/Skill) and only when the payload actually carried usage.
@@ -450,9 +475,24 @@ export async function main(): Promise<void> {
       runId,
       eventType: "tool_call",
       ts: tsPost,
-      actorId: laneId ?? "main",
+      actorId: attributionLaneId ?? "main",
       tokens,
     });
+    // #58 — stamp the resolved specialist role on an Agent dispatch so post-hoc
+    // audits can tell a real specialist lane from a bare generic agent (both
+    // dispatch as subagent_type="general-purpose"). Resolved from the dispatch's
+    // own tool_input (GUILD_SPECIALIST/GUILD_AGENT_DEFINITION env, else the
+    // adoption prompt) — NOT process.env, which belongs to the lead, not the
+    // dispatched lane.
+    // Gated on isSpecialistLane: only a real specialist lane is attributed. An
+    // ordinary generic call is left UNSTAMPED — stamping one would defeat the
+    // very distinction the field exists to record.
+    if (toolName === "Agent") {
+      const attr = resolveDispatchAttribution(payload.tool_input);
+      if (attr?.isSpecialistLane === true && attr.specialist !== undefined) {
+        traceV2.attribution_specialist = attr.specialist;
+      }
+    }
     appendEvent(runDir, event, { traceV2 });
   } catch (err) {
     process.stderr.write(

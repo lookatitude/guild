@@ -45,7 +45,7 @@ import * as path from "path";
 import {
   ALLOWED_INJECTION_CLEAN_VALUES,
   ALLOWED_TOP_LEVEL_KEYS,
-} from "../../../../hooks/lib/handoff-v2";
+} from "../../distribution";
 import { loadYamlApi } from "../../kernel";
 
 const yaml = loadYamlApi();
@@ -515,8 +515,28 @@ const HAND_ROLLED_PATTERN_SOURCES: Array<{ src: string; label: string }> = [
   //     via a named lookahead — distinguishes /^status:\s*/ (warn) from /^https?:\/\//
   //     (no warn) by checking the identifier itself, not the chars after the colon
   //     (which are ambiguous because both :\s* and :\/\/ start with : in source).
+  //
+  //     DIGEST-LITERAL EXCLUSION (second lookahead). `sha256:<hex>` is a
+  //     content-address scheme in exactly the sense `data:` and `mailto:` are
+  //     schemes, so a regex that VALIDATES ONE — /^sha256:[0-9a-f]{64}$/ — is a
+  //     value shape check, not a field extractor. It was flagged in
+  //     scripts/lib/capability/adoption-migrate.ts (and its test), a file that
+  //     reads its YAML through the shared parseFrontmatter; the report was the
+  //     same false-positive class as the '.md' Markdown case, whose lesson was
+  //     recorded above: do NOT force an idiom-dodging rewrite of a correct check.
+  //
+  //     The exclusion is deliberately NOT "any identifier named sha256". It fires
+  //     only when the algorithm name is followed by `:` and a HEX CHARACTER CLASS
+  //     ([0-9a-f], [0-9a-fA-F], [a-f0-9], …) — i.e. the digest-validator idiom. A
+  //     genuine hand-rolled extractor for a frontmatter key that happens to be
+  //     named `sha256` spells the colon differently (/^sha256:\s*(.*)$/), does not
+  //     match the lookahead, and is still flagged. A class with a non-hex letter
+  //     ([A-Za-z]) is not a hex class and does not qualify either.
   {
-    src: String.raw`/\^(?!(?:https?|ftp|file|wss?|data|mailto)[:/])[A-Za-z_][A-Za-z0-9_-]*:`,
+    src:
+      String.raw`/\^(?!(?:https?|ftp|file|wss?|data|mailto)[:/])` +
+      String.raw`(?!(?:sha(?:1|224|256|384|512)|md5|blake2[bs]|blake3):\[[0-9a-fA-F-]{3,}\])` +
+      String.raw`[A-Za-z_][A-Za-z0-9_-]*:`,
     label: "line-anchored YAML key regex literal (hand-rolled field extractor)",
   },
   // (4a) dynamic per-field extractor — quoted-string caret then string concat:

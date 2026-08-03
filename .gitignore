@@ -158,6 +158,10 @@ node_modules/
 .guild/context/run-host-adapter-reconcile-20260621/
 .guild/diagnose/20260626T101814Z-evolve-run-left-open.md
 
+# Re-deny the model-catalog discovery cache: a LOCAL-ONLY, rebuildable, derived
+# artifact (guild.model_catalog.v1 target-scoped cache) — never committed/exported/
+# shared. This later rule wins over the !.guild/indexes/** re-include above.
+.guild/indexes/model-catalog/
 # Re-deny the structural-cache sidecar: a LOCAL-ONLY, rebuildable, derived artifact (our deterministic extractor output) — never committed/exported/shared. This later rule wins over the !.guild/indexes/** re-include above, so even where .guild/indexes/** is tracked a tampered cache can never be committed (FIX-T4.1-r6; threat model in scripts/understand/lib/bundle-validate.ts).
 **/*.structural-cache.json
 

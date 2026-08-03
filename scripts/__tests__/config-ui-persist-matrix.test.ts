@@ -102,6 +102,7 @@ const VALUE_OVERRIDES: Record<string, string> = {
   codex_skip_enforcement: "block",
   agent_mode: "team",
   host: "codex",
+  host_mode: "accept_edits", // rf-wi-01 (G1) — P1-L10 host-autonomy override enum
   "roles.host": "claude-code-cli",
   "roles.advisory": "codex-cli",
   "roles.adversarial": "claude-code-cli",
@@ -115,6 +116,12 @@ const VALUE_OVERRIDES: Record<string, string> = {
   "defaults.retry.backoff": "exponential",
   "defaults.wiki.autopromote": "false", // always-false invariant (agents emit candidates only) — true is rejected
 
+  // S5 (cap-loc-D04) — capability localization enums. Values differ from their
+  // defaults on purpose: this matrix persists a value and reads it back, so a value
+  // equal to the default would pass vacuously.
+  "capability.resolver_mode": "shadow",
+  "capability.auto_create_policy": "never",
+
   "security.bypass_permissions_policy": "allow",
   "secrets_policy.fail_mode_durable": "open",
   "secrets_policy.fail_mode_telemetry": "closed",
@@ -122,9 +129,9 @@ const VALUE_OVERRIDES: Record<string, string> = {
   // valid CSV for loops (a bare "x" would be dropped by the resolver's CSV validator)
   loops: "all",
   // object_editor shapes
-  host_profiles: '{"claude-code-cli":{"enabled":true}}',
   // minimal guild.model_policy.v2 object accepted by the closed-key validator
   model_policy: '{"version":2,"purposes":{}}',
+  host_profiles: '{"claude-code-cli":{"enabled":true}}',
   "models.shortOutputThreshold": '{"impl":{"cheap":100}}',
   "defaults.cross_host.hosts": '{"box":{"address":"10.0.0.1"}}',
   "mcp.tool_description_hashes": '{"tool":"abc"}',
@@ -182,7 +189,12 @@ function writePathFor(key: string): string {
 describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () => {
   it("one edit per metadata key, no gaps (generated, so it can't silently drift)", () => {
     expect(KEY_EDITS.length).toBe(Object.keys(CONFIG_UI_METADATA).length);
-    expect(KEY_EDITS.length).toBe(133);
+    // rf-wi-01 (G1): +5 — host_mode, defaults.lean_lead.{enabled,hands_on_edit_threshold},
+    // defaults.lifecycle_gate.{enabled,adhoc_activity_threshold}.
+    // S5 (cap-loc-D04): +4 — capability.{resolver_mode,suggestion_budget,
+    // starter_roles,auto_create_policy}.
+    // +1 (dynamic-host-model-routing T5): capability model_policy (guild.model_policy.v2).
+    expect(KEY_EDITS.length).toBe(142);
     // every enum/object_editor key resolved to a concrete value (no generator throw)
     for (const e of KEY_EDITS) expect(typeof e.value).toBe("string");
   });
@@ -193,7 +205,7 @@ describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () 
 // ===========================================================================
 
 describe("V12.1 — every key persists to the intended scoped file", () => {
-  it("edits all 133 keys into one project settings.json; each lands, all coexist", () => {
+  it("edits all 132 keys into one project settings.json; each lands, all coexist", () => {
     const dir = mkProject({});
     quiet(() => {
       for (const e of KEY_EDITS) {

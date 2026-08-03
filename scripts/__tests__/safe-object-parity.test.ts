@@ -65,9 +65,15 @@ describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
     const SKIP = new Set(["node_modules", "dist", ".git", "build", "coverage"]);
     const definers: string[] = [];
 
-    // A DEFINITION = a `new Set([... "__proto__" ... ])` literal that lists the
-    // dangerous keys. Re-exports / imports of PROTO_POISON_KEYS do not match.
-    const DEF_RE = /new Set\s*\(\s*\[[^\]]*["']__proto__["'][^\]]*\]/;
+    // A DEFINITION = a Set constructed over a literal that lists the dangerous keys.
+    // Re-exports / imports of PROTO_POISON_KEYS do not match.
+    //
+    // `sealSet(...)` is now the construction form: task #22 established that
+    // `new Set([...])` yields a runtime-mutable Set no type annotation or Object.freeze
+    // can close, so `PROTO_POISON_KEYS.delete("__proto__")` re-opened prototype
+    // pollution. This regex accepts either spelling so it tracks DEFINITIONS rather
+    // than one particular constructor.
+    const DEF_RE = /(?:new Set|sealSet)\s*(?:<[^>]*>)?\s*\(\s*\[[^\]]*["']__proto__["'][^\]]*\]/;
 
     function walk(dir: string): void {
       let entries: fs.Dirent[];
@@ -78,8 +84,10 @@ describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
           walk(path.join(dir, e.name));
         } else if (e.isFile() && e.name.endsWith(".ts") && !e.name.endsWith(".test.ts")) {
           const full = path.join(dir, e.name);
+          const rel = path.relative(repoRoot, full);
+          if (rel.includes(`${path.sep}resources${path.sep}`)) continue;
           const src = fs.readFileSync(full, "utf8");
-          if (DEF_RE.test(src)) definers.push(path.relative(repoRoot, full));
+          if (DEF_RE.test(src)) definers.push(rel);
         }
       }
     }

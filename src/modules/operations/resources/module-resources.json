@@ -29,7 +29,7 @@
       "id": "ops-maintenance",
       "source_path": "skills/meta/ops-maintenance/SKILL.md",
       "resource_path": "resources/skills/meta/ops-maintenance/SKILL.md",
-      "sha256": "9c8be8320d9201336a6a43c21c5614713d9574ec39f375fe796759458784242b"
+      "sha256": "6e86a6d4359e91598f550512b16ad8332e5eb565661e59c3d353b7884a24bc7e"
     },
     {
       "category": "skills",
@@ -50,7 +50,7 @@
       "id": "ops-rollback",
       "source_path": "skills/meta/ops-rollback/SKILL.md",
       "resource_path": "resources/skills/meta/ops-rollback/SKILL.md",
-      "sha256": "09e9b4e075edb92a73f748e6ebc7e308afc98c1d7589a9df5e066469e1136b59"
+      "sha256": "26b822826256e1345cf2bf6ea2bd8b5cd895ea7378bcb64c4b2fa0777c91c165"
     }
   ]
 }

@@ -37,7 +37,7 @@ Prints the report (no file written).
 Run the command CLI and show its output verbatim:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/models-cmd.ts inspect \
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/models-cmd.ts inspect \
   --cwd "$(pwd)"
 # add --run-id <id> to pin a run; add --json for the machine view
 ```

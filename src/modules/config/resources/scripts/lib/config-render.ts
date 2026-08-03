@@ -35,6 +35,7 @@
  */
 
 import * as path from "path";
+import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
 import {
   HostId,
   HOST_IDS,
@@ -66,10 +67,10 @@ export type ConfigSource =
   | "cli";
 
 /** The local (gitignored) layers — values from these never enter a SHARED host output. */
-export const LOCAL_SOURCES: ReadonlySet<ConfigSource> = new Set<ConfigSource>([
+export const LOCAL_SOURCES: ReadonlySet<ConfigSource> = sealSet([
   "workspace-local",
   "project-local",
-]);
+], "LOCAL_SOURCES");
 
 // ---------------------------------------------------------------------------
 // Input
@@ -337,12 +338,18 @@ function isLocalScoped(dottedKey: string, sources: Record<string, ConfigSource> 
 
 /**
  * The rendered `permissions` block is DERIVED from top-level config keys (auto_approve +
- * security.bypass_permissions_policy), so the resolver records THOSE keys' sources — never
- * `permissions.*`. A per-key guard over the permission decisions would therefore miss a
- * local-only feeder. This returns the first feeder whose source is LOCAL (gitignored), or
- * undefined — the whole derived block is withheld + failed-closed when any feeder is local.
+ * security.bypass_permissions_policy + host_mode), so the resolver records THOSE keys'
+ * sources — never `permissions.*`. A per-key guard over the permission decisions would
+ * therefore miss a local-only feeder. This returns the first feeder whose source is LOCAL
+ * (gitignored), or undefined — the whole derived block is withheld + failed-closed when
+ * any feeder is local.
+ *
+ * rf-wi-01 (G1 codex-review fix, P1): `host_mode` now feeds the rendered `<phase>.
+ * <gate_type>.host_mode` cell (config-cmd.ts resolvePermissionPolicy overlay) but was
+ * missing here — a `host_mode` set ONLY in settings.local.json rendered into every
+ * shared host shape with `ok:true`/no redaction, a real local-scope leak (F-9).
  */
-const PERMISSION_FEEDER_KEYS = ["auto_approve", "security.bypass_permissions_policy"] as const;
+const PERMISSION_FEEDER_KEYS = ["auto_approve", "security.bypass_permissions_policy", "host_mode"] as const;
 function permissionFeederLocalSource(
   sources: Record<string, ConfigSource> | undefined
 ): string | undefined {

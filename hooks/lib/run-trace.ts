@@ -179,6 +179,11 @@ export function resolveRunIdForTrace(
   _root: string,
   env: { GUILD_RUN_ID?: string },
 ): string | null {
+  // T3b §5: the WRITER-identity resolver is env-only — a moved current-run-id
+  // sentinel can never resolve a writer's run identity (SC-1). OBSERVATIONAL
+  // consumers that legitimately need the active run from the sentinel (the
+  // lifecycle gate) use the intake surface `locateCandidateRunId` instead; a
+  // sentinel is intake, never a writer identity.
   const fromEnv = env.GUILD_RUN_ID;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
   return null;

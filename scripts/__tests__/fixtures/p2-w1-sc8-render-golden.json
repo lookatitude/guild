@@ -404,10 +404,6 @@
         "reason": "no model is mapped for host \"codex-cli\" (no models.tiers slot and an empty capability-row model set)"
       },
       {
-        "field": "hooks",
-        "reason": "host \"codex-cli\" has no native hook event surface; lifecycle steps run as explicit skill invocations"
-      },
-      {
         "field": "skills",
         "reason": "host \"codex-cli\" has no native skill-autoload directory; skills are driven through the Guild skill tree"
       }
@@ -2145,7 +2141,7 @@
     "host_id": "github-copilot",
     "family": "copilot",
     "surface_kind": "cli",
-    "provenance": "inferred",
+    "provenance": "verified",
     "ok": false,
     "blocked": true,
     "_local_guard": "unverified",
@@ -2360,7 +2356,7 @@
     "host_id": "opencode",
     "family": "opencode",
     "surface_kind": "cli",
-    "provenance": "inferred",
+    "provenance": "verified",
     "ok": false,
     "blocked": true,
     "_local_guard": "unverified",

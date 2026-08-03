@@ -43,6 +43,10 @@ import * as path from "path";
 
 import type { GraphNode, GraphEdge } from "./schema";
 import { STRUCTURAL_PROFILE_KEYS } from "./structural";
+import {
+  checkContained,
+  isRefused,
+} from "../../../src/modules/kernel/workflows/path-containment";
 
 // ---------------------------------------------------------------------------
 // Tunables (all overridable via SimilarityOptions)
@@ -343,13 +347,16 @@ function resolveUnderRoot(repoRoot: string, relPath: string): string | null {
   const root = path.resolve(repoRoot);
   const abs = path.resolve(root, relPath);
   if (escapesBase(path.relative(root, abs))) return null;
-  try {
-    const realRoot = fs.realpathSync(root);
-    const realAbs = fs.realpathSync(abs);
-    if (escapesBase(path.relative(realRoot, realAbs))) return null;
-  } catch {
-    // Root or target absent on disk (injected reader / not-yet-created file):
-    // layer 1 already established lexical containment.
+  // Layer 2 MIGRATED to the shared path-containment primitive. The private version
+  // realpath'd only the LEAF, so it saw nothing when the leaf did not exist yet —
+  // a symlinked ANCESTOR with a not-yet-created leaf passed. The shared check
+  // resolves the deepest existing ancestor instead, which is exactly that case.
+  const r = checkContained(root, abs);
+  if (isRefused(r)) {
+    // `root-unresolvable` means the root is not on disk at all — an injected
+    // reader or a synthetic graph. Layer 1 already proved lexical containment, and
+    // there is nothing on disk to contradict it. Every other refusal is real.
+    if (r.code !== "root-unresolvable") return null;
   }
   return abs;
 }

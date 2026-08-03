@@ -69,10 +69,28 @@ Each stage = deterministic **script half** (`plugin/scripts/learn/`, run
 `npx tsx … --cwd <root>`) then an **LLM semantic half** under the strict
 *"trust the script, do not re-read source"* constraint:
 
+**Who executes the LLM halves (load-bearing).** They are **universal learning
+operations**, not project roles. Each names the *operation* it performs
+(semantic typing, layer naming, domain narration, spec synthesis) and the
+**tier** it runs at (`cheap`/`mid`/`powerful`, table below) — never a specialist
+from the project's roster. The executor is the **installed learning machinery**:
+the **`context-manager` agent** (`agents/context-manager.md`, `mid` tier, shipped
+since decision `cap-loc-D01`), which is exactly what it exists for — assembling
+and summarizing bounded context under its own window, inside the write bounds its
+contract enforces (`scripts/lib/capability/context-manager-contract.ts`: it may
+write run-scoped context and artifact material and nothing else). On a host where
+`context-manager` is not dispatchable, the orchestrating session runs the
+operation itself at the stated tier — the graceful fallback, not the default. A project
+with **zero project agents** therefore runs the full Learn pipeline unchanged —
+Learn never depends on a `researcher` or `architect` existing, which would make
+the bootstrap circular (you would need a learned project to compose the team
+that learns the project). If a matching specialist *does* exist in the roster it
+may be dispatched as an optimization, but it is never a prerequisite.
+
 2. **Analyze.** `analyze-structural.ts --cwd <root>` →
    `understand-partial-graph.json` (file/function/class nodes +
    contains/imports edges, `confidence:high` with `path#Lx-Ly` refs, plus
-   `_merge_report`). LLM (bounded fan-out, researcher lane): **semantic
+   `_merge_report`). LLM (bounded fan-out, `mid` tier): **semantic
    node/edge typing** over the partial graph only — promote generic nodes into
    the frozen type vocabulary and add `calls|depends_on|implemented_by|…`
    edges. Do not re-read source.
@@ -83,12 +101,12 @@ Each stage = deterministic **script half** (`plugin/scripts/learn/`, run
    only on zero valid nodes**) and writes the final `knowledge-graph.json`.
 4. **Architecture.** `assign-layers.ts --cwd <root>` partitions every file node
    into exactly one of 3–10 layers (LOCKED invariant) and **persists the
-   `component` label**. LLM (architect lane): rename layers to meaningful
+   `component` label**. LLM (`mid` tier): rename layers to meaningful
    names — **must not** re-partition.
 5. **Domain.** `derive-domain.ts --cwd <root> --run-id <id>` splices the
    Domain→Flow→Step scaffold (monotone `flow_step` weights), **persists the
    `domain` label**, and appends the initial `knowledge-links.json` projection
-   batch. LLM (researcher+architect): name/narrate domains & flows; emit
+   batch. LLM (`mid` tier): name/narrate domains & flows; emit
    `wiki/concepts/` page **candidates**. **Run the D-INGEST-GATE on each concept
    candidate** before emitting it: call `scripts/lib/ingest-similarity.ts`
    (`--category concepts`, candidate title+content) and consume `should_pause`
@@ -103,7 +121,7 @@ Each stage = deterministic **script half** (`plugin/scripts/learn/`, run
    5–15-step `tour[]` skeleton in the graph. **Narration + `languageLesson` +
    the `onboarding-tour.md` artifact are produced by `guild:learn-onboard`** —
    hand off, do not narrate here.
-7. **Reverse-spec.** LLM (researcher+architect): synthesise `.guild/spec/<slug>.md`
+7. **Reverse-spec.** LLM (`mid`→`powerful`): synthesise `.guild/spec/<slug>.md`
    **from the graph, not raw files**; every claim carries `source_refs` +
    `confidence`.
 
@@ -207,3 +225,7 @@ only; do not scaffold a web UI from this skill.
   `knowledge-links.json` written in one pass, each with `source_refs`, none
   auto-promoted (SC-2).
 - Request to scaffold a web dashboard → refused, deferral doc cited.
+- **Zero-agent project** (`.guild/agents/` empty, no `researcher`, no
+  `architect`) with deep-scan approved → stages 2–7 still run to completion at
+  their stated tiers, executed by the installed learning machinery; no stage
+  blocks on a roster role and no team-compose pass is required first.

@@ -239,12 +239,17 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-// T3b rework F4: main() runs ONLY when this file is the executed entry
-// (node dist/run-trace-close.js via hooks.json, or tsx on the source). An
-// `import`/`require` of this module (tests import findTerminalCheckpoint)
-// must be side-effect-free — an import-time main() here awaited a closed
-// stdin and called process.exit(0) INSIDE the Jest worker, killing the
-// aggregate suite mid-run and turning `npm test` into a false green.
+// T3b rework F4 / #74: main() runs ONLY when this file is the actual process
+// entrypoint (the `npx tsx` shebang invocation, or the bundled
+// dist/run-trace-close.js run directly via hooks.json). Without this guard,
+// merely `import`/`require`-ing this module (e.g. a test pulling in
+// `findTerminalCheckpoint`) executes main() as a side effect of module load:
+// it reads stdin, fails to parse it, and hits the catch at line 137, which
+// calls `process.exit(0)` — killing the whole jest worker mid-run and
+// truncating the reporter before its Tests:/Suites: summary, turning
+// `npm test` into a false green. This file isn't imported into any other
+// hook's bundle, so `require.main === module` is safe here (see
+// emit-learning-checkpoint.ts for the case where it isn't).
 if (require.main === module) {
   main().catch((err: unknown) => {
     process.stderr.write(

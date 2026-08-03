@@ -35,7 +35,8 @@
  * Owned by plugin-architect (L0); consumed by L3 (normalizers) + L6 (tests).
  */
 
-import { validateHandoffV2 } from "../../../../hooks/lib/handoff-v2";
+import { validateHandoffV2 } from "./handoff-v2";
+import { sealSet, deepFreeze } from "../../kernel";
 import { parseReviewResult } from "./review-result";
 import {
   validatePhaseResultV1,
@@ -80,7 +81,7 @@ export interface ResultContractEntry {
  * a host emitting one is normalized the moment its producer lands — no
  * fail-closed "unknown contract" gap. All six are valid normalizer targets.
  */
-export const EXISTING_CONTRACTS: ResultContractEntry[] = [
+export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
   {
     wire_schema_version: "guild.handoff.v2",
     status: "exists",
@@ -123,25 +124,23 @@ export const EXISTING_CONTRACTS: ResultContractEntry[] = [
     source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
     purpose: "Test matrix execution, gaps, failures, release predicate.",
   },
-];
+]);
 
 /**
  * No result contracts remain deferred — the four formerly-deferred contracts now
  * ship (above). Kept as an empty closed set so downstream code (`RESULT_CONTRACTS`,
  * the L6 negative-set assertions) keeps a stable shape.
  */
-export const DEFERRED_CONTRACTS: ResultContractEntry[] = [];
+export const DEFERRED_CONTRACTS: readonly ResultContractEntry[] = Object.freeze([]);
 
 /** Full registry (exists + deferred). */
-export const RESULT_CONTRACTS: ResultContractEntry[] = [
+export const RESULT_CONTRACTS: readonly ResultContractEntry[] = Object.freeze([
   ...EXISTING_CONTRACTS,
   ...DEFERRED_CONTRACTS,
-];
+]);
 
 /** The set of wire schema_version strings a Phase-1 normalizer is allowed to target. */
-export const PHASE1_NORMALIZER_TARGETS: ReadonlySet<string> = new Set(
-  EXISTING_CONTRACTS.map((c) => c.wire_schema_version)
-);
+export const PHASE1_NORMALIZER_TARGETS: ReadonlySet<string> = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
 
 // ---------------------------------------------------------------------------
 // Bound validators (by reference — NOT redefined here)

@@ -43,6 +43,7 @@
  */
 
 import * as fs from "node:fs";
+import { sealSet } from "../src/modules/kernel/workflows/sealed-collections";
 import * as path from "node:path";
 
 import {
@@ -53,7 +54,7 @@ import {
 } from "./learn/lib/knowledge-links-io";
 
 /** Closed edge-type set — continuous-knowledge-and-learning-loop.md §"CR-A #2". */
-export const CLOSED_EDGE_TYPES: ReadonlySet<string> = new Set([
+export const CLOSED_EDGE_TYPES: ReadonlySet<string> = sealSet([
   "decided_by",
   "used_for",
   "produced",
@@ -63,18 +64,18 @@ export const CLOSED_EDGE_TYPES: ReadonlySet<string> = new Set([
   "constrains",
   "opens_question",
   "resolves",
-]);
+], "CLOSED_EDGE_TYPES");
 
 /** The 4 node kinds a completed-run task-id must reach (VC-K2 §180-183). */
 export type NodeKind = "decision" | "skill_agent" | "feature_component" | "wiki" | "other";
 
 /** The 4 connectivity kinds VC-K2 requires reachable from a task-id. */
-export const REQUIRED_KINDS: readonly NodeKind[] = [
+export const REQUIRED_KINDS: readonly NodeKind[] = Object.freeze([
   "decision",
   "skill_agent",
   "feature_component",
   "wiki",
-];
+]);
 
 export interface KnowledgeLink {
   from: string;

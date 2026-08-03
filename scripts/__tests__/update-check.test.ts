@@ -55,6 +55,32 @@ describe("semver + ls-remote parsing", () => {
     expect(latestStableTag(["v1.0.0", "v2.1.0-rc1", "v2.0.1", "v2.1.0"])).toBe("v2.1.0");
   });
 
+  // REGRESSION (gap-audit B5 / cap-loc-D12): the beta channel now carries a
+  // prerelease identifier (2.5.0-beta.1) so the two channels are distinguishable
+  // from the manifest. semverLt used to parse through parseSemver, which REJECTS
+  // prereleases, and an unparseable input yields false — so every prerelease
+  // install compared as "not older than anything" and reported up-to-date
+  // forever. That is the same silent-staleness class the Codex update-check work
+  // fixed (an install stuck at 2.2.0 while stable shipped 2.3.2).
+  it("orders prerelease versions per SemVer §11 so a beta install can go stale", () => {
+    // The actual regression: a beta install vs a much newer stable tag.
+    expect(semverLt("2.5.0-beta.1", "99.0.0")).toBe(true);
+    expect(semverLt("2.5.0-beta.1", "v2.6.0")).toBe(true);
+    // Equal triples: a prerelease precedes its own release, and not vice versa.
+    expect(semverLt("2.5.0-beta.1", "2.5.0")).toBe(true);
+    expect(semverLt("2.5.0", "2.5.0-beta.1")).toBe(false);
+    // Numeric identifiers compare NUMERICALLY (the reason for the dot form).
+    expect(semverLt("2.5.0-beta.9", "2.5.0-beta.10")).toBe(true);
+    expect(semverLt("2.5.0-beta.10", "2.5.0-beta.9")).toBe(false);
+    // A longer identifier list wins when the shared prefix is equal.
+    expect(semverLt("2.5.0-beta", "2.5.0-beta.1")).toBe(true);
+    // A beta is never behind an OLDER stable.
+    expect(semverLt("2.5.0-beta.1", "2.4.0")).toBe(false);
+    // parseSemver stays strict — latestStableTag depends on that rejection.
+    expect(parseSemver("2.5.0-beta.1")).toBeNull();
+    expect(latestStableTag(["v2.5.0-beta.1", "v2.4.0"])).toBe("v2.4.0");
+  });
+
   it("parses ls-remote output: tags (skipping ^{} peels), next and main heads", () => {
     const raw = [
       `${SHA_A}\trefs/heads/main`,
@@ -239,10 +265,11 @@ describe("computeSignal — per-channel staleness", () => {
     expect(sig).toMatchObject({
       update_available: true,
       reason: "stable-newer-tag",
-      available: "v2.1.0",
+      // The tag is "v2.1.0"; the signal renders VERSIONS (v prefix stripped).
+      available: "2.1.0",
     });
     expect(renderSignalLine(sig)).toBe(
-      "Guild update available on stable: 2.0.1 → v2.1.0 — run: claude plugin marketplace update guild && claude plugin update guild@guild"
+      "Guild update available on stable: 2.0.1 → 2.1.0 — run: claude plugin marketplace update guild && claude plugin update guild@guild"
     );
   });
 

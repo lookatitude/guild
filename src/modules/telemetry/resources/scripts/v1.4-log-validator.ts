@@ -43,7 +43,7 @@ import { validateGuildTraceEvent } from "../src/modules/telemetry/workflows/guil
 // Each enum is the binding contract; expanding requires a schema bump.
 // ──────────────────────────────────────────────────────────────────────────
 
-export const PHASE_VALUES = [
+export const PHASE_VALUES = Object.freeze([
   "brainstorm",
   "team-compose",
   "plan",
@@ -52,17 +52,17 @@ export const PHASE_VALUES = [
   "review",
   "verify",
   "reflect",
-] as const;
+] as const);
 
-export const LOOP_LAYER_VALUES = [
+export const LOOP_LAYER_VALUES = Object.freeze([
   "L1",
   "L2",
   "L3",
   "L4",
   "security-review",
-] as const;
+] as const);
 
-export const TOOL_CALL_TOOL_VALUES = [
+export const TOOL_CALL_TOOL_VALUES = Object.freeze([
   "Read",
   "Write",
   "Edit",
@@ -80,9 +80,9 @@ export const TOOL_CALL_TOOL_VALUES = [
   "NotebookEdit",
   "BashOutput",
   "KillShell",
-] as const;
+] as const);
 
-export const HOOK_EVENT_NAMES = [
+export const HOOK_EVENT_NAMES = Object.freeze([
   "SessionStart",
   "SessionEnd",
   "UserPromptSubmit",
@@ -95,9 +95,9 @@ export const HOOK_EVENT_NAMES = [
   "TaskCreated",
   "TaskCompleted",
   "TeammateIdle",
-] as const;
+] as const);
 
-export const EVENT_TYPES = [
+export const EVENT_TYPES = Object.freeze([
   "phase_start",
   "phase_end",
   "specialist_dispatch",
@@ -110,27 +110,27 @@ export const EVENT_TYPES = [
   "assumption_logged",
   "escalation",
   "codex_review_round",
-] as const;
+] as const);
 
-export const PHASE_END_STATUS = ["ok", "error", "escalated"] as const;
-export const LOOP_TERMINATED = [
+export const PHASE_END_STATUS = Object.freeze(["ok", "error", "escalated"] as const);
+export const LOOP_TERMINATED = Object.freeze([
   "satisfied",
   "malformed_termination",
   "cap_hit",
   "escalation",
   "error",
-] as const;
-export const TOOL_CALL_STATUS = ["ok", "err", "n/a"] as const;
-export const HOOK_STATUS = ["ok", "err"] as const;
-export const GATE_DECISION = ["approved", "rejected", "deferred"] as const;
-export const GATE_SOURCE = ["user", "auto-approve-mode"] as const;
-export const ESCALATION_REASON = [
+] as const);
+export const TOOL_CALL_STATUS = Object.freeze(["ok", "err", "n/a"] as const);
+export const HOOK_STATUS = Object.freeze(["ok", "err"] as const);
+export const GATE_DECISION = Object.freeze(["approved", "rejected", "deferred"] as const);
+export const GATE_SOURCE = Object.freeze(["user", "auto-approve-mode"] as const);
+export const ESCALATION_REASON = Object.freeze([
   "cap_hit",
   "malformed_termination_x2",
   "restart_cap_hit",
-] as const;
-export const ESCALATION_LABELS = ["force-pass", "extend-cap", "rework"] as const;
-export const FIXED_GATES = ["gate-1-spec", "gate-2-team", "gate-3-plan"] as const;
+] as const);
+export const ESCALATION_LABELS = Object.freeze(["force-pass", "extend-cap", "rework"] as const);
+export const FIXED_GATES = Object.freeze(["gate-1-spec", "gate-2-team", "gate-3-plan"] as const);
 
 // ISO-8601 timestamp with millisecond precision (Z-suffixed). The schema
 // example: "2026-04-27T07:35:00.123Z".

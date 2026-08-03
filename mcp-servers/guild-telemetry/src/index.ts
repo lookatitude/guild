@@ -37,6 +37,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as yaml from "js-yaml";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -83,12 +84,185 @@ interface TelemetryEvent {
 
 // ─── CWD + runs dir ──────────────────────────────────────────────────────
 
+/**
+ * `--no-cwd-fallback` — set by a host whose launch cwd is NOT the consuming
+ * project (see the identical guard in guild-memory for the full rationale).
+ *
+ * A Codex plugin install declares `cwd: "."` so Codex can resolve the server
+ * path, which makes the launch cwd the PLUGIN payload root, and Codex passes a
+ * scrubbed env with no workspace signal. Falling back to `process.cwd()` there
+ * would read Guild's OWN bundled `.guild/runs` from the install cache — i.e.
+ * report Guild's self-build runs as if they were the consumer's, which is a
+ * data-scoping leak, not merely a wrong answer.
+ *
+ * Path inspection cannot separate that from a Guild developer working in the
+ * checkout (identical shape, opposite intent), so the host declares it.
+ */
+const NO_CWD_FALLBACK = process.argv.includes("--no-cwd-fallback");
+
+/** Flag-aware `cwd` description — REQUIRED when launched outside the project. */
+const CWD_PARAM_DESCRIPTION = NO_CWD_FALLBACK
+  ? "REQUIRED here — absolute path of the consuming project root. This server runs " +
+    "outside the project and has no default; calls without it fail."
+  : "Override consuming-repo root (defaults to the server's working directory).";
+
+/** Thrown when no project root can be determined and guessing would be wrong. */
+export class UnresolvedProjectRootError extends Error {
+  constructor() {
+    super(
+      "guild-telemetry: no project root available. This host launches the MCP server " +
+        "outside the consuming project (--no-cwd-fallback), so the working directory " +
+        "cannot be used. Pass `cwd` with the absolute path of the project root on the " +
+        "tool call, or set GUILD_TELEMETRY_CWD to the project root."
+    );
+    this.name = "UnresolvedProjectRootError";
+  }
+}
+
+/** Thrown when a root arrives but is RELATIVE, which would resolve to the payload. */
+export class RelativeProjectRootError extends Error {
+  constructor(source: string, value: string) {
+    super(
+      `guild-telemetry: ${source} must be an ABSOLUTE path here (got "${value}"). This server runs ` +
+        "outside the consuming project, so a relative path would resolve against the plugin " +
+        "payload and return the plugin's own data. Pass the absolute project root."
+    );
+    this.name = "RelativeProjectRootError";
+  }
+}
+
+/** Thrown when a root points AT (or inside) this server's own payload tree. */
+export class PayloadScopedRootError extends Error {
+  constructor(source: string, value: string) {
+    super(
+      `guild-telemetry: ${source} resolves inside this server's own plugin payload ("${value}"). ` +
+        "That would return the plugin's bundled data instead of the consuming project's. " +
+        "Pass the absolute root of the project you are working in."
+    );
+    this.name = "PayloadScopedRootError";
+  }
+}
+
+/**
+ * The payload tree this server was launched from, canonicalized once.
+ * Only meaningful in flagged mode, where cwd IS the plugin payload.
+ */
+const PAYLOAD_ROOT: string | null = NO_CWD_FALLBACK ? realpathOrSelf(process.cwd()) : null;
+
+/**
+ * Whether the payload lives on a case-insensitive filesystem, decided by
+ * MEASUREMENT rather than by platform guess: flip the case of the path and see
+ * whether it resolves to the same (device, inode). Only then may the string
+ * backstop fold case — otherwise it would reject legitimate sibling paths that
+ * differ only in case.
+ */
+const PAYLOAD_FS_CASE_INSENSITIVE: boolean = (() => {
+  if (PAYLOAD_ROOT === null) return false;
+  const flipped = PAYLOAD_ROOT.split("")
+    .map((ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase()))
+    .join("");
+  if (flipped === PAYLOAD_ROOT) return false; // no cased characters to test with
+  try {
+    const a = fs.statSync(PAYLOAD_ROOT);
+    const b = fs.statSync(flipped);
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false; // flipped path does not resolve ⇒ case-sensitive
+  }
+})();
+
+/**
+ * Canonicalize a path that may not exist yet: realpath the nearest EXISTING
+ * ancestor and re-append the remainder. A plain realpath on a missing directory
+ * throws and would leave symlinked ancestors unresolved.
+ */
+function realpathOrSelf(p: string): string {
+  let cur = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(cur), ...tail.reverse());
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return path.resolve(p); // reached the filesystem root
+      tail.push(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+/**
+ * Reject a root that is the payload itself, lives beneath it, or reaches it
+ * through a symlink. `path.isAbsolute` alone is not enough: an absolute path
+ * naming the payload (directly or via a link) still returned the plugin's own
+ * wiki/runs (gate r5, reproduced live against the shipped bundles).
+ */
+function sameDirectory(a: string, b: string): boolean {
+  // Identity by (device, inode) — the only comparison that is correct on a
+  // CASE-INSENSITIVE filesystem, where "…/Payload" and "…/payload" are one
+  // directory but two different strings (a case-variant path defeated the
+  // string compare and leaked payload data), and which also collapses
+  // symlinks and hardlinks for free.
+  try {
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
+
+function assertNotPayloadScoped(candidate: string, source: string): void {
+  if (PAYLOAD_ROOT === null) return;
+  const real = realpathOrSelf(candidate);
+  // Walk the candidate's existing ancestry: the payload is off-limits whether
+  // the candidate IS it or lives beneath it.
+  let cur = real;
+  for (;;) {
+    if (sameDirectory(cur, PAYLOAD_ROOT)) {
+      throw new PayloadScopedRootError(source, candidate);
+    }
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  // String backstop for paths that do not exist yet (stat cannot compare them).
+  // Case folding is applied ONLY where the filesystem is actually
+  // case-insensitive: on a case-SENSITIVE filesystem "/srv/Guild" and
+  // "/srv/guild/project" are unrelated directories, and folding would reject the
+  // second as payload-scoped — a legitimate root refused.
+  const compare = (v: string): string => (PAYLOAD_FS_CASE_INSENSITIVE ? v.toLowerCase() : v);
+  const c = compare(real);
+  const pay = compare(PAYLOAD_ROOT);
+  if (c === pay || c.startsWith(pay + path.sep)) {
+    throw new PayloadScopedRootError(source, candidate);
+  }
+}
+
 function resolveCwd(cwdArg?: string): string {
   if (cwdArg) {
-    return path.resolve(cwdArg);
+    // See guild-memory: a relative root resolves against the plugin payload in
+    // flagged mode, which is the leak wearing a different hat.
+    if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
+      throw new RelativeProjectRootError("cwd", cwdArg);
+    }
+    // Check the EFFECTIVE runs dir (see guild-memory): a root outside the payload
+    // whose `.guild/runs` symlinks into it would otherwise pass (gate r6).
+    const root = path.resolve(cwdArg);
+    assertNotPayloadScoped(path.join(root, ".guild", "runs"), "cwd");
+    return root;
   }
-  if (process.env.GUILD_TELEMETRY_CWD) {
-    return path.resolve(process.env.GUILD_TELEMETRY_CWD);
+  const envRoot = process.env.GUILD_TELEMETRY_CWD;
+  if (envRoot) {
+    if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
+      throw new RelativeProjectRootError("GUILD_TELEMETRY_CWD", envRoot);
+    }
+    const envRootAbs = path.resolve(envRoot);
+    assertNotPayloadScoped(path.join(envRootAbs, ".guild", "runs"), "GUILD_TELEMETRY_CWD");
+    return envRootAbs;
+  }
+  if (NO_CWD_FALLBACK) {
+    throw new UnresolvedProjectRootError();
   }
   return process.cwd();
 }
@@ -174,9 +348,42 @@ interface RunStats {
   eventCount: number;
   specialists: string[];
   toolCounts: { tool: string; count: number }[];
+  // rf-wi-02: at PARITY with scripts/trace-summarize.ts — a pane run's dispatch
+  // signal. Each pane is a separate host session whose tool calls never land in
+  // this log, so the dispatch receipt is the only lane signal.
+  //   dispatchCounts        — DISTINCT lanes per surface (retry must not inflate).
+  //   dispatchReceiptCounts — raw receipt lines per surface (retry stays visible).
+  dispatchCounts: { backend: string; count: number }[];
+  dispatchReceiptCounts: { backend: string; count: number }[];
   filesTouchedCount: number;
   errors: number;
   okRate: number;
+}
+
+// ── Dispatch predicates (mirror scripts/trace-summarize.ts) ────────────────
+
+/** A dispatch receipt (guild.trace.dispatch.v1), whatever backend produced it. */
+function isDispatchEvent(e: TelemetryEvent): boolean {
+  return e.schema_version === "guild.trace.dispatch.v1";
+}
+
+/**
+ * A CONFIRMED dispatch: the lane actually reached a backend. A bare
+ * `backend: "unknown"` receipt is pre-routing INTENT (write-task-run.ts emits one
+ * per task before any routing decision) and is excluded — mixing the two would
+ * report `[tmux: 3, unknown: 5]` for a three-lane run. A cmux surface rides
+ * `backend: "unknown"` and identifies itself in `pane_backend`.
+ */
+function isConfirmedDispatch(e: TelemetryEvent): boolean {
+  if (!isDispatchEvent(e)) return false;
+  if (typeof e.pane_backend === "string" && e.pane_backend !== "") return true;
+  return typeof e.backend === "string" && e.backend !== "" && e.backend !== "unknown";
+}
+
+/** The surface to report a dispatch under: concrete `pane_backend` else `backend`. */
+function dispatchSurface(e: TelemetryEvent): string {
+  if (typeof e.pane_backend === "string" && e.pane_backend) return e.pane_backend;
+  return e.backend as string;
 }
 
 function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
@@ -189,6 +396,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
       eventCount: 0,
       specialists: [],
       toolCounts: [],
+      dispatchCounts: [],
+      dispatchReceiptCounts: [],
       filesTouchedCount: 0,
       errors: 0,
       okRate: 1,
@@ -212,6 +421,36 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     .map(([tool, count]) => ({ tool, count }))
     .sort((a, b) => b.count - a.count || a.tool.localeCompare(b.tool));
 
+  // rf-wi-02: CONFIRMED dispatches grouped by surface, sorted count-desc then
+  // alpha (same ordering + semantics as scripts/trace-summarize.ts). Both numbers
+  // are reported — dispatched_lanes counts DISTINCT lanes (task_id, else
+  // specialist) so a retry never inflates it; dispatch_receipts counts raw
+  // receipt lines so retry volume stays visible.
+  const dispatchLanes = new Map<string, Set<string>>();
+  const receiptMap = new Map<string, number>();
+  for (const e of events) {
+    if (!isConfirmedDispatch(e)) continue;
+    const surface = dispatchSurface(e);
+    receiptMap.set(surface, (receiptMap.get(surface) ?? 0) + 1);
+    const lane =
+      (typeof e.task_id === "string" && e.task_id) ||
+      (typeof e.specialist === "string" && e.specialist) ||
+      "";
+    if (!lane) continue;
+    if (!dispatchLanes.has(surface)) dispatchLanes.set(surface, new Set());
+    dispatchLanes.get(surface)!.add(lane);
+  }
+  const bySurface = (
+    a: { backend: string; count: number },
+    b: { backend: string; count: number }
+  ) => b.count - a.count || a.backend.localeCompare(b.backend);
+  const dispatchCounts = Array.from(dispatchLanes.entries())
+    .map(([backend, lanes]) => ({ backend, count: lanes.size }))
+    .sort(bySurface);
+  const dispatchReceiptCounts = Array.from(receiptMap.entries())
+    .map(([backend, count]) => ({ backend, count }))
+    .sort(bySurface);
+
   const filesTouchedCount = events.filter(
     (e) => e.tool === "Write" || e.tool === "Edit"
   ).length;
@@ -230,6 +469,8 @@ function computeStats(runId: string, events: TelemetryEvent[]): RunStats {
     eventCount: events.length,
     specialists,
     toolCounts,
+    dispatchCounts,
+    dispatchReceiptCounts,
     filesTouchedCount,
     errors,
     okRate: Math.round(okRate * 1000) / 1000,
@@ -245,6 +486,14 @@ function buildSummary(runId: string, events: TelemetryEvent[]): string {
   const specialistsLine =
     stats.specialists.length > 0 ? stats.specialists.join(", ") : "(none)";
 
+  // rf-wi-02: parity with scripts/trace-summarize.ts's frontmatter — a pane run's
+  // dispatch signal, answerable from the frontmatter alone even though no pane
+  // tool call reached this log.
+  const surfaceLine = (rows: { backend: string; count: number }[]): string =>
+    rows.length > 0
+      ? rows.map(({ backend, count }) => `${backend}: ${count}`).join(", ")
+      : "(none)";
+
   const frontmatter = [
     "---",
     `run_id: ${stats.runId}`,
@@ -253,6 +502,8 @@ function buildSummary(runId: string, events: TelemetryEvent[]): string {
     `duration_ms: ${stats.durationMs}`,
     `event_count: ${stats.eventCount}`,
     `specialists_dispatched: [${specialistsLine}]`,
+    `dispatched_lanes: [${surfaceLine(stats.dispatchCounts)}]`,
+    `dispatch_receipts: [${surfaceLine(stats.dispatchReceiptCounts)}]`,
     `tools_used: [${toolsLine}]`,
     `files_touched_count: ${stats.filesTouchedCount}`,
     `errors: ${stats.errors}`,
@@ -396,17 +647,62 @@ function errorResult(message: string): {
   };
 }
 
+/**
+ * rf-wi-02 (codex r3/r4 finding 2): does a stored summary.md carry BOTH dispatch
+ * parity fields as top-level FRONTMATTER KEYS? The frontmatter block (between the
+ * leading `---` and the next `---`) is parsed as YAML and checked for both keys
+ * as OWN top-level properties. A line-start substring scan was bypassable by a
+ * YAML multiline scalar that embeds the key names inside another value (e.g. a
+ * `description:` block), so the check must understand YAML structure, not text.
+ * A summary without a frontmatter block, or one that does not parse to an object,
+ * returns false (→ synthesize).
+ */
+function summaryHasDispatchFrontmatter(summary: string): boolean {
+  // The block is delimited by an opening `---` line and a closing `---` line —
+  // BOTH exact (a `---not-a-delimiter` line does not close it). Anything else is
+  // not a valid frontmatter block → synthesize.
+  const lines = summary.split("\n");
+  if (lines[0] !== "---") return false;
+  let end = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i] === "---") {
+      end = i;
+      break;
+    }
+  }
+  if (end < 0) return false;
+  const fm = lines.slice(1, end).join("\n");
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(fm);
+  } catch {
+    return false; // unparseable frontmatter — cannot trust it carries the fields
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const o = parsed as Record<string, unknown>;
+  return (
+    Object.prototype.hasOwnProperty.call(o, "dispatched_lanes") &&
+    Object.prototype.hasOwnProperty.call(o, "dispatch_receipts")
+  );
+}
+
 // ─── MCP server ──────────────────────────────────────────────────────────
 
 function buildServer(): McpServer {
   const server = new McpServer(
     { name: "guild-telemetry", version: "0.1.0" },
     {
-      instructions:
-        "Read-only structured query over .guild/runs/. Reads each run's " +
-        "logs/v1.4-events.jsonl (falls back to legacy events.ndjson). Use " +
-        "trace_list_runs first to discover run ids, then trace_summary, " +
-        "trace_query, or trace_cost_rollup (token usage by tier/model/specialist).",
+      instructions: NO_CWD_FALLBACK
+        ? "Read-only structured query over .guild/runs/. IMPORTANT: this server was " +
+          "launched OUTSIDE the consuming project, so it has no default root. You MUST " +
+          "pass `cwd` (absolute path of the project root) on EVERY tool call, or set " +
+          "GUILD_TELEMETRY_CWD. Calls without it fail. Use trace_list_runs first to " +
+          "discover run ids, then trace_summary, trace_query, or trace_cost_rollup."
+        : "Read-only structured query over .guild/runs/. Reads each run's " +
+          "logs/v1.4-events.jsonl (falls back to legacy events.ndjson). Use " +
+          "trace_list_runs first to discover run ids, then trace_summary, " +
+          "trace_query, or trace_cost_rollup (token usage by tier/model/specialist). " +
+          "Pass `cwd` to override the consuming repo root per-tool.",
     }
   );
 
@@ -422,7 +718,7 @@ function buildServer(): McpServer {
         "Does not write anything.",
       inputSchema: {
         run_id: z.string().min(1).describe("The run identifier"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ run_id, cwd }) => {
@@ -434,10 +730,25 @@ function buildServer(): McpServer {
       const existing = path.join(runDir, "summary.md");
       if (fs.existsSync(existing)) {
         const summary = fs.readFileSync(existing, "utf8");
-        return jsonResult({ run_id, source: "file", summary });
+        // rf-wi-02: PARITY guard (codex r2/r3 finding 2). A stored summary.md is
+        // returned verbatim ONLY when its FRONTMATTER carries both dispatch-parity
+        // keys — i.e. it was produced by the current scripts/trace-summarize.ts
+        // (which always emits both, `[(none)]` when empty). A STALE summary
+        // (pre-parity) or a degraded STUB (hooks/maybe-reflect.ts writeStubSummary,
+        // written only when the real summarizer failed) lacks them; returning it
+        // verbatim would break the parity contract, so fall through to synthesize
+        // from the event log instead.
+        if (summaryHasDispatchFrontmatter(summary)) {
+          return jsonResult({ run_id, source: "file", summary });
+        }
       }
       const events = readEvents(runDir);
       if (events.length === 0) {
+        // No event log to synthesize from. If a (field-less) summary.md exists,
+        // returning it is still better than an error — it is all we have.
+        if (fs.existsSync(existing)) {
+          return jsonResult({ run_id, source: "file", summary: fs.readFileSync(existing, "utf8") });
+        }
         return errorResult(
           `No logs/v1.4-events.jsonl or events.ndjson found for run: ${run_id}`
         );
@@ -477,7 +788,7 @@ function buildServer(): McpServer {
           .max(10000)
           .optional()
           .describe("Max number of events returned"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ run_id, event, specialist, since, limit, cwd }) => {
@@ -534,7 +845,7 @@ function buildServer(): McpServer {
             "ISO date/time; keep runs whose ended_at (or started_at if no events) is on/after this"
           ),
         limit: z.number().int().min(1).max(1000).optional().describe("Max runs"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ since, limit, cwd }) => {
@@ -588,7 +899,7 @@ function buildServer(): McpServer {
           .string()
           .optional()
           .describe("ISO date/time; keep events on/after this timestamp"),
-        cwd: z.string().optional().describe("Override consuming-repo root"),
+        cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
       },
     },
     async ({ run_id, since, cwd }) => {

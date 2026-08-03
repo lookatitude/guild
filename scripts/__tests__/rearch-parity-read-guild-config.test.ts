@@ -38,11 +38,19 @@ describe("read-guild-config shim — parity after W3 split", () => {
   it("exports DEFAULTS", () => expect(DEFAULTS).toBeDefined());
   it("exports HELP", () => expect(HELP).toBeDefined());
   it("exports the exact original runtime shim surface (no __main leak)", () => {
+    // This list is a PIN, not a description: it exists so an accidental export (a
+    // `__main` leak, an internal helper) is caught. An ADDITION is therefore a
+    // deliberate act that must be recorded here, which is exactly what happened for
+    // validateCapability below — the pin did its job.
     expect(Object.keys(readGuildConfigExports).sort()).toEqual([
       "DEFAULTS",
       "HELP",
       "scaffold",
       "resolveTierModel",
+      // S5 (cap-loc-D04): config-cmd.ts's raw-file sweep needs the capability content
+      // validator through the same single-SoT entrypoint every other block uses, so
+      // the vocabulary cannot fork. Additive; nothing was removed or renamed.
+      "validateCapability",
       "validateCrossHostBlock",
       "validateDefaults",
       "validateHostProfiles",
@@ -53,6 +61,9 @@ describe("read-guild-config shim — parity after W3 split", () => {
       "validateSecurity",
     ].sort());
   });
+
+  it("exports validateCapability()", () =>
+    expect(typeof readGuildConfigExports.validateCapability).toBe("function"));
 
   // ── DEFAULTS sanity ────────────────────────────────────────────────────────
   it("DEFAULTS.rigor = 'standard'", () => expect(DEFAULTS.rigor).toBe("standard"));

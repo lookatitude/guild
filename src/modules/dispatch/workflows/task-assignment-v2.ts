@@ -43,7 +43,7 @@ import {
   type TaskAssignmentV2,
   type TaskAttemptV1,
   type ToolPermissionProjection,
-} from "../../../../scripts/lib/core/contracts/task-cell-backend";
+} from "./task-cell-contract";
 // T6 rework F5: the production dispatch path consumes the M1/M2 routing plan
 // (shadow provenance on every real dispatch; v2 selection only behind the
 // verified M2 gate) — wired HERE, the module-map §1 dispatch wiring point.

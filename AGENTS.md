@@ -1,6 +1,7 @@
 # Guild — repo orientation
 
-Guild is a cross-host plugin that ships 2 machinery agents (advisor, developer),
+Guild is a cross-host plugin that ships 3 machinery agents (advisor, context-manager,
+developer),
 15 domain specialist type templates (minted into a project's `.guild/agents/` on
 demand by team composition), and 111 skills across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
@@ -19,7 +20,8 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy.
   The former `fallback/` tier no longer exists — its skills were promoted into `meta/`
   (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review`.
-- `agents/*.md` — the 2 machinery agents (`advisor`, `developer`), the only
+- `agents/*.md` — the 3 machinery agents (`advisor`, `context-manager`,
+  `developer`), the only
   host-registered agents the plugin ships. Populated and authored.
 - `templates/specialists/*.md` — the 15 domain specialist type templates
   (`guild.specialist_template.v1`; architect … sales, incl. `doc-writer`),
@@ -178,6 +180,17 @@ Every merge to a channel branch ships to its followers immediately, so both are
 PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
 `.guild/wiki/standards/release-discipline.md`.
 
+**The channel must be legible from the manifest** (gap-audit B5, decision
+cap-loc-D12). `next` carries a **prerelease identifier** on the *next* target
+version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.5.0-beta.1`), bumped when beta
+picks up a materially new surface; `main` carries the bare release triple.
+Without this, `next` and `main` can report the same `"version"` while dozens of
+commits apart, and a user cannot determine which runtime they have from the
+version alone — which is exactly what happened at `2.4.0`. Under SemVer §11 a
+prerelease sorts *below* the same triple, so `2.5.0-beta.1` is correctly ahead
+of `2.4.0` and behind an eventual `2.5.0`; `check:channel-integrity` enforces
+the ordering. The release cut's version-bump commit drops the identifier.
+
 Day-to-day workflow (features, fixes, docs — everything non-release):
 1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.
 2. Commit + push the branch.
@@ -186,12 +199,18 @@ Day-to-day workflow (features, fixes, docs — everything non-release):
    channel for testing; it reaches stable only with the next release.
 
 Release workflow (operator-driven, when `next` is ready). A release adds only
-**two commits** on top of `next` — a version bump and a changelog — so the whole
-cut stays linear and the sync-back is a fast-forward, not a merge that loops content
-back:
-1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump
-   `plugin.json` + `marketplace.json` (+ regenerate `guild.inventory.json` via
-   `npm run build:inventory` — deterministic, keeps the zero-epoch `generated_at`);
+**two commits** on top of `next` — a version bump and a changelog — so the cut
+stays small and, *provided the release PR is merged with a merge commit*, the
+sync-back is a fast-forward rather than a delta copy:
+1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump the
+   version in **`.claude-plugin/plugin.json` ONLY** — the single canonical
+   version field — then propagate it with
+   `cd scripts && npm run sync:claude-install && npm run build:inventory`
+   (regenerates `marketplace.json` from `plugin.json` and refreshes
+   `guild.inventory.json`; both deterministic, keeping the zero-epoch
+   `generated_at`). **Do not hand-edit `marketplace.json`** — it is generated,
+   and CI (`check:claude-install`) fails any hand edit that disagrees with the
+   canonical field;
    (b) the changelog section + notes seed via
    `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (then `--notes`
    for the PR body); polish both. **No live-surface guard pin re-ratification is
@@ -201,14 +220,24 @@ back:
    CI regenerates it from the bumped inventory.
 2. PR `release/vX.Y.Z` → `main` (the ONLY PR shape `main` accepts — enforced by
    `.github/workflows/branch-policy.yml`).
-3. Merge → `release.yml` auto-tags and publishes the GitHub Release (PR body =
-   release notes).
-4. Sync back by **fast-forward**, not a merge commit: `next` is a strict ancestor
-   of the release point, so advance it with `git merge --ff-only <release-tip>`.
-   Because `next` is push-protected, land it either as a sync-back PR merged with
-   *Rebase and merge* (no merge commit), or with the `GUILD_ALLOW_PUSH_MAIN=1`
-   bootstrap override for a direct `--ff-only` push. Both channels now share the
-   exact release commit with zero extra merge nodes.
+3. Merge with a **MERGE COMMIT**. Do NOT squash and do NOT rebase-merge: both
+   rewrite SHAs, leaving `next`'s commits as non-ancestors of `main` and making
+   step 4's fast-forward impossible. (v2.3.2 was squash-merged as PR #96, which
+   is exactly why its sync-back could not fast-forward.) On merge, `release.yml`
+   auto-tags and publishes the GitHub Release (PR body = release notes).
+4. Sync back. First decide by **ancestry, not dates**:
+   `git merge-base --is-ancestor origin/next <release-tag>`.
+   - **Ancestor (the normal case after step 3):** fast-forward —
+     `git merge --ff-only <release-tip>`. `next` is push-protected, so land it
+     with the `GUILD_ALLOW_PUSH_MAIN=1` bootstrap override. Both channels then
+     share the *exact* release commit.
+   - **Diverged:** the fast-forward is impossible. Open a sync-back PR carrying
+     the release delta (version bump + changelog + regenerated inventory).
+     Ancestry is already lost, so merge style no longer matters — the channels
+     will agree on content and version, **not** on SHA.
+   Either way the debt is visible: `channel-integrity.yml` fails while `next`'s
+   version trails `main`'s. It DETECTS only — `release.yml` publishes on the
+   merged-PR event, so it cannot block a release.
 
 **Mechanical enforcement.** `branch-policy.yml` rejects any PR into `main` whose
 head is not `release/vX.Y.Z`; the repo-checked-in `pre-push` hook at

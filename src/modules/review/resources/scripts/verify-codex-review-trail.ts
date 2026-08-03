@@ -7,6 +7,8 @@
 //
 //   - satisfied
 //   - skipped-codex-unavailable
+//   - cap-pushback-recorded   (G6d: cap + reasoned pushback recorded)
+//   - cap-verification-only   (G6d: verification-only round beyond cap)
 //
 // Exit codes:
 //   0 — every file's frontmatter has a recognised final_status; prints a
@@ -31,11 +33,32 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-/** Allowed final_status values per `.guild/wiki/standards/codex-adversarial-review.md`. */
-export const ALLOWED_FINAL_STATUS = [
+/**
+ * Allowed (clean) final_status values per
+ * `.guild/wiki/standards/codex-adversarial-review.md`.
+ *
+ * `satisfied` / `skipped-codex-unavailable` are the un-capped terminals. The two
+ * `cap-*` values are the ONLY two clean ways a review that reached the round cap
+ * WITHOUT a `## SATISFIED` may terminate — the G6d named cap terminal states,
+ * both of which leave a complete audit trail:
+ *   - `cap-pushback-recorded`  — "cap + reasoned pushback recorded": the cap was
+ *     hit and the artifact author recorded a technical rebuttal to Codex's
+ *     remaining findings in the trail (the review-broker "push back only with
+ *     evidence" discipline). The disagreement is ON RECORD, so it validates.
+ *   - `cap-verification-only`  — "verification-only round beyond cap": the
+ *     round(s) past the cap were verification-only (confirming a just-applied
+ *     fix, no NEW adversarial surface) and terminated. Bounded and audited, so it
+ *     validates.
+ * A bare `cap_hit`, or a `force_passed` WITHOUT Codex sign-off, still writes its
+ * value verbatim and DELIBERATELY fails this validator — an audit exception to be
+ * resolved, never one of these two clean capped terminals.
+ */
+export const ALLOWED_FINAL_STATUS = Object.freeze([
   "satisfied",
   "skipped-codex-unavailable",
-] as const;
+  "cap-pushback-recorded",
+  "cap-verification-only",
+] as const);
 
 export type AllowedFinalStatus = (typeof ALLOWED_FINAL_STATUS)[number];
 

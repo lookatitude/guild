@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // agent-team/task-created.ts
-var fs5 = __toESM(require("fs"));
-var path6 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -57,25 +57,25 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// lib/run-state.ts
-var fs3 = __toESM(require("node:fs"));
+// ../src/modules/lifecycle/workflows/run-state.ts
+var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
 
-// lib/v1.4/v1.4-lock.ts
+// ../src/modules/lifecycle/workflows/stable-lock.ts
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");
-function stableLockPath(runDir) {
-  return (0, import_node_path.join)(runDir, "logs", ".lock");
+function stableLockPath(runDir2) {
+  return (0, import_node_path.join)(runDir2, "logs", ".lock");
 }
-function exclusionSentinelPath(runDir) {
-  return (0, import_node_path.join)(runDir, "logs", ".lock.exclusion");
+function exclusionSentinelPath(runDir2) {
+  return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
-function initStableLockfile(runDir) {
-  const path7 = stableLockPath(runDir);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path7), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path7)) return;
+function initStableLockfile(runDir2) {
+  const path8 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path8), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path8)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path7, "wx");
+    const fd = (0, import_node_fs.openSync)(path8, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -88,9 +88,9 @@ function sleepSyncMs(ms) {
   while (Date.now() < end) {
   }
 }
-function withStableLock(runDir, fn, opts = {}) {
-  initStableLockfile(runDir);
-  const sentinel = exclusionSentinelPath(runDir);
+function withStableLock(runDir2, fn, opts = {}) {
+  initStableLockfile(runDir2);
+  const sentinel = exclusionSentinelPath(runDir2);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
   const start = Date.now();
@@ -127,13 +127,621 @@ function withStableLock(runDir, fn, opts = {}) {
   }
 }
 
-// ../src/modules/capability/workflows/independence-record.ts
-var fs2 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+function refuseMutator(label, method) {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+    );
+  };
+}
+function sealSet(values, label = "this Set") {
+  const inner = new Set(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value) => inner.has(value),
+    keys: () => inner.keys(),
+    values: () => inner.values(),
+    entries: () => inner.entries(),
+    forEach: (callback, thisArg) => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade));
+    },
+    [Symbol.iterator]: () => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear")
+  };
+  return Object.freeze(facade);
+}
+function isSealedCollection(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues(value) {
+  if (!isSealedCollection(value)) return void 0;
+  return [...value];
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+
+// ../src/modules/kernel/workflows/path-containment.ts
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
+
+// ../src/modules/state/workflows/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
+
+// ../src/modules/state/workflows/guild-root.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+function resolveGuildRoot2(startDir) {
+  const resolvedStart = path2.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs2.existsSync(path2.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path2.join(current, ".guild");
+      try {
+        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path2.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// ../src/modules/migrations/workflows/index-migrate.ts
+var import_node_child_process = require("node:child_process");
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function openDatabase(dbPath) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
+}
+var CURRENT_SCHEMA_VERSION = 3;
+function resolveGuildRoot3(cwd) {
+  try {
+    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const abs = path3.isAbsolute(raw) ? raw : path3.resolve(cwd, raw);
+    const root = path3.dirname(abs);
+    if (fs3.existsSync(root)) return root;
+  } catch {
+  }
+  return path3.resolve(cwd);
+}
+var MIGRATIONS = [
+  // ── v1: core tables ───────────────────────────────────────────────────────
+  {
+    version: 1,
+    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+      db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+      }
+    }
+  },
+  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+  //
+  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+  //
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
+  {
+    version: 2,
+    tables: ["federation_wiki_cache"],
+    up(db) {
+      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+      db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+    }
+  },
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
+    }
+  }
+];
+function runMigrations(dbPath) {
+  let db;
+  let fromVersion = 0;
+  try {
+    fs3.mkdirSync(path3.dirname(dbPath), { recursive: true });
+    db = openDatabase(dbPath);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA synchronous = NORMAL");
+    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
+    for (const mig of MIGRATIONS) {
+      if (mig.version <= fromVersion) continue;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        mig.up(db);
+        db.exec(`PRAGMA user_version = ${mig.version}`);
+        db.exec("COMMIT");
+        fromVersion = mig.version;
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+        }
+        for (const tbl of mig.tables) {
+          try {
+            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
+          } catch {
+          }
+        }
+        db.close();
+        return {
+          ok: false,
+          fromVersion,
+          toVersion: fromVersion,
+          dbPath,
+          message: `migration to v${mig.version} failed: ${err.message}`
+        };
+      }
+    }
+    db.close();
+    return {
+      ok: true,
+      fromVersion,
+      toVersion: CURRENT_SCHEMA_VERSION,
+      dbPath
+    };
+  } catch (err) {
+    try {
+      db?.close();
+    } catch {
+    }
+    return {
+      ok: false,
+      fromVersion,
+      toVersion: fromVersion,
+      dbPath,
+      message: `migration runner error: ${err.message}`
+    };
+  }
+}
+function runIndexMigrateCli() {
+  const argv = process.argv.slice(2);
+  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
+  let dbPath;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
+  }
+  if (!dbPath) {
+    const guildRoot = resolveGuildRoot3(cwd);
+    dbPath = path3.join(guildRoot, ".guild", "index.sqlite");
+  }
+  const result = runMigrations(dbPath);
+  if (result.ok) {
+    process.stdout.write(
+      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
+`
+    );
+  } else {
+    process.stderr.write(`[index-migrate] WARN: ${result.message}
+`);
+    process.exit(1);
+  }
+}
+if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runIndexMigrateCli();
+}
+
+// ../src/modules/migrations/workflows/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
+// ../src/modules/lifecycle/workflows/run-state.ts
+var RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
+function runStatePath(runDir2) {
+  return path4.join(runDir2, "run-state.json");
+}
+function loadRunState(runDir2) {
+  let raw;
+  try {
+    raw = fs4.readFileSync(runStatePath(runDir2), "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed) || parsed["schema_version"] !== RUN_STATE_SCHEMA_VERSION) {
+    return null;
+  }
+  return parsed;
+}
+function writeRunStateAtomic(runDir2, state) {
+  fs4.mkdirSync(runDir2, { recursive: true });
+  const finalPath = runStatePath(runDir2);
+  const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  fs4.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
+  try {
+    fs4.renameSync(tmpPath, finalPath);
+  } catch (err) {
+    try {
+      fs4.unlinkSync(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
+}
+function newCheckpoint(init2, now) {
+  return {
+    schema_version: RUN_STATE_SCHEMA_VERSION,
+    run_id: init2.runId,
+    plan_slug: init2.planSlug ?? init2.runId,
+    program_id: init2.programId ?? null,
+    wave_index: init2.waveIndex ?? 0,
+    lanes: {},
+    last_checkpoint_at: now
+  };
+}
+function upsertLane(runDir, init, laneId, patch) {
+  if (patch.host?.independence === "strong") {
+    const capability = eval("require")("../../capability");
+    capability.assertPersistableIndependence(
+      runDir,
+      patch.host?.independence,
+      `run-state lane "${laneId}"`,
+      {
+        lane_id: laneId,
+        producer_ref: patch.host?.independence_ref?.producer_ref,
+        reviewer_ref: patch.host?.independence_ref?.reviewer_ref
+      }
+    );
+  }
+  return withStableLock(runDir, () => {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const state = loadRunState(runDir) ?? newCheckpoint(init, now);
+    const prev = state.lanes[laneId];
+    const merged = {
+      status: patch.status ?? prev?.status ?? "pending",
+      attempt: patch.attempt ?? prev?.attempt ?? 1,
+      depends_on: patch.depends_on ?? prev?.depends_on ?? [],
+      receipt_ref: patch.receipt_ref !== void 0 ? patch.receipt_ref : prev?.receipt_ref ?? null,
+      updated_at: now
+    };
+    const tier = patch.tier ?? prev?.tier;
+    if (tier !== void 0) merged.tier = tier;
+    const host = patch.host ?? prev?.host;
+    if (host !== void 0) merged.host = host;
+    state.lanes[laneId] = merged;
+    state.last_checkpoint_at = now;
+    writeRunStateAtomic(runDir, state);
+    return state;
+  });
+}
+function markLaneInProgress(runDir2, init2, laneId2, opts = {}) {
+  return upsertLane(runDir2, init2, laneId2, {
+    status: "in_progress",
+    tier: opts.tier,
+    attempt: opts.attempt,
+    depends_on: opts.depends_on
+  });
+}
+var LANE_RESUME_SCHEMA_VERSION = "guild.lane_resume.v1";
+function laneResumeCheckpointPath(runDir2, laneId2) {
+  return path4.join(runDir2, "lanes", laneId2, "resume.json");
+}
+function readResumeEnabled(cwd) {
+  const settingsPath = path4.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
+  try {
+    const raw = fs4.readFileSync(settingsPath, "utf8");
+    const parsed = JSON.parse(raw);
+    const defs = parsed["defaults"];
+    if (typeof defs === "object" && defs !== null && !Array.isArray(defs)) {
+      const resume = defs["resume"];
+      if (typeof resume === "object" && resume !== null && !Array.isArray(resume)) {
+        const enabled = resume["enabled"];
+        if (typeof enabled === "boolean") return enabled;
+      }
+    }
+  } catch {
+  }
+  return true;
+}
+function loadLaneResumeCheckpoint(runDir2, laneId2) {
+  try {
+    const raw = fs4.readFileSync(laneResumeCheckpointPath(runDir2, laneId2), "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed?.schema_version !== LANE_RESUME_SCHEMA_VERSION) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+function markLaneDead(runDir2, init2, laneId2, signal, cwd) {
+  const state = upsertLane(runDir2, init2, laneId2, {
+    status: "dead",
+    attempt: signal.attempts
+  });
+  if (readResumeEnabled(cwd)) {
+    const checkpoint = {
+      schema_version: LANE_RESUME_SCHEMA_VERSION,
+      lane_id: laneId2,
+      run_id: init2.runId,
+      attempts: signal.attempts,
+      last_attempt_at: signal.lastAttemptAt,
+      resumable_at: (/* @__PURE__ */ new Date()).toISOString(),
+      ...typeof signal.lastError === "string" ? { last_error: signal.lastError } : {}
+    };
+    const checkpointPath = laneResumeCheckpointPath(runDir2, laneId2);
+    fs4.mkdirSync(path4.dirname(checkpointPath), { recursive: true });
+    fs4.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2) + "\n", "utf8");
+  }
+  return state;
+}
+
+// lib/bus-emit.ts
+var fs5 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
+function buildBusEvent(input) {
+  const rec = {
+    schema_version: BUS_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event: input.event
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (typeof input.task_id === "string" && input.task_id.length > 0) rec.task_id = input.task_id;
+  if (typeof input.team_name === "string" && input.team_name.length > 0) {
+    rec.team_name = input.team_name;
+  }
+  if (typeof input.detail === "string" && input.detail.length > 0) rec.detail = input.detail;
+  return rec;
+}
+function emitBusEvent(runDir2, input) {
+  try {
+    const busDir = path5.join(runDir2, "agent-bus");
+    fs5.mkdirSync(busDir, { recursive: true });
+    const record = buildBusEvent(input);
+    fs5.appendFileSync(
+      path5.join(busDir, "events.ndjson"),
+      JSON.stringify(record) + "\n",
+      "utf8"
+    );
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [bus-emit] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
 
 // ../src/modules/lifecycle/workflows/run-binding.ts
 var fsReal = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var path6 = __toESM(require("path"));
 function realBindingFs() {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
@@ -143,7 +751,7 @@ function realBindingFs() {
   };
 }
 function runBindingPath(root, runId) {
-  return path2.join(root, ".guild", "runs", runId, "binding.json");
+  return path6.join(root, ".guild", "runs", runId, "binding.json");
 }
 function validateRunBindingRecord(parsed, expectedRunId) {
   if (parsed === null || typeof parsed !== "object") return null;
@@ -161,8 +769,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs6 = opts.fs ?? realBindingFs();
-  const raw = fs6.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs7 = opts.fs ?? realBindingFs();
+  const raw = fs7.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -199,238 +807,6 @@ function readHookBindingEnvelope(env) {
   const binding_ref = env[HOOK_BINDING_ENV_BINDING_REF]?.trim();
   if (!run_id || !binding_ref) return null;
   return { run_id, binding_ref };
-}
-
-// ../src/modules/capability/workflows/independence-predicates.ts
-var ADJUDICATION_SHA256_HEX = /^[0-9a-f]{64}$/;
-function asAdjudicationRecord(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v) ? v : null;
-}
-function validateAdjudicationRef(v) {
-  const o = asAdjudicationRecord(v);
-  if (!o) return null;
-  const dispatch_id = o["dispatch_id"];
-  const receipt_hash = o["receipt_hash"];
-  if (typeof dispatch_id !== "string" || dispatch_id.length === 0) return null;
-  if (typeof receipt_hash !== "string" || !ADJUDICATION_SHA256_HEX.test(receipt_hash)) return null;
-  return { dispatch_id, receipt_hash };
-}
-function validateWrittenAdjudication(v) {
-  const o = asAdjudicationRecord(v);
-  if (!o) return null;
-  const producer_ref = validateAdjudicationRef(o["producer_ref"]);
-  const reviewer_ref = validateAdjudicationRef(o["reviewer_ref"]);
-  if (!producer_ref || !reviewer_ref) return null;
-  const independence = o["independence"];
-  if (independence !== "strong" && independence !== "weak") return null;
-  const predicate_trace = o["predicate_trace"];
-  if (typeof predicate_trace !== "string" || predicate_trace.length === 0) return null;
-  return { producer_ref, reviewer_ref, independence, predicate_trace };
-}
-
-// ../src/modules/capability/workflows/independence-record.ts
-var INDEPENDENCE_DIR = "independence";
-function independenceDirForRunDir(runDir) {
-  return path3.join(runDir, INDEPENDENCE_DIR);
-}
-function loadWrittenAdjudications(runDir) {
-  const dir = independenceDirForRunDir(runDir);
-  let names;
-  try {
-    names = fs2.readdirSync(dir).filter((n) => n.endsWith(".json")).sort();
-  } catch {
-    return [];
-  }
-  const out = [];
-  for (const name of names) {
-    let parsed;
-    try {
-      parsed = JSON.parse(fs2.readFileSync(path3.join(dir, name), "utf8"));
-    } catch {
-      continue;
-    }
-    const block = validateWrittenAdjudication(parsed);
-    if (block) out.push(block);
-  }
-  return out;
-}
-function validateIndependenceBinding(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
-  const o = v;
-  const lane_id = o["lane_id"];
-  if (typeof lane_id !== "string" || lane_id.length === 0) return null;
-  const producer_ref = validateAdjudicationRef(o["producer_ref"]);
-  const reviewer_ref = validateAdjudicationRef(o["reviewer_ref"]);
-  if (!producer_ref || !reviewer_ref) return null;
-  return { lane_id, producer_ref, reviewer_ref };
-}
-function sameRef(a, b) {
-  return a.dispatch_id === b.dispatch_id && a.receipt_hash === b.receipt_hash;
-}
-function findBoundAdjudications(runDir, binding) {
-  return loadWrittenAdjudications(runDir).filter(
-    (b) => sameRef(b.producer_ref, binding.producer_ref) && sameRef(b.reviewer_ref, binding.reviewer_ref)
-  );
-}
-function assertPersistableIndependence(runDir, independence, context, binding) {
-  if (independence !== "strong") return;
-  const where = independenceDirForRunDir(runDir);
-  const bound = validateIndependenceBinding(binding);
-  if (!bound) {
-    throw new Error(
-      `independence_binding_missing: refusing to persist independence:"strong" for ${context} \u2014 the record declares no valid \xA77a binding {lane_id, producer_ref:{dispatch_id,receipt_hash}, reviewer_ref:{dispatch_id,receipt_hash}} (receipt hashes must be sha256 hex). A strong verdict is persistable only as a claim ON a specific adjudication, never as a bare string. Record the adjudication first (persistIndependenceAdjudication) or persist "weak".`
-    );
-  }
-  if (bound.producer_ref.dispatch_id !== bound.lane_id) {
-    throw new Error(
-      `independence_binding_lane_mismatch: refusing to persist independence:"strong" for ${context} \u2014 the declared adjudication's producer dispatch is "${bound.producer_ref.dispatch_id}" but the record being written is lane "${bound.lane_id}". An adjudication of ANOTHER lane's dispatch never authorizes this one, however valid it is. Adjudicate THIS lane's own producer/reviewer receipts or persist "weak".`
-    );
-  }
-  const matches = findBoundAdjudications(runDir, bound);
-  if (matches.length === 0) {
-    throw new Error(
-      `independence_not_adjudicated: refusing to persist independence:"strong" for ${context} \u2014 no WRITTEN, hash-bound guild.model_resolution.v1 \xA77a independence_adjudication block under ${where} matches this record's binding (producer ${bound.producer_ref.dispatch_id}@${bound.producer_ref.receipt_hash.slice(0, 12)}\u2026, reviewer ${bound.reviewer_ref.dispatch_id}@${bound.reviewer_ref.receipt_hash.slice(0, 12)}\u2026). \xA77a admits NO provisional strong: a strong review verdict exists only as an adjudicated block binding BOTH parties' finalized receipts. Record the adjudication first (persistIndependenceAdjudication) or persist "weak".`
-    );
-  }
-  if (matches.length > 1) {
-    throw new Error(
-      `independence_adjudication_ambiguous: refusing to persist independence:"strong" for ${context} \u2014 ${matches.length} written \xA77a blocks under ${where} bind the SAME producer/reviewer receipt pair. Which verdict applies is ambiguous, and filename order never decides. Resolve the duplicate blocks and re-adjudicate.`
-    );
-  }
-  if (matches[0].independence !== "strong") {
-    throw new Error(
-      `independence_not_adjudicated: refusing to persist independence:"strong" for ${context} \u2014 the \xA77a block bound to this record adjudicated "${matches[0].independence}", not "strong" (${matches[0].predicate_trace}). The persisted value must be the ADJUDICATED one; a caller never upgrades a verdict.`
-    );
-  }
-}
-
-// lib/run-state.ts
-var RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
-function runStatePath(runDir) {
-  return path4.join(runDir, "run-state.json");
-}
-function loadRunState(runDir) {
-  let raw;
-  try {
-    raw = fs3.readFileSync(runStatePath(runDir), "utf8");
-  } catch {
-    return null;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed) || parsed["schema_version"] !== RUN_STATE_SCHEMA_VERSION) {
-    return null;
-  }
-  return parsed;
-}
-function writeRunStateAtomic(runDir, state) {
-  fs3.mkdirSync(runDir, { recursive: true });
-  const finalPath = runStatePath(runDir);
-  const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  fs3.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
-  try {
-    fs3.renameSync(tmpPath, finalPath);
-  } catch (err) {
-    try {
-      fs3.unlinkSync(tmpPath);
-    } catch {
-    }
-    throw err;
-  }
-}
-function newCheckpoint(init, now) {
-  return {
-    schema_version: RUN_STATE_SCHEMA_VERSION,
-    run_id: init.runId,
-    plan_slug: init.planSlug ?? init.runId,
-    program_id: init.programId ?? null,
-    wave_index: init.waveIndex ?? 0,
-    lanes: {},
-    last_checkpoint_at: now
-  };
-}
-function upsertLane(runDir, init, laneId, patch) {
-  assertPersistableIndependence(
-    runDir,
-    patch.host?.independence,
-    `run-state lane "${laneId}"`,
-    {
-      lane_id: laneId,
-      producer_ref: patch.host?.independence_ref?.producer_ref,
-      reviewer_ref: patch.host?.independence_ref?.reviewer_ref
-    }
-  );
-  return withStableLock(runDir, () => {
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    const state = loadRunState(runDir) ?? newCheckpoint(init, now);
-    const prev = state.lanes[laneId];
-    const merged = {
-      status: patch.status ?? prev?.status ?? "pending",
-      attempt: patch.attempt ?? prev?.attempt ?? 1,
-      depends_on: patch.depends_on ?? prev?.depends_on ?? [],
-      receipt_ref: patch.receipt_ref !== void 0 ? patch.receipt_ref : prev?.receipt_ref ?? null,
-      updated_at: now
-    };
-    const tier = patch.tier ?? prev?.tier;
-    if (tier !== void 0) merged.tier = tier;
-    const host = patch.host ?? prev?.host;
-    if (host !== void 0) merged.host = host;
-    state.lanes[laneId] = merged;
-    state.last_checkpoint_at = now;
-    writeRunStateAtomic(runDir, state);
-    return state;
-  });
-}
-function markLaneInProgress(runDir, init, laneId, opts = {}) {
-  return upsertLane(runDir, init, laneId, {
-    status: "in_progress",
-    tier: opts.tier,
-    attempt: opts.attempt,
-    depends_on: opts.depends_on
-  });
-}
-
-// lib/bus-emit.ts
-var fs4 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
-var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
-function buildBusEvent(input) {
-  const rec = {
-    schema_version: BUS_EVENT_SCHEMA_VERSION,
-    ts: (/* @__PURE__ */ new Date()).toISOString(),
-    run_id: input.run_id,
-    event: input.event
-  };
-  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
-  if (typeof input.task_id === "string" && input.task_id.length > 0) rec.task_id = input.task_id;
-  if (typeof input.team_name === "string" && input.team_name.length > 0) {
-    rec.team_name = input.team_name;
-  }
-  if (typeof input.detail === "string" && input.detail.length > 0) rec.detail = input.detail;
-  return rec;
-}
-function emitBusEvent(runDir, input) {
-  try {
-    const busDir = path5.join(runDir, "agent-bus");
-    fs4.mkdirSync(busDir, { recursive: true });
-    const record = buildBusEvent(input);
-    fs4.appendFileSync(
-      path5.join(busDir, "events.ndjson"),
-      JSON.stringify(record) + "\n",
-      "utf8"
-    );
-    return true;
-  } catch (err) {
-    process.stderr.write(
-      `warn: [bus-emit] write failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-    return false;
-  }
 }
 
 // lib/hook-binding.ts
@@ -472,13 +848,13 @@ function extractDependsOn(text) {
   return Array.from(matches, (m) => m[1].trim());
 }
 function loadPlanTaskIds(cwd) {
-  const planDir = path6.join(resolveGuildRoot(cwd), ".guild", "plan");
-  if (!fs5.existsSync(planDir)) return null;
-  const files = fs5.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path7.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs6.existsSync(planDir)) return null;
+  const files = fs6.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   if (files.length === 0) return null;
   const ids = /* @__PURE__ */ new Set();
   for (const file of files) {
-    const content = fs5.readFileSync(path6.join(planDir, file), "utf8");
+    const content = fs6.readFileSync(path7.join(planDir, file), "utf8");
     const patterns = [
       /\bid:\s*(task-[\w-]+)/gi,
       /^\s*[-*]\s*(task-[\w-]+):/gim,
@@ -531,7 +907,7 @@ async function main() {
     const planIds = loadPlanTaskIds(cwd);
     if (planIds === null) {
       warn(
-        `Task "${taskId}" has depends-on references [${deps.join(", ")}] but no plan file found at ${path6.join(resolveGuildRoot(cwd), ".guild/plan/")}. Skipping dependency check.`
+        `Task "${taskId}" has depends-on references [${deps.join(", ")}] but no plan file found at ${path7.join(resolveGuildRoot(cwd), ".guild/plan/")}. Skipping dependency check.`
       );
     } else {
       const missing = deps.filter((d) => !planIds.has(d.toLowerCase()));
@@ -548,11 +924,11 @@ async function main() {
     process.stderr.write(formatBindingRejected("task-created", runStateAuth));
   } else {
     const runId = runStateAuth.run_id;
-    const runDir = path6.join(guildRootForRun, ".guild", "runs", runId);
+    const runDir2 = path7.join(guildRootForRun, ".guild", "runs", runId);
     try {
-      markLaneInProgress(runDir, { runId }, taskId);
+      markLaneInProgress(runDir2, { runId }, taskId);
       process.stderr.write(
-        `[task-created] run-state: lane "${taskId}" \u2192 in_progress (${path6.join(runDir, "run-state.json")}).
+        `[task-created] run-state: lane "${taskId}" \u2192 in_progress (${path7.join(runDir2, "run-state.json")}).
 `
       );
     } catch (err) {
@@ -561,7 +937,7 @@ async function main() {
 `
       );
     }
-    emitBusEvent(runDir, {
+    emitBusEvent(runDir2, {
       run_id: runId,
       event: "dispatched",
       lane_id: owner,

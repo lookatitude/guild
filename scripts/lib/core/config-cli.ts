@@ -56,7 +56,18 @@ import { normalizeHostId } from "../host-id-namespace";
 import { validateHostProfiles } from "../host-profiles-validate";
 // Canonical single-source prototype-pollution guard (re-arch WAVE 1).
 import { PROTO_POISON_KEYS } from "../shared/safe-object";
-import { DEFAULTS as SHARED_DEFAULTS } from "../shared/config-defaults";
+import {
+  DEFAULTS as SHARED_DEFAULTS,
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+  CAPABILITY_SUGGESTION_BUDGET_MAX,
+  CAPABILITY_SUGGESTION_BUDGET_MIN,
+  CAPABILITY_ROLE_SLUG_MAX_LEN,
+  isCanonicalRoleSlug,
+  roleSlugDedupKey,
+  type CapabilityAutoCreatePolicy,
+  type CapabilityResolverMode,
+} from "../shared/config-defaults";
 import {
   resolveTierModel,
   type ResolvedTierModel,
@@ -125,6 +136,20 @@ interface DefaultsBlock {
    * Replaces, not extends, the shared tool allow-list. Default [] (no restriction).
    */
   allowed_tools: string[];
+  /**
+   * rf-wi-01 (G1): registers hooks/lib/lean-lead-guard.ts's already-live tolerant
+   * reader (readLeanLeadConfig). enabled: advisory master toggle.
+   * hands_on_edit_threshold: direct lead Edit/Write ops before the "inline shortcut
+   * expired" advisory fires (SKILL.md "Inline shortcut under high autonomy").
+   */
+  lean_lead: { enabled: boolean; hands_on_edit_threshold: number };
+  /**
+   * rf-wi-01 (G1): registers hooks/lib/lifecycle-gate.ts's already-live tolerant
+   * reader (readLifecycleGateConfig). enabled: master toggle.
+   * adhoc_activity_threshold: ad-hoc (non-skill) activity count before the
+   * lifecycle-gate advisory fires.
+   */
+  lifecycle_gate: { enabled: boolean; adhoc_activity_threshold: number };
 }
 interface WorkspaceBlock {
   /** auto (default) = detect by immediate-child rule; on = force workspace; off = force regular. NO max_depth — depth is fixed at 1. */
@@ -234,6 +259,15 @@ interface KnowledgeConfigBlock {
   batchSize: number;
 }
 
+/**
+ * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
+ * Duplicated here as a small closed literal union (mirrors this file's existing
+ * SecurityBlock/BypassPolicy inline-enum convention) rather than an import, since
+ * permission-policy-schema.ts has not been migrated into a src/modules/* workflow yet.
+ */
+const HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const;
+type HostMode = (typeof HOST_MODES)[number];
+
 // ── Security block (v2-security-and-untrusted-content ADR — D-BYPASS).
 interface SecurityBlock {
   /** bypassPermissions governance during Guild-managed runs (D-BYPASS). Default "audit". */
@@ -267,6 +301,18 @@ interface McpBlock {
   http_available?: boolean;
   /** Bridge package name for restricted-transport envs (pi-adapter, antigravity). Default null. */
   bridge_package?: string | null;
+}
+
+// ── capability block (S5 — cap-loc-D04 new-install policy, cap-loc-D03 ladder).
+interface CapabilityBlock {
+  /** Where this project sits on D03's migration ladder. Never encodes whether it may advance. */
+  resolver_mode: CapabilityResolverMode;
+  /** Max proposals surfaced per project. Range [0, 4]; 0 = "profile but never propose". */
+  suggestion_budget: number;
+  /** Roles a new install starts with. Empty by design — a non-empty default would ship a roster. */
+  starter_roles: string[];
+  /** Whether an approved proposal may auto-advance the resolver mode. */
+  auto_create_policy: CapabilityAutoCreatePolicy;
 }
 
 // ── defaults.index sub-block (v2-persistence-and-sqlite-index ADR — D-PS-1).
@@ -326,6 +372,13 @@ interface GuildSettings {
   auto_approve: string[]; // [] | [spec,plan,build] | [all]
   review: "local" | "cross" | "off";
   host: HostId | "auto";
+  /**
+   * rf-wi-01 (G1): the sanctioned, schema-registered P1-L10 host-autonomy override
+   * (permission-policy-schema.ts HOST_MODES). null (default) = no override. NOT under
+   * `security.` — the #54 lane reverted an ad-hoc `security.host_mode` key for
+   * bypassing this schema; this top-level placement is the registered replacement.
+   */
+  host_mode: HostMode | null;
   /** Per-run role pins {host,advisory,adversarial} (LW1-6 / SC-W1-7). Default all null = auto-resolve. */
   roles: RolesBlock;
   /** Per-host config-render overrides keyed by host_id (LW1-6 / SC-W1-8). Default {} = none. */
@@ -372,6 +425,12 @@ interface GuildSettings {
    * review is not "cross". Set via: config set adversarial_review_provider codex-plugin
    */
   adversarial_review_provider: string;
+  /**
+   * S5 (cap-loc-D04/D03) — project-capability localization policy. These keys
+   * select WHICH DEFINITIONS RESOLVE; they are not security-sensitive and never
+   * widen what a lane may do (that stays with `capability_scope` + permission keys).
+   */
+  capability: CapabilityBlock;
   // power-user overrides
   loops: string | null;
   loop_cap: number;
@@ -620,6 +679,27 @@ export const HELP: Record<string, string> = {
   "defaults.allowed_tools":
     "string[] (default []) — explicit allowed-tools list (guild-boundary-config-and-tracking.md Decision F). " +
     "Replaces, not extends, the shared tool allow-list. [] ⇒ no restriction.",
+  // ── rf-wi-01 (G1): host_mode + defaults.lean_lead.* + defaults.lifecycle_gate.*
+  host_mode:
+    "read_only|ask|accept_edits|auto|bypass_all|null (default null) — the sanctioned, " +
+    "schema-registered P1-L10 host-autonomy override (permission-policy-schema.ts HOST_MODES). " +
+    "null = no override (host default \"ask\" applies, lifted to bypass_all for unattended " +
+    "local tmux team panes per issue #54's resolveTeamPaneHostMode). NEVER lifts a Guild " +
+    "lifecycle gate (host_mode ⊥ guild_gates orthogonality invariant) — see permission-policy.ts. " +
+    "NOT under security. — the #54 lane reverted an ad-hoc security.host_mode key for bypassing " +
+    "this schema; this is the registered replacement.",
+  "defaults.lean_lead.enabled":
+    "bool (default true) — master toggle for the lean-lead inline-shortcut-expired advisory " +
+    "(hooks/lib/lean-lead-guard.ts, SKILL.md \"Inline shortcut under high autonomy\").",
+  "defaults.lean_lead.hands_on_edit_threshold":
+    "int >= 1 (default 8) — direct lead Edit/Write ops (while lanes are open) before the " +
+    "advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
+  "defaults.lifecycle_gate.enabled":
+    "bool (default true) — master toggle for the lifecycle-gate ad-hoc-activity advisory " +
+    "(hooks/lib/lifecycle-gate.ts).",
+  "defaults.lifecycle_gate.adhoc_activity_threshold":
+    "int >= 1 (default 20) — ad-hoc (non-skill) activity count before the lifecycle-gate " +
+    "advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
   _precedence:
     "CLI flag > --rigor profile > settings.json > built-in default. " +
     "For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
@@ -1100,6 +1180,145 @@ export function validateMcp(m: Record<string, unknown>): string[] {
   return rejects;
 }
 
+/** Closed key set for the `capability` block (S5). A typo must surface, not silently pass. */
+const VALID_CAPABILITY_KEYS: ReadonlySet<string> = new Set([
+  "resolver_mode",
+  "suggestion_budget",
+  "starter_roles",
+  "auto_create_policy",
+]);
+
+/**
+ * Closed-key validation of the `capability` block (S5 — cap-loc-D04/D03/F10).
+ *
+ * `validate` REJECTS; the caller's resolve path separately COERCES (see
+ * `coerceCapabilityBlock`). Keeping the two apart is the existing contract here:
+ * `--validate` must hard-fail on a bad value so a typo surfaces, while `repair`
+ * brings a malformed value back into range without discarding the operator's intent.
+ */
+export function validateCapability(c: Record<string, unknown>): string[] {
+  const rejects: string[] = [];
+  for (const k of Object.keys(c)) {
+    if (!VALID_CAPABILITY_KEYS.has(k)) {
+      rejects.push(
+        `unknown capability key "${k}" (closed key set — valid: resolver_mode, suggestion_budget, starter_roles, auto_create_policy)`,
+      );
+    }
+  }
+  // Each field read EXACTLY ONCE into a local. Reading `c["x"]` twice (presence check,
+  // then value check) is the options-object TOCTOU class a sibling lane found: on a
+  // caller-supplied object a getter can answer differently to the two reads, so the
+  // value validated is not the value used.
+  const mode = c["resolver_mode"];
+  if (mode !== undefined && !CAPABILITY_RESOLVER_MODES.includes(mode as CapabilityResolverMode)) {
+    rejects.push(
+      `capability.resolver_mode must be one of ${CAPABILITY_RESOLVER_MODES.join("|")} (got ${JSON.stringify(mode)})`,
+    );
+  }
+  const policy = c["auto_create_policy"];
+  if (
+    policy !== undefined &&
+    !CAPABILITY_AUTO_CREATE_POLICIES.includes(policy as CapabilityAutoCreatePolicy)
+  ) {
+    rejects.push(
+      `capability.auto_create_policy must be one of ${CAPABILITY_AUTO_CREATE_POLICIES.join("|")} (got ${JSON.stringify(policy)})`,
+    );
+  }
+  const budget = c["suggestion_budget"];
+  if (budget !== undefined) {
+    // F10 pinned the budget at 4. Out-of-range is a REJECT here (repair coerces).
+    if (
+      typeof budget !== "number" ||
+      !Number.isInteger(budget) ||
+      budget < CAPABILITY_SUGGESTION_BUDGET_MIN ||
+      budget > CAPABILITY_SUGGESTION_BUDGET_MAX
+    ) {
+      rejects.push(
+        `capability.suggestion_budget must be an integer in [${CAPABILITY_SUGGESTION_BUDGET_MIN}, ${CAPABILITY_SUGGESTION_BUDGET_MAX}] (got ${JSON.stringify(budget)})`,
+      );
+    }
+  }
+  const roles = c["starter_roles"];
+  if (roles !== undefined) {
+    if (!Array.isArray(roles)) {
+      rejects.push(`capability.starter_roles must be an array of role slugs (got ${JSON.stringify(roles)})`);
+    } else {
+      // VALIDATE AND COERCE MUST AGREE ON THE SAME INPUT. The slug FORM is the
+      // contract — bounded, lower-case, control-char-free, no whitespace, no
+      // duplicates — enforced through the single shared `isCanonicalRoleSlug` so
+      // validate / repair / resolve cannot drift apart. Dedup is CASE-INSENSITIVE
+      // because the roster is filesystem-backed and `QA.md`/`qa.md` are one file on
+      // macOS. Non-canonical spellings are REJECTED, never repaired.
+      const seen = new Set<string>();
+      for (const e of roles) {
+        if (!isCanonicalRoleSlug(e)) {
+          rejects.push(
+            `capability.starter_roles entry ${JSON.stringify(e)} is not a canonical role slug (lower-case, <= ${CAPABILITY_ROLE_SLUG_MAX_LEN} chars, [a-z0-9._-], no whitespace or control characters)`,
+          );
+          continue;
+        }
+        const key = roleSlugDedupKey(e);
+        if (seen.has(key)) {
+          rejects.push(`capability.starter_roles contains duplicate entry ${JSON.stringify(e)}`);
+          continue;
+        }
+        seen.add(key);
+      }
+    }
+  }
+  return rejects;
+}
+
+/**
+ * Resolve-path coercion for the `capability` block — the `repair` half of S5.
+ *
+ * Out-of-range budgets clamp to the [0, 4] ceiling rather than resetting to the
+ * default: an operator who wrote `9` wanted "as many as possible", and 4 is that.
+ * Unknown enum members and malformed types fall back to the shipped default, because
+ * there is no partially-valid reading of them. `starter_roles` is trimmed, emptied of
+ * blanks, and DEDUPED (S5 invariant 3) while preserving first-seen order so the
+ * resolved config is stable across runs.
+ */
+export function coerceCapabilityBlock(raw: Record<string, unknown>): CapabilityBlock {
+  const base = DEFAULTS.capability;
+  const out: CapabilityBlock = { ...base, starter_roles: [...base.starter_roles] };
+
+  // Single read per field — same TOCTOU reasoning as validateCapability.
+  const mode = raw["resolver_mode"];
+  if (CAPABILITY_RESOLVER_MODES.includes(mode as CapabilityResolverMode)) {
+    out.resolver_mode = mode as CapabilityResolverMode;
+  }
+  const policy = raw["auto_create_policy"];
+  if (CAPABILITY_AUTO_CREATE_POLICIES.includes(policy as CapabilityAutoCreatePolicy)) {
+    out.auto_create_policy = policy as CapabilityAutoCreatePolicy;
+  }
+  const b = raw["suggestion_budget"];
+  if (typeof b === "number" && Number.isFinite(b)) {
+    out.suggestion_budget = Math.min(
+      CAPABILITY_SUGGESTION_BUDGET_MAX,
+      Math.max(CAPABILITY_SUGGESTION_BUDGET_MIN, Math.trunc(b)),
+    );
+  }
+  const r = raw["starter_roles"];
+  if (Array.isArray(r)) {
+    // DROPS non-canonical entries rather than repairing them: validate already
+    // rejected this input, so anything reaching here is being rescued, and inventing
+    // a canonical spelling for a malformed slug would silently change which ROLE the
+    // project asked for. First-seen order is preserved so resolved config is stable.
+    const seen = new Set<string>();
+    const roles: string[] = [];
+    for (const entry of r) {
+      if (!isCanonicalRoleSlug(entry)) continue;
+      const key = roleSlugDedupKey(entry);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      roles.push(entry);
+    }
+    out.starter_roles = roles;
+  }
+  return out;
+}
+
 /**
  * Closed-key validation of the `roles` block (LW1-6 / SC-W1-7). Sub-keys are CLOSED to
  * {host, advisory, adversarial}; each value must be `null` or a KNOWN registry host_id
@@ -1218,6 +1437,8 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "capability_manifest_ttl_s", // R-018: number s (host-router.ts CR-5 manifest freshness)
   "update",       // plugin-update-lifecycle AC-6: { mode: "auto"|"notify"|"off", cadence_hours: number }
   "allowed_tools",           // R-020: string[] (boundary-config-and-tracking Decision F)
+  "lean_lead",       // rf-wi-01 (G1): { enabled: bool, hands_on_edit_threshold: int }
+  "lifecycle_gate",  // rf-wi-01 (G1): { enabled: bool, adhoc_activity_threshold: int }
 ]);
 
 /** Closed-key validation of the `defaults:` block. Returns reject messages. */
@@ -1303,6 +1524,43 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
   // R-020: defaults.allowed_tools — string[]
   if (d["allowed_tools"] !== undefined && !Array.isArray(d["allowed_tools"]))
     rejects.push(`defaults.allowed_tools must be an array of strings`);
+  // rf-wi-01 (G1): defaults.lean_lead.* — closed sub-key set + types
+  if (d["lean_lead"] !== undefined && !isPlainObject(d["lean_lead"])) {
+    // codex-review fix (P2): a wrong-shaped value (string/array/number) must be
+    // REJECTED, not silently ignored (validate-before-persist would otherwise lie).
+    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(d["lean_lead"])})`);
+  } else if (isPlainObject(d["lean_lead"])) {
+    const ll = d["lean_lead"] as Record<string, unknown>;
+    const VALID_LEAN_LEAD_KEYS = new Set(["enabled", "hands_on_edit_threshold"]);
+    for (const k of Object.keys(ll)) {
+      if (!VALID_LEAN_LEAD_KEYS.has(k)) rejects.push(`unknown defaults.lean_lead key "${k}" (valid: enabled, hands_on_edit_threshold)`);
+    }
+    if (ll["enabled"] !== undefined && typeof ll["enabled"] !== "boolean")
+      rejects.push(`defaults.lean_lead.enabled must be a boolean (got ${JSON.stringify(ll["enabled"])})`);
+    if (ll["hands_on_edit_threshold"] !== undefined) {
+      const v = ll["hands_on_edit_threshold"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(v)})`);
+    }
+  }
+  // rf-wi-01 (G1): defaults.lifecycle_gate.* — closed sub-key set + types
+  if (d["lifecycle_gate"] !== undefined && !isPlainObject(d["lifecycle_gate"])) {
+    // codex-review fix (P2): same non-object rejection as lean_lead above.
+    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(d["lifecycle_gate"])})`);
+  } else if (isPlainObject(d["lifecycle_gate"])) {
+    const lg = d["lifecycle_gate"] as Record<string, unknown>;
+    const VALID_LIFECYCLE_GATE_KEYS = new Set(["enabled", "adhoc_activity_threshold"]);
+    for (const k of Object.keys(lg)) {
+      if (!VALID_LIFECYCLE_GATE_KEYS.has(k)) rejects.push(`unknown defaults.lifecycle_gate key "${k}" (valid: enabled, adhoc_activity_threshold)`);
+    }
+    if (lg["enabled"] !== undefined && typeof lg["enabled"] !== "boolean")
+      rejects.push(`defaults.lifecycle_gate.enabled must be a boolean (got ${JSON.stringify(lg["enabled"])})`);
+    if (lg["adhoc_activity_threshold"] !== undefined) {
+      const v = lg["adhoc_activity_threshold"];
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
+        rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(v)})`);
+    }
+  }
   // defaults.index.* — closed key set (D-PS-1)
   if (isPlainObject(d["index"])) {
     const idx = d["index"] as Record<string, unknown>;
@@ -1345,9 +1603,12 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
     }
     const rejects: string[] = [];
     const TIER1 = new Set([
-      "rigor", "auto_approve", "review", "host", "roles", "host_profiles", "initiative_default",
+      "rigor", "auto_approve", "review", "host", "host_mode", "roles", "host_profiles", "initiative_default",
       "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace", "models",
       "security", "secrets_policy", "mcp",
+      "capability",                  // S5 (cap-loc-D04) — else a VALID block is reported
+                                     // as an unknown top-level key by the very function
+                                     // that then calls validateCapability on it.
       "statusline",                  // R-009: status-line pane enable (--statusline flag / settings key)
       "adversarial_review_provider", // R-008: cross-review provider pin
       "loops", "loop_cap", "codex_cap", "defaults",
@@ -1380,6 +1641,23 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
             `(valid: auto or dispatch-selectable host ids ${[...DISPATCH_HOST_IDS].join("|")})`
         );
       }
+    }
+    // rf-wi-01 (G1): host_mode — nullable P1-L10 host-autonomy override. NOT under
+    // security. (see GuildSettings.host_mode doc comment for why).
+    if (parsed["host_mode"] === null) {
+      out.host_mode = null;
+    } else if (typeof parsed["host_mode"] === "string") {
+      if ((HOST_MODES as readonly string[]).includes(parsed["host_mode"])) {
+        out.host_mode = parsed["host_mode"] as HostMode;
+      } else {
+        rejects.push(
+          `host_mode "${parsed["host_mode"]}" is invalid — valid: ${HOST_MODES.join("|")} or null`
+        );
+      }
+    } else if (parsed["host_mode"] !== undefined) {
+      rejects.push(
+        `host_mode must be a string (${HOST_MODES.join("|")}) or null (got ${JSON.stringify(parsed["host_mode"])})`
+      );
     }
     // roles: per-run role pins (LW1-6). Closed sub-keys; null or known host_id values.
     if (isPlainObject(parsed["roles"])) {
@@ -1599,6 +1877,14 @@ function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
         mergedMcp.bridge_package = rawMcp["bridge_package"] as string | null;
       }
       out.mcp = mergedMcp;
+    }
+    // S5 — capability localization policy. validate REJECTS a bad value; the resolve
+    // path COERCES it (clamp/dedupe/fall-back) so a malformed file still yields a
+    // usable config instead of a crash.
+    if (isPlainObject(parsed["capability"])) {
+      const rawCapability = parsed["capability"] as Record<string, unknown>;
+      rejects.push(...validateCapability(rawCapability));
+      out.capability = coerceCapabilityBlock(rawCapability);
     }
     if (typeof parsed["loops"] === "string" || parsed["loops"] === null) out.loops = parsed["loops"] as string | null;
     if (typeof parsed["loop_cap"] === "number") out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));

@@ -15,12 +15,12 @@ gate.
 
 ## What v2 ships
 
-- **15 specialist templates + 2 machinery agents** — 15 domain type templates
+- **15 specialist templates + 3 machinery agents** — 15 domain type templates
   across three groups (engineering: architect, researcher, backend, frontend,
   devops, qa, mobile, security; content & communication: copywriter, doc-writer,
   technical-writer, social-media, seo; commercial: marketing, sales), one
   `templates/specialists/*.md` per role, minted on demand into your project's
-  `.guild/agents/` by team composition — plus the 2 machinery agents the plugin
+  `.guild/agents/` by team composition — plus the 3 machinery agents the plugin
   registers directly (advisor, developer; one `agents/*.md` each).
 - **111 skills** across six tiers — 1 core (`guild-principles`), 39 meta
   (the workflow spine + decisions + reflect + evolve + create-specialist +
@@ -141,23 +141,42 @@ tag on stable, new `next` commit on beta. `defaults.update.mode` controls it:
 `notify` (default), `auto` (stages the update headlessly; applies next
 session), or `off`. Dev checkouts are never touched.
 
-Applying updates per host:
+Applying updates per host — the full 16-host registry:
 
 ```bash
-# Claude Code (marketplace-managed):
+# claude-code-cli (marketplace-managed):
 claude plugin marketplace update guild && claude plugin update guild@guild
 
-# Wrapper hosts (codex, pi, antigravity, cursor, copilot, opencode, rovo-dev):
+# Wrapper-package hosts — pi-cli, antigravity-cli, cursor, github-copilot,
+# opencode, rovo-dev (installer-managed; needs the receipt):
 guild-run update
+
+# codex-cli — Codex OWNS its installed plugin cache, so Guild never swaps it
+# (guild-run update refuses and names this instead). Receipted installs
+# re-render; host-native installs are detected and told the precise codex
+# command for their registered source type:
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
+
+# File-surface hosts — agents-file, kiro, qoder, trae (snapshot copies):
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
+# …then re-copy the refreshed dist/agents tree into the project.
 
 # Everything with an install receipt, in one go (any host mix):
 curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
 ```
 
+The four app/connector surfaces (`claude-code-app`, `claude-code-web`,
+`codex-app`, `claude-ai-connector`) take no install and therefore no update
+command; `codex-app` follows whatever its shared Codex CLI registration does.
+
 Each install writes a `guild.install_receipt.v1` (host, channel, ref, commit)
 under `~/.guild/receipts/` — that receipt is what `--update` and `guild-run
 update` re-render from, keeping every host on the channel it was installed
-from.
+from. A **host-native** install (e.g. a hand-run `codex plugin add`) writes no
+machine receipt: `--update` will detect it and name that host's real command.
+The session-start update check mints a package-local receipt for
+IDENTIFICATION — its channel field is an assumed default, marked as such, and
+nothing ever clones from it.
 
 Installing manually into Codex CLI uses Codex's plugin manager:
 
@@ -322,7 +341,7 @@ The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 - `https://guildstack.dev/docs/getting-started` — install, first run, and basic configuration.
 - `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, the v2 single-verb lifecycle phases, hook inventory, backend options.
-- `https://guildstack.dev/docs/specialist-roster` — the 15 domain specialist templates + the 2 machinery agents (advisor, developer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
+- `https://guildstack.dev/docs/specialist-roster` — the 15 domain specialist templates + the 3 machinery agents (advisor, context-manager, developer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
 - `https://guildstack.dev/docs/context-assembly` — three-layer context contract, role mapping, ambient-context caveat.
 - `https://guildstack.dev/docs/wiki-pattern` — categorized project memory, raw vs synthesized, decision capture, scale transition.
 - `https://guildstack.dev/docs/self-evolution` — the two triggers, the 10-step pipeline, promotion gate, versioning + rollback.

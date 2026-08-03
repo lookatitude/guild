@@ -13,7 +13,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 /** Forked default exclusions (Understand-Anything ignore-filter, MIT). */
-export const DEFAULT_IGNORE_PATTERNS: string[] = [
+export const DEFAULT_IGNORE_PATTERNS: readonly string[] = Object.freeze([
   "node_modules/", ".git/", "vendor/", "venv/", ".venv/", "__pycache__/",
   // Guild derived-index dir is never itself indexed (derived, rebuildable).
   // Any external/forked plugin's dotfolder is excluded by the user's
@@ -43,7 +43,7 @@ export const DEFAULT_IGNORE_PATTERNS: string[] = [
   "*.min.js", "*.min.css", "*.map", "*.generated.*",
   ".idea/", ".vscode/",
   "LICENSE", ".gitignore", ".editorconfig", ".prettierrc", ".eslintrc*", "*.log",
-];
+]);
 
 interface Rule {
   re: RegExp;

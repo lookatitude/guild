@@ -8,14 +8,14 @@
       "id": "migrate",
       "source_path": "commands/migrate.md",
       "resource_path": "resources/commands/migrate.md",
-      "sha256": "e5eeef11e67e2b9971f939422ef05f1eaabd093778c4b620ad7310723a714cf9"
+      "sha256": "c45c2fdc337f81ce805aeb3e9056faea2f63568116fc775f8590e0791d097423"
     },
     {
       "category": "scripts",
       "id": "dot-guild/audit",
       "source_path": "scripts/dot-guild/audit.ts",
       "resource_path": "resources/scripts/dot-guild/audit.ts",
-      "sha256": "7c45cf1bdd1fffe019c63cf35d223d62c1d8189e29771534edcc4eaa1a3dfede"
+      "sha256": "10682a538fbd45bf4c8de83744f6efbb2c40b4dc407675173df7705e37e342d5"
     },
     {
       "category": "scripts",
@@ -78,7 +78,7 @@
       "id": "dot-guild/convert/wiki-importance",
       "source_path": "scripts/dot-guild/convert/wiki-importance.ts",
       "resource_path": "resources/scripts/dot-guild/convert/wiki-importance.ts",
-      "sha256": "c3a4288ad4c60ab2b673f4ea636cc402b1e788885e7e64a6abaf6b6447307595"
+      "sha256": "dd7cf54a3bcee0bffdd5a17985cf88af3d619b69d33e77655bbaeb3652651bea"
     },
     {
       "category": "scripts",

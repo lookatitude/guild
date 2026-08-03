@@ -29,7 +29,7 @@
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
       "resource_path": "resources/skills/meta/create-specialist/SKILL.md",
-      "sha256": "fcb72dc05a2cb7a3ade03fc3c2c37e30a35ebe01b44b7fd029cb46da1324f04b"
+      "sha256": "32c6d424f518d2b7333a28bea2cb2885647bb583fa41f5b6118138c3668cb249"
     },
     {
       "category": "skills",
@@ -50,7 +50,7 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
-      "sha256": "693f8c53949863a6a11192e11c781752d36ae33771ff63057ac04b8fd2e415c1"
+      "sha256": "9ef54254184bc770a6bb085262a31a36162fe692d07399479096d362e80cbd0a"
     },
     {
       "category": "skills",

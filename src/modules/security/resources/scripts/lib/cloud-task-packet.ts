@@ -43,27 +43,27 @@ export const CLOUD_TASK_PACKET_SCHEMA = "guild.cloud_task_packet.v1" as const;
 // ── Closed enums (as const tuples so callers can iterate them) ────────────────
 
 /** Closed set of allowed origin_host values. */
-export const ORIGIN_HOSTS = ["claude-code", "codex-local"] as const;
+export const ORIGIN_HOSTS = Object.freeze(["claude-code", "codex-local"] as const);
 export type OriginHost = (typeof ORIGIN_HOSTS)[number];
 
 /** Closed set of allowed capability_requirements.isolation values. */
-export const ISOLATION_KINDS = ["cloud_container", "worktree", "none"] as const;
+export const ISOLATION_KINDS = Object.freeze(["cloud_container", "worktree", "none"] as const);
 export type IsolationKind = (typeof ISOLATION_KINDS)[number];
 
 /** Closed set of expected_outputs values. */
-export const EXPECTED_OUTPUT_KINDS = [
+export const EXPECTED_OUTPUT_KINDS = Object.freeze([
   "handoff_receipt",
   "pr_or_patch",
   "evidence",
-] as const;
+] as const);
 export type ExpectedOutputKind = (typeof EXPECTED_OUTPUT_KINDS)[number];
 
 /** Closed set of return_contract.handoff_receipt values. */
-export const HANDOFF_RECEIPT_MODES = ["canonical"] as const;
+export const HANDOFF_RECEIPT_MODES = Object.freeze(["canonical"] as const);
 export type HandoffReceiptMode = (typeof HANDOFF_RECEIPT_MODES)[number];
 
 /** Closed set of quarantined_input kinds. */
-export const QUARANTINE_KINDS = ["web", "issue", "external_doc"] as const;
+export const QUARANTINE_KINDS = Object.freeze(["web", "issue", "external_doc"] as const);
 export type QuarantineKind = (typeof QUARANTINE_KINDS)[number];
 
 // ── Nested shape types ────────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ export interface CloudTaskPacketParams {
  * Note: glob patterns use "**" notation but never contain "star-slash-star"
  * in a way that would end a block comment (they use "**" only).
  */
-export const CANONICAL_EXCLUDED_PATHS: readonly string[] = [
+export const CANONICAL_EXCLUDED_PATHS: readonly string[] = Object.freeze([
   ".guild/runs/*/logs/",
   ".guild/runs/*/events.ndjson",
   ".guild/.lock",
@@ -271,7 +271,7 @@ export const CANONICAL_EXCLUDED_PATHS: readonly string[] = [
   ".env",
   "**/*secret*",
   "**/.git/**",
-] as const;
+] as const);
 
 // ── Cloud opt-in error ────────────────────────────────────────────────────────
 

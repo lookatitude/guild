@@ -310,7 +310,7 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
       .filter((l) => l.includes("tmux split-window"));
     expect(paneLines).toHaveLength(3);
     for (const line of paneLines) {
-      expect(line).toContain("claude --model powerful-model-1");
+      expect(line).toContain("--model powerful-model-1");
       expect(line).toContain("export GUILD_MODEL=powerful-model-1");
     }
 
@@ -632,7 +632,7 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
       .filter((l) => l.includes("tmux split-window") && l.includes("--model"));
     expect(modelPanes).toHaveLength(v2Selections.length);
     for (const line of modelPanes) {
-      expect(line).toContain("claude --model powerful-model-1");
+      expect(line).toContain("--model powerful-model-1");
     }
   });
 

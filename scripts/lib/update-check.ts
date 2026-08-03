@@ -38,21 +38,77 @@ export type UpdateMode = "auto" | "notify" | "off";
 
 // ── Semver ──────────────────────────────────────────────────────────────────
 
-/** Parse "v2.1.0" / "2.1.0" (prerelease tags are ignored for stable staleness). */
+/**
+ * Parse a FULL RELEASE "v2.1.0" / "2.1.0". Returns null for anything carrying a
+ * prerelease suffix — that rejection is load-bearing: `latestStableTag` uses this
+ * as its "is this a stable tag" predicate, so stable installs never target an rc.
+ * To ORDER two versions (either of which may be a prerelease) use `semverLt`.
+ */
 export function parseSemver(v: string): [number, number, number] | null {
   const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(v.trim());
   if (!m) return null;
   return [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
 }
 
+interface ComparableVersion {
+  triple: [number, number, number];
+  /** Dot-separated prerelease identifiers; empty ⇒ a full release. */
+  prerelease: string[];
+}
+
+/**
+ * Parse for COMPARISON — accepts an optional prerelease suffix.
+ *
+ * The installed version is NOT always a full release: the beta channel carries a
+ * prerelease identifier (`2.5.0-beta.1`) precisely so a user can tell the channels
+ * apart. `parseSemver` rejects those, and `semverLt` returning false on an
+ * unparseable input meant every prerelease install reported "up-to-date" forever —
+ * the exact silent-staleness failure the Codex update-check work exists to prevent.
+ */
+function parseComparable(v: string): ComparableVersion | null {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(v.trim());
+  if (!m) return null;
+  return {
+    triple: [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)],
+    prerelease: m[4] ? m[4].split(".") : [],
+  };
+}
+
+/** SemVer §11 identifier comparison: numerics compare numerically and rank below alphanumerics. */
+function comparePrereleaseIds(a: string, b: string): number {
+  const aNum = /^\d+$/.test(a);
+  const bNum = /^\d+$/.test(b);
+  if (aNum && bNum) return Number(a) - Number(b);
+  if (aNum) return -1;
+  if (bNum) return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * `a < b` under SemVer §11 precedence — including the prerelease rules a bare
+ * triple compare gets wrong: equal triples make a version WITH a prerelease LOWER
+ * than one without (2.5.0-beta.1 < 2.5.0), and two prereleases compare
+ * identifier-by-identifier. Unparseable input still yields false (never claim an
+ * update we cannot justify).
+ */
 export function semverLt(a: string, b: string): boolean {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
+  const pa = parseComparable(a);
+  const pb = parseComparable(b);
   if (!pa || !pb) return false;
   for (let i = 0; i < 3; i++) {
-    if (pa[i] !== pb[i]) return pa[i] < pb[i];
+    if (pa.triple[i] !== pb.triple[i]) return pa.triple[i] < pb.triple[i];
   }
-  return false;
+  // Equal triples: a prerelease precedes its own release.
+  if (pa.prerelease.length === 0 || pb.prerelease.length === 0) {
+    return pa.prerelease.length > 0 && pb.prerelease.length === 0;
+  }
+  const shared = Math.min(pa.prerelease.length, pb.prerelease.length);
+  for (let i = 0; i < shared; i++) {
+    const cmp = comparePrereleaseIds(pa.prerelease[i], pb.prerelease[i]);
+    if (cmp !== 0) return cmp < 0;
+  }
+  // A larger set of identifiers has higher precedence when all preceding ones are equal.
+  return pa.prerelease.length < pb.prerelease.length;
 }
 
 /** Highest full-release v* tag (prereleases excluded — stable never targets an rc). */
@@ -264,15 +320,36 @@ export function resolveInstallState(
   return { channel: "stable", version, commit: null, source: "default" };
 }
 
+/**
+ * Per-host plugin manifests, in probe order.
+ *
+ * Reading ONLY `.claude-plugin/plugin.json` silently broke every non-Claude
+ * host: a rendered Codex package ships `.codex-plugin/plugin.json`, so version
+ * resolution returned null, `computeSignal` saw no installed version, the
+ * stable comparison short-circuited to "up-to-date", and the staleness signal
+ * emitted NOTHING. The hook fired into silence — which is indistinguishable
+ * from being up to date, and is why a Codex install could sit three releases
+ * behind without a word (xhrd-wi-04 / G4).
+ */
+const PLUGIN_MANIFEST_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
+  [".claude-plugin", "plugin.json"],
+  [".codex-plugin", "plugin.json"],
+];
+
 export function readInstalledVersion(pluginRoot: string, fsi: typeof fs = fs): string | null {
-  try {
-    const manifest = JSON.parse(
-      fsi.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")
-    ) as { version?: string };
-    return typeof manifest.version === "string" ? manifest.version : null;
-  } catch {
-    return null;
+  for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
+    try {
+      const manifest = JSON.parse(fsi.readFileSync(path.join(pluginRoot, dir, file), "utf8")) as {
+        version?: string;
+      };
+      // Truthy, not merely present: an empty string must fall through to the
+      // next candidate rather than masquerade as a resolved version.
+      if (typeof manifest.version === "string" && manifest.version.length > 0) return manifest.version;
+    } catch {
+      // try the next candidate — an absent manifest is not an error here
+    }
   }
+  return null;
 }
 
 // ── Cache ───────────────────────────────────────────────────────────────────
@@ -425,7 +502,10 @@ export function computeSignal(opts: {
     return {
       ...base,
       update_available: true,
-      available: latest,
+      // The cache stores the tag verbatim ("v2.4.0"); the signal compares and
+      // renders VERSIONS, so strip the tag prefix — "2.2.0 → v2.4.0" mixed the
+      // two vocabularies (observed live in the v2.4.0 validation pass).
+      available: latest.replace(/^v/, ""),
       command,
       reason: "stable-newer-tag",
     };

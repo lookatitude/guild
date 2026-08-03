@@ -150,7 +150,7 @@ describe("SshRemoteTransport — ssh argv construction", () => {
     expect((ssh as unknown as Record<string, unknown>)["send"]).toBeUndefined();
   });
 
-  it("teardown kills the exact tmux session by remoteId (guaranteed match, unlike pkill)", () => {
+  it("teardown kills the exact tmux session by remoteId, THEN verifies with has-session (rf-wi-04 Q2b)", () => {
     const { run, calls } = recordingRun();
     const ssh = new SshRemoteTransport({ run });
     const handle = ssh.spawn(host, paneSpec, "cmd");
@@ -158,7 +158,10 @@ describe("SshRemoteTransport — ssh argv construction", () => {
     const teardownCall = calls[calls.length - 1];
     expect(teardownCall.cmd).toBe("ssh");
     expect(teardownCall.args[0]).toBe("gpu@box");
-    expect(teardownCall.args[1]).toBe(`tmux kill-session -t ${handle.remoteId} 2>/dev/null || true`);
+    // kill-session gives the exact-match teardown; has-session VERIFIES it so a
+    // masked kill failure surfaces as an orphan instead of a false "killed".
+    expect(teardownCall.args[1]).toContain(`tmux kill-session -t ${handle.remoteId}`);
+    expect(teardownCall.args[1]).toContain(`tmux has-session -t ${handle.remoteId}`);
   });
 
   it("teardown re-applies the host's loginShell wrap (tmux may itself be off non-interactive PATH)", () => {

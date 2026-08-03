@@ -38,6 +38,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { atomicWrite } from "../../state";
+import { isRefused, isWithin, prepareContainedWrite } from "../../kernel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -361,20 +362,63 @@ export function runPromoteUpstreamCli(argv: string[] = process.argv.slice(2)): v
 
     const runsBase = path.resolve(workspaceRoot, ".guild", "runs");
     const runsDir = path.join(runsBase, runId);
+    const manifestPath = path.join(runsDir, "upstream-candidates.json");
 
-    // Finding #2 (+ round-3): containment assertion — resolved path must be a STRICT
-    // subdir of runsBase. Equality with runsBase is rejected too, so any run-id that
-    // collapses onto the base (".", "", trailing-dot edge cases) is caught even if it
-    // slips past validateRunId.
+    // THE STRICT-SUBDIRECTORY RULE RUNS FIRST, AND THE ORDER IS THE WHOLE POINT.
+    //
+    // I had this second, after `prepareContainedWrite`, and that reintroduced
+    // VARIANT 2(a) — mkdir before the check — inside the migration whose entire
+    // purpose is that ordering. Reproduced: a run-id of `../evil` that slipped
+    // `validateRunId` collapses at `path.join` to `<workspaceRoot>/.guild/evil`,
+    // which IS inside the workspace root, so the primitive accepted it and created
+    // the directory; only then did this rule refuse. The old lexical code refused
+    // before any mkdir. A migration that fixes symlink escapes must not pay for it
+    // with a side effect the predecessor did not have.
+    //
+    // It belongs first on its own merits too: it is PURE (no I/O), so there is no
+    // reason to do filesystem work before asking it. Containment permits equality;
+    // requiring the run dir to sit STRICTLY below the base is this command's rule,
+    // not the primitive's, and it catches a run-id that collapses onto the base
+    // (".", "", trailing-dot forms) even if `validateRunId` misses it.
     const resolvedRunsDir = path.resolve(runsDir);
-    if (!resolvedRunsDir.startsWith(runsBase + path.sep)) {
+    if (!isWithin(resolvedRunsDir, runsBase) || resolvedRunsDir === runsBase) {
       process.stderr.write(
-        `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" escapes runs base\n`,
+        `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" is not a ` +
+          `strict subdirectory of the runs base\n`,
       );
       process.exit(1);
     }
 
-    fs.mkdirSync(runsDir, { recursive: true });
+    // MIGRATED to the shared path-containment primitive — THE ELEVENTH HOME of one
+    // shape, and the one `run-lifecycle.ts` was pointing at all along ("mirrors the
+    // containment assertion in promote-upstream.ts").
+    //
+    // What was here was PURELY LEXICAL: `path.resolve` plus
+    // `startsWith(runsBase + path.sep)`, which is string algebra and knows nothing
+    // about symlinks — so a symlinked `.guild/runs` walked straight through it into
+    // the `mkdirSync` on the next line. Worse than the tenth home in one respect:
+    // the check was INLINE rather than factored into a named helper, which is why
+    // the rail that caught the tenth could not see this one. Factoring a check out
+    // is what someone does once they have thought about it; the unfactored copies
+    // are the likelier ones, and were the invisible ones.
+    //
+    // `policy: "physical"` for the same reason as the other run-tree writers: a run
+    // tree whose realpath is load-bearing provenance must be physically real.
+    //
+    // This also replaces the bare `mkdirSync`. The real write target is the manifest,
+    // so bounding it bounds the directory creation too — pre-check, mkdir, post-check
+    // in one call, instead of a check and a mkdir that merely sit next to each other.
+    const prepared = prepareContainedWrite(workspaceRoot, manifestPath, {
+      policy: "physical",
+    });
+    if (isRefused(prepared)) {
+      process.stderr.write(
+        `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" escapes ` +
+          `runs base [${prepared.code}] — ${prepared.detail}\n`,
+      );
+      process.exit(1);
+    }
+
 
     // Determine scanned children for manifest
     const subGuilds = child
@@ -390,7 +434,6 @@ export function runPromoteUpstreamCli(argv: string[] = process.argv.slice(2)): v
       candidates,
     };
 
-    const manifestPath = path.join(runsDir, "upstream-candidates.json");
     // EXDEV fix: atomicWrite writes its temp file in the SAME directory as
     // `manifestPath` (never os.tmpdir()), so the rename is always same-filesystem.
     atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");

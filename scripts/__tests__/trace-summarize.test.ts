@@ -351,6 +351,435 @@ describe("trace-summarize.ts", () => {
   });
 
   // ─────────────────────────────────────────────────────────────
+  // Canonical v1.4 tool_call shape (status/latency_ms, not ok/ms) — #73
+  // ─────────────────────────────────────────────────────────────
+  describe("canonical v1.4 tool_call shape — events-v14-tool-call.ndjson (#73)", () => {
+    // Real production `tool_call` events (hooks/post-tool-use.ts) carry
+    // `status: "ok"|"err"|"n/a"` + `latency_ms`, NOT the legacy hook-mirror
+    // `ok: boolean` + `ms: number` pair trace-summarize.ts reads. Before the
+    // fix, every row here — including the two "ok" rows, the "n/a" row, and
+    // the fieldless row — rendered "⚠ ERROR (undefinedms)" because `event.ok`
+    // and `event.ms` were simply undefined for all of them, and `event.ok ?
+    // "" : " ⚠ ERROR"` treats `undefined` as an error.
+    //
+    // Fixture rows: 1/2 status:"ok"; 3 status:"err" with the real orphan-sweep
+    // latency_ms:-1 sentinel (hooks/post-tool-use.ts); 4 status:"n/a"; 5 no
+    // status/latency_ms/ok/ms field at all (defensive fallback — this module's
+    // header comment: "every access below is defensive/undefined-safe"; not a
+    // literal producer shape, exercises the fully-fieldless path); 6 carries
+    // BOTH an explicit legacy ok:true/ms:77 AND a contradicting
+    // status:"err"/latency_ms:500 (proves existing ok/ms always wins — no
+    // legitimate producer emits both, but normalizeEvent must never clobber a
+    // field already present); 7 uses duration_ms instead of latency_ms; 8 a
+    // `phase_end status:"escalated"` — a DIFFERENT status enum than
+    // tool_call/hook_event's "ok"|"err"|"n/a" (see log-jsonl-schema.ts) that a
+    // `status !== "n/a"` blacklist would wrongly turn into an error; 9 a
+    // canonical `hook_event status:"err"` with `hook_name` (no `tool` field)
+    // proving the hook_name→tool Timeline bridge.
+    it("does not mark ok/n/a/fieldless/escalated rows as ERROR — only explicit status:err rows", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      const { exitCode } = runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      expect(exitCode).toBe(0);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const timelineLines = content
+        .split("\n")
+        .filter((l) => l.startsWith("- `"));
+      // 7 tool_call rows with a `tool` field + 1 hook_event bridged via
+      // hook_name. The phase_end row has neither `tool` nor `hook_name` and
+      // contributes no Timeline row.
+      expect(timelineLines).toHaveLength(8);
+
+      const errorLines = timelineLines.filter((l) => l.includes("ERROR"));
+      // status:"err" Bash row (a3) + status:"err" hook_event row (SessionStart)
+      // are real errors. The contradicting Grep row (a6) has an explicit
+      // ok:true that wins, and the escalated phase_end has no Timeline row.
+      expect(errorLines).toHaveLength(2);
+      expect(errorLines.some((l) => l.includes("Bash"))).toBe(true);
+      expect(errorLines.some((l) => l.includes("SessionStart"))).toBe(true);
+
+      const okLine = timelineLines.find((l) => l.includes("Skill"))!;
+      expect(okLine).not.toContain("ERROR");
+
+      const naStatusLine = timelineLines.find((l) => l.includes("WebFetch"))!;
+      expect(naStatusLine).not.toContain("ERROR");
+
+      const grepLine = timelineLines.find((l) => l.includes("Grep"))!;
+      expect(grepLine).not.toContain("ERROR");
+    });
+
+    it("does not classify a phase_end status:\"escalated\" as an error (different status enum than tool_call)", () => {
+      // Regression for the blacklist bug: `status !== "n/a"` would have
+      // mapped "escalated" to ok:false, inflating frontmatter `errors`.
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Only the two real status:"err" rows (Bash tool_call, SessionStart
+      // hook_event) count — "escalated" must not be a third.
+      expect(content).toMatch(/errors:\s*2/);
+    });
+
+    it("bridges hook_event.hook_name onto Timeline `tool` so its status:err is visible", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const hookLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("SessionStart"))!;
+      expect(hookLine).toBeDefined();
+      expect(hookLine).toContain("ERROR");
+      expect(hookLine).toContain("(5ms)");
+    });
+
+    it("renders (n/a) — never a literal (undefinedms) or a negative sentinel — for unknown durations", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      expect(content).not.toMatch(/undefinedms/);
+      expect(content).not.toMatch(/\(-1ms\)/);
+
+      const readLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("Read"))!;
+      expect(readLine).toContain("(n/a)");
+      expect(readLine).not.toContain("ERROR");
+
+      // The orphan-sweep sentinel latency_ms:-1 is not a real duration either.
+      const bashErrorLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("Bash") && l.includes("ERROR"))!;
+      expect(bashErrorLine).toContain("(n/a)");
+    });
+
+    it("maps a real positive latency_ms/duration_ms onto the rendered duration", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const timelineLines = content.split("\n").filter((l) => l.startsWith("- `"));
+      expect(timelineLines.find((l) => l.includes("Bash") && !l.includes("ERROR"))).toContain("(955ms)");
+      expect(timelineLines.find((l) => l.includes("Skill"))).toContain("(3ms)");
+      expect(timelineLines.find((l) => l.includes("WebFetch"))).toContain("(12ms)");
+      // duration_ms fallback (no latency_ms on this row).
+      expect(timelineLines.find((l) => l.includes("Glob"))).toContain("(42ms)");
+    });
+
+    it("never overwrites an existing ok/ms pair with a contradicting status/latency_ms", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      const grepLine = content
+        .split("\n")
+        .find((l) => l.startsWith("- `") && l.includes("Grep"))!;
+      // ok:true + ms:77 are already present on this row — status:"err" /
+      // latency_ms:500 must not override them.
+      expect(grepLine).not.toContain("ERROR");
+      expect(grepLine).toContain("(77ms)");
+    });
+
+    it("frontmatter errors/ok_rate agree with the timeline (2 errors out of 5 defined-verdict events)", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Verdict-bearing rows: 1 (ok), 2 (ok), 3 (err), 6 (ok, via existing
+      // ok:true), 9 (err, via hook_event status). Rows 4/5/7/8 have no
+      // defined ok verdict and are excluded from both errors and the
+      // ok_rate denominator.
+      expect(content).toMatch(/errors:\s*2/);
+      expect(content).toMatch(/ok_rate:\s*0\.6/);
+      const errorLines = content
+        .split("\n")
+        .filter((l) => l.startsWith("- `") && l.includes("ERROR"));
+      expect(errorLines).toHaveLength(2);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // G7b — canonical tool_call events undercounted + digest cosmetic
+  // (rf-wi-07 / v23x-deferred-followups): buildSpecialistActivity and the
+  // slow-call detectors gated on the legacy hook-mirror `event.event ===
+  // "PostToolUse"` only — the canonical v1.4 shape (log-jsonl-schema.ts)
+  // names the same activity `event: "tool_call"`, so every canonical run
+  // silently zeroed these tallies. buildNotableEvents also printed the
+  // literal string "digest: undefined" for canonical rows, which carry no
+  // `payload_digest` field (legacy-only).
+  // ─────────────────────────────────────────────────────────────
+  describe("G7b — canonical tool_call gate + digest cosmetic", () => {
+    it("counts canonical tool_call events toward a specialist's Tool calls tally (events-v14-tool-call.ndjson)", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Row 5 is the sole tool_call carrying specialist:"backend-engineer"
+      // (a bare Read, no status/latency_ms/ok/ms at all).
+      const section = content.split("### backend-engineer")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*1/);
+    });
+
+    it("counts canonical tool_call events toward (main session)'s Tool calls tally", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // Rows 1,2,3,4,6,7 are tool_call with no specialist field → "(main session)".
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*6/);
+    });
+
+    it("flags a canonical tool_call over 2000ms as SLOW in Notable events", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "slow-canon-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:35:26.666Z","event":"tool_call","run_id":"slow-canon-run","tool":"Bash","status":"ok","latency_ms":3000}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "slow-canon-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      expect(content).toMatch(/SLOW at .*Bash.*took 3000ms/);
+    });
+
+    it("flags a canonical tool_call over 5000ms as a context-bundle reflection hint", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "very-slow-canon-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:35:26.666Z","event":"tool_call","run_id":"very-slow-canon-run","tool":"Bash","status":"ok","latency_ms":6000}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "very-slow-canon-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      expect(content).toMatch(/context-bundle issues: 1 tool call\(s\) exceeded 5000ms/);
+    });
+
+    it("never prints the literal 'digest: undefined' for a canonical ERROR row", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      expect(content).not.toMatch(/digest: undefined/);
+    });
+
+    it("renders the real redacted excerpt as the digest when payload_digest is absent", () => {
+      makeCanonicalRunDir(tmpDir, "v14-run", "events-v14-tool-call.ndjson");
+      runScript(["--run-id", "v14-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".guild", "runs", "v14-run", "summary.md"),
+        "utf8"
+      );
+      // The Bash status:"err" tool_call row carries result_excerpt_redacted:"<orphaned>".
+      expect(content).toMatch(/digest: <orphaned>/);
+    });
+
+    // codex round-1 finding #1: a naive OR of both dialect names double-counts
+    // a mixed-dialect log. Pre-de-dup-fix canonical logs (see
+    // hooks/capture-telemetry.ts's de-duplication comment, and the checked-in
+    // tests/rearch/perf-corpus/run-medium-942.jsonl fixture) carry BOTH a
+    // legacy `PostToolUse` hook-mirror line AND post-tool-use.ts's richer
+    // `tool_call` line for the SAME invocation.
+    it("does not double-count a mixed-dialect log (PostToolUse + tool_call for the same invocation)", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "mixed-dialect-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          '{"ts":"2026-07-21T01:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T01:00:00.001Z","event":"tool_call","run_id":"mixed-dialect-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "mixed-dialect-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      // ONE invocation, represented twice — must tally as 1 Tool call, not 2.
+      expect(section).toMatch(/Tool calls:\s*1/);
+    });
+
+    // codex round-2 finding: a whole-log "prefer one dialect" heuristic
+    // silently DROPS real data — `tool_call.tool` is a closed enum
+    // (hooks/post-tool-use.ts's isKnownTool()) so a tool like Monitor never
+    // gets a `tool_call` row at all, only ever `PostToolUse`. A log with one
+    // genuinely PAIRED duplicate (Bash) plus one genuinely UNPAIRED
+    // PostToolUse-only tool (Monitor) must tally 2 Tool calls, not 1
+    // (whole-dialect-preference bug) and not 3 (round-1 OR-bug).
+    it("keeps an unpaired PostToolUse-only tool distinct alongside a paired duplicate", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "mixed-dialect-unpaired-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          '{"ts":"2026-07-21T01:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T01:00:00.001Z","event":"tool_call","run_id":"mixed-dialect-unpaired-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+          '{"ts":"2026-07-21T01:00:05.000Z","event":"PostToolUse","tool":"Monitor","specialist":"","payload_digest":"d2","ok":true,"ms":5,"span_id":"ccc"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "mixed-dialect-unpaired-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*2/);
+    });
+
+    // codex round-3 finding: cardinality-only slicing (min(a,b) of a tool are
+    // "paired", by position after independently sorting each side) gets the
+    // COUNT right but can pick the WRONG identity — it can silently treat a
+    // real unpaired PostToolUse row as "the pair" and drop a DIFFERENT real
+    // unpaired row's specialist/duration. Proximity-based matching (only
+    // treat two same-tool rows as a pair when their timestamps are within
+    // MATCH_WINDOW_MS) must preserve the true unpaired row's OWN identity —
+    // proven here via a distinguishing specialist + a >2000ms duration that
+    // must survive into both the per-specialist tally AND the SLOW detector.
+    it("preserves a same-tool unpaired PostToolUse row's own specialist/duration (not the pair's)", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "same-tool-unpaired-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          // A real pair, ~1ms apart (within the match window).
+          '{"ts":"2026-07-21T01:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T01:00:00.001Z","event":"tool_call","run_id":"same-tool-unpaired-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+          // A genuinely unpaired PostToolUse-only Bash row, 10s later (well
+          // outside the match window) — its own specialist + a >2000ms
+          // duration must survive, not be silently discarded.
+          '{"ts":"2026-07-21T01:00:10.000Z","event":"PostToolUse","tool":"Bash","specialist":"backend-engineer","payload_digest":"d2","ok":true,"ms":6000,"span_id":"ccc"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "same-tool-unpaired-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const mainSection = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      const backendSection = content.split("### backend-engineer")[1]?.split("###")[0] ?? "";
+      expect(mainSection).toMatch(/Tool calls:\s*1/); // the pair
+      expect(backendSection).toMatch(/Tool calls:\s*1/); // the unpaired row, own bucket
+      // The unpaired row's own 6000ms duration must reach the SLOW detector —
+      // proof its identity (not the pair's 19ms) survived reconciliation.
+      expect(content).toMatch(/SLOW at .*Bash.*backend-engineer.*took 6000ms/);
+    });
+
+    // codex round-3 finding: a tool can have unpaired rows on BOTH sides at
+    // once (a real pair + a post-only orphan + a call-only orphan for the
+    // SAME tool) — cardinality slicing reports max(2,2)=2, silently dropping
+    // one real record whose true count is 3.
+    it("counts 3 distinct records for one same-tool pair + one post-only orphan + one call-only orphan", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "same-tool-double-orphan-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          // The real pair, ~1ms apart.
+          '{"ts":"2026-07-21T02:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d1","ok":true,"ms":19,"span_id":"aaa"}',
+          '{"ts":"2026-07-21T02:00:00.001Z","event":"tool_call","run_id":"same-tool-double-orphan-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":19,"result_excerpt_redacted":"{}","span_id":"bbb"}',
+          // A post-only orphan, far in time.
+          '{"ts":"2026-07-21T02:00:20.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"d2","ok":true,"ms":25,"span_id":"ccc"}',
+          // A call-only orphan, far in time from both the pair and the post-only orphan.
+          '{"ts":"2026-07-21T02:00:40.000Z","event":"tool_call","run_id":"same-tool-double-orphan-run","tool":"Bash","command_redacted":"","status":"err","latency_ms":-1,"result_excerpt_redacted":"<orphaned>","span_id":"ddd"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "same-tool-double-orphan-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*3/);
+    });
+
+    // codex round-4 finding: greedy nearest-first matching (process posts
+    // oldest-first, each claims its nearest still-free call) is NOT
+    // guaranteed to find the maximum-cardinality/minimum-cost matching.
+    // Concrete counterexample (relative ms): posts at 0/40, calls at -35/30,
+    // window 50ms. True optimal: post0<->call-35 (dist 35) + post40<->call30
+    // (dist 10) = 2 matches. Greedy lets post0 grab call30 first (dist 30 <
+    // 35, nearer), stranding post40 and call-35 unmatched = 3 reported
+    // records instead of 2. Requires the exact DP (maxCardinalityMinCostMatch),
+    // not greedy.
+    it("finds the true optimal matching, not a greedy one that strands a valid pair", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "optimal-matching-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        [
+          // post0 = t+0ms
+          '{"ts":"2026-07-21T03:00:00.000Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"p1","ok":true,"ms":10,"span_id":"p0"}',
+          // post40 = t+40ms
+          '{"ts":"2026-07-21T03:00:00.040Z","event":"PostToolUse","tool":"Bash","specialist":"","payload_digest":"p2","ok":true,"ms":11,"span_id":"p40"}',
+          // call-35 = t-35ms (true match for post0, dist 35)
+          '{"ts":"2026-07-21T02:59:59.965Z","event":"tool_call","run_id":"optimal-matching-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":10,"result_excerpt_redacted":"{}","span_id":"cm35"}',
+          // call30 = t+30ms (true match for post40, dist 10 — but nearer to post0, dist 30, which is what greedy wrongly grabs)
+          '{"ts":"2026-07-21T03:00:00.030Z","event":"tool_call","run_id":"optimal-matching-run","tool":"Bash","command_redacted":"","status":"ok","latency_ms":11,"result_excerpt_redacted":"{}","span_id":"c30"}',
+        ].join("\n") + "\n",
+        "utf8"
+      );
+      runScript(["--run-id", "optimal-matching-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const section = content.split("### (main session)")[1]?.split("###")[0] ?? "";
+      expect(section).toMatch(/Tool calls:\s*2/);
+    });
+
+    it("omits the digest segment for a whitespace-only redacted excerpt", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "whitespace-digest-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:00:00.000Z","event":"tool_call","run_id":"whitespace-digest-run","tool":"Bash","status":"err","latency_ms":5,"result_excerpt_redacted":"   \\n  "}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "whitespace-digest-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const errorLine = content.split("\n").find((l) => l.startsWith("- ERROR"))!;
+      expect(errorLine).toBeDefined();
+      expect(errorLine).not.toContain("digest:");
+    });
+
+    it("collapses a multiline redacted excerpt to a single-line digest", () => {
+      const runDir = path.join(tmpDir, ".guild", "runs", "multiline-digest-run");
+      const logsDir = path.join(runDir, "logs");
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "v1.4-events.jsonl"),
+        '{"ts":"2026-07-21T01:00:00.000Z","event":"tool_call","run_id":"multiline-digest-run","tool":"Bash","status":"err","latency_ms":5,"result_excerpt_redacted":"line one\\nline two"}\n',
+        "utf8"
+      );
+      runScript(["--run-id", "multiline-digest-run", "--cwd", tmpDir]);
+      const content = fs.readFileSync(path.join(runDir, "summary.md"), "utf8");
+      const errorLine = content.split("\n").find((l) => l.startsWith("- ERROR"))!;
+      expect(errorLine).toBeDefined();
+      expect(errorLine).toContain("digest: line one line two");
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // CLI error handling
   // ─────────────────────────────────────────────────────────────
   describe("CLI error handling", () => {

@@ -26,7 +26,7 @@
  * schema strings, and validators that return the typed value or NULL — never
  * throw, never repair. Vocabulary reuse: `StationSignals`, `StationId`,
  * `TeamPlanV1`, `TeamResultV1`, and their validators are imported from G6a, never
- * re-declared. `assertWithinRunTree` is imported from G2 for containment.
+ * re-declared. Path containment comes from the shared kernel primitive.
  *
  * ADDITIVE: nothing here is wired to a station or a shipping path — G6b-2 wires
  * it. No existing file is edited.
@@ -35,7 +35,11 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { assertWithinRunTree } from "../../../../scripts/lib/core/contracts/task-cell-backend";
+import {
+  isRefused,
+  isWithin,
+  prepareContainedWrite,
+} from "../../kernel";
 import {
   isStation,
   validateTeamPlanV1,
@@ -60,14 +64,14 @@ export const STATION_SIGNALS_SCHEMA = "guild.station_signals.v1" as const;
  * `StationSignals`: if G6a adds or removes a signal field, this file stops
  * compiling until the array is reconciled.
  */
-export const STATION_SIGNAL_KEYS = [
+export const STATION_SIGNAL_KEYS = Object.freeze([
   "multi_component",
   "auth_touched",
   "backend_present",
   "user_facing_ui",
   "public_docs",
   "search_discoverability",
-] as const;
+] as const);
 
 export type StationSignalKey = (typeof STATION_SIGNAL_KEYS)[number];
 
@@ -235,9 +239,8 @@ function validateStationSignalsV1Inner(obj: unknown): StationSignalsV1 | null {
  *
  * One file per (run, station). The station segment is the composer's own
  * `StationId` (a closed enum — always a safe segment); the only untrusted segment
- * is `run_id`, which is validated below. `assertWithinRunTree` is the final
- * fail-closed containment check — no record may be scattered outside the
- * authoritative run tree (mirrors G2 D6).
+ * is `run_id`, which is validated below. `isWithin` is the lexical fail-closed
+ * check here; the physical one runs in `prepareEmitDir` after the bounded mkdir.
  */
 const TEAM_PLAN_DIR = "team-plan" as const;
 const TEAM_RESULT_DIR = "team-result" as const;
@@ -269,7 +272,16 @@ function teamArtifactPath(
   }
   const runDir = path.join(cwd, guildDir, "runs", runId);
   const p = path.join(runDir, kind, `${station}.json`);
-  assertWithinRunTree(runDir, p, `${kind}/${station}.json`);
+  // MIGRATED. This called `assertWithinRunTree`, imported from `../../dispatch` —
+  // a symbol that DOES NOT EXIST anywhere in the tree, so the call was a latent
+  // TypeError and the "final fail-closed containment check" this file documents was
+  // never running. A `grep` found it; TypeScript did not, because the module's
+  // barrel re-exports with `export *`. Replaced with the shared LEXICAL predicate:
+  // the run dir does not exist yet at this point, so the check must not touch disk
+  // (the physical check happens in `prepareEmitDir`, after the bounded mkdir).
+  if (!isWithin(path.resolve(p), path.resolve(runDir))) {
+    throw new Error(`refusing ${kind}/${station}.json — path escapes the run tree`);
+  }
   return p;
 }
 
@@ -280,21 +292,16 @@ export interface EmitOptions {
 
 /**
  * Real-path containment guard against a symlink escape, then create the target
- * directory. `assertWithinRunTree` (G2) compares resolved *logical* strings, so a
- * pre-planted symlink at `.guild/runs/<run-id>/team-plan` — or a symlinked run
- * root — would let `fs.writeFileSync` follow the link and land OUTSIDE the run
- * tree while the logical path still "contains". We close that here, locally
- * (without widening the shared G2 helper's contract):
+ * directory.
  *
- *   1. BEFORE creating anything, refuse if a sensitive path segment (the run root
- *      or the kind dir) already exists AS a symlink — no side-effect dir gets
- *      created through a planted link.
- *   2. AFTER `mkdir`, resolve the parent + the runs container through
- *      `realpathSync` and require the REAL parent to sit under the REAL runs
- *      container with the expected `run_id` segment intact (belt-and-suspenders:
- *      also catches a symlinked runs-internal ancestor).
- *   3. Refuse an existing symlink at the final file path (never overwrite through
- *      a link).
+ * A LEXICAL check cannot do this: a pre-planted symlink at
+ * `.guild/runs/<run-id>/team-plan` — or a symlinked run root — lets
+ * `fs.writeFileSync` follow the link and land OUTSIDE the run tree while the
+ * logical path still "contains". This used to be closed here by hand, in a comment
+ * that said it was doing so "without widening the shared helper's contract". The
+ * contract is now widened, and this function is a caller rather than a fourth
+ * implementation. What remains local is the run-tree SHAPE rule, which is this
+ * lane's business and not the primitive's.
  *
  * Throws on any breach; nothing is written.
  */
@@ -305,48 +312,39 @@ function prepareEmitDir(
   guildDir: string,
   label: string
 ): void {
-  const guildRoot = path.join(cwd, guildDir);
-  const runsContainer = path.join(guildRoot, "runs");
-  const kindDir = path.dirname(filePath);
-
-  const notASymlink = (seg: string): void => {
-    try {
-      if (fs.lstatSync(seg).isSymbolicLink()) {
-        throw new Error(`${label}: refusing — symlinked run path segment: ${seg}`);
-      }
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-    }
-  };
-
-  // (1) BEFORE creating anything: refuse if ANY sensitive existing segment is a
-  //     symlink — the `.guild` root, the `runs` container, the run root, or the
-  //     kind dir. Checking the CONTAINERS first (and before mkdir) closes the
-  //     escape where `.guild` or `.guild/runs` is itself a symlink to an outside
-  //     directory: a bare `mkdirSync(runsContainer, {recursive})` would otherwise
-  //     follow that link and make the external target the authoritative realpath.
-  for (const seg of [guildRoot, runsContainer, path.join(runsContainer, runId), kindDir]) {
-    notASymlink(seg);
+  // MIGRATED to the shared path-containment primitive. Everything this function
+  // used to spell out by hand — refuse a symlinked segment BEFORE any mkdir, then
+  // mkdir, then re-resolve and re-check AFTER — is the primitive's pairing, and
+  // the local copy was written with a comment saying it was closing the hole
+  // "without widening the shared helper's contract". Widening the contract was the
+  // right move; this lane was the fourth to pay for its absence.
+  //
+  // `policy: "physical"` is this lane's stricter stance, preserved exactly: a run
+  // tree whose realpath is load-bearing evidence must be physically real, so an
+  // IN-ROOT symlink is refused here even though it is contained. That is a policy,
+  // not a different truth about containment — which is why it is a parameter and
+  // not a second implementation.
+  const prepared = prepareContainedWrite(cwd, filePath, { policy: "physical" });
+  if (isRefused(prepared)) {
+    throw new Error(`${label}: refusing to write outside the run tree [${prepared.code}]`);
   }
 
-  // (2) create the kind dir (recursive also creates `.guild/runs/<runId>`); every
-  //     existing ancestor was just proven to be a real (non-symlink) directory.
-  fs.mkdirSync(kindDir, { recursive: true });
-
-  // (3) post-mkdir real-path containment, ANCHORED ON THE REAL cwd (the trusted
-  //     root) — not the runs container, which a symlink could redirect. The
-  //     resolved kind dir must sit under `<realCwd>/<guildDir>/runs/<runId>/`.
-  const realCwd = fs.realpathSync(cwd);
-  const expectedRunsReal = path.join(realCwd, guildDir, "runs");
-  const realParent = fs.realpathSync(kindDir);
-  const rel = path.relative(expectedRunsReal, realParent);
-  const firstSeg = rel.split(path.sep)[0];
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel) || firstSeg !== runId) {
+  // The run-tree SHAPE check the primitive does not own: containment says "inside
+  // cwd", this says "inside <cwd>/<guildDir>/runs/<runId>/". Kept local on purpose.
+  const rel = path.relative(path.join(prepared.realRoot, guildDir, "runs"), prepared.realDir);
+  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel) || rel.split(path.sep)[0] !== runId) {
     throw new Error(`${label}: refusing to write outside the run tree (symlinked path)`);
   }
-
-  // (4) refuse an existing symlink at the final file path.
-  notASymlink(filePath);
+  // (4) refuse an existing symlink at the final file path. `requireRegularFileLeaf`
+  //     would refuse a DIRECTORY too, and an existing directory here is a different
+  //     (already-handled) failure, so the narrow link check stays.
+  try {
+    if (fs.lstatSync(filePath).isSymbolicLink()) {
+      throw new Error(`${label}: refusing — symlinked run path segment: ${filePath}`);
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
 }
 
 /**
@@ -375,7 +373,14 @@ export function writeRunArtifact(
   const guildDir = opts.guildDir ?? ".guild";
   const runDir = path.join(cwd, guildDir, "runs", runId);
   const p = path.join(runDir, kind, filename);
-  assertWithinRunTree(runDir, p, `${kind}/${filename}`);
+  // MIGRATED (next-merge): `assertWithinRunTree` no longer exists — next's
+  // path-containment migration retired that symbol. Use the shared LEXICAL
+  // predicate here (the run dir may not exist yet); the real-path/symlink guard
+  // runs inside `prepareEmitDir` after the bounded mkdir, mirroring the sibling
+  // migration in `writeTeamArtifactPath` above.
+  if (!isWithin(path.resolve(p), path.resolve(runDir))) {
+    throw new Error(`writeRunArtifact: refusing ${kind}/${filename} — path escapes the run tree`);
+  }
   prepareEmitDir(cwd, runId, p, guildDir, "writeRunArtifact");
   if (opts.immutable && fs.existsSync(p)) {
     throw new Error(

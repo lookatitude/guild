@@ -110,7 +110,7 @@ export function proposalHashOf(proposal: object): string {
 // (including every pre-round-3 form) fails closed.
 
 /** Closed §4 actor kinds — the ONLY identities that may decide. */
-export const DECISION_ACTOR_KINDS = ["user", "operator"] as const;
+export const DECISION_ACTOR_KINDS = Object.freeze(["user", "operator"] as const);
 export type DecisionActorKind = (typeof DECISION_ACTOR_KINDS)[number];
 
 /**
@@ -121,11 +121,11 @@ export type DecisionActorKind = (typeof DECISION_ACTOR_KINDS)[number];
  *                          native question UI; the user writes the decision file).
  * Extending this enum is a contract-reviewed change, never ad hoc.
  */
-export const DECISION_CHANNELS = [
+export const DECISION_CHANNELS = Object.freeze([
   "interactive_prompt",
   "terminal_prompt",
   "file_gate",
-] as const;
+] as const);
 export type DecisionChannel = (typeof DECISION_CHANNELS)[number];
 
 /** Typed §4 deciding actor — the only shape `recordDecision` accepts. */
