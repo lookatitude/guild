@@ -18,13 +18,33 @@ import { spawnSync } from "child_process";
 
 import { findModelCatalogCacheLeaks } from "../../scripts/dot-guild/audit";
 
-const WORKSPACE_ROOT = path.resolve(__dirname, "../../..");
-const REPOS = ["", "plugin", "benchmark", "website"].map((r) => path.join(WORKSPACE_ROOT, r));
+const PLUGIN_ROOT = path.resolve(__dirname, "../..");
+const WORKSPACE_ROOT = path.resolve(PLUGIN_ROOT, "..");
 
 function git(cwd: string, ...args: string[]): { status: number | null; stdout: string } {
   const res = spawnSync("git", args, { cwd, encoding: "utf8" });
   return { status: res.status, stdout: res.stdout ?? "" };
 }
+
+function isGitWorkTree(p: string): boolean {
+  if (!fs.existsSync(p)) return false;
+  const r = git(p, "rev-parse", "--is-inside-work-tree");
+  return r.status === 0 && r.stdout.trim() === "true";
+}
+
+// The plugin repo (this test ships in it) is ALWAYS verified — it is the repo
+// this CI owns. Sibling repos and the umbrella root are verified only when the
+// umbrella-workspace layout is checked out (local dev); in the plugin-only CI
+// checkout they are absent, and their .gitignore/audit legs belong to their own
+// repos' CI. Filtering to existing git work-trees keeps this checkout-robust
+// (mirrors check-docs-architecture's skip-when-umbrella-absent posture) instead
+// of asserting against non-existent paths.
+const REPOS = [
+  PLUGIN_ROOT,
+  WORKSPACE_ROOT,
+  path.join(WORKSPACE_ROOT, "benchmark"),
+  path.join(WORKSPACE_ROOT, "website"),
+].filter(isGitWorkTree);
 
 describe("model-catalog cache exclusion (both scrub-policy legs + .gitignore deny)", () => {
   test.each(REPOS)("%s: .gitignore denies .guild/indexes/model-catalog/**", (repo) => {
@@ -64,7 +84,7 @@ describe("model-catalog cache exclusion (both scrub-policy legs + .gitignore den
   });
 
   test("scrub.ts carries the matching warn leg (both legs updated together)", () => {
-    const scrubSrc = fs.readFileSync(path.join(WORKSPACE_ROOT, "plugin/scripts/dot-guild/scrub.ts"), "utf8");
+    const scrubSrc = fs.readFileSync(path.join(PLUGIN_ROOT, "scripts/dot-guild/scrub.ts"), "utf8");
     expect(scrubSrc).toContain("warnTrackableModelCatalogCache");
     expect(scrubSrc).toContain("model-catalog");
   });
