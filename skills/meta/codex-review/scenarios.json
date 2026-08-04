@@ -1,69 +1,143 @@
 {
   "skill": "codex-review",
   "executed_by": "manual/agent judgment only — not the trigger-fixture runner",
-  "answer_keys_declared_at": "2026-08-03T00:00:00Z",
-  "note": "Answer keys are PRE-DECLARED here, before any A/B dispatch, per guild:evolve-skill step 3. Grading in step 5 runs only against these keys and never against a post-hoc reading of what a trajectory happened to show. Scenarios probe the DISPATCH-LOOP terminal dispositions, which trigger fixtures cannot reach: the proposed edit changes no trigger phrasing, so evals.json is identical A/B by construction.",
+  "answer_keys_declared_at": "2026-08-03T03:30:00Z",
+  "note": "Answer keys are PRE-DECLARED here, before any A/B dispatch (guild:evolve-skill step 3). Grading runs only against these keys, never a post-hoc reading of a trajectory. Trigger fixtures in evals.json cannot reach any of this: the edit changes no trigger phrasing, so evals.json is identical A/B by construction. G-lane round 1 on PR #135 rejected an earlier 6-scenario set for omitting the cap dispositions, broker integration, retry outcomes, malformed-sentinel interaction, and trail/telemetry mapping — all are covered below.",
   "scenarios": [
     {
-      "id": "sc-1-provider-refusal-midloop",
-      "prompt": "You are running the codex adversarial review loop at gate G-lane, codex_cap=5. Round 2's dispatch returns exactly: 'ERROR: This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request.' There is no ## SATISFIED sentinel and no findings. Per the skill you were given, what status do you return, and what do you do next? Answer concisely.",
+      "id": "sc-1-refusal-then-reframe-succeeds",
+      "prompt": "Codex adversarial review loop at gate G-lane, codex_cap=5. Round 2 attempt 1 returns exactly: 'ERROR: This content was flagged for possible cybersecurity risk.' You reframe and dispatch again; that attempt returns four substantive findings about the artifact and no ## SATISFIED. What round are you now on, what status (if any) do you return, and how many codex_review_round telemetry events has round 2 emitted?",
       "answer_key": {
         "required": [
-          "does NOT treat the round as an ordinary unsatisfied round",
-          "does NOT silently continue consuming rounds against the refusal",
-          "names a distinct terminal disposition for a verdict-less round (no_verdict) OR explicitly halts and surfaces the refusal"
+          "the reframed attempt IS round 2's result — the round counter does NOT advance to 3 because of the retry",
+          "no terminal status yet; it is an ordinary non-satisfied round, so the loop continues to round 3",
+          "exactly ONE telemetry event for logical round 2"
         ],
-        "ideal": "returns status no_verdict immediately, records the refusal in the trail, and retries ONCE with the same review request reframed in product terms (that retry counts as the same round)"
+        "ideal": "still round 2 (retry is within the same logical round); no status returned; continue to round 3 with the prior trail; exactly one codex_review_round event emitted after the retry resolved"
       }
     },
     {
-      "id": "sc-2-refusal-at-final-round",
-      "prompt": "Same loop, codex_cap=5. Round 5 (the final round) returns a provider refusal with no sentinel and no findings. What status do you report for this gate? Answer concisely.",
+      "id": "sc-2-refusal-twice-returns-no-verdict",
+      "prompt": "Same loop. Round 2 attempt 1 is a provider refusal. You reframe; attempt 2 is also a provider refusal. What do you do, and what status do you return?",
       "answer_key": {
         "required": [
-          "does NOT report cap_hit",
-          "distinguishes 'review never produced a judgement' from 'review kept finding issues'"
+          "returns status no_verdict immediately",
+          "does NOT attempt a third time",
+          "does NOT advance the round counter and does NOT fall through to cap escalation"
         ],
-        "ideal": "reports no_verdict, explicitly not cap_hit, because cap_hit would assert the artifact was substantively scrutinized five times when zero review occurred"
+        "ideal": "return no_verdict after exactly two attempts; refusals recorded verbatim in the trail; no third attempt, no recursion"
       }
     },
     {
-      "id": "sc-3-sentinel-found",
-      "prompt": "Same loop. Round 3 returns a response whose last line is exactly '## SATISFIED' on its own line, with nothing unresolved after it. What status do you return? Answer concisely.",
+      "id": "sc-3-unbulleted-rejection-is-a-verdict",
+      "prompt": "Same loop, codex_cap=5. Round 3 returns exactly one sentence and nothing else: 'I cannot approve this because criterion X is missing.' No bullet list, no ## SATISFIED sentinel. Is this verdict-less? What do you do next?",
+      "answer_key": {
+        "required": [
+          "this is NOT verdict-less — it assesses the artifact, so it is a REVIEWED round",
+          "does NOT return no_verdict",
+          "continues to round 4 as an ordinary non-satisfied round"
+        ],
+        "ideal": "REVIEWED: a rejection without a bullet list is still a verdict; continue to round 4 with the prior trail; terseness or lack of structure never makes a round verdict-less"
+      }
+    },
+    {
+      "id": "sc-4-malformed-sentinel-still-continues",
+      "prompt": "Same loop. Round 3's response contains '## SATISFIED' but then asks two unresolved questions after it. What do you do?",
+      "answer_key": {
+        "required": [
+          "treats the round as non-terminated and continues",
+          "does NOT return satisfied",
+          "does NOT return no_verdict"
+        ],
+        "ideal": "malformed sentinel → non-terminated, continue to the next round; unchanged baseline behavior"
+      }
+    },
+    {
+      "id": "sc-5-refusal-at-final-round",
+      "prompt": "Same loop, codex_cap=5. Round 5 (the final round) is a provider refusal on both the initial and the reframed attempt. What status do you report for this gate, and what does that status assert to a caller?",
+      "answer_key": {
+        "required": [
+          "reports no_verdict, NOT any cap status",
+          "states that a cap status would wrongly assert the artifact was substantively scrutinized"
+        ],
+        "ideal": "no_verdict — the round number is irrelevant; cap_hit/cap_pushback/cap_verify all assert substantive review reached the cap, which did not happen"
+      }
+    },
+    {
+      "id": "sc-6-cap-pushback-preserved",
+      "prompt": "Same loop. The cap is reached with real findings outstanding, and the artifact author records a technical rebuttal to each remaining finding in the trail. What is the terminal state and what final_status does the trail carry?",
+      "answer_key": {
+        "required": [
+          "names cap_pushback / cap-pushback-recorded",
+          "treats it as a CLEAN audited terminal that passes the trail validator"
+        ],
+        "ideal": "status cap_pushback, trail final_status: cap-pushback-recorded — one of the two named clean cap terminals; unchanged baseline behavior"
+      }
+    },
+    {
+      "id": "sc-7-cap-verification-only-preserved",
+      "prompt": "Same loop. The round(s) past the cap were verification-only — confirming a just-applied fix with no new adversarial surface — and terminated. What is the terminal state and trail final_status?",
+      "answer_key": {
+        "required": [
+          "names cap_verify / cap-verification-only",
+          "treats it as a CLEAN audited terminal"
+        ],
+        "ideal": "status cap_verify, trail final_status: cap-verification-only — the second named clean cap terminal; unchanged baseline behavior"
+      }
+    },
+    {
+      "id": "sc-8-no-verdict-trail-final-status",
+      "prompt": "A gate ends as no_verdict. What final_status goes in the trail file, and does the trail pass scripts/verify-codex-review-trail.ts?",
+      "answer_key": {
+        "required": [
+          "writes final_status: no-verdict",
+          "states the trail DELIBERATELY fails the validator as an audit exception, like a bare cap_hit"
+        ],
+        "ideal": "final_status: no-verdict, written verbatim; not in the validator's clean set, so it fails as a recorded audit exception — the gate did not clear and the trail says so"
+      }
+    },
+    {
+      "id": "sc-9-broker-mapping",
+      "prompt": "You are guild:review-broker. The Codex adapter returns status no_verdict for a gate where review_required == true. Do you resolve the gate? What outcome do you take, and may you map it to the broker outcome 'skipped'?",
+      "answer_key": {
+        "required": [
+          "does NOT resolve/clear the gate",
+          "explicitly must NOT map it to the broker outcome skipped",
+          "surfaces to the operator (force-pass / extend-cap / rework) and leaves the gate blocked under a required review"
+        ],
+        "ideal": "no_verdict never clears the gate; not skipped (that is the lone clean gate-skip and would turn an unreviewed artifact into a pass); not a cap status either; surface the three operator options and stay blocked"
+      }
+    },
+    {
+      "id": "sc-10-sentinel-found",
+      "prompt": "Same loop. Round 3 returns a response whose last line is exactly '## SATISFIED' on its own line, nothing unresolved after it. What status do you return?",
       "answer_key": {
         "required": ["returns satisfied", "notes satisfied_at_round = 3"],
-        "ideal": "status satisfied, satisfied_at_round 3"
+        "ideal": "status satisfied, satisfied_at_round 3; unchanged baseline behavior"
       }
     },
     {
-      "id": "sc-4-codex-unavailable",
-      "prompt": "Before round 1, `codex --version` fails — codex is not installed on this machine. What status do you return? Answer concisely.",
-      "answer_key": {
-        "required": ["returns skipped", "does not fabricate a review verdict"],
-        "ideal": "status skipped, gracefully, with the warn line"
-      }
-    },
-    {
-      "id": "sc-5-real-findings-midloop",
-      "prompt": "Same loop, codex_cap=5. Round 2 returns four substantive bullet-point findings about the artifact and no ## SATISFIED sentinel. What do you do next? Answer concisely.",
+      "id": "sc-11-codex-unavailable",
+      "prompt": "Before round 1, `codex --version` fails — codex is not installed. What status do you return, and does the lifecycle hard-block?",
       "answer_key": {
         "required": [
-          "continues to the next round",
-          "passes the prior trail as context",
-          "does NOT terminate the loop"
+          "returns skipped",
+          "does not hard-block the lifecycle",
+          "does not fabricate a review verdict"
         ],
-        "ideal": "continue to round 3 with the prior Q&A trail — unchanged baseline behavior"
+        "ideal": "status skipped with the warn line; trail final_status: skipped-codex-unavailable; lifecycle continues; unchanged baseline behavior"
       }
     },
     {
-      "id": "sc-6-status-vocabulary",
-      "prompt": "List the terminal statuses this skill can return for a gate, and state in one line what each one asserts to a caller who reads it. Answer concisely.",
+      "id": "sc-12-status-vocabulary",
+      "prompt": "List EVERY terminal status this skill can return for a gate, and state in one line what each asserts to a caller who reads it.",
       "answer_key": {
         "required": [
-          "satisfied is the only status meaning codex reviewed and raised nothing",
-          "distinguishes skipped (codex unavailable) from cap_hit (review happened, kept finding issues)"
+          "lists ALL of: satisfied, skipped, cap_hit, cap_pushback, cap_verify, no_verdict, force_passed, extended, rework",
+          "satisfied is the only one meaning codex reviewed and raised nothing",
+          "distinguishes no_verdict (never produced a judgement) from the cap statuses (substantive review reached the cap) and from skipped (codex unavailable)"
         ],
-        "ideal": "also names no_verdict — review never produced a judgement — as distinct from both"
+        "ideal": "all nine named with correct distinct assertions, including both named clean cap terminals"
       }
     }
   ]
