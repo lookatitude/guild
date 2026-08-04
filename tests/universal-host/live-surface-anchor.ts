@@ -333,10 +333,32 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * against the OLD pins on this exact tree before the bump — SC-W2-5(1) naming
  * `M commands/dashboard.md` + `M commands/status.md`, SC-W3-6(B) naming the
  * `.claude-plugin` manifest hashes, and both naming the six skills files.
+ *
+ * ── 2026-08-04 re-ratification (skills only) ───────────────────────────────────
+ * `skills` moves 74d8b37c → 66362ad2; `commands` does NOT move and neither
+ * manifest hash does. The surface delta is exactly two files, both from the
+ * codex-review evolve round (`a verdict-less round is not an unsatisfied round`):
+ * `M skills/meta/codex-review/SKILL.md` and `A skills/meta/codex-review/scenarios.json`.
+ *
+ * Plus a third change found by `check-plugin-root-fallback.ts` while re-ratifying:
+ * SKILL.md:315 shipped the FORBIDDEN two-level `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}`
+ * with no terminal $HOME default, which resolves to an empty path on a host that sets
+ * neither. Repaired to the required triple fallback in the same commit, so the pinned
+ * tree is the CORRECTED surface rather than the authored one.
+ *
+ * The C5 mirror under `src/modules/review/resources/**` was already correct for the
+ * evolve edit in the authoring commit — `sync-module-resources.ts` produced a ZERO
+ * diff over 645 resources across 31 modules — and was re-synced after the fallback
+ * repair, with `--check` clean both times.
+ *
+ * ANTI-VACUITY: both guards were observed RED against the OLD pin on this exact
+ * tree before the bump, and RED for the right reason — SC-W2-5(1) and SC-W3-6(B)
+ * each named those two skills files and NOTHING else, so the pin move is scoped to
+ * the intended change rather than papering over unrelated drift.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "c32076fa811c45d181314e3b2664663b5bce5dd2",
-  skills: "74d8b37c68540a7ecb8dce9d6f960e40f2c38eed",
+  skills: "a800ffa567f9af1b1e52104919ff741172eab718",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
