@@ -106,6 +106,16 @@ import {
   buildTaskAssignment,
   writeTaskAssignment,
 } from "../src/modules/dispatch/workflows/task-assignment";
+// T3 rework F3 (session_context §5): descriptor writers fail closed without the
+// run's minted binding. The launcher resolves the nonce explicitly (env envelope
+// from the orchestrator → the addressed run's own minted record → mint, ONLY
+// when this launcher itself minted a fresh standalone run-id) and threads it
+// into every v1/v2 descriptor write. A sentinel value never participates.
+import {
+  loadRunBinding,
+  mintRunBinding,
+  readHookBindingEnvelope,
+} from "../src/modules/lifecycle/workflows/run-binding";
 // MH-04: the substrate DECISION lives behind the versioned execution port
 // (`guild.execution.transports.v1`), never in this launcher. The launcher reads
 // host FACTS through the capability probe below and reports what the port decided.
@@ -131,8 +141,20 @@ import {
 // only as the frozen-backend pane pointer (GUILD_TASK_ASSIGNMENT — out of G3 scope).
 import {
   buildTaskCell,
+  planProductionDispatchModel,
   writeTaskCell,
+  type ProductionDispatchModelOutcome,
 } from "../src/modules/dispatch/workflows/task-assignment-v2";
+// T8R F3: the PRODUCTION writer for M0 inspection evidence. `persistInspectionReport`
+// previously had no production caller at all — `guild models inspect` is read-only by
+// contract — so the M2 gate's evidence dir was always empty in a real run and the
+// derived resolver inputs were always null. Recording happens HERE, once per run on the
+// real dispatch path, and is inert at the ADR defaults (v2 flags off ⇒ no write).
+import { recordRunInspectionEvidence } from "../src/modules/capability/workflows/inspection-record";
+// T6 rework F5: the legacy tier→model label for the shadow comparison comes
+// from the SAME unpack point the legacy path uses (models.tiers), never a
+// parallel implementation.
+import { resolveTierModel } from "../src/modules/config/workflows/tier-model";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -145,7 +167,12 @@ import { markLaneDead, upsertLane, type RunStateInit } from "../hooks/lib/run-st
 // readPlanOwnerTaskIds (TE-03): used in onDecision to map specialist name → plan task-id(s)
 // without the name-key fallback that resolveDeadLaneKeys adds (that fallback is right for
 // SSH dead-lanes but violates the contract for run-state keying).
-import { slugFromTeamPath, resolveDeadLaneKeys, readPlanOwnerTaskIds } from "./lib/team-file";
+import { slugFromTeamPath, phaseFromTeamPath, readActivePhase, resolveDeadLaneKeys, readPlanOwnerTaskIds } from "./lib/team-file";
+// T7-H1: the approve-before-dispatch gate, wired on the REAL dispatch path.
+// The gate itself (dispatchGate → preDispatchGate) was correct and unreachable;
+// this is the join. It runs BEFORE the D5 ladder so every rung — tmux team,
+// in-process agent, and the subagent signal execute-plan acts on — is covered.
+import { assertDispatchApproved } from "../src/modules/teams/workflows/dispatch-approval";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
@@ -189,6 +216,19 @@ interface CliArgs {
    * Falls through to reapDeadMembers for registry hygiene. Always exits 0.
    */
   dismissCompleted: boolean;
+  /**
+   * T7-H1 LEGACY: accepted and ignored. Approve-before-dispatch verification is
+   * now UNCONDITIONAL, so there is nothing left to force on.
+   */
+  requireApproval: boolean;
+  /**
+   * T7R-R1-B1: the ONE audited escape hatch. `--approval-override "<reason>"`
+   * lets an un-migrated caller dispatch DESPITE an approval refusal. The value
+   * is the operator's stated reason; a boolean-shaped value ("1"/"true"/…) is
+   * REFUSED, and the override is written to a durable audit log before any pane
+   * is created. It is reported as a degradation, never as a pass.
+   */
+  approvalOverride: string | null;
 }
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
@@ -205,6 +245,8 @@ function parseArgs(argv: string[]): CliArgs {
     reap: false,
     runId: null,
     dismissCompleted: false,
+    requireApproval: false,
+    approvalOverride: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -214,6 +256,11 @@ function parseArgs(argv: string[]): CliArgs {
     else if (a === "--dry-run") out.dryRun = true;
     else if (a === "--reap") out.reap = true;
     else if (a === "--dismiss-completed") out.dismissCompleted = true;
+    else if (a === "--require-approval") out.requireApproval = true;
+    else if (a === "--approval-override" && i + 1 < argv.length) out.approvalOverride = argv[++i];
+    else if (a.startsWith("--approval-override=")) {
+      out.approvalOverride = a.slice("--approval-override=".length);
+    }
     else if (a === "--run-id" && i + 1 < argv.length) out.runId = argv[++i];
     else if (a.startsWith("--agent-mode=")) {
       const v = a.slice("--agent-mode=".length);
@@ -673,7 +720,17 @@ function writeTaskAssignments(
   specialists: Specialist[],
   ownerMap: Map<string, string[]>,
   orchestratorHostKind: string,
+  bindingRef: string | null,
 ): number {
+  // §5 fail-closed: no verifiable binding → no descriptor writes at all.
+  if (bindingRef === null) {
+    process.stderr.write(
+      `[agent-team-launcher] WARN: binding_rejected — refusing to write ` +
+        `guild.task_assignment.v1 descriptors for ${runId}: no minted run binding ` +
+        `is resolvable (env envelope/binding.json). No files written.\n`,
+    );
+    return 0;
+  }
   const runDir = path.join(cwd, ".guild", "runs", runId);
   let written = 0;
   for (const s of specialists) {
@@ -696,7 +753,7 @@ function writeTaskAssignments(
         adapterVersion: ADAPTER_VERSION,
         now: () => new Date().toISOString(),
       });
-      if (writeTaskAssignment(runDir, assignment)) written += 1;
+      if (writeTaskAssignment(runDir, assignment, { binding_ref: bindingRef })) written += 1;
     } catch (err) {
       process.stderr.write(
         `[agent-team-launcher] WARN: task-assignment write for ${s.name} failed: ${
@@ -722,6 +779,134 @@ function writeTaskAssignments(
  * out of `main()` to a non-zero exit. This deliberately drops the v1 writer's
  * "warn and keep going" behavior for the v2 production path.
  */
+/** True when the repo opted into a model_routing leg that could change dispatch. */
+function routingOptedIn(cwd: string): boolean {
+  try {
+    const raw: unknown = JSON.parse(
+      fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"),
+    );
+    const mr = isPlainObject(raw) ? (raw as Record<string, unknown>)["model_routing"] : undefined;
+    if (!isPlainObject(mr)) return false;
+    const block = mr as Record<string, unknown>;
+    return block["shadow"] === "on" || block["enabled"] === "on";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * T6 F5: the ONE lane model-routing step, shared by every dispatch rung.
+ *
+ * Reads the rollout flags + the legacy `models.tiers` label ONCE, then plans
+ * per dispatch attempt through the production function. The returned planner
+ * STAMPS `s.modelProvenance` — which is what the backends consume
+ * (`dispatchModelForSpecialist`) to spawn the lane at the selected model — so
+ * the tmux rung (task cells) and the in-process rung both route identically
+ * instead of only the tmux rung carrying provenance.
+ *
+ * At M0/M1 the plan returns the legacy selection and stamps no model: every
+ * backend's command/descriptor stays byte-identical to today.
+ */
+function makeLaneModelPlanner(
+  cwd: string,
+  runId: string,
+  orchestratorHostKind: string,
+  bindingRef: string,
+): (
+  s: Specialist,
+  logicalTaskId: string,
+) => { outcome: ProductionDispatchModelOutcome; laneTier: "cheap" | "mid" | "powerful" } {
+  let rawSettings: unknown;
+  try {
+    rawSettings = JSON.parse(
+      fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"),
+    );
+  } catch {
+    rawSettings = undefined;
+  }
+  const settingsObj = isPlainObject(rawSettings) ? (rawSettings as Record<string, unknown>) : {};
+  const modelsBlock = isPlainObject(settingsObj["models"])
+    ? (settingsObj["models"] as Record<string, unknown>)
+    : {};
+  // ── T8R F3: record this run's M0 inspection evidence ONCE, before any lane
+  // plans a model. This is the production write that was missing: without it
+  // `.guild/runs/<id>/inspection/` stays empty in every real run, so
+  // `deriveResolveInputsFromM0Evidence` finds nothing and M2 can never reach a
+  // v2 selection no matter how the flags are set.
+  //
+  // Inert at the ADR defaults — the recorder returns `recorded: false` and
+  // writes nothing unless `model_routing.shadow` or `model_routing.enabled` is
+  // on, so M0 dispatch stays byte-identical to legacy. An unverifiable binding
+  // THROWS out of the binding-verified writer rather than dispatching on
+  // unbound evidence; absence (no session context, no usable report) is
+  // reported honestly and never fabricated.
+  const inspection = recordRunInspectionEvidence({
+    root: cwd,
+    binding: { run_id: runId, binding_ref: bindingRef },
+    now: new Date().toISOString(),
+  });
+  if (inspection.recorded) {
+    process.stdout.write(
+      `[agent-team-launcher] M0 inspection evidence recorded for ${runId} → ${inspection.ref}\n`,
+    );
+  }
+  return (s, logicalTaskId) => {
+    const hostKind = s.host_kind ?? orchestratorHostKind;
+    // The legacy selection this lane would dispatch with today — the SAME
+    // models.tiers unpack the legacy path uses. An unresolvable tier slot is
+    // recorded honestly, never invented.
+    const laneTier = s.tier ?? s.default_tier ?? "mid";
+    const legacyResolved = resolveTierModel(modelsBlock["tiers"], laneTier, hostKind);
+    const legacy = {
+      model: legacyResolved.model ?? "unspecified",
+      source: `tier_map:${laneTier}${legacyResolved.model ? "" : ":unresolved"}`,
+    };
+    const outcome = planProductionDispatchModel({
+      cwd,
+      runId,
+      dispatchId: `${logicalTaskId}.att1`,
+      binding: { binding_ref: bindingRef },
+      legacy,
+      settings: rawSettings,
+      request: { purpose: "implementation" },
+    });
+    // The specialist dispatch contract carries the provenance on the real path
+    // — this is the object every backend reads the selected model from.
+    s.modelProvenance = outcome.provenance;
+    if (outcome.shadowArtifacts.comparisonPath) {
+      process.stdout.write(
+        `[agent-team-launcher] M1 shadow comparison recorded for ${logicalTaskId} → ` +
+          `${path.relative(cwd, outcome.shadowArtifacts.comparisonPath)}\n`,
+      );
+    }
+    if (outcome.selection.source === "v2") {
+      process.stdout.write(
+        `[agent-team-launcher] M2 v2 selection for ${logicalTaskId}: ` +
+          `${outcome.selection.model} (${outcome.selection.reason})\n`,
+      );
+    }
+    // T7-M4 — §6 exact-key confirmation gate on the REAL dispatch path.
+    // A v2 selection that DEGRADES and whose purpose policy requires
+    // confirmation may not dispatch on an unanswered prompt. Guild never
+    // auto-approves a degradation, and an approval recorded for a different
+    // target / purpose / policy / catalog / fallback shape is a DIFFERENT key
+    // and therefore no approval at all (the arbiter enforces that, exactly).
+    // Inert at M0/M1: legacy selections degrade nothing, so nothing is claimed.
+    if (outcome.confirmation.required && !outcome.confirmation.decided) {
+      throw new Error(
+        `confirmation_required: refusing to dispatch ${logicalTaskId} — ${outcome.confirmation.reason}`,
+      );
+    }
+    if (outcome.confirmation.required) {
+      process.stdout.write(
+        `[agent-team-launcher] §6 confirmation prompt ${outcome.confirmation.prompt_id} for ` +
+          `${logicalTaskId} already decided "${outcome.confirmation.decision}"\n`,
+      );
+    }
+    return { outcome, laneTier };
+  };
+}
+
 function emitTaskCellsV2(
   cwd: string,
   runId: string,
@@ -729,8 +914,30 @@ function emitTaskCellsV2(
   specialists: Specialist[],
   ownerMap: Map<string, string[]>,
   orchestratorHostKind: string,
-): number {
+  bindingRef: string | null,
+): {
+  written: number;
+  modelOutcomes: Map<
+    string,
+    { outcome: ProductionDispatchModelOutcome; laneTier: "cheap" | "mid" | "powerful" }
+  >;
+} {
+  // §5 + D6: the v2 channel is HARD fail-closed — a run with no verifiable
+  // binding cannot dispatch. Throw (propagates to a non-zero exit).
+  if (bindingRef === null) {
+    throw new Error(
+      `binding_rejected: refusing to emit guild.task_assignment.v2 cells for ` +
+        `${runId} — no minted run binding is resolvable (session_context §5)`,
+    );
+  }
   let written = 0;
+  // T6 F5: model-routing plan per DISPATCH ATTEMPT, on the real path. Keyed by
+  // logical task id so the routing block below can consume v2 selections.
+  const modelOutcomes = new Map<
+    string,
+    { outcome: ProductionDispatchModelOutcome; laneTier: "cheap" | "mid" | "powerful" }
+  >();
+  const planLaneModel = makeLaneModelPlanner(cwd, runId, orchestratorHostKind, bindingRef);
   // Resolved decision 2: the launcher reuses the parent orchestrator as lead, so
   // every cell carries a `lead_binding_id` (no distinct Team Lead instance minted).
   const leadBindingId = `lead-binding-${safeSegment(slug)}`;
@@ -785,11 +992,18 @@ function emitTaskCellsV2(
         leadBindingId,
         now: () => new Date().toISOString(),
       });
-      writeTaskCell(cwd, cell);
+      writeTaskCell(cwd, cell, { binding_ref: bindingRef });
       written += 1;
+      // T6 F5: the PRODUCTION model-routing step for this dispatch attempt.
+      // M0/M1: selection stays the legacy label (no routing change); when
+      // model_routing.shadow is on, the shadow receipt + comparison persist
+      // run-local through the binding-verified writer. M2 (opt-in + verified
+      // evidence) stamps the v2 selection onto s.modelProvenance, which the
+      // tmux pane spec below (and the routing block) then dispatch with.
+      modelOutcomes.set(logicalTaskId, planLaneModel(s, logicalTaskId));
     }
   }
-  return written;
+  return { written, modelOutcomes };
 }
 
 /**
@@ -799,6 +1013,34 @@ function emitTaskCellsV2(
  */
 function safeSegment(s: string): string {
   return s.replace(/[^A-Za-z0-9_.-]/g, "_");
+}
+
+/**
+ * Resolve the run's minted binding nonce for descriptor writes (T3 F3, §5).
+ *
+ *  1. The orchestrator-exported hook envelope (GUILD_RUN_ID +
+ *     GUILD_RUN_BINDING_REF), accepted ONLY when it names this exact run.
+ *  2. The explicitly-addressed run's own minted record (schema-validated on
+ *     load — a malformed record loads as null and is refused, F1).
+ *  3. When THIS launcher minted a fresh standalone run-id (no --run-id), it is
+ *     the run-starting actor: mint the binding before any write (F2).
+ *
+ * Returns null when a caller-supplied run has no verifiable binding — the
+ * descriptor writers then fail closed (`binding_rejected`), never fail open.
+ */
+function resolveLaunchBindingRef(
+  cwd: string,
+  runId: string,
+  launcherMintedRunId: boolean,
+): string | null {
+  const envelope = readHookBindingEnvelope(process.env);
+  if (envelope && envelope.run_id === runId) return envelope.binding_ref;
+  const record = loadRunBinding({ root: cwd, run_id: runId });
+  if (record) return record.binding_ref;
+  if (launcherMintedRunId) {
+    return mintRunBinding({ root: cwd, run_id: runId }).binding_ref;
+  }
+  return null;
 }
 
 // ── Cross-host routing inputs (CH-1) ─────────────────────────────────────────
@@ -1428,6 +1670,100 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // ── T7-H1: APPROVE-BEFORE-DISPATCH GATE ───────────────────────────────────
+  //
+  // Placed HERE — after the team file is parsed, before the D5 ladder — so it
+  // covers EVERY rung: the tmux team launch below, the in-process agent rung,
+  // and the `{backend: "subagent"}` signal guild:execute-plan dispatches from.
+  // Nothing downstream of this point may create a pane, emit a dispatch plan,
+  // or hand a roster to the caller without a verified approval when the
+  // approval regime is active for the run.
+  //
+  // The verdict is fully delegated: dispatch-approval.ts loads the trail and
+  // hands it to preDispatchGate → dispatchGate. No gate logic is re-spelled in
+  // the launcher, and no flag here can record an approval.
+  {
+    const gateSlug = slugFromTeamPath(args.team);
+    const gateRunId = args.runId ?? "";
+    const gateCwd = path.resolve(args.cwd);
+    // Phase from the team-file basename (`<slug>.<phase>.yaml`), else the run's
+    // active phase, else "build" — the phase the trail is keyed by.
+    const gatePhase =
+      phaseFromTeamPath(args.team) ??
+      (gateRunId ? readActivePhase(gateCwd, gateRunId) : null) ??
+      "build";
+    const scheduled = team.specialists.map((s) => s.name);
+    // T7R-R1-B1: verification is MANDATORY here — including the standalone /
+    // no-run-id call, which the gate refuses outright (`no_run_id`) because a
+    // dispatch whose approval cannot even be looked up is never approved.
+    // The ONLY way past a refusal is `--approval-override "<reason>"`, which is
+    // recorded to a durable audit log and reported below as a DEGRADATION.
+    let verdict: ReturnType<typeof assertDispatchApproved>;
+    try {
+      verdict = assertDispatchApproved({
+        cwd: gateCwd,
+        runId: gateRunId,
+        phase: gatePhase,
+        teamPath: args.team,
+        scheduledParticipants: scheduled,
+        overrideReason: args.approvalOverride,
+        forced: args.requireApproval,
+      });
+    } catch (err) {
+      // An unreasoned override attempt (e.g. `--approval-override 1`) throws.
+      process.stderr.write(
+        `[agent-team-launcher] REFUSED (approve-before-dispatch gate): ${(err as Error).message}\n` +
+          `  NO pane was created and NO dispatch plan was emitted.\n`,
+      );
+      process.exit(1);
+    }
+    if (!verdict.allowed && !args.dryRun) {
+      process.stderr.write(
+        `[agent-team-launcher] REFUSED (approve-before-dispatch gate, ${verdict.refusal}): ${verdict.reason}\n` +
+          `  team:     ${args.team}\n` +
+          `  run/phase: ${gateRunId || "(none)"} / ${gatePhase}\n` +
+          `  proposal: ${verdict.proposal_path ?? "(none)"}\n` +
+          `  gate mode: ${verdict.mode} — ${verdict.mode_reason}\n` +
+          `  NO pane was created and NO dispatch plan was emitted. Persist the composed proposal ` +
+          `and record a current guild.team_decision.v1 approve over the CURRENT proposal bytes, ` +
+          `then re-run:\n` +
+          `    npx tsx scripts/team-decide.ts persist --proposal <f> --cwd ${gateCwd}\n` +
+          `    npx tsx scripts/team-decide.ts record  --proposal <f> --cwd ${gateCwd} ` +
+          `--decision approve --decided-by operator:<id> --channel terminal_prompt\n`,
+      );
+      process.exit(1);
+    }
+    if (!verdict.allowed && args.dryRun) {
+      // T7-H1 scope: the approve-before-dispatch gate protects a REAL dispatch —
+      // a pane spawn / agent launch with side effects. `--dry-run` emits a
+      // DECLARATIVE preview plan only: no pane, no agent, no run-tree write.
+      // A preview that cannot dispatch is not a dispatch, so it is not gated —
+      // but it is loudly stamped UNVERIFIED so a plan is never mistaken for an
+      // approved one. The real (non-dry-run) path above stays MANDATORY.
+      process.stderr.write(
+        `[agent-team-launcher] NOTICE (--dry-run preview): approve-before-dispatch NOT verified ` +
+          `(${verdict.refusal}: ${verdict.reason}). Emitting a preview plan only — NO pane, NO ` +
+          `dispatch, NO run-tree write. A real dispatch still requires a persisted ` +
+          `guild.team_proposal.v2 + a current approve decision.\n`,
+      );
+    } else if (verdict.degradation) {
+      // Loud, non-silent, and explicitly a degradation — not a pass.
+      process.stderr.write(
+        `[agent-team-launcher] DEGRADATION: approve-before-dispatch verification was ` +
+          `OVERRIDDEN by the operator.\n` +
+          `  refusal overridden: ${verdict.refusal} — ${verdict.reason}\n` +
+          `  operator reason:    ${verdict.override_reason}\n` +
+          `  audit record:       ${verdict.override_audit_path}\n` +
+          `  This dispatch is NOT approval-verified.\n`,
+      );
+    } else {
+      process.stdout.write(
+        `[agent-team-launcher] approve-before-dispatch gate PASSED (${verdict.mode_reason}): ` +
+          `${verdict.reason}${verdict.decision_hash ? ` [decision ${verdict.decision_hash.slice(0, 12)}…]` : ""}\n`,
+      );
+    }
+  }
+
   // ── D5 dispatch ladder ────────────────────────────────────────────────────
   // When --agent-mode is provided, run the D5 ladder. Non-team modes emit a
   // JSON signal so the caller (guild:execute-plan) can route accordingly.
@@ -1451,6 +1787,42 @@ async function main(): Promise<void> {
       const runId = args.runId ?? makeRunId();
       const cwd = path.resolve(args.cwd);
       const orchestratorHostKind = resolveOrchestratorHostKind(process.env) ?? undefined;
+      // T6 F5: the in-process rung routes models through the SAME production
+      // step the tmux rung uses, so a gated-on M2 selection reaches the
+      // Agent()-dispatch descriptors too (composeInProcessDispatch reads the
+      // stamped provenance). No verifiable binding ⇒ no planning at all: the
+      // rung stays exactly as it is today rather than dispatching unbound.
+      // (Runs BEFORE next's MH-04 port resolution: model provenance is stamped
+      // onto the specialists the resolved port then dispatches.)
+      {
+        // `false`: this rung never MINTS a binding — it only reads one that
+        // already exists (env envelope / the run's own record), so a standalone
+        // in-process preview keeps writing nothing at all.
+        const bindingRef = resolveLaunchBindingRef(cwd, runId, false);
+        if (bindingRef !== null) {
+          const planLaneModel = makeLaneModelPlanner(
+            cwd,
+            runId,
+            orchestratorHostKind ?? "claude",
+            bindingRef,
+          );
+          const ownerMap = readPlanOwnerTaskIds(cwd, slug);
+          for (const s of team.specialists) {
+            const taskIds = ownerMap.get(s.name);
+            const repTaskId = taskIds && taskIds.length > 0 ? taskIds[0] : s.name;
+            planLaneModel(s, safeSegment(repTaskId));
+          }
+        } else if (routingOptedIn(cwd)) {
+          // Silent only when NOTHING was opted into; an operator who turned a
+          // model_routing leg on is told why it did not run (never a silent
+          // degradation, never a warning on the untouched legacy path).
+          process.stderr.write(
+            `[agent-team-launcher] WARN: no minted run binding for ${runId} — ` +
+              `skipping the model-routing step for the in-process rung ` +
+              `(legacy model resolution retained).\n`,
+          );
+        }
+      }
       const runtime = createHostExecutionRuntime({
         transports: { "in-process": inProcessTransportPort() },
       });
@@ -1583,6 +1955,14 @@ async function main(): Promise<void> {
   // caller supplied none (e.g. a standalone launch or a `--dry-run` preview).
   const runId = args.runId ?? makeRunId();
 
+  // T6 F5: per-task v2 (M2 gated-on) model selections from the production
+  // dispatch-model step — consumed by run-state persistence and cross-host
+  // routing below. Empty at M0/M1 (legacy selections write nothing here).
+  const v2ModelByTask = new Map<
+    string,
+    { model: string; effort: string | null; tier: "cheap" | "mid" | "powerful" }
+  >();
+
   // ── W2-A2: pre-routing task_run writes (single-source for capability routing) ─
   // Write ALL task_runs for ALL specialists BEFORE any routing decision. After
   // writing, read back capability_requirements from disk and update each
@@ -1636,6 +2016,11 @@ async function main(): Promise<void> {
         }
       }
     }
+    // ── T3 F3: resolve the run's minted binding ONCE for both descriptor channels ──
+    // (env envelope → the run's own minted record → mint iff this launcher minted
+    // the fresh standalone run-id). null ⇒ the writers fail closed below.
+    const launchBindingRef = resolveLaunchBindingRef(cwd, runId, args.runId == null);
+
     // ── guild.task_assignment.v1: cross-host work-assignment channel (docs/v2 §08) ──
     // Write ALL assignments here — full pre-routing list, BEFORE any local/remote
     // dispatch — so remote specialists (later filtered out of the local tmux pool)
@@ -1647,6 +2032,7 @@ async function main(): Promise<void> {
         team.specialists,
         preRoutingOwnerMap,
         orchestratorHostKind,
+        launchBindingRef,
       );
       if (taWritten > 0) {
         process.stdout.write(
@@ -1664,18 +2050,51 @@ async function main(): Promise<void> {
     // assignment or an overwrite THROWS → non-zero exit (hard dispatch failure, D6),
     // never the v1 path's warn-and-continue.
     {
-      const cellsWritten = emitTaskCellsV2(
+      const { written: cellsWritten, modelOutcomes } = emitTaskCellsV2(
         cwd,
         runId,
         slug,
         team.specialists,
         preRoutingOwnerMap,
         orchestratorHostKind,
+        launchBindingRef,
       );
       if (cellsWritten > 0) {
         process.stdout.write(
           `[agent-team-launcher] emitted ${cellsWritten} guild.task_assignment.v2 cell(s) → ` +
             `.guild/runs/${runId}/task-cells/\n`,
+        );
+      }
+      // T6 F5: expose the per-task v2 selections to the routing block below
+      // (cross-host onDecision consumes them so a gated-on M2 selection is the
+      // model that actually rides the lane's persisted routing decision).
+      for (const [taskId, { outcome, laneTier }] of modelOutcomes) {
+        if (outcome.selection.source !== "v2") continue;
+        v2ModelByTask.set(taskId, {
+          model: outcome.selection.model,
+          effort: outcome.selection.effort,
+          tier: laneTier,
+        });
+      }
+      // Single-host path (the cross-host block below may not run at all):
+      // persist a gated-on v2 selection into run-state per lane NOW, so the
+      // selection is consumed, not just logged. M0/M1 (source legacy) writes
+      // nothing — byte-identical legacy behavior.
+      for (const [taskId, sel] of v2ModelByTask) {
+        upsertLane(
+          path.join(cwd, ".guild", "runs", runId),
+          { runId, planSlug: slug, programId: null },
+          taskId,
+          {
+            host: {
+              selected: hostKindToRegistryId(orchestratorHostKind) || String(orchestratorHostKind),
+              degraded: false,
+              independence: "weak",
+              tier: sel.tier,
+              model: sel.model,
+              modelParams: { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}) },
+            },
+          },
         );
       }
     }
@@ -1770,15 +2189,20 @@ async function main(): Promise<void> {
               // No plan task-id — skip. Do NOT persist under the specialist name.
               return;
             }
-            const hostBlock = {
-              selected: d.host,
-              degraded: d.degraded,
-              independence: d.independence,
-              tier: d.tier,
-              model: d.model,
-              modelParams: d.modelParams,
-            };
             for (const taskId of taskIds) {
+              // T6 F5: a gated-on M2 selection is authoritative for the lane's
+              // persisted model — the router's tier-map model is the legacy leg.
+              const v2 = v2ModelByTask.get(taskId);
+              const hostBlock = {
+                selected: d.host,
+                degraded: d.degraded,
+                independence: d.independence,
+                tier: v2?.tier ?? d.tier,
+                model: v2?.model ?? d.model,
+                modelParams: v2
+                  ? { model: v2.model, ...(v2.effort ? { effort: v2.effort } : {}) }
+                  : d.modelParams,
+              };
               upsertLane(
                 path.join(cwd, ".guild", "runs", runId),
                 { runId, planSlug: slug, programId: null },

@@ -31,8 +31,12 @@ function codex(selectable: boolean): DetectedProvider {
   };
 }
 
-const CLAUDE_CODEX: DetectionResult = { authorHost: "claude", providers: [host(), codex(true)] };
-const CLAUDE_ONLY: DetectionResult = { authorHost: "claude", providers: [host(), codex(false)] };
+// R3-F1: DetectionResult.authorTrust is non-optional — the canonical fixtures
+// model the production default box, where the native-adapter marker
+// (CLAUDECODE) VERIFIES the claude author. Non-verified trust degrades the
+// adversarial strength (see the T3 F4 / R3-F1 suites below).
+const CLAUDE_CODEX: DetectionResult = { authorHost: "claude", authorTrust: "verified", providers: [host(), codex(true)] };
+const CLAUDE_ONLY: DetectionResult = { authorHost: "claude", authorTrust: "verified", providers: [host(), codex(false)] };
 
 describe("P1-L8 role resolver — contract + default==today (SC-5)", () => {
   it("the wired resolver matches the L0 reference for the same inputs", () => {
@@ -61,6 +65,7 @@ describe("P1-L8 role resolver — contract + default==today (SC-5)", () => {
   it("availableRegistryRows drops families with no registry row (gemini, D10) and keeps registry order", () => {
     const det: DetectionResult = {
       authorHost: "claude",
+      authorTrust: "verified",
       providers: [
         host(),
         // gemini family was dropped (D10) — it is no longer a HostFamily, so cast a
@@ -105,5 +110,43 @@ describe("P1-L8 advisory routing — substrate stamped on the record (C1)", () =
     });
     expect(validateAdvisoryRecord(rec).valid).toBe(true);
     expect(rec.substrate).toBe("claude-code-cli");
+  });
+});
+
+
+// ── T3 rework F4 — asserted-identity clamp (session_context §3: asserted ⇒ weak) ──
+
+describe("T3 F4 — asserted author identity clamps adversarial strength", () => {
+  it("asserted trust: a would-be strong different-family adversarial resolves WEAK with the downgrade reason", () => {
+    const det: DetectionResult = { authorHost: "claude", authorTrust: "asserted", providers: [host(), codex(true)] };
+    const r = resolveRolesForRun(det);
+    expect(r.adversarial.substrate).toBe("codex-cli");
+    expect(r.adversarial.strength).toBe("weak");
+    expect(r.adversarial.reason).toMatch(/not verified|unverified/i);
+    expect(r.adversarial.reason).toMatch(/trust: asserted/);
+    // host/advisory are capability claims, not independence claims — unclamped.
+    expect(r.host.strength).toBe("strong");
+    expect(r.advisory.strength).toBe("strong");
+  });
+
+  it("verified trust: strength strong is preserved (anti-vacuity)", () => {
+    const det: DetectionResult = { authorHost: "claude", authorTrust: "verified", providers: [host(), codex(true)] };
+    expect(resolveRolesForRun(det).adversarial).toMatchObject({ substrate: "codex-cli", strength: "strong" });
+  });
+
+  it("OMITTED trust (rogue plain-JS caller) fails CLOSED: adversarial degrades to weak (R3-F1)", () => {
+    // R3-F1 CORRECTION: the pre-R3 expectation here ("absent trust: behavior
+    // unchanged" ⇒ strong) encoded the fail-open trust hole — an omitted
+    // authorTrust bypassed the asserted clamp and let an unverified author
+    // keep a STRONG cross-family sign-off. The corrected contract requires
+    // `verified` for strong; absent trust degrades exactly like asserted.
+    const det = { authorHost: "claude", providers: [host(), codex(true)] } as unknown as DetectionResult;
+    const r = resolveRolesForRun(det);
+    expect(r.adversarial.substrate).toBe("codex-cli");
+    expect(r.adversarial.strength).toBe("weak");
+    expect(r.adversarial.reason).toMatch(/not verified|unverified/i);
+    // host/advisory are capability claims, not independence claims — unclamped.
+    expect(r.host.strength).toBe("strong");
+    expect(r.advisory.strength).toBe("strong");
   });
 });

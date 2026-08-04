@@ -13,7 +13,9 @@
  *          sweep + phase-token mapping).
  *
  * Only fires when:
- *   - a run-id is resolvable (GUILD_RUN_ID → current-run-id sentinels), AND
+ *   - a run-id is resolvable (GUILD_RUN_ID explicit binding env ONLY —
+ *     session_context §5 / T3b: sentinels are interactive intake, never a
+ *     writer identity), AND
  *   - `<runDir>/run.yaml` exists (a run that was actually started).
  * A bare chat session is a silent no-op. Idempotent: existing checkpoint
  * files (model-emitted or prior backstop) are never overwritten.
@@ -28,6 +30,7 @@
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { resolveRunIdForTrace } from "./lib/run-trace.js";
+import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import { runLearningBackstop } from "./lib/learning-backstop.js";
 
 interface HookPayload {
@@ -63,6 +66,14 @@ async function main(): Promise<void> {
     GUILD_RUN_ID: process.env["GUILD_RUN_ID"],
   });
   if (!runId) process.exit(0); // no active run — nothing to backstop
+
+  // T3b (session_context §5): backstop checkpoints are runtime writes —
+  // verified against the run's minted binding; refused → no write, exit 0.
+  const auth = authorizeHookWrite(guildRoot, { runId });
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("learning-backstop", auth));
+    process.exit(0);
+  }
 
   const result = runLearningBackstop({ guildRoot, runId });
 

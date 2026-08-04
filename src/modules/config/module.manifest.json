@@ -5,7 +5,7 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns settings schema, config rendering, config command behavior, and layered settings resolution.",
-  "depends_on": ["host-runtime", "kernel", "security", "state", "telemetry"],
+  "depends_on": ["capability", "host-runtime", "kernel", "security", "state", "telemetry"],
   "owns": {
     "commands": ["config"],
     "scripts": [

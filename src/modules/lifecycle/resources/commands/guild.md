@@ -111,6 +111,17 @@ Resumption is the same mechanism: the first absent artifact in the table
 order is the resume point. Restart is `/guild:resume --restart` (the v1
 `--restart` first-word positional is removed).
 
+## Team decision gate (blocking — team-contracts §4/§5)
+
+`/guild:guild` routes; it never dispatches on its own. The phase command it
+delegates to owns the gate, and that gate is **not optional**: before any
+phase dispatches a participant — worker, advisor, challenger, or local /
+cross-host reviewer — a PERSISTED `guild.team_decision.v1` approve must
+authorize it (`scripts/team-decide.ts gate`, non-zero exit ⇒ stop). Guild
+never auto-approves, `--auto-approve` does not cover team approval, and a
+stale or hash-mismatched decision fails closed and needs renewed user
+approval. See the delegated phase command's *Team decision gate* section.
+
 ## Flags
 
 The five surviving global flags:

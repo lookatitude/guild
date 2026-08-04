@@ -8,14 +8,14 @@
       "id": "config",
       "source_path": "commands/config.md",
       "resource_path": "resources/commands/config.md",
-      "sha256": "4c4daacb475acfc2a54e053047b6bfb0f77a51c8ee61e56bdaa0e76f26e17434"
+      "sha256": "b436d28f20c26da6a5ab8710300f0d94d2332ce6e25a5a807808974bd60fa140"
     },
     {
       "category": "scripts",
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "e3bbcdf9ee7fae64e7911c02fa1511835c367627669f5324be062d6de79b01df"
+      "sha256": "70f57a1a879fae1289dc45cb6d34ab1d556d0e0b7263d68cc31fa6a0e6020ded"
     },
     {
       "category": "scripts",
@@ -50,7 +50,7 @@
       "id": "lib/config-ui-metadata",
       "source_path": "scripts/lib/config-ui-metadata.ts",
       "resource_path": "resources/scripts/lib/config-ui-metadata.ts",
-      "sha256": "260974d97a34f28199d8fc4b8907390e0b45c77314a8a7aa2f0a9ffebae6a743"
+      "sha256": "249a3d9e22036a7a7074b77b99f17501d265f8fa33ea8f832b109820372fe082"
     },
     {
       "category": "scripts",
@@ -64,7 +64,7 @@
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "76f31806c7e628b46471146d77bd7ea72de8796134c47dda1db83b0d68ecf566"
+      "sha256": "06edb1f765687e319a93ad7317ad29d6de9da2d38c6e6454a303185fa967bd4d"
     },
     {
       "category": "scripts",

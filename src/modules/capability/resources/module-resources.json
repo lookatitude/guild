@@ -4,6 +4,13 @@
   "generated_from": "guild.inventory.v1",
   "entries": [
     {
+      "category": "commands",
+      "id": "models",
+      "source_path": "commands/models.md",
+      "resource_path": "resources/commands/models.md",
+      "sha256": "d2e5e1cc302571fd5770eb0568ed93689f4334d39fb9b6889ecc7edf8f33e865"
+    },
+    {
       "category": "scripts",
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
@@ -121,6 +128,13 @@
       "source_path": "scripts/lib/role-resolver.ts",
       "resource_path": "resources/scripts/lib/role-resolver.ts",
       "sha256": "3940995252e92164002c13a9bbad401fd5170825474bc1bcd3ae6bf0f5fc1945"
+    },
+    {
+      "category": "scripts",
+      "id": "models-cmd",
+      "source_path": "scripts/models-cmd.ts",
+      "resource_path": "resources/scripts/models-cmd.ts",
+      "sha256": "23548e5478aaa590ece89b0f5d8f777dfb8e7ca7c9e5f29ffe69b21ab53649da"
     },
     {
       "category": "scripts",

@@ -196,6 +196,9 @@ export function runMarkLaneDeadCli(): void {
   process.exit(code);
 }
 
-if (require.main === module) {
+if (
+  require.main === module &&
+  new RegExp("[\\\\/]mark-lane-dead\\.[cm]?[jt]s$").test(process.argv[1] ?? "")
+) {
   runMarkLaneDeadCli();
 }

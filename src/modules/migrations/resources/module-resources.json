@@ -15,7 +15,7 @@
       "id": "dot-guild/audit",
       "source_path": "scripts/dot-guild/audit.ts",
       "resource_path": "resources/scripts/dot-guild/audit.ts",
-      "sha256": "d02f53ec9aa35533af3baadc24fff3c87d0254826dcbce05d090cfd3563c965d"
+      "sha256": "10682a538fbd45bf4c8de83744f6efbb2c40b4dc407675173df7705e37e342d5"
     },
     {
       "category": "scripts",
@@ -99,7 +99,7 @@
       "id": "dot-guild/scrub",
       "source_path": "scripts/dot-guild/scrub.ts",
       "resource_path": "resources/scripts/dot-guild/scrub.ts",
-      "sha256": "8a768767bee857c18547c4bcdaba929ec68a5f036804ac419c20b483d71662af"
+      "sha256": "2e34904d0a741a9f37c8738eea02c61bef06284db89ae8f0500a75471a2b63c0"
     },
     {
       "category": "scripts",

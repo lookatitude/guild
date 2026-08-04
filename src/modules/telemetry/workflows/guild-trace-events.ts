@@ -290,10 +290,35 @@ export interface GuildTraceDegradationV1 extends GuildTraceEventBase {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 7. guild.trace.model_inspection.v1 — M0 read-only routing inspection (lane T6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GuildTraceModelInspectionV1 extends GuildTraceEventBase {
+  schema_version: "guild.trace.model_inspection.v1";
+  /** Session host family as inspected ("unknown" when unbound). */
+  host_family: string;
+  /** Session host surface as inspected ("unknown" when unbound). */
+  host_surface: string;
+  /** Identity trust surfaced by the inspection ("asserted" | "verified"). */
+  identity_trust: string;
+  /** Catalog state surfaced ("ok" | "absent" | "discovery_disabled" | "inspect_disabled"). */
+  catalog_state: string;
+  /** Frozen-receipt selected model, or null when no receipt was inspected. */
+  selection_model: string | null;
+  /** Finalized-receipt served model, or the literal "unknown" (never the requested model). */
+  actual_model: string;
+  /** "strong" | "weak" from a WRITTEN adjudication block, else "none_written" (§7a). */
+  independence: string;
+  /** Count of honest-unknown fields the report surfaced. */
+  unknowns_count: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Union type
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type GuildTraceEvent =
+  | GuildTraceModelInspectionV1
   | GuildTraceDispatchV1
   | GuildTraceRecallV1
   | GuildTraceRecallDecisionV1
@@ -309,6 +334,7 @@ export const GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
   "guild.trace.config_resolution.v1",
   "guild.trace.security_decision.v1",
   "guild.trace.degradation.v1",
+  "guild.trace.model_inspection.v1",
 ] as const);
 
 export type GuildTraceSchemaVersion = (typeof GUILD_TRACE_SCHEMA_VERSIONS)[number];
@@ -583,6 +609,29 @@ export function validateDegradationEvent(ev: unknown): ValidationResult {
   return { ok: true };
 }
 
+/** Validate a guild.trace.model_inspection.v1 event (lane T6 — M0 inspection). */
+export function validateModelInspectionEvent(ev: unknown): ValidationResult {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev as Record<string, unknown>;
+
+  if (e["schema_version"] !== "guild.trace.model_inspection.v1") {
+    return { ok: false, reason: `wrong schema_version for model_inspection: ${e["schema_version"]}` };
+  }
+  for (const key of ["host_family", "host_surface", "identity_trust", "catalog_state", "actual_model", "independence"]) {
+    if (typeof e[key] !== "string" || e[key] === "") {
+      return { ok: false, reason: `${key} must be a non-empty string` };
+    }
+  }
+  if (e["selection_model"] !== null && (typeof e["selection_model"] !== "string" || e["selection_model"] === "")) {
+    return { ok: false, reason: "selection_model must be a non-empty string or null" };
+  }
+  if (typeof e["unknowns_count"] !== "number" || e["unknowns_count"] < 0 || !Number.isInteger(e["unknowns_count"])) {
+    return { ok: false, reason: "unknowns_count must be a non-negative integer" };
+  }
+  return { ok: true };
+}
+
 /** Validate any guild.trace.*.v1 event — dispatches to the appropriate typed validator. */
 export function validateGuildTraceEvent(ev: unknown): ValidationResult {
   if (typeof ev !== "object" || ev === null) {
@@ -590,6 +639,8 @@ export function validateGuildTraceEvent(ev: unknown): ValidationResult {
   }
   const sv = (ev as Record<string, unknown>)["schema_version"];
   switch (sv) {
+    case "guild.trace.model_inspection.v1":
+      return validateModelInspectionEvent(ev);
     case "guild.trace.dispatch.v1":
       return validateDispatchEvent(ev);
     case "guild.trace.recall.v1":
@@ -651,4 +702,11 @@ export function makeDegradationEvent(
   fields: Omit<GuildTraceDegradationV1, "schema_version">,
 ): GuildTraceDegradationV1 {
   return { schema_version: "guild.trace.degradation.v1", ...fields };
+}
+
+/** Build a guild.trace.model_inspection.v1 event (lane T6 — M0 inspection). */
+export function makeModelInspectionEvent(
+  fields: Omit<GuildTraceModelInspectionV1, "schema_version">,
+): GuildTraceModelInspectionV1 {
+  return { schema_version: "guild.trace.model_inspection.v1", ...fields };
 }

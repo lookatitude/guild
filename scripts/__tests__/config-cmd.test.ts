@@ -975,22 +975,28 @@ function captureStdout(fn: () => number): { output: string; exitCode: number } {
 }
 
 describe("providers detect — FU-2: injected probe via direct import (no CLI flag)", () => {
-  test("claude host + codex-plugin available: prints table with codex-plugin recommendation, exits 0", () => {
-    // Claude is the author host; codex-plugin is installed and authed; review=cross
+  test("claude host + codex-plugin available: table shows selectable codex-plugin but recommendation honestly degrades (asserted identity), exits 0", () => {
+    // Claude is the author host; codex-plugin is installed and authed; review=cross.
+    // T3 R3-F1 CORRECTION: this test previously expected a codex-plugin
+    // recommendation off a settings-asserted host — the CLI records no
+    // native-adapter/handshake evidence, so it supplies trust "asserted" and
+    // the cross-review recommendation must degrade to (none) with the reason.
+    // The detection table itself (detected/authed/selectable) is unaffected.
     const probe = makeProbe({ pluginAdapters: ["codex-plugin"], codexStoredAuth: true });
     const project = tmp(mkProject({ settings: { host: "claude", review: "cross" } }));
 
     const { output, exitCode } = captureStdout(() => cmdProvidersDetect(project, probe));
 
     expect(exitCode).toBe(0);
-    // Table must include the author host family
+    // Table must include the author host family + the honest trust line
     expect(output).toMatch(/author.*host|host.*family|claude/i);
-    // Provider rows must be present
+    expect(output).toMatch(/author trust\s*:\s*asserted/i);
+    // Provider rows must be present, with codex-plugin selectable
     expect(output).toMatch(/codex-plugin/);
-    // Detection state columns
     expect(output).toMatch(/detected|authed|selectable/i);
-    // Recommendation must call out codex-plugin
-    expect(output).toMatch(/recommend.*codex-plugin|codex-plugin.*recommend/i);
+    // No recommendation off an asserted-only identity — reason explains why
+    expect(output).toMatch(/recommended cross-review\s*:\s*\(none\)/i);
+    expect(output).toMatch(/not verified|unverified/i);
   });
 
   test("codex absent: codex-plugin shows as not detected and not selectable, exits 0", () => {

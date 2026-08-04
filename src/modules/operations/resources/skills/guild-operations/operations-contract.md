@@ -65,8 +65,11 @@ the **`null` ops producer** in the station composer's `ops` `advisory_panel` (So
 
 Split posture rides the interactive-by-default policy + the additive
 `autonomy_contract`; runbook approval lowers **only the SOFT gate**, never the
-hard set (rail 3). Active specialists stay `≤ producer + challenger` for
-`incident` / `rollback` (the composer caps). The G-operations advisory
+hard set (rail 3). Panel membership is signal-justified, proposed in the phase's
+`guild.team_proposal.v2`, and user-approved at the `guild.team_decision.v1` gate
+like every other participant; for `incident` / `rollback` urgency the
+`guild.team_schedule.v1` waves run **producer + challenger concurrently, the
+rest in later waves** — a scheduling choice, never a membership cut. The G-operations advisory
 **challengers** are sourced from the same `ops` `advisory_panel`, resolved by
 `composeStationTeam` — not a hardcoded list: `security` (BASELINE — always present) +
 `architect` (GATED on the `multi_component` signal; recorded as `chal:ops:architect`).

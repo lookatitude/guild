@@ -335,13 +335,13 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * `.claude-plugin` manifest hashes, and both naming the six skills files.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "6e911d9f724f1d1bf831386509e4269254a78102",
-  skills: "931c854c3e1557857b3408d9e555ea875ee9661b",
+  commands: "c32076fa811c45d181314e3b2664663b5bce5dd2",
+  skills: "74d8b37c68540a7ecb8dce9d6f960e40f2c38eed",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "14ac5fc1f859d90e6da4025398ef8b83939dee19b7eed8fa49260b76a834f197",
+  ".claude-plugin/plugin.json": "969bb2779e081266c436a29b53f6b2fc8d5a16c550c8364df502e2ef1eba7a39",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 

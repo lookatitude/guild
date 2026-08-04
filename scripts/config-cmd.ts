@@ -157,6 +157,8 @@ const TIER1_KEYS = new Set([
   "secrets_policy",
   "mcp",
   "defaults",
+  // T5 dynamic-host-model-routing: guild.model_policy.v2 (object; null = unset)
+  "model_policy",
   // LW1-6 schema extension (SC-W1-7/W1-8): the per-run role pins + per-host render
   // overrides. They live in DEFAULTS, are written by `config role` AND materialized by
   // `reconcile sync`/`config init`, and resolved by the resolver — so the closed key-set
@@ -2306,10 +2308,15 @@ export function cmdProvidersDetect(cwd: string, probe?: ProbeEnv): number {
   // way to inject a fake probe is via direct function call from test code.
   const resolvedProbe: ProbeEnv = probe ?? defaultProbeEnv(cwd);
 
-  // Run detection
+  // Run detection. T3 R3-F1: the settings `host:` key is a caller ASSERTION —
+  // this informational CLI surface records no native-adapter/handshake
+  // evidence, so it must never supply "verified" (the run-start preflight is
+  // the authoritative trust resolver). Asserted identity means the cross-review
+  // recommendation below honestly degrades to (none) with the reason.
   const detection = detectProviders({
     cwd,
     host: resolvedHost,
+    trust: "asserted",
     probe: resolvedProbe,
   });
 
@@ -2324,6 +2331,7 @@ export function cmdProvidersDetect(cwd: string, probe?: ProbeEnv): number {
 
   lines.push(`[config-cmd] providers detect`);
   lines.push(`  author host family : ${detection.authorHost}`);
+  lines.push(`  author trust       : ${detection.authorTrust} (settings host is a caller claim; only the run-start preflight can verify)`);
   lines.push(`  review.mode        : ${resolvedReview.mode}`);
   lines.push("");
   lines.push(

@@ -475,6 +475,11 @@ function runLauncher(
 ): { exitCode: number; stdout: string; stderr: string } {
   const baseEnv: Record<string, string | undefined> = { ...process.env };
   delete baseEnv.TMUX; // prevent host terminal state from tripping tests
+  // T7R-R1-B1: these fixtures carry no team-plan trail and are about consumer
+  // migration, not approval. Opt into the ONE audited escape hatch with a stated
+  // reason; the gate's own pins live in t7-h1-dispatch-approval.test.ts.
+  baseEnv.GUILD_DISPATCH_APPROVAL_OVERRIDE =
+    "consumer-migration fixture: no team-plan trail; approval verification is pinned separately";
   const finalEnv: Record<string, string> = {};
   for (const [k, v] of Object.entries({ ...baseEnv, ...env })) {
     if (v !== undefined) finalEnv[k] = v;

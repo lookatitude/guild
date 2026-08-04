@@ -3,6 +3,7 @@ export * from "./workflows/emit-loop-event";
 export * from "./workflows/mark-lane-dead";
 export * from "./workflows/resume-lanes";
 export * from "./workflows/retry-lane";
+export * from "./workflows/run-binding";
 export * from "./workflows/run-lifecycle";
 export * from "./workflows/run-manifest-wiring";
 export * from "./workflows/runstart-preflight";

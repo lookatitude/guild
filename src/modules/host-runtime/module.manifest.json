@@ -35,6 +35,7 @@
       "lib/mixed-host-contracts",
       "lib/pane-adapter",
       "lib/provider-detect",
+      "lib/session-context",
       "lib/result-normalizer",
       "lib/support-matrix",
       "host-smoke",

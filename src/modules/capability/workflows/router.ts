@@ -207,12 +207,31 @@ export interface RoutingDecision extends RouteTarget {
    */
   degraded: boolean;
   /**
-   * TE-03: "strong" = reviewer on a DIFFERENT host than the producer (full
-   * cross-host adversarial independence). "weak" = reviewer on the SAME host
-   * (independence lost — the observable signal defined in docs/v2/host-adversarial-adaptability.html + 08).
-   * Set to "weak" whenever degraded=true.
+   * ALWAYS "weak" from the router (T7-H2). The router is a HOST-SELECTION
+   * function: it has no producer/reviewer pair, no identity-trust evidence,
+   * and no served-model binding, so it cannot evaluate the two-axis §7/§7a
+   * predicate. It used to set "strong" unconditionally on every non-degraded
+   * route — meaning "a fully-qualifying host was found", but READING as a
+   * cross-family review sign-off once the launcher persisted it into the
+   * shared, git-tracked `run-state.json`.
+   *
+   * A strong verdict now exists in exactly ONE place: a WRITTEN, hash-bound
+   * `independence_adjudication` block (guild.model_resolution.v1 §7a), produced
+   * by `adjudicateIndependence` / `buildIndependenceAdjudication` over BOTH
+   * parties' finalized receipts. §7a's own words: "no provisional strong exists
+   * anywhere". `assertPersistableIndependence` enforces that at the persistence
+   * boundary, so re-widening this type alone cannot reopen the hole.
+   *
+   * The honest host-axis signal the router DOES compute is `hostDiversity`.
    */
-  independence: "strong" | "weak";
+  independence: "weak";
+  /**
+   * The host-selection fact the router can actually observe, named so it can
+   * never be misread as a review verdict: was the selected host a different
+   * registry host from the requested/preferred one? This is an input to an
+   * independence adjudication, never an adjudication.
+   */
+  hostDiversity: "distinct" | "same" | "unknown";
   /** Ranked alternatives at the SAME tier (CR-3 — no silent downgrade). */
   fallbackChain: RouteTarget[];
   /** Rank score of the selected primary (CR-1 step 2 affinity input). */
@@ -391,6 +410,21 @@ export function resolveModelParams(
 // ── route() — CR-1 ───────────────────────────────────────────────────────────
 
 /**
+ * T7-H2 — the honest host-axis signal the router CAN compute. Named
+ * `hostDiversity` (not `independence`) precisely so no reader, gate, or
+ * benchmark can mistake it for a review sign-off: it says only whether the
+ * selected host kind differs from the one the lane preferred. With no
+ * preference expressed the answer is "unknown", never an optimistic default.
+ */
+function hostDiversityOf(
+  preferred: HostKind | undefined,
+  selected: HostKind
+): "distinct" | "same" | "unknown" {
+  if (preferred === undefined) return "unknown";
+  return preferred === selected ? "same" : "distinct";
+}
+
+/**
  * Deterministic three-axis routing. Returns the full logged decision (the
  * `{host, hostKind, tier, model}` core + the ranked fallback chain + the reject
  * trail). Throws RouteError when no host satisfies the lane.
@@ -491,6 +525,7 @@ export function route(
       affinityScore: rankScore(leastBad, lane),
       degraded: true,
       independence: "weak",
+      hostDiversity: hostDiversityOf(lane.preferredHostKind, leastBad.host_kind),
       reason:
         `DEGRADED: no host fully qualified for task "${lane.taskId}"; ` +
         `routed to least-bad candidate ${leastBad.host_id}(${leastBad.host_kind}); ` +
@@ -550,7 +585,10 @@ export function route(
     fallbackChain,
     affinityScore: rankScore(primaryHost, lane),
     degraded: false,
-    independence: "strong",
+    // T7-H2: NEVER "strong" here. Finding a fully-qualifying host is not a
+    // review-independence verdict; only a written §7a adjudication is.
+    independence: "weak",
+    hostDiversity: hostDiversityOf(lane.preferredHostKind, primary.hostKind),
     reason:
       `primary=${primary.host}(${primary.hostKind}) tier=${primary.tier} ` +
       `model=${primary.model ?? "(host default — no Guild-mapped model)"}; ${fallbackChain.length} fallback(s); ` +
@@ -558,6 +596,7 @@ export function route(
     rejected,
     notes: [
       "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+      "independence is ALWAYS weak from the router (T7-H2): finding a fully-qualifying host is a host-selection fact (see hostDiversity), never a review verdict; strong exists only as a written §7a independence_adjudication block over both parties' finalized receipts",
     ],
   };
 

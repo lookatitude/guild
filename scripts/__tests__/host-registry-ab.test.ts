@@ -160,6 +160,11 @@ function runRoutingAbMatrix(): Record<string, string> {
       const detection = detectProviders({
         cwd: "/ab",
         host: author,
+        // R3-F1: trust is non-optional. The matrix pins the registry A/B
+        // under VERIFIED identity (only there is selection trust-invariant);
+        // the trust gates are covered by their own dedicated suites. Golden
+        // regenerated (UPDATE_GOLDEN=1) for the added authorTrust field.
+        trust: "verified",
         probe: fakeProbe(facts),
       });
       out[`detect:${author}:${scenName}`] = canonicalJSON(detection);

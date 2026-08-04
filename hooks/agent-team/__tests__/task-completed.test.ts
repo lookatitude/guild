@@ -24,6 +24,12 @@ import * as os from "os";
 
 const SCRIPT = path.resolve(__dirname, "../task-completed.ts");
 
+// T3b (session_context §5): run-record writes are binding-gated; fixtures mint
+// the run's binding. hermeticEnv strips outer Guild-lane env (a leaked
+// GUILD_RUN_ID would redirect deriveRunId off the fixture's run).
+import { mintTestBinding } from "../../test-support/mint-binding";
+import { hermeticEnv } from "../../test-support/hermetic-env";
+
 function runScript(
   payloadOverride: object,
   env: Record<string, string> = {}
@@ -32,7 +38,7 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...hermeticEnv(), ...env },
     timeout: 15000,
   });
   return {
@@ -144,6 +150,10 @@ describe("task-completed.ts", () => {
       const runId = "run-sess-abc123";
       const runDir = path.join(tmpDir, ".guild", "runs", runId);
       createReceipt(runDir, "backend", "task-001", FULL_RECEIPT_FIELDS, VALID_ENVELOPE);
+      // T3b rework F1: learnings persistence is a run-record write — the
+      // caller must PRESENT the pair (a minted record alone no longer
+      // authorizes, and a session-derived run id never does).
+      const ref = mintTestBinding(tmpDir, runId);
 
       const payload = {
         session_id: "sess-abc123",
@@ -156,6 +166,8 @@ describe("task-completed.ts", () => {
       };
       const { exitCode, stderr } = runScript(payload, {
         CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+        GUILD_RUN_ID: runId,
+        GUILD_RUN_BINDING_REF: ref,
       });
       expect(exitCode).toBe(0);
       expect(stderr).toMatch(/envelope validated/i);

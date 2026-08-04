@@ -4,14 +4,16 @@
     "degraded": false,
     "fallbackChain": [],
     "host": "claude",
+    "hostDiversity": "unknown",
     "hostKind": "claude",
-    "independence": "strong",
+    "independence": "weak",
     "model": "sonnet",
     "modelParams": {
       "model": "sonnet"
     },
     "notes": [
-      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+      "independence is ALWAYS weak from the router (T7-H2): finding a fully-qualifying host is a host-selection fact (see hostDiversity), never a review verdict; strong exists only as a written §7a independence_adjudication block over both parties' finalized receipts"
     ],
     "reason": "primary=claude(claude) tier=mid model=sonnet; 0 fallback(s); backend=agent_team; workType=none",
     "rejected": [
@@ -39,14 +41,16 @@
       }
     ],
     "host": "codex",
+    "hostDiversity": "unknown",
     "hostKind": "codex",
-    "independence": "strong",
+    "independence": "weak",
     "model": "o3",
     "modelParams": {
       "model": "o3"
     },
     "notes": [
-      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+      "independence is ALWAYS weak from the router (T7-H2): finding a fully-qualifying host is a host-selection fact (see hostDiversity), never a review verdict; strong exists only as a written §7a independence_adjudication block over both parties' finalized receipts"
     ],
     "reason": "primary=codex(codex) tier=powerful model=o3; 1 fallback(s); backend=subagent; workType=adversarial_review",
     "rejected": [],
@@ -58,14 +62,16 @@
     "degraded": false,
     "fallbackChain": [],
     "host": "claude",
+    "hostDiversity": "unknown",
     "hostKind": "claude",
-    "independence": "strong",
+    "independence": "weak",
     "model": "haiku",
     "modelParams": {
       "model": "haiku"
     },
     "notes": [
-      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+      "independence is ALWAYS weak from the router (T7-H2): finding a fully-qualifying host is a host-selection fact (see hostDiversity), never a review verdict; strong exists only as a written §7a independence_adjudication block over both parties' finalized receipts"
     ],
     "reason": "primary=claude(claude) tier=cheap model=haiku; 0 fallback(s); backend=independent_agents; workType=none",
     "rejected": [
@@ -83,14 +89,16 @@
     "degraded": false,
     "fallbackChain": [],
     "host": "claude",
+    "hostDiversity": "distinct",
     "hostKind": "claude",
-    "independence": "strong",
+    "independence": "weak",
     "model": "sonnet",
     "modelParams": {
       "model": "sonnet"
     },
     "notes": [
-      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub"
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+      "independence is ALWAYS weak from the router (T7-H2): finding a fully-qualifying host is a host-selection fact (see hostDiversity), never a review verdict; strong exists only as a written §7a independence_adjudication block over both parties' finalized receipts"
     ],
     "reason": "primary=claude(claude) tier=mid model=sonnet; 0 fallback(s); backend=agent_team; workType=none",
     "rejected": [

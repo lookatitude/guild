@@ -17,6 +17,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   GENERIC_SUBAGENT_TYPE,
+  dispatchModelForSpecialist,
+  dispatchModelParamsForSpecialist,
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
 } from "../core/contracts/team-backend";
@@ -60,6 +62,12 @@ export function composeInProcessDispatch(
         );
       }
     }
+    // T6-R2-F5: an evidenced-M2 selection IS the descriptor's model, so the
+    // Agent() call guild:execute-plan issues runs at the resolver's frozen
+    // model instead of being auto-scored. `null` (legacy / shadow / no
+    // provenance) keeps the auto-scored behavior byte-identical.
+    const model = dispatchModelForSpecialist(spec);
+    const modelParams = dispatchModelParamsForSpecialist(spec);
     // rf-wi-03 (G3) — carry the scored tier on the lane's OWN env so the tier
     // guard can verify MODEL↔TIER and reach `scored_compliant` instead of
     // capping at `model_present`. The scored tier wins over the authoring
@@ -73,11 +81,15 @@ export function composeInProcessDispatch(
     return {
       name: spec.name,
       subagentType: isProjectLocal ? GENERIC_SUBAGENT_TYPE : spec.name,
-      model: null,
+      model,
       env: {
         GUILD_RUN_ID: req.runId,
         GUILD_SPECIALIST: spec.name,
         GUILD_TASK_ID: spec.taskId ?? spec.name,
+        ...(model !== null ? { GUILD_MODEL: model } : {}),
+        ...(modelParams !== undefined
+          ? { GUILD_MODEL_PARAMS: JSON.stringify(modelParams) }
+          : {}),
         // rf-wi-03 (G3) — the universal structured producer marker. Unforgeable
         // by quoted prose (it lives in the dispatch's own env map), stamped on
         // EVERY descriptor so a lane that lacks it is detectably NOT

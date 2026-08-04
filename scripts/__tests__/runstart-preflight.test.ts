@@ -89,6 +89,16 @@ function makeWorkspaceWithChild(
 interface FakeWorld {
   incompleteRun?: { runId: string; runDir: string } | null;
   tmuxOnPath?: boolean;
+  /** T3: make the fake probe inject a verified claude native-adapter identity. */
+  claudeNativeIdentity?: boolean;
+  /** T3 F4: inject an arbitrary verified native-adapter identity (wins over claudeNativeIdentity). */
+  nativeIdentity?: {
+    family: "claude" | "codex" | "pi" | "antigravity" | "unknown" | "agents";
+    surface: "cli" | "app" | "web" | "api" | "connector" | "file" | "unknown";
+    adapter_id: string;
+    adapter_version: string;
+    evidence: string;
+  };
   providerWorld?: {
     onPath?: string[];
     versionOk?: string[];
@@ -119,12 +129,28 @@ function makeProbe(world: FakeWorld): PreflightProbe {
     tmuxOnPath: () => world.tmuxOnPath === true,
     providerProbe: makeProbeEnv(world.providerWorld ?? {}),
     incompleteRun: () => world.incompleteRun ?? null,
+    // T3 (session_context §4 step 2): the fake native-adapter identity. The
+    // reference "Claude host" scenarios set claudeNativeIdentity — with the
+    // retired claude default gone, author identity must come from an explicit
+    // host setting or this adapter injection, never a fallback.
+    hostIdentity: () =>
+      world.nativeIdentity ??
+      (world.claudeNativeIdentity
+        ? {
+            family: "claude" as const,
+            surface: "cli" as const,
+            adapter_id: "claude-code-native",
+            adapter_version: "test",
+            evidence: "fake host-set env marker (test probe)",
+          }
+        : null),
   };
 }
 
 // A probe with tmux available AND codex-plugin detected+authed (the reference scenario).
 const CLAUDE_HOST_CODEX_PLUGIN_PROBE = makeProbe({
   tmuxOnPath: true,
+  claudeNativeIdentity: true,
   providerWorld: {
     pluginAdapters: ["codex-plugin"],
     codexStoredAuth: true,
@@ -324,13 +350,57 @@ describe("persistTmuxTeamArgv", () => {
 // ---------------------------------------------------------------------------
 
 describe("AC-6 — provider detection populated", () => {
-  it("populates providers.authorHost as 'claude' by default", () => {
+  it("populates providers.authorHost as 'claude' from the native-adapter identity (session_context §4 step 2)", () => {
     const cwd = makeTmpDir();
     const result = runStartPreflight({
       cwd,
       probe: CLAUDE_HOST_CODEX_PLUGIN_PROBE,
     });
     expect(result.providers.authorHost).toBe("claude");
+    // T3: the identity inputs are surfaced for startRun's session context.
+    expect(result.session_identity.native_adapter?.family).toBe("claude");
+    expect(result.session_identity.envelope_host).toBeUndefined();
+  });
+
+  it("resolves authorHost 'unknown' when host is auto and NO native identity exists (§3 — no claude default)", () => {
+    const cwd = makeTmpDir();
+    // TMUX_NO_CODEX_PROBE injects no native identity and settings carry the
+    // default host: "auto" — the retired claude fallback must NOT resurface.
+    const result = runStartPreflight({ cwd, probe: TMUX_NO_CODEX_PROBE });
+    expect(result.providers.authorHost).toBe("unknown");
+    expect(result.session_identity.native_adapter).toBeNull();
+  });
+
+  it("an explicit host setting is captured as the CANONICAL asserted envelope host (§4 step 1; F5)", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, { host: "codex" });
+    // No native identity in the probe → the assertion stands, trust stays asserted.
+    const result = runStartPreflight({ cwd, probe: TMUX_NO_CODEX_PROBE });
+    // F5: the settings resolver canonicalizes host "codex" → the registry id
+    // "codex-cli"; envelope_host carries that canonical asserted value verbatim
+    // (family resolution to "codex" happens downstream via resolveAuthorHost).
+    expect(result.resolved.config.host).toBe("codex-cli");
+    expect(result.session_identity.envelope_host).toBe("codex-cli");
+    expect(result.providers.authorHost).toBe("codex");
+    expect(result.providers.authorTrust).toBe("asserted");
+    expect(result.snapshot.providers.authorTrust).toBe("asserted");
+  });
+
+  it("F4 (reviewer probe): a VERIFIED native identity that CONTRADICTS the asserted host replaces it downstream", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, { host: "codex" });
+    const result = runStartPreflight({
+      cwd,
+      probe: CLAUDE_HOST_CODEX_PLUGIN_PROBE, // verified native claude
+    });
+    // §4 conflict rule: the verified family REPLACES the contradicted assertion
+    // before any provider/reviewer/role resolution — never the other way round.
+    expect(result.providers.authorHost).toBe("claude");
+    expect(result.providers.authorTrust).toBe("verified");
+    // The asserted envelope value is still surfaced for the frozen session
+    // context, which records the conflict + rejection (§4).
+    expect(result.session_identity.envelope_host).toBe("codex-cli");
+    expect(result.session_identity.native_adapter?.family).toBe("claude");
   });
 
   it("Claude host + codex-plugin available → recommended is codex-plugin (AC-7)", () => {
@@ -789,6 +859,7 @@ describe("R-008 — adversarial_review_provider pin is honored", () => {
     });
     const probe = makeProbe({
       tmuxOnPath: false,
+      claudeNativeIdentity: true,
       providerWorld: {
         pluginAdapters: ["codex-plugin"],
         codexStoredAuth: true,
@@ -817,6 +888,7 @@ describe("R-008 — adversarial_review_provider pin is honored", () => {
     });
     const probe = makeProbe({
       tmuxOnPath: false,
+      claudeNativeIdentity: true,
       providerWorld: {
         pluginAdapters: ["codex-plugin"],
         codexStoredAuth: true,
@@ -910,5 +982,95 @@ describe("incomplete-run intake (06-initiatives, deterministic probe)", () => {
       },
     });
     expect(res.incompleteRun).toBeNull();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// T3 rework F4 — reviewer probe regressions (session_context §3/§4)
+// Round-1 live probes:
+//   P1: asserted-only claude (explicit host, NO native identity) + selectable
+//       codex-plugin → preflight selected "codex-plugin" and stamped
+//       roles.adversarial.strength "strong". Asserted identity may NEVER
+//       satisfy the strong predicate (contract: asserted ⇒ weak).
+//   P2: asserted claude + VERIFIED native codex → preflight kept authorHost
+//       "claude" and selected a codex adversarial substrate at strength
+//       "strong" — a same-family review mislabeled as cross-family
+//       independence. The verified contradiction must replace the asserted
+//       family BEFORE reviewer selection.
+// ---------------------------------------------------------------------------
+
+describe("T3 F4 — asserted identity can never produce strong independence", () => {
+  it("P1: asserted-only host + selectable codex-plugin → NO selected reviewer, NO recommendation, adversarial weak", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, { host: "claude", review: "cross" });
+    const probe = makeProbe({
+      tmuxOnPath: false,
+      // NO native identity — the explicit host setting is an unverified assertion.
+      providerWorld: { pluginAdapters: ["codex-plugin"], codexStoredAuth: true },
+    });
+    const result = runStartPreflight({ cwd, probe });
+
+    expect(result.providers.authorHost).toBe("claude");
+    expect(result.providers.authorTrust).toBe("asserted");
+    // The false-signoff class: no selected reviewer, no recommendation, and the
+    // stated reason names the unverified identity.
+    expect(result.providers.selected).toBeUndefined();
+    expect(result.snapshot.providers.selected).toBeUndefined();
+    expect(result.providers.recommended).toBeNull();
+    expect(result.providers.reason).toMatch(/not verified|asserted-only|unverified/);
+    // The adversarial role can never be stamped strong off an assertion.
+    expect(result.snapshot.roles.adversarial.strength).toBe("weak");
+    expect(result.snapshot.roles.adversarial.reason).toMatch(/not verified|asserted-only|unverified/);
+    expect(result.snapshot.providers.authorTrust).toBe("asserted");
+  });
+
+  it("P1b: the SAME world with a VERIFIED native identity still selects normally (anti-vacuity)", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, { host: "claude", review: "cross" });
+    const probe = makeProbe({
+      tmuxOnPath: false,
+      claudeNativeIdentity: true, // verified — confirms the assertion
+      providerWorld: { pluginAdapters: ["codex-plugin"], codexStoredAuth: true },
+    });
+    const result = runStartPreflight({ cwd, probe });
+    expect(result.providers.authorTrust).toBe("verified");
+    expect(result.providers.selected).toBe("codex-plugin");
+    expect(result.snapshot.roles.adversarial.strength).toBe("strong");
+  });
+
+  it("P2: asserted claude + VERIFIED native codex → codex wins, and NO same-family strong sign-off survives", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, { host: "claude", review: "cross" });
+    const probe = makeProbe({
+      tmuxOnPath: false,
+      nativeIdentity: {
+        family: "codex",
+        surface: "cli",
+        adapter_id: "codex-guild-run",
+        adapter_version: "test",
+        evidence: "fake codex native-adapter injection (test probe)",
+      },
+      providerWorld: {
+        onPath: ["codex"],
+        versionOk: ["codex"],
+        pluginAdapters: ["codex-plugin"],
+        codexStoredAuth: true,
+      },
+    });
+    const result = runStartPreflight({ cwd, probe });
+
+    // The verified contradiction REPLACES the asserted author family.
+    expect(result.providers.authorHost).toBe("codex");
+    expect(result.providers.authorTrust).toBe("verified");
+    expect(result.snapshot.providers.authorHost).toBe("codex");
+    // A codex reviewer is now SAME-family — it can never be selected for cross.
+    expect(result.providers.selected).toBeUndefined();
+    expect(result.snapshot.providers.selected).toBeUndefined();
+    // And the adversarial role degrades honestly instead of a same-family "strong".
+    expect(result.snapshot.roles.adversarial.strength).toBe("weak");
+    // The frozen-record inputs still carry both sides for §4 conflict evidence.
+    expect(result.session_identity.envelope_host).toBe("claude-code-cli");
+    expect(result.session_identity.native_adapter?.family).toBe("codex");
   });
 });

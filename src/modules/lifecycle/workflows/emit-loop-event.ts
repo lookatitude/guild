@@ -209,6 +209,9 @@ export function runEmitLoopEventCli(): void {
   }
 }
 
-if (require.main === module) {
+if (
+  require.main === module &&
+  new RegExp("[\\\\/]emit-loop-event\\.[cm]?[jt]s$").test(process.argv[1] ?? "")
+) {
   runEmitLoopEventCli();
 }

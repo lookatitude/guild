@@ -16,7 +16,7 @@ Two files, both required:
 1. `.guild/spec/<slug>.md` — the approved spec from `guild:brainstorm`. Authoritative source for goal, audience, success criteria, non-goals, constraints, autonomy policy, and risks. Reject planning if any of those seven fields is missing — return control to `guild:brainstorm` instead of silently filling in.
 2. The resolved per-phase team file from `guild:team-compose` — **resolved via `resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** (`scripts/lib/team-file.ts`), which returns `.guild/team/<slug>.<phase>.yaml` (current world) or the legacy `.guild/team/<slug>.yaml` (read-only back-compat). Authoritative source for which specialists own which scope, inter-specialist dependencies, and execution backend (`subagent` vs `agent-team`). **On a `null` return** (no per-phase file and no legacy) → loop back to `guild:team-compose` to run the phase-composition pass; do **not** fabricate a path. **On a legacy hit** (per-phase absent) → emit the one-line deprecation notice once per run: *"single-file team.yaml is legacy; re-compose to adopt per-phase teams."*
 
-Do not infer lanes from chat history outside these two files. If the resolved team file says 4 specialists, you plan 4 lanes; if a user adds scope in chat, loop back to `guild:team-compose` or `guild:brainstorm` rather than expanding the plan unilaterally.
+Do not infer lanes from chat history outside these two files. The team file realizes a **user-approved `guild.team_proposal.v2`** (its top-level `proposal_ref`/`decision_ref` keys — the `guild.team_decision.v1` gate ran at `guild:team-compose`): you plan **one lane per approved `participation_kind: worker` participant** (keyed by its stable `participant_id`) — however many the user approved; the roster is uncapped and never trimmed here to a size target or backend capacity. Approved advisor/challenger/reviewer participants are NOT plan lanes — they dispatch at their own gate points (advisor escalation, panels, brokers) under the same decision — so filter by `participation_kind`, never by count. If a user adds or removes scope/roles in chat, loop back to `guild:team-compose`'s decision gate (a restructure yields a new proposal version + fresh approval) or `guild:brainstorm` rather than expanding or shrinking the plan unilaterally.
 
 ## Output
 
@@ -37,6 +37,7 @@ approved: false
 ## Lane: architect
 - task-id: T1-architect
 - owner: architect
+- participant-id: architect-build-1   # REQUIRED — the stable participant_id from the approved proposal/team file
 - depends-on: []
 - spine: true           # T2-backend lists T1-architect in its depends-on — this lane is a spine lane
 - consumed-contract:
@@ -73,12 +74,13 @@ Per-lane field rules:
 
 - **task-id** — unique within this plan. Convention: `T<ordinal>-<specialist>`. Downstream handoff receipts reference it.
 - **owner** — exact specialist slug from `team.yaml`. One owner per lane; no shared ownership.
+- **participant-id** — REQUIRED: the stable `participant_id` of the approved-proposal worker this lane realizes (copied verbatim from the team file entry). This — not the role slug — is the set-equality key `guild:execute-plan` carries through task-runs, receipts, and terminal outcomes; it stays constant across retries and disambiguates multiple participants sharing one role. Participant-level `depends_on` edges from the proposal must be preserved losslessly as lane `depends-on` edges between the corresponding lanes.
 - **depends-on** — list of upstream `task-id`s this lane must wait for. Empty list means the lane is eligible for parallel dispatch from run-start. Dependencies must be a strict DAG — no cycles — and must be consistent with `team.yaml`'s `depends-on:` between specialists.
 - **scope** — one-to-two sentences. Bounded responsibility for *this* task only; do not restate the specialist's full remit.
 - **success-criteria** — measurable, testable bullets. Vague criteria ("improves code quality") are rejected; a reviewer must be able to say "met" or "not met" at `guild:verify-done`.
 - **autonomy-policy** — three sub-bullets (may act / requires confirmation / forbidden) derived from the spec's autonomy policy, narrowed to this lane's scope. This becomes the subagent's permission contract during `guild:execute-plan`.
 - **complexity_score** — the deterministic auto-score for this lane per the cost-aware-tiering rubric (ADR §2): sum the signal weights (work-type verb 0/+1/+2, blast-radius/file-count, presence of an upstream `depends-on:` contract, security/correctness sensitivity, prior-attempt escalation +1). Seed it here from the team.yaml `default_tier` and the lane's scope; `guild:execute-plan` **re-scores deterministically at dispatch** (same inputs → same tier), so this value is an authoring estimate the dispatch trace either confirms or supersedes — never a silent pin.
-- **tier** — the chosen model tier (`cheap | mid | powerful`) the score maps to via the band cutoffs (`models.thresholds`, default `{mid:1, powerful:3}` — ADR §10, bound by pointer). The author MAY pin a tier upward when the auto-score will under-call a security/correctness-sensitive lane (`tier: powerful` with a one-line rationale in `scope`); this is the **per-lane override**, second in the precedence ladder below the `--model-tier` CLI escape hatch (ADR §2/§10). Leaving `tier` to track `complexity_score` is the default — the band map is authoritative unless the author explicitly pins.
+- **tier** — the chosen model tier (`cheap | mid | powerful`) the score maps to via the band cutoffs (`models.thresholds`, default `{mid:1, powerful:3}` — ADR §10, bound by pointer). The author MAY pin a tier upward when the auto-score will under-call a security/correctness-sensitive lane (`tier: powerful` with a one-line rationale in `scope`); this is the **per-lane override**, second in the precedence ladder below the `--model-tier` CLI escape hatch (ADR §2/§10). Leaving `tier` to track `complexity_score` is the default — the band map is authoritative unless the author explicitly pins. **Research floor:** a lane owned by a `purpose: research` participant (authoritative `work_class` role metadata) is authored `tier: powerful` / `effective_complexity: hard` (`research_always_hard`) — no score, pin, or later re-score may lower it, and the floor propagates transitively to anything the lane sub-dispatches (`guild:execute-plan §"Tier resolution"` step 3b).
 - **spine** — `true` when this lane's `task-id` appears in ≥1 other lane's `depends-on:` list; **omit the field entirely** on lanes with no dependents (do not write `spine: false` — its absence on a non-spine lane is itself signal, not a default value to spell out). Compute this deterministically from the DAG you are authoring, not from a role heuristic — architect is the common case (`## Parallelism rules` below) but any lane with downstream dependents qualifies.
 - **consumed-contract** — required when `spine: true`; omitted otherwise. One bullet per item a dependent lane's `scope` actually pulls from this lane's receipt (an artifact path, an interface, a schema name, a decision), naming the pulling dependent's `task-id`. See `## Spine lanes — declaration + non-waivable checkpoint` below for why this field exists and what consumes it.
 
@@ -171,6 +173,8 @@ args: gate=G-plan artifact_path=.guild/plan/<slug>.md run_id=<run-id> author_hos
 
 The broker is **policy-gated** (adversarial-review spec §The review broker): it fires only when `risk ≥ high`, `review: cross` / `--review=cross` is set, or project config requires it — otherwise it resolves `status: "skipped"` and the gate passes with no reviewer. Self-build runs treat cross-host review as always-on. `author_host` is the host that produced the plan (resolved from the run-start preflight snapshot; `claude` on a Claude-hosted run).
 
+The G-plan reviewer slot is a plan-phase participant (`participation_kind: reviewer_cross_host`): before dispatching the broker, verify a **current** `guild.team_decision.v1` `approve` whose hash matches the RECOMPUTED proposal hash covers it — stale/mismatched decisions fail closed (a policy no-fire resolves `skipped` and dispatches nothing, needing no coverage).
+
 If the broker returns `status: "rework"`, revise the plan using the findings before re-presenting to the user. On `"satisfied"`, `"skipped"`, or `"force_passed"`, proceed to the user-approval gate normally.
 
 The gate runs between plan write and user-approval. It does not replace user approval.
@@ -185,7 +189,7 @@ The plan is **not** handed off to `guild:context-assemble` or `guild:execute-pla
 - Flip `approved: true` in the frontmatter and record the approval timestamp.
 - Only then emit the handoff to `guild:context-assemble`.
 
-If the user requests changes at the approval gate, edit the plan in place (not a new file) and re-present. The approval gate exists precisely because downstream dispatch runs parallel specialists — a plan error discovered mid-execution is far more expensive to unwind than one caught here.
+If the user requests changes at the approval gate, edit the plan in place (not a new file) and re-present. **Team-decision invalidation (frozen §4):** if a plan edit (user-requested or broker `rework`) changes a participant's obligations, dependencies, tier/purpose, capability scope, backend, wave structure, concurrency, cost posture, or review independence, the phase's prior `guild.team_decision.v1` is invalidated — loop to `guild:team-compose`'s decision gate for a restructured proposal (new version) and fresh approve before dispatch; plan-text edits that change none of those team facts need no new team decision. The approval gate exists precisely because downstream dispatch runs parallel specialists — a plan error discovered mid-execution is far more expensive to unwind than one caught here.
 
 ## Distinction from guild:plan
 

@@ -32,6 +32,11 @@ import * as os from "os";
 const SCRIPT = path.resolve(__dirname, "../pre-tool-use.ts");
 const RUN = "test-run";
 
+// T3b: run-dir writes (approval requests, security events) are binding-gated;
+// fixtures mint the run's binding. hermeticEnv strips any outer Guild-lane env.
+import { mintTestBinding } from "../test-support/mint-binding";
+import { hermeticEnv } from "../test-support/hermetic-env";
+
 function run(
   payload: object,
   env: Record<string, string>,
@@ -39,7 +44,7 @@ function run(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...hermeticEnv(), ...env },
     timeout: 20000,
   });
   return {
@@ -120,6 +125,7 @@ describe("pre-tool-use.ts — boundary-guard degrade path (HK-07 second ask)", (
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ptu-bgdegrade-"));
     fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
     fs.mkdirSync(path.join(tmp, ".guild", "runs", RUN), { recursive: true });
+    mintTestBinding(tmp, RUN);
   });
 
   afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -127,6 +133,7 @@ describe("pre-tool-use.ts — boundary-guard degrade path (HK-07 second ask)", (
   const baseEnv = (over: Record<string, string> = {}) => ({
     GUILD_CWD: tmp,
     GUILD_RUN_ID: RUN,
+      GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
     ...over,
   });
 
@@ -228,6 +235,7 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ptu-degrade-"));
     fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
     fs.mkdirSync(path.join(tmp, ".guild", "runs", RUN), { recursive: true });
+    mintTestBinding(tmp, RUN);
   });
 
   afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -235,6 +243,7 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
   const baseEnv = (over: Record<string, string> = {}) => ({
     GUILD_CWD: tmp,
     GUILD_RUN_ID: RUN,
+      GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
     GUILD_LANE_ID: "backend",
     // Declare a capability scope so the enforcement path is exercised
     GUILD_CAPABILITY_SCOPE: JSON.stringify({

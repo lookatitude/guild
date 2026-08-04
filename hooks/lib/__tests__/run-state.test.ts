@@ -142,13 +142,18 @@ describe("run-state.ts", () => {
       expect(lane.receipt_ref).toBe("handoffs/backend-backend-001.md");
     });
 
+    // T7-H2: this case is about modelParams, not independence. It used to seed
+    // `independence: "strong"` casually — exactly the unearned value the
+    // persistence guard now refuses without a written §7a adjudication. Seeding
+    // "weak" keeps the test about what it is about; the guard itself is pinned
+    // in tests/integration/t7-remediation.test.ts (both directions).
     it("persists R5 host modelParams in the launcher routing block", () => {
       const state = upsertLane(runDir, { runId: "run-abc", planSlug: "auth" }, "backend-001", {
         status: "in_progress",
         host: {
           selected: "claude-code-cli",
           degraded: false,
-          independence: "strong",
+          independence: "weak",
           tier: "powerful",
           model: "opus-4.8",
           modelParams: {
@@ -163,7 +168,7 @@ describe("run-state.ts", () => {
       expect(state.lanes["backend-001"].host).toEqual({
         selected: "claude-code-cli",
         degraded: false,
-        independence: "strong",
+        independence: "weak",
         tier: "powerful",
         model: "opus-4.8",
         modelParams: {

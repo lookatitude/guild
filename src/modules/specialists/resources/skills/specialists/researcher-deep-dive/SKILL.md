@@ -3,9 +3,12 @@ name: researcher-deep-dive
 description: Produces a structured research brief on a topic — key findings, sources, confidence-per-claim, open questions. Output: `.guild/runs/<run-id>/research/<slug>.md`. Pulled by the `researcher` specialist. TRIGGER: "research X", "do a deep dive on X", "what's the state of the art on X", "give me a research brief on X", "investigate X and summarize findings", "gather sources on X". DO NOT TRIGGER for: summarizing a single known paper (use `researcher-paper-digest`), N-option side-by-side comparison (use `researcher-comparison-table`), architecture decision capture (architect-adr-writer), scoring two architecture options for a specific project choice (architect-tradeoff-matrix), generating marketing/SEO keyword lists (seo group).
 when_to_use: The parent `researcher` specialist pulls this skill when the task requires open-ended investigation of a topic with multiple sources and a confidence-calibrated synthesis. Also fires on explicit user request.
 type: specialist
+work_class: research
 ---
 
 # researcher-deep-dive
+
+**Work class: `research` (authoritative, non-downgradable).** Any lane pulling this skill is `purpose: research` and resolves `effective_complexity: hard` / `tier: powerful` (`research_always_hard` — the frozen `guild.model_policy.v2` floor). The floor is transitive: every handoff, advisor consult, retry, resume, or sub-dispatch descending from this lane inherits it and cannot downgrade it. Handoff receipts record `purpose: research`, `effective_complexity: hard`, `tier: powerful`, `forced_floor_reason: research_always_hard`.
 
 Evidence is the source list — every non-trivial claim cites a source with a URL and a confidence label.
 

@@ -17,6 +17,8 @@ export {
   type Installability,
 } from "./workflows/host-registry-schema";
 export * from "./workflows/provider-detect";
+export * from "./workflows/session-context";
+export * from "./workflows/model-discovery";
 export type { HostKind } from "./workflows/host-types";
 
 // ---------------------------------------------------------------------------

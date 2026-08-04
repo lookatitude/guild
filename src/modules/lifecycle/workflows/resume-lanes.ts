@@ -223,6 +223,9 @@ export function runResumeLanesCli(): void {
   process.exit(0);
 }
 
-if (require.main === module) {
+if (
+  require.main === module &&
+  new RegExp("[\\\\/]resume-lanes\\.[cm]?[jt]s$").test(process.argv[1] ?? "")
+) {
   runResumeLanesCli();
 }

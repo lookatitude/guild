@@ -31,8 +31,9 @@ describe("CONFIG_UI_METADATA coverage (V9)", () => {
     // defaults.lifecycle_gate.{enabled,adhoc_activity_threshold}.
     // S5 (cap-loc-D04): +4 — capability.{resolver_mode,suggestion_budget,
     // starter_roles,auto_create_policy}.
-    expect(CONFIG_SCHEMA.length).toBe(141);
-    expect(Object.keys(CONFIG_UI_METADATA).length).toBe(141);
+    // +1 (dynamic-host-model-routing T5): capability model_policy (guild.model_policy.v2).
+    expect(CONFIG_SCHEMA.length).toBe(142);
+    expect(Object.keys(CONFIG_UI_METADATA).length).toBe(142);
   });
 
   it("every key declares all required UI fields", () => {

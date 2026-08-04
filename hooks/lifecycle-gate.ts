@@ -51,6 +51,12 @@
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { resolveRunIdForTrace } from "./lib/run-trace.js";
+// The lifecycle gate is OBSERVATIONAL (it emits a block envelope; it does not
+// write to the run tree under a redirectable identity), so it resolves the
+// active run from the current-run-id sentinel intake surface when GUILD_RUN_ID
+// is absent — resolveRunIdForTrace is the WRITER-identity resolver (env-only,
+// T3b §5) and never reads a sentinel.
+import { locateCandidateRunId } from "./lib/hook-binding.js";
 import { evaluateCloseGate, evaluateLifecycleGate } from "./lib/lifecycle-gate.js";
 import { buildAdditionalContextEnvelope } from "./lib/reanchor.js";
 
@@ -98,7 +104,10 @@ export async function main(): Promise<void> {
   const cwd = process.env["GUILD_CWD"] ?? payloadCwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
 
-  const runId = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
+  const runId =
+    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
+    locateCandidateRunId(guildRoot)?.run_id ??
+    null;
   if (!runId) return; // no active run to gate — zero noise.
 
   // Mode selection. `hook_event_name` is authoritative; when a host omits it,

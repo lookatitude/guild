@@ -496,6 +496,9 @@ export function runRunManifestWiringCli(args: string[] = process.argv.slice(2)):
   }
 }
 
-if (require.main === module) {
+if (
+  require.main === module &&
+  new RegExp("[\\\\/]run-manifest-wiring\\.[cm]?[jt]s$").test(process.argv[1] ?? "")
+) {
   runRunManifestWiringCli();
 }

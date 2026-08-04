@@ -98,8 +98,11 @@ const USAGE =
   "usage: run-trace.ts <start|status|phase|skipped> [--cwd <root>] [--run-id <id>]\n" +
   "  start   --command=/guild:plan [--phase=<p>] [--run-class=full|lightweight] [--cwd <root>]\n" +
   "  status  [--cwd <root>]   (alias: start --run-class=lightweight + OQ6 gate)\n" +
-  "  phase   --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--cwd <root>]\n" +
-  "  skipped --run-id <id>    [--cwd <root>] < entries.json\n";
+  "  phase   --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--binding-ref <nonce>] [--cwd <root>]\n" +
+  "  skipped --run-id <id>    [--binding-ref <nonce>] [--cwd <root>] < entries.json\n" +
+  "  (rework F1: a writer addressing a run explicitly must present the run's\n" +
+  "   binding nonce — --binding-ref or the GUILD_RUN_BINDING_REF env envelope;\n" +
+  "   without it the write is refused: binding_rejected.)\n";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -170,7 +173,11 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     const runId = flag(argv, "run-id");
-    recordPhase(root, phase, runId ? { runId } : {});
+    const bindingRef = flag(argv, "binding-ref");
+    recordPhase(root, phase, {
+      ...(runId ? { runId } : {}),
+      ...(bindingRef ? { binding_ref: bindingRef } : {}),
+    });
     process.exit(0);
   }
 
@@ -196,7 +203,15 @@ async function main(): Promise<void> {
     } catch {
       process.stderr.write("[run-trace] skipped: invalid JSON on stdin; writing empty set.\n");
     }
-    const out = writeSkippedFiles(root, runId, entries);
+    const bindingRef = flag(argv, "binding-ref");
+    const out = writeSkippedFiles(root, runId, entries, {
+      ...(bindingRef ? { binding_ref: bindingRef } : {}),
+    });
+    if (out === null) {
+      // T3b (§5): the write was refused — binding_rejected already went to
+      // stderr; surface the fail-closed result non-zero to the caller.
+      process.exit(1);
+    }
     process.stdout.write(out + "\n");
     process.exit(0);
   }
