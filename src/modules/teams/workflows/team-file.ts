@@ -76,6 +76,22 @@ export function slugFromTeamPath(teamPath: string): string {
   return noYaml;
 }
 
+/**
+ * T7-H1: recover the PHASE from a team-file path, or null for the legacy
+ * `<slug>.yaml` form (which encodes no phase). Exact inverse of the phase
+ * segment `teamFilePath` writes — the dispatch-approval gate needs it to find
+ * the run's `<phase>.proposal.*` / `<phase>.decision.*` trail.
+ */
+export function phaseFromTeamPath(teamPath: string): string | null {
+  const noYaml = path.basename(teamPath).replace(/\.ya?ml$/i, "");
+  const lastDot = noYaml.lastIndexOf(".");
+  if (lastDot > 0) {
+    const candidate = noYaml.slice(lastDot + 1);
+    if (isCanonicalPhase(candidate)) return candidate;
+  }
+  return null;
+}
+
 /** `.guild/team/<slug>.current` — the convenience phase-pointer mirror. */
 function currentPointerPath(guildRoot: string, slug: string): string {
   return path.join(teamDir(guildRoot), `${slug}.current`);

@@ -41,8 +41,16 @@ import * as path from "path";
 
 import { checkContained, isRefused, isWithin } from "../../kernel";
 import type { HostKind } from "../../host-runtime";
+import {
+  buildSessionContext,
+  writeSessionContext,
+  type ExecutionTargetBlock,
+  type HostHandshakeIdentity,
+  type NativeAdapterIdentity,
+} from "../../host-runtime";
 import { resolveSettings } from "../../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../../state";
+import { assertWritableBinding, closeRunBinding, mintRunBinding } from "./run-binding";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../../security";
 
@@ -144,12 +152,32 @@ export interface StartRunOpts {
    * unchanged (back-compat — existing runs and tests stay green).
    */
   snapshot?: ResolvedSettingsSnapshot;
+  /**
+   * T3 (guild.session_context.v1): adapter-injected identity inputs for the
+   * run's immutable session context. When absent, the context records the
+   * honest terminal `unknown` identity (§3) — it NEVER defaults to claude.
+   */
+  session_identity?: {
+    envelope_host?: string;
+    env?: Record<string, string | undefined>;
+    native_adapter?: NativeAdapterIdentity | null;
+    handshake?: HostHandshakeIdentity | null;
+    execution_target?: Partial<ExecutionTargetBlock>;
+    active_model?: string | null;
+  };
 }
 
 /** What closeRun records into provenance.json (caller assembles touched-facts). */
 export interface CloseRunOpts {
   /** Terminal status. */
   status: TerminalStatus;
+  /**
+   * T3 (guild.session_context.v1 §5, rework F2): the run's minted binding
+   * nonce — REQUIRED. Every close is FULLY verified (fail closed on
+   * absent/malformed/not-minted/closed/mismatch). There is no "fresh run" or
+   * legacy exemption: a caller that cannot present the nonce is refused.
+   */
+  binding_ref: string;
   /** The "what this run touched" fact block (defaults to empty arrays). */
   touched?: Partial<{
     tasks: string[];
@@ -566,6 +594,12 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       const runId = makeRunId(opts.initiative, env.now());
       const root = opts.root;
 
+      // guild.session_context.v1 §5 (rework F2): mint the run's binding FIRST —
+      // before ANY other write lands under the run dir. Run start mints the
+      // binding before any write; there is no window in which run records
+      // exist without a verifiable binding. The nonce is revoked at close.
+      const binding = mintRunBinding({ root, run_id: runId, fs: env.fs });
+
       // logs/ dir (mkdirp also ensures runs/<id>/ exists). NN#5: we touch ONLY
       // .guild/runs/<id>/ — never .guild/initiatives/.
       env.fs.mkdirp(logsDir(root, runId));
@@ -585,7 +619,30 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       const manifest = buildRunManifest(opts, runId, env);
       env.fs.writeFile(runYamlPath(root, runId), serializeRunYaml(manifest));
 
-      // current-run-id sentinel.
+      // §1: the immutable session context — written once at start, restored
+      // verbatim on resume. Identity comes from the adapter-injected inputs;
+      // absent inputs record the honest terminal `unknown` (§3), never a
+      // claude default.
+      const identity = opts.session_identity ?? {};
+      writeSessionContext(
+        root,
+        buildSessionContext({
+          run_id: runId,
+          started_at: env.now(),
+          envelope_host: identity.envelope_host,
+          env: identity.env,
+          native_adapter: identity.native_adapter,
+          handshake: identity.handshake,
+          execution_target: identity.execution_target,
+          active_model: identity.active_model,
+          run_binding: { binding_ref: binding.binding_ref, state: binding.state },
+        }),
+        env.fs
+      );
+
+      // current-run-id sentinel — interactive command intake ONLY (§5): it may
+      // locate a candidate run for a user-typed command; it never authorizes a
+      // write and never serves as a fallback binding.
       env.fs.writeFile(sentinelPath(root), runId);
 
       return runId;
@@ -597,6 +654,13 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // We reconstruct root by reading the run.yaml under the same base the
       // caller's env.fs sees; the real adapter is rooted at the project root.
       const root = resolveCloseRoot(env);
+
+      // §5 fail-closed gate (rework F2): the caller-threaded nonce is ALWAYS
+      // fully verified — absent, malformed, not-minted, closed, or mismatched
+      // bindings all throw BindingRejectedError before any mutation. No
+      // migration posture (fresh-run, open-unreferenced, legacy) authorizes a
+      // close: a legacy run is migrated (mint via run start tooling) or refused.
+      assertWritableBinding({ root, run_id: runId, binding_ref: opts.binding_ref, fs: env.fs });
 
       const facts = readStartFacts(env, root, runId);
       const runClass = facts.run_class;
@@ -654,6 +718,8 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // Flip run.yaml.status to the terminal value.
       flipRunStatus(env, root, runId, opts.status);
 
+      // §5: revoke the binding at run close — post-close writes fail closed.
+      closeRunBinding({ root, run_id: runId, fs: env.fs });
       // G5(a) (v23x-deferred-followups rf-wi-05, origin oir-wi-58): clear the
       // current-run-id sentinel IFF it still points at the run being closed.
       // Before this, closeRun never touched the sentinel — every one of its

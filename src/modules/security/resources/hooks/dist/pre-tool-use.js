@@ -1114,6 +1114,45 @@ var SHARED_SCRUBBED_NAMES = sealSet([
   "run-state.json"
 ], "SHARED_SCRUBBED_NAMES");
 
+// ../src/modules/security/workflows/secret-patterns.ts
+var SECRET_PATTERNS = Object.freeze([
+  // NOTE: labels deliberately drop the `=` so the redaction replacement
+  // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+  // on a subsequent scrub pass. Idempotency depends on this — every label below
+  // is checked against every pattern above it, and none re-matches.
+  Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+  Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+  Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+  Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+  Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+  Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+  Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+  Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+  // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+  // Round-1 review proved the list above blind to the shapes an inspection
+  // surface is most likely to echo out of a persisted artifact: an
+  // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+  // `<something>_token = …` assignment family. A display surface that renders
+  // a persisted evidence string verbatim leaked all three past the applier.
+  //
+  // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+  // stays specific, and each replacement label is inert against every pattern
+  // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+  // which is what keeps `redact` idempotent.
+  Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+  Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+  Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+  // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+  Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+  Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+  Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+  Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+  Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+  Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+  // High-entropy string heuristic: 40+ hex chars (SHA-like)
+  Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+]);
+
 // ../src/modules/lifecycle/workflows/stable-lock.ts
 var import_node_fs = require("node:fs");
 var import_node_path = require("node:path");

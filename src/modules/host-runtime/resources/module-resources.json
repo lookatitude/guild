@@ -225,7 +225,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "a7b9f51e4005a1e5e941a02123b770fd690d578e21d17379a78df0382e083688"
+      "sha256": "8dad21f1653e01691edb562acf63e0cf9048087aaf11c1cc0b330bbf99b4e1d7"
     },
     {
       "category": "scripts",
@@ -240,6 +240,13 @@
       "source_path": "scripts/lib/result-normalizer.ts",
       "resource_path": "resources/scripts/lib/result-normalizer.ts",
       "sha256": "34a4dcb7aca28ba47cadc99afdbefaffdb759ca1eda4ef5e69ac488c10439f1f"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/session-context",
+      "source_path": "scripts/lib/session-context.ts",
+      "resource_path": "resources/scripts/lib/session-context.ts",
+      "sha256": "761381c12ccb26eca023580d0819a99c7d745887c3fb7c57e96192d3fac0f838"
     },
     {
       "category": "scripts",
@@ -261,7 +268,7 @@
       "id": "projection:scripts/lib/core/contracts/team-backend.ts",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "3d04b5414307997d218b7a504b4f77f0cc058bde8abd0c16c156974a06887caa",
+      "sha256": "de5837e48c59e9044a95c2625d4969e4c719d47e06d7f6922ae28e146ae2e2fd",
       "projection_dependency": true
     },
     {
@@ -269,7 +276,7 @@
       "id": "projection:scripts/lib/host/inprocess-backend.ts",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "26cb6ad530068342447e91784206454bb195c48a6a9d4978279aed483bd4b9c7",
+      "sha256": "f2686434ea2ee1b390473c5ef4c380541cbaaaf7fe67292408cb676fc8a4cc72",
       "projection_dependency": true
     },
     {
@@ -277,7 +284,7 @@
       "id": "projection:scripts/lib/host/remote-backend.ts",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "12a57828166f7c6e0fa8a366aff7c595116b414132dae64e15505b7c0a62eb24",
+      "sha256": "05f35cdf40ee2229fb3dd84edef92f0844d89548b3ebcb5dca0f3ebb54451e88",
       "projection_dependency": true
     },
     {
@@ -285,7 +292,7 @@
       "id": "projection:scripts/lib/host/tmux-backend.ts",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "ee08a29f15412f2f926c51455f03ce9a40e4fea999d1680b437093e149ec2816",
+      "sha256": "3f02d2250a0c8d428fa8ebb8381a30acf45214f5ed4cba1bbdf6aa82b912bc87",
       "projection_dependency": true
     },
     {
@@ -341,7 +348,15 @@
       "id": "projection:src/modules/capability/index.ts",
       "source_path": "src/modules/capability/index.ts",
       "resource_path": "resources/src/modules/capability/index.ts",
-      "sha256": "bae38c6a8aa27cd242008ecdb119056e6968cd2ac4b98980bbb518ffda20c890",
+      "sha256": "9855f16f84edb84c3fbaf4186566fb78c222782d10280c95f371ec5e82b9c400",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/catalog-cache.ts",
+      "source_path": "src/modules/capability/workflows/catalog-cache.ts",
+      "resource_path": "resources/src/modules/capability/workflows/catalog-cache.ts",
+      "sha256": "d78814bd91204f424b0e1f3e11b91d45775dc58f5abdb32eeba1427340dd8716",
       "projection_dependency": true
     },
     {
@@ -358,6 +373,102 @@
       "source_path": "src/modules/capability/workflows/compatibility-usage.ts",
       "resource_path": "resources/src/modules/capability/workflows/compatibility-usage.ts",
       "sha256": "a872a844f1062d6021483de09eab690679d5e43d5d88a2eeb58f20894c7720c3",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/confirmation-arbiter.ts",
+      "source_path": "src/modules/capability/workflows/confirmation-arbiter.ts",
+      "resource_path": "resources/src/modules/capability/workflows/confirmation-arbiter.ts",
+      "sha256": "4e653aa3ec3f62f23d9c7ac84363854271f7a6c7d5b40513db056456c8cd3915",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/independence-predicates.ts",
+      "source_path": "src/modules/capability/workflows/independence-predicates.ts",
+      "resource_path": "resources/src/modules/capability/workflows/independence-predicates.ts",
+      "sha256": "6ede78ad2453ce2f05df392b3084268b9bbac7e4824a50545f2c25da0bd9461e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/independence-record.ts",
+      "source_path": "src/modules/capability/workflows/independence-record.ts",
+      "resource_path": "resources/src/modules/capability/workflows/independence-record.ts",
+      "sha256": "c7d238b322f04f6c2f09fdd2d6c52140e88f0c753da8c64c4f2735d4b8897c5f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/inspection-persist.ts",
+      "source_path": "src/modules/capability/workflows/inspection-persist.ts",
+      "resource_path": "resources/src/modules/capability/workflows/inspection-persist.ts",
+      "sha256": "7007f98e13c3f4a349d5a7da5f18a57593b38b33d771797b51b5ca15898f9f22",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/inspection-record.ts",
+      "source_path": "src/modules/capability/workflows/inspection-record.ts",
+      "resource_path": "resources/src/modules/capability/workflows/inspection-record.ts",
+      "sha256": "dcd3b12ff669b4c0b7fee0c4924b11c88c447ddb60ee92a2ad946110254c4d49",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-catalog.ts",
+      "source_path": "src/modules/capability/workflows/model-catalog.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-catalog.ts",
+      "sha256": "f5ff5e41234d528beaae0a24f3cdfdf0db100f06d11437e2a00a4a281876e6ad",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-inspect.ts",
+      "source_path": "src/modules/capability/workflows/model-inspect.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-inspect.ts",
+      "sha256": "64c560cd706789b823a2646d80ec92dd72c0e4f1ddc3b59ecfb467558971ab7a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-policy.ts",
+      "source_path": "src/modules/capability/workflows/model-policy.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-policy.ts",
+      "sha256": "f1fcad1c19cbe5a65b401db29c6563f4cacd90e373daf428340ebae4a4bc615b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-resolver.ts",
+      "source_path": "src/modules/capability/workflows/model-resolver.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-resolver.ts",
+      "sha256": "05ef9b676b8d672c3f864616733ecaacb5246797abb0a8fb6c4a10c95e4268c5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/models-command.ts",
+      "source_path": "src/modules/capability/workflows/models-command.ts",
+      "resource_path": "resources/src/modules/capability/workflows/models-command.ts",
+      "sha256": "b095b65cb370cf3252360058372ccd8fc1f17e0cd853c659eec5fe3daa51e1de",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/policy-migration.ts",
+      "source_path": "src/modules/capability/workflows/policy-migration.ts",
+      "resource_path": "resources/src/modules/capability/workflows/policy-migration.ts",
+      "sha256": "1b5b93a28357a6893c61fbc308a9fed8fe8030eceac407498e3825a2c522c0c2",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/purpose-provenance.ts",
+      "source_path": "src/modules/capability/workflows/purpose-provenance.ts",
+      "resource_path": "resources/src/modules/capability/workflows/purpose-provenance.ts",
+      "sha256": "a1a01773ab676dd4b96681fc4cb2a0bf41a61f66ee19e817e3a557f5986eea5c",
       "projection_dependency": true
     },
     {
@@ -389,7 +500,7 @@
       "id": "projection:src/modules/capability/workflows/role-resolver.ts",
       "source_path": "src/modules/capability/workflows/role-resolver.ts",
       "resource_path": "resources/src/modules/capability/workflows/role-resolver.ts",
-      "sha256": "db0cf529a027282ed20a61e8055ab626977149c8610b63075347db93c6eafb9c",
+      "sha256": "17db21669ecb028c8395a5da4c593ace8853962de0c23f50bf679e74a4c91258",
       "projection_dependency": true
     },
     {
@@ -397,7 +508,15 @@
       "id": "projection:src/modules/capability/workflows/router.ts",
       "source_path": "src/modules/capability/workflows/router.ts",
       "resource_path": "resources/src/modules/capability/workflows/router.ts",
-      "sha256": "896a39688a3f4efa1743a6777f0d35d36f129d754a1ef597065103ad4e654584",
+      "sha256": "444b23999acfe87ee413f05a182f78cf6892b48de568efeecf3674ad3bca7530",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/routing-rollout.ts",
+      "source_path": "src/modules/capability/workflows/routing-rollout.ts",
+      "resource_path": "resources/src/modules/capability/workflows/routing-rollout.ts",
+      "sha256": "2459a1be82e7160cdcdaf0bdfb71f8fb30feff464e1016dfd96d7d81466a5eb3",
       "projection_dependency": true
     },
     {
@@ -429,7 +548,7 @@
       "id": "projection:src/modules/config/workflows/config-defaults.ts",
       "source_path": "src/modules/config/workflows/config-defaults.ts",
       "resource_path": "resources/src/modules/config/workflows/config-defaults.ts",
-      "sha256": "fe5687a13b8884df22517680ec7ff7a720ab0052262286e518369acd70f0870e",
+      "sha256": "f0531b5bd46cbcf7688ae8dba0b33968a877b862ccd9b2ff6452a5659193accd",
       "projection_dependency": true
     },
     {
@@ -445,7 +564,7 @@
       "id": "projection:src/modules/config/workflows/settings-reader.ts",
       "source_path": "src/modules/config/workflows/settings-reader.ts",
       "resource_path": "resources/src/modules/config/workflows/settings-reader.ts",
-      "sha256": "2bd51d9bd00eff4d6dd368a0a9ba02e4c32af60ccbd71484beaafe4f7e75d6dc",
+      "sha256": "95dda07facf7e33b8e0b42da2acf04fd2853d479cb6a4053ebc3c628fa1e064e",
       "projection_dependency": true
     },
     {
@@ -517,7 +636,7 @@
       "id": "projection:src/modules/dispatch/index.ts",
       "source_path": "src/modules/dispatch/index.ts",
       "resource_path": "resources/src/modules/dispatch/index.ts",
-      "sha256": "f01fa43c26a6cfab740d051542bba4d8ee1eb6e3661df994a5f7f742919bbb7e",
+      "sha256": "7ee9ffae282bf8088b739bc910a03eb1881b323dda9be6311c91b6e8d29b6181",
       "projection_dependency": true
     },
     {
@@ -546,10 +665,18 @@
     },
     {
       "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/shadow-routing.ts",
+      "source_path": "src/modules/dispatch/workflows/shadow-routing.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/shadow-routing.ts",
+      "sha256": "eddb832349a35ea7f788dc39079ac08ab2add0eedb90743ebe450585bd95a3ec",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
       "id": "projection:src/modules/dispatch/workflows/specialist-contract.ts",
       "source_path": "src/modules/dispatch/workflows/specialist-contract.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/specialist-contract.ts",
-      "sha256": "a8e0d68a3ef1406f8a3e0ffcfeed0e8963cec30e328495c28c2dc475c0c624ce",
+      "sha256": "44dc90483b08dc01bb87971ac865276ec35ab28e07c66396ecb780b98067bfd9",
       "projection_dependency": true
     },
     {
@@ -653,7 +780,7 @@
       "id": "projection:src/modules/host-runtime/index.ts",
       "source_path": "src/modules/host-runtime/index.ts",
       "resource_path": "resources/src/modules/host-runtime/index.ts",
-      "sha256": "9cb3f9ed876d7fbc3933aa8d2f97edc9a51cdaf5bb09c49157cf330009458353",
+      "sha256": "5c0890b5b7a4d3d47f0badc5f967495fbca73152f1d11748d39c65f031724681",
       "projection_dependency": true
     },
     {
@@ -754,10 +881,74 @@
     },
     {
       "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts",
+      "sha256": "c643b0f979074ea49a21669750bcb281ae32c4fd538fa1f17a97e50cc8aee62b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/claude-api.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/claude-api.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/claude-api.ts",
+      "sha256": "289f2483946a20a25262c849185a136ea072cd290fa9f0f4e9354b3880cdcf7b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts",
+      "sha256": "af347d171ac2c92ab779f38ad6c2c1eb834c5855aba0a72b777aa81facc08e51",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts",
+      "sha256": "823c1dabfe0edac05ec1acac279c9feccd6c0905752f5ae31c926729c1898b83",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts",
+      "sha256": "637df2f2c98232203ef518b1d55a393e4b815d6e5d34b7fc22c165418c93e937",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/index.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/index.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/index.ts",
+      "sha256": "2eb892772289f150e6ad52c10d2115bbbf10c593f568c8a5d40d02ff32f52760",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/openai-api.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/openai-api.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/openai-api.ts",
+      "sha256": "c95398fe3f996f444090c7c0d4728c0868ab8d63687c9474b371b839517a5660",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
       "id": "projection:src/modules/host-runtime/workflows/provider-detect.ts",
       "source_path": "src/modules/host-runtime/workflows/provider-detect.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/provider-detect.ts",
-      "sha256": "13dabdd4046ee0dab2a283dbc08eb3bec610b63fae2a7433b59a608ae762272c",
+      "sha256": "7cd0b9587aa69be2737bf8867d9963386d77fccbdbda3ade1410c68237bf0b36",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/session-context.ts",
+      "source_path": "src/modules/host-runtime/workflows/session-context.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/session-context.ts",
+      "sha256": "4b1359396f8171af42987b30b946fecb4e97901c37d324388e6ad45bb23522af",
       "projection_dependency": true
     },
     {
@@ -893,7 +1084,7 @@
       "id": "projection:src/modules/lifecycle/index.ts",
       "source_path": "src/modules/lifecycle/index.ts",
       "resource_path": "resources/src/modules/lifecycle/index.ts",
-      "sha256": "b9157e49c7280481bfa979a8508165d1420c57f3eb033eeae36992741d6966a2",
+      "sha256": "8682e2818476b1b6b8385a6af5e30db2d858b6128febeb310649fa119b4f2d3b",
       "projection_dependency": true
     },
     {
@@ -901,7 +1092,7 @@
       "id": "projection:src/modules/lifecycle/workflows/check-lane-liveness.ts",
       "source_path": "src/modules/lifecycle/workflows/check-lane-liveness.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/check-lane-liveness.ts",
-      "sha256": "0f1a10640451596c3620fba1ecff0b0243f856f1bf49c37c7fb91a92c7ed3778",
+      "sha256": "6427eb64484c24a6a4297f4bece420682e12fdff3af38b42bf0397903b28ef5f",
       "projection_dependency": true
     },
     {
@@ -909,7 +1100,7 @@
       "id": "projection:src/modules/lifecycle/workflows/emit-loop-event.ts",
       "source_path": "src/modules/lifecycle/workflows/emit-loop-event.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/emit-loop-event.ts",
-      "sha256": "942314d4178713b29a11313b69f01426e14e6286dcf30eaabea873d14ec9f10b",
+      "sha256": "9f5276e19b527d36623b3094117e45da569b0318699b388e54a3887610b17826",
       "projection_dependency": true
     },
     {
@@ -949,7 +1140,7 @@
       "id": "projection:src/modules/lifecycle/workflows/mark-lane-dead.ts",
       "source_path": "src/modules/lifecycle/workflows/mark-lane-dead.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/mark-lane-dead.ts",
-      "sha256": "d0468d7067133ba2504653f2d48f3015f55821a6886288b5e3311dd90dd80cc3",
+      "sha256": "d8d94c3b007839aaa3d2485d5f7218b220a2cd2d3f7f16186f15beace257bcf2",
       "projection_dependency": true
     },
     {
@@ -997,7 +1188,7 @@
       "id": "projection:src/modules/lifecycle/workflows/resume-lanes.ts",
       "source_path": "src/modules/lifecycle/workflows/resume-lanes.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/resume-lanes.ts",
-      "sha256": "a10f1682172459e3a44d316216a54387023e2bf7bd7a81e77709db078e34ded5",
+      "sha256": "134efd8935655e4476e47ee753622ddcb00f948e91ffa1daad15cdf81869462b",
       "projection_dependency": true
     },
     {
@@ -1010,10 +1201,18 @@
     },
     {
       "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/run-binding.ts",
+      "source_path": "src/modules/lifecycle/workflows/run-binding.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/run-binding.ts",
+      "sha256": "abf2c6138fe4b30b2817924a261eaba4b4b896daa600e3d454d8a42abca1f2f9",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "8c085cbae58dd441aa2475163aa8e3ad5cfd6492ed195f57e1d9df1130e2b362",
+      "sha256": "ffd3c55dc571c1e61478e22610d796c54e3d5402207b2b7ce433c7f842723c5f",
       "projection_dependency": true
     },
     {
@@ -1021,7 +1220,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-manifest-wiring.ts",
       "source_path": "src/modules/lifecycle/workflows/run-manifest-wiring.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-manifest-wiring.ts",
-      "sha256": "237ff32a401795a1deaa29acba27184ff472021d67d6b6967b42ddc1f1047f98",
+      "sha256": "5436e097c97d588da2dacad0f33f976e6e1fb4300800b250d488d8529bfc4086",
       "projection_dependency": true
     },
     {
@@ -1029,7 +1228,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-state.ts",
       "source_path": "src/modules/lifecycle/workflows/run-state.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-state.ts",
-      "sha256": "07ff1599ea034c520f9a97787053827f45af09499d4d87c7e2307ee6ebfb02f5",
+      "sha256": "758d166317828e38ca2b777bd3c6f832b592f54a8563180bd36daeeea6b04d40",
       "projection_dependency": true
     },
     {
@@ -1037,7 +1236,7 @@
       "id": "projection:src/modules/lifecycle/workflows/runstart-preflight.ts",
       "source_path": "src/modules/lifecycle/workflows/runstart-preflight.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/runstart-preflight.ts",
-      "sha256": "5f00d77b4c536758b32fe1b32c84762ec2b1fa3f6e79083b404cb0331301d5b2",
+      "sha256": "553400d2d214a08e4f929a311a975ca58b37af7cf108c7720a7b806fa617cf66",
       "projection_dependency": true
     },
     {
@@ -1061,7 +1260,7 @@
       "id": "projection:src/modules/lifecycle/workflows/write-run-manifest.ts",
       "source_path": "src/modules/lifecycle/workflows/write-run-manifest.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/write-run-manifest.ts",
-      "sha256": "f9fe0a19b1bb226d191ff892d632c1c86955c0d2b0a65ef24715f237a1db9437",
+      "sha256": "67f99c0627316df71f1a6336e97b9a478e25898fbbd524db9b402b031fe8df98",
       "projection_dependency": true
     },
     {
@@ -1069,7 +1268,7 @@
       "id": "projection:src/modules/lifecycle/workflows/write-task-run.ts",
       "source_path": "src/modules/lifecycle/workflows/write-task-run.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/write-task-run.ts",
-      "sha256": "4c9a0da307dcfdf97705f70674a95a2bb7b8f8dc50fae0ab1d6ee5bbfa071f35",
+      "sha256": "e36cc7d7af5275df73fb7f75159e1256b1e925ae6f0f00b8e1303ca61be51dae",
       "projection_dependency": true
     },
     {
@@ -1133,7 +1332,7 @@
       "id": "projection:src/modules/review/workflows/review-pairing.ts",
       "source_path": "src/modules/review/workflows/review-pairing.ts",
       "resource_path": "resources/src/modules/review/workflows/review-pairing.ts",
-      "sha256": "dff0791c33e5126e0ee7c640279265c02a38264da021f7ce676ea598272382eb",
+      "sha256": "e4efd24fe141dd409bd3a46dfb8b7f7abd4aec281add5ddb8fd45d7f0d635caf",
       "projection_dependency": true
     },
     {
@@ -1149,7 +1348,7 @@
       "id": "projection:src/modules/security/index.ts",
       "source_path": "src/modules/security/index.ts",
       "resource_path": "resources/src/modules/security/index.ts",
-      "sha256": "6f46e69dee19ef8026758d97802d4dbafb5fc69be9845077f42ee8b625f79164",
+      "sha256": "895964ce8a2b15e79245ac9b2a3a81dae8651d5e0915beeca1736ded1ef3707c",
       "projection_dependency": true
     },
     {
@@ -1194,10 +1393,26 @@
     },
     {
       "category": "scripts",
+      "id": "projection:src/modules/security/workflows/scrub-redact.ts",
+      "source_path": "src/modules/security/workflows/scrub-redact.ts",
+      "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
+      "sha256": "7d08fca0a9d53c28713b875ddafeb78bab586f291d01139799dd79fdbe2d3682",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
       "id": "projection:src/modules/security/workflows/scrubbed-write.ts",
       "source_path": "src/modules/security/workflows/scrubbed-write.ts",
       "resource_path": "resources/src/modules/security/workflows/scrubbed-write.ts",
       "sha256": "623395058a240d0a557edd1b87240661c56ec72758a361d5a7a1c151b6af8fd7",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/secret-patterns.ts",
+      "source_path": "src/modules/security/workflows/secret-patterns.ts",
+      "resource_path": "resources/src/modules/security/workflows/secret-patterns.ts",
+      "sha256": "319166216093f567c6307308f3d708f43b079068076cb353e78bd278f50ad812",
       "projection_dependency": true
     },
     {
@@ -1293,7 +1508,15 @@
       "id": "projection:src/modules/teams/index.ts",
       "source_path": "src/modules/teams/index.ts",
       "resource_path": "resources/src/modules/teams/index.ts",
-      "sha256": "6112e782ff5dfdc0f0861810f1631360ae1b1cd78c506522fce8726bcee5be49",
+      "sha256": "169b218ff7233b5e8275c0d7b3f0fa8ffe8b48f65bd209b409d6c81319df3fda",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/teams/workflows/canonical-hash.ts",
+      "source_path": "src/modules/teams/workflows/canonical-hash.ts",
+      "resource_path": "resources/src/modules/teams/workflows/canonical-hash.ts",
+      "sha256": "55e38bf95b5ba19628cb4c1d4bf84e6a76f8b45ba4c67c761ac0c5f84e0476c3",
       "projection_dependency": true
     },
     {
@@ -1301,7 +1524,7 @@
       "id": "projection:src/modules/teams/workflows/team-file.ts",
       "source_path": "src/modules/teams/workflows/team-file.ts",
       "resource_path": "resources/src/modules/teams/workflows/team-file.ts",
-      "sha256": "eaf16128a574151599d861d9ed6635205aa108a3fd06bfa1cf7a76901cd5b98f",
+      "sha256": "38ed7a49c47052649189b895dffc002323bf1b79b2ce3f044ffd0f3632f141d1",
       "projection_dependency": true
     },
     {
@@ -1333,7 +1556,7 @@
       "id": "projection:src/modules/telemetry/workflows/guild-trace-events.ts",
       "source_path": "src/modules/telemetry/workflows/guild-trace-events.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/guild-trace-events.ts",
-      "sha256": "98587951b469ea1aaedf67f5885f6581545fce8719b21eba23b9df99812393f9",
+      "sha256": "c770a9ab0831074295c95fa41ebba000ada69cd31ebacdf2a36193b71eaf9a6a",
       "projection_dependency": true
     },
     {

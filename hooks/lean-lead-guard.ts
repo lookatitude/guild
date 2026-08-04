@@ -42,6 +42,11 @@
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { resolveRunIdForTrace } from "./lib/run-trace.js";
+// Observational guard (emits a Stop additionalContext envelope; no run-tree
+// write under a redirectable identity): resolve the active run from the
+// current-run-id sentinel intake surface when GUILD_RUN_ID is absent.
+// resolveRunIdForTrace is the WRITER-identity resolver (env-only, T3b §5).
+import { locateCandidateRunId } from "./lib/hook-binding.js";
 import { evaluateLeanLeadGuard } from "./lib/lean-lead-guard.js";
 import { buildAdditionalContextEnvelope } from "./lib/reanchor.js";
 
@@ -81,7 +86,10 @@ export async function main(): Promise<void> {
   const cwd = process.env["GUILD_CWD"] ?? payloadCwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
 
-  const runId = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
+  const runId =
+    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
+    locateCandidateRunId(guildRoot)?.run_id ??
+    null;
   if (!runId) return; // no active run to guard — zero noise.
 
   try {

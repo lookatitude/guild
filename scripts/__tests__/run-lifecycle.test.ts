@@ -30,7 +30,18 @@ import {
   type StartRunOpts,
 } from "../lib/run-lifecycle";
 import type { HostKind } from "../lib/host-types";
+import { loadRunBinding } from "../lib/run-binding";
 import { parseYaml } from "../lib/frontmatter";
+
+/**
+ * T3 F2: closeRun requires the run's minted binding nonce (fail-closed §5).
+ * Read it back off the in-memory fs for the run the test just started.
+ */
+function refOf(mem: { env: RunLifecycleEnv["fs"] }, runId: string): string {
+  const record = loadRunBinding({ root: ROOT, run_id: runId, fs: mem.env });
+  if (!record) throw new Error(`test setup: no minted binding for ${runId}`);
+  return record.binding_ref;
+}
 
 /** Parse a run.yaml document and read one top-level scalar via the shared parser (OD-3). */
 function runField(rawYaml: string, key: string): unknown {
@@ -193,7 +204,9 @@ describe("run-lifecycle — startRun (SC-B §1)", () => {
     }
   });
 
-  it("writes EXACTLY run.yaml + current-run-id (the only two files at start)", () => {
+  it("writes EXACTLY run.yaml + current-run-id + binding.json + session-context.json at start", () => {
+    // T3 (guild.session_context.v1): startRun additionally mints the run
+    // binding (§5) and freezes the session context (§1) — both run-scoped.
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts({ initiative: "foo" }));
@@ -202,6 +215,8 @@ describe("run-lifecycle — startRun (SC-B §1)", () => {
       [
         path.join(ROOT, ".guild", "runs", "current-run-id"),
         path.join(ROOT, ".guild", "runs", runId, "run.yaml"),
+        path.join(ROOT, ".guild", "runs", runId, "binding.json"),
+        path.join(ROOT, ".guild", "runs", runId, "session-context.json"),
       ].sort()
     );
   });
@@ -237,13 +252,14 @@ describe("run-lifecycle — host neutrality (SC-B §4)", () => {
 describe("run-lifecycle — closeRun (SC-B §2)", () => {
   function startThenClose(
     startOver: Partial<StartRunOpts>,
-    closeOpts: Parameters<ReturnType<typeof createRunLifecycle>["closeRun"]>[1],
+    closeOpts: Omit<Parameters<ReturnType<typeof createRunLifecycle>["closeRun"]>[1], "binding_ref">,
     envOver: Parameters<typeof makeEnv>[1] = {}
   ) {
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem, { now: "2026-05-29T08:40:21Z", ...envOver }));
     const runId = lc.startRun(baseStartOpts(startOver));
-    lc.closeRun(runId, closeOpts);
+    // T3 F2: every close threads the run's minted nonce (fail-closed otherwise).
+    lc.closeRun(runId, { ...closeOpts, binding_ref: refOf(mem, runId) });
     return { mem, runId };
   }
 
@@ -283,7 +299,7 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
     } as RunLifecycleEnv);
     const runId = lc.startRun(baseStartOpts());
     t = "2026-05-29T09:12:04Z"; // advance the injected clock before close
-    lc.closeRun(runId, { status: "closed" });
+    lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) });
     const prov = JSON.parse(
       mem.files.get(path.join(ROOT, ".guild", "runs", runId, "provenance.json")) as string
     );
@@ -352,7 +368,9 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
   it("throws when closing an unknown run-id (no run.yaml on disk)", () => {
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
-    expect(() => lc.closeRun("run-does-not-exist", { status: "closed" })).toThrow();
+    expect(() =>
+      lc.closeRun("run-does-not-exist", { status: "closed", binding_ref: "rb-nonexistent" })
+    ).toThrow();
   });
 
   // ── G5(a) — current-run-id sentinel is cleared at close ──────────────────
@@ -367,7 +385,8 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
       const lc = createRunLifecycle(makeEnv(mem));
       const runId = lc.startRun(baseStartOpts({ initiative: null }));
       expect(mem.files.get(sentinelPath)).toBe(runId); // sanity: sentinel armed at start
-      lc.closeRun(runId, { status: "closed" });
+      // T3 F2: closeRun requires the run's minted binding nonce (fail-closed §5).
+      lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) });
       const cleared = mem.files.get(sentinelPath);
       // Every real reader (capture-telemetry.ts readCurrentRunId, run-trace.ts
       // readSentinel, ...) treats a trimmed-empty value identically to a
@@ -381,7 +400,8 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
       const olderRunId = lc.startRun(baseStartOpts({ initiative: "alpha" }));
       const newerRunId = lc.startRun(baseStartOpts({ initiative: "beta" }));
       expect(mem.files.get(sentinelPath)).toBe(newerRunId);
-      lc.closeRun(olderRunId, { status: "closed" });
+      // T3 F2: closeRun requires the run's minted binding nonce (fail-closed §5).
+      lc.closeRun(olderRunId, { status: "closed", binding_ref: refOf(mem, olderRunId) });
       // The sentinel still names the NEWER (still-current) run — closing an
       // older run must never disarm guards for the run that is actually live.
       expect(mem.files.get(sentinelPath)).toBe(newerRunId);
@@ -519,6 +539,7 @@ describe("run-lifecycle — lightweight run_class (SC-B §5)", () => {
     // Caller mistakenly supplies a checkpoint path — lightweight MUST null it.
     lc.closeRun(runId, {
       status: "closed",
+      binding_ref: refOf(mem, runId),
       final_learning_checkpoint: ".guild/runs/x/learning/reflection-x.yaml",
     });
     const prov = JSON.parse(
@@ -532,7 +553,7 @@ describe("run-lifecycle — lightweight run_class (SC-B §5)", () => {
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts({ command: "/guild:status", run_class: "lightweight" }));
-    lc.closeRun(runId, { status: "closed" });
+    lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) });
     const runsPrefix = path.join(ROOT, ".guild", "runs") + path.sep;
     for (const f of mem.files.keys()) {
       // sentinel is .guild/runs/current-run-id — already under runsPrefix.
@@ -550,6 +571,7 @@ describe("run-lifecycle — lightweight run_class (SC-B §5)", () => {
     const runId = lc.startRun(baseStartOpts({ run_class: "full" }));
     lc.closeRun(runId, {
       status: "closed",
+      binding_ref: refOf(mem, runId),
       final_learning_checkpoint: ".guild/runs/x/learning/reflection-x.yaml",
     });
     const prov = JSON.parse(
@@ -689,7 +711,7 @@ describe("run-lifecycle — HK-06 provenance.json scrubbed-write coverage", () =
     const mem = memFsWithScrub({ scrubResult: { written: false, blocked: true } });
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts());
-    lc.closeRun(runId, { status: "closed" });
+    lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) });
 
     const provPath = path.join(ROOT, ".guild", "runs", runId, "provenance.json");
     // Fail-CLOSED invariant: the file MUST NOT exist when scrub is blocked.
@@ -700,7 +722,7 @@ describe("run-lifecycle — HK-06 provenance.json scrubbed-write coverage", () =
     const mem = memFsWithScrub({ scrubResult: { written: true, blocked: false } });
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts());
-    lc.closeRun(runId, { status: "closed" });
+    lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) });
 
     const provPath = path.join(ROOT, ".guild", "runs", runId, "provenance.json");
     expect(mem.files.has(provPath)).toBe(true);
@@ -714,7 +736,7 @@ describe("run-lifecycle — HK-06 provenance.json scrubbed-write coverage", () =
     const mem = memFsWithScrub({ scrubResult: { written: true, blocked: false }, captureArgs: captured });
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts());
-    lc.closeRun(runId, { status: "closed" });
+    lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) });
 
     // Exactly one call, surface must be "provenance".
     const provCalls = captured.calls.filter((c) => c.outPath.endsWith("provenance.json"));
@@ -727,7 +749,7 @@ describe("run-lifecycle — HK-06 provenance.json scrubbed-write coverage", () =
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts());
-    lc.closeRun(runId, { status: "closed" });
+    lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) });
 
     const provPath = path.join(ROOT, ".guild", "runs", runId, "provenance.json");
     expect(mem.files.has(provPath)).toBe(true);

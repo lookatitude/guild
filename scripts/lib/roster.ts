@@ -86,6 +86,8 @@ export interface RosterAgentEntry {
   when_to_use: string | null;
   model: string | null;
   default_tier: Tier;
+  /** Optional authoritative purpose binding — closed guild.model_policy.v2 §2 purpose enum (guild.agent_template.v2). */
+  work_class: string | null;
   tools: string[] | null;
   skills: string[];
   derived_from_template: string | null;
@@ -218,6 +220,7 @@ function readAgentEntry(
     when_to_use: asString(fm["when_to_use"]),
     model,
     default_tier: tier,
+    work_class: asString(fm["work_class"]),
     tools: fm["tools"] !== undefined ? asStringList(fm["tools"]) : null,
     skills: asStringList(fm["skills"]),
     derived_from_template: asString(fm["derived_from_template"]),
@@ -634,6 +637,7 @@ export function deriveAgentsRegistry(
       model_params: a.model_params,
       host_preference: a.host_preference,
       default_tier: a.default_tier,
+      work_class: a.work_class,
       specialist_type: a.specialist_type,
       derived_from_template: a.derived_from_template,
       skills: a.skills,

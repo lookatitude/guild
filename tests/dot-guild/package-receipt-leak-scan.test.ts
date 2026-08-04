@@ -20,7 +20,10 @@
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { execFileSync, spawnSync } from "child_process";
+import { execFileSync } from "child_process";
+// T6B-R2-B1: the audit CLI is launched through the PACKAGE-LOCAL runtime (same resolver
+// the shipped audit uses), not ambient `npx` — this rail must not depend on ~/.npm.
+import { runTsCli } from "./ts-runtime-helper";
 
 const AUDIT = path.resolve(__dirname, "../../scripts/dot-guild/audit.ts");
 const REAL_GITIGNORE = path.resolve(__dirname, "../../.gitignore");
@@ -39,8 +42,8 @@ function writeReceipt(repo: string, rel: string, body: object | string): void {
 }
 
 function runAudit(repo: string): { status: number; out: string } {
-  const r = spawnSync("npx", ["tsx", AUDIT, `--workspace=${repo}`], { encoding: "utf8", cwd: repo });
-  return { status: r.status ?? -1, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  const r = runTsCli(AUDIT, [`--workspace=${repo}`], { cwd: repo });
+  return { status: r.status ?? -1, out: r.out };
 }
 
 describe("package/receipt-tree leak scan (audit.ts §7.2, real CLI, non-vacuous)", () => {

@@ -27,6 +27,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  dispatchModelForSpecialist,
+  dispatchModelParamsForSpecialist,
 } from "../core/contracts/team-backend";
 import {
   buildPrompt,
@@ -372,6 +374,10 @@ export class RemoteTeamBackend implements TeamBackend {
   private paneSpecFor(spec: Specialist, req: TeamLaunchRequest): PaneSpec {
     const hostKind: HostKind = spec.host_kind ?? req.orchestratorHostKind ?? "claude";
     const prompt = buildPrompt(req.slug, req.runId, spec, req.teamPath, hostKind);
+    // T6-R2-F5: a remote lane spawns at the same evidenced-M2 selection a local
+    // pane would — one consumption rule, every backend (absent ⇒ legacy bytes).
+    const model = dispatchModelForSpecialist(spec) ?? undefined;
+    const modelParams = dispatchModelParamsForSpecialist(spec);
     return {
       name: spec.name,
       scope: spec.scope,
@@ -382,6 +388,8 @@ export class RemoteTeamBackend implements TeamBackend {
       taskId: spec.taskId,
       capability_scope: spec.capability_scope,
       specialist: spec.name,
+      ...(model !== undefined ? { model } : {}),
+      ...(modelParams !== undefined ? { modelParams } : {}),
     };
   }
 

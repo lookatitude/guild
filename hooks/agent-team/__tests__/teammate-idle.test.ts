@@ -68,7 +68,14 @@ function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, worke
     now: SEED_NOW,
   };
   const cell = buildTaskCell(disp);
-  writeTaskCell(cwd, cell);
+  // T3 F3: descriptor writers fail closed without the run's minted binding.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const rb = require("../../../src/modules/lifecycle/workflows/run-binding") as
+    typeof import("../../../src/modules/lifecycle/workflows/run-binding");
+  const existing = rb.loadRunBinding({ root: cwd, run_id: cell.assignment.run_id });
+  const bindingRef =
+    (existing ?? rb.mintRunBinding({ root: cwd, run_id: cell.assignment.run_id })).binding_ref;
+  writeTaskCell(cwd, cell, { binding_ref: bindingRef });
   const validation = runDeterministicFloor({
     assignment: cell.assignment,
     submitted: {

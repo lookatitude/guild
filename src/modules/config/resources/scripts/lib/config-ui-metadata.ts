@@ -229,6 +229,7 @@ const EXPLICIT: Record<string, ConfigUiMeta> = {
   host_profiles: meta({ group: "host_roles", label: "Per-host config profiles", control: "object_editor", safety_class: "advanced" }),
 
   // ── Models & scoring (non-tier) ────────────────────────────────────────
+  model_policy: meta({ group: "models", label: "Model routing policy (guild.model_policy.v2)", control: "object_editor", safety_class: "advanced" }),
   "models.enabled": meta({ group: "models", label: "Cost-tiered model scoring", control: "boolean", safety_class: "normal" }),
   "models.scoreWeights.workType": meta({ group: "models", label: "Score weight — work type", control: "number", safety_class: "advanced" }),
   "models.scoreWeights.blastRadius": meta({ group: "models", label: "Score weight — blast radius", control: "number", safety_class: "advanced" }),

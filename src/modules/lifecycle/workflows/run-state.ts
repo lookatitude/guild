@@ -71,6 +71,27 @@ export interface LaneModelParams {
   [key: string]: string | undefined;
 }
 
+/** Backward reference to one party's finalized receipt (§7a). */
+export interface LaneAdjudicationRef {
+  dispatch_id: string;
+  /** sha256 hex of that party's finalized receipt. */
+  receipt_hash: string;
+}
+
+/**
+ * T7R-R1-B2: the §7a adjudication a lane's `independence` value comes FROM.
+ * REQUIRED whenever `independence` is `"strong"` — `upsertLane` refuses the
+ * write otherwise. `producer_ref.dispatch_id` must equal the lane key: a lane's
+ * producing dispatch IS that lane, so an adjudication of any other dispatch
+ * cannot authorize it. Persisted alongside the verdict so the shared artifact is
+ * self-auditing — a reader re-verifies the claim against the named block rather
+ * than trusting the string.
+ */
+export interface LaneIndependenceRef {
+  producer_ref: LaneAdjudicationRef;
+  reviewer_ref: LaneAdjudicationRef;
+}
+
 /** Per-lane DAG execution state, keyed by task-id in `RunStateV1.lanes`. */
 export interface LaneState {
   /** Required. Lane lifecycle status. */
@@ -90,6 +111,8 @@ export interface LaneState {
     degraded: boolean;
     /** "weak" when reviewer shares the producer host OR the route was degraded. */
     independence: "strong" | "weak";
+    /** REQUIRED when `independence` is "strong" (T7R-R1-B2) — the §7a block it came from. */
+    independence_ref?: LaneIndependenceRef;
     /** Per-lane tier actually routed (ARCH-6 — may differ from plan estimate). */
     tier: LaneTier;
     /**
@@ -155,6 +178,8 @@ export interface LanePatch {
     selected: string;
     degraded: boolean;
     independence: "strong" | "weak";
+    /** REQUIRED when `independence` is "strong" (T7R-R1-B2). */
+    independence_ref?: LaneIndependenceRef;
     tier: LaneTier;
     model: string | null;
     modelParams?: LaneModelParams;
@@ -263,6 +288,49 @@ export function upsertLane(
   laneId: string,
   patch: LanePatch
 ): RunStateV1 {
+  // T7-H2 (ported at the next-merge run-state relocation): refuse to persist an
+  // unearned "strong" independence BEFORE the lock is taken and before any byte
+  // is written — a refused write must leave the shareable checkpoint exactly as
+  // it was. The guard lives in capability (`independence-record.ts`), and
+  // capability↔lifecycle is a sanctioned cyclic edge (capability's run-binding
+  // auth imports lifecycle), so it is reached via a LAZY require through
+  // capability's PUBLIC index — deferring to call time (the settings-reader.ts
+  // pattern) avoids a module-init half-load. T7R-R1-B2: `lane_id` is DERIVED from
+  // this call's own `laneId`, never from the patch, and the receipt refs come
+  // from the lane's own declared `independence_ref`; a "strong" with none refuses.
+  //
+  // GATED on `independence === "strong"` — the ONLY value `assertPersistableIndependence`
+  // can reject. A hook heartbeat / `in_progress` transition never persists a strong
+  // verdict, so this deferred require never runs there: without the gate the require
+  // would drag the whole capability→lifecycle barrel (incl. a `require.main===module`
+  // CLI module) into every hook bundle that writes run-state, whose entry-guard then
+  // misfires at bundle runtime. A "weak"/absent independence is always persistable.
+  if (patch.host?.independence === "strong") {
+    // The require path is assembled at runtime (not a literal) so esbuild leaves
+    // it EXTERNAL rather than inlining the capability index — whose barrel would
+    // otherwise drag the whole capability→lifecycle graph (incl. `require.main`-
+    // gated CLI modules) into every hook bundle that writes run-state. This branch
+    // only runs when a "strong" verdict is being persisted, which happens solely on
+    // the scripts/tsx path (launcher / receipt writer) where the module runs from
+    // source and `../../capability` resolves; a hook never persists "strong", so the
+    // require is never reached in a bundled context.
+    // `eval("require")` returns the REAL runtime require untouched by esbuild's
+    // static bundler (a plain `require("../../capability")` or a constant-foldable
+    // path is inlined; this is not). No user input is involved — the module id is a
+    // fixed string — and this line runs only on the scripts/tsx path.
+    // eslint-disable-next-line no-eval, @typescript-eslint/no-require-imports
+    const capability = (eval("require") as NodeRequire)("../../capability") as typeof import("../../capability");
+    capability.assertPersistableIndependence(
+      runDir,
+      patch.host?.independence,
+      `run-state lane "${laneId}"`,
+      {
+        lane_id: laneId,
+        producer_ref: patch.host?.independence_ref?.producer_ref,
+        reviewer_ref: patch.host?.independence_ref?.reviewer_ref,
+      },
+    );
+  }
   return withStableLock(runDir, () => {
     const now = new Date().toISOString();
     const state = loadRunState(runDir) ?? newCheckpoint(init, now);

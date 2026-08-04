@@ -24,6 +24,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  dispatchModelForSpecialist,
+  dispatchModelParamsForSpecialist,
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
 } from "../core/contracts/team-backend";
@@ -157,6 +159,13 @@ export function paneCommand(
    * other caller (ClaudePaneAdapter/remote dispatch) stays untouched.
    */
   launchArgs: string[] = [],
+  /**
+   * T6-R2-F5: the evidenced-M2 selected model this pane must run at. Absent ⇒
+   * the emitted command is byte-identical to the pre-model one (no --model, no
+   * GUILD_MODEL export) — the flag-off path never changes a single byte. Rides
+   * ALONGSIDE `launchArgs` (#54): the final argv is `${launchFragment}${modelArg}`.
+   */
+  model?: string,
 ): string {
   const taskFragment =
     taskId !== undefined && taskId.length > 0
@@ -185,12 +194,21 @@ export function paneCommand(
   // into a shell for the operator.
   const launchFragment = launchArgs.length > 0 ? `${launchArgs.map(shellQuote).join(" ")} ` : "";
   const debugTitle = DEBUG_PANE_TITLE_PREFIX + (specialist !== undefined && specialist.length > 0 ? specialist : "orchestrator");
+  // T6-R2-F5: `claude --model <selected>` is what makes the M2 selection real —
+  // the pane process itself runs at the resolver's frozen model. No model ⇒ the
+  // invocation is exactly the legacy `claude '<prompt>'`.
+  const modelArg =
+    model !== undefined && model.length > 0 ? `--model ${shellQuote(model)} ` : "";
+  const modelFragment =
+    model !== undefined && model.length > 0
+      ? `export GUILD_MODEL=${shellQuote(model)}; `
+      : "";
   const teardownTail = debug
-    ? `claude ${launchFragment}${shellQuote(prompt)}; ` +
+    ? `claude ${launchFragment}${modelArg}${shellQuote(prompt)}; ` +
       `tmux select-pane -t "$TMUX_PANE" -T ${shellQuote(debugTitle)} 2>/dev/null || true; ` +
       `echo ${shellQuote("[GUILD_PANE_DEBUG] worker process exited — this is an operator debug shell, NOT a live worker.")}; ` +
       `exec $SHELL`
-    : `claude ${launchFragment}${shellQuote(prompt)}`;
+    : `claude ${launchFragment}${modelArg}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     // rf-wi-03 (G3) — the universal structured producer marker on every pane env,
@@ -203,6 +221,7 @@ export function paneCommand(
     assignmentFragment +
     statuslineFragment +
     scopeFragment +
+    modelFragment +
     teardownTail
   );
 }
@@ -237,6 +256,11 @@ export function composeTmuxCommands(opts: {
   const commandFor = (spec: Specialist | null): string => {
     const hostKind: HostKind = spec?.host_kind ?? orchestratorHostKind;
     const prompt = buildPrompt(slug, runId, spec, teamPath, hostKind);
+    // T6-R2-F5: an evidenced-M2 selection reaches the pane spawn HERE — both
+    // the adapter path and the legacy inline path. `null` on every lane whose
+    // provenance is legacy/shadow, so M0/M1 panes stay byte-identical.
+    const model = dispatchModelForSpecialist(spec) ?? undefined;
+    const modelParams = dispatchModelParamsForSpecialist(spec);
     // Issue #54: EVERY local Claude pane gets the resolved launch flags —
     // whether or not `resolveAdapter` is wired for OTHER (non-Claude) panes
     // in this same local team. composeTmuxCommands is exclusively the LOCAL
@@ -256,8 +280,9 @@ export function composeTmuxCommands(opts: {
         spec?.capability_scope,
         spec?.taskId,
         spec?.name,
-        undefined,
+        undefined, // keep paneCommand's own GUILD_PANE_DEBUG default
         resolveClaudeTeamLaunchArgs(permissionConfig),
+        model,
       );
     }
     if (!resolveAdapter) {
@@ -278,6 +303,8 @@ export function composeTmuxCommands(opts: {
       taskId: spec?.taskId,
       capability_scope: spec?.capability_scope,
       specialist: spec?.name,
+      ...(model !== undefined ? { model } : {}),
+      ...(modelParams !== undefined ? { modelParams } : {}),
     });
   };
 

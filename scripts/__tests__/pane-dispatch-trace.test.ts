@@ -38,6 +38,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import * as yaml from "js-yaml";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const LAUNCHER = path.resolve(__dirname, "../agent-team-launcher.ts");
 const SUMMARIZER = path.resolve(__dirname, "../trace-summarize.ts");
@@ -70,12 +71,21 @@ function runScript(
 function setupConsumerRepo(
   tmpDir: string,
   slug: string,
+  runId: string,
   fixture = "team-agent-team.yaml",
 ): string {
   const teamDir = path.join(tmpDir, ".guild", "team");
   fs.mkdirSync(teamDir, { recursive: true });
   const dst = path.join(teamDir, `${slug}.yaml`);
   fs.copyFileSync(path.join(FIXTURES, fixture), dst);
+  // T3b (session_context §5): mint the run binding so the launcher's
+  // binding-verified descriptor writers (guild.task_assignment.v1/v2) resolve
+  // the run's own minted record instead of failing closed. The binding + the
+  // T7 approve-before-dispatch gate are exercised as REAL preconditions of a
+  // real dispatch (gate enforcement itself is pinned in
+  // t7-h1-dispatch-approval.test.ts; these launcher tests use --approval-override
+  // to focus on the trace-emission wiring).
+  mintRunBinding({ root: tmpDir, run_id: runId });
   return dst;
 }
 
@@ -238,12 +248,12 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
     const RUN_ID = "run-pane-76";
 
     it("appends one guild.trace.dispatch.v1 per specialist to the orchestrating run", () => {
-      const teamPath = setupConsumerRepo(tmpDir, "test-slug");
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID);
       const fakeBin = makeFakeTmuxBin(tmpDir);
 
       const { exitCode } = runScript(
         LAUNCHER,
-        ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID],
+        ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID, "--approval-override", "test: dispatch-trace wiring; T7 gate enforcement pinned in t7-h1-dispatch-approval.test.ts"],
         {
           TMUX: "/tmp/tmux-1000/default,12345,0",
           PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
@@ -261,10 +271,10 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
     });
 
     it("carries attribution_specialist, task id, pane id, pane target and backend kind", () => {
-      const teamPath = setupConsumerRepo(tmpDir, "test-slug");
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID);
       const fakeBin = makeFakeTmuxBin(tmpDir);
 
-      runScript(LAUNCHER, ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID], {
+      runScript(LAUNCHER, ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID, "--approval-override", "test: dispatch-trace wiring; T7 gate enforcement pinned in t7-h1-dispatch-approval.test.ts"], {
         TMUX: "/tmp/tmux-1000/default,12345,0",
         PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
       });
@@ -286,7 +296,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
     });
 
     it("does NOT emit a pane dispatch on --dry-run (nothing was dispatched)", () => {
-      const teamPath = setupConsumerRepo(tmpDir, "test-slug");
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID);
       const { exitCode } = runScript(
         LAUNCHER,
         ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID, "--dry-run"],
@@ -300,10 +310,10 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
     // write-task-run's pre-routing emit must stay backend "unknown" with NO pane
     // fields — this lane only ADDS the pane-path receipt.
     it("leaves the pre-routing write-task-run dispatch emit unchanged", () => {
-      const teamPath = setupConsumerRepo(tmpDir, "test-slug");
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID);
       const fakeBin = makeFakeTmuxBin(tmpDir);
 
-      runScript(LAUNCHER, ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID], {
+      runScript(LAUNCHER, ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID, "--approval-override", "test: dispatch-trace wiring; T7 gate enforcement pinned in t7-h1-dispatch-approval.test.ts"], {
         TMUX: "/tmp/tmux-1000/default,12345,0",
         PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
       });
@@ -767,7 +777,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
 
     it("records an SSH-dispatched lane in the orchestrating run", () => {
       // team-mixed-host.yaml: architect stays local, security routes to codex.
-      const teamPath = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID, "team-mixed-host.yaml");
       writeHostManifest(tmpDir, "claude", "claude");
       writeHostManifest(tmpDir, "codex-remote", "codex");
       writeSettingsCrossHost(tmpDir, {
@@ -777,7 +787,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
 
       const { exitCode, stdout, stderr } = runScript(
         LAUNCHER,
-        ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID],
+        ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID, "--approval-override", "test: dispatch-trace wiring; T7 gate enforcement pinned in t7-h1-dispatch-approval.test.ts"],
         {
           TMUX: "/tmp/tmux-1000/default,12345,0",
           PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
@@ -812,7 +822,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
     });
 
     it("emits nothing on a remote --dry-run (nothing was dispatched)", () => {
-      const teamPath = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID, "team-mixed-host.yaml");
       writeHostManifest(tmpDir, "claude", "claude");
       writeHostManifest(tmpDir, "codex-remote", "codex");
       writeSettingsCrossHost(tmpDir, { "codex-remote": { address: "gpu-box.example.com" } });
@@ -838,12 +848,12 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
   describe("launcher → summarizer, one run dir", () => {
     it("a real pane launch summarizes with its real specialist count", () => {
       const RUN_ID = "run-e2e-76";
-      const teamPath = setupConsumerRepo(tmpDir, "test-slug");
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID);
       const fakeBin = makeFakeTmuxBin(tmpDir);
 
       const launch = runScript(
         LAUNCHER,
-        ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID],
+        ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID, "--approval-override", "test: dispatch-trace wiring; T7 gate enforcement pinned in t7-h1-dispatch-approval.test.ts"],
         {
           TMUX: "/tmp/tmux-1000/default,12345,0",
           PATH: `${fakeBin}:${process.env.PATH ?? ""}`,

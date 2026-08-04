@@ -26,7 +26,7 @@ Five fields, captured via the step-1 interview (ask until all five are captured;
 
 Everything this skill writes lands in the **consuming repo's `.guild/`** — **never** the read-only plugin install dir (a runtime write into plugin install state is the **v2 DH-3 defect being fixed**):
 
-- **Draft** → `.guild/agents/proposed/<role>.md` + `.guild/skills/proposed-<role>-*/`, each stamped **at draft time** with `derived_from_template: guild.agent_template.v1` / `guild.skill_template.v1` (template ids documented at https://guildstack.dev/docs/architecture).
+- **Draft** → `.guild/agents/proposed/<role>.md` + `.guild/skills/proposed-<role>-*/`, each stamped **at draft time** with `derived_from_template: guild.agent_template.v2` / `guild.skill_template.v1` (template ids documented at https://guildstack.dev/docs/architecture).
 - **Incubate** → files stay under `proposed/` until every applicable boundary-edit gate and the new-specialist gate pass. `guild:team-compose` reads `.guild/agents/*.md` (+ the shipped machinery agents and the `templates/specialists/*.md` type library), **never** `.guild/agents/proposed/*.md`.
 - **Register** → a **move within `.guild/`**: `.guild/agents/proposed/<role>.md` → `.guild/agents/<role>.md`, and `.guild/skills/proposed-<role>-*/` → `.guild/skills/<role>-*/`. Register is a move, not a rewrite — the `derived_from_template` stamp is preserved unchanged. The v1 behavior (moving into `agents/<role>.md` / `skills/specialists/<role>-*/` in the plugin install dir) is the explicit **v2 DH-3 defect being fixed**.
 

@@ -436,9 +436,6 @@ const VALID_PLAN = {
     lead_reuses_parent: true,
     override: null,
   },
-  cap: 6,
-  capped: false,
-  dropped_roles: [],
 };
 
 const VALID_RESULT = {

@@ -190,34 +190,44 @@ export function selectReviewerAbCases(): SelectReviewerCase[] {
     codexStoredAuth: true,
     pluginAdapters: ["codex-plugin"],
   };
+  // T3 (session_context §3): the retired "auto"/unset ⇒ claude default is
+  // gone, so the claude-author posture these cases model is now EXPLICIT —
+  // identity comes from the caller, never a fallback. Golden outputs are
+  // unchanged (the same author family, now honestly asserted).
   return [
     {
       name: "claude-author + codex-plugin + cross/auto ⇒ selected codex-plugin",
+      host: "claude",
       world: codexReachable,
       review: { mode: "cross", provider: "auto" },
     },
     {
       name: "review=off ⇒ skipped",
+      host: "claude",
       world: codexReachable,
       review: { mode: "off", provider: "auto" },
     },
     {
       name: "review=local ⇒ degraded-local",
+      host: "claude",
       world: codexReachable,
       review: { mode: "local", provider: "auto" },
     },
     {
       name: "cross + pin gemini-cli (no adapter) ⇒ skipped (honor-or-refuse)",
+      host: "claude",
       world: codexReachable,
       review: { mode: "cross", provider: "gemini-cli" },
     },
     {
       name: "cross + pin claude (same family as author) ⇒ skipped (no self-review)",
+      host: "claude",
       world: codexReachable,
       review: { mode: "cross", provider: "claude" },
     },
     {
       name: "cross/auto + empty world ⇒ skipped (no cross reviewer)",
+      host: "claude",
       world: {},
       review: { mode: "cross", provider: "auto" },
     },
@@ -229,6 +239,10 @@ export function runSelectReviewerCase(c: SelectReviewerCase): SelectResult {
   const detection: DetectionResult = detectProviders({
     cwd: CWD,
     host: c.host,
+    // R3-F1: trust is non-optional. The SC-4 golden pins the REGISTRY A/B
+    // under verified identity (selection behavior is trust-invariant only at
+    // "verified"); the trust gates have their own dedicated suites.
+    trust: "verified",
     probe: makeProbe(c.world),
   });
   return selectReviewer(detection, c.review);

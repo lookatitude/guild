@@ -487,6 +487,9 @@ export function runWriteTaskRunCli(argv: string[] = process.argv.slice(2)): void
   }
 }
 
-if (require.main === module) {
+if (
+  require.main === module &&
+  new RegExp("[\\\\/]write-task-run\\.[cm]?[jt]s$").test(process.argv[1] ?? "")
+) {
   runWriteTaskRunCli();
 }

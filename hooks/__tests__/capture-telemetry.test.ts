@@ -18,6 +18,10 @@ import * as os from "os";
 const SCRIPT = path.resolve(__dirname, "../capture-telemetry.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 
+// T3b (session_context §5): telemetry writes are binding-gated; fixtures mint
+// the run's binding so the authorized write path is exercised.
+import { mintTestBinding } from "../test-support/mint-binding";
+
 function readFixture(name: string): string {
   return fs.readFileSync(path.join(FIXTURES, name), "utf8");
 }
@@ -29,7 +33,16 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input,
     encoding: "utf8",
-    env: { ...process.env, GUILD_RUN_ID: "test-run", ...env },
+    // Rework F1: writers demand the caller-PRESENTED pair — export the
+    // envelope by default ("rb-test-test-run" is mintTestBinding's
+    // deterministic nonce for run "test-run"). Tests that override
+    // GUILD_RUN_ID away from test-run break the envelope on purpose.
+    env: {
+      ...process.env,
+      GUILD_RUN_ID: "test-run",
+      GUILD_RUN_BINDING_REF: "rb-test-test-run",
+      ...env,
+    },
     timeout: 15000,
   });
   return {
@@ -48,6 +61,7 @@ describe("capture-telemetry.ts", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-telemetry-test-"));
     runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     fs.mkdirSync(runDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     eventsFile = path.join(runDir, "events.ndjson");
   });
 
@@ -188,43 +202,48 @@ describe("capture-telemetry.ts", () => {
       expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "sentinel-run", "events.ndjson"))).toBe(false);
     });
 
-    it("uses sentinel file when GUILD_RUN_ID is empty", () => {
+    it("does NOT use the sentinel file when GUILD_RUN_ID is empty (T3b §5: fail closed, no write)", () => {
+      // CORRECTED (T3b): this test previously ENCODED the retired sentinel
+      // scoping (empty env → sentinel resolves the write target). Under
+      // session_context §5 the sentinel is intake-only: an empty explicit
+      // binding refuses the write entirely — even with a minted open binding
+      // for the sentinel-named run.
       const sentinelDir = path.join(tmpDir, ".guild", "runs");
       fs.mkdirSync(sentinelDir, { recursive: true });
       fs.writeFileSync(path.join(sentinelDir, "current-run-id"), "from-sentinel", "utf8");
+      mintTestBinding(tmpDir, "from-sentinel");
 
-      // Pass GUILD_RUN_ID="" to bypass env priority — sentinel should be used
       const result = runScript(readFixture("post-tool-use.json"), {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "", // empty overrides the default "test-run"
       });
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(0); // a hook never blocks the session
       const sentinelEventsFile = path.join(tmpDir, ".guild", "runs", "from-sentinel", "events.ndjson");
-      expect(fs.existsSync(sentinelEventsFile)).toBe(true);
-      const lines = fs.readFileSync(sentinelEventsFile, "utf8").trim().split("\n").filter(Boolean);
-      expect(lines.length).toBe(1);
-      expect(JSON.parse(lines[0]).event).toBe("PostToolUse");
+      expect(fs.existsSync(sentinelEventsFile)).toBe(false);
     });
 
-    it("falls back to session_id when sentinel is absent and GUILD_RUN_ID is empty", () => {
-      // No sentinel, GUILD_RUN_ID="" — payload session_id should be used
+    it("does NOT fall back to session_id when sentinel is absent and GUILD_RUN_ID is empty (T3b §5)", () => {
+      // CORRECTED (T3b): the session_id-derived run dir was a fabricated write
+      // identity with no minted binding — refused under §5.
       runScript(readFixture("post-tool-use.json"), {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "", // empty — bypasses env priority
-        // no sentinel file written
       });
       // post-tool-use.json has session_id: "sess-abc123"
       const sessionEventsFile = path.join(tmpDir, ".guild", "runs", "run-sess-abc123", "events.ndjson");
-      expect(fs.existsSync(sessionEventsFile)).toBe(true);
+      expect(fs.existsSync(sessionEventsFile)).toBe(false);
     });
   });
 
   describe("run scoping", () => {
-    it("uses .guild/runs/current-run-id when GUILD_RUN_ID is unset", () => {
+    it("does NOT scope by .guild/runs/current-run-id when GUILD_RUN_ID is unset (T3b §5: fail closed)", () => {
+      // CORRECTED (T3b): sentinel scoping is retired; no explicit binding →
+      // no write anywhere (neither the sentinel-named run nor the default).
       const scopedRunId = "run-sentinel-123";
       const runsRoot = path.join(tmpDir, ".guild", "runs");
       fs.mkdirSync(runsRoot, { recursive: true });
       fs.writeFileSync(path.join(runsRoot, "current-run-id"), scopedRunId, "utf8");
+      mintTestBinding(tmpDir, scopedRunId);
 
       runScript(readFixture("post-tool-use.json"), {
         GUILD_CWD: tmpDir,
@@ -232,14 +251,20 @@ describe("capture-telemetry.ts", () => {
       });
 
       const scopedEvents = path.join(runsRoot, scopedRunId, "events.ndjson");
-      expect(fs.existsSync(scopedEvents)).toBe(true);
+      expect(fs.existsSync(scopedEvents)).toBe(false);
       expect(fs.existsSync(eventsFile)).toBe(false);
     });
 
-    it("uses a new sentinel value for a later /guild invocation in the same session", () => {
+    it("SC-1: moving the sentinel between two hook events redirects NEITHER (both refuse — no binding)", () => {
+      // CORRECTED (T3b): previously pinned "each event follows the sentinel of
+      // its moment" — the exact concurrent-redirect defect SC-1 forbids. Now:
+      // a moved sentinel changes nothing, because no sentinel value ever
+      // resolves a writer identity.
       const runsRoot = path.join(tmpDir, ".guild", "runs");
       fs.mkdirSync(runsRoot, { recursive: true });
       const sentinel = path.join(runsRoot, "current-run-id");
+      mintTestBinding(tmpDir, "run-first");
+      mintTestBinding(tmpDir, "run-second");
 
       fs.writeFileSync(sentinel, "run-first", "utf8");
       runScript(readFixture("post-tool-use.json"), {
@@ -253,12 +278,23 @@ describe("capture-telemetry.ts", () => {
         GUILD_RUN_ID: "",
       });
 
-      expect(fs.existsSync(path.join(runsRoot, "run-first", "events.ndjson"))).toBe(true);
-      expect(fs.existsSync(path.join(runsRoot, "run-second", "events.ndjson"))).toBe(true);
-      const firstLines = fs.readFileSync(path.join(runsRoot, "run-first", "events.ndjson"), "utf8").trim().split("\n");
-      const secondLines = fs.readFileSync(path.join(runsRoot, "run-second", "events.ndjson"), "utf8").trim().split("\n");
-      expect(firstLines.length).toBe(1);
-      expect(secondLines.length).toBe(1);
+      expect(fs.existsSync(path.join(runsRoot, "run-first", "events.ndjson"))).toBe(false);
+      expect(fs.existsSync(path.join(runsRoot, "run-second", "events.ndjson"))).toBe(false);
+    });
+
+    it("[control] the explicitly-bound run keeps writing to ITS run dir while the sentinel moves (SC-1 anti-vacuity)", () => {
+      // The positive leg: an explicit binding is move-stable — the write lands
+      // under the bound run no matter where the sentinel points.
+      const runsRoot = path.join(tmpDir, ".guild", "runs");
+      fs.mkdirSync(runsRoot, { recursive: true });
+      fs.writeFileSync(path.join(runsRoot, "current-run-id"), "run-elsewhere", "utf8");
+
+      runScript(readFixture("post-tool-use.json"), {
+        GUILD_CWD: tmpDir,
+        GUILD_RUN_ID: "test-run",
+      });
+      expect(fs.existsSync(eventsFile)).toBe(true);
+      expect(fs.existsSync(path.join(runsRoot, "run-elsewhere", "events.ndjson"))).toBe(false);
     });
   });
 

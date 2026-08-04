@@ -64,7 +64,14 @@ fields); per-step evidence under `.guild/runs/<run-id>/ops/evidence/`.
 Producer **`devops-incident-runbook`** — class→producer map per
 `../../guild-operations/operations-contract.md §Posture` (by pointer). **Posture: INTERACTIVE
 always — never autonomous** (rail 2), regardless of runbook approval or
-`--auto-approve`. Active specialists **≤ producer + challenger**.
+`--auto-approve`. **Gate inheritance (via the router):** this playbook runs only
+AFTER the guild:operations router's step-0 ops team gate has verified a current,
+recomputed-hash-matching `guild.team_decision.v1` `approve` — rollback urgency
+never bypasses that hold, and this playbook dispatches no participant outside
+the approved set. Wave concurrency (`guild.team_schedule.v1`): rollback waves run
+**producer + challenger concurrently at most**; other approved participants
+schedule into later waves — membership was decided at the phase's
+`guild.team_decision.v1` gate and is never cut here.
 
 ## KB integrity check (optional, defense Layer 5)
 
@@ -105,7 +112,8 @@ Each step records `op_class`; every **hard-set step** shows
 
 - producer is `devops-incident-runbook`; posture interactive (never
   autonomous); per-step `op_class`; hard-set step `prompted_inline`;
-  `guild.incident.v1` populated by pointer; active set ≤ producer + challenger.
+  `guild.incident.v1` populated by pointer; wave concurrency: producer +
+  challenger at most run concurrently (schedule-only; approved membership preserved).
 
 # Escalation rules
 
@@ -128,5 +136,6 @@ Each step records `op_class`; every **hard-set step** shows
 2. **`rollback`, Quality `block`, no force_pass** → **REFUSE with route-back**
    (rollback is in the refuse set, unlike incident).
 3. **`rollback`, Quality `block`, recorded human `force_pass`** → proceeds.
-4. **`rollback`** → emits `guild.ops.v1` + `guild.incident.v1`; active set never
-   exceeds producer + challenger.
+4. **`rollback`** → emits `guild.ops.v1` + `guild.incident.v1`; wave concurrency:
+   producer + challenger at most run concurrently — remaining approved
+   participants wait in later waves (never removed).

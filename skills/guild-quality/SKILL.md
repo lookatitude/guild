@@ -74,6 +74,24 @@ full disposition enum.
 
 Full mechanics + `pass_when` per step: **`./quality-mechanics.md`**.
 
+## qa-team-gate (step 0 — HOLD before any participant dispatch)
+
+The qa phase dispatches participants — the producer, the advisory-panel
+challengers, and the `reviewer_cross_host` broker slot — so it composes and
+gates **first** (`team-compose SKILL.md §"Team decision gate"`: every phase
+that can dispatch). Before ANY producer/panel/broker dispatch, either run the
+per-phase composition pass (`guild:team-compose` with `phase=qa`, proposing the
+full qa roster — producer, composer-derived `advisory_panel` challengers,
+cross-host reviewer slot — as an immutable `guild.team_proposal.v2`) or
+consume an already-approved **current** qa-phase decision. Then **HOLD**: no
+participant dispatches until a current `guild.team_decision.v1` `approve`
+exists whose `proposal_hash` equals the hash RECOMPUTED from the proposal
+artifact; stale, hash-mismatched, or absent decisions **fail closed** — there
+is no dispatch-first path. `selection`/`runchecks` are orchestrator-session
+work (no participant dispatch) and may proceed while the gate is pending; the
+per-dispatch hash checks in `## g-quality` re-verify this same gate at each
+dispatch — they never replace it.
+
 ## selection
 
 SignalScan → SelectMatrix: deterministic, surfaced, overridable. Each class in
@@ -100,12 +118,21 @@ Two **distinct, both-kept** review mechanisms at this boundary (https://guildsta
    `STATION_POLICY.qa.advisory_panel`) — not a hardcoded fixed pair: producer
    `qa-test-strategy` (matches the composer); challengers `security` (BASELINE — always
    present) + `architect` (GATED on `multi_component`, recorded `chal:qa:architect`);
-   cross-model-preferred (flag recorded). Findings resolve by rerun / added check / named
-   owner-accepted risk — never itself blocks. Populate `challenger_trail` →
-   `./quality-contract.md §challenger_trail`.
+   cross-model-preferred (flag recorded). Panel members are qa-phase participants
+   (`guild.team_proposal.v2` → `guild.team_decision.v1`; advisory labels never
+   bypass approval; capacity shapes `guild.team_schedule.v1` waves only, never
+   membership) — and at panel dispatch, verify a **current** `approve` decision
+   whose hash matches the RECOMPUTED proposal hash covers each member
+   (stale/mismatched decisions fail closed), same as any dispatch. Findings resolve by rerun /
+   added check / named owner-accepted risk — never itself blocks. Populate
+   `challenger_trail` → `./quality-contract.md §challenger_trail`.
 2. **Cross-host G-quality gate via the broker (policy-gated).** *Separate* from
    the same-session panel above: this is the **cross-host** review where a
-   **different host family** critiques the quality report. After the report is
+   **different host family** critiques the quality report. The reviewer slot is a
+   qa-phase participant (`participation_kind: reviewer_cross_host`): before
+   dispatching the broker, confirm a current `guild.team_decision.v1` `approve`
+   whose hash matches the recomputed proposal hash covers it — stale/mismatched
+   decisions fail closed (a `skipped` outcome dispatches nothing). After the report is
    written and before `releasegate` computes, invoke `guild-review-broker`:
 
    ```
@@ -145,6 +172,9 @@ After `releasegate` and before phase close, fire the per-phase LearningCheckpoin
 
 # Evidence requirements
 
+- `qa-team-gate`: the step-0 hold ran BEFORE any producer/panel/broker
+  dispatch — a current, recomputed-hash-matching `approve` decision (or the
+  composition pass that produced one) is cited ahead of the first dispatch.
 - `selection`: deterministic-signal table + 3-choice prompt; grep proves zero
   copied schema. `runchecks`: budget a `§4.4` pointer (no literals);
   discovered-harness-only. `g-quality`: composer-derived qa `advisory_panel` +

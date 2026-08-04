@@ -109,6 +109,23 @@ validator, two callers).
 
 ## execute (ExecuteRunbook shell)
 
+0. **Ops team gate (HOLD — precedes every dispatch).** The ops phase's
+   participants — the CLASS-driven producer, the composer-derived advisory-panel
+   challengers, and the `reviewer_cross_host` broker slot — are composed and
+   user-approved BEFORE step 1 (`team-compose SKILL.md §"Team decision gate"`:
+   every phase that can dispatch): run the per-phase composition pass
+   (`guild:team-compose` with `phase=ops`, an immutable `guild.team_proposal.v2`)
+   or consume an already-approved **current** ops-phase decision, then **HOLD**
+   every dispatch until a current `guild.team_decision.v1` `approve` exists whose
+   `proposal_hash` equals the hash RECOMPUTED from the proposal artifact —
+   stale, hash-mismatched, or absent decisions **fail closed**; no participant
+   (producer, panel member, broker reviewer) dispatches ahead of this gate. The
+   per-dispatch hash checks in step 2 re-verify it, never replace it. The routed
+   `ops-*` playbooks **inherit this gate through the router**: they are
+   dispatched BY step 1 only after the gate clears and dispatch no participant
+   outside the approved set — incident/rollback urgency shapes
+   `guild.team_schedule.v1` waves only, never membership and never an early
+   escape from the hold.
 1. **Dispatch** the confirmed class to `guild:ops-<class>`; the playbook names
    its producer (per `./operations-contract.md §Posture`) and emits the
    outputs.
@@ -120,11 +137,21 @@ validator, two callers).
      hardcoded `[security, …]` list: `security` (BASELINE — always present) + `architect`
      (GATED on the `multi_component` signal; recorded as `chal:ops:architect`). Producer
      stays **CLASS-driven** (the `§Posture` class→producer map fills the composer's `null`
-     ops producer). Cross-model-preferred; **≤4 active**; incident/rollback never exceed
-     **producer + challenger** (the composer caps). Same-session review; non-blocking.
+     ops producer). Cross-model-preferred. Panel membership is proposed in the phase's
+     `guild.team_proposal.v2` and user-approved at the `guild.team_decision.v1` gate
+     (advisory labels never bypass it) — and at panel dispatch, verify a **current**
+     `approve` decision whose hash matches the RECOMPUTED proposal hash covers each
+     member (stale/mismatched decisions fail closed). Urgency shapes
+     `guild.team_schedule.v1` concurrency waves only — incident/rollback run producer +
+     challenger concurrently and schedule the rest in later waves, never dropping
+     approved participants. Same-session review; non-blocking.
    - **Cross-host G-operations gate via the broker (policy-gated).** *Separate*
      from the panel: a **different host family** critiques the ops record /
-     runbook. After the playbook emits its outputs and before done-criteria,
+     runbook. The reviewer slot is an ops-phase participant
+     (`participation_kind: reviewer_cross_host`): before dispatching the broker,
+     confirm a current `guild.team_decision.v1` `approve` whose hash matches the
+     recomputed proposal hash covers it — stale/mismatched decisions fail closed
+     (a `skipped` outcome dispatches nothing). After the playbook emits its outputs and before done-criteria,
      invoke `guild-review-broker`:
 
      ```
@@ -172,8 +199,9 @@ After done-criteria + the d8-join and before phase close, fire the per-phase Lea
   + the class→`ops-*` routing column.
 - `safety-rails`: the 5-row rail-leg→boolean enumeration (each `§"Safety rails"` boolean
   named once) + the 4↔5 reconciliation; allowlist exit-2.
-- `execute`: dispatch to `ops-<class>`; per-step `op_class`; hard-set step
-  `prompted_inline`.
+- `execute`: the step-0 ops team gate (current, recomputed-hash-matching
+  `approve`) cleared BEFORE the step-1 dispatch; dispatch to `ops-<class>`;
+  per-step `op_class`; hard-set step `prompted_inline`.
 - `d8-join`: pointer-cited 3-leg table; refuse-on-non-force-pass-block rule;
   InitiativeCloseout sole closer; no automation task.
 

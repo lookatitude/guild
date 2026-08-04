@@ -42,6 +42,7 @@
     "./commands/initiative.md",
     "./commands/learn.md",
     "./commands/migrate.md",
+    "./commands/models.md",
     "./commands/ops.md",
     "./commands/plan.md",
     "./commands/qa.md",

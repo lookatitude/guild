@@ -45,9 +45,10 @@
  * Stdout:  Silent (Claude Code may consume stdout).
  * Stderr:  Human-readable reason if blocking.
  *
- * Run ID derivation: GUILD_RUN_ID env var (set by launcher) → current-run-id
- * sentinel (legacy .guild/runs/ or B2's .guild/, via the shared
- * resolveRunIdForTrace()) → "run-<session_id>" fallback. See deriveRunId().
+ * Run ID derivation: GUILD_RUN_ID env var (set by launcher) →
+ * "run-<session_id>" fallback (T3b: the sentinel leg is retired — sentinels
+ * are intake-only). Run-record WRITES additionally require a verified run
+ * binding (authorizeHookWrite); validation reads do not. See deriveRunId().
  *
  * Manual usage:
  *   echo '{"hook_event_name":"TaskCompleted","task_id":"task-001","session_id":"sess-abc123",
@@ -59,6 +60,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
+import { authorizeHookWrite, formatBindingRejected } from "../lib/hook-binding.js";
 import { validateHandoffV2, extractHandoffEnvelope, HandoffV2 } from "../lib/handoff-v2.js";
 import {
   POLICY_EFFECTIVE_DATE,
@@ -127,15 +129,14 @@ function die(reason: string): never {
 }
 
 /**
- * Derive run ID. Honors GUILD_RUN_ID env var if set (agent-team launcher
- * exports it per pane so hooks converge on the launcher's session manifest
- * path); falls back to the current-run-id sentinel (legacy .guild/runs/ or
- * B2's .guild/) via the SHARED resolveRunIdForTrace() — the same resolver
- * run-trace-close.ts/learning-backstop.ts use — so a session without the
- * launcher's env (lead session creating tasks, or a pane the launcher failed
- * to seed) still converges on the sentinel run instead of a divorced
- * run-<session_id> directory (audit finding). Only falls back to
- * "run-<session_id>" when NEITHER env nor sentinel resolves anything.
+ * Derive run ID for the receipt-VALIDATION legs (reads + the die/ok gate).
+ * Honors GUILD_RUN_ID env (the agent-team launcher exports the binding
+ * envelope per pane); falls back to "run-<session_id>" only when the env is
+ * absent. T3b (session_context §5): the sentinel leg is retired —
+ * resolveRunIdForTrace is env-only now, so a moved current-run-id can never
+ * redirect this hook. Run-record WRITES (learnings, injection audit, security
+ * events) are additionally binding-gated in main() via authorizeHookWrite;
+ * this derived id alone never authorizes them.
  */
 function deriveRunId(sessionId: string, guildRoot: string): string {
   return (
@@ -530,6 +531,19 @@ async function main(): Promise<void> {
   const runDir = path.join(guildRoot, ".guild", "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
 
+  // T3b (session_context §5): run-record WRITES below (learnings extraction,
+  // injection audit, HK-08 security events) require a verified run binding —
+  // refused writes are skipped with a structured diagnostic. The receipt
+  // VALIDATION gate (reads + die/ok) is not a write and continues either way.
+  // Deliberate exception: the HK-06 secret scrub-in-place still runs on a
+  // refused binding — skipping a scrub would leave secrets on disk, which is
+  // strictly worse than a scrubbed-in-place receipt (security fail-closed
+  // outranks write fail-closed for this one surface).
+  const writeAuth = authorizeHookWrite(guildRoot, { runId });
+  if (writeAuth.ok === false) {
+    process.stderr.write(formatBindingRejected("task-completed", writeAuth));
+  }
+
   // ── Check receipt exists ───────────────────────────────────────────────────
   if (!fs.existsSync(rPath)) {
     die(
@@ -593,31 +607,43 @@ async function main(): Promise<void> {
     }
     // ── end HK-06 handoff scrub ────────────────────────────────────────────────
 
-    // Extract learnings into run record (§6 D3 Extract phase)
+    // Extract learnings into run record (§6 D3 Extract phase). T3b: a
+    // run-record write — only under a verified binding (writeAuth above).
     const envelope = rawEnvelope as HandoffV2;
     envelopeStatus = envelope.status;
     laneTier = envelope.tier;
-    const lPath = learningsPath(guildRoot, runId, specialist, taskId);
-    persistLearnings(envelope, lPath, specialist, taskId, runDir, runId);
+    if (writeAuth.ok) {
+      const lPath = learningsPath(guildRoot, runId, specialist, taskId);
+      persistLearnings(envelope, lPath, specialist, taskId, runDir, runId);
+    } else {
+      process.stderr.write(
+        `[task-completed] NOTE: learnings extraction skipped for task "${taskId}" — ` +
+          `binding_rejected (no verified run binding; §5 fail-closed).\n`,
+      );
+    }
 
     // ── HK-08: injection_clean enforcement ────────────────────────────────
     // Classify the envelope's free-text (summary + notes) for directive
     // language. Advisory — never blocks task completion. Records result in
-    // injection-audit.jsonl; emits security event on flagged.
+    // injection-audit.jsonl; emits security event on flagged. T3b: both are
+    // run-record writes — binding-gated; the CLASSIFICATION + stderr notice
+    // still run so a flagged envelope is never silent.
     const rawObj = rawEnvelope as Record<string, unknown>;
     const injectionClean: InjectionClean = classifyEnvelope(rawObj);
-    persistInjectionAudit(runDir, taskId, specialist, injectionClean);
+    if (writeAuth.ok) persistInjectionAudit(runDir, taskId, specialist, injectionClean);
     if (injectionClean === "flagged") {
-      const secEvt = buildSecurityEvent({
-        run_id: runId,
-        lane_id: specialist,
-        event_type: "injection_attempt_detected",
-        decision: "pass", // advisory — we record and continue, not deny
-        tool: "",
-        detail: `Directive language detected in guild.handoff.v2 summary/notes from "${specialist}" (task: "${taskId}")`,
-        permission_mode: "advisory",
-      });
-      appendSecurityEvent(runDir, secEvt);
+      if (writeAuth.ok) {
+        const secEvt = buildSecurityEvent({
+          run_id: runId,
+          lane_id: specialist,
+          event_type: "injection_attempt_detected",
+          decision: "pass", // advisory — we record and continue, not deny
+          tool: "",
+          detail: `Directive language detected in guild.handoff.v2 summary/notes from "${specialist}" (task: "${taskId}")`,
+          permission_mode: "advisory",
+        });
+        appendSecurityEvent(runDir, secEvt);
+      }
       process.stderr.write(
         `[task-completed] SECURITY: injection patterns detected in summary from ` +
           `specialist "${specialist}" (task: "${taskId}"). Recorded in injection-audit.jsonl.\n`,

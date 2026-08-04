@@ -33,6 +33,8 @@ import {
   resolveRunIdForTrace,
   type SkippedFileEntry,
 } from "../lib/run-trace";
+// T3b §5: sentinel assertions go through the INTAKE surface, never a writer.
+import { locateCandidateRunId } from "../lib/hook-binding";
 
 // B2's lib — the real spine we wire into.
 import {
@@ -84,6 +86,16 @@ function startedRun(root: string, runClass: "full" | "lightweight"): string {
   });
 }
 
+// Rework F1: writers accept ONLY a caller-presented (run_id, binding_ref)
+// pair. startRun mints the nonce; the frozen core surface returns only the
+// run id, so these tests read the minted record back to SIMULATE the caller
+// that was handed the nonce at run start (the guard itself never does this).
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { loadRunBinding } = require("../../scripts/lib/run-binding") as
+  typeof import("../../scripts/lib/run-binding");
+const refOf = (r: string, id: string): string =>
+  loadRunBinding({ root: r, run_id: id })!.binding_ref;
+
 function liveLog(root: string, runId: string): string {
   return path.join(root, ".guild", "runs", runId, "logs", "v1.4-events.jsonl");
 }
@@ -111,7 +123,7 @@ describe("run-trace lib (Lane B3)", () => {
   describe("emitRunStarted", () => {
     it("appends one run_started guild.trace_event.v1 line to logs/v1.4-events.jsonl", () => {
       const runId = startedRun(root, "full");
-      emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z" });
+      emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z", binding_ref: refOf(root, runId) });
       const lines = readJsonl(liveLog(root, runId));
       expect(lines).toHaveLength(1);
       expect(lines[0]["schema_version"]).toBe("guild.trace_event.v1");
@@ -121,10 +133,16 @@ describe("run-trace lib (Lane B3)", () => {
       expect(lines[0]["at"]).toBe("2026-05-29T09:00:00Z");
     });
 
+    it("REWORK F1: a run id alone writes NOTHING — the loadable open record is never recovered", () => {
+      const runId = startedRun(root, "full"); // binding minted + OPEN on disk
+      emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z" }); // no nonce presented
+      expect(readJsonl(liveLog(root, runId))).toHaveLength(0);
+    });
+
     it("is idempotent — does not double-emit run_started for one run", () => {
       const runId = startedRun(root, "full");
-      emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z" });
-      emitRunStarted(root, runId, { now: "2026-05-29T09:00:05Z" });
+      emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z", binding_ref: refOf(root, runId) });
+      emitRunStarted(root, runId, { now: "2026-05-29T09:00:05Z", binding_ref: refOf(root, runId) });
       const started = readJsonl(liveLog(root, runId)).filter(
         (e) => e["event_name"] === "run_started",
       );
@@ -135,9 +153,12 @@ describe("run-trace lib (Lane B3)", () => {
   describe("emitRunClosed", () => {
     it("calls closeRun then appends a run_closed line whose event_id matches the provenance pointer", () => {
       const runId = startedRun(root, "full");
-      emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z" });
+      emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z", binding_ref: refOf(root, runId) });
 
-      emitRunClosed(root, runId, resolveHost, { status: "closed" });
+      emitRunClosed(root, runId, resolveHost, {
+        status: "closed",
+        binding_ref: refOf(root, runId),
+      });
 
       // provenance.json was written by closeRun and points at the terminal event.
       const provPath = path.join(root, ".guild", "runs", runId, "provenance.json");
@@ -206,7 +227,7 @@ describe("run-trace lib (Lane B3)", () => {
           summary_produced: false,
         },
       ];
-      const out = writeSkippedFiles(root, runId, entries);
+      const out = writeSkippedFiles(root, runId, entries, { binding_ref: refOf(root, runId) });
       const written = JSON.parse(fs.readFileSync(out, "utf8"));
       expect(out).toContain(path.join("runs", runId, "learn", "skipped-files.json"));
       expect(written.run_id).toBe(runId);
@@ -216,18 +237,21 @@ describe("run-trace lib (Lane B3)", () => {
   });
 
   describe("resolveRunIdForTrace", () => {
-    it("prefers GUILD_RUN_ID, then runs/current-run-id, then .guild/current-run-id (B2 sentinel)", () => {
-      // B2's lib writes the sentinel to .guild/current-run-id (NOT runs/).
+    it("resolves from the explicit GUILD_RUN_ID env ONLY — sentinels never resolve a writer identity (T3b §5)", () => {
+      // CORRECTED (T3b): this test previously ENCODED the retired sentinel
+      // fallback chain (env → legacy sentinel → B2 sentinel). Under
+      // session_context §5 the sentinels are interactive intake only: a writer
+      // with no explicit binding env resolves null and fails closed, no matter
+      // what either sentinel says.
       fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
       fs.writeFileSync(path.join(root, ".guild", "current-run-id"), "run-from-b2", "utf8");
-      expect(resolveRunIdForTrace(root, {})).toBe("run-from-b2");
+      expect(resolveRunIdForTrace(root, {})).toBeNull();
 
-      // legacy new-run-id.ts writes runs/current-run-id — takes precedence over B2's.
       fs.mkdirSync(path.join(root, ".guild", "runs"), { recursive: true });
       fs.writeFileSync(path.join(root, ".guild", "runs", "current-run-id"), "run-legacy", "utf8");
-      expect(resolveRunIdForTrace(root, {})).toBe("run-legacy");
+      expect(resolveRunIdForTrace(root, {})).toBeNull();
 
-      // explicit env wins outright.
+      // explicit env wins outright (the ONLY resolving source).
       expect(resolveRunIdForTrace(root, { GUILD_RUN_ID: "run-env" })).toBe("run-env");
     });
   });
@@ -387,7 +411,10 @@ describe("run-trace lib (Lane B3)", () => {
         run_class: "full",
       }) as string;
       // Simulate the Stop hook firing at session end.
-      emitRunClosed(root, runId, resolveHost, { status: "closed" });
+      emitRunClosed(root, runId, resolveHost, {
+        status: "closed",
+        binding_ref: refOf(root, runId),
+      });
       const runDir = path.join(root, ".guild", "runs", runId);
       expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(true);
       const runYaml = fs.readFileSync(path.join(runDir, "run.yaml"), "utf8");
@@ -731,7 +758,7 @@ describe("run-trace lib (Lane B3)", () => {
 
     it("records a canonical phase via opts.runId and returns the runId", () => {
       const runId = startedRun(root, "full");
-      const result = recordPhase(root, "build", { runId });
+      const result = recordPhase(root, "build", { runId, binding_ref: refOf(root, runId) });
       // Returns the runId on success.
       expect(result).toBe(runId);
       // run.yaml carries the updated `phase:` scalar and a phases_log entry.
@@ -748,7 +775,7 @@ describe("run-trace lib (Lane B3)", () => {
       // One run per canonical phase — each append should succeed.
       for (const phase of ["init", "ideate", "plan", "build", "qa", "ops"]) {
         const runId = startedRun(root, "full");
-        const result = recordPhase(root, phase, { runId });
+        const result = recordPhase(root, phase, { runId, binding_ref: refOf(root, runId) });
         expect(result).toBe(runId);
         const runYaml = fs.readFileSync(
           path.join(root, ".guild", "runs", runId, "run.yaml"),
@@ -762,7 +789,9 @@ describe("run-trace lib (Lane B3)", () => {
       const runId = startedRun(root, "full");
       // Supply GUILD_RUN_ID via the opts.env seam — this exercises the
       // resolveRunIdForTrace path inside recordPhase.
-      const result = recordPhase(root, "qa", { env: { GUILD_RUN_ID: runId } });
+      const result = recordPhase(root, "qa", {
+        env: { GUILD_RUN_ID: runId, GUILD_RUN_BINDING_REF: refOf(root, runId) },
+      });
       expect(result).toBe(runId);
       const runYaml = fs.readFileSync(
         path.join(root, ".guild", "runs", runId, "run.yaml"),
@@ -771,40 +800,39 @@ describe("run-trace lib (Lane B3)", () => {
       expect(runYamlFields(runYaml)).toMatchObject({ phase: "qa" });
     });
 
-    it("resolves runId from .guild/runs/current-run-id legacy sentinel when no opts override", () => {
+    it("does NOT resolve runId from the legacy runs/current-run-id sentinel (T3b §5: fail closed, no write)", () => {
+      // CORRECTED (T3b): the sentinel fallback this test used to pin is
+      // retired — a writer with no explicit binding env records NOTHING.
       const runId = startedRun(root, "full");
-      // Write the legacy sentinel (written by scripts/new-run-id.ts).
       const sentinelDir = path.join(root, ".guild", "runs");
       fs.mkdirSync(sentinelDir, { recursive: true });
       fs.writeFileSync(path.join(sentinelDir, "current-run-id"), runId, "utf8");
 
-      // No GUILD_RUN_ID in env, no opts.runId — must fall through to sentinel.
       const result = recordPhase(root, "ops", { env: {} });
-      expect(result).toBe(runId);
+      expect(result).toBeNull();
       const runYaml = fs.readFileSync(
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYamlFields(runYaml)).toMatchObject({ phase: "ops" });
+      expect(runYamlFields(runYaml)).not.toMatchObject({ phase: "ops" });
     });
 
-    it("resolves runId from .guild/current-run-id B2 sentinel (fallback after legacy)", () => {
+    it("does NOT resolve runId from the B2 .guild/current-run-id sentinel either (T3b §5)", () => {
+      // CORRECTED (T3b): same demotion for the B2 sentinel location.
       const runId = startedRun(root, "full");
-      // Write ONLY the B2 sentinel (written by scripts/lib/run-lifecycle.ts startRun).
       const guildDir = path.join(root, ".guild");
       fs.mkdirSync(guildDir, { recursive: true });
       fs.writeFileSync(path.join(guildDir, "current-run-id"), runId, "utf8");
-      // Make sure the legacy location does NOT exist so the B2 path is exercised.
       const legacyPath = path.join(guildDir, "runs", "current-run-id");
       if (fs.existsSync(legacyPath)) fs.unlinkSync(legacyPath);
 
       const result = recordPhase(root, "ideate", { env: {} });
-      expect(result).toBe(runId);
+      expect(result).toBeNull();
       const runYaml = fs.readFileSync(
         path.join(root, ".guild", "runs", runId, "run.yaml"),
         "utf8",
       );
-      expect(runYamlFields(runYaml)).toMatchObject({ phase: "ideate" });
+      expect(runYamlFields(runYaml)).not.toMatchObject({ phase: "ideate" });
     });
   });
 
@@ -827,7 +855,14 @@ describe("run-trace lib (Lane B3)", () => {
       }
     }
 
-    it("closes an ABANDONED open prior run when a new run starts, and still starts the new run", () => {
+    it("REWORK F1: an ABANDONED open prior run is REFUSED (left open) — the janitor holds no caller nonce; the new run still starts", () => {
+      // CORRECTED (rework F1): the self-heal janitor previously finalized the
+      // orphan by letting the guard recover the nonce from the orphan's own
+      // binding.json — the exact fail-open escape T3B-R1-F1 closed. The
+      // janitor's process holds NO caller-presented nonce for the prior run,
+      // so the close is now refused (binding_rejected) and the orphan is
+      // honestly left open. Orphan finalization needs an authorized channel
+      // (T3-core follow-up) — never nonce recovery.
       const prior = startedRun(root, "full"); // status:open, sentinel -> prior
       expect(statusOf(root, prior)).toBe("open");
       backdateTrace(root, prior, ABANDONED_MS);
@@ -836,12 +871,15 @@ describe("run-trace lib (Lane B3)", () => {
       expect(next).toBeTruthy();
       expect(next).not.toBe(prior);
 
-      // prior finalized through the REAL close path: status flipped + provenance minted
-      expect(statusOf(root, prior)).toBe("closed");
-      expect(fs.existsSync(runRel(root, prior, "provenance.json"))).toBe(true);
-      // and the new run is open and owns the sentinel
+      // prior is NOT closed (fail closed, no write) — no provenance minted.
+      expect(statusOf(root, prior)).toBe("open");
+      expect(fs.existsSync(runRel(root, prior, "provenance.json"))).toBe(false);
+      // and the new run is open and owns the sentinel — asserted through the
+      // INTAKE surface (locateCandidateRunId), since resolveRunIdForTrace is
+      // env-only under T3b §5 and never reads a sentinel.
       expect(statusOf(root, next)).toBe("open");
-      expect(resolveRunIdForTrace(root, {})).toBe(next);
+      expect(locateCandidateRunId(root)?.run_id).toBe(next);
+      expect(resolveRunIdForTrace(root, {})).toBeNull();
     });
 
     it("ANTI-VACUITY: a FRESH open prior run is LEFT OPEN — an active run is never closed", () => {
@@ -869,7 +907,7 @@ describe("run-trace lib (Lane B3)", () => {
       expect(statusOf(root, prior)).toBe("open");
     });
 
-    it("the lightweight /guild:status path (startAndCloseRun) also heals an abandoned orphan", () => {
+    it("REWORK F1: the lightweight path also REFUSES the orphan close (no caller nonce) but records its own run", () => {
       const prior = startedRun(root, "full");
       backdateTrace(root, prior, ABANDONED_MS);
       const statusRun = startAndCloseRun(root, resolveHost, {
@@ -877,7 +915,11 @@ describe("run-trace lib (Lane B3)", () => {
         run_class: "lightweight",
       }) as string;
       expect(statusRun).toBeTruthy();
-      expect(statusOf(root, prior)).toBe("closed");
+      // The orphan stays open (fail closed) — but the lightweight run ITSELF
+      // closed fine via its mint-origin nonce (anti-vacuity: the refusal is
+      // specific to the foreign run, not a broken close path).
+      expect(statusOf(root, prior)).toBe("open");
+      expect(statusOf(root, statusRun)).toBe("closed");
     });
   });
 });

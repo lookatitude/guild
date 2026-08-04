@@ -3,9 +3,12 @@ name: researcher-paper-digest
 description: Summarizes a single academic paper or long-form article with a critical read — Problem / Approach / Results / Limitations / Relevance. Output: `.guild/runs/<run-id>/research/digests/<slug>.md`. Pulled by the `researcher` specialist. TRIGGER: "summarize this paper", "digest this arxiv link", "what does this paper say", "give me the TL;DR on this PDF", "break down this research article", "read this whitepaper and summarize". DO NOT TRIGGER for: open-ended topic research spanning multiple sources (use `researcher-deep-dive`), N-way option comparison (use `researcher-comparison-table`), rewriting the paper as marketing copy (copywriter), producing user-facing docs from it (technical-writer), technical blog post from the paper (copywriter-long-form).
 when_to_use: The parent `researcher` specialist pulls this skill when a specific paper, preprint, whitepaper, or long article needs a critical summary the team can cite. Also fires on explicit user request.
 type: specialist
+work_class: research
 ---
 
 # researcher-paper-digest
+
+**Work class: `research` (authoritative, non-downgradable).** Any lane pulling this skill is `purpose: research` and resolves `effective_complexity: hard` / `tier: powerful` (`research_always_hard` — the frozen `guild.model_policy.v2` floor); the floor is transitive through every handoff and sub-dispatch and is recorded in the receipt (`forced_floor_reason: research_always_hard`).
 
 Evidence is a digest the team can read in 10 minutes and cite with confidence — not a paraphrase of the abstract.
 

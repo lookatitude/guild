@@ -5,6 +5,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -29,6 +32,21 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES;
+var init_module_manifest = __esm({
+  "../src/modules/kernel/workflows/module-manifest.ts"() {
+    OWNED_INVENTORY_CATEGORIES = Object.freeze([
+      "commands",
+      "skills",
+      "agents",
+      "hooks",
+      "mcp_servers",
+      "scripts"
+    ]);
+  }
+});
 
 // node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
@@ -3065,61 +3083,7 @@ var require_js_yaml = __commonJS({
   }
 });
 
-// gate-outcome-writer.ts
-var gate_outcome_writer_exports = {};
-__export(gate_outcome_writer_exports, {
-  main: () => main,
-  parseGateOutcome: () => parseGateOutcome
-});
-module.exports = __toCommonJS(gate_outcome_writer_exports);
-var fs3 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
-
-// lib/guild-root.ts
-var fs = __toESM(require("node:fs"));
-var path = __toESM(require("node:path"));
-function resolveGuildRoot(startCwd) {
-  const resolvedStart = path.resolve(startCwd);
-  let current = resolvedStart;
-  let nearestGuildDir = null;
-  for (; ; ) {
-    if (fs.existsSync(path.join(current, ".git"))) {
-      return current;
-    }
-    if (nearestGuildDir === null) {
-      const guildDir = path.join(current, ".guild");
-      if (fs.existsSync(guildDir)) {
-        try {
-          if (fs.statSync(guildDir).isDirectory()) {
-            nearestGuildDir = current;
-          }
-        } catch {
-        }
-      }
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return nearestGuildDir ?? resolvedStart;
-    }
-    current = parent;
-  }
-}
-
-// ../src/modules/lifecycle/workflows/run-lifecycle.ts
-var path4 = __toESM(require("path"));
-
-// ../src/modules/kernel/workflows/module-manifest.ts
-var OWNED_INVENTORY_CATEGORIES = Object.freeze([
-  "commands",
-  "skills",
-  "agents",
-  "hooks",
-  "mcp_servers",
-  "scripts"
-]);
-
 // ../src/modules/kernel/workflows/yaml-loader.ts
-var path2 = __toESM(require("node:path"));
 function pluginLocalScriptsRoots() {
   return [
     // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
@@ -3156,6 +3120,18 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
+var path2;
+var init_yaml_loader = __esm({
+  "../src/modules/kernel/workflows/yaml-loader.ts"() {
+    path2 = __toESM(require("node:path"));
+  }
+});
+
+// ../src/modules/kernel/workflows/identifier-tokenize.ts
+var init_identifier_tokenize = __esm({
+  "../src/modules/kernel/workflows/identifier-tokenize.ts"() {
+  }
+});
 
 // ../src/modules/kernel/workflows/sealed-collections.ts
 function regExpWritesLastIndex(re) {
@@ -3166,7 +3142,6 @@ function freezeRegExpSafely(re) {
   Object.freeze(re);
   return true;
 }
-var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
 function refuseMutator(label, method) {
   return () => {
     throw new TypeError(
@@ -3241,676 +3216,423 @@ function deepFreeze(value, options = {}) {
   walk(value);
   return value;
 }
+var SEALED_BRAND;
+var init_sealed_collections = __esm({
+  "../src/modules/kernel/workflows/sealed-collections.ts"() {
+    SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+  }
+});
 
 // ../src/modules/kernel/workflows/path-containment.ts
-var CONTAINMENT_REFUSAL_CODES = Object.freeze([
-  "root-unresolvable",
-  "no-existing-ancestor",
-  "dangling-symlink",
-  "physical-symlink",
-  "outside-root",
-  "leaf-not-regular-file",
-  "mkdir-failed",
-  "parent-traversal",
-  "destination-moved"
-]);
+var CONTAINMENT_REFUSAL_CODES;
+var init_path_containment = __esm({
+  "../src/modules/kernel/workflows/path-containment.ts"() {
+    CONTAINMENT_REFUSAL_CODES = Object.freeze([
+      "root-unresolvable",
+      "no-existing-ancestor",
+      "dangling-symlink",
+      "physical-symlink",
+      "outside-root",
+      "leaf-not-regular-file",
+      "mkdir-failed",
+      "parent-traversal",
+      "destination-moved"
+    ]);
+  }
+});
 
-// ../src/modules/config/workflows/config-defaults.ts
-var DEFAULT_ESCALATION_MARKERS = Object.freeze([
-  "I'm not sure",
-  "unclear",
-  "cannot determine",
-  "I don't know",
-  "ambiguous",
-  "uncertain",
-  "not enough information"
-]);
-var NON_INHERITABLE_KEYS = sealSet([
-  "initiative_default",
-  // OD-1: attach-to-wrong-initiative risk
-  "workspace"
-  // workspace.mode is root-detection-only
-], "NON_INHERITABLE_KEYS");
-var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-var SIDECAR_MAX_BYTES = 1024 * 1024;
-var CAPABILITY_RESOLVER_MODES = Object.freeze([
-  "legacy",
-  "observe",
-  "shadow",
-  "project-local",
-  "strict"
-]);
-var CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
-var CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
-var CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
-var DEFAULTS = deepFreeze({
-  rigor: "standard",
-  auto_approve: [],
-  review: "local",
-  host: "auto",
-  /**
-   * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
-   * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
-   * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
-   * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
-   * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
-   * this top-level placement (sibling of the `host` dispatch selector) is the registered
-   * replacement. One of only three keys ever legitimately null-typed at the top level.
-   */
-  host_mode: null,
-  roles: { host: null, advisory: null, adversarial: null },
-  host_profiles: {},
-  initiative_default: null,
-  index: "auto",
-  record_status_runs: true,
-  codex_skip_enforcement: "warn",
-  agent_mode: "auto",
-  workspace: { mode: "auto" },
-  models: {
-    enabled: true,
-    // G4b (host-reachability): every host in the registry's HOST_IDS gets an
-    // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
-    // own contract, stated in the module doc comment above, is to stay free of
-    // internal runtime imports so core settings code can load it before the
-    // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
-    // roster (host-registry-schema.ts) enumerated by hand; a jest test
-    // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
-    // stay in sync so this can never silently drift again the way it had (7 of
-    // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
-    // non-null model — every other host's registry row carries `models.<tier>.model:
-    // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
-    // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
-    // equivalent this static scaffold mirrors).
-    tiers: {
-      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-      mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-      powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
-    },
-    scoreWeights: {
-      workType: 0,
-      blastRadius: 1,
-      dependsOn: 1,
-      security: 1,
-      priorEscalation: 1
-    },
-    thresholds: { mid: 1, powerful: 3 },
-    advisorRounds: 2,
-    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
-    recallBeforeRead: true,
-    recallScoreThreshold: 0.4,
-    structuredOutputRequired: true,
-    cacheTTL: { coordinator: "1h", leaf: "5m" },
-    importanceGate: 3,
-    compositeRecall: true,
-    importanceAtIngest: true,
-    ingestSimilarityGate: 0.8,
-    shortOutputThreshold: {},
-    knowledge: {
-      maxDepth: 8,
-      maxBranching: 12,
-      minTopicImportance: 0.4,
-      relMinConf: 0.5,
-      maxFiles: 3e3,
-      maxTokens: 1e6,
-      batchSize: 20
-    }
-  },
-  security: {
-    bypass_permissions_policy: "audit"
-  },
-  secrets_policy: {
-    env_allowlist: [],
-    redaction_patterns: [],
-    fail_mode_durable: "closed",
-    fail_mode_telemetry: "open"
-  },
-  mcp: {
-    tool_description_hashes: {},
-    stdio_available: true,
-    http_available: false,
-    bridge_package: null
-  },
-  /**
-   * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
-   * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
-   * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
-   *
-   * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
-   * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
-   * What a lane may DO stays with `capability_scope` and the permission keys.
-   *
-   * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
-   * already emits unconditionally — capability ownership is per project by
-   * definition (the umbrella and each child answer "what roles do I need"
-   * independently, and D03 has the four repos migrating at different rates). Per
-   * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
-   * out with zero generator change, and adding it would touch every existing key.
-   */
-  capability: {
-    /**
-     * Which resolver mode this project is in on D03's migration ladder. Config
-     * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
-     * gate criteria the initiative evaluates, and a mode change is a deliberate
-     * write.
-     *
-     * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
-     * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
-     * silently defaulted: an unset value resolves with provenance `default`, so
-     * `config show --sources` shows it was never chosen.
-     */
-    resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
-    /**
-     * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
-     * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
-     * the two cannot disagree. 0 is legal: "profile but never propose".
-     */
-    suggestion_budget: 4,
-    /**
-     * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
-     * ship a roster, which is precisely what localization exists to stop. Empty ⇒
-     * Learn proposes.
-     */
-    starter_roles: [],
-    /** Whether an approved proposal may auto-advance the resolver mode (D04). */
-    auto_create_policy: "on_approval"
-  },
-  statusline: false,
-  adversarial_review_provider: "auto",
-  loops: null,
-  loop_cap: 16,
-  codex_cap: 5,
-  defaults: {
-    auto_learn: false,
-    adversarial: "on",
-    team: { size: null, always_include: [] },
-    review_workflow: "standard",
-    skill_policy: "standard",
-    gates: { auto_approve: [] },
-    wiki: { share_mode: "team", autopromote: false },
-    quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
-    reporting: "standard",
-    index: {
-      enabled: true,
-      kg_node_threshold: 2e3,
-      kg_size_threshold_mb: 1,
-      links_edge_threshold: 2e3,
-      runs_threshold: 20,
-      wiki_file_threshold: 500
-    },
-    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
-    retry: { max_attempts: 1, backoff: "exponential" },
-    resume: { enabled: true },
-    heartbeat_timeout_ms: 6e5,
-    capability_manifest_ttl_s: 3600,
-    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
-    // the SessionStart signal; `auto` additionally stages the host apply path;
-    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
-    update: { mode: "notify", cadence_hours: 24 },
-    allowed_tools: [],
-    /**
-     * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
-     * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
-     * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
-     * "Inline shortcut under high autonomy").
-     */
-    lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
-    /**
-     * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
-     * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
-     * activity count before the lifecycle gate advisory fires.
-     */
-    lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
+// ../src/modules/kernel/index.ts
+var init_kernel = __esm({
+  "../src/modules/kernel/index.ts"() {
+    init_module_manifest();
+    init_yaml_loader();
+    init_identifier_tokenize();
+    init_sealed_collections();
+    init_path_containment();
   }
 });
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
-var UPDATE_COMMANDS = {
-  marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
-  self_update: "guild-run update",
-  reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
-};
-var INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
-var INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
-var CLAUDE_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "claude",
-  family: "claude",
-  surface_kind: "cli",
-  package: {
-    installable: true,
-    installability: "verified",
-    manifest_format: "claude-plugin",
-    update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
-  },
-  bootstrap: {
-    context_injection: "hookSpecificOutput.additionalContext",
-    skill_autoload: true,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  commands: { slash_commands: true, command_files: "markdown" },
-  skills: { native_skills: true, skill_dir: ".claude/skills" },
-  agents: { native_agents: true, agent_format: "claude-md" },
-  injection: {
-    // No injection probe has EVER run on any host — the capability is unbuilt (S7
-    // landed the transport half only). A dispatch surface exists, so "target".
-    definition_injection: false,
-    definition_injection_support: "target",
-    skill_bundle_injection: false,
-    skill_bundle_injection_support: "target",
-    dynamic_registration: false,
-    dynamic_registration_support: "target",
-    fallback: "prompt_text",
-    definition_injection_verified_by: null,
-    skill_bundle_injection_verified_by: null,
-    dynamic_registration_verified_by: null
-  },
-  hooks: {
-    // All ten events are bound in the live hooks/hooks.json (verified).
-    session_start: true,
-    user_prompt_submit: true,
-    pre_tool_use: true,
-    post_tool_use: true,
-    stop: true,
-    pre_compact: true,
-    subagent_stop: true,
-    task_created: true,
-    task_completed: true,
-    teammate_idle: true
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: "pre_tool_use",
-    accept_edits_without_prompt: true,
-    auto_approve_tools: true,
-    bypass_prompts: true,
-    bypass_sandbox: false,
-    permission_prompt_layer: true,
-    launch_modes: {
-      read_only: ["--tools", "Read,Grep,Glob"],
-      ask: ["--permission-mode", "default"],
-      accept_edits: ["--permission-mode", "acceptEdits"],
-      auto: ["--permission-mode", "auto"],
-      bypass_all: ["--permission-mode", "bypassPermissions"]
-    }
-  },
-  dispatch: {
-    tmux_processes: true,
-    plain_processes: true,
-    independent_agents: true,
-    subagents: true,
-    inline: true
-  },
-  interaction: {
-    native_questions: true,
-    terminal_prompt: true,
-    file_bus_questions: true
-  },
-  sessions: { continue: true, resume_by_id: true, fork: true },
-  structured_output: {
-    native_json: true,
-    schema_validation: true,
-    repair_prompt: true
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "bridge",
-    web: "native",
-    mcp: "native"
-  },
-  mcp: { stdio: true, http: false },
-  models: {
-    cheap: { model: "haiku" },
-    mid: { model: "sonnet" },
-    powerful: { model: "opus" }
+var UPDATE_COMMANDS, INJECTION_SUPPORT, INJECTION_SUPPORT_SET, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES, REQUIRED_HOOK_EVENTS;
+var init_host_capabilities_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
+    UPDATE_COMMANDS = {
+      marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+      self_update: "guild-run update",
+      reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
+    };
+    INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+    INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
+    CLAUDE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "claude",
+      family: "claude",
+      surface_kind: "cli",
+      package: {
+        installable: true,
+        installability: "verified",
+        manifest_format: "claude-plugin",
+        update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
+      },
+      bootstrap: {
+        context_injection: "hookSpecificOutput.additionalContext",
+        skill_autoload: true,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: true, command_files: "markdown" },
+      skills: { native_skills: true, skill_dir: ".claude/skills" },
+      agents: { native_agents: true, agent_format: "claude-md" },
+      injection: {
+        // No injection probe has EVER run on any host — the capability is unbuilt (S7
+        // landed the transport half only). A dispatch surface exists, so "target".
+        definition_injection: false,
+        definition_injection_support: "target",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "target",
+        dynamic_registration: false,
+        dynamic_registration_support: "target",
+        fallback: "prompt_text",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
+      hooks: {
+        // All ten events are bound in the live hooks/hooks.json (verified).
+        session_start: true,
+        user_prompt_submit: true,
+        pre_tool_use: true,
+        post_tool_use: true,
+        stop: true,
+        pre_compact: true,
+        subagent_stop: true,
+        task_created: true,
+        task_completed: true,
+        teammate_idle: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: "pre_tool_use",
+        accept_edits_without_prompt: true,
+        auto_approve_tools: true,
+        bypass_prompts: true,
+        bypass_sandbox: false,
+        permission_prompt_layer: true,
+        launch_modes: {
+          read_only: ["--tools", "Read,Grep,Glob"],
+          ask: ["--permission-mode", "default"],
+          accept_edits: ["--permission-mode", "acceptEdits"],
+          auto: ["--permission-mode", "auto"],
+          bypass_all: ["--permission-mode", "bypassPermissions"]
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        plain_processes: true,
+        independent_agents: true,
+        subagents: true,
+        inline: true
+      },
+      interaction: {
+        native_questions: true,
+        terminal_prompt: true,
+        file_bus_questions: true
+      },
+      sessions: { continue: true, resume_by_id: true, fork: true },
+      structured_output: {
+        native_json: true,
+        schema_validation: true,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "bridge",
+        web: "native",
+        mcp: "native"
+      },
+      mcp: { stdio: true, http: false },
+      models: {
+        cheap: { model: "haiku" },
+        mid: { model: "sonnet" },
+        powerful: { model: "opus" }
+      }
+    };
+    CODEX_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "codex",
+      family: "codex",
+      surface_kind: "cli",
+      // installable:false is the honest MACHINE state — the Codex renderer exists but
+      // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+      // as installable until proven. installability:"target" records that the renderer
+      // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "codex-plugin",
+        // NOT self_update (operator decision, initiative cross-host-release-
+        // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
+        // list` tracks the registered marketplace source, so a Guild-side staged
+        // swap of the cache mutates manager state behind Codex's back and the next
+        // `codex plugin add` reinstalls the old payload. A minted receipt also
+        // cannot know a native install's channel, so a self-update could silently
+        // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
+        // populations: receipted installs re-render properly; host-native installs
+        // are detected and told the precise codex command for their registered
+        // source type (git → marketplace upgrade + plugin add; local → reinstall).
+        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+      },
+      bootstrap: {
+        // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+        // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+        prompt_transform: false,
+        // INFERRED
+        wrapper_injection: true
+        // The generated guild-run wrapper injects bootstrap.
+      },
+      commands: {
+        // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+        slash_commands: false,
+        command_files: "none"
+      },
+      skills: { native_skills: false, skill_dir: null },
+      // Verified (per-host-packaging).
+      agents: { native_agents: false, agent_format: null },
+      // Verified (per-host-packaging flags agents unsupported).
+      injection: {
+        // No injection probe has EVER run on any host — the capability is unbuilt (S7
+        // landed the transport half only). A dispatch surface exists, so "target".
+        definition_injection: false,
+        definition_injection_support: "target",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "target",
+        dynamic_registration: false,
+        dynamic_registration_support: "absent",
+        fallback: "prompt_text",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
+      hooks: {
+        // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+        // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+        // Claude-shaped hooks manifest and fires both events the generated
+        // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+        // bridge since the package existed, and SessionStart now carries the
+        // update-check signal, LIVE-VERIFIED in a real codex session (the model
+        // quoted the injected line verbatim). Remaining events stay false until
+        // individually verified.
+        session_start: true,
+        user_prompt_submit: true,
+        pre_tool_use: false,
+        post_tool_use: false,
+        stop: false,
+        pre_compact: false,
+        subagent_stop: false,
+        task_created: false,
+        task_completed: false,
+        teammate_idle: false
+      },
+      permissions: {
+        // INFERRED (Codex CLI approval model). Confirm on-box at L3.
+        deny: false,
+        ask: true,
+        // Codex prompts for approval by default.
+        ask_mode: null,
+        // No pre_tool_use layer; approval is interactive.
+        accept_edits_without_prompt: false,
+        // INFERRED
+        auto_approve_tools: false,
+        // INFERRED
+        bypass_prompts: true,
+        // Codex YOLO / --dangerously-bypass exists (AC19).
+        bypass_sandbox: true,
+        // INFERRED — YOLO bypasses the sandbox.
+        permission_prompt_layer: false,
+        // INFERRED
+        launch_modes: {
+          // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+          // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+          // than guessed, so their absence reads as "degrade/record", not "supported".
+          bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
+          // INFERRED flag name — verify on-box (AC19).
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        // Codex is a CLI process — tmux panes work.
+        plain_processes: true,
+        independent_agents: false,
+        // INFERRED — no native agent-team primitive.
+        subagents: false,
+        // INFERRED
+        inline: true
+      },
+      interaction: {
+        native_questions: false,
+        // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+        terminal_prompt: true,
+        file_bus_questions: true
+        // Guild file-bus approval works on any FS host.
+      },
+      sessions: {
+        continue: true,
+        // INFERRED — Codex has session continuation.
+        resume_by_id: true,
+        // INFERRED
+        fork: false
+        // INFERRED
+      },
+      structured_output: {
+        native_json: false,
+        // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+        schema_validation: false,
+        // Guild-side validation (validateHandoffV2) instead.
+        repair_prompt: true
+        // Bounded repair prompt is the fallback (ADR §Result contracts).
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        // INFERRED — no native browser; record fallback (AC29).
+        web: "emulated",
+        // INFERRED
+        mcp: "native"
+        // Codex supports stdio MCP.
+      },
+      mcp: { stdio: true, http: false },
+      // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+      models: {
+        // Codex model ids are host-specific and not pinned in this repo yet; null =
+        // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    NO_HOOKS = {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    };
+    AGENTS_FILE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "agents-file",
+      family: "agents",
+      surface_kind: "file",
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "agents-file",
+        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+      },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: false, command_files: "none" },
+      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+      agents: { native_agents: false, agent_format: null },
+      injection: {
+        // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+        definition_injection: false,
+        definition_injection_support: "absent",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "absent",
+        dynamic_registration: false,
+        dynamic_registration_support: "absent",
+        fallback: "none",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
+      hooks: NO_HOOKS,
+      permissions: {
+        deny: false,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: false,
+        bypass_sandbox: false,
+        permission_prompt_layer: false,
+        launch_modes: {}
+      },
+      dispatch: {
+        tmux_processes: false,
+        plain_processes: false,
+        independent_agents: false,
+        subagents: false,
+        inline: false
+      },
+      interaction: {
+        native_questions: false,
+        terminal_prompt: false,
+        file_bus_questions: true
+      },
+      sessions: { continue: false, resume_by_id: false, fork: false },
+      structured_output: {
+        native_json: false,
+        schema_validation: false,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        web: "emulated",
+        mcp: "none"
+      },
+      mcp: { stdio: false, http: false },
+      models: {
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    REQUIRED_HOOK_EVENTS = Object.freeze([
+      "session_start",
+      "user_prompt_submit",
+      "pre_tool_use",
+      "post_tool_use",
+      "stop",
+      "pre_compact",
+      "subagent_stop",
+      "task_created",
+      "task_completed",
+      "teammate_idle"
+    ]);
   }
-};
-var CODEX_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "codex",
-  family: "codex",
-  surface_kind: "cli",
-  // installable:false is the honest MACHINE state — the Codex renderer exists but
-  // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
-  // as installable until proven. installability:"target" records that the renderer
-  // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
-  package: {
-    installable: false,
-    installability: "target",
-    manifest_format: "codex-plugin",
-    // NOT self_update (operator decision, initiative cross-host-release-
-    // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
-    // list` tracks the registered marketplace source, so a Guild-side staged
-    // swap of the cache mutates manager state behind Codex's back and the next
-    // `codex plugin add` reinstalls the old payload. A minted receipt also
-    // cannot know a native install's channel, so a self-update could silently
-    // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
-    // populations: receipted installs re-render properly; host-native installs
-    // are detected and told the precise codex command for their registered
-    // source type (git → marketplace upgrade + plugin add; local → reinstall).
-    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
-  },
-  bootstrap: {
-    // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
-    // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
-    prompt_transform: false,
-    // INFERRED
-    wrapper_injection: true
-    // The generated guild-run wrapper injects bootstrap.
-  },
-  commands: {
-    // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
-    slash_commands: false,
-    command_files: "none"
-  },
-  skills: { native_skills: false, skill_dir: null },
-  // Verified (per-host-packaging).
-  agents: { native_agents: false, agent_format: null },
-  // Verified (per-host-packaging flags agents unsupported).
-  injection: {
-    // No injection probe has EVER run on any host — the capability is unbuilt (S7
-    // landed the transport half only). A dispatch surface exists, so "target".
-    definition_injection: false,
-    definition_injection_support: "target",
-    skill_bundle_injection: false,
-    skill_bundle_injection_support: "target",
-    dynamic_registration: false,
-    dynamic_registration_support: "absent",
-    fallback: "prompt_text",
-    definition_injection_verified_by: null,
-    skill_bundle_injection_verified_by: null,
-    dynamic_registration_verified_by: null
-  },
-  hooks: {
-    // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
-    // Claude-equivalent hooks" claim was empirically false. Codex accepts a
-    // Claude-shaped hooks manifest and fires both events the generated
-    // codex-hooks.json registers — UserPromptSubmit has carried the prompt
-    // bridge since the package existed, and SessionStart now carries the
-    // update-check signal, LIVE-VERIFIED in a real codex session (the model
-    // quoted the injected line verbatim). Remaining events stay false until
-    // individually verified.
-    session_start: true,
-    user_prompt_submit: true,
-    pre_tool_use: false,
-    post_tool_use: false,
-    stop: false,
-    pre_compact: false,
-    subagent_stop: false,
-    task_created: false,
-    task_completed: false,
-    teammate_idle: false
-  },
-  permissions: {
-    // INFERRED (Codex CLI approval model). Confirm on-box at L3.
-    deny: false,
-    ask: true,
-    // Codex prompts for approval by default.
-    ask_mode: null,
-    // No pre_tool_use layer; approval is interactive.
-    accept_edits_without_prompt: false,
-    // INFERRED
-    auto_approve_tools: false,
-    // INFERRED
-    bypass_prompts: true,
-    // Codex YOLO / --dangerously-bypass exists (AC19).
-    bypass_sandbox: true,
-    // INFERRED — YOLO bypasses the sandbox.
-    permission_prompt_layer: false,
-    // INFERRED
-    launch_modes: {
-      // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
-      // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
-      // than guessed, so their absence reads as "degrade/record", not "supported".
-      bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
-      // INFERRED flag name — verify on-box (AC19).
-    }
-  },
-  dispatch: {
-    tmux_processes: true,
-    // Codex is a CLI process — tmux panes work.
-    plain_processes: true,
-    independent_agents: false,
-    // INFERRED — no native agent-team primitive.
-    subagents: false,
-    // INFERRED
-    inline: true
-  },
-  interaction: {
-    native_questions: false,
-    // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
-    terminal_prompt: true,
-    file_bus_questions: true
-    // Guild file-bus approval works on any FS host.
-  },
-  sessions: {
-    continue: true,
-    // INFERRED — Codex has session continuation.
-    resume_by_id: true,
-    // INFERRED
-    fork: false
-    // INFERRED
-  },
-  structured_output: {
-    native_json: false,
-    // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
-    schema_validation: false,
-    // Guild-side validation (validateHandoffV2) instead.
-    repair_prompt: true
-    // Bounded repair prompt is the fallback (ADR §Result contracts).
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    // INFERRED — no native browser; record fallback (AC29).
-    web: "emulated",
-    // INFERRED
-    mcp: "native"
-    // Codex supports stdio MCP.
-  },
-  mcp: { stdio: true, http: false },
-  // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
-  models: {
-    // Codex model ids are host-specific and not pinned in this repo yet; null =
-    // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null }
-  }
-};
-var NO_HOOKS = {
-  session_start: false,
-  user_prompt_submit: false,
-  pre_tool_use: false,
-  post_tool_use: false,
-  stop: false,
-  pre_compact: false,
-  subagent_stop: false,
-  task_created: false,
-  task_completed: false,
-  teammate_idle: false
-};
-var AGENTS_FILE_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "agents-file",
-  family: "agents",
-  surface_kind: "file",
-  package: {
-    installable: false,
-    installability: "target",
-    manifest_format: "agents-file",
-    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
-  },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  commands: { slash_commands: false, command_files: "none" },
-  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-  agents: { native_agents: false, agent_format: null },
-  injection: {
-    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
-    definition_injection: false,
-    definition_injection_support: "absent",
-    skill_bundle_injection: false,
-    skill_bundle_injection_support: "absent",
-    dynamic_registration: false,
-    dynamic_registration_support: "absent",
-    fallback: "none",
-    definition_injection_verified_by: null,
-    skill_bundle_injection_verified_by: null,
-    dynamic_registration_verified_by: null
-  },
-  hooks: NO_HOOKS,
-  permissions: {
-    deny: false,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: false,
-    bypass_sandbox: false,
-    permission_prompt_layer: false,
-    launch_modes: {}
-  },
-  dispatch: {
-    tmux_processes: false,
-    plain_processes: false,
-    independent_agents: false,
-    subagents: false,
-    inline: false
-  },
-  interaction: {
-    native_questions: false,
-    terminal_prompt: false,
-    file_bus_questions: true
-  },
-  sessions: { continue: false, resume_by_id: false, fork: false },
-  structured_output: {
-    native_json: false,
-    schema_validation: false,
-    repair_prompt: true
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    web: "emulated",
-    mcp: "none"
-  },
-  mcp: { stdio: false, http: false },
-  models: {
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null }
-  }
-};
-var REQUIRED_HOOK_EVENTS = Object.freeze([
-  "session_start",
-  "user_prompt_submit",
-  "pre_tool_use",
-  "post_tool_use",
-  "stop",
-  "pre_compact",
-  "subagent_stop",
-  "task_created",
-  "task_completed",
-  "teammate_idle"
-]);
+});
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
-var HOST_IDS = Object.freeze([
-  // keep CLI/file (5)
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  // keep-as-refuse (4) — RETAINED verbatim
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector",
-  // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
-  "cursor",
-  "github-copilot",
-  "opencode",
-  "rovo-dev",
-  // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
-  // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
-  "kiro",
-  "qoder",
-  "trae"
-]);
-var HOST_FAMILIES = Object.freeze([
-  "claude",
-  "codex",
-  "agents",
-  "pi",
-  "antigravity",
-  "cursor",
-  "copilot",
-  "opencode",
-  "rovo"
-]);
-var AUTH_PROBES = Object.freeze([
-  "codex_stored_or_env",
-  "none",
-  "cursor_stored",
-  "gh_auth",
-  "opencode_stored_or_env",
-  "acli_stored"
-]);
-var CLAUDE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-cli",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
-  installability: "native",
-  result_adapter: false,
-  // Claude is the reference author host, not a cross reviewer for itself.
-  dispatch_selectable: true,
-  capabilities: CLAUDE_CAPABILITIES,
-  provenance: "verified"
-};
-var CODEX_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "codex-cli",
-  family: "codex",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
-  // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
-  installability: "target",
-  result_adapter: true,
-  // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
-  dispatch_selectable: true,
-  capabilities: CODEX_CAPABILITIES,
-  provenance: "verified"
-  // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
-};
 function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
@@ -4018,512 +3740,1086 @@ function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectab
     models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
   };
 }
-var AGENTS_FILE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "agents-file",
-  family: "agents",
-  // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
-  // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
-  adapter_binding: "self",
-  // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
-  surface_kind: "file",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "target",
-  result_adapter: false,
-  // INFERRED — no cross-review adapter; verify at live-host availability.
-  // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
-  // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
-  // The prior value was annotated INFERRED with the rationale "a host consuming
-  // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
-  // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
-  // THIS row", and under that reading it is false by construction:
-  //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
-  //     TeamBackend/pane path can name it;
-  //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
-  //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
-  //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
-  //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
-  //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
-  //     package target, not a process launcher".
-  // The G4b lane carved this row out as a documented exception rather than flipping it.
-  // That carve-out is superseded here because the field has REAL per-row consumers that
-  // read it as selectability: config-cli.ts builds the operator-pinnable host set from
-  // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
-  // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
-  // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
-  // and then dispatch into an adapter that returns `command: null`. A concrete
-  // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
-  // this row is the render TARGET, never a dispatch destination.
-  dispatch_selectable: false,
-  capabilities: AGENTS_FILE_CAPABILITIES,
-  // file surface — matches top-level surface_kind.
-  provenance: "inferred"
-};
-var PI_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "pi-cli",
-  family: "pi",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
-  // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
-  installability: "target",
-  // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
-  result_adapter: false,
-  // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
-  dispatch_selectable: true,
-  // VERIFIED: pi is a CLI process a lane can run on.
-  capabilities: {
-    ...inferredCaps("pi-cli", "pi"),
-    // VERIFIED on-host (pi --help, 0.79.3):
-    sessions: { continue: true, resume_by_id: true, fork: true },
-    // --continue/-c, --resume/-r + --session-id, --fork
-    structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
-    // --mode json
-    permissions: {
-      ...inferredCaps("pi-cli", "pi").permissions,
-      // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
-      // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
-      // left false) — pi's --tools allowlist lets an invocation deny specific tools,
-      // so `deny:true` is the correct capability. Recorded here (not just in the
-      // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
-      deny: true
-    }
-  },
-  provenance: "verified"
-  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-};
-var ANTIGRAVITY_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "antigravity-cli",
-  family: "antigravity",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
-  detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
-  installability: "target",
-  // VERIFIED-as-target: CLI present; Guild-package install unproven.
-  result_adapter: false,
-  // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
-  dispatch_selectable: true,
-  // VERIFIED: agy is a CLI process a lane can run on.
-  capabilities: {
-    ...inferredCaps("antigravity-cli", "antigravity"),
-    // VERIFIED on-host (agy --help, 1.0.8):
-    sessions: { continue: true, resume_by_id: true, fork: false },
-    // --continue/-c, --conversation <id>; no fork flag
-    permissions: {
-      ...inferredCaps("antigravity-cli", "antigravity").permissions,
-      bypass_prompts: true,
-      // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
-      launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
-      // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
-      // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
-      // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
-      // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
-      // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
-      // Recorded here so the registry — not a second hand-authored row — is the one
-      // source of truth (closes the "two diverged capability truths" audit finding).
-      deny: true,
-      bypass_sandbox: true
-    }
-  },
-  provenance: "verified"
-  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-};
-var CLAUDE_APP_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-app",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-code-app", "claude", "app"),
-  provenance: "inferred"
-};
-var CLAUDE_WEB_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-web",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-code-web", "claude", "app"),
-  provenance: "inferred"
-};
-var CODEX_APP_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "codex-app",
-  family: "codex",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("codex-app", "codex", "app"),
-  provenance: "inferred"
-};
-var CLAUDE_AI_CONNECTOR_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-ai-connector",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
-  provenance: "inferred"
-};
-var CURSOR_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "cursor",
-  family: "cursor",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("cursor", "cursor", "cli"),
-  // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
-  // were live-checked 2026-07-30, but no authenticated completion has run —
-  // partial verification does not flip the row.
-  provenance: "inferred"
-};
-var GITHUB_COPILOT_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "github-copilot",
-  family: "copilot",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // capability is a subcommand of the shared `gh` bin (`gh copilot`).
-  detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("github-copilot", "copilot", "cli"),
-  // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
-  // real completion end to end through guild-run; per-host receipt + live
-  // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
-  // INFERRED_HOSTS) until all cells are live-verified.
-  provenance: "verified"
-};
-var OPENCODE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "opencode",
-  family: "opencode",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("opencode", "opencode", "cli"),
-  // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
-  // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
-  // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
-  // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
-  provenance: "verified"
-};
-var ROVO_DEV_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "rovo-dev",
-  family: "rovo",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
-  detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
-  provenance: "inferred"
-};
-var KIRO_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "kiro",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
-  // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
-  // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
-  // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
-  // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
-  // a row per registry id, but a capability row is not a dispatch surface). The
-  // honest column for a pane-less file surface is false.
-  dispatch_selectable: false,
-  capabilities: inferredCaps("kiro", "agents", "file"),
-  provenance: "inferred"
-};
-var QODER_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "qoder",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
-  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
-  dispatch_selectable: false,
-  capabilities: inferredCaps("qoder", "agents", "file"),
-  provenance: "inferred"
-};
-var TRAE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "trae",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
-  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
-  dispatch_selectable: false,
-  capabilities: inferredCaps("trae", "agents", "file"),
-  provenance: "inferred"
-};
-var HOST_REGISTRY_ROWS = deepFreeze({
-  "claude-code-cli": CLAUDE_ENTRY,
-  "codex-cli": CODEX_ENTRY,
-  "pi-cli": PI_ENTRY,
-  "antigravity-cli": ANTIGRAVITY_ENTRY,
-  "agents-file": AGENTS_FILE_ENTRY,
-  "claude-code-app": CLAUDE_APP_ENTRY,
-  "claude-code-web": CLAUDE_WEB_ENTRY,
-  "codex-app": CODEX_APP_ENTRY,
-  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
-  cursor: CURSOR_ENTRY,
-  "github-copilot": GITHUB_COPILOT_ENTRY,
-  opencode: OPENCODE_ENTRY,
-  "rovo-dev": ROVO_DEV_ENTRY,
-  kiro: KIRO_ENTRY,
-  qoder: QODER_ENTRY,
-  trae: TRAE_ENTRY
+var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE_ENTRY, PI_ENTRY, ANTIGRAVITY_ENTRY, CLAUDE_APP_ENTRY, CLAUDE_WEB_ENTRY, CODEX_APP_ENTRY, CLAUDE_AI_CONNECTOR_ENTRY, CURSOR_ENTRY, GITHUB_COPILOT_ENTRY, OPENCODE_ENTRY, ROVO_DEV_ENTRY, KIRO_ENTRY, QODER_ENTRY, TRAE_ENTRY, HOST_REGISTRY_ROWS, HOST_ID_SET, FAMILY_SET, AUTH_PROBE_SET;
+var init_host_registry_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-registry-schema.ts"() {
+    init_kernel();
+    init_host_capabilities_schema();
+    HOST_IDS = Object.freeze([
+      // keep CLI/file (5)
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      // keep-as-refuse (4) — RETAINED verbatim
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+      // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+      "kiro",
+      "qoder",
+      "trae"
+    ]);
+    HOST_FAMILIES = Object.freeze([
+      "claude",
+      "codex",
+      "agents",
+      "pi",
+      "antigravity",
+      "cursor",
+      "copilot",
+      "opencode",
+      "rovo"
+    ]);
+    AUTH_PROBES = Object.freeze([
+      "codex_stored_or_env",
+      "none",
+      "cursor_stored",
+      "gh_auth",
+      "opencode_stored_or_env",
+      "acli_stored"
+    ]);
+    CLAUDE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-cli",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
+      installability: "native",
+      result_adapter: false,
+      // Claude is the reference author host, not a cross reviewer for itself.
+      dispatch_selectable: true,
+      capabilities: CLAUDE_CAPABILITIES,
+      provenance: "verified"
+    };
+    CODEX_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-cli",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
+      // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
+      installability: "target",
+      result_adapter: true,
+      // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
+      dispatch_selectable: true,
+      capabilities: CODEX_CAPABILITIES,
+      provenance: "verified"
+      // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
+    };
+    AGENTS_FILE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "agents-file",
+      family: "agents",
+      // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+      // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+      adapter_binding: "self",
+      // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+      surface_kind: "file",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      result_adapter: false,
+      // INFERRED — no cross-review adapter; verify at live-host availability.
+      // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
+      // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
+      // The prior value was annotated INFERRED with the rationale "a host consuming
+      // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
+      // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
+      // THIS row", and under that reading it is false by construction:
+      //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
+      //     TeamBackend/pane path can name it;
+      //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
+      //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
+      //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
+      //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
+      //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
+      //     package target, not a process launcher".
+      // The G4b lane carved this row out as a documented exception rather than flipping it.
+      // That carve-out is superseded here because the field has REAL per-row consumers that
+      // read it as selectability: config-cli.ts builds the operator-pinnable host set from
+      // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
+      // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
+      // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
+      // and then dispatch into an adapter that returns `command: null`. A concrete
+      // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
+      // this row is the render TARGET, never a dispatch destination.
+      dispatch_selectable: false,
+      capabilities: AGENTS_FILE_CAPABILITIES,
+      // file surface — matches top-level surface_kind.
+      provenance: "inferred"
+    };
+    PI_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "pi-cli",
+      family: "pi",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
+      // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+      dispatch_selectable: true,
+      // VERIFIED: pi is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("pi-cli", "pi"),
+        // VERIFIED on-host (pi --help, 0.79.3):
+        sessions: { continue: true, resume_by_id: true, fork: true },
+        // --continue/-c, --resume/-r + --session-id, --fork
+        structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
+        // --mode json
+        permissions: {
+          ...inferredCaps("pi-cli", "pi").permissions,
+          // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
+          // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
+          // left false) — pi's --tools allowlist lets an invocation deny specific tools,
+          // so `deny:true` is the correct capability. Recorded here (not just in the
+          // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
+          deny: true
+        }
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    ANTIGRAVITY_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "antigravity-cli",
+      family: "antigravity",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+      detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+      dispatch_selectable: true,
+      // VERIFIED: agy is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("antigravity-cli", "antigravity"),
+        // VERIFIED on-host (agy --help, 1.0.8):
+        sessions: { continue: true, resume_by_id: true, fork: false },
+        // --continue/-c, --conversation <id>; no fork flag
+        permissions: {
+          ...inferredCaps("antigravity-cli", "antigravity").permissions,
+          bypass_prompts: true,
+          // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+          launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+          // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
+          // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
+          // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
+          // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
+          // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
+          // Recorded here so the registry — not a second hand-authored row — is the one
+          // source of truth (closes the "two diverged capability truths" audit finding).
+          deny: true,
+          bypass_sandbox: true
+        }
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    CLAUDE_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-app",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-app", "claude", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_WEB_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-web",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-web", "claude", "app"),
+      provenance: "inferred"
+    };
+    CODEX_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-app",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("codex-app", "codex", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_AI_CONNECTOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-ai-connector",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+      provenance: "inferred"
+    };
+    CURSOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "cursor",
+      family: "cursor",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("cursor", "cursor", "cli"),
+      // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
+      // were live-checked 2026-07-30, but no authenticated completion has run —
+      // partial verification does not flip the row.
+      provenance: "inferred"
+    };
+    GITHUB_COPILOT_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "github-copilot",
+      family: "copilot",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+      detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+      // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
+      // real completion end to end through guild-run; per-host receipt + live
+      // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
+      // INFERRED_HOSTS) until all cells are live-verified.
+      provenance: "verified"
+    };
+    OPENCODE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "opencode",
+      family: "opencode",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("opencode", "opencode", "cli"),
+      // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
+      // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
+      // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
+      // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
+      provenance: "verified"
+    };
+    ROVO_DEV_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "rovo-dev",
+      family: "rovo",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+      detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+      provenance: "inferred"
+    };
+    KIRO_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "kiro",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
+      // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
+      // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
+      // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+      // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+      // a row per registry id, but a capability row is not a dispatch surface). The
+      // honest column for a pane-less file surface is false.
+      dispatch_selectable: false,
+      capabilities: inferredCaps("kiro", "agents", "file"),
+      provenance: "inferred"
+    };
+    QODER_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "qoder",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
+      capabilities: inferredCaps("qoder", "agents", "file"),
+      provenance: "inferred"
+    };
+    TRAE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "trae",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
+      capabilities: inferredCaps("trae", "agents", "file"),
+      provenance: "inferred"
+    };
+    HOST_REGISTRY_ROWS = deepFreeze({
+      "claude-code-cli": CLAUDE_ENTRY,
+      "codex-cli": CODEX_ENTRY,
+      "pi-cli": PI_ENTRY,
+      "antigravity-cli": ANTIGRAVITY_ENTRY,
+      "agents-file": AGENTS_FILE_ENTRY,
+      "claude-code-app": CLAUDE_APP_ENTRY,
+      "claude-code-web": CLAUDE_WEB_ENTRY,
+      "codex-app": CODEX_APP_ENTRY,
+      "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+      cursor: CURSOR_ENTRY,
+      "github-copilot": GITHUB_COPILOT_ENTRY,
+      opencode: OPENCODE_ENTRY,
+      "rovo-dev": ROVO_DEV_ENTRY,
+      kiro: KIRO_ENTRY,
+      qoder: QODER_ENTRY,
+      trae: TRAE_ENTRY
+    });
+    HOST_ID_SET = new Set(HOST_IDS);
+    FAMILY_SET = new Set(HOST_FAMILIES);
+    AUTH_PROBE_SET = new Set(AUTH_PROBES);
+  }
 });
-var HOST_ID_SET = new Set(HOST_IDS);
-var FAMILY_SET = new Set(HOST_FAMILIES);
-var AUTH_PROBE_SET = new Set(AUTH_PROBES);
 
 // ../src/modules/host-runtime/workflows/host-id-namespace.ts
-var HOST_ID_SET2 = new Set(HOST_IDS);
-var LEGACY_HOST_ALIASES = {
-  claude: "claude-code-cli",
-  "claude-code-desktop": "claude-code-app",
-  codex: "codex-cli",
-  "codex-plugin": "codex-cli",
-  agents: "agents-file",
-  ".agents": "agents-file",
-  pi: "pi-cli",
-  antigravity: "antigravity-cli",
-  "antigravity-2": "antigravity-cli"
-};
 function normalizeHostId(value) {
   const s = value.trim();
   if (HOST_ID_SET2.has(s)) return s;
   return LEGACY_HOST_ALIASES[s] ?? null;
 }
+var HOST_ID_SET2, LEGACY_HOST_ALIASES;
+var init_host_id_namespace = __esm({
+  "../src/modules/host-runtime/workflows/host-id-namespace.ts"() {
+    init_host_registry_schema();
+    HOST_ID_SET2 = new Set(HOST_IDS);
+    LEGACY_HOST_ALIASES = {
+      claude: "claude-code-cli",
+      "claude-code-desktop": "claude-code-app",
+      codex: "codex-cli",
+      "codex-plugin": "codex-cli",
+      agents: "agents-file",
+      ".agents": "agents-file",
+      pi: "pi-cli",
+      antigravity: "antigravity-cli",
+      "antigravity-2": "antigravity-cli"
+    };
+  }
+});
 
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
-var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
-var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
-var INFERRED_HOSTS = sealSet([
-  "agents-file",
-  "pi-cli",
-  "antigravity-cli",
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector",
-  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
-  "cursor",
-  "github-copilot",
-  "opencode",
-  "rovo-dev",
-  "kiro",
-  "qoder",
-  "trae"
-], "INFERRED_HOSTS");
-var RUNG_SET = new Set(RUNGS);
-var SURFACE_SET = new Set(ADAPTER_SURFACES);
+var RUNGS, ADAPTER_SURFACES, INFERRED_HOSTS, RUNG_SET, SURFACE_SET;
+var init_adapter_fallback_ladders = __esm({
+  "../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"() {
+    init_host_registry_schema();
+    init_kernel();
+    RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
+    ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+    INFERRED_HOSTS = sealSet([
+      "agents-file",
+      "pi-cli",
+      "antigravity-cli",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      "kiro",
+      "qoder",
+      "trae"
+    ], "INFERRED_HOSTS");
+    RUNG_SET = new Set(RUNGS);
+    SURFACE_SET = new Set(ADAPTER_SURFACES);
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-profiles-validate.ts
-var KNOWN_HOST_IDS = new Set(HOST_IDS);
-var VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
-var VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
+var KNOWN_HOST_IDS, VALID_HOST_PROFILE_ENTRY_KEYS, VALID_HOST_PROFILE_MODEL_KEYS;
+var init_host_profiles_validate = __esm({
+  "../src/modules/host-runtime/workflows/host-profiles-validate.ts"() {
+    init_host_registry_schema();
+    init_kernel();
+    init_host_id_namespace();
+    KNOWN_HOST_IDS = new Set(HOST_IDS);
+    VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
+    VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-registry.ts
 function deriveCapabilityRow(row) {
   return row.capabilities;
 }
-var DERIVED_HOST_CAPABILITY_ROWS = (() => {
-  const out = {};
-  for (const id of HOST_IDS) {
-    out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
-  }
-  out["claude"] = out["claude-code-cli"];
-  out["codex"] = out["codex-cli"];
-  out["pi"] = out["pi-cli"];
-  out["antigravity"] = out["antigravity-cli"];
-  out["antigravity-2"] = out["antigravity-cli"];
-  return out;
-})();
-var FAMILY_TO_ROW = (() => {
-  const out = {};
-  for (const id of HOST_IDS) {
-    const row = HOST_REGISTRY_ROWS[id];
-    const existing = out[row.family];
-    if (!existing || !existing.result_adapter && row.result_adapter) {
-      out[row.family] = row;
-    }
-  }
-  return out;
-})();
 function resultAdapterForFamily(family) {
   return FAMILY_TO_ROW[family]?.result_adapter ?? false;
 }
+var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
+var init_host_registry = __esm({
+  "../src/modules/host-runtime/workflows/host-registry.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    DERIVED_HOST_CAPABILITY_ROWS = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
+      }
+      out["claude"] = out["claude-code-cli"];
+      out["codex"] = out["codex-cli"];
+      out["pi"] = out["pi-cli"];
+      out["antigravity"] = out["antigravity-cli"];
+      out["antigravity-2"] = out["antigravity-cli"];
+      return out;
+    })();
+    FAMILY_TO_ROW = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        const row = HOST_REGISTRY_ROWS[id];
+        const existing = out[row.family];
+        if (!existing || !existing.result_adapter && row.result_adapter) {
+          out[row.family] = row;
+        }
+      }
+      return out;
+    })();
+  }
+});
 
 // ../src/modules/host-runtime/workflows/provider-detect.ts
-var PROVIDER_REGISTRY = [
-  // The author host itself — always "detected on the host", never a cross reviewer
-  // for a same-family author (the AC-8 guard handles that).
-  { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
-  // Codex reference adapters (the only selectable cross reviewers today).
-  { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
-  // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
-  { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
-  // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
-  { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
-];
+var PROVIDER_REGISTRY;
+var init_provider_detect = __esm({
+  "../src/modules/host-runtime/workflows/provider-detect.ts"() {
+    init_host_registry();
+    PROVIDER_REGISTRY = [
+      // The author host itself — always "detected on the host", never a cross reviewer
+      // for a same-family author (the AC-8 guard handles that).
+      { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
+      // Codex reference adapters (the only selectable cross reviewers today).
+      { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
+      // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
+      { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
+      // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
+      { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
+    ];
+  }
+});
+
+// ../src/modules/host-runtime/workflows/session-context.ts
+var init_session_context = __esm({
+  "../src/modules/host-runtime/workflows/session-context.ts"() {
+    init_provider_detect();
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts
+function isFailureReason(value) {
+  return typeof value === "string" && FAILURE_REASONS.includes(value);
+}
+function failureResult(adapter, status, failureReason, latencyMs, sourceRef) {
+  if (!isFailureReason(failureReason)) throw new Error("failure_reason outside the closed vocabulary");
+  return {
+    adapter_id: adapter.adapter_id,
+    adapter_version: adapter.adapter_version,
+    target_id: adapter.target_id,
+    method: adapter.method,
+    source_ref: sourceRef,
+    status,
+    latency_ms: latencyMs,
+    failure_reason: failureReason,
+    models: []
+  };
+}
+var FAILURE_REASONS, DiscoveryParseRejected;
+var init_adapter_contract = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts"() {
+    init_session_context();
+    FAILURE_REASONS = Object.freeze([
+      "timeout_budget_exceeded",
+      "parse_rejected",
+      "io_unavailable",
+      "tool_version_out_of_range",
+      "subprocess_failed",
+      "http_error",
+      "auth_unavailable",
+      "surface_absent"
+    ]);
+    DiscoveryParseRejected = class extends Error {
+      constructor(detail) {
+        super(`provider output rejected by schema validation: ${detail}`);
+        this.name = "DiscoveryParseRejected";
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/claude-api.ts
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseClaudeModelsPage(raw) {
+  if (!isRecord(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    if (entry.capabilities !== void 0 && !isRecord(entry.capabilities)) {
+      throw new DiscoveryParseRejected(`data[${i}].capabilities is not an object`);
+    }
+    models.push(entry);
+  });
+  return {
+    models,
+    hasMore: raw.has_more === true,
+    lastId: typeof raw.last_id === "string" ? raw.last_id : null
+  };
+}
+function effortsFromCapabilities(capabilities) {
+  const effort = capabilities?.effort;
+  if (!isRecord(effort)) return [];
+  return CLAUDE_EFFORT_LEVELS.filter((level) => effort[level] === true);
+}
+function normalizeClaudeApiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    model_family: "claude",
+    // this authenticated first-party catalog lists Claude models
+    reasoning_efforts: effortsFromCapabilities(m.capabilities),
+    default_effort: null,
+    // the listing carries support flags, not a default
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: isRecord(m.capabilities) ? m.capabilities : {},
+    evidence_source: "contract_api_list",
+    // The one row whose contract states availability for the requesting target.
+    contract_states_availability: true
+  }));
+}
+var CLAUDE_API_ADAPTER_ID, CLAUDE_API_ADAPTER_VERSION, CLAUDE_API_MODELS_URL, CLAUDE_API_VERSION_HEADER, CLAUDE_API_MAX_PAGES, CLAUDE_EFFORT_LEVELS, claudeApiAdapter;
+var init_claude_api = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/claude-api.ts"() {
+    init_adapter_contract();
+    CLAUDE_API_ADAPTER_ID = "claude-api-models";
+    CLAUDE_API_ADAPTER_VERSION = "1.0.0";
+    CLAUDE_API_MODELS_URL = "https://api.anthropic.com/v1/models";
+    CLAUDE_API_VERSION_HEADER = "2023-06-01";
+    CLAUDE_API_MAX_PAGES = 5;
+    CLAUDE_EFFORT_LEVELS = Object.freeze(["low", "medium", "high", "xhigh", "max"]);
+    claudeApiAdapter = {
+      adapter_id: CLAUDE_API_ADAPTER_ID,
+      adapter_version: CLAUDE_API_ADAPTER_VERSION,
+      target_id: "claude-api",
+      method: "contract_api_list",
+      tool_versions: null,
+      // versioned REST surface; gated by anthropic-version header, not CLI version
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.httpGetJson) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CLAUDE_API_ADAPTER_ID);
+        }
+        const all = [];
+        let url = `${CLAUDE_API_MODELS_URL}?limit=1000`;
+        for (let page = 0; page < CLAUDE_API_MAX_PAGES; page += 1) {
+          const raw = await io.httpGetJson(url, { "anthropic-version": CLAUDE_API_VERSION_HEADER });
+          const { models, hasMore, lastId } = parseClaudeModelsPage(raw);
+          all.push(...normalizeClaudeApiModels(models));
+          if (!hasMore || !lastId) {
+            return {
+              adapter_id: CLAUDE_API_ADAPTER_ID,
+              adapter_version: CLAUDE_API_ADAPTER_VERSION,
+              target_id: "claude-api",
+              method: "contract_api_list",
+              source_ref: "claude-api GET /v1/models",
+              status: "ok",
+              latency_ms: elapsed(),
+              failure_reason: null,
+              models: all
+            };
+          }
+          url = `${CLAUDE_API_MODELS_URL}?limit=1000&after_id=${encodeURIComponent(lastId)}`;
+        }
+        return {
+          adapter_id: CLAUDE_API_ADAPTER_ID,
+          adapter_version: CLAUDE_API_ADAPTER_VERSION,
+          target_id: "claude-api",
+          method: "contract_api_list",
+          source_ref: "claude-api GET /v1/models",
+          status: "partial",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models: all
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseModelListResult(raw) {
+  if (!isRecord2(raw)) throw new DiscoveryParseRejected("result is not an object");
+  const data = raw.data;
+  if (!Array.isArray(data)) throw new DiscoveryParseRejected("result.data is not an array");
+  const models = [];
+  data.forEach((entry, i) => {
+    if (!isRecord2(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.model !== "string" || entry.model.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].model is not a non-empty string`);
+    }
+    if (entry.supportedReasoningEfforts !== void 0) {
+      if (!Array.isArray(entry.supportedReasoningEfforts)) {
+        throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts is not an array`);
+      }
+      for (const [j, eff] of entry.supportedReasoningEfforts.entries()) {
+        if (!isRecord2(eff) || typeof eff.reasoningEffort !== "string") {
+          throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts[${j}].reasoningEffort missing`);
+        }
+      }
+    }
+    if (entry.hidden !== void 0 && typeof entry.hidden !== "boolean") {
+      throw new DiscoveryParseRejected(`data[${i}].hidden is not a boolean`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeAppServerModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.model,
+    display_name: typeof m.displayName === "string" ? m.displayName : void 0,
+    // No family field is provider-stated on this surface.
+    reasoning_efforts: (m.supportedReasoningEfforts ?? []).map((e) => e.reasoningEffort),
+    default_effort: typeof m.defaultReasoningEffort === "string" ? m.defaultReasoningEffort : null,
+    provider_priority: null,
+    // app-server exposes order, not a numeric priority field
+    provider_default: m.isDefault === true,
+    visibility: m.hidden === true ? "hidden" : "listed",
+    deprecation: {
+      upgrade_to: typeof m.upgrade === "string" ? m.upgrade : null,
+      migration_note: typeof m.upgradeInfo?.migrationMarkdown === "string" ? m.upgradeInfo.migrationMarkdown : null
+    },
+    capabilities: {
+      image_input: Array.isArray(m.inputModalities) ? m.inputModalities.includes("image") : void 0,
+      // Superset-schema extensions preserved from the provider listing:
+      service_tiers: Array.isArray(m.serviceTiers) ? m.serviceTiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additionalSpeedTiers) ? m.additionalSpeedTiers : [],
+      default_service_tier: typeof m.defaultServiceTier === "string" ? m.defaultServiceTier : null
+    },
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // entitlement semantics contractually undefined
+  }));
+}
+var CODEX_APP_SERVER_ADAPTER_ID, CODEX_APP_SERVER_ADAPTER_VERSION, CODEX_APP_SERVER_TOOL_VERSIONS, codexAppServerAdapter;
+var init_codex_app_server = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts"() {
+    init_adapter_contract();
+    CODEX_APP_SERVER_ADAPTER_ID = "codex-app-server-model-list";
+    CODEX_APP_SERVER_ADAPTER_VERSION = "1.0.0";
+    CODEX_APP_SERVER_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "2.0.0" };
+    codexAppServerAdapter = {
+      adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+      adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+      target_id: "codex-app-server",
+      method: "native_list",
+      tool_versions: CODEX_APP_SERVER_TOOL_VERSIONS,
+      async discover(io, opts = {}) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.jsonRpcCall) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_APP_SERVER_ADAPTER_ID);
+        }
+        const includeHidden = opts.includeHidden === true;
+        const result = await io.jsonRpcCall("model/list", includeHidden ? { includeHidden: true } : {});
+        const models = normalizeAppServerModels(parseModelListResult(result));
+        return {
+          adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+          adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+          target_id: "codex-app-server",
+          method: "native_list",
+          source_ref: "codex-app-server model/list",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts
+function isRecord3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseDebugModelsOutput(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new DiscoveryParseRejected("stdout is not valid JSON");
+  }
+  if (!isRecord3(parsed) || !Array.isArray(parsed.models)) {
+    throw new DiscoveryParseRejected("payload.models is not an array");
+  }
+  const entries = [];
+  parsed.models.forEach((entry, i) => {
+    if (!isRecord3(entry)) throw new DiscoveryParseRejected(`models[${i}] is not an object`);
+    if (typeof entry.slug !== "string" || entry.slug.length === 0) {
+      throw new DiscoveryParseRejected(`models[${i}].slug is not a non-empty string`);
+    }
+    if (entry.supported_reasoning_levels !== void 0) {
+      if (!Array.isArray(entry.supported_reasoning_levels)) {
+        throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels is not an array`);
+      }
+      for (const [j, lvl] of entry.supported_reasoning_levels.entries()) {
+        if (!isRecord3(lvl) || typeof lvl.effort !== "string") {
+          throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels[${j}].effort missing`);
+        }
+      }
+    }
+    entries.push(entry);
+  });
+  return entries;
+}
+function normalizeDebugModels(entries) {
+  return entries.map((m) => ({
+    canonical_id: m.slug,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    reasoning_efforts: (m.supported_reasoning_levels ?? []).map((l) => l.effort),
+    default_effort: typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null,
+    provider_priority: typeof m.priority === "number" ? m.priority : null,
+    provider_default: false,
+    // the debug catalog carries no default flag
+    visibility: m.visibility === "hide" ? "hidden" : "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {
+      // Advertised subscription-catalog metadata about the API target (F5):
+      // preserved verbatim as metadata, never treated as dispatch evidence.
+      supported_in_api: typeof m.supported_in_api === "boolean" ? m.supported_in_api : void 0,
+      service_tiers: Array.isArray(m.service_tiers) ? m.service_tiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additional_speed_tiers) ? m.additional_speed_tiers : []
+    },
+    evidence_source: "debug_catalog",
+    contract_states_availability: false
+  }));
+}
+var CODEX_DEBUG_MODELS_ADAPTER_ID, CODEX_DEBUG_MODELS_ADAPTER_VERSION, CODEX_DEBUG_MODELS_TOOL_VERSIONS, codexDebugModelsAdapter;
+var init_codex_debug_models = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts"() {
+    init_adapter_contract();
+    CODEX_DEBUG_MODELS_ADAPTER_ID = "codex-debug-models";
+    CODEX_DEBUG_MODELS_ADAPTER_VERSION = "1.0.0";
+    CODEX_DEBUG_MODELS_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "0.147.0" };
+    codexDebugModelsAdapter = {
+      adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+      adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+      target_id: "codex-cli-chatgpt",
+      method: "debug_catalog",
+      tool_versions: CODEX_DEBUG_MODELS_TOOL_VERSIONS,
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.execCapture) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_DEBUG_MODELS_ADAPTER_ID);
+        }
+        const { stdout } = await io.execCapture(["codex", "debug", "models"]);
+        const models = normalizeDebugModels(parseDebugModelsOutput(stdout));
+        return {
+          adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+          adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+          target_id: "codex-cli-chatgpt",
+          method: "debug_catalog",
+          source_ref: "codex debug models",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/openai-api.ts
+function isRecord4(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function openAiFamilyFor(id) {
+  if (id.startsWith("gpt-")) return "gpt";
+  return "unknown";
+}
+function parseOpenAiModelsResponse(raw) {
+  if (!isRecord4(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord4(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeOpenAiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    model_family: openAiFamilyFor(m.id),
+    reasoning_efforts: [],
+    // not stated on this surface — never copied from other targets
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // scope-ambiguous contract ⇒ advertised at most
+  }));
+}
+var OPENAI_API_ADAPTER_ID, OPENAI_API_ADAPTER_VERSION, OPENAI_API_MODELS_URL, openAiApiAdapter;
+var init_openai_api = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/openai-api.ts"() {
+    init_adapter_contract();
+    OPENAI_API_ADAPTER_ID = "openai-api-models";
+    OPENAI_API_ADAPTER_VERSION = "1.0.0";
+    OPENAI_API_MODELS_URL = "https://api.openai.com/v1/models";
+    openAiApiAdapter = {
+      adapter_id: OPENAI_API_ADAPTER_ID,
+      adapter_version: OPENAI_API_ADAPTER_VERSION,
+      target_id: "openai-api",
+      method: "native_list",
+      tool_versions: null,
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.httpGetJson) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), OPENAI_API_ADAPTER_ID);
+        }
+        const raw = await io.httpGetJson(OPENAI_API_MODELS_URL, {});
+        const models = normalizeOpenAiModels(parseOpenAiModelsResponse(raw));
+        return {
+          adapter_id: OPENAI_API_ADAPTER_ID,
+          adapter_version: OPENAI_API_ADAPTER_VERSION,
+          target_id: "openai-api",
+          method: "native_list",
+          source_ref: "openai-api GET /v1/models",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts
+function staticHintEntries(hints) {
+  return hints.map((h) => ({
+    canonical_id: h.canonical_id,
+    display_name: h.display_name,
+    aliases: h.aliases,
+    model_family: h.model_family,
+    reasoning_efforts: [],
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "static_hint",
+    contract_states_availability: false
+  }));
+}
+function makeHonestUnknownAdapter(targetId, opts = {}) {
+  const hints = opts.staticHints ?? [];
+  const adapterId = `honest-unknown-${targetId}`;
+  return {
+    adapter_id: adapterId,
+    adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+    target_id: targetId,
+    method: hints.length > 0 ? "static_hint" : "none",
+    tool_versions: null,
+    async discover(io) {
+      const started = io.monotonicMs();
+      return {
+        adapter_id: adapterId,
+        adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+        target_id: targetId,
+        method: hints.length > 0 ? "static_hint" : "none",
+        source_ref: opts.surfaceNote ?? "no evidenced availability-listing surface",
+        // The receipt itself is honest: no listing surface exists for this
+        // target, so discovery is `unsupported` and the target-level evidence
+        // state stays `unknown` (static hints only fill model metadata).
+        status: "unsupported",
+        latency_ms: Math.max(0, io.monotonicMs() - started),
+        failure_reason: "surface_absent",
+        models: staticHintEntries(hints)
+      };
+    }
+  };
+}
+var HONEST_UNKNOWN_ADAPTER_VERSION, claudeCliSubscriptionAdapter, claudeAppAdapter, claudeWebAdapter, claudeGatewayBedrockAdapter, claudeGatewayVertexAdapter, claudeGatewayFoundryAdapter, codexCliApiKeyAdapter;
+var init_honest_unknown = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts"() {
+    HONEST_UNKNOWN_ADAPTER_VERSION = "1.0.0";
+    claudeCliSubscriptionAdapter = makeHonestUnknownAdapter("claude-cli-subscription", {
+      surfaceNote: "picker is interactive-only; headless entitlement unprovable pre-dispatch"
+    });
+    claudeAppAdapter = makeHonestUnknownAdapter("claude-app", {
+      surfaceNote: "no programmatic discovery surface exists"
+    });
+    claudeWebAdapter = makeHonestUnknownAdapter("claude-web", {
+      surfaceNote: "no programmatic discovery surface exists"
+    });
+    claudeGatewayBedrockAdapter = makeHonestUnknownAdapter("claude-gateway-bedrock", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    claudeGatewayVertexAdapter = makeHonestUnknownAdapter("claude-gateway-vertex", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    claudeGatewayFoundryAdapter = makeHonestUnknownAdapter("claude-gateway-foundry", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    codexCliApiKeyAdapter = makeHonestUnknownAdapter("codex-cli-api-key", {
+      surfaceNote: "no listing evidenced under API-key auth (distinct target from codex-cli-chatgpt)"
+    });
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/index.ts
+var DISCOVERY_ADAPTER_REGISTRY, CODEX_SEAM_PREFERENCE, CODEX_SEAM_ADAPTERS;
+var init_model_discovery = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/index.ts"() {
+    init_adapter_contract();
+    init_claude_api();
+    init_codex_app_server();
+    init_codex_debug_models();
+    init_openai_api();
+    init_honest_unknown();
+    init_adapter_contract();
+    init_codex_app_server();
+    init_codex_debug_models();
+    init_claude_api();
+    init_openai_api();
+    init_honest_unknown();
+    DISCOVERY_ADAPTER_REGISTRY = Object.freeze({
+      "claude-cli-subscription": claudeCliSubscriptionAdapter,
+      "claude-app": claudeAppAdapter,
+      "claude-web": claudeWebAdapter,
+      "claude-api": claudeApiAdapter,
+      "claude-gateway-bedrock": claudeGatewayBedrockAdapter,
+      "claude-gateway-vertex": claudeGatewayVertexAdapter,
+      "claude-gateway-foundry": claudeGatewayFoundryAdapter,
+      "codex-cli-chatgpt": codexDebugModelsAdapter,
+      "codex-app-server": codexAppServerAdapter,
+      "codex-cli-api-key": codexCliApiKeyAdapter,
+      "openai-api": openAiApiAdapter
+    });
+    CODEX_SEAM_PREFERENCE = Object.freeze(["app-server", "debug-models"]);
+    CODEX_SEAM_ADAPTERS = Object.freeze({
+      "app-server": codexAppServerAdapter,
+      "debug-models": codexDebugModelsAdapter
+    });
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-adapter-contract.ts
-var HOST_ADAPTER_OPERATIONS = Object.freeze([
-  "capabilities",
-  "bootstrap",
-  "preflight",
-  "dispatch",
-  "collect",
-  "renderCommandSurface",
-  "renderPackage",
-  "renderPermissionDecision",
-  "resolveModelParams",
-  "memory"
-]);
+var HOST_ADAPTER_OPERATIONS;
+var init_host_adapter_contract = __esm({
+  "../src/modules/host-runtime/workflows/host-adapter-contract.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    HOST_ADAPTER_OPERATIONS = Object.freeze([
+      "capabilities",
+      "bootstrap",
+      "preflight",
+      "dispatch",
+      "collect",
+      "renderCommandSurface",
+      "renderPackage",
+      "renderPermissionDecision",
+      "resolveModelParams",
+      "memory"
+    ]);
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
-var import_node_crypto = require("node:crypto");
-var HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
-var HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
-var HOST_CAPABILITY_IDS = Object.freeze([
-  "host.artifacts.direct_filesystem",
-  "host.artifacts.file_bus",
-  "host.bootstrap.context_injection",
-  "host.bootstrap.skill_autoload",
-  "host.bootstrap.wrapper_injection",
-  "host.commands.command_files",
-  "host.commands.slash_commands",
-  "host.dispatch.selectable",
-  "host.hooks.post_tool_use",
-  "host.hooks.pre_compact",
-  "host.hooks.pre_tool_use",
-  "host.hooks.session_start",
-  "host.hooks.stop",
-  "host.hooks.subagent_stop",
-  "host.hooks.task_completed",
-  "host.hooks.task_created",
-  "host.hooks.teammate_idle",
-  "host.hooks.user_prompt_submit",
-  "host.interaction.native_questions",
-  "host.mcp.http",
-  "host.mcp.stdio",
-  "host.models.tier_map",
-  "host.package.install",
-  "host.package.render",
-  "host.package.update",
-  "host.permissions.ask",
-  "host.permissions.deny",
-  "host.result_adapter",
-  "host.sessions.resume_by_id",
-  "host.structured_output.native_json"
-]);
-var CAPABILITY_READERS = {
-  "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
-  "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
-  "host.bootstrap.context_injection": (entry) => {
-    const injection = entry.capabilities.bootstrap.context_injection;
-    return typeof injection === "string" && injection.length > 0 && injection !== "none";
-  },
-  "host.bootstrap.skill_autoload": (entry) => entry.capabilities.bootstrap.skill_autoload,
-  "host.bootstrap.wrapper_injection": (entry) => entry.capabilities.bootstrap.wrapper_injection,
-  "host.commands.command_files": (entry) => entry.capabilities.commands.command_files !== "none",
-  "host.commands.slash_commands": (entry) => entry.capabilities.commands.slash_commands,
-  "host.dispatch.selectable": (entry) => entry.dispatch_selectable,
-  "host.hooks.post_tool_use": (entry) => entry.capabilities.hooks.post_tool_use,
-  "host.hooks.pre_compact": (entry) => entry.capabilities.hooks.pre_compact,
-  "host.hooks.pre_tool_use": (entry) => entry.capabilities.hooks.pre_tool_use,
-  "host.hooks.session_start": (entry) => entry.capabilities.hooks.session_start,
-  "host.hooks.stop": (entry) => entry.capabilities.hooks.stop,
-  "host.hooks.subagent_stop": (entry) => entry.capabilities.hooks.subagent_stop,
-  "host.hooks.task_completed": (entry) => entry.capabilities.hooks.task_completed,
-  "host.hooks.task_created": (entry) => entry.capabilities.hooks.task_created,
-  "host.hooks.teammate_idle": (entry) => entry.capabilities.hooks.teammate_idle,
-  "host.hooks.user_prompt_submit": (entry) => entry.capabilities.hooks.user_prompt_submit,
-  "host.interaction.native_questions": (entry) => entry.capabilities.interaction.native_questions,
-  "host.mcp.http": (entry) => entry.capabilities.mcp.http,
-  "host.mcp.stdio": (entry) => entry.capabilities.mcp.stdio,
-  "host.models.tier_map": (entry) => {
-    const models = entry.capabilities.models;
-    return Boolean(models.cheap.model || models.mid.model || models.powerful.model);
-  },
-  // `installability` is the REGISTRY column, and it is the one that decides
-  // whether an install is proven. A renderer that exists but was never installed
-  // is `target`, which is render-capable and install-INCAPABLE — collapsing the
-  // two is precisely the optimistic default this snapshot exists to prevent.
-  "host.package.install": (entry) => entry.installability === "native" && entry.capabilities.package.installable,
-  "host.package.render": (entry) => entry.installability !== "none",
-  "host.package.update": (entry) => entry.capabilities.package.update.apply !== "none",
-  "host.permissions.ask": (entry) => entry.capabilities.permissions.ask,
-  "host.permissions.deny": (entry) => entry.capabilities.permissions.deny,
-  "host.result_adapter": (entry) => entry.result_adapter,
-  "host.sessions.resume_by_id": (entry) => entry.capabilities.sessions.resume_by_id,
-  "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
-};
-var UNKNOWN_HOST_VERSION = "unknown";
 function canonicalJson(value) {
   if (value === null) return "null";
   const kind = typeof value;
@@ -4659,121 +4955,98 @@ function createHostCapabilitySnapshotStore() {
     }
   };
 }
-var DEFAULT_STORE = createHostCapabilitySnapshotStore();
+var import_node_crypto, HOST_CAPABILITY_SNAPSHOT_SCHEMA, HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA, HOST_CAPABILITY_IDS, CAPABILITY_READERS, UNKNOWN_HOST_VERSION, DEFAULT_STORE;
+var init_host_capability_snapshot = __esm({
+  "../src/modules/host-runtime/workflows/host-capability-snapshot.ts"() {
+    import_node_crypto = require("node:crypto");
+    init_kernel();
+    init_host_id_namespace();
+    init_host_registry_schema();
+    HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
+    HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
+    HOST_CAPABILITY_IDS = Object.freeze([
+      "host.artifacts.direct_filesystem",
+      "host.artifacts.file_bus",
+      "host.bootstrap.context_injection",
+      "host.bootstrap.skill_autoload",
+      "host.bootstrap.wrapper_injection",
+      "host.commands.command_files",
+      "host.commands.slash_commands",
+      "host.dispatch.selectable",
+      "host.hooks.post_tool_use",
+      "host.hooks.pre_compact",
+      "host.hooks.pre_tool_use",
+      "host.hooks.session_start",
+      "host.hooks.stop",
+      "host.hooks.subagent_stop",
+      "host.hooks.task_completed",
+      "host.hooks.task_created",
+      "host.hooks.teammate_idle",
+      "host.hooks.user_prompt_submit",
+      "host.interaction.native_questions",
+      "host.mcp.http",
+      "host.mcp.stdio",
+      "host.models.tier_map",
+      "host.package.install",
+      "host.package.render",
+      "host.package.update",
+      "host.permissions.ask",
+      "host.permissions.deny",
+      "host.result_adapter",
+      "host.sessions.resume_by_id",
+      "host.structured_output.native_json"
+    ]);
+    CAPABILITY_READERS = {
+      "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
+      "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
+      "host.bootstrap.context_injection": (entry) => {
+        const injection = entry.capabilities.bootstrap.context_injection;
+        return typeof injection === "string" && injection.length > 0 && injection !== "none";
+      },
+      "host.bootstrap.skill_autoload": (entry) => entry.capabilities.bootstrap.skill_autoload,
+      "host.bootstrap.wrapper_injection": (entry) => entry.capabilities.bootstrap.wrapper_injection,
+      "host.commands.command_files": (entry) => entry.capabilities.commands.command_files !== "none",
+      "host.commands.slash_commands": (entry) => entry.capabilities.commands.slash_commands,
+      "host.dispatch.selectable": (entry) => entry.dispatch_selectable,
+      "host.hooks.post_tool_use": (entry) => entry.capabilities.hooks.post_tool_use,
+      "host.hooks.pre_compact": (entry) => entry.capabilities.hooks.pre_compact,
+      "host.hooks.pre_tool_use": (entry) => entry.capabilities.hooks.pre_tool_use,
+      "host.hooks.session_start": (entry) => entry.capabilities.hooks.session_start,
+      "host.hooks.stop": (entry) => entry.capabilities.hooks.stop,
+      "host.hooks.subagent_stop": (entry) => entry.capabilities.hooks.subagent_stop,
+      "host.hooks.task_completed": (entry) => entry.capabilities.hooks.task_completed,
+      "host.hooks.task_created": (entry) => entry.capabilities.hooks.task_created,
+      "host.hooks.teammate_idle": (entry) => entry.capabilities.hooks.teammate_idle,
+      "host.hooks.user_prompt_submit": (entry) => entry.capabilities.hooks.user_prompt_submit,
+      "host.interaction.native_questions": (entry) => entry.capabilities.interaction.native_questions,
+      "host.mcp.http": (entry) => entry.capabilities.mcp.http,
+      "host.mcp.stdio": (entry) => entry.capabilities.mcp.stdio,
+      "host.models.tier_map": (entry) => {
+        const models = entry.capabilities.models;
+        return Boolean(models.cheap.model || models.mid.model || models.powerful.model);
+      },
+      // `installability` is the REGISTRY column, and it is the one that decides
+      // whether an install is proven. A renderer that exists but was never installed
+      // is `target`, which is render-capable and install-INCAPABLE — collapsing the
+      // two is precisely the optimistic default this snapshot exists to prevent.
+      "host.package.install": (entry) => entry.installability === "native" && entry.capabilities.package.installable,
+      "host.package.render": (entry) => entry.installability !== "none",
+      "host.package.update": (entry) => entry.capabilities.package.update.apply !== "none",
+      "host.permissions.ask": (entry) => entry.capabilities.permissions.ask,
+      "host.permissions.deny": (entry) => entry.capabilities.permissions.deny,
+      "host.result_adapter": (entry) => entry.result_adapter,
+      "host.sessions.resume_by_id": (entry) => entry.capabilities.sessions.resume_by_id,
+      "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
+    };
+    UNKNOWN_HOST_VERSION = "unknown";
+    DEFAULT_STORE = createHostCapabilitySnapshotStore();
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-event-normalizer.ts
-var HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
-var CLAUDE_NATIVE_EVENT_BINDINGS = Object.freeze([
-  Object.freeze({
-    native_event: "PostToolUse",
-    normalized_event: "tool.after",
-    rationale: "fires after a tool call completes"
-  }),
-  Object.freeze({
-    native_event: "PreCompact",
-    normalized_event: "context.compact",
-    rationale: "fires before the host compacts its context window"
-  }),
-  Object.freeze({
-    native_event: "PreToolUse",
-    normalized_event: "tool.before",
-    rationale: "fires before a tool call is admitted"
-  }),
-  Object.freeze({
-    native_event: "SessionStart",
-    normalized_event: "session.start",
-    rationale: "fires once when the host session opens"
-  }),
-  Object.freeze({
-    native_event: "Stop",
-    normalized_event: "run.stop",
-    rationale: "Guild's state model is run-centric, so the host's session stop is the run stop the core names"
-  }),
-  Object.freeze({
-    native_event: "SubagentStop",
-    normalized_event: null,
-    rationale: "a subagent finishing is not a task collection: the normative vocabulary has no subagent lifecycle name, and reusing the task-collection name would report a collection that never happened. Declared unmapped rather than approximated."
-  }),
-  Object.freeze({
-    native_event: "TaskCompleted",
-    normalized_event: "task.collect",
-    rationale: "the shipped task-completion producer the normative vocabulary was chosen to keep distinct"
-  }),
-  Object.freeze({
-    native_event: "TaskCreated",
-    normalized_event: "task.dispatch",
-    rationale: "the shipped task-creation producer the normative vocabulary was chosen to keep distinct"
-  }),
-  Object.freeze({
-    native_event: "TeammateIdle",
-    normalized_event: null,
-    rationale: "teammate idleness is a scheduling signal, not a lifecycle transition; the normative vocabulary declares no image for it. Declared unmapped rather than approximated."
-  }),
-  Object.freeze({
-    native_event: "UserPromptSubmit",
-    normalized_event: "prompt.submit",
-    rationale: "fires when the operator submits a prompt"
-  })
-]);
-var WRAPPER_NATIVE_EVENT_BINDINGS = Object.freeze([
-  Object.freeze({
-    native_event: "guild.wrapper.context_compact",
-    normalized_event: "context.compact",
-    rationale: "the wrapper reports a context reduction it performed on the host's behalf"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.prompt_submit",
-    normalized_event: "prompt.submit",
-    rationale: "the wrapper hands the host an operator prompt"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.run_resume",
-    normalized_event: "run.resume",
-    rationale: "the wrapper re-enters an existing run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.run_stop",
-    normalized_event: "run.stop",
-    rationale: "the wrapper observes the host process closing the run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.session_start",
-    normalized_event: "session.start",
-    rationale: "the wrapper opens the host process for this run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.task_collect",
-    normalized_event: "task.collect",
-    rationale: "the wrapper collects a finished task run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.task_dispatch",
-    normalized_event: "task.dispatch",
-    rationale: "the wrapper dispatches a task run onto the host"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.tool_after",
-    normalized_event: "tool.after",
-    rationale: "the wrapper observes a completed tool call"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.tool_before",
-    normalized_event: "tool.before",
-    rationale: "the wrapper observes a tool call about to run"
-  })
-]);
-var NATIVE_BINDINGS_BY_FAMILY = Object.freeze({
-  claude: CLAUDE_NATIVE_EVENT_BINDINGS
-});
 function advertisesNativeHooks(entry) {
   return Object.values(entry.capabilities.hooks).some(Boolean);
 }
-var NO_SOURCE = Object.freeze({
-  schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
-  host_id: null,
-  kind: "none",
-  bindings: Object.freeze([])
-});
 function hostEventSource(host) {
   const hostId = normalizeHostId(String(host ?? ""));
   const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
@@ -4810,50 +5083,124 @@ function hostEventSource(host) {
     bindings: WRAPPER_NATIVE_EVENT_BINDINGS
   });
 }
+var HOST_EVENT_NORMALIZATION_SCHEMA, CLAUDE_NATIVE_EVENT_BINDINGS, WRAPPER_NATIVE_EVENT_BINDINGS, NATIVE_BINDINGS_BY_FAMILY, NO_SOURCE;
+var init_host_event_normalizer = __esm({
+  "../src/modules/host-runtime/workflows/host-event-normalizer.ts"() {
+    init_host_id_namespace();
+    init_host_registry_schema();
+    HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
+    CLAUDE_NATIVE_EVENT_BINDINGS = Object.freeze([
+      Object.freeze({
+        native_event: "PostToolUse",
+        normalized_event: "tool.after",
+        rationale: "fires after a tool call completes"
+      }),
+      Object.freeze({
+        native_event: "PreCompact",
+        normalized_event: "context.compact",
+        rationale: "fires before the host compacts its context window"
+      }),
+      Object.freeze({
+        native_event: "PreToolUse",
+        normalized_event: "tool.before",
+        rationale: "fires before a tool call is admitted"
+      }),
+      Object.freeze({
+        native_event: "SessionStart",
+        normalized_event: "session.start",
+        rationale: "fires once when the host session opens"
+      }),
+      Object.freeze({
+        native_event: "Stop",
+        normalized_event: "run.stop",
+        rationale: "Guild's state model is run-centric, so the host's session stop is the run stop the core names"
+      }),
+      Object.freeze({
+        native_event: "SubagentStop",
+        normalized_event: null,
+        rationale: "a subagent finishing is not a task collection: the normative vocabulary has no subagent lifecycle name, and reusing the task-collection name would report a collection that never happened. Declared unmapped rather than approximated."
+      }),
+      Object.freeze({
+        native_event: "TaskCompleted",
+        normalized_event: "task.collect",
+        rationale: "the shipped task-completion producer the normative vocabulary was chosen to keep distinct"
+      }),
+      Object.freeze({
+        native_event: "TaskCreated",
+        normalized_event: "task.dispatch",
+        rationale: "the shipped task-creation producer the normative vocabulary was chosen to keep distinct"
+      }),
+      Object.freeze({
+        native_event: "TeammateIdle",
+        normalized_event: null,
+        rationale: "teammate idleness is a scheduling signal, not a lifecycle transition; the normative vocabulary declares no image for it. Declared unmapped rather than approximated."
+      }),
+      Object.freeze({
+        native_event: "UserPromptSubmit",
+        normalized_event: "prompt.submit",
+        rationale: "fires when the operator submits a prompt"
+      })
+    ]);
+    WRAPPER_NATIVE_EVENT_BINDINGS = Object.freeze([
+      Object.freeze({
+        native_event: "guild.wrapper.context_compact",
+        normalized_event: "context.compact",
+        rationale: "the wrapper reports a context reduction it performed on the host's behalf"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.prompt_submit",
+        normalized_event: "prompt.submit",
+        rationale: "the wrapper hands the host an operator prompt"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.run_resume",
+        normalized_event: "run.resume",
+        rationale: "the wrapper re-enters an existing run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.run_stop",
+        normalized_event: "run.stop",
+        rationale: "the wrapper observes the host process closing the run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.session_start",
+        normalized_event: "session.start",
+        rationale: "the wrapper opens the host process for this run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.task_collect",
+        normalized_event: "task.collect",
+        rationale: "the wrapper collects a finished task run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.task_dispatch",
+        normalized_event: "task.dispatch",
+        rationale: "the wrapper dispatches a task run onto the host"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.tool_after",
+        normalized_event: "tool.after",
+        rationale: "the wrapper observes a completed tool call"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.tool_before",
+        normalized_event: "tool.before",
+        rationale: "the wrapper observes a tool call about to run"
+      })
+    ]);
+    NATIVE_BINDINGS_BY_FAMILY = Object.freeze({
+      claude: CLAUDE_NATIVE_EVENT_BINDINGS
+    });
+    NO_SOURCE = Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: null,
+      kind: "none",
+      bindings: Object.freeze([])
+    });
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-adapter-boundary.ts
-var HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
-var HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
-var HOST_ADAPTER_OWNERSHIP_SCHEMA = "guild.host_adapter_ownership.v1";
-var HOST_ADAPTER_REASON_CODES = Object.freeze([
-  "boundary_membership_mismatch",
-  "capability_absent",
-  "capability_snapshot_mismatch",
-  "execution_failed",
-  "unknown_event"
-]);
-var HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
-  "host_identity_resolution",
-  "host_entry_point_binding",
-  "host_capability_snapshot",
-  "host_native_event_normalization"
-]);
-var HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
-  "lifecycle_state",
-  "gate_policy",
-  "artifact_semantics",
-  "document_rendering",
-  "transport_execution"
-]);
-var CONCERN_OWNERS = Object.freeze({
-  host_identity_resolution: "host-adapters",
-  host_entry_point_binding: "host-adapters",
-  host_capability_snapshot: "host-adapters",
-  host_native_event_normalization: "host-adapters",
-  lifecycle_state: "host-neutral-core",
-  gate_policy: "host-neutral-core",
-  artifact_semantics: "artifact-document-services",
-  document_rendering: "artifact-document-services",
-  transport_execution: "execution-transports"
-});
-var OWNERSHIP = Object.freeze({
-  schema_version: HOST_ADAPTER_OWNERSHIP_SCHEMA,
-  boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
-  owned: Object.freeze([...HOST_ADAPTER_OWNED_CONCERNS]),
-  not_owned: Object.freeze([...HOST_ADAPTER_NOT_OWNED_CONCERNS]),
-  owners: CONCERN_OWNERS
-});
-var DEFAULT_INSTRUCTION_FILE = "AGENTS.md";
 function entryPointFor(hostId) {
   const row = HOST_REGISTRY_ROWS[hostId];
   const subcommand = row.detection.subcommand ?? null;
@@ -4873,76 +5220,439 @@ function entryPointFor(hostId) {
     dispatch_selectable: row.dispatch_selectable
   });
 }
-var HOST_ENTRY_POINTS = Object.freeze(
-  HOST_IDS.reduce(
-    (accumulator, hostId) => {
-      accumulator[hostId] = entryPointFor(hostId);
-      return accumulator;
-    },
-    {}
-  )
-);
-var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
+var HOST_ADAPTER_BOUNDARY_SCHEMA, HOST_ENTRY_POINT_SCHEMA, HOST_ADAPTER_OWNERSHIP_SCHEMA, HOST_ADAPTER_REASON_CODES, HOST_ADAPTER_OWNED_CONCERNS, HOST_ADAPTER_NOT_OWNED_CONCERNS, CONCERN_OWNERS, OWNERSHIP, DEFAULT_INSTRUCTION_FILE, HOST_ENTRY_POINTS, BOUNDARY_STORE;
+var init_host_adapter_boundary = __esm({
+  "../src/modules/host-runtime/workflows/host-adapter-boundary.ts"() {
+    init_host_adapter_contract();
+    init_host_id_namespace();
+    init_host_registry_schema();
+    init_host_capability_snapshot();
+    init_host_event_normalizer();
+    HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
+    HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
+    HOST_ADAPTER_OWNERSHIP_SCHEMA = "guild.host_adapter_ownership.v1";
+    HOST_ADAPTER_REASON_CODES = Object.freeze([
+      "boundary_membership_mismatch",
+      "capability_absent",
+      "capability_snapshot_mismatch",
+      "execution_failed",
+      "unknown_event"
+    ]);
+    HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
+      "host_identity_resolution",
+      "host_entry_point_binding",
+      "host_capability_snapshot",
+      "host_native_event_normalization"
+    ]);
+    HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
+      "lifecycle_state",
+      "gate_policy",
+      "artifact_semantics",
+      "document_rendering",
+      "transport_execution"
+    ]);
+    CONCERN_OWNERS = Object.freeze({
+      host_identity_resolution: "host-adapters",
+      host_entry_point_binding: "host-adapters",
+      host_capability_snapshot: "host-adapters",
+      host_native_event_normalization: "host-adapters",
+      lifecycle_state: "host-neutral-core",
+      gate_policy: "host-neutral-core",
+      artifact_semantics: "artifact-document-services",
+      document_rendering: "artifact-document-services",
+      transport_execution: "execution-transports"
+    });
+    OWNERSHIP = Object.freeze({
+      schema_version: HOST_ADAPTER_OWNERSHIP_SCHEMA,
+      boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
+      owned: Object.freeze([...HOST_ADAPTER_OWNED_CONCERNS]),
+      not_owned: Object.freeze([...HOST_ADAPTER_NOT_OWNED_CONCERNS]),
+      owners: CONCERN_OWNERS
+    });
+    DEFAULT_INSTRUCTION_FILE = "AGENTS.md";
+    HOST_ENTRY_POINTS = Object.freeze(
+      HOST_IDS.reduce(
+        (accumulator, hostId) => {
+          accumulator[hostId] = entryPointFor(hostId);
+          return accumulator;
+        },
+        {}
+      )
+    );
+    BOUNDARY_STORE = createHostCapabilitySnapshotStore();
+  }
+});
+
+// ../src/modules/host-runtime/index.ts
+var init_host_runtime = __esm({
+  "../src/modules/host-runtime/index.ts"() {
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    init_host_profiles_validate();
+    init_host_registry();
+    init_host_registry_schema();
+    init_provider_detect();
+    init_session_context();
+    init_model_discovery();
+    init_host_adapter_contract();
+    init_host_adapter_boundary();
+    init_host_capability_snapshot();
+    init_host_event_normalizer();
+  }
+});
+
+// ../src/modules/config/workflows/config-defaults.ts
+var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_AFTER_F7, CAPABILITY_RESOLVER_MODE_DEFAULT, DEFAULTS;
+var init_config_defaults = __esm({
+  "../src/modules/config/workflows/config-defaults.ts"() {
+    init_kernel();
+    DEFAULT_ESCALATION_MARKERS = Object.freeze([
+      "I'm not sure",
+      "unclear",
+      "cannot determine",
+      "I don't know",
+      "ambiguous",
+      "uncertain",
+      "not enough information"
+    ]);
+    NON_INHERITABLE_KEYS = sealSet([
+      "initiative_default",
+      // OD-1: attach-to-wrong-initiative risk
+      "workspace"
+      // workspace.mode is root-detection-only
+    ], "NON_INHERITABLE_KEYS");
+    LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+    SIDECAR_MAX_BYTES = 1024 * 1024;
+    CAPABILITY_RESOLVER_MODES = Object.freeze([
+      "legacy",
+      "observe",
+      "shadow",
+      "project-local",
+      "strict"
+    ]);
+    CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
+    CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
+    CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
+    DEFAULTS = deepFreeze({
+      rigor: "standard",
+      auto_approve: [],
+      review: "local",
+      host: "auto",
+      /**
+       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+       * this top-level placement (sibling of the `host` dispatch selector) is the registered
+       * replacement. One of only three keys ever legitimately null-typed at the top level.
+       */
+      host_mode: null,
+      roles: { host: null, advisory: null, adversarial: null },
+      host_profiles: {},
+      initiative_default: null,
+      index: "auto",
+      record_status_runs: true,
+      codex_skip_enforcement: "warn",
+      agent_mode: "auto",
+      workspace: { mode: "auto" },
+      models: {
+        enabled: true,
+        // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+        // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+        // own contract, stated in the module doc comment above, is to stay free of
+        // internal runtime imports so core settings code can load it before the
+        // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+        // roster (host-registry-schema.ts) enumerated by hand; a jest test
+        // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+        // stay in sync so this can never silently drift again the way it had (7 of
+        // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+        // non-null model — every other host's registry row carries `models.<tier>.model:
+        // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+        // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+        // equivalent this static scaffold mirrors).
+        tiers: {
+          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
+        },
+        scoreWeights: {
+          workType: 0,
+          blastRadius: 1,
+          dependsOn: 1,
+          security: 1,
+          priorEscalation: 1
+        },
+        thresholds: { mid: 1, powerful: 3 },
+        advisorRounds: 2,
+        escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+        recallBeforeRead: true,
+        recallScoreThreshold: 0.4,
+        structuredOutputRequired: true,
+        cacheTTL: { coordinator: "1h", leaf: "5m" },
+        importanceGate: 3,
+        compositeRecall: true,
+        importanceAtIngest: true,
+        ingestSimilarityGate: 0.8,
+        shortOutputThreshold: {},
+        knowledge: {
+          maxDepth: 8,
+          maxBranching: 12,
+          minTopicImportance: 0.4,
+          relMinConf: 0.5,
+          maxFiles: 3e3,
+          maxTokens: 1e6,
+          batchSize: 20
+        }
+      },
+      security: {
+        bypass_permissions_policy: "audit"
+      },
+      secrets_policy: {
+        env_allowlist: [],
+        redaction_patterns: [],
+        fail_mode_durable: "closed",
+        fail_mode_telemetry: "open"
+      },
+      mcp: {
+        tool_description_hashes: {},
+        stdio_available: true,
+        http_available: false,
+        bridge_package: null
+      },
+      /**
+       * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+       * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+       * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+       *
+       * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+       * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+       * What a lane may DO stays with `capability_scope` and the permission keys.
+       *
+       * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+       * already emits unconditionally — capability ownership is per project by
+       * definition (the umbrella and each child answer "what roles do I need"
+       * independently, and D03 has the four repos migrating at different rates). Per
+       * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+       * out with zero generator change, and adding it would touch every existing key.
+       */
+      capability: {
+        /**
+         * Which resolver mode this project is in on D03's migration ladder. Config
+         * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+         * gate criteria the initiative evaluates, and a mode change is a deliberate
+         * write.
+         *
+         * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
+         * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
+         * silently defaulted: an unset value resolves with provenance `default`, so
+         * `config show --sources` shows it was never chosen.
+         */
+        resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+        /**
+         * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+         * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+         * the two cannot disagree. 0 is legal: "profile but never propose".
+         */
+        suggestion_budget: 4,
+        /**
+         * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+         * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+         * Learn proposes.
+         */
+        starter_roles: [],
+        /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+        auto_create_policy: "on_approval"
+      },
+      statusline: false,
+      adversarial_review_provider: "auto",
+      loops: null,
+      loop_cap: 16,
+      codex_cap: 5,
+      // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
+      // routing intent. null = not configured — v2 routing stays off and the legacy
+      // tier maps drive generic preferences for the §6 migration window. When set, the
+      // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
+      model_policy: null,
+      defaults: {
+        auto_learn: false,
+        adversarial: "on",
+        team: { size: null, always_include: [] },
+        review_workflow: "standard",
+        skill_policy: "standard",
+        gates: { auto_approve: [] },
+        wiki: { share_mode: "team", autopromote: false },
+        quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+        reporting: "standard",
+        index: {
+          enabled: true,
+          kg_node_threshold: 2e3,
+          kg_size_threshold_mb: 1,
+          links_edge_threshold: 2e3,
+          runs_threshold: 20,
+          wiki_file_threshold: 500
+        },
+        cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+        retry: { max_attempts: 1, backoff: "exponential" },
+        resume: { enabled: true },
+        heartbeat_timeout_ms: 6e5,
+        capability_manifest_ttl_s: 3600,
+        // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+        // the SessionStart signal; `auto` additionally stages the host apply path;
+        // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+        update: { mode: "notify", cadence_hours: 24 },
+        allowed_tools: [],
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+         * "Inline shortcut under high autonomy").
+         */
+        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+         * activity count before the lifecycle gate advisory fires.
+         */
+        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
+      }
+    });
+  }
+});
+
+// ../src/modules/config/workflows/config-validation.ts
+var init_config_validation = __esm({
+  "../src/modules/config/workflows/config-validation.ts"() {
+    init_host_runtime();
+  }
+});
 
 // ../src/modules/security/workflows/safe-object.ts
-var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+var PROTO_POISON_KEYS;
+var init_safe_object = __esm({
+  "../src/modules/security/workflows/safe-object.ts"() {
+    init_kernel();
+    PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+  }
+});
+
+// ../src/modules/security/workflows/injection-guard.ts
+var init_injection_guard = __esm({
+  "../src/modules/security/workflows/injection-guard.ts"() {
+  }
+});
 
 // ../src/modules/security/workflows/redact-log.ts
-var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = Object.freeze([
-  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
-  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
-  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
-  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
-  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
-  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
-  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
-  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
-  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
-]);
-var SENSITIVE_HOME_DIRS = Object.freeze([
-  ".claude",
-  ".codex",
-  ".ssh",
-  ".aws",
-  ".gnupg"
-]);
-var REDACTABLE_FIELD_NAMES = Object.freeze([
-  "command_redacted",
-  "result_excerpt_redacted",
-  "payload_excerpt_redacted",
-  "prompt_excerpt",
-  "assumption_text",
-  "result"
-]);
-var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
+var init_redact_log = __esm({
+  "../src/modules/security/workflows/redact-log.ts"() {
+    init_kernel();
+    FIELD_SIZE_CAP_BYTES = 4 * 1024;
+    TOKEN_SHAPE_PATTERNS = Object.freeze([
+      Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+      Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+      Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+      Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+      Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+      Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+      Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+    ]);
+    SENSITIVE_HOME_DIRS = Object.freeze([
+      ".claude",
+      ".codex",
+      ".ssh",
+      ".aws",
+      ".gnupg"
+    ]);
+    REDACTABLE_FIELD_NAMES = Object.freeze([
+      "command_redacted",
+      "result_excerpt_redacted",
+      "payload_excerpt_redacted",
+      "prompt_excerpt",
+      "assumption_text",
+      "result"
+    ]);
+    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+  }
+});
+
+// ../src/modules/security/workflows/secrets.ts
+var init_secrets = __esm({
+  "../src/modules/security/workflows/secrets.ts"() {
+    init_redact_log();
+  }
+});
+
+// ../src/modules/state/workflows/plugin-install-guard.ts
+var init_plugin_install_guard = __esm({
+  "../src/modules/state/workflows/plugin-install-guard.ts"() {
+  }
+});
+
+// ../src/modules/state/workflows/atomic-write.ts
+var init_atomic_write = __esm({
+  "../src/modules/state/workflows/atomic-write.ts"() {
+    init_plugin_install_guard();
+  }
+});
 
 // ../src/modules/state/workflows/dependency-graph-schema.ts
-var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
-var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
-  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
-  nodes: [
-    { id: "guild-plugin", path: "plugin" },
-    { id: "guild-website", path: "website" },
-    { id: "guild-benchmark", path: "benchmark" }
-  ],
-  edges: [
-    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
-    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
-  ]
+var DEPENDENCY_GRAPH_SCHEMA_VERSION, DEPENDENCY_GRAPH_V1_EXAMPLE;
+var init_dependency_graph_schema = __esm({
+  "../src/modules/state/workflows/dependency-graph-schema.ts"() {
+    init_kernel();
+    DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+    DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+      schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+      nodes: [
+        { id: "guild-plugin", path: "plugin" },
+        { id: "guild-website", path: "website" },
+        { id: "guild-benchmark", path: "benchmark" }
+      ],
+      edges: [
+        { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+        { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+      ]
+    });
+  }
+});
+
+// ../src/modules/state/workflows/dependency-graph-reader.ts
+var init_dependency_graph_reader = __esm({
+  "../src/modules/state/workflows/dependency-graph-reader.ts"() {
+    init_dependency_graph_schema();
+  }
+});
+
+// ../src/modules/state/workflows/frontmatter.ts
+var init_frontmatter = __esm({
+  "../src/modules/state/workflows/frontmatter.ts"() {
+    init_kernel();
+  }
+});
+
+// ../src/modules/state/workflows/guild-root.ts
+var init_guild_root = __esm({
+  "../src/modules/state/workflows/guild-root.ts"() {
+  }
+});
+
+// ../src/modules/state/workflows/guild-discovery.ts
+var init_guild_discovery = __esm({
+  "../src/modules/state/workflows/guild-discovery.ts"() {
+    init_guild_root();
+  }
 });
 
 // ../src/modules/migrations/workflows/index-migrate.ts
-var import_node_child_process = require("node:child_process");
-var fs2 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA busy_timeout = 5000");
   return db;
 }
-var CURRENT_SCHEMA_VERSION = 3;
 function resolveGuildRoot3(cwd) {
   try {
     const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
@@ -4957,168 +5667,6 @@ function resolveGuildRoot3(cwd) {
   }
   return path3.resolve(cwd);
 }
-var MIGRATIONS = [
-  // ── v1: core tables ───────────────────────────────────────────────────────
-  {
-    version: 1,
-    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_nodes;
-        DROP TABLE IF EXISTS kg_edges;
-        DROP TABLE IF EXISTS kl_edges;
-        DROP TABLE IF EXISTS run_provenance;
-        DROP TABLE IF EXISTS wiki_fts;
-        DROP TABLE IF EXISTS _fingerprints;
-      `);
-      db.exec(`
-        CREATE TABLE kg_nodes (
-          id         TEXT NOT NULL PRIMARY KEY,
-          type       TEXT,
-          name       TEXT,
-          source_refs TEXT,
-          confidence TEXT,
-          layer      TEXT,
-          data       TEXT
-        );
-
-        CREATE TABLE kg_edges (
-          id        INTEGER PRIMARY KEY,
-          source    TEXT NOT NULL,
-          target    TEXT NOT NULL,
-          type      TEXT,
-          direction TEXT,
-          weight    REAL,
-          data      TEXT
-        );
-
-        CREATE TABLE kl_edges (
-          id        INTEGER PRIMARY KEY,
-          from_node TEXT NOT NULL,
-          to_node   TEXT NOT NULL,
-          type      TEXT,
-          run_id    TEXT,
-          data      TEXT
-        );
-
-        CREATE TABLE run_provenance (
-          run_id TEXT NOT NULL PRIMARY KEY,
-          ts     TEXT,
-          data   TEXT
-        );
-
-        CREATE TABLE _fingerprints (
-          table_name   TEXT NOT NULL PRIMARY KEY,
-          source_path  TEXT NOT NULL,
-          sha256       TEXT NOT NULL,
-          populated_at TEXT NOT NULL
-        );
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE wiki_fts USING fts5(
-            path      UNINDEXED,
-            title,
-            content,
-            tokenize='porter ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE wiki_fts (
-            path    TEXT,
-            title   TEXT,
-            content TEXT
-          );
-        `);
-      }
-    }
-  },
-  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
-  //
-  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
-  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
-  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
-  //
-  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
-  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
-  // invalidate function (ensureFederationWikiCache) was removed in
-  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
-  // schema migration is retained (harmless empty table) since altering the
-  // migration ladder is a separate, out-of-scope decision.
-  {
-    version: 2,
-    tables: ["federation_wiki_cache"],
-    up(db) {
-      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
-      db.exec(`
-        CREATE TABLE federation_wiki_cache (
-          sub_guild_root TEXT NOT NULL,
-          path           TEXT NOT NULL,
-          title          TEXT,
-          snippet        TEXT,
-          PRIMARY KEY (sub_guild_root, path)
-        );
-      `);
-    }
-  },
-  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
-  //
-  // Two OPTIONAL acceleration tables projected from the canonical, file-first
-  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
-  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
-  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
-  // remains the source of truth that returns IDENTICAL answers.
-  //
-  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
-  //                    indexed on source AND target so the call-graph BFS
-  //                    (kgTrace / kgDeadCode) is fetched without parsing the
-  //                    whole JSON graph.
-  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
-  //                    node, so identifier search (`process_order` →
-  //                    `processOrder`) is an index lookup, not a full node scan.
-  //                    Tokens are PRE-SPLIT with the shared identifier-aware
-  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
-  //                    document and query side, so the FTS built-in tokenizer
-  //                    only has to whitespace-split — the camel/snake behaviour
-  //                    lives in the (deterministic, model-free) projection feed.
-  {
-    version: 3,
-    tables: ["kg_calls", "kg_symbols_fts"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_calls;
-        DROP TABLE IF EXISTS kg_symbols_fts;
-      `);
-      db.exec(`
-        CREATE TABLE kg_calls (
-          id         INTEGER PRIMARY KEY,
-          source     TEXT NOT NULL,
-          target     TEXT NOT NULL,
-          confidence TEXT
-        );
-        CREATE INDEX kg_calls_source ON kg_calls (source);
-        CREATE INDEX kg_calls_target ON kg_calls (target);
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
-            node_id UNINDEXED,
-            name_tokens,
-            tokenize='ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE kg_symbols_fts (
-            node_id     TEXT,
-            name_tokens TEXT
-          );
-        `);
-      }
-    }
-  }
-];
 function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
@@ -5202,147 +5750,543 @@ function runIndexMigrateCli() {
     process.exit(1);
   }
 }
-if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  runIndexMigrateCli();
-}
+var import_node_child_process, fs2, path3, CURRENT_SCHEMA_VERSION, MIGRATIONS;
+var init_index_migrate = __esm({
+  "../src/modules/migrations/workflows/index-migrate.ts"() {
+    import_node_child_process = require("node:child_process");
+    fs2 = __toESM(require("node:fs"));
+    path3 = __toESM(require("node:path"));
+    CURRENT_SCHEMA_VERSION = 3;
+    MIGRATIONS = [
+      // ── v1: core tables ───────────────────────────────────────────────────────
+      {
+        version: 1,
+        tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+        up(db) {
+          db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+          db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+          try {
+            db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+          } catch {
+            db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+          }
+        }
+      },
+      // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+      //
+      // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+      // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+      // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+      //
+      // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+      // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+      // invalidate function (ensureFederationWikiCache) was removed in
+      // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+      // schema migration is retained (harmless empty table) since altering the
+      // migration ladder is a separate, out-of-scope decision.
+      {
+        version: 2,
+        tables: ["federation_wiki_cache"],
+        up(db) {
+          db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+          db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+        }
+      },
+      // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+      //
+      // Two OPTIONAL acceleration tables projected from the canonical, file-first
+      // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+      // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+      // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+      // remains the source of truth that returns IDENTICAL answers.
+      //
+      //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+      //                    indexed on source AND target so the call-graph BFS
+      //                    (kgTrace / kgDeadCode) is fetched without parsing the
+      //                    whole JSON graph.
+      //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+      //                    node, so identifier search (`process_order` →
+      //                    `processOrder`) is an index lookup, not a full node scan.
+      //                    Tokens are PRE-SPLIT with the shared identifier-aware
+      //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+      //                    document and query side, so the FTS built-in tokenizer
+      //                    only has to whitespace-split — the camel/snake behaviour
+      //                    lives in the (deterministic, model-free) projection feed.
+      {
+        version: 3,
+        tables: ["kg_calls", "kg_symbols_fts"],
+        up(db) {
+          db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+          db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+          try {
+            db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+          } catch {
+            db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+          }
+        }
+      }
+    ];
+    if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+      runIndexMigrateCli();
+    }
+  }
+});
 
 // ../src/modules/migrations/workflows/wiki-importance.ts
-var STRUCTURAL_BASENAMES = sealSet([
-  "index.md",
-  "readme.md",
-  "log.md",
-  "query.md",
-  "transfer-manifest.md"
-], "STRUCTURAL_BASENAMES");
+var STRUCTURAL_BASENAMES;
+var init_wiki_importance = __esm({
+  "../src/modules/migrations/workflows/wiki-importance.ts"() {
+    init_kernel();
+    init_state();
+    STRUCTURAL_BASENAMES = sealSet([
+      "index.md",
+      "readme.md",
+      "log.md",
+      "query.md",
+      "transfer-manifest.md"
+    ], "STRUCTURAL_BASENAMES");
+  }
+});
+
+// ../src/modules/migrations/index.ts
+var init_migrations = __esm({
+  "../src/modules/migrations/index.ts"() {
+    init_index_migrate();
+    init_wiki_importance();
+  }
+});
+
+// ../src/modules/state/workflows/index-cache.ts
+var init_index_cache = __esm({
+  "../src/modules/state/workflows/index-cache.ts"() {
+    init_migrations();
+    init_kernel();
+  }
+});
+
+// ../src/modules/state/index.ts
+var init_state = __esm({
+  "../src/modules/state/index.ts"() {
+    init_atomic_write();
+    init_dependency_graph_reader();
+    init_dependency_graph_schema();
+    init_frontmatter();
+    init_guild_discovery();
+    init_guild_root();
+    init_index_cache();
+  }
+});
+
+// ../src/modules/security/workflows/config.ts
+var init_config = __esm({
+  "../src/modules/security/workflows/config.ts"() {
+    init_state();
+  }
+});
 
 // ../src/modules/security/workflows/events.ts
-var KNOWN_GUILD_HOST_KINDS = Object.freeze([
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector"
-]);
-var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+var KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET;
+var init_events = __esm({
+  "../src/modules/security/workflows/events.ts"() {
+    init_state();
+    init_redact_log();
+    KNOWN_GUILD_HOST_KINDS = Object.freeze([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector"
+    ]);
+    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+  }
+});
+
+// ../src/modules/security/workflows/scrubbed-write.ts
+var init_scrubbed_write = __esm({
+  "../src/modules/security/workflows/scrubbed-write.ts"() {
+    init_secrets();
+    init_config();
+    init_events();
+  }
+});
 
 // ../src/modules/security/workflows/share-set.ts
-var SHARED_SCRUBBED_NAMES = sealSet([
-  "verify.md",
-  "review.md",
-  "provenance.json",
-  "summary.md",
-  "run.yaml",
-  "run-state.json"
-], "SHARED_SCRUBBED_NAMES");
+var SHARED_SCRUBBED_NAMES;
+var init_share_set = __esm({
+  "../src/modules/security/workflows/share-set.ts"() {
+    init_kernel();
+    SHARED_SCRUBBED_NAMES = sealSet([
+      "verify.md",
+      "review.md",
+      "provenance.json",
+      "summary.md",
+      "run.yaml",
+      "run-state.json"
+    ], "SHARED_SCRUBBED_NAMES");
+  }
+});
+
+// ../src/modules/security/workflows/secret-patterns.ts
+var SECRET_PATTERNS;
+var init_secret_patterns = __esm({
+  "../src/modules/security/workflows/secret-patterns.ts"() {
+    SECRET_PATTERNS = Object.freeze([
+      // NOTE: labels deliberately drop the `=` so the redaction replacement
+      // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+      // on a subsequent scrub pass. Idempotency depends on this — every label below
+      // is checked against every pattern above it, and none re-matches.
+      Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+      Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+      Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+      Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+      Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+      Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+      Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+      Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+      // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+      // Round-1 review proved the list above blind to the shapes an inspection
+      // surface is most likely to echo out of a persisted artifact: an
+      // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+      // `<something>_token = …` assignment family. A display surface that renders
+      // a persisted evidence string verbatim leaked all three past the applier.
+      //
+      // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+      // stays specific, and each replacement label is inert against every pattern
+      // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+      // which is what keeps `redact` idempotent.
+      Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+      Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+      Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+      // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+      Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+      Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+      Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+      Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+      Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+      Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+      // High-entropy string heuristic: 40+ hex chars (SHA-like)
+      Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+    ]);
+  }
+});
+
+// ../src/modules/security/workflows/scrub-redact.ts
+var init_scrub_redact = __esm({
+  "../src/modules/security/workflows/scrub-redact.ts"() {
+    init_secret_patterns();
+  }
+});
+
+// ../src/modules/security/index.ts
+var init_security = __esm({
+  "../src/modules/security/index.ts"() {
+    init_safe_object();
+    init_injection_guard();
+    init_scrubbed_write();
+    init_redact_log();
+    init_share_set();
+    init_scrub_redact();
+    init_secret_patterns();
+  }
+});
+
+// ../src/modules/config/workflows/workspace-manifest.ts
+var init_workspace_manifest = __esm({
+  "../src/modules/config/workflows/workspace-manifest.ts"() {
+  }
+});
 
 // ../src/modules/config/workflows/settings-reader.ts
-var yaml = loadYamlApi();
-var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
-var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
-var DISPATCH_HOST_IDS = new Set(
-  HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
-);
-var RESOLVER_TIER1_KEYS = sealSet([
-  "rigor",
-  "auto_approve",
-  "review",
-  "host",
-  "host_mode",
-  "roles",
-  "host_profiles",
-  "initiative_default",
-  "index",
-  "record_status_runs",
-  "codex_skip_enforcement",
-  "agent_mode",
-  "workspace",
-  "models",
-  "security",
-  "secrets_policy",
-  "mcp",
-  "capability",
-  // S5 (cap-loc-D04) — capability localization policy
-  "statusline",
-  // R-009
-  "adversarial_review_provider",
-  // R-008
-  "loops",
-  "loop_cap",
-  "codex_cap",
-  "defaults"
-], "RESOLVER_TIER1_KEYS");
+var yaml, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, DISPATCH_HOST_IDS, RESOLVER_TIER1_KEYS;
+var init_settings_reader = __esm({
+  "../src/modules/config/workflows/settings-reader.ts"() {
+    init_host_runtime();
+    init_host_runtime();
+    init_host_runtime();
+    init_security();
+    init_config_defaults();
+    init_kernel();
+    init_workspace_manifest();
+    yaml = loadYamlApi();
+    VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
+    KNOWN_HOST_IDS2 = new Set(HOST_IDS);
+    DISPATCH_HOST_IDS = new Set(
+      HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+    );
+    RESOLVER_TIER1_KEYS = sealSet([
+      "rigor",
+      "auto_approve",
+      "review",
+      "host",
+      "host_mode",
+      "roles",
+      "host_profiles",
+      "initiative_default",
+      "index",
+      "record_status_runs",
+      "codex_skip_enforcement",
+      "agent_mode",
+      "workspace",
+      "models",
+      "security",
+      "secrets_policy",
+      "mcp",
+      "capability",
+      // S5 (cap-loc-D04) — capability localization policy
+      "statusline",
+      // R-009
+      "adversarial_review_provider",
+      // R-008
+      "loops",
+      "loop_cap",
+      "codex_cap",
+      "defaults",
+      "model_policy"
+      // T5 dynamic-host-model-routing: guild.model_policy.v2 (optional closed key)
+    ], "RESOLVER_TIER1_KEYS");
+  }
+});
 
 // ../src/modules/telemetry/workflows/guild-trace-events.ts
-var GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
-  "guild.trace.dispatch.v1",
-  "guild.trace.recall.v1",
-  "guild.trace.recall_decision.v1",
-  "guild.trace.config_resolution.v1",
-  "guild.trace.security_decision.v1",
-  "guild.trace.degradation.v1"
-]);
+var GUILD_TRACE_SCHEMA_VERSIONS;
+var init_guild_trace_events = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
+    GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
+      "guild.trace.dispatch.v1",
+      "guild.trace.recall.v1",
+      "guild.trace.recall_decision.v1",
+      "guild.trace.config_resolution.v1",
+      "guild.trace.security_decision.v1",
+      "guild.trace.degradation.v1",
+      "guild.trace.model_inspection.v1"
+    ]);
+  }
+});
+
+// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+var init_guild_trace_emit = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-emit.ts"() {
+    init_guild_trace_events();
+  }
+});
 
 // ../src/modules/telemetry/workflows/receipt-journal.ts
-var RECEIPT_DISPOSITIONS = Object.freeze([
-  "succeeded",
-  "refused",
-  "unsupported",
-  "failed",
-  "degraded"
-]);
-var OBSERVATION_STATES = Object.freeze([
-  "checked_clean",
-  "not_applicable",
-  "not_observed",
-  "observation_failed"
-]);
-var RECEIPT_EVENT_NAMES = Object.freeze([
-  "session.start",
-  "prompt.submit",
-  "tool.before",
-  "tool.after",
-  "context.compact",
-  "task.dispatch",
-  "task.collect",
-  "run.resume",
-  "run.stop",
-  "package.render",
-  "package.install",
-  "package.activate",
-  "package.update",
-  "runtime.verify",
-  "receipt.append",
-  "receipt.reconcile",
-  "migration.shadow",
-  "migration.cutover",
-  "migration.rollback"
-]);
-var RECEIPT_OUTCOME_TYPES = Object.freeze([
-  "guild.lifecycle_outcome.v1",
-  "guild.normalized_event_outcome.v1",
-  "guild.support_transition_outcome.v1",
-  "guild.capability_outcome.v1",
-  "guild.policy_outcome.v1",
-  "guild.receipt_outcome.v1",
-  "guild.reconciliation_outcome.v1",
-  "guild.boundary_outcome.v1",
-  "guild.migration_outcome.v1",
-  "guild.version_compatibility_outcome.v1"
-]);
+var RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES;
+var init_receipt_journal = __esm({
+  "../src/modules/telemetry/workflows/receipt-journal.ts"() {
+    init_state();
+    RECEIPT_DISPOSITIONS = Object.freeze([
+      "succeeded",
+      "refused",
+      "unsupported",
+      "failed",
+      "degraded"
+    ]);
+    OBSERVATION_STATES = Object.freeze([
+      "checked_clean",
+      "not_applicable",
+      "not_observed",
+      "observation_failed"
+    ]);
+    RECEIPT_EVENT_NAMES = Object.freeze([
+      "session.start",
+      "prompt.submit",
+      "tool.before",
+      "tool.after",
+      "context.compact",
+      "task.dispatch",
+      "task.collect",
+      "run.resume",
+      "run.stop",
+      "package.render",
+      "package.install",
+      "package.activate",
+      "package.update",
+      "runtime.verify",
+      "receipt.append",
+      "receipt.reconcile",
+      "migration.shadow",
+      "migration.cutover",
+      "migration.rollback"
+    ]);
+    RECEIPT_OUTCOME_TYPES = Object.freeze([
+      "guild.lifecycle_outcome.v1",
+      "guild.normalized_event_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.capability_outcome.v1",
+      "guild.policy_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.reconciliation_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.version_compatibility_outcome.v1"
+    ]);
+  }
+});
+
+// ../src/modules/telemetry/workflows/receipt-reconcile.ts
+var init_receipt_reconcile = __esm({
+  "../src/modules/telemetry/workflows/receipt-reconcile.ts"() {
+    init_receipt_journal();
+  }
+});
 
 // ../src/modules/telemetry/workflows/debug-bundle.ts
-var DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
-  "capability_snapshot",
-  "normalized_event",
-  "policy_decision",
-  "transport_attempt",
-  "artifact",
-  "conformance"
-]);
+var DEBUG_BUNDLE_SECTION_KINDS;
+var init_debug_bundle = __esm({
+  "../src/modules/telemetry/workflows/debug-bundle.ts"() {
+    init_receipt_journal();
+    DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
+      "capability_snapshot",
+      "normalized_event",
+      "policy_decision",
+      "transport_attempt",
+      "artifact",
+      "conformance"
+    ]);
+  }
+});
+
+// ../src/modules/telemetry/index.ts
+var init_telemetry = __esm({
+  "../src/modules/telemetry/index.ts"() {
+    init_guild_trace_emit();
+    init_guild_trace_events();
+    init_receipt_journal();
+    init_receipt_reconcile();
+    init_debug_bundle();
+  }
+});
+
+// ../src/modules/config/workflows/settings-resolver.ts
+var init_settings_resolver = __esm({
+  "../src/modules/config/workflows/settings-resolver.ts"() {
+    init_settings_reader();
+    init_settings_reader();
+    init_telemetry();
+    init_telemetry();
+  }
+});
+
+// ../src/modules/config/workflows/tier-model.ts
+var init_tier_model = __esm({
+  "../src/modules/config/workflows/tier-model.ts"() {
+    init_host_runtime();
+  }
+});
+
+// ../src/modules/config/index.ts
+var init_config2 = __esm({
+  "../src/modules/config/index.ts"() {
+    init_config_defaults();
+    init_config_validation();
+    init_settings_resolver();
+    init_tier_model();
+  }
+});
+
+// ../src/modules/lifecycle/workflows/run-binding.ts
+var init_run_binding = __esm({
+  "../src/modules/lifecycle/workflows/run-binding.ts"() {
+  }
+});
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
 function runDir(root, runId) {
@@ -5359,8 +6303,6 @@ function yamlScalar(v) {
   if (/^[^\s#:][^#]*$/.test(v) && !v.includes(": ") && !/[:#]$/.test(v)) return v;
   return JSON.stringify(v);
 }
-var CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
-var GATE_TOKEN = /^[a-z][a-z0-9-]{0,63}$/;
 function writeGateBlock(raw, gate, rec) {
   const lines = raw.split("\n");
   const idx = lines.findIndex((l) => l.startsWith("gates:"));
@@ -5399,8 +6341,63 @@ function appendGateOutcome(fs4, root, runId, gate, record) {
   fs4.writeFile(p, next);
   return true;
 }
+var path4, CANONICAL_PHASES, GATE_TOKEN;
+var init_run_lifecycle = __esm({
+  "../src/modules/lifecycle/workflows/run-lifecycle.ts"() {
+    path4 = __toESM(require("path"));
+    init_kernel();
+    init_host_runtime();
+    init_config2();
+    init_state();
+    init_run_binding();
+    init_security();
+    CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
+    GATE_TOKEN = /^[a-z][a-z0-9-]{0,63}$/;
+  }
+});
 
 // gate-outcome-writer.ts
+var gate_outcome_writer_exports = {};
+__export(gate_outcome_writer_exports, {
+  main: () => main,
+  parseGateOutcome: () => parseGateOutcome
+});
+module.exports = __toCommonJS(gate_outcome_writer_exports);
+var fs3 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+
+// lib/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  const resolvedStart = path.resolve(startCwd);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      if (fs.existsSync(guildDir)) {
+        try {
+          if (fs.statSync(guildDir).isDirectory()) {
+            nearestGuildDir = current;
+          }
+        } catch {
+        }
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return nearestGuildDir ?? resolvedStart;
+    }
+    current = parent;
+  }
+}
+
+// gate-outcome-writer.ts
+init_run_lifecycle();
 function readCurrentRunId(cwd) {
   const sentinelPath = path5.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
   try {
