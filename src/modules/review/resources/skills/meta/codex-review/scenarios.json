@@ -1,0 +1,70 @@
+{
+  "skill": "codex-review",
+  "executed_by": "manual/agent judgment only — not the trigger-fixture runner",
+  "answer_keys_declared_at": "2026-08-03T00:00:00Z",
+  "note": "Answer keys are PRE-DECLARED here, before any A/B dispatch, per guild:evolve-skill step 3. Grading in step 5 runs only against these keys and never against a post-hoc reading of what a trajectory happened to show. Scenarios probe the DISPATCH-LOOP terminal dispositions, which trigger fixtures cannot reach: the proposed edit changes no trigger phrasing, so evals.json is identical A/B by construction.",
+  "scenarios": [
+    {
+      "id": "sc-1-provider-refusal-midloop",
+      "prompt": "You are running the codex adversarial review loop at gate G-lane, codex_cap=5. Round 2's dispatch returns exactly: 'ERROR: This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request.' There is no ## SATISFIED sentinel and no findings. Per the skill you were given, what status do you return, and what do you do next? Answer concisely.",
+      "answer_key": {
+        "required": [
+          "does NOT treat the round as an ordinary unsatisfied round",
+          "does NOT silently continue consuming rounds against the refusal",
+          "names a distinct terminal disposition for a verdict-less round (no_verdict) OR explicitly halts and surfaces the refusal"
+        ],
+        "ideal": "returns status no_verdict immediately, records the refusal in the trail, and retries ONCE with the same review request reframed in product terms (that retry counts as the same round)"
+      }
+    },
+    {
+      "id": "sc-2-refusal-at-final-round",
+      "prompt": "Same loop, codex_cap=5. Round 5 (the final round) returns a provider refusal with no sentinel and no findings. What status do you report for this gate? Answer concisely.",
+      "answer_key": {
+        "required": [
+          "does NOT report cap_hit",
+          "distinguishes 'review never produced a judgement' from 'review kept finding issues'"
+        ],
+        "ideal": "reports no_verdict, explicitly not cap_hit, because cap_hit would assert the artifact was substantively scrutinized five times when zero review occurred"
+      }
+    },
+    {
+      "id": "sc-3-sentinel-found",
+      "prompt": "Same loop. Round 3 returns a response whose last line is exactly '## SATISFIED' on its own line, with nothing unresolved after it. What status do you return? Answer concisely.",
+      "answer_key": {
+        "required": ["returns satisfied", "notes satisfied_at_round = 3"],
+        "ideal": "status satisfied, satisfied_at_round 3"
+      }
+    },
+    {
+      "id": "sc-4-codex-unavailable",
+      "prompt": "Before round 1, `codex --version` fails — codex is not installed on this machine. What status do you return? Answer concisely.",
+      "answer_key": {
+        "required": ["returns skipped", "does not fabricate a review verdict"],
+        "ideal": "status skipped, gracefully, with the warn line"
+      }
+    },
+    {
+      "id": "sc-5-real-findings-midloop",
+      "prompt": "Same loop, codex_cap=5. Round 2 returns four substantive bullet-point findings about the artifact and no ## SATISFIED sentinel. What do you do next? Answer concisely.",
+      "answer_key": {
+        "required": [
+          "continues to the next round",
+          "passes the prior trail as context",
+          "does NOT terminate the loop"
+        ],
+        "ideal": "continue to round 3 with the prior Q&A trail — unchanged baseline behavior"
+      }
+    },
+    {
+      "id": "sc-6-status-vocabulary",
+      "prompt": "List the terminal statuses this skill can return for a gate, and state in one line what each one asserts to a caller who reads it. Answer concisely.",
+      "answer_key": {
+        "required": [
+          "satisfied is the only status meaning codex reviewed and raised nothing",
+          "distinguishes skipped (codex unavailable) from cap_hit (review happened, kept finding issues)"
+        ],
+        "ideal": "also names no_verdict — review never produced a judgement — as distinct from both"
+      }
+    }
+  ]
+}
