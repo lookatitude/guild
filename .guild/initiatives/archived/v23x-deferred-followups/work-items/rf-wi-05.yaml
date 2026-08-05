@@ -1,0 +1,18 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: rf-wi-05
+initiative_id: v23x-deferred-followups
+title: "G5 — run-state hygiene: sentinel clear, gates writer, newCustomInstructions channel, per-tool lifecycle bound"
+type: implementation
+status: done
+owner: hook-engineer
+depends_on: []
+acceptance:
+  - "per goals.md §G5 — every enumerated sub-item shipped or explicitly re-deferred with a filed issue"
+  - "red-first regression evidence for defect-shaped items; enforcement as deterministic code"
+  - "codex adversarial review RAN; PR to next; docs/v2 deferred callout flipped in-rollout where applicable"
+evidence_refs:
+  - "goals.md §G5"
+  - "PR #83 (merged to next) — current-run-id sentinel compare-and-cleared at close; run.yaml gates writer; PreCompact newCustomInstructions channel; per-tool lifecycle bound; codex capped/2"
+  - "receipt: runs/run-305333a3-8707-4982-9c65-0ed121c9748f/handoffs/rf-wi-05.md"
+  - "docs/v2 flipped: dispatch-execution.html sentinel callout (workspace PR #24)"
+  - "re-deferred → issue #92 (live-session verify PreCompact newCustomInstructions is consumed by the host compaction path)"

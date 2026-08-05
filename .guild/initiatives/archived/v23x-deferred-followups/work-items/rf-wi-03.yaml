@@ -1,0 +1,18 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: rf-wi-03
+initiative_id: v23x-deferred-followups
+title: "G3 — GUILD_TIER/GUILD_TIER_SCORE producers + structured dispatch marker; prompt-only drift becomes blockable"
+type: implementation
+status: done
+owner: tooling-engineer
+depends_on: []
+acceptance:
+  - "per goals.md §G3 — every enumerated sub-item shipped or explicitly re-deferred with a filed issue"
+  - "red-first regression evidence for defect-shaped items; enforcement as deterministic code"
+  - "codex adversarial review RAN; PR to next; docs/v2 deferred callout flipped in-rollout where applicable"
+evidence_refs:
+  - "goals.md §G3"
+  - "PR #85 (merged to next) — GUILD_TIER/_SCORE on lane env; universal GUILD_DISPATCH_PRODUCER marker; prompt-only rung blockable; codex SATISFIED/4"
+  - "receipt: runs/run-305333a3-8707-4982-9c65-0ed121c9748f/handoffs/rf-wi-03.md"
+  - "docs/v2 flipped: dispatch-execution.html + architecture/modules/dispatch.html (workspace PR #24)"
+  - "re-deferred → issue #91 (mark the direct-subagent D5 rung — marker not yet on that class); issue #93 (register defaults.dispatch.block_unmarked_lanes — block is opt-in via env only)"
