@@ -1,0 +1,18 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: rf-wi-04
+initiative_id: v23x-deferred-followups
+title: "G4 — remote hook-install verification + teardown confirmation, then remote pane flags; codex precondition documented"
+type: implementation
+status: done
+owner: tooling-engineer
+depends_on: []
+acceptance:
+  - "per goals.md §G4 — every enumerated sub-item shipped or explicitly re-deferred with a filed issue"
+  - "red-first regression evidence for defect-shaped items; enforcement as deterministic code"
+  - "codex adversarial review RAN; PR to next; docs/v2 deferred callout flipped in-rollout where applicable"
+evidence_refs:
+  - "goals.md §G4"
+  - "PR #88 (merged to next) — remote hook-install preflight (probeHooks) + killed/orphaned teardown verdict; remote Claude flags opt-in behind verified hooks (default bare); codex SATISFIED/5"
+  - "receipt: runs/run-305333a3-8707-4982-9c65-0ed121c9748f/handoffs/rf-wi-04.md"
+  - "docs/v2 flipped: security.html + architecture/modules/dispatch.html (workspace PR #24)"
+  - "codex-half = accepted refusal-with-rationale (feasible-but-not-wired, corrected from 'infeasible'); re-deferred → issue #94 (wire codex-side PreToolUse deny + tighten remote hook proof)"

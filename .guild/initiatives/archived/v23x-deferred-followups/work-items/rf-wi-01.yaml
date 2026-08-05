@@ -1,0 +1,17 @@
+# schema: WorkItem (scripts/lib/initiative-workitems.ts)
+id: rf-wi-01
+initiative_id: v23x-deferred-followups
+title: "G1 — register defaults.lean_lead.* / defaults.lifecycle_gate.* / host_mode in the canonical config schema"
+type: implementation
+status: done
+owner: tooling-engineer
+depends_on: []
+acceptance:
+  - "per goals.md §G1 — every enumerated sub-item shipped or explicitly re-deferred with a filed issue"
+  - "red-first regression evidence for defect-shaped items; enforcement as deterministic code"
+  - "codex adversarial review RAN; PR to next; docs/v2 deferred callout flipped in-rollout where applicable"
+evidence_refs:
+  - "goals.md §G1"
+  - "PR #87 (merged to next) — lean_lead/lifecycle_gate/host_mode registered in the closed schema; guards read resolved config; codex SATISFIED/4"
+  - "receipt: runs/run-305333a3-8707-4982-9c65-0ed121c9748f/handoffs/rf-wi-01.md"
+  - "docs/v2 flipped: config-surfaces.html + security.html (workspace PR #24)"
