@@ -11,6 +11,7 @@ import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
 import { buildPrompt } from "../../../src/modules/prompting/workflows/team-prompt";
 import type {
   AdapterResolver,
+  PaneAdapter,
   LaunchMode,
   ParsedTmuxCommand,
   PaneSpec,
@@ -139,6 +140,24 @@ export function resolveClaudeTeamLaunchArgs(
   config: RuntimePermissionConfig = RUNTIME_DEFAULT_CONFIG,
 ): string[] {
   return resolveHostLaunch("claude", resolveTeamPaneHostMode(config)).args;
+}
+
+/**
+ * ISSUE #94 — the Codex launch argv for a local team pane, resolved from the
+ * SAME `host_mode` ladder as Claude's. Codex used to be excluded here on
+ * purpose: with no PreToolUse enforcement on that host, handing a codex pane a
+ * bypass flag was a net safety regression. Now that the deny bridge is wired,
+ * the exclusion is obsolete — but this function is only HALF the decision.
+ *
+ * Returning args does NOT mean a pane gets them. `CodexPaneAdapter` applies them
+ * only behind its own gates: an explicit opt-in (these args), a scoped pane, and
+ * a probe proving the deny actually executes. Whatever this resolves to, an
+ * unproven box still launches bare.
+ */
+export function resolveCodexTeamLaunchArgs(
+  config: RuntimePermissionConfig = RUNTIME_DEFAULT_CONFIG,
+): string[] {
+  return resolveHostLaunch("codex", resolveTeamPaneHostMode(config)).args;
 }
 
 export function paneCommand(
@@ -284,6 +303,35 @@ export function composeTmuxCommands(opts: {
         resolveClaudeTeamLaunchArgs(permissionConfig),
         model,
       );
+    }
+    // ISSUE #94: a codex pane's opt-in bypass argv is resolved HERE, from the
+    // same permissionConfig-driven host_mode ladder the claude branch above
+    // uses. The adapter still withholds it unless the pane is scoped AND its
+    // PreToolUse deny probe passes — see CodexPaneAdapter.command().
+    if (hostKind === "codex" && resolveAdapter) {
+      // Duck-typed rather than `instanceof CodexPaneAdapter`: pane-adapter.ts
+      // already imports `paneCommand` from this file, so importing its class
+      // back would close an import cycle for a one-line type test.
+      const adapter = resolveAdapter("codex") as PaneAdapter & {
+        withLaunchArgs?: (args: string[]) => PaneAdapter;
+      };
+      const codexAdapter =
+        typeof adapter.withLaunchArgs === "function"
+          ? adapter.withLaunchArgs(resolveCodexTeamLaunchArgs(permissionConfig))
+          : adapter;
+      return codexAdapter.command({
+        name: spec?.name ?? "orchestrator",
+        scope: spec ? "lane" : "orchestrator",
+        runId,
+        slug,
+        prompt,
+        hostKind,
+        ...(spec?.taskId ? { taskId: spec.taskId } : {}),
+        ...(spec?.capability_scope ? { capability_scope: spec.capability_scope } : {}),
+        ...(spec?.name ? { specialist: spec.name } : {}),
+        ...(model ? { model } : {}),
+        ...(modelParams ? { modelParams } : {}),
+      });
     }
     if (!resolveAdapter) {
       // Pre-#54 fallback contract, preserved verbatim: no resolver and a

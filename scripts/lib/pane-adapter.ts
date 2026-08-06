@@ -73,10 +73,15 @@ const defaultRun: RunFn = (cmd, args, opts = {}) => {
   };
 };
 
-/** Minimal fs seam — only the two operations used by CodexPaneAdapter.preflight(). */
+/**
+ * Minimal fs seam — the operations used by CodexPaneAdapter.preflight() plus
+ * (issue #94) the codex PreToolUse enforcement probe, which must READ the codex
+ * hooks manifest to learn which command is registered.
+ */
 export interface FsSeam {
   existsSync(path: string): boolean;
   statSync(path: string): { size: number };
+  readFileSync?(path: string, encoding: "utf8"): string;
 }
 
 export interface AdapterOpts {
@@ -86,6 +91,20 @@ export interface AdapterOpts {
   env?: NodeJS.ProcessEnv;
   /** Test seam: override filesystem operations (defaults to node:fs). */
   fs?: FsSeam;
+  /**
+   * ISSUE #94 — opt-in permission-bypass argv for a CODEX pane (e.g.
+   * `["--dangerously-bypass-approvals-and-sandbox"]`).
+   *
+   * TWO GATES, exactly mirroring the remote-Claude design in
+   * RemoteTeamBackend.claudeLaunchArgs (rf-wi-04 items 1+3). The flag reaches a
+   * codex pane ONLY when BOTH hold:
+   *   (a) the caller EXPLICITLY passed it here, AND
+   *   (b) probeCodexPreToolUseEnforcement() proves the deny actually EXECUTES.
+   *
+   * DEFAULT is `[]` (bare) — the safe posture, and byte-identical to the
+   * pre-issue-#94 command. Withholding the flag only ever launches bare.
+   */
+  codexLaunchArgs?: string[];
 }
 
 // ── ClaudePaneAdapter ─────────────────────────────────────────────────────────
@@ -235,6 +254,494 @@ export class ClaudePaneAdapter implements PaneAdapter {
   }
 }
 
+// ── ISSUE #94: codex PreToolUse enforcement probe ─────────────────────────────
+
+/** The bypass flag a codex pane may be granted, and ONLY behind the probe. */
+export const CODEX_BYPASS_FLAG = "--dangerously-bypass-approvals-and-sandbox";
+
+/**
+ * Shipped WITH the bypass, never alone. Codex runs an enabled hook only when it
+ * carries persisted hook trust — granted interactively and readable nowhere the
+ * CLI exposes — so without this a bypassed pane's Guild gate can silently no-op.
+ * See CodexPaneAdapter.command() for the full rationale.
+ */
+export const CODEX_HOOK_TRUST_FLAG = "--dangerously-bypass-hook-trust";
+
+/** Outcome of probeCodexPreToolUseEnforcement — every check is separately reportable. */
+export interface CodexEnforcementProbeResult {
+  /** True iff ALL FOUR checks pass. The only thing the bypass gate reads. */
+  enforced: boolean;
+  /** Operator-facing explanation; always populated, pass or fail. */
+  detail: string;
+  /** The manifest the verdict was drawn from, when one was found. */
+  manifest?: string;
+  checks: {
+    /** The codex hooks manifest exists AND registers a PreToolUse command. */
+    manifest_registers_pretooluse: boolean;
+    /** The registered command's script is actually on disk. */
+    bridge_present: boolean;
+    /**
+     * EVERY hook the manifest registers resolves to a Guild-shipped script.
+     * Gates the hook-trust flag: proving Guild's bridge enforces says nothing
+     * about a third party's hook in the same manifest.
+     */
+    sole_owner: boolean;
+    /** The bridge, when EXECUTED, really emits permissionDecision:"deny". */
+    deny_functional: boolean;
+    /**
+     * ...and STILL denies under `permission_mode:"bypassPermissions"` — the mode
+     * the granted pane actually runs in. Distinct fact: the project's
+     * `bypass_permissions_policy` decides this one, and its default (`audit`)
+     * ALLOWS an out-of-scope call.
+     */
+    deny_under_bypass: boolean;
+  };
+}
+
+export interface CodexProbeOpts {
+  env?: NodeJS.ProcessEnv;
+  fs?: FsSeam;
+  run?: RunFn;
+  /**
+   * The project root whose security config the bypass leg is judged against.
+   * Defaults to `process.cwd()`. Read-only: the probe writes nothing here (its
+   * run dir is always a scratch directory).
+   */
+  cwd?: string;
+  /**
+   * Where a Guild install may have written its codex manifest, beyond
+   * `$CODEX_HOME/hooks.json`. Defaults to the packaged
+   * `<plugin-root>/hooks/codex-hooks.json` resolved from the env.
+   */
+  manifestPaths?: string[];
+}
+
+interface CodexHookManifest {
+  hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>;
+}
+
+/** Extract the first `PreToolUse` command string from a codex hooks manifest. */
+function preToolUseCommandFrom(manifestRaw: string): string | null {
+  try {
+    const m = JSON.parse(manifestRaw) as CodexHookManifest;
+    const cmd = m.hooks?.["PreToolUse"]?.[0]?.hooks?.[0]?.command;
+    return typeof cmd === "string" && cmd.trim().length > 0 ? cmd.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Every hook command a codex manifest registers, across all events. */
+function allHookCommandsFrom(manifestRaw: string): string[] {
+  try {
+    const m = JSON.parse(manifestRaw) as CodexHookManifest;
+    return Object.values(m.hooks ?? {})
+      .flat()
+      .flatMap((g) => g?.hooks ?? [])
+      .map((h) => (h?.command ?? "").trim())
+      .filter((c) => c.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+
+/**
+ * Expand `${NAME}` / `${NAME:-DEFAULT}` references, where DEFAULT may itself
+ * contain further references — the `${A:-${B:-${C}}}` chain Guild's generated
+ * hook commands use.
+ *
+ * OUTERMOST-FIRST, matching the shell: when `A` is set, `B` and `C` are never
+ * consulted, so an unset `C` must NOT sink the expansion. An innermost-first
+ * pass got this backwards and rejected Guild's own install.
+ *
+ * Returns null when a reference is genuinely unresolvable (unset, no default) —
+ * "cannot resolve" must read as "cannot prove", never as an empty string.
+ */
+function expandVarRefs(input: string, env: NodeJS.ProcessEnv): string | null {
+  let out = "";
+  let i = 0;
+  while (i < input.length) {
+    const open = input.indexOf("${", i);
+    if (open === -1) {
+      out += input.slice(i);
+      break;
+    }
+    out += input.slice(i, open);
+    // Find the matching close brace, honouring nesting.
+    let depth = 0;
+    let close = -1;
+    for (let j = open + 1; j < input.length; j += 1) {
+      if (input[j] === "{") depth += 1;
+      else if (input[j] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          close = j;
+          break;
+        }
+      }
+    }
+    if (close === -1) return null; // unbalanced — refuse to guess
+    const body = input.slice(open + 2, close);
+    const sep = body.indexOf(":-");
+    const name = (sep === -1 ? body : body.slice(0, sep)).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
+    const value = (env[name] ?? "").trim();
+    if (value.length > 0) {
+      out += value;
+    } else if (sep === -1) {
+      return null; // unset, no default
+    } else {
+      const fallback = expandVarRefs(body.slice(sep + 2), env);
+      if (fallback === null) return null;
+      out += fallback;
+    }
+    i = close + 1;
+  }
+  return out;
+}
+
+/**
+ * Resolve the script path out of a registered hook command such as
+ * `node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/dist/x.js"`.
+ *
+ * ORDER MATTERS, and getting it wrong is exploitable: expanding variables into
+ * the command string BEFORE parsing quotes lets a quote character carried in an
+ * env VALUE be read as shell syntax, so the probe can resolve — and successfully
+ * execute — a path that is not the one the shell would run. So the quoted token
+ * is extracted FIRST, from the unexpanded command, and variables are expanded
+ * only INSIDE that token, where their contents are inert text.
+ *
+ * An unset variable with no `:-` default yields null ("cannot resolve" ⇒ cannot
+ * prove ⇒ FAIL), never the empty string — an empty expansion would turn
+ * `${UNSET}/hooks/dist/x.js` into a plausible absolute path and make the verdict
+ * depend on whether that path happens to exist.
+ */
+function scriptPathFrom(command: string, env: NodeJS.ProcessEnv): string | null {
+  const quoted = command.match(/"([^"]*)"|'([^']*)'/);
+  const token = quoted
+    ? (quoted[1] ?? quoted[2] ?? "")
+    : (command.split(/\s+/).find((t) => t.endsWith(".js")) ?? "");
+  if (token.length === 0) return null;
+
+  const expanded = expandVarRefs(token, env);
+  if (expanded === null || expanded.length === 0) return null;
+  const out = expanded;
+  // A value that smuggled shell metacharacters in is not a path we can vouch for.
+  if (/["'`$\\]/.test(out)) return null;
+  return out;
+}
+
+
+/** realpath, or null when the path does not exist / cannot be resolved. */
+function realpathOrNull(p: string): string | null {
+  try {
+    return nodefs.realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+/** True when `child` is `root` itself or lies beneath it. Both must be real paths. */
+function isInside(root: string, child: string): boolean {
+  const rel = nodepath.relative(root, child);
+  return rel === "" || (!rel.startsWith("..") && !nodepath.isAbsolute(rel));
+}
+
+/**
+ * ISSUE #94 — prove that codex-side PreToolUse enforcement is REAL on this box.
+ *
+ * WHY THIS IS NOT A FILE-PRESENCE CHECK. On-box (codex-cli 0.146.0), codex gates
+ * hooks behind PERSISTED HOOK TRUST. With a valid hooks.json registering a
+ * working deny hook, the raw binary ran the tool ANYWAY: the hook never
+ * executed, produced no output, and emitted NO WARNING. Presence is therefore a
+ * false positive on codex, so this probe ends with an EXECUTION test.
+ *
+ * Four checks, ALL required:
+ *   1. manifest_registers_pretooluse — a Guild codex manifest (either
+ *      `$CODEX_HOME/hooks.json` or the packaged `<plugin>/hooks/codex-hooks.json`)
+ *      registers a PreToolUse command. Guild's generated command carries
+ *      `${GUILD_PLUGIN_ROOT:-…}` chains, so they are EXPANDED from the env
+ *      rather than rejected.
+ *   2. bridge_present  — the registered script exists on disk.
+ *   3. sole_owner      — EVERY hook the manifest registers resolves to a script
+ *      under the same Guild plugin root. Proving Guild's bridge enforces says
+ *      nothing about a third party's hook sharing that manifest, and the pane
+ *      grant carries `--dangerously-bypass-hook-trust`, which would run theirs
+ *      too. A foreign hook therefore withholds the whole grant.
+ *   4. deny_functional — executing the bridge yields a parsed PreToolUse
+ *      response whose decision is exactly `deny`, on a zero exit status.
+ *
+ * FAIL-CLOSED by construction: every error path (missing file, unreadable
+ * manifest, unresolvable command, non-zero exit, unparseable or unexpected
+ * stdout, thrown exception) leaves `enforced:false`. The only way to `true` is
+ * an observed deny from a manifest Guild solely owns.
+ */
+export function probeCodexPreToolUseEnforcement(
+  opts: CodexProbeOpts = {},
+): CodexEnforcementProbeResult {
+  const env = opts.env ?? process.env;
+  const fsSeam = opts.fs ?? nodefs;
+  const run = opts.run ?? defaultRun;
+  const checks = {
+    manifest_registers_pretooluse: false,
+    bridge_present: false,
+    sole_owner: false,
+    deny_functional: false,
+    deny_under_bypass: false,
+  };
+  const fail = (detail: string): CodexEnforcementProbeResult => ({
+    enforced: false,
+    detail,
+    checks,
+  });
+  const readSeam = (p: string): string =>
+    fsSeam.readFileSync ? fsSeam.readFileSync(p, "utf8") : nodefs.readFileSync(p, "utf8");
+
+  // 1. SOME Guild codex manifest registers PreToolUse.
+  //
+  // Two locations, because they are two real deployments: an operator-installed
+  // `$CODEX_HOME/hooks.json`, and the manifest the generated codex package ships
+  // as `<plugin-root>/hooks/codex-hooks.json` (per-host-packaging points codex
+  // at that path). Reading only the first made the probe reject Guild's own
+  // shipped install.
+  const codexHome = (env["CODEX_HOME"] ?? "").trim() || nodepath.join(os.homedir(), ".codex");
+  const pluginRoot = (
+    env["GUILD_PLUGIN_ROOT"] ??
+    env["PLUGIN_ROOT"] ??
+    env["CLAUDE_PLUGIN_ROOT"] ??
+    ""
+  ).trim();
+  const candidates =
+    opts.manifestPaths ??
+    [
+      nodepath.join(codexHome, "hooks.json"),
+      ...(pluginRoot.length > 0 ? [nodepath.join(pluginRoot, "hooks", "codex-hooks.json")] : []),
+    ];
+
+  // EVERY candidate that exists is read, not just the first with a PreToolUse
+  // entry. Codex loads them all, so an ownership proof drawn from one manifest
+  // says nothing about a foreign hook sitting in the other — and the grant
+  // carries a flag that would run that foreign hook untrusted.
+  const present: Array<{ path: string; raw: string }> = [];
+  for (const candidate of candidates) {
+    try {
+      if (!fsSeam.existsSync(candidate)) continue;
+      present.push({ path: candidate, raw: readSeam(candidate) });
+    } catch {
+      return fail(
+        `codex PreToolUse enforcement NOT proven: ${candidate} exists but cannot be read, ` +
+          `so its hooks cannot be vouched for. Codex panes launch BARE.`,
+      );
+    }
+  }
+  const registering = present.find((m) => preToolUseCommandFrom(m.raw) !== null);
+  const command = registering ? preToolUseCommandFrom(registering.raw) : null;
+  if (registering === undefined || command === null) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: no codex hooks manifest registering a ` +
+        `PreToolUse hook was found (looked at ${candidates.join(", ") || "no candidate paths"}). ` +
+        `Install/refresh the Guild codex package. Codex panes launch BARE (bypass withheld).`,
+    );
+  }
+  const manifestPath = registering.path;
+  checks.manifest_registers_pretooluse = true;
+
+  // 2. the registered bridge is on disk, INSIDE a root we did not learn from it.
+  //
+  // The ownership root must be independent of the command being vetted. An
+  // earlier draft derived it by walking three parents up from the registered
+  // script — self-authenticating, and trivially defeated: a hook registered at
+  // `/tmp/x.js` yields the root `/`, under which every path on the box is
+  // "Guild's". The root now comes from the environment (the same plugin-root
+  // chain the install uses), realpath-resolved so a symlink cannot escape it.
+  const trustedRoot = pluginRoot.length > 0 ? realpathOrNull(pluginRoot) : null;
+  if (trustedRoot === null) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: no resolvable Guild plugin root ` +
+        `(GUILD_PLUGIN_ROOT / PLUGIN_ROOT / CLAUDE_PLUGIN_ROOT). Without one there is no ` +
+        `independent way to tell Guild's hooks from anyone else's, and the grant carries ` +
+        `${CODEX_HOOK_TRUST_FLAG}. Codex panes launch BARE.`,
+    );
+  }
+  const script = scriptPathFrom(command, env);
+  const scriptReal = script === null ? null : realpathOrNull(script);
+  if (script === null || scriptReal === null || !fsSeam.existsSync(script)) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: the PreToolUse command in ${manifestPath} ` +
+        `(${command}) does not resolve to a script on disk — the issue-#55 defect class ` +
+        `(a signal whose binary is absent can never fire). If the command uses ` +
+        `\${GUILD_PLUGIN_ROOT}, export it for this process.`,
+    );
+  }
+  if (!isInside(trustedRoot, scriptReal)) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: the registered PreToolUse script ${scriptReal} ` +
+        `is outside the Guild plugin root ${trustedRoot}. Guild will not vouch for a bridge ` +
+        `it did not ship. Codex panes launch BARE.`,
+    );
+  }
+  checks.bridge_present = true;
+
+  // 3. Guild solely owns EVERY manifest codex will load.
+  const foreign: string[] = [];
+  for (const manifest of present) {
+    for (const cmd of allHookCommandsFrom(manifest.raw)) {
+      const p = scriptPathFrom(cmd, env);
+      const real = p === null ? null : realpathOrNull(p);
+      if (real === null || !isInside(trustedRoot, real)) {
+        foreign.push(`${manifest.path}: ${cmd}`);
+      }
+    }
+  }
+  if (foreign.length > 0) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven (grant withheld): hook command(s) outside the ` +
+        `Guild plugin root ${trustedRoot} — ${foreign.join("; ")}. The pane grant carries ` +
+        `${CODEX_HOOK_TRUST_FLAG}, which would run those untrusted too, so a hook set Guild ` +
+        `does not solely own never earns the bypass.`,
+    );
+  }
+  checks.sole_owner = true;
+
+  // 4/5. THE EXECUTION TESTS — the checks that presence cannot give us.
+  //
+  // The bridge is fed a synthetic PreToolUse event in codex's own on-box payload
+  // shape, for a tool OUTSIDE an explicit capability scope, so a working bridge
+  // MUST refuse it — and on a codex host that refusal must be `deny`, because
+  // codex has no `ask` primitive.
+  //
+  // TWICE, because the granted pane does not run in the default mode. Codex
+  // under `--dangerously-bypass-approvals-and-sandbox` reports
+  // `permission_mode:"bypassPermissions"` (captured verbatim on-box), and Guild
+  // routes that through `bypass_permissions_policy`, whose DEFAULT (`audit`)
+  // records an out-of-scope call and ALLOWS it. A probe that only exercised the
+  // default mode would prove enforcement for a pane that does not exist and
+  // grant the flag to one that is not enforced. So:
+  //   4. deny_functional    — refuses in the ordinary mode (the bridge works).
+  //   5. deny_under_bypass  — still refuses under bypassPermissions (THIS
+  //      project's policy actually hard-blocks). Under the default `audit` this
+  //      fails, and it SHOULD: there is nothing there to justify a bypass.
+  //
+  // The event's `cwd` is the REAL project root, so the policy under test is the
+  // project's own rather than one the probe invented; the run dir is always a
+  // scratch directory, so no probe artifact ever lands in a real run's file bus.
+  const projectCwd = opts.cwd ?? process.cwd();
+  const sandbox = nodefs.mkdtempSync(nodepath.join(os.tmpdir(), "guild-codex-probe-"));
+  const attempt = (
+    permissionMode: string | undefined,
+  ): { status: number | null; decision: string | null } => {
+    const runDir = nodepath.join(sandbox, "run");
+    nodefs.mkdirSync(runDir, { recursive: true });
+    const r = run("node", [script], {
+      input: JSON.stringify({
+        session_id: "guild-codex-enforcement-probe",
+        transcript_path: "",
+        cwd: projectCwd,
+        hook_event_name: "PreToolUse",
+        ...(permissionMode !== undefined ? { permission_mode: permissionMode } : {}),
+        tool_name: "Bash",
+        tool_input: { command: "guild-codex-enforcement-probe" },
+        tool_use_id: "guild-probe",
+      }),
+      env: {
+        // process.env FIRST so the child keeps PATH (without it `node` may not
+        // even resolve, which would read as "no deny" — a false NEGATIVE that
+        // silently withholds the flag). `env` (the injectable seam) overrides it.
+        ...process.env,
+        ...env,
+        GUILD_RUN_ID: "run-guild-codex-enforcement-probe",
+        GUILD_RUN_DIR: runDir,
+        // Force the refusal: an explicit scope that does not contain Bash.
+        GUILD_CAPABILITY_SCOPE: JSON.stringify(["Read"]),
+        GUILD_HOST: "codex-cli",
+        GUILD_HOST_ID: "codex-cli",
+      },
+      encoding: "utf8",
+    });
+    return { status: r.status ?? null, decision: parsePreToolUseDecision(r.stdout ?? "") };
+  };
+
+  let plain: { status: number | null; decision: string | null };
+  let bypassed: { status: number | null; decision: string | null };
+  try {
+    plain = attempt(undefined);
+    bypassed = attempt("bypassPermissions");
+  } catch (e) {
+    return fail(`codex PreToolUse enforcement NOT proven: probing the bridge threw (${String(e)}).`);
+  } finally {
+    try {
+      nodefs.rmSync(sandbox, { recursive: true, force: true });
+    } catch {
+      // A leaked temp dir must never change the verdict.
+    }
+  }
+
+  if (plain.status !== 0) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: the bridge (${script}) exited ` +
+        `${String(plain.status)}. A gate that cannot complete cleanly is not a gate. ` +
+        `Codex panes launch BARE.`,
+    );
+  }
+  if (plain.decision !== "deny") {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: the bridge (${script}) answered ` +
+        `${plain.decision === null ? "no parseable PreToolUse response" : `"${plain.decision}"`} ` +
+        `for an out-of-scope tool call, not "deny". Codex honours only deny, and a hook can be ` +
+        `registered and present yet never enforce (codex requires persisted hook trust). ` +
+        `Codex panes launch BARE.`,
+    );
+  }
+  checks.deny_functional = true;
+
+  if (bypassed.status !== 0 || bypassed.decision !== "deny") {
+    return fail(
+      `codex PreToolUse enforcement NOT proven UNDER BYPASS: with ` +
+        `permission_mode="bypassPermissions" — the mode the flag itself puts the pane in — ` +
+        `the bridge answered ` +
+        `${bypassed.decision === null ? "no parseable PreToolUse response" : `"${bypassed.decision}"`} ` +
+        `(exit ${String(bypassed.status)}) for an out-of-scope tool call. That is this project's ` +
+        `bypass_permissions_policy talking: the default "audit" records and ALLOWS. Set ` +
+        `bypass_permissions_policy=deny (or run under a non-interactive autonomy mode, which ` +
+        `forces it) to earn the flag. Codex panes launch BARE.`,
+    );
+  }
+  checks.deny_under_bypass = true;
+
+  return {
+    enforced: true,
+    manifest: manifestPath,
+    detail:
+      `codex PreToolUse enforcement PROVEN: ${manifestPath} registers ${script} (and no ` +
+      `non-Guild hook), which exited 0 emitting permissionDecision:"deny" for an ` +
+      `out-of-scope tool call — including under permission_mode="bypassPermissions".`,
+    checks,
+  };
+}
+
+/**
+ * Parse a hook's stdout into its PreToolUse decision. STRICT by design: the
+ * whole output must be one JSON object carrying a PreToolUse
+ * `hookSpecificOutput`. A substring scan would let an unrelated log line
+ * mentioning `"permissionDecision":"deny"` masquerade as a verdict.
+ * Returns null when nothing valid is present.
+ */
+function parsePreToolUseDecision(stdout: string): string | null {
+  const text = stdout.trim();
+  if (text.length === 0) return null;
+  try {
+    const parsed = JSON.parse(text) as {
+      hookSpecificOutput?: { hookEventName?: string; permissionDecision?: string };
+    };
+    const out = parsed.hookSpecificOutput;
+    if (!out || out.hookEventName !== "PreToolUse") return null;
+    return typeof out.permissionDecision === "string" ? out.permissionDecision : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── CodexPaneAdapter ──────────────────────────────────────────────────────────
 
 /**
@@ -252,11 +759,40 @@ export class CodexPaneAdapter implements PaneAdapter {
   private run: RunFn;
   private env_: NodeJS.ProcessEnv;
   private fs_: FsSeam;
+  /** ISSUE #94 — opt-in bypass argv; see AdapterOpts.codexLaunchArgs. Default []. */
+  private codexLaunchArgs: string[];
 
   constructor(opts: AdapterOpts = {}) {
     this.run = opts.run ?? defaultRun;
     this.env_ = opts.env ?? process.env;
     this.fs_ = opts.fs ?? nodefs;
+    this.codexLaunchArgs = opts.codexLaunchArgs ?? [];
+  }
+
+  /**
+   * ISSUE #94 — is codex-side PreToolUse deny enforcement PROVEN on this box?
+   * Exposed so a caller can record the verdict (pass or fail) in a run trace
+   * rather than only observing its effect on the launch command.
+   */
+  /**
+   * ISSUE #94 — a copy of this adapter carrying `args` as its opt-in bypass
+   * argv. The resolver is built once, at launcher start, where the project's
+   * `RuntimePermissionConfig` is not in hand; the per-pane composer HAS it. So
+   * the argv is applied here, at compose time, from the same resolved host_mode
+   * ladder Claude panes use — rather than baked in from the defaults and
+   * described as if it were configured.
+   */
+  withLaunchArgs(args: string[]): CodexPaneAdapter {
+    return new CodexPaneAdapter({
+      run: this.run,
+      env: this.env_,
+      fs: this.fs_,
+      codexLaunchArgs: args,
+    });
+  }
+
+  probeEnforcement(): CodexEnforcementProbeResult {
+    return probeCodexPreToolUseEnforcement({ env: this.env_, fs: this.fs_, run: this.run });
   }
 
   /** Resolve the auth.json path, honouring CODEX_HOME env override. */
@@ -310,58 +846,84 @@ export class CodexPaneAdapter implements PaneAdapter {
     // D-CAP: export GUILD_TASK_ID (scope-file locator) and optionally
     // GUILD_CAPABILITY_SCOPE (env fast-path) so D-CAP enforces on Codex panes.
     //
-    // rf-wi-04 (G4) — CODEX-SIDE PreToolUse ENFORCEMENT: NOT WIRED THIS WAVE,
-    // with a corrected rationale (not silence, and NOT the "infeasible" claim an
-    // earlier draft made — the rf-wi-04 codex review disproved that). A codex
-    // pane launches BARE here. The honest, current picture:
+    // ISSUE #94 — CODEX-SIDE PreToolUse ENFORCEMENT IS NOW WIRED, and the pane
+    // bypass flag is gated on PROVEN enforcement. This closes the rf-wi-04 (G4)
+    // followup that deliberately left a codex pane bare.
     //
-    //   FEASIBLE at the CLI level: Codex CLI ships stable `hooks` (stable since
-    //   codex 0.124.0; live-observed on 0.144.5) whose `PreToolUse` hook can
-    //   intercept Bash/apply_patch/MCP/tool calls and DENY them before execution
-    //   (`permissionDecision:"deny"` / exit 2). See developers.openai.com/codex/
-    //   hooks. So a Guild-gated per-tool deny IS achievable on codex.
+    // What landed (the 4 preconditions rf-wi-04 named, in order):
+    //   (a) ON-BOX CONFIRMED (codex-cli 0.146.0, isolated CODEX_HOME): a
+    //       PreToolUse hook returning permissionDecision:"deny" blocks the tool
+    //       call ("hook: PreToolUse Blocked"); the control run executed.
+    //   (b) The codex capability rows now record hooks.pre_tool_use: true and
+    //       permissions.deny: true (host-capabilities-schema.ts). `ask_mode`
+    //       stays null — codex has a deny layer but NO ask primitive.
+    //   (c) writeCodexHookBridge registers PreToolUse -> hooks/dist/pre-tool-use.js
+    //       and ships that binary. It is Guild's EXISTING enforcement binary, not
+    //       a codex-only fork: codex's PreToolUse payload is the same snake_case
+    //       shape pre-tool-use.ts already consumes, and its HK-07 gate degrades
+    //       ask -> approval_request + deny, which is exactly what codex enforces.
+    //   (d) probeCodexPreToolUseEnforcement() gates the bypass flag below.
     //
-    //   NOT YET ENABLED in Guild, for two concrete reasons:
-    //     1. Guild's generated codex hook bundle wires SessionStart (update-check)
-    //        and `UserPromptSubmit` (prompt bridge),
-    //        NOT `PreToolUse` (scripts/build-host-packages.ts, writeCodexHookBridge)
-    //        — there is no codex PreToolUse deny bridge to gate a bypass behind.
-    //     2. The codex capability rows still record `hooks.pre_tool_use: false`
-    //        (INFERRED / "confirm on-box", never verified) in BOTH
-    //        host-capabilities-schema.ts and host-registry-schema.ts — stale vs.
-    //        the live CLI. (Note the same rows DO already declare a bypass launch
-    //        mode `--dangerously-bypass-approvals-and-sandbox`, so the earlier
-    //        "launch_modes: {}" claim was also wrong.)
+    // WHY THE PROBE EXECUTES RATHER THAN STATS. Codex gates hooks behind
+    // persisted hook trust: on-box, an untrusted-but-present hook SILENTLY never
+    // ran and the tool executed, with no warning. File presence is a false
+    // positive here, so the probe demands an observed deny.
     //
-    //   PRECONDITION to enable a codex bypass flag later (mirrors the remote-
-    //   Claude item-1 gate): (a) on-box confirm codex PreToolUse deny, (b) refresh
-    //   the codex capability rows to `pre_tool_use: true` (blast-radius: routing/
-    //   degradation/support-matrix consumers), (c) add a codex `PreToolUse` deny
-    //   bridge to writeCodexHookBridge, (d) add a codex-side probe analogous to
-    //   RemoteTransport.probeHooks and gate the bypass on it. That is a scoped
-    //   followup (host-package build + a new hook + capability-row refresh),
-    //   beyond this lane's remote-precondition core — filed, not silently dropped.
+    // TWO GATES, both required, mirroring RemoteTeamBackend.claudeLaunchArgs:
+    // an explicit operator opt-in AND a passing probe. Default stays BARE.
+    //
+    // AND THE HOOK-TRUST COUPLING. The probe proves the BRIDGE enforces; it
+    // cannot prove codex will RUN it. Hook trust is granted through an
+    // interactive prompt and persisted nowhere the CLI exposes — `codex doctor
+    // --json` (0.146.0) reports install/config/auth health and says nothing
+    // about hooks, and no trust store is discoverable on disk. On-box, the same
+    // hooks.json without trust meant the hook never fired, silently, and the
+    // command ran. A bypass flag on such a pane is precisely the regression this
+    // issue exists to prevent, so the two flags ship TOGETHER: a codex pane that
+    // is granted the sandbox bypass is also guaranteed to run Guild's gate.
+    // The extra flag's own cost — other enabled hooks in that CODEX_HOME also
+    // run untrusted — is strictly smaller than the bypass the operator already
+    // opted into, and it never appears on a pane that is not being bypassed.
+    //
+    // THIRD GATE — the pane must have something to enforce. `capability_scope`
+    // is optional, and an absent scope means "no tool restrictions": the bridge
+    // then falls through cleanly and denies nothing. Bypassing native approval
+    // on such a pane trades a real gate for no gate, so an unscoped pane never
+    // receives the flag however green the probe is.
+    const scoped = (spec.capability_scope?.length ?? 0) > 0;
+    const bypassGranted =
+      this.codexLaunchArgs.length > 0 && scoped && this.probeEnforcement().enforced;
+    const bypassFragment = bypassGranted
+      ? `${[...this.codexLaunchArgs, CODEX_HOOK_TRUST_FLAG].map(shellQuote).join(" ")} `
+      : "";
     const taskFragment =
       spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer
-    // (lane panes only; Codex panes run no Claude PostToolUse hook — only
-    // SessionStart/UserPromptSubmit are wired — but the env
-    // parity keeps the heartbeat contract uniform across adapters).
+    // (lane panes only; Codex panes run no Claude PostToolUse hook — the wired
+    // codex events are SessionStart, UserPromptSubmit and, since issue #94,
+    // PreToolUse — but the env parity keeps the heartbeat contract uniform
+    // across adapters).
     const specialistFragment =
       spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment =
       spec.capability_scope !== undefined
         ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; `
         : "";
+    // ISSUE #94 — the PreToolUse bridge resolves the host from the environment it
+    // inherits. Without this a codex pane's gate read as Claude, decided `ask`,
+    // and codex — which has no ask primitive — enforced nothing. Codex's
+    // SessionStart wiring runs update-check, not the bootstrap that writes the
+    // capability manifest, so the identity has to come from the pane itself.
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
+      `export GUILD_HOST=codex-cli; export GUILD_HOST_ID=codex-cli; ` +
       producerMarkerExport() +
       taskFragment +
       specialistFragment +
       taskAssignmentExport(spec) +
       scopeFragment +
       modelExport(spec) +
-      `codex exec ${modelArg(spec, "-m")}${shellQuote(spec.prompt)}; ` +
+      `codex exec ${bypassFragment}${modelArg(spec, "-m")}${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
     );
   }
@@ -369,6 +931,10 @@ export class CodexPaneAdapter implements PaneAdapter {
   env(spec: PaneSpec): Record<string, string> {
     return {
       GUILD_RUN_ID: spec.runId,
+      // ISSUE #94 — keep env() in step with command(): the PreToolUse bridge
+      // resolves the codex capability row from these.
+      GUILD_HOST: "codex-cli",
+      GUILD_HOST_ID: "codex-cli",
       ...modelEnv(spec),
       ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.

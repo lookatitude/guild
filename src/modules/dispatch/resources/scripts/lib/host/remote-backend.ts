@@ -57,10 +57,67 @@ import type { HostKind } from "../host-types";
  * probe documents. A tighter proof (query the live Claude for its loaded hook
  * set) is a followup.
  */
+/**
+ * ISSUE #94 (secondary) — the synthetic PreToolUse event the remote probe feeds
+ * to the far host's own enforcement binary. Single-quoted into the ssh command,
+ * so it must contain NO single quotes.
+ */
+const HOOK_PROBE_EVENT =
+  '{"session_id":"guild-remote-enforcement-probe","transcript_path":"",' +
+  '"hook_event_name":"PreToolUse","tool_name":"Bash",' +
+  '"tool_input":{"command":"guild-remote-enforcement-probe"},"tool_use_id":"guild-probe"}';
+
+/**
+ * ISSUE #94 (secondary) — TIGHTENED from presence to REGISTRATION + EXECUTION.
+ *
+ * WAS (rf-wi-04): `[ -f "$root/hooks/hooks.json" ]`. That proved the bundle was
+ * on disk, NOT that anything would enforce — a stale or partial checkout at
+ * GUILD_PLUGIN_ROOT passed happily. The gap was documented, and compensated for
+ * by keeping the remote bypass opt-in.
+ *
+ * NOW, two conjuncts, both required:
+ *   1. REGISTRATION — `hooks/hooks.json` must actually name `pre-tool-use`.
+ *      Executing a binary the host never wired proves the binary works and
+ *      nothing about the host: a tree carrying the script but no manifest
+ *      passed the execution-only draft of this probe.
+ *   2. EXECUTION — run the far host's OWN `hooks/dist/pre-tool-use.js` against a
+ *      synthetic PreToolUse event under a capability scope that excludes the
+ *      probed tool, and require BOTH a zero exit from node itself and a real
+ *      gating decision (`"permissionDecision":"ask"` or `"deny"`). The node
+ *      status is captured into a variable rather than left inside a pipeline,
+ *      where `grep`'s status would have masked a crashing hook.
+ * Accepting `ask` is right HERE and not on codex: a remote Claude host has a
+ * native ask primitive, so `ask` is a real gate there.
+ *
+ * The codex half of issue #94 is why this is worth the extra hop: it confirmed
+ * on real hardware that a registered, present hook can silently never run
+ * (codex hook trust) — with no warning at all. Presence is not enforcement.
+ *
+ * WHAT THIS STILL DOES NOT PROVE — stated, not implied. The followup asked to
+ * "query the live remote Claude for its LOADED hook set". Claude Code exposes no
+ * such query: `claude doctor` (2.1.223) reports install health, settings
+ * validity and MCP wiring, and does NOT enumerate loaded hooks. So this proves
+ * the gate is WIRED AND EXECUTABLE on the far host, not that the far host's live
+ * session has that hook table loaded. Strictly stronger than presence, strictly
+ * weaker than introspection — which is exactly why the remote bypass flag
+ * REMAINS opt-in on top of this proof (see RemoteTeamBackend.claudeLaunchArgs).
+ *
+ * Residual (unchanged, matching connect/probe/spawn): the far host's
+ * non-interactive shell must export GUILD_PLUGIN_ROOT (or reach it via the
+ * host's login_shell wrap), and must have `node` on PATH.
+ */
 const HOOK_INSTALL_PROBE =
   'root="${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"; ' +
-  '[ -n "$root" ] && [ -f "$root/hooks/hooks.json" ] && echo GUILD_HOOKS_INSTALLED || true';
-const HOOK_INSTALL_SIGNAL = "GUILD_HOOKS_INSTALLED";
+  '[ -n "$root" ] && [ -f "$root/hooks/hooks.json" ] && ' +
+  '[ -f "$root/hooks/dist/pre-tool-use.js" ] && ' +
+  'grep -q "hooks/dist/pre-tool-use.js" "$root/hooks/hooks.json" && ' +
+  `out=$(printf '%s' '${HOOK_PROBE_EVENT}' | ` +
+  'GUILD_CAPABILITY_SCOPE=\'["Read"]\' ' +
+  'node "$root/hooks/dist/pre-tool-use.js" 2>/dev/null) && ' +
+  'printf \'%s\' "$out" | grep -q \'"hookEventName":"PreToolUse"\' && ' +
+  'printf \'%s\' "$out" | grep -qE \'"permissionDecision":"(ask|deny)"\' && ' +
+  'echo GUILD_HOOKS_ENFORCING || true';
+const HOOK_INSTALL_SIGNAL = "GUILD_HOOKS_ENFORCING";
 
 // ── MockTransport ─────────────────────────────────────────────────────────────
 
@@ -206,8 +263,10 @@ export class SshRemoteTransport implements RemoteTransport {
   }
 
   probeHooks(host: RemoteHostTarget): RemoteHookProbeResult {
-    // rf-wi-04 item 1 — check the remote for Guild's hook bundle (the
-    // PreToolUse gate wiring). See HOOK_INSTALL_PROBE for the exact signal.
+    // rf-wi-04 item 1, TIGHTENED by issue #94 — do not merely stat the remote
+    // bundle: EXECUTE its enforcement binary and require a gating decision.
+    // See HOOK_INSTALL_PROBE for the exact snippet, the signal, and the
+    // precise residual this still does not cover.
     const remoteCmd = host.loginShell ? wrapLoginShell(HOOK_INSTALL_PROBE, host.loginShell) : HOOK_INSTALL_PROBE;
     const r = this.run("ssh", ["-o", "BatchMode=yes", host.endpoint, remoteCmd]);
     const installed =
@@ -215,10 +274,15 @@ export class SshRemoteTransport implements RemoteTransport {
     return {
       installed,
       detail: installed
-        ? `ssh: Guild hooks verified at $GUILD_PLUGIN_ROOT/hooks/hooks.json on ${host.endpoint}`
-        : `ssh: Guild hooks NOT found on ${host.endpoint} (ssh exit ${r.status ?? "null"}) — ` +
-          `remote Claude panes launch BARE (bypass flag withheld). Install the Guild plugin on ` +
-          `the remote and ensure GUILD_PLUGIN_ROOT is on the non-interactive shell (or set ` +
+        ? `ssh: Guild hook ENFORCEMENT verified on ${host.endpoint} — ` +
+          `$GUILD_PLUGIN_ROOT/hooks/dist/pre-tool-use.js returned a gating decision for a ` +
+          `synthetic out-of-scope PreToolUse event. (Proves the gate is executable on the far ` +
+          `host; NOT that its live session has the hook table loaded — Claude exposes no such ` +
+          `query, which is why the bypass flag stays opt-in on top of this proof.)`
+        : `ssh: Guild hook enforcement NOT proven on ${host.endpoint} (ssh exit ${r.status ?? "null"}) — ` +
+          `remote Claude panes launch BARE (bypass flag withheld). Either the bundle is absent, the ` +
+          `checkout is stale/partial (a hooks.json alone no longer passes — issue #94), or ` +
+          `\`node\`/GUILD_PLUGIN_ROOT is not on the non-interactive shell (set ` +
           `defaults.cross_host.hosts.${host.hostId}.login_shell).`,
     };
   }

@@ -185,11 +185,21 @@ describe("SshRemoteTransport.probeHooks — ssh argv + parsing", () => {
     return { run, calls };
   }
 
-  it("checks the remote GUILD_PLUGIN_ROOT hooks bundle and parses the positive signal", () => {
-    const { run, calls } = recording({ status: 0, stdout: "GUILD_HOOKS_INSTALLED\n", stderr: "" });
+  // ISSUE #94 TIGHTENED THIS PROBE, deliberately. It used to assert the remote
+  // command mentioned `hooks.json` and to parse a GUILD_HOOKS_INSTALLED marker —
+  // i.e. it pinned a FILE-PRESENCE check. Presence was always documented as
+  // necessary-but-not-sufficient, and the codex half of issue #94 confirmed on
+  // real hardware that a present, registered hook can silently never enforce. The
+  // probe now EXECUTES the far host's enforcement binary and requires a gating
+  // decision, so the marker changed to GUILD_HOOKS_ENFORCING and the command
+  // targets hooks/dist/pre-tool-use.js. Full coverage of the new semantics —
+  // including the stale-checkout false positive this closes — lives in
+  // remote-hook-enforcement-probe.test.ts.
+  it("checks the remote GUILD_PLUGIN_ROOT enforcement binary and parses the positive signal", () => {
+    const { run, calls } = recording({ status: 0, stdout: "GUILD_HOOKS_ENFORCING\n", stderr: "" });
     const r = new SshRemoteTransport({ run }).probeHooks(target("box", "claude"));
     expect(calls[0].cmd).toBe("ssh");
-    expect(calls[0].args.at(-1)).toMatch(/hooks\.json/);
+    expect(calls[0].args.at(-1)).toMatch(/hooks\/dist\/pre-tool-use\.js/);
     expect(r.installed).toBe(true);
   });
 
@@ -199,7 +209,7 @@ describe("SshRemoteTransport.probeHooks — ssh argv + parsing", () => {
   });
 
   it("login-shell-wraps the hook probe when the host carries a loginShell", () => {
-    const { run, calls } = recording({ status: 0, stdout: "GUILD_HOOKS_INSTALLED\n", stderr: "" });
+    const { run, calls } = recording({ status: 0, stdout: "GUILD_HOOKS_ENFORCING\n", stderr: "" });
     new SshRemoteTransport({ run }).probeHooks(target("box", "claude", "zsh"));
     expect(calls[0].args.at(-1)).toMatch(/^zsh -lic /);
   });

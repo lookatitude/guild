@@ -120,17 +120,19 @@ export function createCodexCliAdapter(entry: HostRegistryEntry = ENTRY): HostAda
         HOST_ID,
         "preflight",
         "degraded",
-        "Codex fires SessionStart + UserPromptSubmit natively via codex-hooks.json; the remaining Claude hook events degrade to wrapper/instruction-file",
+        "Codex fires SessionStart + UserPromptSubmit + PreToolUse natively via codex-hooks.json; the remaining Claude hook events degrade to wrapper/instruction-file",
         {
           request: request ?? {},
-          // Two events are native (live-verified, wi-04); the rest of the
+          // Three events are native (live-verified: SessionStart +
+          // UserPromptSubmit in wi-04; PreToolUse on-box in issue #94, where a
+          // hook deny was observed blocking a real tool call); the rest of the
           // Claude hook taxonomy has no Codex surface and degrades. The flag
           // means "the FULL taxonomy is native", which stays false.
           native_hooks: false,
-          native_hook_events: ["SessionStart", "UserPromptSubmit"],
+          native_hook_events: ["SessionStart", "UserPromptSubmit", "PreToolUse"],
           bootstrap_file: "AGENTS.md",
           commands: ["codex --version", "codex login status"],
-          degradation: "hook events beyond SessionStart/UserPromptSubmit have no Codex surface; they degrade through the HookEmitter",
+          degradation: "hook events beyond SessionStart/UserPromptSubmit/PreToolUse have no Codex surface; they degrade through the HookEmitter",
         },
         resolveRung("session", HOST_ID)
       );

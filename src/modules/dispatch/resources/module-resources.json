@@ -71,14 +71,14 @@
       "id": "lib/host/remote-backend",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "05f35cdf40ee2229fb3dd84edef92f0844d89548b3ebcb5dca0f3ebb54451e88"
+      "sha256": "98f4404ad62fa69dcb8b32833d8df704eafcf350c7abd4a3483c20c0acaa1f3d"
     },
     {
       "category": "scripts",
       "id": "lib/host/tmux-backend",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "3f02d2250a0c8d428fa8ebb8381a30acf45214f5ed4cba1bbdf6aa82b912bc87"
+      "sha256": "b4dd4c55060c54362cd16fcb14fb00d9640241b6f16c085dc9146ae10daa2ef1"
     },
     {
       "category": "scripts",

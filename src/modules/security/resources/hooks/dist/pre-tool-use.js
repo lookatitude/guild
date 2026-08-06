@@ -1283,6 +1283,909 @@ function appendSidecarPre(runDir, entry, opts = {}) {
   });
 }
 
+// ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
+var UPDATE_COMMANDS = {
+  marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+  self_update: "guild-run update",
+  reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
+};
+var INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+var INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
+var CLAUDE_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "claude",
+  family: "claude",
+  surface_kind: "cli",
+  package: {
+    installable: true,
+    installability: "verified",
+    manifest_format: "claude-plugin",
+    update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
+  },
+  bootstrap: {
+    context_injection: "hookSpecificOutput.additionalContext",
+    skill_autoload: true,
+    prompt_transform: false,
+    wrapper_injection: true
+  },
+  commands: { slash_commands: true, command_files: "markdown" },
+  skills: { native_skills: true, skill_dir: ".claude/skills" },
+  agents: { native_agents: true, agent_format: "claude-md" },
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "target",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
+  hooks: {
+    // All ten events are bound in the live hooks/hooks.json (verified).
+    session_start: true,
+    user_prompt_submit: true,
+    pre_tool_use: true,
+    post_tool_use: true,
+    stop: true,
+    pre_compact: true,
+    subagent_stop: true,
+    task_created: true,
+    task_completed: true,
+    teammate_idle: true
+  },
+  permissions: {
+    deny: true,
+    ask: true,
+    ask_mode: "pre_tool_use",
+    accept_edits_without_prompt: true,
+    auto_approve_tools: true,
+    bypass_prompts: true,
+    bypass_sandbox: false,
+    permission_prompt_layer: true,
+    launch_modes: {
+      read_only: ["--tools", "Read,Grep,Glob"],
+      ask: ["--permission-mode", "default"],
+      accept_edits: ["--permission-mode", "acceptEdits"],
+      auto: ["--permission-mode", "auto"],
+      bypass_all: ["--permission-mode", "bypassPermissions"]
+    }
+  },
+  dispatch: {
+    tmux_processes: true,
+    plain_processes: true,
+    independent_agents: true,
+    subagents: true,
+    inline: true
+  },
+  interaction: {
+    native_questions: true,
+    terminal_prompt: true,
+    file_bus_questions: true
+  },
+  sessions: { continue: true, resume_by_id: true, fork: true },
+  structured_output: {
+    native_json: true,
+    schema_validation: true,
+    repair_prompt: true
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "bridge",
+    web: "native",
+    mcp: "native"
+  },
+  mcp: { stdio: true, http: false },
+  models: {
+    cheap: { model: "haiku" },
+    mid: { model: "sonnet" },
+    powerful: { model: "opus" }
+  }
+};
+var CODEX_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "codex",
+  family: "codex",
+  surface_kind: "cli",
+  // installable:false is the honest MACHINE state — the Codex renderer exists but
+  // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+  // as installable until proven. installability:"target" records that the renderer
+  // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "codex-plugin",
+    // NOT self_update (operator decision, initiative cross-host-release-
+    // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
+    // list` tracks the registered marketplace source, so a Guild-side staged
+    // swap of the cache mutates manager state behind Codex's back and the next
+    // `codex plugin add` reinstalls the old payload. A minted receipt also
+    // cannot know a native install's channel, so a self-update could silently
+    // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
+    // populations: receipted installs re-render properly; host-native installs
+    // are detected and told the precise codex command for their registered
+    // source type (git → marketplace upgrade + plugin add; local → reinstall).
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+  },
+  bootstrap: {
+    // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+    // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+    context_injection: "instruction_file",
+    skill_autoload: false,
+    // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+    prompt_transform: false,
+    // INFERRED
+    wrapper_injection: true
+    // The generated guild-run wrapper injects bootstrap.
+  },
+  commands: {
+    // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+    slash_commands: false,
+    command_files: "none"
+  },
+  skills: { native_skills: false, skill_dir: null },
+  // Verified (per-host-packaging).
+  agents: { native_agents: false, agent_format: null },
+  // Verified (per-host-packaging flags agents unsupported).
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
+  hooks: {
+    // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+    // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+    // Claude-shaped hooks manifest and fires both events the generated
+    // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+    // bridge since the package existed, and SessionStart now carries the
+    // update-check signal, LIVE-VERIFIED in a real codex session (the model
+    // quoted the injected line verbatim). Remaining events stay false until
+    // individually verified.
+    session_start: true,
+    user_prompt_submit: true,
+    // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0, isolated CODEX_HOME).
+    // A PreToolUse hook emitting the Claude-shaped
+    // {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}
+    // BLOCKS the tool call:
+    //     hook: PreToolUse Blocked
+    //     ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: …
+    // and the model stops. CONTROL (same config, non-matching command) reached
+    // `hook: PreToolUse Completed` and executed — so the deny, not the sandbox,
+    // is causal. This retires the old INFERRED `false` (never verified).
+    //
+    // CAVEAT THAT DOES NOT BELONG IN THIS BOOLEAN, but governs how it may be
+    // consumed: codex gates hooks behind PERSISTED HOOK TRUST. With the same
+    // hooks.json but no trust, the hook SILENTLY never runs (no warning, tool
+    // executes). So "codex supports PreToolUse deny" (this row) must never be
+    // read as "enforcement is live on this box" — that needs a probe of actual
+    // execution (probeCodexPreToolUseEnforcement, scripts/lib/pane-adapter.ts),
+    // which is what the codex-pane bypass flag is gated on.
+    pre_tool_use: true,
+    post_tool_use: false,
+    stop: false,
+    pre_compact: false,
+    subagent_stop: false,
+    task_created: false,
+    task_completed: false,
+    teammate_idle: false
+  },
+  permissions: {
+    // `deny` CONFIRMED ON-BOX (issue #94) — see hooks.pre_tool_use above: a
+    // PreToolUse hook decision of "deny" is honoured and blocks the call.
+    deny: true,
+    ask: true,
+    // Codex prompts for approval by default.
+    // STILL NULL, DELIBERATELY. Codex has a PreToolUse DENY layer but no
+    // PreToolUse ASK primitive (`permissionDecision:"ask"` is not an accepted
+    // codex decision). Guild's own enforcement already handles this: the
+    // manifest written by write-host-capability.ts carries
+    // `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
+    // hooks/pre-tool-use.ts's HK-07 gate degrades ask -> file-bus
+    // approval_request + `deny`. VERIFIED end-to-end for codex in issue #94.
+    // Flipping this to "pre_tool_use" would re-enable an ask codex rejects.
+    ask_mode: null,
+    accept_edits_without_prompt: false,
+    // INFERRED
+    auto_approve_tools: false,
+    // INFERRED
+    bypass_prompts: true,
+    // Codex YOLO / --dangerously-bypass exists (AC19).
+    bypass_sandbox: true,
+    // INFERRED — YOLO bypasses the sandbox.
+    permission_prompt_layer: false,
+    // INFERRED
+    launch_modes: {
+      // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+      // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+      // than guessed, so their absence reads as "degrade/record", not "supported".
+      // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0): the flag exists and
+      // takes effect. Note what it does NOT do — a PreToolUse hook deny still
+      // blocked the tool call under this flag, so the bypass suppresses codex's
+      // own approval/sandbox layer and leaves Guild's gate intact.
+      bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
+    }
+  },
+  dispatch: {
+    tmux_processes: true,
+    // Codex is a CLI process — tmux panes work.
+    plain_processes: true,
+    independent_agents: false,
+    // INFERRED — no native agent-team primitive.
+    subagents: false,
+    // INFERRED
+    inline: true
+  },
+  interaction: {
+    native_questions: false,
+    // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+    terminal_prompt: true,
+    file_bus_questions: true
+    // Guild file-bus approval works on any FS host.
+  },
+  sessions: {
+    continue: true,
+    // INFERRED — Codex has session continuation.
+    resume_by_id: true,
+    // INFERRED
+    fork: false
+    // INFERRED
+  },
+  structured_output: {
+    native_json: false,
+    // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+    schema_validation: false,
+    // Guild-side validation (validateHandoffV2) instead.
+    repair_prompt: true
+    // Bounded repair prompt is the fallback (ADR §Result contracts).
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none",
+    // INFERRED — no native browser; record fallback (AC29).
+    web: "emulated",
+    // INFERRED
+    mcp: "native"
+    // Codex supports stdio MCP.
+  },
+  mcp: { stdio: true, http: false },
+  // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+  models: {
+    // Codex model ids are host-specific and not pinned in this repo yet; null =
+    // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null }
+  }
+};
+var NO_HOOKS = {
+  session_start: false,
+  user_prompt_submit: false,
+  pre_tool_use: false,
+  post_tool_use: false,
+  stop: false,
+  pre_compact: false,
+  subagent_stop: false,
+  task_created: false,
+  task_completed: false,
+  teammate_idle: false
+};
+var AGENTS_FILE_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "agents-file",
+  family: "agents",
+  surface_kind: "file",
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "agents-file",
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+  },
+  bootstrap: {
+    context_injection: "instruction_file",
+    skill_autoload: false,
+    prompt_transform: false,
+    wrapper_injection: true
+  },
+  commands: { slash_commands: false, command_files: "none" },
+  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+  agents: { native_agents: false, agent_format: null },
+  injection: {
+    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+    definition_injection: false,
+    definition_injection_support: "absent",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "absent",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "none",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
+  hooks: NO_HOOKS,
+  permissions: {
+    deny: false,
+    ask: true,
+    ask_mode: null,
+    accept_edits_without_prompt: false,
+    auto_approve_tools: false,
+    bypass_prompts: false,
+    bypass_sandbox: false,
+    permission_prompt_layer: false,
+    launch_modes: {}
+  },
+  dispatch: {
+    tmux_processes: false,
+    plain_processes: false,
+    independent_agents: false,
+    subagents: false,
+    inline: false
+  },
+  interaction: {
+    native_questions: false,
+    terminal_prompt: false,
+    file_bus_questions: true
+  },
+  sessions: { continue: false, resume_by_id: false, fork: false },
+  structured_output: {
+    native_json: false,
+    schema_validation: false,
+    repair_prompt: true
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none",
+    web: "emulated",
+    mcp: "none"
+  },
+  mcp: { stdio: false, http: false },
+  models: {
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null }
+  }
+};
+var REQUIRED_HOOK_EVENTS = Object.freeze([
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+  "post_tool_use",
+  "stop",
+  "pre_compact",
+  "subagent_stop",
+  "task_created",
+  "task_completed",
+  "teammate_idle"
+]);
+
+// ../src/modules/host-runtime/workflows/host-registry-schema.ts
+var HOST_IDS = Object.freeze([
+  // keep CLI/file (5)
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  // keep-as-refuse (4) — RETAINED verbatim
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+  // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+  "kiro",
+  "qoder",
+  "trae"
+]);
+var HOST_FAMILIES = Object.freeze([
+  "claude",
+  "codex",
+  "agents",
+  "pi",
+  "antigravity",
+  "cursor",
+  "copilot",
+  "opencode",
+  "rovo"
+]);
+var AUTH_PROBES = Object.freeze([
+  "codex_stored_or_env",
+  "none",
+  "cursor_stored",
+  "gh_auth",
+  "opencode_stored_or_env",
+  "acli_stored"
+]);
+var CLAUDE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-cli",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
+  installability: "native",
+  result_adapter: false,
+  // Claude is the reference author host, not a cross reviewer for itself.
+  dispatch_selectable: true,
+  capabilities: CLAUDE_CAPABILITIES,
+  provenance: "verified"
+};
+var CODEX_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "codex-cli",
+  family: "codex",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
+  // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
+  installability: "target",
+  result_adapter: true,
+  // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
+  dispatch_selectable: true,
+  capabilities: CODEX_CAPABILITIES,
+  provenance: "verified"
+  // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
+};
+function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
+  return {
+    schema_version: "guild.host_capabilities.v1",
+    host_kind,
+    family,
+    // Must equal the registry entry's top-level surface_kind (cross-field invariant,
+    // enforced by validateHostRegistryEntry). `.agents` is a file surface, not cli.
+    surface_kind,
+    package: {
+      installable: false,
+      installability: "target",
+      manifest_format: `${host_kind}-package`,
+      // AC-7 by surface: cli = Guild-owned wrapper packages → guild-run
+      // self-update; file = AGENTS-file packages → reinstall command (notify +
+      // one command, no daemon); app = refused install surfaces → no check, no
+      // apply (degrades to notify-only prose; the recorded loss IS this row).
+      update: surface_kind === "cli" ? { check: "receipt", apply: "self_update", command: UPDATE_COMMANDS.self_update, auto_capable: false } : surface_kind === "file" ? { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false } : { check: "none", apply: "none", command: null, auto_capable: false }
+    },
+    bootstrap: {
+      context_injection: "instruction_file",
+      skill_autoload: false,
+      prompt_transform: false,
+      wrapper_injection: true
+    },
+    commands: { slash_commands: false, command_files: "none" },
+    skills: { native_skills: false, skill_dir: null },
+    agents: { native_agents: false, agent_format: null },
+    // cap-loc-D11 — injection facts derived STRUCTURALLY from the surface kind.
+    // A `cli` surface has somewhere to dispatch a lane, so injection is an
+    // unproven TARGET. An `app` or `file` surface has no pane to dispatch into
+    // (see the AGENTS_FILE / kiro / qoder / trae rows: `dispatch_selectable:
+    // false`), so there is nothing to inject INTO — `absent`, and nothing to
+    // degrade to either. That is a structural fact, not pessimism.
+    //
+    // NO ROW STARTS `verified`: injection is unbuilt, so no probe of it has ever
+    // run on any host. A row flips only on a real probe receipt (E3 / cap-loc-D12).
+    injection: dispatch_selectable ? {
+      definition_injection: false,
+      definition_injection_support: "target",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "target",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "prompt_text",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    } : {
+      definition_injection: false,
+      definition_injection_support: "absent",
+      skill_bundle_injection: false,
+      skill_bundle_injection_support: "absent",
+      dynamic_registration: false,
+      dynamic_registration_support: "absent",
+      fallback: "none",
+      definition_injection_verified_by: null,
+      skill_bundle_injection_verified_by: null,
+      dynamic_registration_verified_by: null
+    },
+    hooks: {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    },
+    permissions: {
+      deny: false,
+      ask: true,
+      ask_mode: null,
+      accept_edits_without_prompt: false,
+      auto_approve_tools: false,
+      bypass_prompts: false,
+      bypass_sandbox: false,
+      permission_prompt_layer: false,
+      launch_modes: {}
+    },
+    dispatch: {
+      tmux_processes: true,
+      plain_processes: true,
+      independent_agents: false,
+      subagents: false,
+      inline: true
+    },
+    interaction: { native_questions: false, terminal_prompt: true, file_bus_questions: true },
+    sessions: { continue: false, resume_by_id: false, fork: false },
+    structured_output: { native_json: false, schema_validation: false, repair_prompt: true },
+    artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+    tools: {
+      read: "native",
+      search: "native",
+      shell: "native",
+      edit: "native",
+      write: "native",
+      browser: "none",
+      web: "emulated",
+      mcp: "none"
+    },
+    mcp: { stdio: false, http: false },
+    models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
+  };
+}
+var AGENTS_FILE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "agents-file",
+  family: "agents",
+  // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+  // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+  adapter_binding: "self",
+  // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+  surface_kind: "file",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "target",
+  result_adapter: false,
+  // INFERRED — no cross-review adapter; verify at live-host availability.
+  // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
+  // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
+  // The prior value was annotated INFERRED with the rationale "a host consuming
+  // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
+  // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
+  // THIS row", and under that reading it is false by construction:
+  //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
+  //     TeamBackend/pane path can name it;
+  //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
+  //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
+  //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
+  //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
+  //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
+  //     package target, not a process launcher".
+  // The G4b lane carved this row out as a documented exception rather than flipping it.
+  // That carve-out is superseded here because the field has REAL per-row consumers that
+  // read it as selectability: config-cli.ts builds the operator-pinnable host set from
+  // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
+  // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
+  // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
+  // and then dispatch into an adapter that returns `command: null`. A concrete
+  // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
+  // this row is the render TARGET, never a dispatch destination.
+  dispatch_selectable: false,
+  capabilities: AGENTS_FILE_CAPABILITIES,
+  // file surface — matches top-level surface_kind.
+  provenance: "inferred"
+};
+var PI_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "pi-cli",
+  family: "pi",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
+  // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+  installability: "target",
+  // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+  result_adapter: false,
+  // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+  dispatch_selectable: true,
+  // VERIFIED: pi is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("pi-cli", "pi"),
+    // VERIFIED on-host (pi --help, 0.79.3):
+    sessions: { continue: true, resume_by_id: true, fork: true },
+    // --continue/-c, --resume/-r + --session-id, --fork
+    structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
+    // --mode json
+    permissions: {
+      ...inferredCaps("pi-cli", "pi").permissions,
+      // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
+      // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
+      // left false) — pi's --tools allowlist lets an invocation deny specific tools,
+      // so `deny:true` is the correct capability. Recorded here (not just in the
+      // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
+      deny: true
+    }
+  },
+  provenance: "verified"
+  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+};
+var ANTIGRAVITY_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "antigravity-cli",
+  family: "antigravity",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+  detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+  installability: "target",
+  // VERIFIED-as-target: CLI present; Guild-package install unproven.
+  result_adapter: false,
+  // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+  dispatch_selectable: true,
+  // VERIFIED: agy is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("antigravity-cli", "antigravity"),
+    // VERIFIED on-host (agy --help, 1.0.8):
+    sessions: { continue: true, resume_by_id: true, fork: false },
+    // --continue/-c, --conversation <id>; no fork flag
+    permissions: {
+      ...inferredCaps("antigravity-cli", "antigravity").permissions,
+      bypass_prompts: true,
+      // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+      launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+      // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
+      // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
+      // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
+      // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
+      // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
+      // Recorded here so the registry — not a second hand-authored row — is the one
+      // source of truth (closes the "two diverged capability truths" audit finding).
+      deny: true,
+      bypass_sandbox: true
+    }
+  },
+  provenance: "verified"
+  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+};
+var CLAUDE_APP_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-app",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-app", "claude", "app"),
+  provenance: "inferred"
+};
+var CLAUDE_WEB_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-web",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-web", "claude", "app"),
+  provenance: "inferred"
+};
+var CODEX_APP_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "codex-app",
+  family: "codex",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("codex-app", "codex", "app"),
+  provenance: "inferred"
+};
+var CLAUDE_AI_CONNECTOR_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-ai-connector",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+  provenance: "inferred"
+};
+var CURSOR_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "cursor",
+  family: "cursor",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("cursor", "cursor", "cli"),
+  // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
+  // were live-checked 2026-07-30, but no authenticated completion has run —
+  // partial verification does not flip the row.
+  provenance: "inferred"
+};
+var GITHUB_COPILOT_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "github-copilot",
+  family: "copilot",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+  detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+  // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
+  // real completion end to end through guild-run; per-host receipt + live
+  // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
+  // INFERRED_HOSTS) until all cells are live-verified.
+  provenance: "verified"
+};
+var OPENCODE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "opencode",
+  family: "opencode",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("opencode", "opencode", "cli"),
+  // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
+  // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
+  // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
+  // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
+  provenance: "verified"
+};
+var ROVO_DEV_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "rovo-dev",
+  family: "rovo",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+  detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+  provenance: "inferred"
+};
+var KIRO_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "kiro",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
+  // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
+  // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
+  // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+  // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+  // a row per registry id, but a capability row is not a dispatch surface). The
+  // honest column for a pane-less file surface is false.
+  dispatch_selectable: false,
+  capabilities: inferredCaps("kiro", "agents", "file"),
+  provenance: "inferred"
+};
+var QODER_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "qoder",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+  dispatch_selectable: false,
+  capabilities: inferredCaps("qoder", "agents", "file"),
+  provenance: "inferred"
+};
+var TRAE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "trae",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+  dispatch_selectable: false,
+  capabilities: inferredCaps("trae", "agents", "file"),
+  provenance: "inferred"
+};
+var HOST_REGISTRY_ROWS = deepFreeze({
+  "claude-code-cli": CLAUDE_ENTRY,
+  "codex-cli": CODEX_ENTRY,
+  "pi-cli": PI_ENTRY,
+  "antigravity-cli": ANTIGRAVITY_ENTRY,
+  "agents-file": AGENTS_FILE_ENTRY,
+  "claude-code-app": CLAUDE_APP_ENTRY,
+  "claude-code-web": CLAUDE_WEB_ENTRY,
+  "codex-app": CODEX_APP_ENTRY,
+  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+  cursor: CURSOR_ENTRY,
+  "github-copilot": GITHUB_COPILOT_ENTRY,
+  opencode: OPENCODE_ENTRY,
+  "rovo-dev": ROVO_DEV_ENTRY,
+  kiro: KIRO_ENTRY,
+  qoder: QODER_ENTRY,
+  trae: TRAE_ENTRY
+});
+var HOST_ID_SET = new Set(HOST_IDS);
+var FAMILY_SET = new Set(HOST_FAMILIES);
+var AUTH_PROBE_SET = new Set(AUTH_PROBES);
+
 // lib/security/enforce.ts
 var fs7 = __toESM(require("node:fs"));
 function effectiveBypassPolicy(configured, autonomyMode) {
@@ -2483,6 +3386,14 @@ function readHostCapability(cwd) {
   }
   return null;
 }
+function hostSupportsPreToolUseAsk(cwd) {
+  const fromManifest = readHostCapability(cwd)?.tool_support?.pre_tool_use_ask;
+  if (typeof fromManifest === "boolean") return fromManifest;
+  const caps = HOST_REGISTRY_ROWS[resolveHostResolution(process.env).id]?.capabilities;
+  if (caps === void 0) return true;
+  const hasUsableDeny = caps.hooks.pre_tool_use === true && caps.permissions.deny === true && caps.permissions.ask_mode === null;
+  return !hasUsableDeny;
+}
 function writeApprovalRequest(runDir, opts) {
   try {
     const approvalDir = path10.join(runDir, "agent-bus", "approvals");
@@ -2644,8 +3555,7 @@ function runSecurityEnforcement(payload, cwd) {
   const laneId = typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : void 0;
   const permissionMode = payload.permission_mode;
   const dispatchRung = (process.env["GUILD_DISPATCH_RUNG"] ?? "").trim() || void 0;
-  const hostCap = readHostCapability(cwd);
-  const hostSupportsAsk = hostCap?.tool_support?.pre_tool_use_ask !== false;
+  const hostSupportsAsk = hostSupportsPreToolUseAsk(cwd);
   const emit = (input) => {
     if (runId === void 0 || runDir === void 0) {
       process.stderr.write(
@@ -3006,8 +3916,7 @@ async function main() {
   }
   if (runSecurityEnforcement(payload, cwd)) return;
   {
-    const bgHostCap = readHostCapability(cwd);
-    const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
+    const bgHostSupportsAsk = hostSupportsPreToolUseAsk(cwd);
     const bgRunId = resolveRunId(cwd);
     const bgRunDir = bgRunId !== void 0 ? process.env["GUILD_RUN_DIR"] ?? path10.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId) : void 0;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
