@@ -3428,7 +3428,24 @@ var init_host_capabilities_schema = __esm({
         // individually verified.
         session_start: true,
         user_prompt_submit: true,
-        pre_tool_use: false,
+        // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0, isolated CODEX_HOME).
+        // A PreToolUse hook emitting the Claude-shaped
+        // {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}
+        // BLOCKS the tool call:
+        //     hook: PreToolUse Blocked
+        //     ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: …
+        // and the model stops. CONTROL (same config, non-matching command) reached
+        // `hook: PreToolUse Completed` and executed — so the deny, not the sandbox,
+        // is causal. This retires the old INFERRED `false` (never verified).
+        //
+        // CAVEAT THAT DOES NOT BELONG IN THIS BOOLEAN, but governs how it may be
+        // consumed: codex gates hooks behind PERSISTED HOOK TRUST. With the same
+        // hooks.json but no trust, the hook SILENTLY never runs (no warning, tool
+        // executes). So "codex supports PreToolUse deny" (this row) must never be
+        // read as "enforcement is live on this box" — that needs a probe of actual
+        // execution (probeCodexPreToolUseEnforcement, scripts/lib/pane-adapter.ts),
+        // which is what the codex-pane bypass flag is gated on.
+        pre_tool_use: true,
         post_tool_use: false,
         stop: false,
         pre_compact: false,
@@ -3438,12 +3455,20 @@ var init_host_capabilities_schema = __esm({
         teammate_idle: false
       },
       permissions: {
-        // INFERRED (Codex CLI approval model). Confirm on-box at L3.
-        deny: false,
+        // `deny` CONFIRMED ON-BOX (issue #94) — see hooks.pre_tool_use above: a
+        // PreToolUse hook decision of "deny" is honoured and blocks the call.
+        deny: true,
         ask: true,
         // Codex prompts for approval by default.
+        // STILL NULL, DELIBERATELY. Codex has a PreToolUse DENY layer but no
+        // PreToolUse ASK primitive (`permissionDecision:"ask"` is not an accepted
+        // codex decision). Guild's own enforcement already handles this: the
+        // manifest written by write-host-capability.ts carries
+        // `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
+        // hooks/pre-tool-use.ts's HK-07 gate degrades ask -> file-bus
+        // approval_request + `deny`. VERIFIED end-to-end for codex in issue #94.
+        // Flipping this to "pre_tool_use" would re-enable an ask codex rejects.
         ask_mode: null,
-        // No pre_tool_use layer; approval is interactive.
         accept_edits_without_prompt: false,
         // INFERRED
         auto_approve_tools: false,
@@ -3458,8 +3483,11 @@ var init_host_capabilities_schema = __esm({
           // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
           // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
           // than guessed, so their absence reads as "degrade/record", not "supported".
+          // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0): the flag exists and
+          // takes effect. Note what it does NOT do — a PreToolUse hook deny still
+          // blocked the tool call under this flag, so the bypass suppresses codex's
+          // own approval/sandbox layer and leaves Guild's gate intact.
           bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
-          // INFERRED flag name — verify on-box (AC19).
         }
       },
       dispatch: {

@@ -65,6 +65,9 @@ import {
   resolveRunDir,
   type SecurityEventInput,
 } from "./lib/security/events.js";
+// ISSUE #94: the manifest-absent fallback for `pre_tool_use_ask` reads the same
+// capability rows the manifest is rendered from — see hostSupportsPreToolUseAsk.
+import { HOST_REGISTRY_ROWS } from "../src/modules/host-runtime/workflows/host-registry-schema.js";
 import {
   effectiveBypassPolicy,
   readScopeContext,
@@ -178,8 +181,11 @@ function resolveRunId(cwd: string): string | undefined {
 //   host supports PreToolUse ask  →  normal ask decision (unchanged behavior)
 //
 // The capability manifest is written at SessionStart by bootstrap.sh →
-// scripts/write-host-capability.ts (RE-5).  We read it best-effort; absent
-// manifest = safe fallback to the existing ask path (no regression).
+// scripts/write-host-capability.ts (RE-5). We read it best-effort. An ABSENT
+// manifest no longer means "assume ask works" unconditionally — see
+// hostSupportsPreToolUseAsk, which falls back to the registry capability row for
+// the narrow set of hosts that have a real refusal primitive and no ask (today:
+// codex-cli only). Every other host keeps the historical ask path.
 
 /** Shape of tool_support in the guild.host_capability.v1 manifest (HK-07 slice). */
 interface HostToolSupport {
@@ -231,6 +237,42 @@ function readHostCapability(cwd: string): HostCapabilitySlice | null {
     }
   }
   return null; // absent or unreadable manifest — safe fallback
+}
+
+/**
+ * ISSUE #94 — does the RESOLVED host have a native PreToolUse `ask` primitive?
+ *
+ * The manifest is authoritative when present. When it is ABSENT the old answer
+ * was an unconditional "assume ask works", which is a safe fallback only on a
+ * host that actually HAS ask. On Codex it is not safe: codex accepts `deny` but
+ * has no `ask` decision at all, and its SessionStart wiring runs `update-check`,
+ * not the bootstrap that writes the manifest — so a codex pane hit the fallback
+ * every time and Guild emitted an `ask` codex cannot honour. The gate looked
+ * armed and enforced nothing.
+ *
+ * So the manifest-absent branch falls back to the registry capability row — the
+ * same `guild.host_capabilities.v1` source the manifest is rendered from.
+ *
+ * THE FALLBACK IS DELIBERATELY NARROW. `ask_mode === null` alone is NOT the
+ * test: almost every non-Claude row carries it, including rows that also declare
+ * `hooks.pre_tool_use:false` and `permissions.deny:false` — hosts with no
+ * PreToolUse layer at all. Degrading those to `deny` would substitute an
+ * unenforceable decision for a merely-imperfect one on a dozen hosts nobody has
+ * verified. So the fallback fires ONLY where the row proves a USABLE deny
+ * primitive: a PreToolUse hook exists, deny is honoured, and there is no ask.
+ * Today exactly one row qualifies — codex-cli, confirmed on-box in issue #94.
+ * Everything else (and every unknown host id) keeps the historical assume-ask.
+ */
+function hostSupportsPreToolUseAsk(cwd: string): boolean {
+  const fromManifest = readHostCapability(cwd)?.tool_support?.pre_tool_use_ask;
+  if (typeof fromManifest === "boolean") return fromManifest;
+  const caps = HOST_REGISTRY_ROWS[resolveHostResolution(process.env).id]?.capabilities;
+  if (caps === undefined) return true;
+  const hasUsableDeny =
+    caps.hooks.pre_tool_use === true &&
+    caps.permissions.deny === true &&
+    caps.permissions.ask_mode === null;
+  return !hasUsableDeny;
 }
 
 /**
@@ -571,8 +613,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
 
   // HK-07: read the host capability manifest (written at SessionStart by bootstrap.sh).
   // Absent manifest = assume ask is supported (safe fallback, no regression).
-  const hostCap = readHostCapability(cwd);
-  const hostSupportsAsk = hostCap?.tool_support?.pre_tool_use_ask !== false;
+  const hostSupportsAsk = hostSupportsPreToolUseAsk(cwd);
 
   const emit = (input: Omit<SecurityEventInput, "run_id" | "lane_id">): void => {
     if (runId === undefined || runDir === undefined) {
@@ -1253,8 +1294,7 @@ export async function main(): Promise<void> {
   // HK-07: thread degrade context so the boundary-guard ask is also covered
   // (both ask-emitting paths must degrade when the host lacks PreToolUse ask).
   {
-    const bgHostCap = readHostCapability(cwd);
-    const bgHostSupportsAsk = bgHostCap?.tool_support?.pre_tool_use_ask !== false;
+    const bgHostSupportsAsk = hostSupportsPreToolUseAsk(cwd);
     const bgRunId = resolveRunId(cwd);
     const bgRunDir =
       bgRunId !== undefined

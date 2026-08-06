@@ -11,6 +11,7 @@ import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
 import { buildPrompt } from "../../../src/modules/prompting/workflows/team-prompt";
 import type {
   AdapterResolver,
+  PaneAdapter,
   LaunchMode,
   ParsedTmuxCommand,
   PaneSpec,
@@ -94,7 +95,8 @@ export function isDebugShellTitle(title: string): boolean {
 // team pane adds no safety, only a stall.
 //
 // Scope, deliberately narrow: this overlay is wired ONLY inside
-// composeTmuxCommands below — for EVERY Claude pane it builds, whether or not
+// composeTmuxCommands below — for EVERY Claude pane it builds (and, since issue
+// #94, for a codex pane through its own separate resolver), whether or not
 // `resolveAdapter` is wired for other (non-Claude) panes in the same local
 // team. composeTmuxCommands is exclusively the LOCAL tmux path
 // (`TmuxTeamBackend.plan()`); `RemoteTeamBackend` (remote-backend.ts) owns an
@@ -114,7 +116,13 @@ export function isDebugShellTitle(title: string): boolean {
 //     (bypassing the bare adapter) — so the permission-mode flag reaches a
 //     remote pane exclusively behind the proven Guild-side guardrail. A host
 //     that fails the preflight still launches bare (recorded, never silent).
-//   - Codex is never touched here at all (see resolveClaudeTeamLaunchArgs).
+//   - Codex WAS never touched here. Issue #94 changed that: now that a codex
+//     pane's PreToolUse deny is wired and probe-verified, composeTmuxCommands
+//     also resolves a codex pane's argv (resolveCodexTeamLaunchArgs, same
+//     permissionConfig ladder) and hands it to the adapter — which still
+//     withholds it unless the pane is scoped AND the probe passes. The two
+//     resolvers stay separate functions so neither can be asked for the other
+//     host's flags.
 
 /**
  * Resolve the host_mode a spawned team pane should launch under, given the
@@ -139,6 +147,24 @@ export function resolveClaudeTeamLaunchArgs(
   config: RuntimePermissionConfig = RUNTIME_DEFAULT_CONFIG,
 ): string[] {
   return resolveHostLaunch("claude", resolveTeamPaneHostMode(config)).args;
+}
+
+/**
+ * ISSUE #94 — the Codex launch argv for a local team pane, resolved from the
+ * SAME `host_mode` ladder as Claude's. Codex used to be excluded here on
+ * purpose: with no PreToolUse enforcement on that host, handing a codex pane a
+ * bypass flag was a net safety regression. Now that the deny bridge is wired,
+ * the exclusion is obsolete — but this function is only HALF the decision.
+ *
+ * Returning args does NOT mean a pane gets them. `CodexPaneAdapter` applies them
+ * only behind its own gates: an explicit opt-in (these args), a scoped pane, and
+ * a probe proving the deny actually executes. Whatever this resolves to, an
+ * unproven box still launches bare.
+ */
+export function resolveCodexTeamLaunchArgs(
+  config: RuntimePermissionConfig = RUNTIME_DEFAULT_CONFIG,
+): string[] {
+  return resolveHostLaunch("codex", resolveTeamPaneHostMode(config)).args;
 }
 
 export function paneCommand(
@@ -284,6 +310,35 @@ export function composeTmuxCommands(opts: {
         resolveClaudeTeamLaunchArgs(permissionConfig),
         model,
       );
+    }
+    // ISSUE #94: a codex pane's opt-in bypass argv is resolved HERE, from the
+    // same permissionConfig-driven host_mode ladder the claude branch above
+    // uses. The adapter still withholds it unless the pane is scoped AND its
+    // PreToolUse deny probe passes — see CodexPaneAdapter.command().
+    if (hostKind === "codex" && resolveAdapter) {
+      // Duck-typed rather than `instanceof CodexPaneAdapter`: pane-adapter.ts
+      // already imports `paneCommand` from this file, so importing its class
+      // back would close an import cycle for a one-line type test.
+      const adapter = resolveAdapter("codex") as PaneAdapter & {
+        withLaunchArgs?: (args: string[], projectCwd?: string) => PaneAdapter;
+      };
+      const codexAdapter =
+        typeof adapter.withLaunchArgs === "function"
+          ? adapter.withLaunchArgs(resolveCodexTeamLaunchArgs(permissionConfig), cwd)
+          : adapter;
+      return codexAdapter.command({
+        name: spec?.name ?? "orchestrator",
+        scope: spec ? "lane" : "orchestrator",
+        runId,
+        slug,
+        prompt,
+        hostKind,
+        ...(spec?.taskId ? { taskId: spec.taskId } : {}),
+        ...(spec?.capability_scope ? { capability_scope: spec.capability_scope } : {}),
+        ...(spec?.name ? { specialist: spec.name } : {}),
+        ...(model ? { model } : {}),
+        ...(modelParams ? { modelParams } : {}),
+      });
     }
     if (!resolveAdapter) {
       // Pre-#54 fallback contract, preserved verbatim: no resolver and a

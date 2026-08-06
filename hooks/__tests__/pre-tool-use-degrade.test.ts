@@ -271,6 +271,40 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
       const approvals = approvalRequests(tmp);
       expect(approvals.length).toBe(0);
     });
+
+    /**
+     * ISSUE #94 — the manifest-absent branch is no longer an unconditional
+     * assume-ask. Codex's SessionStart wiring runs update-check, not the
+     * bootstrap that writes this manifest, so a codex pane hit that branch every
+     * time and Guild emitted an `ask` codex has no primitive for: the gate looked
+     * armed and enforced nothing. With no manifest, a codex host now degrades
+     * from the registry capability row instead.
+     */
+    it("degrades to deny for codex when the manifest is absent (registry fallback)", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "codex", GUILD_HOST_ID: "codex-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"deny"');
+      expect(approvalRequests(tmp).length).toBe(1);
+    });
+
+    /**
+     * ...and the fallback is NARROW. `ask_mode:null` alone is not the test —
+     * nearly every non-Claude row carries it, including rows that also declare
+     * no PreToolUse hook and no deny. Degrading those would swap a merely
+     * imperfect decision for an unenforceable one on a dozen unverified hosts.
+     */
+    it("does NOT degrade a host that lacks a usable deny primitive", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "pi", GUILD_HOST_ID: "pi-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"ask"');
+      expect(approvalRequests(tmp).length).toBe(0);
+    });
   });
 
   // ── Degraded path: host lacks ask ───────────────────────────────────────
@@ -364,6 +398,40 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
       // The tool either asks or falls through — it MUST NOT write an approval_request
       const approvals = approvalRequests(tmp);
       expect(approvals.length).toBe(0);
+    });
+
+    /**
+     * ISSUE #94 — the manifest-absent branch is no longer an unconditional
+     * assume-ask. Codex's SessionStart wiring runs update-check, not the
+     * bootstrap that writes this manifest, so a codex pane hit that branch every
+     * time and Guild emitted an `ask` codex has no primitive for: the gate looked
+     * armed and enforced nothing. With no manifest, a codex host now degrades
+     * from the registry capability row instead.
+     */
+    it("degrades to deny for codex when the manifest is absent (registry fallback)", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "codex", GUILD_HOST_ID: "codex-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"deny"');
+      expect(approvalRequests(tmp).length).toBe(1);
+    });
+
+    /**
+     * ...and the fallback is NARROW. `ask_mode:null` alone is not the test —
+     * nearly every non-Claude row carries it, including rows that also declare
+     * no PreToolUse hook and no deny. Degrading those would swap a merely
+     * imperfect decision for an unenforceable one on a dozen unverified hosts.
+     */
+    it("does NOT degrade a host that lacks a usable deny primitive", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "pi", GUILD_HOST_ID: "pi-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"ask"');
+      expect(approvalRequests(tmp).length).toBe(0);
     });
   });
 

@@ -106,7 +106,7 @@
       "id": "lib/host-adapters/codex-cli",
       "source_path": "scripts/lib/host-adapters/codex-cli.ts",
       "resource_path": "resources/scripts/lib/host-adapters/codex-cli.ts",
-      "sha256": "42151dc9ce9fbe4ccad0c2903dea9128fb56d38d39e5dd3a5e021f13407a7ad6"
+      "sha256": "48837194628eb97dc433b433fd3a2c24c39a8005712920d3c7f42ad06d98158d"
     },
     {
       "category": "scripts",
@@ -225,7 +225,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "8dad21f1653e01691edb562acf63e0cf9048087aaf11c1cc0b330bbf99b4e1d7"
+      "sha256": "802b659487fc73d22c8e833a21a4ccf63e14720a8372b258443c071dc5725b85"
     },
     {
       "category": "scripts",
@@ -284,7 +284,7 @@
       "id": "projection:scripts/lib/host/remote-backend.ts",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "05f35cdf40ee2229fb3dd84edef92f0844d89548b3ebcb5dca0f3ebb54451e88",
+      "sha256": "83d5ed06d2ae7baa2ccd1bd174382062a8a6c0d9c22d6a43c37502a8d7a73854",
       "projection_dependency": true
     },
     {
@@ -292,7 +292,7 @@
       "id": "projection:scripts/lib/host/tmux-backend.ts",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "3f02d2250a0c8d428fa8ebb8381a30acf45214f5ed4cba1bbdf6aa82b912bc87",
+      "sha256": "5bb28e17919edb9036fac9ead3d226f5c0530ca19dd5e2b5a79a22ac3bcda9de",
       "projection_dependency": true
     },
     {
@@ -812,7 +812,7 @@
       "id": "projection:src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "source_path": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-capabilities-schema.ts",
-      "sha256": "9f150abc2ddb0588df8a0ca0e275afe2d0366e99592068b7748bc3ae3e74258c",
+      "sha256": "13929c4f00c2c8b50107e26c72b84b1ecfb63692c2eefafcae478081ee442332",
       "projection_dependency": true
     },
     {
