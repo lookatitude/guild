@@ -631,10 +631,13 @@ describe("reanchor — rebuilt dist bundle carries the injection", () => {
     expect(src).toContain("model` param is REQUIRED");
   });
 
-  it("pre-compact.js contains the injection strings (dist-grep rail)", () => {
+  // PreCompact ships the PLAIN-TEXT compact-summary instructions (issue #139) —
+  // NOT the additionalContext header — so the rail greps the summary-instruction
+  // wording, not the header marker.
+  it("pre-compact.js contains the compact-summary instruction strings (dist-grep rail)", () => {
     expect(fs.existsSync(precompactBundle)).toBe(true);
     const src = fs.readFileSync(precompactBundle, "utf8");
-    expect(src).toContain("GUILD RE-ANCHOR");
+    expect(src).toContain("MUST survive this compaction verbatim");
     expect(src).toContain("guild:resume");
   });
 });
@@ -765,7 +768,7 @@ describe("reanchor — LEAD-ONLY gate (oir-wi-57 round-4 fix)", () => {
     expect(hookEvent.lane_id).toBe("T1-backend"); // telemetry still attributed
   });
 
-  it("pre-compact.js: the lead's own invocation (no such env) still gets the header", () => {
+  it("pre-compact.js: the lead's own invocation (no such env) still gets the compact-summary instructions", () => {
     makeRun(root, { agentMode: "team", phase: "build" });
     const runDir = path.join(root, ".guild", "runs", "run-fix-1");
     fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
@@ -774,7 +777,8 @@ describe("reanchor — LEAD-ONLY gate (oir-wi-57 round-4 fix)", () => {
       { hook_event_name: "PreCompact", cwd: root },
       { GUILD_RUN_ID: "run-fix-1" },
     );
-    expect(out).toContain(REANCHOR_MARKER);
+    expect(out).toContain("run-fix-1");
+    expect(out).toMatch(/preserve/i);
   });
 
   it("ROUND-5 REGRESSION: pre-compact.js — GUILD_LANE_ID=\"\" (present but blank) does not mask a valid GUILD_TASK_ID, so the header is still suppressed for the worker", () => {
@@ -821,6 +825,22 @@ describe("reanchor — renderCompactSummaryInstructions / buildCompactSummaryIns
     expect(text).toContain('next pending gate "review"');
   });
 
+  it("folds the lead-posture re-anchor facts in preservation wording (#139: this is now the ONLY live PreCompact channel)", () => {
+    const text = renderCompactSummaryInstructions({
+      runId: "run-abc",
+      agentMode: "team",
+      phase: "build",
+      initiative: null,
+      nextGate: "review",
+    });
+    expect(text).toContain('agent_mode "team"');
+    expect(text).toMatch(/lean Guild LEAD/i);
+    expect(text).toContain("guild:resume");
+    // Benign preservation wording only — no adversarial-shaped directive.
+    expect(text).not.toMatch(/must begin with/i);
+    expect(text).not.toContain(REANCHOR_MARKER);
+  });
+
   it("omits the initiative clause when there is none, and renders unknown for a null next gate", () => {
     const text = renderCompactSummaryInstructions({
       runId: "run-abc",
@@ -860,47 +880,77 @@ describe("reanchor — renderCompactSummaryInstructions / buildCompactSummaryIns
   });
 });
 
-describe("buildAdditionalContextEnvelope — newCustomInstructions is additive", () => {
-  it("omits newCustomInstructions when not passed (byte-identical to the pre-G5(c) shape)", () => {
-    const json = buildAdditionalContextEnvelope("PreCompact", "HEADER");
-    const parsed = JSON.parse(json);
+describe("buildAdditionalContextEnvelope — the SessionStart-shaped envelope only", () => {
+  // #139: the `newCustomInstructions` parameter is gone with its only caller
+  // (PreCompact), which now emits plain text. The envelope carries exactly the
+  // two keys the SessionStart/Stop/UserPromptSubmit call sites need.
+  it("emits exactly hookEventName + additionalContext", () => {
+    const json = buildAdditionalContextEnvelope("SessionStart", "HEADER");
+    const parsed = JSON.parse(json) as Record<string, Record<string, unknown>>;
     expect(parsed).toEqual({
-      hookSpecificOutput: { hookEventName: "PreCompact", additionalContext: "HEADER" },
+      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "HEADER" },
     });
-    expect("newCustomInstructions" in parsed.hookSpecificOutput).toBe(false);
-  });
-
-  it("includes newCustomInstructions when passed", () => {
-    const json = buildAdditionalContextEnvelope("PreCompact", "HEADER", "INSTRUCTIONS");
-    const parsed = JSON.parse(json);
-    expect(parsed.hookSpecificOutput.newCustomInstructions).toBe("INSTRUCTIONS");
-    expect(parsed.hookSpecificOutput.additionalContext).toBe("HEADER");
+    expect("newCustomInstructions" in parsed["hookSpecificOutput"]!).toBe(false);
   });
 });
 
-describe("reanchor — pre-compact.js emits newCustomInstructions end-to-end (real bundle)", () => {
+// ── Issue #139 — PreCompact stdout must be PLAIN TEXT, never a JSON envelope ──
+// Live-session verification (Claude Code 2.1.223, evidence on issue #92) showed
+// the `hookSpecificOutput` envelope FAILS the host's PreCompact hook-output
+// validation ("Hook JSON output validation failed — (root): Invalid input"): the
+// hook is marked FAILED, its stdout is DISCARDED (so both `additionalContext`
+// and `newCustomInstructions` were dead), and a `PreCompact [...] failed:` line
+// is shown to the user on every compaction with an active run. The real channel
+// is the raw stdout of a SUCCEEDED PreCompact hook, which the compaction path
+// joins into the summarizer's custom instructions.
+describe("reanchor — pre-compact.js emits PLAIN-TEXT compact-summary instructions (real bundle, #139)", () => {
   let root: string;
   beforeEach(() => {
     root = tmpRoot();
   });
   afterEach(() => cleanup(root));
 
-  it("the lead's own invocation gets BOTH channels carrying consistent facts", () => {
-    makeRun(root, { agentMode: "team", phase: "build" });
+  function runLead(): string {
     const runDir = path.join(root, ".guild", "runs", "run-fix-1");
     fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
-    const out = execFileSync("node", [path.join(DIST, "pre-compact.js")], {
+    return execFileSync("node", [path.join(DIST, "pre-compact.js")], {
       input: JSON.stringify({ hook_event_name: "PreCompact", cwd: root }),
       encoding: "utf8",
       env: { ...process.env, GUILD_RUN_ID: "run-fix-1" },
     });
-    const parsed = JSON.parse(out);
-    expect(parsed.hookSpecificOutput.additionalContext).toContain(REANCHOR_MARKER);
-    expect(parsed.hookSpecificOutput.newCustomInstructions).toContain("run-fix-1");
-    expect(parsed.hookSpecificOutput.newCustomInstructions).toMatch(/preserve/i);
+  }
+
+  it("stdout is EXACTLY the plain-text instructions — no JSON envelope at all", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const out = runLead();
+    expect(out.trim()).toBe(buildCompactSummaryInstructions(root));
+    expect(out).not.toContain("hookSpecificOutput");
+    expect(out).not.toContain("additionalContext");
+    expect(out).not.toContain("newCustomInstructions");
+    // Not parseable as the JSON envelope the host rejects.
+    expect(() => JSON.parse(out) as unknown).toThrow();
   });
 
-  it("a dispatched worker's own session gets NEITHER channel", () => {
+  it("the plain text carries the run facts and the lead-posture re-anchor facts", () => {
+    makeRun(root, { agentMode: "team", phase: "build", initiative: "my-initiative" });
+    const out = runLead();
+    expect(out).toContain('run "run-fix-1"');
+    expect(out).toContain('initiative "my-initiative"');
+    expect(out).toContain('phase "build"');
+    expect(out).toContain('next pending gate "review"');
+    expect(out).toContain("guild:resume");
+    expect(out).toMatch(/preserve/i);
+  });
+
+  it("the plain text carries NO adversarial-shaped directive (summarizer flags those as injection)", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const out = runLead();
+    expect(out).not.toMatch(/must begin with/i);
+    expect(out).not.toMatch(/ignore (the |all )?(above|previous)/i);
+    expect(out).not.toContain(REANCHOR_MARKER);
+  });
+
+  it("a dispatched worker's own session stays silent (zero noise)", () => {
     makeRun(root, { agentMode: "team", phase: "build" });
     const runDir = path.join(root, ".guild", "runs", "run-fix-1");
     fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
@@ -908,6 +958,16 @@ describe("reanchor — pre-compact.js emits newCustomInstructions end-to-end (re
       input: JSON.stringify({ hook_event_name: "PreCompact", cwd: root }),
       encoding: "utf8",
       env: { ...process.env, GUILD_RUN_ID: "run-fix-1", GUILD_TASK_ID: "T1-backend" },
+    });
+    expect(out.trim()).toBe("");
+  });
+
+  it("no active run ⇒ empty stdout (zero-noise gate unchanged)", () => {
+    makeRun(root, { noSentinel: true });
+    const out = execFileSync("node", [path.join(DIST, "pre-compact.js")], {
+      input: JSON.stringify({ hook_event_name: "PreCompact", cwd: root }),
+      encoding: "utf8",
+      env: { ...process.env, GUILD_RUN_ID: "" },
     });
     expect(out.trim()).toBe("");
   });

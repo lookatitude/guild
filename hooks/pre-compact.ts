@@ -7,22 +7,39 @@
  *          compacts conversation context (clearing the working buffer), so we
  *          emit a `hook_event` JSONL line via T3c's appendEvent() to capture the
  *          compact boundary in the audit log. (2) Gap G1 re-anchor (oir-wi-00):
- *          when an active OPEN run exists under the resolved guild root, emit a
- *          compact re-anchor header (lead posture, agent_mode/backend,
- *          named-specialist dispatch, tier contract, next pending gate,
- *          guild:resume pointer) as `hookSpecificOutput.additionalContext` into
- *          the context the host preserves.
+ *          when an active OPEN run exists under the resolved guild root, write
+ *          the PLAIN-TEXT compact-summary instructions
+ *          (`buildCompactSummaryInstructions`) to stdout so the run's identity /
+ *          phase / next-gate / lead-posture facts survive into the post-compact
+ *          summary.
  *
- *          PreCompact fires BEFORE compaction, so the injected header is
- *          best-effort — the RELIABLE surface is the SessionStart source=compact
- *          branch (hooks/session-reanchor.ts), which fires AFTER compaction. We
- *          ship BOTH per the work-item. Both fall through cleanly (no stdout, no
- *          log) when no active OPEN run exists — zero noise.
+ *          PLAIN TEXT, NOT A JSON ENVELOPE (issue #139, verified live on Claude
+ *          Code 2.1.223 — evidence:
+ *          https://github.com/lookatitude/guild/issues/92#issuecomment-5200045481).
+ *          This hook previously wrote a `hookSpecificOutput` envelope here. That
+ *          envelope FAILS the host's PreCompact hook-output validation ("Hook
+ *          JSON output validation failed — (root): Invalid input"): the hook is
+ *          marked FAILED, its stdout is DISCARDED (so BOTH `additionalContext`
+ *          and `newCustomInstructions` were dead), and a visible
+ *          `PreCompact [...] failed:` line was shown to the user on every
+ *          compaction with an active run. The real channel is the RAW STDOUT of
+ *          a SUCCEEDED PreCompact hook, which the compaction path joins into the
+ *          summarizer's custom instructions. Do NOT re-wire
+ *          `buildAdditionalContextEnvelope` here — it stays valid only for
+ *          SessionStart/Stop/UserPromptSubmit.
+ *
+ *          The RELIABLE model-context surface is still the SessionStart
+ *          source=compact branch (hooks/session-reanchor.ts), which fires AFTER
+ *          compaction and whose `additionalContext` envelope IS valid for
+ *          SessionStart. We ship BOTH per the work-item. Both fall through
+ *          cleanly (no stdout, no log) when no active OPEN run exists — zero
+ *          noise.
  *
  *          LEAD-ONLY re-anchor (oir-wi-57 round-4 fix): PreCompact is
  *          globally registered, so it ALSO fires inside every dispatched
  *          specialist's own pane/subagent session, not just the lead's. The
- *          re-anchor header ("you are the lean LEAD, not a lane worker") is
+ *          re-anchor text ("this is the lean Guild LEAD session, not a lane
+ *          worker") is
  *          gated on this invocation's OWN environment carrying no
  *          GUILD_LANE_ID/GUILD_TASK_ID — a compacted specialist reading that
  *          text and abandoning its lane to assume orchestration would
@@ -32,9 +49,9 @@
  *          can tell a worker's own compaction apart from the lead's.
  *
  * Stdin:   JSON — Claude Code PreCompact hook payload.
- * Stdout:  The re-anchor additionalContext envelope when an active OPEN run
+ * Stdout:  The PLAIN-TEXT compact-summary instructions when an active OPEN run
  *          exists AND this invocation is the lead's own session (no
- *          GUILD_LANE_ID/GUILD_TASK_ID); otherwise silent.
+ *          GUILD_LANE_ID/GUILD_TASK_ID); otherwise silent. Never JSON.
  * Stderr:  Diagnostic warnings only.
  * Exit:    Always 0 — telemetry / re-anchor must not block compaction.
  *
@@ -51,11 +68,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
-import {
-  buildReanchorHeader,
-  buildAdditionalContextEnvelope,
-  buildCompactSummaryInstructions,
-} from "./lib/reanchor.js";
+import { buildCompactSummaryInstructions } from "./lib/reanchor.js";
 import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header. Hook events are not LLM calls → no tokens.
@@ -150,36 +163,26 @@ export async function main(): Promise<void> {
   // valid GUILD_TASK_ID and wrongly let the lead header through to a worker).
   const laneId = resolveLaneAttribution();
 
-  // Gap G1 (oir-wi-00): emit a compact re-anchor header into the context the
-  // host preserves BEFORE it compacts. Best-effort — PreCompact fires before
-  // compaction, so this may or may not survive; the reliable surface is the
-  // SessionStart source=compact branch (hooks/session-reanchor.ts). We ship
-  // BOTH per the work-item. Zero-noise: buildReanchorHeader returns null when
-  // there is no active OPEN run, and we write nothing. Wrapped so a re-anchor
-  // failure never blocks compaction (telemetry emit below still runs).
+  // Gap G1 (oir-wi-00) / issue #139: shape the post-compact SUMMARY by writing
+  // the compact-summary instructions to stdout as PLAIN TEXT — the compaction
+  // path joins a SUCCEEDED PreCompact hook's raw stdout into the summarizer's
+  // custom instructions. A `hookSpecificOutput` envelope here fails host output
+  // validation and is discarded (see the file header), so no envelope, ever.
+  // Zero-noise: buildCompactSummaryInstructions returns null when there is no
+  // active OPEN run, and we write nothing. Wrapped so a build failure never
+  // blocks compaction (the telemetry emit below still runs).
   // LEAD-ONLY: skip entirely when `laneId` is set — a dispatched specialist's
   // own compaction gets its telemetry recorded (below, with attribution) but
-  // never the lead's posture header.
+  // never the lead's posture facts.
   if (laneId === undefined) {
     try {
-      const header = buildReanchorHeader(guildRoot);
-      if (header !== null) {
-        // G5(c) (v23x-deferred-followups rf-wi-05, origin oir-wi-58): the
-        // compaction path already CONSUMES `newCustomInstructions` — nothing
-        // emitted it. Use it as the SECOND channel (alongside the existing
-        // `additionalContext` header) to shape the post-compact SUMMARY
-        // itself, telling the compactor to preserve the run's identity/
-        // phase/next-gate facts verbatim. Derived from the identical facts
-        // the header uses, so the two channels never disagree; null only
-        // when the header is also null (same zero-noise gate).
-        const customInstructions = buildCompactSummaryInstructions(guildRoot);
-        process.stdout.write(
-          buildAdditionalContextEnvelope("PreCompact", header, customInstructions ?? undefined),
-        );
+      const instructions = buildCompactSummaryInstructions(guildRoot);
+      if (instructions !== null) {
+        process.stdout.write(instructions);
       }
     } catch (err) {
       process.stderr.write(
-        `warn: [pre-compact] re-anchor header build failed: ${
+        `warn: [pre-compact] compact-summary instruction build failed: ${
           err instanceof Error ? err.message : String(err)
         }\n`,
       );

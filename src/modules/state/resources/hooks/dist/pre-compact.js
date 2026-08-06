@@ -7338,7 +7338,6 @@ var yaml2 = __toESM(require_js_yaml());
 init_run_lifecycle();
 
 // lib/reanchor.ts
-var REANCHOR_MARKER = "[GUILD RE-ANCHOR]";
 var SAFE_IDENT = /^[A-Za-z0-9._-]{1,120}$/;
 var KNOWN_AGENT_MODES = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
 function safeIdent(value) {
@@ -7467,19 +7466,6 @@ function isRunActive(guildRoot, runId, status, nowMs = Date.now()) {
   if (newest === 0) return false;
   return nowMs - newest <= reanchorGraceMs();
 }
-function renderReanchorHeader(f) {
-  const isTeam = f.agentMode === "team";
-  const backendClause = isTeam ? "dispatch each lane as its NAMED specialist via the agent-team launcher / visible panes \u2014 NOT in-session general-purpose Agents" : "dispatch each lane as its NAMED specialist via the resolved backend \u2014 NOT inline, NOT bare general-purpose Agents";
-  const initLine = f.initiative ? `initiative=${f.initiative}; ` : "";
-  return [
-    `${REANCHOR_MARKER} active run ${f.runId} \u2014 you are the lean LEAD, not a lane worker.`,
-    `- ${initLine}agent_mode=${f.agentMode}; phase=${f.phase ?? "unknown"}.`,
-    `- Backend: ${backendClause}.`,
-    "- The Agent `model` param is REQUIRED on every dispatch per tier resolution (default cheap; powerful must be justified).",
-    "- Do NOT do lane work inline. Re-enter the gated lifecycle via guild:resume.",
-    f.nextGate === null ? "- Next pending gate: unknown for this phase \u2014 run /guild:status before proceeding." : `- Next pending gate: ${f.nextGate}.`
-  ].join("\n");
-}
 function resolveReanchorFacts(guildRoot) {
   const runId = resolveActiveRunId(guildRoot);
   if (!runId) return null;
@@ -7511,26 +7497,13 @@ function resolveReanchorFacts(guildRoot) {
     nextGate
   };
 }
-function buildReanchorHeader(guildRoot) {
-  const facts = resolveReanchorFacts(guildRoot);
-  return facts === null ? null : renderReanchorHeader(facts);
-}
 function renderCompactSummaryInstructions(f) {
   const initClause = f.initiative ? ` initiative "${f.initiative}",` : "";
-  return `Guild lifecycle facts MUST survive this compaction verbatim. When writing the summary, explicitly preserve: active run "${f.runId}",${initClause} phase "${f.phase ?? "unknown"}", and next pending gate "${f.nextGate ?? "unknown"}". Do not paraphrase, generalize, or omit these identifiers.`;
+  return `Guild lifecycle facts MUST survive this compaction verbatim. When writing the summary, explicitly preserve: active run "${f.runId}",${initClause} phase "${f.phase ?? "unknown"}", agent_mode "${f.agentMode}", and next pending gate "${f.nextGate ?? "unknown"}". Also preserve these standing facts about the session: it is the lean Guild LEAD session, not a lane worker; each lane is dispatched as its NAMED specialist via the resolved backend with an explicit model tier; and the gated lifecycle is re-entered via guild:resume. Do not paraphrase, generalize, or omit these identifiers.`;
 }
 function buildCompactSummaryInstructions(guildRoot) {
   const facts = resolveReanchorFacts(guildRoot);
   return facts === null ? null : renderCompactSummaryInstructions(facts);
-}
-function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
-  return JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName,
-      additionalContext: header,
-      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
-    }
-  });
 }
 
 // lib/v1.4/log-jsonl.ts
@@ -7606,16 +7579,13 @@ async function main() {
   const laneId = resolveLaneAttribution();
   if (laneId === void 0) {
     try {
-      const header = buildReanchorHeader(guildRoot);
-      if (header !== null) {
-        const customInstructions = buildCompactSummaryInstructions(guildRoot);
-        process.stdout.write(
-          buildAdditionalContextEnvelope("PreCompact", header, customInstructions ?? void 0)
-        );
+      const instructions = buildCompactSummaryInstructions(guildRoot);
+      if (instructions !== null) {
+        process.stdout.write(instructions);
       }
     } catch (err) {
       process.stderr.write(
-        `warn: [pre-compact] re-anchor header build failed: ${err instanceof Error ? err.message : String(err)}
+        `warn: [pre-compact] compact-summary instruction build failed: ${err instanceof Error ? err.message : String(err)}
 `
       );
     }

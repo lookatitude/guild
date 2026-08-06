@@ -11,12 +11,16 @@
  * compaction boundary.
  *
  * This module builds a compact, deterministic re-anchor HEADER from the ON-DISK
- * run state — never re-resolved. Two hook surfaces ship it (both, per the
- * work-item — we probed which reaches post-compact context and ship both):
- *   - PreCompact (`hooks/pre-compact.ts`) — best-effort, fires BEFORE compaction.
+ * run state — never re-resolved. Two hook surfaces ship the facts, in two
+ * DIFFERENT shapes (issue #139 settled which shape each host event accepts):
  *   - SessionStart source=compact|resume (`hooks/session-reanchor.ts`) — the
- *     reliable surface: fires AFTER compaction / on resume, so its injected
- *     context lands in the fresh window.
+ *     reliable MODEL-context surface: fires AFTER compaction / on resume, so its
+ *     `hookSpecificOutput.additionalContext` envelope (valid for SessionStart)
+ *     lands the HEADER in the fresh window.
+ *   - PreCompact (`hooks/pre-compact.ts`) — shapes the post-compact SUMMARY, and
+ *     must emit PLAIN TEXT (`renderCompactSummaryInstructions`). A JSON envelope
+ *     there FAILS host output validation and is discarded — see the verified-host-
+ *     behavior note on `renderCompactSummaryInstructions`.
  *
  * Zero-noise contract: no ACTIVE run ⇒ `buildReanchorHeader` returns null and the
  * hooks emit nothing. "Active" is deliberately NOT `status === "open"` — the Stop
@@ -384,10 +388,10 @@ export function renderReanchorHeader(f: ReanchorFields): string {
 /**
  * Resolve the shared re-anchor facts from on-disk run state, or null when
  * there is no active OPEN run (zero-noise contract). Both `buildReanchorHeader`
- * (the `additionalContext` channel) and `buildCompactSummaryInstructions` (the
- * `newCustomInstructions` channel, G5(c)) are pure renderers over this ONE
- * resolved fact set, so the two channels can never disagree about which run,
- * phase, or next-gate they describe.
+ * (the SessionStart `additionalContext` header) and
+ * `buildCompactSummaryInstructions` (PreCompact's plain-text summary
+ * instructions) are pure renderers over this ONE resolved fact set, so the two
+ * surfaces can never disagree about which run, phase, or next-gate they describe.
  */
 function resolveReanchorFacts(guildRoot: string): ReanchorFields | null {
   const runId = resolveActiveRunId(guildRoot);
@@ -459,43 +463,51 @@ export function buildReanchorHeader(guildRoot: string): string | null {
 }
 
 /**
- * Render the PreCompact `newCustomInstructions` directive — the SECOND
- * channel (G5(c), v23x-deferred-followups rf-wi-05, origin oir-wi-58).
+ * Render PreCompact's compact-summary instructions — the text `hooks/pre-compact.ts`
+ * writes to stdout as PLAIN TEXT (G5(c), v23x-deferred-followups rf-wi-05, origin
+ * oir-wi-58; corrected by issue #139).
  *
- * Unlike `additionalContext` (delivered into the MODEL's own preserved
- * context — what `renderReanchorHeader` builds), `newCustomInstructions` is
- * meant to be consumed by the compactor itself and shape what IT writes into
- * the post-compact summary. This renderer tells the compactor to preserve the
- * run's identity/phase/next-gate facts VERBATIM rather than paraphrasing or
- * dropping them while summarizing — the exact facts a lost re-anchor would
- * otherwise have to reconstruct from a header that itself may not survive.
+ * VERIFIED HOST BEHAVIOR (live session, Claude Code 2.1.223, 2026-08-06 — evidence:
+ * https://github.com/lookatitude/guild/issues/92#issuecomment-5200045481). The
+ * earlier KNOWN CAVEAT here guessed at this from static inspection; it is now
+ * settled empirically:
+ *   - A `hookSpecificOutput` JSON envelope on PreCompact stdout FAILS the host's
+ *     PreCompact hook-output validation ("Hook JSON output validation failed —
+ *     (root): Invalid input"). The hook is marked FAILED, its stdout is DISCARDED,
+ *     and a visible `PreCompact [...] failed:` line is shown to the user on every
+ *     compaction with an active run. Both `additionalContext` AND
+ *     `newCustomInstructions` were therefore DEAD on PreCompact.
+ *   - The real channel is the RAW STDOUT of a SUCCEEDED PreCompact hook, which the
+ *     compaction path joins into the summarizer's custom instructions.
+ * So PreCompact emits this string as plain text and nothing else. The reliable
+ * MODEL-context re-anchor surface remains SessionStart source=compact
+ * (`hooks/session-reanchor.ts`), whose `additionalContext` envelope IS valid for
+ * SessionStart and is untouched by this.
  *
- * KNOWN CAVEAT (codex-review finding, recorded honestly rather than
- * overclaimed — see rf-wi-05 receipt): static inspection of an installed
- * Claude Code build shows its PreCompact hook runner treats a `command`-type
- * hook's raw stdout (not a parsed `hookSpecificOutput.newCustomInstructions`
- * field) as the string it forwards to the compaction summarizer on a
- * successful, non-blocking run. Under that reading, this key's PRESENCE in
- * the JSON envelope may not be individually parsed by every host/version —
- * the whole stdout blob (already including `additionalContext` before this
- * change) is what actually reaches the summarizer either way. This addition
- * is therefore safe (additive, no regression to the proven `additionalContext`
- * path) but its host-consumption behavior could not be empirically confirmed
- * in this lane — flagged as a followup for a live-session verification pass.
+ * Because this is now the ONLY live PreCompact channel, the lead-posture facts
+ * `renderReanchorHeader` carries are folded in here too — in benign preservation
+ * wording. WORDING CONTRACT (same verification): adversarial-shaped directives
+ * ("the summary MUST begin with the exact token X") get flagged by the summarizer
+ * as prompt-injection-like and dropped. Keep every clause preservation-shaped —
+ * "preserve these facts", never "obey this instruction".
  */
 export function renderCompactSummaryInstructions(f: ReanchorFields): string {
   const initClause = f.initiative ? ` initiative "${f.initiative}",` : "";
   return (
     `Guild lifecycle facts MUST survive this compaction verbatim. When writing ` +
     `the summary, explicitly preserve: active run "${f.runId}",${initClause} phase ` +
-    `"${f.phase ?? "unknown"}", and next pending gate "${f.nextGate ?? "unknown"}". ` +
+    `"${f.phase ?? "unknown"}", agent_mode "${f.agentMode}", and next pending gate ` +
+    `"${f.nextGate ?? "unknown"}". Also preserve these standing facts about the ` +
+    `session: it is the lean Guild LEAD session, not a lane worker; each lane is ` +
+    `dispatched as its NAMED specialist via the resolved backend with an explicit ` +
+    `model tier; and the gated lifecycle is re-entered via guild:resume. ` +
     `Do not paraphrase, generalize, or omit these identifiers.`
   );
 }
 
 /**
- * Build the PreCompact `newCustomInstructions` string from on-disk run state,
- * or null when there is no active OPEN run — same zero-noise contract as
+ * Build PreCompact's plain-text compact-summary instructions from on-disk run
+ * state, or null when there is no active OPEN run — same zero-noise contract as
  * `buildReanchorHeader` (both resolve from the identical `resolveReanchorFacts`
  * gate, so one is never null while the other is not).
  */
@@ -506,25 +518,22 @@ export function buildCompactSummaryInstructions(guildRoot: string): string | nul
 
 /**
  * Wrap a header string in the Claude Code hook `additionalContext` envelope for
- * a given event. Exported so both hook surfaces (and their tests) share one
- * exact payload shape.
+ * a given event. Exported so the call sites (and their tests) share one exact
+ * payload shape.
  *
- * @param newCustomInstructions G5(c) — PreCompact's SECOND channel, consumed
- *   by the compactor itself (shapes the post-compact summary), distinct from
- *   `additionalContext` (delivered into the model's own context). Optional so
- *   the three OTHER call sites (SessionStart/Stop/UserPromptSubmit, which have
- *   no such field) are byte-identical to before this parameter existed.
+ * NOT VALID FOR PreCompact (issue #139): that event rejects the
+ * `hookSpecificOutput` envelope outright and consumes raw stdout instead — see
+ * `renderCompactSummaryInstructions`. Callers are SessionStart / Stop /
+ * UserPromptSubmit only.
  */
 export function buildAdditionalContextEnvelope(
   hookEventName: string,
   header: string,
-  newCustomInstructions?: string,
 ): string {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
       additionalContext: header,
-      ...(newCustomInstructions !== undefined ? { newCustomInstructions } : {}),
     },
   });
 }

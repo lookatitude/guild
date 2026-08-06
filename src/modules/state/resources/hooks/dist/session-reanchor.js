@@ -7294,12 +7294,11 @@ function buildReanchorHeader(guildRoot) {
   const facts = resolveReanchorFacts(guildRoot);
   return facts === null ? null : renderReanchorHeader(facts);
 }
-function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
+function buildAdditionalContextEnvelope(hookEventName, header) {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
-      additionalContext: header,
-      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
+      additionalContext: header
     }
   });
 }
