@@ -12,7 +12,7 @@ acceptance:
   - "codex adversarial review RAN; PR to next; docs/v2 deferred callout flipped in-rollout where applicable"
 evidence_refs:
   - "goals.md §G5"
-  - "PR #83 (merged to next) — current-run-id sentinel compare-and-cleared at close; run.yaml gates writer; PreCompact newCustomInstructions channel; per-tool lifecycle bound; codex capped/2"
+  - "PR #83 (merged to next) — current-run-id sentinel compare-and-cleared at close; run.yaml gates writer; PreCompact newCustomInstructions channel; per-tool lifecycle bound; codex capped/2 [SUPERSEDED 2026-08-06 by issue #139 — PreCompact REJECTS the hookSpecificOutput envelope entirely (hook FAILED, stdout discarded); the consumed channel is a succeeded hook's raw plain-text stdout. Historical text preserved.]"
   - "receipt: runs/run-305333a3-8707-4982-9c65-0ed121c9748f/handoffs/rf-wi-05.md"
   - "docs/v2 flipped: dispatch-execution.html sentinel callout (workspace PR #24)"
-  - "re-deferred → issue #92 (live-session verify PreCompact newCustomInstructions is consumed by the host compaction path)"
+  - "re-deferred → issue #92 (live-session verify PreCompact newCustomInstructions is consumed by the host compaction path) — verification DISPROVED it; corrected by issue #139 (plain-text stdout)"

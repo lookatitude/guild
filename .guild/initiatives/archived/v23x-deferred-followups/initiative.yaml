@@ -37,7 +37,7 @@ initiative:
     G2: "Sink consumers — guild:verify-done + guild:reflect read logs/backend-degradation.jsonl and logs/tier-dispatch.jsonl (degradations/un-tiered dispatches surface automatically, not auditable-by-path-only); guild-telemetry MCP trace_summary gains dispatched_lanes/dispatch_receipts parity."
     G3: "Tier-env producer + structured dispatch marker — execute-plan/composeInProcessDispatch set GUILD_TIER/GUILD_TIER_SCORE on lane env (tier receipts upgrade to scored_compliant); every dispatch carries a structured producer marker so the backend-degradation guard can BLOCK prompt-only drift instead of only recording it."
     G4: "Remote + codex pane enforcement preconditions — remote hook-installation verification in RemoteTeamBackend preflight, teardown confirmation (kill-session verdict, no orphaned live lanes), THEN extend the resolved permission-mode flags to remote panes; document the codex-side PreToolUse enforcement gap as the explicit precondition for codex-pane bypass."
-    G5: "Lifecycle/run-state hygiene — clear current-run-id sentinel at run close; a writer for run.yaml gates: (re-anchor's next-gate refinement activates); use PreCompact newCustomInstructions as the second compaction channel; PreToolUse per-tool lifecycle enforcement (the real bound on a single agentic turn)."
+    G5: "Lifecycle/run-state hygiene — clear current-run-id sentinel at run close; a writer for run.yaml gates: (re-anchor's next-gate refinement activates); use PreCompact newCustomInstructions as the second compaction channel; PreToolUse per-tool lifecycle enforcement (the real bound on a single agentic turn). [SUPERSEDED 2026-08-06 by issue #139 — PreCompact REJECTS the hookSpecificOutput envelope entirely (hook FAILED, stdout discarded); the consumed channel is a succeeded hook's raw plain-text stdout. Historical text preserved.]"
     G6: "execute-plan surface lane — wire the cmux dispatch-receipt CLI into execute-plan SKILL.md; codify the skills/commands surface-change checklist as deterministic lane-runnable code; require the guild.handoff.v2 envelope in the receipt contract; name codex-review cap terminal states. ONE lane (touches the pinned skill surface — registry re-extraction + pin re-ratification in-commit)."
     G7: "Small cleanups — reconcile scripts/ vs hooks/ js-yaml (4.1.1 vs 4.3.0); summarizer PostToolUse-gated tallies undercount canonical runs + digest:undefined cosmetic; drop the legacy 300-char producer-head parsing once all producers emit the line-1 marker."
 
@@ -65,7 +65,7 @@ initiative:
     docs_leg: "workspace PR lookatitude/guild-workspace#24 — docs/v2 deferred callouts reconciled to shipped reality (config-surfaces, observability, dispatch-execution, security, architecture/modules/dispatch); CI green"
     followups_filed:
       - "#91 — mark the direct-subagent D5 rung, then drop the class-gated legacy 300-char fallback (G3/G7c)"
-      - "#92 — live-session verify PreCompact newCustomInstructions is consumed (G5)"
+      - "#92 — live-session verify PreCompact newCustomInstructions is consumed (G5) — CLOSED: verification DISPROVED the premise; corrected by issue #139"
       - "#93 — register defaults.dispatch.block_unmarked_lanes in the closed schema (G3)"
       - "#94 — wire codex-side PreToolUse deny enforcement; tighten remote hook proof (G4)"
     close_checklist_resolved:
