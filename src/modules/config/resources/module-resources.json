@@ -15,7 +15,7 @@
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "70f57a1a879fae1289dc45cb6d34ab1d556d0e0b7263d68cc31fa6a0e6020ded"
+      "sha256": "7c72b3b45028a25cd060dff8107831cee669b249d34ded13e0bc39c3f09e3d1b"
     },
     {
       "category": "scripts",
@@ -43,28 +43,28 @@
       "id": "lib/config-schema",
       "source_path": "scripts/lib/config-schema.ts",
       "resource_path": "resources/scripts/lib/config-schema.ts",
-      "sha256": "8f902b2ae5dd2bc7c4facef722dc082880880eec13085ad892f801a0b81df90d"
+      "sha256": "ad9e0b078926319fb549c07ca33349c1add979b966e6d3495e2e417ffcd53d8f"
     },
     {
       "category": "scripts",
       "id": "lib/config-ui-metadata",
       "source_path": "scripts/lib/config-ui-metadata.ts",
       "resource_path": "resources/scripts/lib/config-ui-metadata.ts",
-      "sha256": "249a3d9e22036a7a7074b77b99f17501d265f8fa33ea8f832b109820372fe082"
+      "sha256": "3936957214dc5a5b10617ebc080ab648b4d9515878b032306bd5e2c87f7741f7"
     },
     {
       "category": "scripts",
       "id": "lib/config-ui-surface",
       "source_path": "scripts/lib/config-ui-surface.ts",
       "resource_path": "resources/scripts/lib/config-ui-surface.ts",
-      "sha256": "d90a3ed1650b7808455438e04319096a5f178c3676b2195f85ce9846b279ed62"
+      "sha256": "1ae0a7db98ac8c2a44b6a4e603efefcf92b315addb68edb7698e88599d0f599c"
     },
     {
       "category": "scripts",
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "06edb1f765687e319a93ad7317ad29d6de9da2d38c6e6454a303185fa967bd4d"
+      "sha256": "c4a669625fbc183923f588dd5e223e5ee94c1bfdc3f9eaf85585179f55408347"
     },
     {
       "category": "scripts",

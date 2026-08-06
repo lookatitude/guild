@@ -552,6 +552,48 @@ describe("snapshot — ResolvedSettingsSnapshot shape", () => {
     expect(eff).toHaveProperty("rigor");
     expect(eff).toHaveProperty("loops");
     expect(eff).toHaveProperty("loop_cap");
+    // #93: the backend-degradation guard's strict rung, hoisted here so
+    // hooks/lib/backend-degradation.ts can read the resolved value from the
+    // snapshot instead of importing the settings resolver into pre-tool-use.js
+    // (measured: that import takes that per-tool-call bundle 110 KB → 923 KB).
+    expect(eff).toHaveProperty("block_unmarked_lanes");
+  });
+
+  // ── #93 — settings.json → resolveSettings → snapshot, end to end ──────────
+  // This is the leg that makes the hook-side snapshot read EQUIVALENT to reading
+  // the resolved config: whatever the 5-layer chain resolves is what gets frozen.
+
+  it("snapshot.effective.block_unmarked_lanes defaults to false when unconfigured", () => {
+    const cwd = makeTmpDir();
+    const result = runStartPreflight({ cwd, probe: NO_TMUX_PROBE });
+    expect(result.snapshot.effective.block_unmarked_lanes).toBe(false);
+  });
+
+  it("snapshot.effective.block_unmarked_lanes carries a configured project value", () => {
+    const cwd = makeTmpDir();
+    writeSettings(cwd, { defaults: { dispatch: { block_unmarked_lanes: true } } });
+    const result = runStartPreflight({ cwd, probe: NO_TMUX_PROBE });
+    expect(result.snapshot.effective.block_unmarked_lanes).toBe(true);
+  });
+
+  it("snapshot.effective.block_unmarked_lanes INHERITS a workspace-level value (PR #87 codex round-2 finding)", () => {
+    // A hand-rolled project-settings.json-only reader in the hook would have
+    // missed this entirely. Going through resolveSettings at run start means the
+    // workspace layer is honored for free.
+    const { childDir } = makeWorkspaceWithChild({
+      defaults: { dispatch: { block_unmarked_lanes: true } },
+    });
+    const result = runStartPreflight({ cwd: childDir, probe: NO_TMUX_PROBE });
+    expect(result.snapshot.effective.block_unmarked_lanes).toBe(true);
+  });
+
+  it("a child's own value WINS over the workspace value (layer precedence preserved)", () => {
+    const { childDir } = makeWorkspaceWithChild(
+      { defaults: { dispatch: { block_unmarked_lanes: true } } },
+      { defaults: { dispatch: { block_unmarked_lanes: false } } },
+    );
+    const result = runStartPreflight({ cwd: childDir, probe: NO_TMUX_PROBE });
+    expect(result.snapshot.effective.block_unmarked_lanes).toBe(false);
   });
 
   it("snapshot.providers contains authorHost, detected, recommended", () => {

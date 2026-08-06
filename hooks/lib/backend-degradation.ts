@@ -57,20 +57,52 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { DispatchAttribution } from "./dispatch-attribution.js";
+// #93: the ONE canonical default for the strict rung. Imported from the same
+// DEFAULTS tree `CONFIG_SCHEMA` derives from, exactly as `lean-lead-guard.ts` /
+// `lifecycle-gate.ts` do for their keys (PR #87 deliberately replaced their
+// duplicated literals with this import) — so the guard's fallback and the
+// registered schema default can never drift into a silent disagreement.
+//
+// Bundle cost, measured: this import adds ~12 KB to `pre-tool-use.js`
+// (110,813 → 123,178 bytes). Paid deliberately. Importing the settings RESOLVER
+// here instead — the obvious way to read the key — was measured at 923,345
+// bytes, an 8x regression on the hottest hook Guild ships, which is why
+// `readSnapshotBlockUnmarkedLanes` below reads the frozen run snapshot instead.
+import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
 
 /** The env var an operator sets to consciously accept a backend downgrade. */
 export const OVERRIDE_ENV = "GUILD_ALLOW_BACKEND_DEGRADE";
 
 /**
- * The env var an operator sets to turn on STRICT mode: block a Guild lane that
- * carries NO structured producer marker (drift), not just record it (rf-wi-03 /
- * G3). Deliberately an ENV flag (not a config key) this wave to avoid touching
- * the closed config schema (owned by rf-wi-01) and the pinned skill surface
- * (rf-wi-06); registering it as `defaults.dispatch.block_unmarked_lanes` is a
- * followup. Default OFF preserves the no-false-positive-on-a-quoted-brief
- * invariant unless the operator opts in.
+ * The env var that OVERRIDES the registered strict-mode config key for one
+ * session (see `resolveBlockUnmarkedLanes` for the precedence).
+ *
+ * History: rf-wi-03 (G3, PR #85) shipped strict mode as this env flag ALONE,
+ * deliberately deferring schema registration to avoid colliding with rf-wi-01's
+ * in-flight closed-schema work. That left the rung undiscoverable and
+ * unvalidated. Issue #93 registered it as `defaults.dispatch.block_unmarked_lanes`;
+ * the env var survives as the per-session override on top of the resolved value.
  */
 export const BLOCK_UNMARKED_ENV = "GUILD_BLOCK_UNMARKED_LANES";
+
+/**
+ * The registered config key that engages strict mode (#93). Named alongside the
+ * env var in every operator-visible deny/allow message: after #93 strict mode is
+ * usually reached through CONFIG, so a message that named only the env var would
+ * send an operator hunting for an export nobody made.
+ */
+export const BLOCK_UNMARKED_CONFIG_KEY = "defaults.dispatch.block_unmarked_lanes";
+
+/**
+ * The registered default for `defaults.dispatch.block_unmarked_lanes` — OFF.
+ *
+ * Load-bearing, not timidity: `classifyLaneEvidence` grades a fully-substituted
+ * lane brief that was merely QUOTED in a prompt as `prompt_only` too, so strict
+ * mode trades the no-false-positive-on-a-quoted-brief invariant for tighter
+ * drift coverage. That is an operator's call, never a shipped default.
+ */
+export const DEFAULT_BLOCK_UNMARKED_LANES: boolean =
+  CONFIG_DEFAULTS.defaults.dispatch.block_unmarked_lanes;
 
 /** The receipt's self-versioned schema token and its `event` value. */
 export const BACKEND_DEGRADATION_EVENT = "backend_degradation";
@@ -558,15 +590,123 @@ export function isOverrideEngaged(env: NodeJS.ProcessEnv): boolean {
 }
 
 /**
- * Is STRICT unmarked-lane blocking engaged (`GUILD_BLOCK_UNMARKED_LANES`)? Same
- * affirmative-allowlist doctrine as the override — unset / "0" / "false" leaves
- * the guard in its default record-not-block posture for prompt-only drift.
+ * Is STRICT unmarked-lane blocking engaged by the ENV VAR ALONE? Same
+ * affirmative-allowlist doctrine as the override — unset / "0" / "false" reads
+ * false.
+ *
+ * Kept as the narrow env-only predicate it always was (#93 did not widen it).
+ * Call `resolveBlockUnmarkedLanes` for the ACTUAL runtime posture: this function
+ * cannot see the registered `defaults.dispatch.block_unmarked_lanes` config key
+ * and therefore under-reports whenever an operator configured strict mode
+ * instead of exporting the env var.
  */
 export function isBlockUnmarkedEngaged(env: NodeJS.ProcessEnv): boolean {
   const raw = env[BLOCK_UNMARKED_ENV];
   if (typeof raw !== "string") return false;
   const v = raw.trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
+}
+
+/**
+ * Parse `GUILD_BLOCK_UNMARKED_LANES` as a TRISTATE: true / false / "not stated".
+ *
+ * Strict mode is now a config key, so the env var's job changed from "the only
+ * switch" to "the per-session OVERRIDE". An override that can only force a value
+ * ON is not an override — an operator who configured
+ * `block_unmarked_lanes: true` and hits a false positive on a quoted brief needs
+ * a one-session escape hatch that does NOT require editing (and remembering to
+ * revert) `.guild/settings.json`. So the negative tokens are honored too.
+ *
+ * Anything unrecognized (including the empty string) returns null and falls
+ * through to config — a typo must never silently disarm a guard the operator
+ * deliberately turned on.
+ */
+function parseBlockUnmarkedEnv(env: NodeJS.ProcessEnv): boolean | null {
+  const raw = env[BLOCK_UNMARKED_ENV];
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  if (v === "1" || v === "true" || v === "yes") return true;
+  if (v === "0" || v === "false" || v === "no") return false;
+  return null;
+}
+
+/**
+ * Read the RESOLVED `defaults.dispatch.block_unmarked_lanes` from the run's U6
+ * resolved-settings snapshot. Returns null when the snapshot is absent,
+ * unreadable, malformed, or carries no BOOLEAN for the field — i.e. "the run
+ * never stated a value", which the caller turns into the registered default.
+ *
+ * ── WHY THE SNAPSHOT AND NOT `resolveSettings()` ────────────────────────────
+ * `lean-lead-guard.ts` / `lifecycle-gate.ts` / `update-check.ts` read their keys
+ * by lazily requiring the canonical resolver, and that is right FOR THEM — they
+ * run once per session-ish event and their bundles are already 800-900 KB. This
+ * module lives in `pre-tool-use.js`, which runs on EVERY tool call in every
+ * session; wiring the resolver in here was measured at 110 KB → 923 KB for that
+ * bundle, an 8x parse-cost regression on the hottest hook Guild ships. That is
+ * precisely the tradeoff this file's header already calls out for
+ * `readResolvedSettingsSnapshot`.
+ *
+ * The snapshot loses NOTHING in fidelity. `runstart-preflight.ts` computes
+ * `effective.block_unmarked_lanes` from `resolveSettings()` itself, so the value
+ * frozen here has already been through the full 5-layer chain — builtin <
+ * workspace settings.json < workspace settings.local.json < project
+ * settings.json < project settings.local.json. Workspace inheritance and the
+ * local layer (PR #87's codex round-2 P1 finding) are honored by construction.
+ *
+ * What it changes is WHEN: the value is the one the run committed to at start,
+ * exactly like `agent_mode` two functions up. Editing settings.json mid-run does
+ * not re-arm the guard — `GUILD_BLOCK_UNMARKED_LANES` is the in-session lever,
+ * which is the whole reason #93 kept it as an override rather than deleting it.
+ *
+ * The snapshot is always THERE when this matters: `pre-tool-use.ts` bails out
+ * before ever calling the guard unless `readSnapshotAgentMode` returned "team"
+ * or "auto" from this same file, so a run with no readable snapshot never
+ * reaches strict-mode evaluation at all.
+ *
+ * `runId` MUST already be validated as a safe single path component by the
+ * caller (`isSafeRunId`) — this function does not re-derive path safety.
+ */
+export function readSnapshotBlockUnmarkedLanes(
+  guildRoot: string,
+  runId: string,
+): boolean | null {
+  const file = path.join(guildRoot, ".guild", "runs", runId, "resolved-settings.json");
+  let doc: unknown;
+  try {
+    doc = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const effective = (doc as Record<string, unknown>)["effective"];
+  if (effective === null || typeof effective !== "object" || Array.isArray(effective)) {
+    return null;
+  }
+  const v = (effective as Record<string, unknown>)["block_unmarked_lanes"];
+  // A non-boolean is IGNORED, never coerced: the string "false" is truthy, and
+  // reading it as "on" would engage a BLOCKING gate nobody asked for.
+  return typeof v === "boolean" ? v : null;
+}
+
+/**
+ * The runtime posture for strict unmarked-lane blocking.
+ *
+ * Precedence, highest first:
+ *   1. `GUILD_BLOCK_UNMARKED_LANES`, when it states a recognized boolean — the
+ *      per-session operator override, in BOTH directions;
+ *   2. the run's resolved `defaults.dispatch.block_unmarked_lanes`;
+ *   3. `DEFAULT_BLOCK_UNMARKED_LANES` (OFF).
+ */
+export function resolveBlockUnmarkedLanes(
+  guildRoot: string,
+  runId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const fromEnv = parseBlockUnmarkedEnv(env);
+  if (fromEnv !== null) return fromEnv;
+  const fromSnapshot = readSnapshotBlockUnmarkedLanes(guildRoot, runId);
+  if (fromSnapshot !== null) return fromSnapshot;
+  return DEFAULT_BLOCK_UNMARKED_LANES;
 }
 
 // ── Display sanitization ─────────────────────────────────────────────────────
@@ -651,7 +791,9 @@ export interface BackendDegradationFacts {
   runFresh: boolean;
   /**
    * G3 — the operator opted into blocking a lane that carries NO structured
-   * producer marker (`GUILD_BLOCK_UNMARKED_LANES`). When engaged, a prompt-only
+   * producer marker. Supplied by `resolveBlockUnmarkedLanes` (#93): the resolved
+   * `defaults.dispatch.block_unmarked_lanes` config key, with
+   * `GUILD_BLOCK_UNMARKED_LANES` as a per-session override. When engaged, a prompt-only
    * degradation (which is by construction unmarked) becomes blockable instead of
    * merely recorded. Default false ⇒ the pre-G3 record-not-block behaviour, so
    * the no-false-positive invariant on a quoted live brief holds unless the
@@ -839,7 +981,8 @@ export function buildDenyMessage(
     evidence === "prompt_only"
       ? `This lane carries NO structured producer marker (${PRODUCER_MARKER_ENV}) — it was ` +
         `not composed by a Guild dispatch producer, which is the drift signature strict ` +
-        `mode (${BLOCK_UNMARKED_ENV}) blocks. Dispatch it through the producer path so it ` +
+        `mode (${BLOCK_UNMARKED_CONFIG_KEY} / ${BLOCK_UNMARKED_ENV}) blocks. Dispatch it ` +
+        `through the producer path so it ` +
         `carries the marker, or `
       : "";
   return (
@@ -909,7 +1052,8 @@ export function buildAllowMessage(
       `OVERRIDDEN: ${backendClause(reason)}` +
       (evidence === "prompt_only"
         ? ` and this lane carries NO structured producer marker (${PRODUCER_MARKER_ENV}) — ` +
-          `strict mode (${BLOCK_UNMARKED_ENV}) would block it, but the in-session fallback ` +
+          `strict mode (${BLOCK_UNMARKED_CONFIG_KEY} / ${BLOCK_UNMARKED_ENV}) would block it, ` +
+          `but the in-session fallback ` +
           `was allowed because ${OVERRIDE_ENV} is set`
         : `, and the in-session fallback was allowed because ${OVERRIDE_ENV} is set`) +
       `. To honor the backend instead: ${remedyForSubstrate(substrate)} ${tail}`

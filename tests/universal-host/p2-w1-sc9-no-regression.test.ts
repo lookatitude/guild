@@ -133,6 +133,21 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/__tests__/dispatch-attribution.test.ts",
   "hooks/__tests__/pre-tool-use-dispatch-guard.test.ts",
   "hooks/lib/__tests__/backend-degradation.test.ts",
+  // #93 — promoting the backend-degradation guard's strict rung from the
+  // GUILD_BLOCK_UNMARKED_LANES env flag to the registered config key
+  // `defaults.dispatch.block_unmarked_lanes`. Same shape as rf-wi-01 above: a
+  // guard + its one call site, plus the esbuild bundles that transitively carry
+  // the canonical DEFAULTS tree the guard now sources its fallback from.
+  "hooks/lib/backend-degradation.ts",
+  "hooks/pre-tool-use.ts",
+  "hooks/lib/__tests__/block-unmarked-lanes-config.test.ts",
+  // The #56 guard's REAL-hook-path suite, extended with the #93 config-driven
+  // deny/allow cases (codex round-1 P2: the unit tests proved the resolution
+  // rules but nothing proved the hook wired them to a decision).
+  "hooks/__tests__/pre-tool-use-backend-guard.test.ts",
+  "hooks/dist/pre-compact.js",
+  "hooks/dist/gate-outcome-writer.js",
+  "hooks/dist/session-reanchor.js",
 ]);
 
 function gitLines(args: string[]): string[] {

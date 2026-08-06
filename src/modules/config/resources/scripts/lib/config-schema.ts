@@ -62,7 +62,18 @@ export function isSecuritySensitiveKey(key: string): boolean {
     // rf-wi-01 (G1): host_mode governs P1-L10 host autonomy (bypass_all can disable a
     // host's native tool-permission prompt) — the sanctioned, schema-registered
     // replacement for the ad-hoc `security.host_mode` key the #54 lane reverted.
-    key === "host_mode"
+    key === "host_mode" ||
+    // #93 (codex-review round-2 P1): this key governs a PreToolUse PERMISSION
+    // decision — when true, an unmarked lane dispatch is DENIED. Turning it off
+    // removes that denial, which is the same "silently weakened enforcement"
+    // shape `codex_skip_enforcement` above is classified for. Deliberately
+    // registered with NO `most_restrictive`: fail-closed repair would coerce a
+    // merely-CORRUPTED value to `true` and start blocking real dispatches (a
+    // quoted lane brief grades `prompt_only` too), turning a config-corruption
+    // event into a work stoppage. Without a `most_restrictive` target the F4 path
+    // takes the `security-hold` branch instead — the malformed value is left
+    // untouched and SURFACED to the operator, never silently resolved to `false`.
+    key === "defaults.dispatch.block_unmarked_lanes"
   );
 }
 

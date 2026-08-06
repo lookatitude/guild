@@ -150,6 +150,12 @@ interface DefaultsBlock {
    * lifecycle-gate advisory fires.
    */
   lifecycle_gate: { enabled: boolean; adhoc_activity_threshold: number };
+  /**
+   * Issue #93: registers the #56 backend-degradation guard's strict rung
+   * (hooks/lib/backend-degradation.ts `resolveBlockUnmarkedLanes`), previously
+   * reachable only via the undiscoverable `GUILD_BLOCK_UNMARKED_LANES` env var.
+   */
+  dispatch: { block_unmarked_lanes: boolean };
 }
 interface WorkspaceBlock {
   /** auto (default) = detect by immediate-child rule; on = force workspace; off = force regular. NO max_depth — depth is fixed at 1. */
@@ -700,6 +706,14 @@ export const HELP: Record<string, string> = {
   "defaults.lifecycle_gate.adhoc_activity_threshold":
     "int >= 1 (default 20) — ad-hoc (non-skill) activity count before the lifecycle-gate " +
     "advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
+  // ── Issue #93: defaults.dispatch.block_unmarked_lanes
+  "defaults.dispatch.block_unmarked_lanes":
+    "bool (default false) — STRICT mode for the #56 backend-degradation guard " +
+    "(hooks/lib/backend-degradation.ts). When true, a Guild lane dispatch carrying NO " +
+    "structured producer marker (prompt_only evidence) is BLOCKED under a resolved team " +
+    "backend instead of merely recorded. Default false keeps the no-false-positive-on-a-" +
+    "quoted-brief invariant: a lane brief merely QUOTED in a prompt grades prompt_only too. " +
+    "The GUILD_BLOCK_UNMARKED_LANES env var overrides this per session, in BOTH directions.",
   _precedence:
     "CLI flag > --rigor profile > settings.json > built-in default. " +
     "For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
@@ -1439,6 +1453,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "allowed_tools",           // R-020: string[] (boundary-config-and-tracking Decision F)
   "lean_lead",       // rf-wi-01 (G1): { enabled: bool, hands_on_edit_threshold: int }
   "lifecycle_gate",  // rf-wi-01 (G1): { enabled: bool, adhoc_activity_threshold: int }
+  "dispatch",        // #93: { block_unmarked_lanes: bool }
 ]);
 
 /** Closed-key validation of the `defaults:` block. Returns reject messages. */
@@ -1560,6 +1575,20 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
       if (typeof v !== "number" || !Number.isInteger(v) || v < 1)
         rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(v)})`);
     }
+  }
+  // #93: defaults.dispatch.* — closed sub-key set + types. Same non-object
+  // rejection posture as lean_lead/lifecycle_gate above: a wrong-shaped value must
+  // SURFACE, never be silently ignored by a validate-before-persist that then lies.
+  if (d["dispatch"] !== undefined && !isPlainObject(d["dispatch"])) {
+    rejects.push(`defaults.dispatch must be an object { block_unmarked_lanes? } (got ${JSON.stringify(d["dispatch"])})`);
+  } else if (isPlainObject(d["dispatch"])) {
+    const dp = d["dispatch"] as Record<string, unknown>;
+    const VALID_DISPATCH_KEYS = new Set(["block_unmarked_lanes"]);
+    for (const k of Object.keys(dp)) {
+      if (!VALID_DISPATCH_KEYS.has(k)) rejects.push(`unknown defaults.dispatch key "${k}" (valid: block_unmarked_lanes)`);
+    }
+    if (dp["block_unmarked_lanes"] !== undefined && typeof dp["block_unmarked_lanes"] !== "boolean")
+      rejects.push(`defaults.dispatch.block_unmarked_lanes must be a boolean (got ${JSON.stringify(dp["block_unmarked_lanes"])})`);
   }
   // defaults.index.* — closed key set (D-PS-1)
   if (isPlainObject(d["index"])) {

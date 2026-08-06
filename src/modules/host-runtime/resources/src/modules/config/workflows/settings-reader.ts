@@ -124,6 +124,8 @@ interface DefaultsBlock {
   lean_lead: { enabled: boolean; hands_on_edit_threshold: number };
   // rf-wi-01 (G1): hooks/lib/lifecycle-gate.ts tolerant reader.
   lifecycle_gate: { enabled: boolean; adhoc_activity_threshold: number };
+  // #93: hooks/lib/backend-degradation.ts strict unmarked-lane blocking.
+  dispatch: { block_unmarked_lanes: boolean };
 }
 /**
  * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
@@ -449,6 +451,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "allowed_tools",                  // R-020
   "update",                         // plugin-update-lifecycle AC-6
   "lean_lead", "lifecycle_gate",    // rf-wi-01 (G1)
+  "dispatch",                       // #93: { block_unmarked_lanes: bool }
 ]);
 /**
  * The resolver's OWN closed top-level key set.

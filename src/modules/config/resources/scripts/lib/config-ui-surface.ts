@@ -75,6 +75,8 @@ export const CONFIG_UI_GROUP_ORDER: readonly string[] = Object.freeze([
   "cross_host_runtime",
   // rf-wi-01 (G1): defaults.lean_lead.* + defaults.lifecycle_gate.* — session/run
   // hygiene advisories, no security impact (see config-ui-metadata.ts).
+  // #93 adds defaults.dispatch.block_unmarked_lanes here too: same family of
+  // run-hygiene guards, the only one that can BLOCK rather than merely advise.
   "lifecycle_guards",
   "safety_platform",
   "workspace",
