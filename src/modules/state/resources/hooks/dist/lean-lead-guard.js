@@ -23374,12 +23374,11 @@ function safeIdent(value) {
 }
 var REANCHOR_SESSION_SOURCES = sealSet(["compact", "resume"], "REANCHOR_SESSION_SOURCES");
 var DEFAULT_REANCHOR_GRACE_MS = 3 * 60 * 60 * 1e3;
-function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
+function buildAdditionalContextEnvelope(hookEventName, header) {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
-      additionalContext: header,
-      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
+      additionalContext: header
     }
   });
 }

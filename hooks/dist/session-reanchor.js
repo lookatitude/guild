@@ -7130,6 +7130,32 @@ function safeAgentMode(value) {
 function safePhase(value) {
   return safeIdent(value);
 }
+var DIRECTIVE_PHRASES = [
+  "ignoreall",
+  "ignoreprevious",
+  "ignoreabove",
+  "ignorethe",
+  "disregard",
+  "overrideprevious",
+  "overrideall",
+  "previousinstructions",
+  "priorinstructions",
+  "newinstructions",
+  "allinstructions",
+  "systemprompt",
+  "revealthe",
+  "revealsystem",
+  "forgetprevious",
+  "forgeteverything",
+  "forgetall",
+  "exfiltrate",
+  "jailbreak"
+];
+function nonDirectiveScalar(value) {
+  if (value === null) return null;
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return DIRECTIVE_PHRASES.some((phrase) => normalized.includes(phrase)) ? null : value;
+}
 var PASSED_GATE_OUTCOMES = /* @__PURE__ */ new Set(["pass", "passed", "success", "succeeded"]);
 function isPassedGateRecord(record) {
   if (record === null || typeof record !== "object" || Array.isArray(record)) return false;
@@ -7265,6 +7291,7 @@ function resolveReanchorFacts(guildRoot) {
   if (!validateRunId(runId)) return null;
   const safeRunId = safeIdent(runId);
   if (safeRunId === null) return null;
+  if (nonDirectiveScalar(safeRunId) === null) return null;
   const facts = readRunYamlFacts(guildRoot, safeRunId);
   if (!facts) return null;
   if (!isRunActive(guildRoot, safeRunId, facts.status)) return null;
@@ -7279,8 +7306,8 @@ function resolveReanchorFacts(guildRoot) {
   }
   if (!agentMode) agentMode = facts.settingsRefBackend;
   const safeMode = safeAgentMode(agentMode);
-  const safePhaseValue = safePhase(facts.phase);
-  const safeInitiative = safeIdent(facts.initiative);
+  const safePhaseValue = nonDirectiveScalar(safePhase(facts.phase));
+  const safeInitiative = nonDirectiveScalar(safeIdent(facts.initiative));
   const nextGate = deriveNextGate(safePhaseValue, facts.passedGates);
   return {
     runId: safeRunId,
@@ -7294,12 +7321,11 @@ function buildReanchorHeader(guildRoot) {
   const facts = resolveReanchorFacts(guildRoot);
   return facts === null ? null : renderReanchorHeader(facts);
 }
-function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
+function buildAdditionalContextEnvelope(hookEventName, header) {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
-      additionalContext: header,
-      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
+      additionalContext: header
     }
   });
 }

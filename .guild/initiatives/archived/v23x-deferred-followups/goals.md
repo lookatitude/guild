@@ -45,7 +45,12 @@ after a run ends; clearing belongs to run-lifecycle.ts. (b) `run.yaml gates:`
 has no writer — the re-anchor header's next-gate refinement never activates;
 emit gate outcomes at review/verify boundaries. (c) PreCompact
 `newCustomInstructions` IS consumed by the compaction path — use it as the
-second channel to shape the post-compact summary. (d) PreToolUse per-tool
+second channel to shape the post-compact summary. **[SUPERSEDED 2026-08-06 by
+issue #139]** — this premise was wrong. Live verification on Claude Code 2.1.223
+showed PreCompact REJECTS the `hookSpecificOutput` envelope entirely (hook marked
+FAILED, stdout discarded); the consumed channel is a succeeded hook's raw plain-
+text stdout. Corrected in `hooks/pre-compact.ts` — historical text kept as-is
+above for provenance. (d) PreToolUse per-tool
 lifecycle enforcement — the UserPromptSubmit gate bounds turns, not tools; add
 the per-tool bound wi-59 declared as the real limit on a single agentic turn.
 

@@ -23591,12 +23591,11 @@ function isRunActive(guildRoot, runId, status, nowMs = Date.now()) {
   if (newest === 0) return false;
   return nowMs - newest <= reanchorGraceMs();
 }
-function buildAdditionalContextEnvelope(hookEventName, header, newCustomInstructions) {
+function buildAdditionalContextEnvelope(hookEventName, header) {
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName,
-      additionalContext: header,
-      ...newCustomInstructions !== void 0 ? { newCustomInstructions } : {}
+      additionalContext: header
     }
   });
 }
