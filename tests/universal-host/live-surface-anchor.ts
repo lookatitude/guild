@@ -355,10 +355,54 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * tree before the bump, and RED for the right reason — SC-W2-5(1) and SC-W3-6(B)
  * each named those two skills files and NOTHING else, so the pin move is scoped to
  * the intended change rather than papering over unrelated drift.
+ *
+ * ── 2026-08-06 re-ratification (skills only, issue #91) ────────────────────────
+ * `skills` moves a800ffa5 → e92d7dbb; `commands` does NOT move and neither
+ * manifest hash does. The surface delta is exactly three files, all the skill half
+ * of issue #91 (the D5 direct-subagent dispatch rung was the ONE dispatch class
+ * PR #85's universal producer marker did not cover, because the launcher hands
+ * that rung's whole `Agent()` construction back to the skill and there is no
+ * launcher-side descriptor to stamp):
+ *   `M skills/meta/execute-plan/SKILL.md`  — §"Capability-scope env injection"
+ *      gains steps (2b)/(2c): the producer marker's env half
+ *      (`GUILD_DISPATCH_PRODUCER=guild.dispatch.v1` + `GUILD_SPECIALIST`, plus
+ *      `GUILD_TIER`/`GUILD_TIER_SCORE` where a tier/score actually resolves, plus
+ *      `GUILD_AGENT_DEFINITION` for a project specialist) and its prompt half
+ *      (the line-1 marker), plus the unconditional-on-this-rung invariant.
+ *   `M skills/meta/execute-plan/dispatch.md` — new §"Producer marker (line-1 +
+ *      env)" carrying the per-class stamping table and the parse rules, plus
+ *      three pointer updates (structured-carrier list, handoff-injection row,
+ *      prompt-cache exception).
+ *   `M skills/meta/execute-plan/scenarios.json` — five added behavioral scenarios
+ *      (S6 line-1 marker on the subagent rung, S7 omit-vs-fabricate GUILD_TIER,
+ *      S8 the PROJECT-class dispatch shape, S9 the lane-owner→team-specialist
+ *      join, S10 marker on every retry/re-dispatch) so the body change is
+ *      eval-gated; S8-S10 close coverage gaps the adversarial review found. The trigger fixtures in `evals.json` are
+ *      unchanged: no frontmatter `description`/`when_to_use` field moved, so the
+ *      skill's trigger surface is byte-identical.
+ * No command, agent, or manifest surface changed. The SAME commit also carries
+ * the hook half of issue #91 — `hooks/lib/dispatch-attribution.ts` deletes the
+ * class-gated legacy 300-char producer-head parse now that the marker covers
+ * every dispatch class — but `hooks/**` is NOT part of either ratified tree, so
+ * it moves no pin here; it is covered by the hooks suite + the module-resource
+ * drift gates instead.
+ *
+ * Pins below were computed AFTER `hooks && npm run build` and
+ * `sync-module-resources.ts`, with both `sync-module-resources.ts --check` and
+ * `sync-live-resources.ts --check` clean (645 resources across 31 modules); the
+ * C5 mirror `src/modules/lifecycle/resources/skills/meta/execute-plan/**` moved
+ * with the live files as expected.
+ *
+ * ANTI-VACUITY: both guards were observed RED against the OLD pin on this exact
+ * tree before the bump, and RED for the right reason — SC-W2-5(1), SC-W3-6(B)
+ * and the check-surface-pins drift report each named the `skills/` tree and the
+ * three `skills/meta/execute-plan/**` files above and NOTHING else, so the pin
+ * move is scoped to the intended change rather than papering over unrelated
+ * drift.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "c32076fa811c45d181314e3b2664663b5bce5dd2",
-  skills: "a800ffa567f9af1b1e52104919ff741172eab718",
+  skills: "e92d7dbbee98592237ecd7a8ec3e2b6caa4bc73c",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

@@ -42,8 +42,22 @@ export function composeInProcessDispatch(
     // fail closed rather than silently degrade to a bare `general-purpose`
     // dispatch (that IS the defect #58 describes).
     const isProjectLocal = spec.definition_source === "project";
+    // rf-wi-06 (issue #91) — NORMALIZE, don't just validate-on-a-copy. The check
+    // below compares TRIMMED, so a padded-but-canonical
+    // `"  .guild/agents/devops.md  "` passes; but the raw `spec` was then handed
+    // to `buildPrompt`, which interpolates it verbatim and emitted the line-1
+    // marker `GUILD_AGENT_DEFINITION=  .guild/agents/devops.md  `. That line is
+    // parsed whole-or-not-at-all, so `resolveDispatchAttribution` rejected it —
+    // `hasAdoptionPrompt: false`, violation `missing_adoption_prompt` — and the
+    // PreToolUse guard DENIED a dispatch this composer had just accepted, with
+    // the env carrier canonical and the prompt carrier malformed. Normalizing
+    // once, here, keeps both carriers identical by construction.
+    const normalizedSpec: Specialist =
+      isProjectLocal && typeof spec.definition === "string"
+        ? { ...spec, definition: spec.definition.trim() }
+        : spec;
     if (isProjectLocal) {
-      const def = typeof spec.definition === "string" ? spec.definition.trim() : "";
+      const def = typeof normalizedSpec.definition === "string" ? normalizedSpec.definition : "";
       // The definition MUST be a well-formed `.guild/agents/<name>.md` path whose
       // role matches this specialist. A missing / whitespace / arbitrary /
       // role-mismatched path is not a valid GUILD_AGENT_DEFINITION — dispatching
@@ -107,7 +121,11 @@ export function composeInProcessDispatch(
       prompt: buildPrompt(
         req.slug,
         req.runId,
-        spec,
+        // rf-wi-06 — the NORMALIZED spec: `buildPrompt` interpolates
+        // `definition` verbatim into the line-1 marker, so a padded value here
+        // would emit a marker the whole-line parser rejects while the env
+        // carrier above stayed canonical. Both carriers must agree.
+        normalizedSpec,
         req.teamPath,
         spec.host_kind ?? req.orchestratorHostKind ?? "claude",
       ),

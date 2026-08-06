@@ -50,7 +50,11 @@ function securityEvents(tmp: string): Array<Record<string, unknown>> {
     .map((l) => JSON.parse(l) as Record<string, unknown>);
 }
 
+// What `buildPrompt` emits for a project specialist: the line-1 adoption marker
+// (the ONLY adoption proof the resolver reads since rf-wi-06 deleted the legacy
+// producer-head parse) followed by the human-readable instruction.
 const ADOPTION_PROMPT =
+  "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
   "You are the `devops` teammate for run-id `test-run`. Your role definition is at " +
   "`.guild/agents/devops.md` — read it FIRST and adopt it fully (persona, boundaries).";
 
@@ -167,8 +171,20 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
         tool_input: {
           subagent_type: "developer",
           model: "sonnet", // #60: structured lane carries a model param
-          prompt: ADOPTION_PROMPT,
-          env: { GUILD_RUN_ID: RUN, GUILD_SPECIALIST: "developer", GUILD_TASK_ID: "wi-1" },
+          // A SHIPPED specialist's real producer shape: dispatched by name with
+          // the non-project line-1 marker, every carrier naming `developer`.
+          // (Reusing the project ADOPTION_PROMPT here would make the fixture
+          // role-inconsistent and prove only that non-generic dispatches are
+          // exempt — not that a legitimate shipped dispatch passes.)
+          prompt:
+            "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=developer\n" +
+            "You are the `developer` teammate for run-id `test-run`.",
+          env: {
+            GUILD_RUN_ID: RUN,
+            GUILD_SPECIALIST: "developer",
+            GUILD_TASK_ID: "wi-1",
+            GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
+          },
         },
       },
       guildEnv(),
@@ -265,6 +281,7 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
         tool_input: {
           subagent_type: "general-purpose",
           prompt:
+            "GUILD_AGENT_DEFINITION=.guild/agents/frontend.md\n" +
             "Your role definition is at `.guild/agents/frontend.md` — read it FIRST and adopt it.",
           env: {
             GUILD_RUN_ID: RUN,
@@ -280,7 +297,12 @@ describe("pre-tool-use.ts — #58 dispatch-integrity guard", () => {
     expect(out.hookSpecificOutput.permissionDecision).toBe("deny");
   });
 
-  it("DENIES the TRANSCRIPT-form wrong persona (prose devops, adoption path frontend)", () => {
+  // NOTE the name: this pins the MISSING-MARKER denial, not a wrong-persona one.
+  // The `frontend` path here sits in free text, which since rf-wi-06 is never an
+  // identity carrier — so identity does NOT conflict and the guard denies purely
+  // because the line-1 adoption marker is absent. The genuine wrong-persona case
+  // is the next test, on producer-owned carriers that can actually disagree.
+  it("DENIES the TRANSCRIPT-form dispatch for the MISSING adoption marker (free-text path is not identity)", () => {
     const { stdout } = run(
       {
         tool_name: "Agent",

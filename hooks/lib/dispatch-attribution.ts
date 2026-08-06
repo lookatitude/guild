@@ -52,16 +52,6 @@ const SAFE_ROLE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 // review: it misclassifies benign prompts like "Review .guild/agents/backend.md.
 // Adopt a skeptical reviewer persona.")
 
-/** `buildPrompt`'s exact anchor: "Your role definition is at `.guild/agents/<role>.md`". */
-const ROLE_DEF_ANCHOR_RE =
-  /role definition is at\s*[`'"]?\.guild\/agents\/([A-Za-z0-9._-]+)\.md/i;
-
-/**
- * The prose variant of the adoption signature ("You are dispatched as the Guild
- * **devops** specialist …") seen in real transcripts (issue #58 evidence).
- */
-const DISPATCH_PROSE_RE = /dispatched as the Guild\s+\*{0,2}([A-Za-z0-9._-]+)\*{0,2}\s+specialist/i;
-
 /**
  * The machine-readable adoption PREFIX `buildPrompt` emits as the prompt's very
  * FIRST LINE for a project specialist. This is the primary adoption proof and
@@ -78,32 +68,59 @@ const DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
  * producer identity for the dispatch class that has no GUILD_AGENT_DEFINITION
  * line, making line-1 a universal identity anchor across both classes.
  *
- * rf-wi-07c (G7c) — this is the anchor that makes the legacy 300-char
- * producer-head parsing (ROLE_DEF_ANCHOR_RE / DISPATCH_PROSE_RE, below) DEAD
- * for every dispatch composed by `composeInProcessDispatch` / `buildPrompt`
- * (team, tmux, in-process, remote — every one of them stamps a line-1 marker).
- * `resolveDispatchAttribution` GATES each legacy signal behind its OWN
- * same-class marker (`hasProjectMarker` gates `anchorRole`; `hasAnyMarker`
- * gates `proseRole`'s IDENTITY contribution only — see both near their use,
- * below) — a marker-carrying dispatch does not consult the legacy signal of
- * its OWN class for identity, but a legacy signal from a DIFFERENT class (or a
- * legacy signal's mere LANE-SIGNATURE role, as opposed to its identity role)
- * can still matter: adversarial review found that a single combined
- * "any marker present ⇒ skip all legacy parsing" gate is unsafe (five rounds,
- * documented in full at `hasProjectMarker`/`hasAnyMarker`, below). The one
- * dispatch class the marker does NOT yet cover at all is the direct D5
- * `subagent` rung — a SKILL-authored inline `Agent()` call issued directly
- * by `guild:execute-plan` with no launcher descriptor at all (see
+ * rf-wi-06 (issue #91) — the marker is now UNIVERSAL. G3/rf-wi-03 covered every
+ * dispatch composed by `composeInProcessDispatch` / `buildPrompt` (team, tmux,
+ * in-process, remote); rf-wi-06 marked the last uncovered class, the direct D5
+ * `subagent` rung — a SKILL-authored inline `Agent()` call issued by
+ * `guild:execute-plan` with no launcher descriptor at all (see
  * `scripts/agent-team-launcher.ts`'s `resolvedMode !== "team"` branch, which
- * hands the whole `Agent()` construction back to the skill). That rung is
- * owned by a different lane (rf-wi-06, the skill surface) and had not yet
- * landed the marker as of rf-wi-07c. The legacy regexes therefore survive,
- * class-gated, as the fallback for that one uncovered path.
- * TODO(rf-wi-06): once the direct-subagent rung emits the line-1 marker too,
- * delete `PRODUCER_HEAD_CHARS` / `ROLE_DEF_ANCHOR_RE` / `DISPATCH_PROSE_RE` /
- * `anchorRole` / `proseRole` / `hasProseSignature` entirely.
- * Like the definition marker, it is a producer-owned FIRST-LINE position that the
- * lane's appended scope text can neither forge nor contradict.
+ * hands the whole `Agent()` construction back to the skill; the skill stamps
+ * both halves itself per its §"Capability-scope env injection" steps
+ * (2b)/(2c)). With no unmarked class left, the class-gated legacy 300-char
+ * producer-head parse (`ROLE_DEF_ANCHOR_RE` / `DISPATCH_PROSE_RE` /
+ * `PRODUCER_HEAD_CHARS` / `anchorRole` / `proseRole` / `hasProseSignature`) and
+ * the five rounds of gating it required are DELETED. Identity is now read from
+ * producer-owned positions ONLY: the dispatch's own `env` map and the prompt's
+ * FIRST LINE — positions the lane's arbitrary appended scope text can neither
+ * forge nor contradict. Free-text prompt prose is no longer an identity carrier
+ * anywhere, which is what removes the whole class of scope-text false
+ * positives/negatives the gating existed to manage.
+ *
+ * ACCEPTED COVERAGE TRADE (rf-wi-06 adversarial review, round 1 finding 4). These
+ * generic-dispatch shapes were BLOCKED before the deletion and now PASS:
+ *   (a) a legacy role-definition anchor in the first 300 chars with no line-1
+ *       marker and a missing/invalid/mismatched definition env;
+ *   (b) legacy "dispatched as the Guild <role> specialist" prose with no other
+ *       structural lane signal;
+ *   (c) a role-less env producer TOKEN plus either legacy signature, with the
+ *       prompt marker and role carriers stripped;
+ *   (d) a malformed line-1 marker attempt rescued by a legacy anchor/prose.
+ * None is producible by an intact emitter: `composeInProcessDispatch`,
+ * `buildPrompt` and `paneCommand` stamp both marker halves atomically, and the
+ * D5 rung is now stamped by `guild:execute-plan` itself. Every one of these is a
+ * hand-rolled, pre-marker, or partially-corrupted dispatch. They are accepted as
+ * unblockable because the alternative — keeping a free-text identity parse alive
+ * forever — is what made five rounds of class-gating necessary and is itself a
+ * standing false-positive surface. Note the consequence honestly: with no
+ * canonical handoff block and no "teammate for run-id" phrasing, these also drop
+ * from `prompt_only` to `none` in `classifyLaneEvidence`, so even strict
+ * unmarked-lane mode cannot see them. The bounded `promptTeammate` signal is kept
+ * deliberately (below) because it preserves some corrupted-lane VISIBILITY while
+ * carrying no identity and never blocking.
+ *
+ * KNOWN GAP, NOT CLOSED HERE (rf-wi-06 adversarial review, round 1 finding 3 /
+ * round 2). The producer marker is documented as a TWO-HALF contract (env +
+ * prompt line 1), but only the prompt half is read by this resolver: strip
+ * `GUILD_DISPATCH_PRODUCER` from an otherwise-correct dispatch and nothing here
+ * denies it. Nor does anything else catch it today — `classifyLaneEvidence`
+ * still grades that dispatch `structured` from its OTHER env carriers
+ * (`GUILD_SPECIALIST` / `GUILD_TASK_ID` / `GUILD_AGENT_DEFINITION`), and the
+ * strict `blockUnmarked` rung in `backend-degradation.ts` only ever applies to
+ * `prompt_only` evidence, so it never sees this shape. Enforcing the env half is
+ * therefore a NEW requirement, not something an existing rung already covers.
+ * It is deliberately out of scope for issue #91: making the token REQUIRED is a
+ * new blocking policy that would deny every pre-#85 dispatch and any host adapter
+ * that carries the other carriers but not the token. Tracked as a followup.
  */
 const PRODUCER_MARKER_HEAD = "GUILD_DISPATCH_PRODUCER=";
 const PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;
@@ -138,14 +155,16 @@ function producerMarkerRole(firstLine: string): string | undefined {
 }
 
 /**
- * How much of the prompt counts as the producer-owned OPENING for the legacy
- * (pre-marker) signatures. Identity is NEVER parsed past this — `buildPrompt`
- * appends the lane's arbitrary `scope` after it, and scope text must not be
- * readable as identity (pre-existing #58 adversarial review round 5). Each
- * legacy signal is gated by its own same-class marker — see
- * `hasProjectMarker` / `hasAnyMarker` (G7c gating) near their use, below.
+ * Bound for the ONE remaining prompt-text probe: the "teammate for run-id"
+ * phrasing, a weak LANE SIGNATURE (`hasLaneSignature`) that never contributes
+ * identity and is never blocked on. It stays bounded to the producer-owned
+ * opening for the same reason identity always was — `buildPrompt` appends the
+ * lane's arbitrary `scope` after it, and a scope that happens to quote a brief
+ * must not read as a lane signal (#58 adversarial review round 5). Widening it
+ * to the whole prompt would be a strictly looser signal, so the bound survives
+ * the rf-wi-06 deletion of the identity regexes it used to share.
  */
-const PRODUCER_HEAD_CHARS = 300;
+const LANE_SIGNATURE_HEAD_CHARS = 300;
 
 /** Bound a candidate role to a safe identifier, else drop it. */
 function safeRole(v: string | undefined): string | undefined {
@@ -164,15 +183,19 @@ export interface DispatchAttribution {
   /** GUILD_TASK_ID env carried on the dispatch, when present + non-empty. */
   taskId?: string;
   /**
-   * The dispatch is a Guild project-specialist LANE: its prompt carries the
-   * definition-adoption instruction (`.guild/agents/<role>.md` + adopt/persona,
-   * or the "dispatched as the Guild <role> specialist" prose), OR it carries
-   * BOTH GUILD_SPECIALIST + GUILD_TASK_ID env (a composed team lane). This is the
-   * class of dispatch that MUST carry GUILD_AGENT_DEFINITION + the adoption
-   * prompt.
+   * The dispatch is a Guild project-specialist LANE: its prompt's FIRST LINE
+   * carries the `GUILD_AGENT_DEFINITION=.guild/agents/<role>.md` adoption
+   * marker, OR it carries BOTH GUILD_SPECIALIST + GUILD_TASK_ID env (a composed
+   * team lane), OR it is host-generic while carrying the by-name class's
+   * role-bearing producer marker (a class mismatch — see
+   * `isMisclassedGenericMarker`). This is the class of dispatch that MUST carry
+   * GUILD_AGENT_DEFINITION + the adoption prompt.
    */
   isSpecialistLane: boolean;
-  /** The prompt carries the definition-adoption instruction (path+adopt or prose). */
+  /**
+   * The prompt's FIRST LINE is the `GUILD_AGENT_DEFINITION=.guild/agents/<role>.md`
+   * adoption marker. Producer-owned position only — prose never counts.
+   */
   hasAdoptionPrompt: boolean;
   /**
    * GUILD_AGENT_DEFINITION is a well-formed `.guild/agents/<role>.md` path AND,
@@ -234,83 +257,10 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
   // lane to read/adopt a definition), so it does not feed hasAdoptionPrompt.
   const producerMarkerRoleValue = producerMarkerRole(firstLine);
 
-  // rf-wi-07c (G7c) — the legacy producer-head parse below is DEAD wherever a
-  // marker ALREADY supplies the SAME kind of signal, so it is gated per legacy
-  // signal, matched by SEMANTIC CLASS rather than by "any marker resolved
-  // anything" — a single combined gate went through four adversarial-review
-  // rounds and three failure modes before landing here:
-  //
-  //   - Gating both legacy signals on the marker's literal PREFIX (attempt,
-  //     not success) stopped a malformed marker's rejected claim from being
-  //     "rescued" by unrelated legacy prose (round 1's concern), but ALSO
-  //     disabled the legacy anchor for a malformed attempt with NO backing
-  //     evidence at all — the direct-subagent D5 rung's exact unmarked shape —
-  //     silently dropping the only attribution/protection that rung had, a
-  //     strictly worse outcome than the wrong-role-but-still-blocked one it
-  //     replaced (round 2).
-  //   - Gating both on a validly-formed `GUILD_DISPATCH_PRODUCER` ENV value
-  //     fixed round 1 but reopened a WORSE gap: a `general-purpose` dispatch
-  //     whose env carries a valid producer-marker TOKEN (which names no role)
-  //     but had `GUILD_SPECIALIST`/`GUILD_AGENT_DEFINITION` stripped had
-  //     NOTHING left to fall back on, so the #58 guard silently PASSED a
-  //     persona-stripped dispatch it used to BLOCK (round 3).
-  //   - Gating BOTH legacy signals on "either marker parsed" (drop env, keep
-  //     parse-success) fixed rounds 2 and 3, but a VALID `producerMarkerRoleValue`
-  //     (the non-project/shipped-class marker) still suppressed `anchorRole`
-  //     (the project-class signal) even when the SAME prompt also carried a
-  //     genuine project-style adoption instruction with no backing
-  //     `GUILD_AGENT_DEFINITION` — exactly the corrupted/mixed-class dispatch
-  //     the guard exists to catch (round 4).
-  //
-  // The fix: match gate to CLASS, not to "any marker". `markerRole` and
-  // `anchorRole` serve the IDENTICAL purpose for the IDENTICAL class (project-
-  // specialist adoption proof, old wording vs new marker) and are ALWAYS
-  // co-emitted atomically by `buildPrompt` for that class — so `markerRole`
-  // alone may gate `anchorRole` off. `producerMarkerRoleValue` and `proseRole`
-  // likewise serve the identical purpose for the identical class (shipped/
-  // orchestrator identity, neither is adoption proof) — either marker gates
-  // `proseRole` off (a project specialist with valid adoption proof needs no
-  // prose check either). But `producerMarkerRoleValue` must NEVER gate
-  // `anchorRole` off: they are DIFFERENT classes, and their co-occurrence on
-  // one dispatch (round 4's shape) is itself the drift signal — suppressing
-  // `anchorRole` there would erase the only thing left to catch it with.
-  //
-  // Net residual (round 1, re-confirmed by adversarial review as
-  // security-inert): a MALFORMED marker attempt whose dispatch is otherwise
-  // non-generic (dispatched BY NAME, never in #58's persona-strip net —
-  // `dispatchViolations` requires `isGeneric`) may still have its `specialist`
-  // telemetry field resolved from unrelated legacy prose rather than left
-  // unattributed. This never changes a `dispatchViolations` block decision,
-  // since a non-generic dispatch is never in that guard's net regardless.
-  const hasProjectMarker = markerRole !== undefined;
-  const hasAnyMarker = hasProjectMarker || producerMarkerRoleValue !== undefined;
-
-  const head = prompt.slice(0, PRODUCER_HEAD_CHARS);
-  // Legacy (pre-marker) producer wording, still accepted as adoption proof —
-  // gated OFF only by `markerRole`, the same-class/co-emitted marker (see
-  // above). `producerMarkerRoleValue` (a different class) must not suppress
-  // this — round 4.
-  const anchorRole = hasProjectMarker ? undefined : safeRole(ROLE_DEF_ANCHOR_RE.exec(head)?.[1]);
-  // Prose is a LANE SIGNATURE and an identity carrier, but NOT adoption proof:
-  // "you are dispatched as the Guild devops specialist" never instructs the lane
-  // to read/adopt the definition (pre-existing #58 adversarial review round 5,
-  // predates rf-wi-07c). Its IDENTITY contribution (`proseRole`, feeding
-  // `specialist` / the `roles` consistency array) is gated OFF by either
-  // marker — once a marker resolves a role, redundant/possibly-conflicting
-  // legacy prose text should not also feed identity. But its SIGNATURE
-  // contribution (`hasProseSignature`, feeding `isSpecialistLane`) must NOT be
-  // gated: a valid marker with no role-bearing carrier (`GUILD_SPECIALIST`/
-  // `GUILD_AGENT_DEFINITION` stripped) plus prose claiming a specialist
-  // persona is EXACTLY the drift the guard exists to catch, and gating the
-  // signature off left `isSpecialistLane` false with no other signal to make
-  // it true — a silent pass (rf-wi-07c round 5, found independently of rounds
-  // 1-4: no malformed marker, no env-only evidence, no cross-class anchor).
-  const rawProseRole = safeRole(DISPATCH_PROSE_RE.exec(head)?.[1]);
-  const proseRole = hasAnyMarker ? undefined : rawProseRole;
-  const hasProseSignature = rawProseRole !== undefined;
+  const head = prompt.slice(0, LANE_SIGNATURE_HEAD_CHARS);
 
   /** Adoption PROOF = a producer-owned definition-adoption instruction. */
-  const hasAdoptionPrompt = markerRole !== undefined || anchorRole !== undefined;
+  const hasAdoptionPrompt = markerRole !== undefined;
 
   // A VALID definition path is EXACTLY `.guild/agents/<role>.md` — whitespace,
   // arbitrary paths, and role-mismatched paths do NOT count as proof (#58,
@@ -330,35 +280,41 @@ export function resolveDispatchAttribution(toolInput: unknown): DispatchAttribut
 
   // Every identity source that IS present must name the SAME role. Catches real
   // orchestrator drift where e.g. GUILD_SPECIALIST/definition say `devops` but
-  // the prompt's marker/prose names `frontend` — the lane would run the wrong
+  // the prompt's line-1 marker names `frontend` — the lane would run the wrong
   // persona (adversarial review rounds 2 + 3). All carriers are read from
   // producer-owned positions only, so appended scope text can never conflict.
-  const roles = [
-    specialistEnv,
-    defRole,
-    markerRole,
-    producerMarkerRoleValue,
-    anchorRole,
-    proseRole,
-  ].filter((r): r is string => r !== undefined);
+  const roles = [specialistEnv, defRole, markerRole, producerMarkerRoleValue].filter(
+    (r): r is string => r !== undefined,
+  );
   const hasConsistentIdentity = roles.every((r) => r === roles[0]);
 
   // Attribution role — from identity carriers ONLY. A stray `.guild/agents/x.md`
   // mention in ordinary prompt/scope text is NOT a carrier and never yields a
   // specialist.
-  const specialist =
-    specialistEnv ?? defRole ?? markerRole ?? producerMarkerRoleValue ?? anchorRole ?? proseRole;
+  const specialist = specialistEnv ?? defRole ?? markerRole ?? producerMarkerRoleValue;
 
   const promptTeammate = /teammate for run-id/i.test(head);
 
   // A composed team lane always carries BOTH GUILD_SPECIALIST + GUILD_TASK_ID
-  // (composeInProcessDispatch). Any of: the adoption proof, the "dispatched as
-  // the Guild <role> specialist" prose, or the composed-lane env pair marks a
-  // project-specialist lane that MUST carry the full contract. Prose counts as a
-  // SIGNATURE here (so a stripped hand-rolled dispatch is still caught) but is
-  // NOT itself adoption proof — see hasAdoptionPrompt.
+  // (composeInProcessDispatch). Either the adoption proof or that env pair marks
+  // a project-specialist lane that MUST carry the full contract.
   const isComposedLane = taskId !== undefined && specialistEnv !== undefined;
-  const isSpecialistLane = hasAdoptionPrompt || hasProseSignature || isComposedLane;
+  // rf-wi-06 — the third entry replaces the deleted `hasProseSignature` with a
+  // STRUCTURAL check of the same drift. Producer contract: the host-generic
+  // subagent_type is reserved for PROJECT specialists, whose line 1 is the
+  // GUILD_AGENT_DEFINITION marker (`composeInProcessDispatch` keys
+  // GENERIC_SUBAGENT_TYPE on `definition_source === "project"`, and `buildPrompt`
+  // emits the `GUILD_DISPATCH_PRODUCER … role=` line ONLY for the non-project,
+  // dispatched-BY-NAME class). So a role-bearing producer marker on a
+  // `general-purpose` dispatch is a class mismatch: the dispatch claims a Guild
+  // persona while carrying no adoption proof. That is precisely the shape the
+  // prose signature used to catch (rf-wi-07c round 5) — a marker whose
+  // GUILD_SPECIALIST/GUILD_AGENT_DEFINITION were stripped — and it is caught
+  // here from a producer-owned carrier instead of free text, so no legitimate
+  // producer-composed dispatch can trip it.
+  const isMisclassedGenericMarker =
+    subagentType === GENERIC_SUBAGENT_TYPE && producerMarkerRoleValue !== undefined;
+  const isSpecialistLane = hasAdoptionPrompt || isComposedLane || isMisclassedGenericMarker;
 
   const hasLaneSignature =
     isSpecialistLane ||

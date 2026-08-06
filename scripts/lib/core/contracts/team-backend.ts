@@ -67,9 +67,10 @@ export const GENERIC_SUBAGENT_TYPE = "general-purpose";
 // queued behind the descriptor work. Two effects:
 //   - the backend-degradation guard's prompt-only rung can now BLOCK a lane that
 //     carries NO producer marker (drift) once the marker is universal (G3-3);
-//   - dispatch-attribution can read identity from a single line-1 anchor for
-//     every dispatch, unblocking the removal of the legacy 300-char producer-head
-//     parsing (rf-wi-07c / G7c — a downstream lane).
+//   - dispatch-attribution reads identity from a single line-1 anchor for every
+//     dispatch, which is what let rf-wi-06 (issue #91) DELETE the legacy 300-char
+//     producer-head parsing outright once the last unmarked class — the direct D5
+//     `subagent` rung, stamped by `guild:execute-plan` itself — was covered.
 // The hooks bundle restates these literals (same doctrine as GENERIC_SUBAGENT_TYPE);
 // keep the values in step.
 
