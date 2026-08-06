@@ -151,6 +151,20 @@ and **no code path** that returns `selected` when `authorHost === "unknown"`.
 
 **Broker action by status (closes the gate-bypass — SK-9):**
 
+- **Adapter `no_verdict` → the gate does NOT clear, and it is NOT a skip.** The
+  Codex adapter returns `no_verdict` when a round produced no judgement at all
+  (provider refusal, dispatch error, empty response — see `guild:codex-review`
+  §Verdict-less rounds). It asserts the artifact was never reviewed, so it can
+  never resolve the gate. Do NOT map it to the broker outcome `skipped`:
+  `skipped` is the lone CLEAN gate-skip and legitimately continues the lifecycle
+  when `review_required == false`, which would turn an unreviewed artifact into
+  a pass. Do NOT map it to a cap status either — those assert substantive review
+  reached the cap. Treat it as a non-terminated round that cannot be retried:
+  surface the same three options as `## Cap handling` (`force-pass` /
+  `extend-cap N` / `rework`) and record the adapter's captured refusal in the
+  trail. Under a required review, an unresolved `no_verdict` leaves the gate
+  BLOCKED.
+
 - `selected` → run the cross-host **STRONG** review.
 - `degraded-local` → run the **WEAK same-host** review (fresh-context subagent,
   `independence: weak`, recorded) **and gate it by the 5-condition rule**. This

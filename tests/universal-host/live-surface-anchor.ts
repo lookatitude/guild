@@ -399,10 +399,41 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * three `skills/meta/execute-plan/**` files above and NOTHING else, so the pin
  * move is scoped to the intended change rather than papering over unrelated
  * drift.
+ *
+ * ── 2026-08-06 re-ratification (skills only) — v1 regression repair (PR #136),
+ *    rebased over the issue #91 pin move above ─────────────────────────────────
+ * `skills` moves e92d7dbb → the pin below; `commands` does NOT move and neither
+ * manifest hash does. The delta is exactly three files:
+ * `M skills/meta/codex-review/SKILL.md`, `M skills/meta/codex-review/scenarios.json`,
+ * `M skills/meta/review-broker/SKILL.md`.
+ *
+ * WHY: the evolve edit merged in PR #135 was authored as a whole-file copy from a
+ * STALE snapshot, so landing it silently DELETED the `## Cap handling` §"two named
+ * cap terminal states" section and the `cap_pushback` / `cap_verify` statuses from
+ * the output union and the trail-format table (351 → 334 lines; `cap_pushback`
+ * 4 → 0 occurrences). `main` never carried the loss; `next` did, and the tree-hash
+ * guards could not see it because the pin was re-ratified in the same commit as the
+ * deletion. This bump pins the REPAIRED surface: the `no_verdict` terminal is kept
+ * and re-derived as an additive PATCH (334 → 418 lines), the cap terminal states
+ * are restored verbatim from `main`, and `review-broker` gains the fail-closed
+ * `no_verdict` mapping it was missing — an adapter `no_verdict` reaching the broker
+ * had no defined handling on `next`.
+ *
+ * `skills/meta/review-broker/SKILL.md` is GENERATED: the edit was made in
+ * `skill-src/skill-registry.json` and re-rendered via `renderSkillFromRegistry`, so
+ * render-equivalence (p2-w2-sc1) still holds. The triple `${GUILD_PLUGIN_ROOT:-…}`
+ * fallback repaired in the prior re-ratification is carried forward unchanged.
+ *
+ * Pins computed AFTER `sync-module-resources` (645 resources / 31 modules, `--check`
+ * clean). ANTI-VACUITY: both guards were observed RED against the OLD pin on this
+ * exact tree before the bump, and RED for the right reason — SC-W2-5(1) and
+ * SC-W3-6(B) each named those three skills files and NOTHING else. (The
+ * 310323f6 pin from the pre-rebase derivation was superseded by this rebase;
+ * the repair content is identical, re-hashed over the #91 skill tree.)
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "c32076fa811c45d181314e3b2664663b5bce5dd2",
-  skills: "e92d7dbbee98592237ecd7a8ec3e2b6caa4bc73c",
+  skills: "1521571d8db27b878c439b67557cfd1e4f8ec98c",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

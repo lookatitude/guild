@@ -78,14 +78,14 @@
       "id": "guild-codex-review",
       "source_path": "skills/meta/codex-review/SKILL.md",
       "resource_path": "resources/skills/meta/codex-review/SKILL.md",
-      "sha256": "1b6a5eb9abdf46a078631dbf38c89016628cad2c641bb0187a812aab54b07e3e"
+      "sha256": "e6757d7b588845519e3e95e4dade20ffffa0359c15ad9c39faac587b7881fa01"
     },
     {
       "category": "skills",
       "id": "guild-codex-review/scenarios.json",
       "source_path": "skills/meta/codex-review/scenarios.json",
       "resource_path": "resources/skills/meta/codex-review/scenarios.json",
-      "sha256": "7b7f9c1a00e3f01aba5a6766b482e303a14a97f458e5799458a2fb986d0024b6"
+      "sha256": "d74efaf1e470199d75da6c7726a816a31f7a66a8a463eb072ff1e0c2fbab5462"
     },
     {
       "category": "skills",
@@ -106,7 +106,7 @@
       "id": "guild-review-broker",
       "source_path": "skills/meta/review-broker/SKILL.md",
       "resource_path": "resources/skills/meta/review-broker/SKILL.md",
-      "sha256": "2ce37adb2f674d18846283831752a26b00b6de431939c6a56d6ba3ed79c3f780"
+      "sha256": "7f9c7a1c91391a270fa8478d1f0a3e025e0dc0f3a92fa5c98e907e1610dbd1b6"
     },
     {
       "category": "skills",
