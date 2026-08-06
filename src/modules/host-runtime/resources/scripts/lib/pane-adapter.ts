@@ -32,8 +32,12 @@
  * invocation shape, in which case give it its own class exactly like the four above
  * (CH-2 extension point unchanged).
  *
- * Invariant: never writes anything. Adapters are pure command/env builders plus
- * a read-only preflight probe (injectable for tests).
+ * Invariant: adapters never touch project or run state. They are pure
+ * command/env builders plus injectable probes. The one exception is scoped and
+ * deliberate: the issue-#94 codex enforcement probe creates a throwaway temp
+ * directory (removed in a `finally`) and executes Guild's own gate binary
+ * against it, because the fact it must establish — that the gate really refuses
+ * — cannot be read off the filesystem.
  */
 
 import {
@@ -105,6 +109,15 @@ export interface AdapterOpts {
    * pre-issue-#94 command. Withholding the flag only ever launches bare.
    */
   codexLaunchArgs?: string[];
+  /**
+   * ISSUE #94 — the PROJECT root a codex pane will run against. The bypass
+   * probe judges the project's own `bypass_permissions_policy`, so it must read
+   * the TARGET project's config, not the launcher's working directory: a
+   * launcher sitting in a hard-blocking project while dispatching into a
+   * permissive one would otherwise grant the flag on the wrong project's
+   * policy. Defaults to `process.cwd()`.
+   */
+  projectCwd?: string;
 }
 
 // ── ClaudePaneAdapter ─────────────────────────────────────────────────────────
@@ -269,7 +282,7 @@ export const CODEX_HOOK_TRUST_FLAG = "--dangerously-bypass-hook-trust";
 
 /** Outcome of probeCodexPreToolUseEnforcement — every check is separately reportable. */
 export interface CodexEnforcementProbeResult {
-  /** True iff ALL FOUR checks pass. The only thing the bypass gate reads. */
+  /** True iff EVERY check below passes. The only thing the bypass gate reads. */
   enforced: boolean;
   /** Operator-facing explanation; always populated, pass or fail. */
   detail: string;
@@ -304,8 +317,9 @@ export interface CodexProbeOpts {
   run?: RunFn;
   /**
    * The project root whose security config the bypass leg is judged against.
-   * Defaults to `process.cwd()`. Read-only: the probe writes nothing here (its
-   * run dir is always a scratch directory).
+   * Defaults to `process.cwd()`. The probe reads this project's config and
+   * writes nothing into it — its run dir is always a scratch directory, so any
+   * approval_request the gate emits lands there and is deleted.
    */
   cwd?: string;
   /**
@@ -386,8 +400,13 @@ function expandVarRefs(input: string, env: NodeJS.ProcessEnv): string | null {
     const sep = body.indexOf(":-");
     const name = (sep === -1 ? body : body.slice(0, sep)).trim();
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return null;
-    const value = (env[name] ?? "").trim();
-    if (value.length > 0) {
+    // EXACT `${VAR:-default}` semantics — the default applies when VAR is unset
+    // OR empty, and a non-empty value is used VERBATIM. Trimming it here made
+    // the probe resolve a path the shell would not: a root with a trailing
+    // space vouched for the trimmed (valid) bridge while the real command kept
+    // the space and failed to load.
+    const value = env[name];
+    if (value !== undefined && value !== "") {
       out += value;
     } else if (sep === -1) {
       return null; // unset, no default
@@ -402,36 +421,78 @@ function expandVarRefs(input: string, env: NodeJS.ProcessEnv): string | null {
 }
 
 /**
+ * The ONLY hook-command shape the probe will vouch for:
+ *
+ *     node "<path>.js" [plain args...]
+ *
+ * The script may be single- or double-quoted, or bare with no spaces; trailing
+ * arguments must be plain tokens (Guild's own SessionStart hook carries
+ * `--host codex-cli`). They are PARSED, not discarded, and the probe executes
+ * the script WITH them, so the command that earns the grant is exactly the
+ * command that was proven. Nothing else is accepted. Not because other shapes cannot work, but because anything else
+ * cannot be VERIFIED: a probe that pulls the first quoted token out of a command
+ * and then runs `node <that token>` proves the token, not the command. Empirically
+ * `node "<trusted bridge>"; touch /tmp/marker` satisfied a token-only check while
+ * the shell ran the `touch` — so the command that earns the grant must be exactly
+ * the command the probe executed, with no room for a second one.
+ *
+ * Anchored, no alternation over user input, and every shell operator
+ * (`; & | > < ( ) \` $ \\` and newline) is rejected before parsing.
+ */
+const SAFE_HOOK_COMMAND_RE =
+  /^node\s+(?:"([^"]+)"|'([^']+)'|(\S+\.js))((?:\s+[A-Za-z0-9_.:/=@,+-]+)*)$/;
+
+/** Shell characters that would give a command a second effect. */
+const SHELL_OPERATOR_RE = /[;&|<>()`\\\n\r]/;
+
+/**
  * Resolve the script path out of a registered hook command such as
  * `node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/dist/x.js"`.
  *
  * ORDER MATTERS, and getting it wrong is exploitable: expanding variables into
  * the command string BEFORE parsing quotes lets a quote character carried in an
  * env VALUE be read as shell syntax, so the probe can resolve — and successfully
- * execute — a path that is not the one the shell would run. So the quoted token
- * is extracted FIRST, from the unexpanded command, and variables are expanded
- * only INSIDE that token, where their contents are inert text.
+ * execute — a path that is not the one the shell would run. So the command is
+ * matched against SAFE_HOOK_COMMAND_RE FIRST, unexpanded, and variables are
+ * expanded only INSIDE the captured path, where their contents are inert text.
  *
  * An unset variable with no `:-` default yields null ("cannot resolve" ⇒ cannot
  * prove ⇒ FAIL), never the empty string — an empty expansion would turn
  * `${UNSET}/hooks/dist/x.js` into a plausible absolute path and make the verdict
  * depend on whether that path happens to exist.
  */
-function scriptPathFrom(command: string, env: NodeJS.ProcessEnv): string | null {
-  const quoted = command.match(/"([^"]*)"|'([^']*)'/);
-  const token = quoted
-    ? (quoted[1] ?? quoted[2] ?? "")
-    : (command.split(/\s+/).find((t) => t.endsWith(".js")) ?? "");
+function parseHookCommand(
+  command: string,
+  env: NodeJS.ProcessEnv,
+): { script: string; args: string[] } | null {
+  const raw = command.trim();
+  if (SHELL_OPERATOR_RE.test(raw)) return null;
+  const m = SAFE_HOOK_COMMAND_RE.exec(raw);
+  if (m === null) return null;
+  const token = m[1] ?? m[2] ?? m[3] ?? "";
   if (token.length === 0) return null;
 
   const expanded = expandVarRefs(token, env);
   if (expanded === null || expanded.length === 0) return null;
-  const out = expanded;
-  // A value that smuggled shell metacharacters in is not a path we can vouch for.
-  if (/["'`$\\]/.test(out)) return null;
-  return out;
+  // A value that smuggled quoting or expansion syntax in is not a path we can
+  // vouch for — the shell would read it differently than we just did.
+  if (/["'`$\\]/.test(expanded) || /\s/.test(expanded)) return null;
+  if (!expanded.endsWith(".js")) return null;
+
+  const args: string[] = [];
+  for (const arg of (m[4] ?? "").trim().split(/\s+/).filter((a) => a.length > 0)) {
+    const argExpanded = expandVarRefs(arg, env);
+    if (argExpanded === null) return null;
+    if (/["'`$\\\s]/.test(argExpanded)) return null;
+    args.push(argExpanded);
+  }
+  return { script: expanded, args };
 }
 
+/** The script path alone, for the ownership scan. */
+function scriptPathFrom(command: string, env: NodeJS.ProcessEnv): string | null {
+  return parseHookCommand(command, env)?.script ?? null;
+}
 
 /** realpath, or null when the path does not exist / cannot be resolved. */
 function realpathOrNull(p: string): string | null {
@@ -457,7 +518,7 @@ function isInside(root: string, child: string): boolean {
  * executed, produced no output, and emitted NO WARNING. Presence is therefore a
  * false positive on codex, so this probe ends with an EXECUTION test.
  *
- * Four checks, ALL required:
+ * Five checks, ALL required:
  *   1. manifest_registers_pretooluse — a Guild codex manifest (either
  *      `$CODEX_HOME/hooks.json` or the packaged `<plugin>/hooks/codex-hooks.json`)
  *      registers a PreToolUse command. Guild's generated command carries
@@ -506,12 +567,10 @@ export function probeCodexPreToolUseEnforcement(
   // at that path). Reading only the first made the probe reject Guild's own
   // shipped install.
   const codexHome = (env["CODEX_HOME"] ?? "").trim() || nodepath.join(os.homedir(), ".codex");
-  const pluginRoot = (
-    env["GUILD_PLUGIN_ROOT"] ??
-    env["PLUGIN_ROOT"] ??
-    env["CLAUDE_PLUGIN_ROOT"] ??
-    ""
-  ).trim();
+  // NOT trimmed: the trusted root must be the bytes the shell would use, or the
+  // probe vouches for a different path than the one that runs.
+  const pluginRoot =
+    env["GUILD_PLUGIN_ROOT"] ?? env["PLUGIN_ROOT"] ?? env["CLAUDE_PLUGIN_ROOT"] ?? "";
   const candidates =
     opts.manifestPaths ??
     [
@@ -564,7 +623,8 @@ export function probeCodexPreToolUseEnforcement(
         `${CODEX_HOOK_TRUST_FLAG}. Codex panes launch BARE.`,
     );
   }
-  const script = scriptPathFrom(command, env);
+  const parsed = parseHookCommand(command, env);
+  const script = parsed?.script ?? null;
   const scriptReal = script === null ? null : realpathOrNull(script);
   if (script === null || scriptReal === null || !fsSeam.existsSync(script)) {
     return fail(
@@ -633,7 +693,7 @@ export function probeCodexPreToolUseEnforcement(
   ): { status: number | null; decision: string | null } => {
     const runDir = nodepath.join(sandbox, "run");
     nodefs.mkdirSync(runDir, { recursive: true });
-    const r = run("node", [script], {
+    const r = run("node", [script, ...(parsed?.args ?? [])], {
       input: JSON.stringify({
         session_id: "guild-codex-enforcement-probe",
         transcript_path: "",
@@ -652,6 +712,10 @@ export function probeCodexPreToolUseEnforcement(
         ...env,
         GUILD_RUN_ID: "run-guild-codex-enforcement-probe",
         GUILD_RUN_DIR: runDir,
+        // Pinned, not inherited: an ambient GUILD_CWD from the launcher's own
+        // session takes priority over the event's `cwd` inside the hook, which
+        // would silently judge the wrong project's policy.
+        GUILD_CWD: projectCwd,
         // Force the refusal: an explicit scope that does not contain Bash.
         GUILD_CAPABILITY_SCOPE: JSON.stringify(["Read"]),
         GUILD_HOST: "codex-cli",
@@ -761,12 +825,15 @@ export class CodexPaneAdapter implements PaneAdapter {
   private fs_: FsSeam;
   /** ISSUE #94 — opt-in bypass argv; see AdapterOpts.codexLaunchArgs. Default []. */
   private codexLaunchArgs: string[];
+  /** ISSUE #94 — the target project whose policy the probe judges. */
+  private projectCwd: string | undefined;
 
   constructor(opts: AdapterOpts = {}) {
     this.run = opts.run ?? defaultRun;
     this.env_ = opts.env ?? process.env;
     this.fs_ = opts.fs ?? nodefs;
     this.codexLaunchArgs = opts.codexLaunchArgs ?? [];
+    this.projectCwd = opts.projectCwd;
   }
 
   /**
@@ -782,17 +849,26 @@ export class CodexPaneAdapter implements PaneAdapter {
    * ladder Claude panes use — rather than baked in from the defaults and
    * described as if it were configured.
    */
-  withLaunchArgs(args: string[]): CodexPaneAdapter {
+  withLaunchArgs(args: string[], projectCwd?: string): CodexPaneAdapter {
     return new CodexPaneAdapter({
       run: this.run,
       env: this.env_,
       fs: this.fs_,
       codexLaunchArgs: args,
+      ...(projectCwd !== undefined ? { projectCwd } : {}),
+      ...(this.projectCwd !== undefined && projectCwd === undefined
+        ? { projectCwd: this.projectCwd }
+        : {}),
     });
   }
 
   probeEnforcement(): CodexEnforcementProbeResult {
-    return probeCodexPreToolUseEnforcement({ env: this.env_, fs: this.fs_, run: this.run });
+    return probeCodexPreToolUseEnforcement({
+      env: this.env_,
+      fs: this.fs_,
+      run: this.run,
+      ...(this.projectCwd !== undefined ? { cwd: this.projectCwd } : {}),
+    });
   }
 
   /** Resolve the auth.json path, honouring CODEX_HOME env override. */
@@ -880,10 +956,13 @@ export class CodexPaneAdapter implements PaneAdapter {
     // hooks.json without trust meant the hook never fired, silently, and the
     // command ran. A bypass flag on such a pane is precisely the regression this
     // issue exists to prevent, so the two flags ship TOGETHER: a codex pane that
-    // is granted the sandbox bypass is also guaranteed to run Guild's gate.
+    // is granted the sandbox bypass also runs Guild's gate rather than silently
+    // skipping it for want of trust.
     // The extra flag's own cost — other enabled hooks in that CODEX_HOME also
-    // run untrusted — is strictly smaller than the bypass the operator already
-    // opted into, and it never appears on a pane that is not being bypassed.
+    // run untrusted — is contained by the probe's sole_owner check, which
+    // withholds the whole grant when any manifest codex loads registers a hook
+    // outside Guild's plugin root. It never appears on a pane that is not
+    // being bypassed.
     //
     // THIRD GATE — the pane must have something to enforce. `capability_scope`
     // is optional, and an absent scope means "no tool restrictions": the bridge

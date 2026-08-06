@@ -40,24 +40,6 @@ import {
 import type { HostKind } from "../host-types";
 
 /**
- * rf-wi-04 item 1 — the remote shell snippet that verifies Guild's hook bundle
- * is installed. Guild resolves its plugin root from GUILD_PLUGIN_ROOT (Claude's
- * CLAUDE_PLUGIN_ROOT is the compat alias — see hooks/bootstrap.sh); the hooks
- * that actually wire the PreToolUse gate live at `<root>/hooks/hooks.json`. So
- * "hooks bundle present on the far host" ⟺ that file exists under the resolved
- * root. This is NECESSARY BUT NOT SUFFICIENT: it proves the bundle is on disk,
- * NOT that Claude actually loaded/enabled/trusts it (a stale or partial checkout
- * pointed at by GUILD_PLUGIN_ROOT would be a false positive). That gap is why
- * rf-wi-04 makes the remote bypass flag OPT-IN on top of this proof (see
- * RemoteTeamBackend.claudeLaunchArgs) rather than auto-granting it — presence
- * gates OUT the clearly-unsafe hosts (no Guild install at all) without being
- * trusted as a full guarantee. Residual (matching connect/probe/spawn): the far
- * host's non-interactive shell must have GUILD_PLUGIN_ROOT exported (or reachable
- * via the host's login_shell wrap) — the same PATH-visibility residual the binary
- * probe documents. A tighter proof (query the live Claude for its loaded hook
- * set) is a followup.
- */
-/**
  * ISSUE #94 (secondary) — the synthetic PreToolUse event the remote probe feeds
  * to the far host's own enforcement binary. Single-quoted into the ssh command,
  * so it must contain NO single quotes.

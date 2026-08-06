@@ -37,6 +37,12 @@
 
 import { SshRemoteTransport } from "../lib/host/remote-backend";
 import type { RunFn, RunResult } from "../lib/core/contracts/team-backend";
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+import { PLUGIN_ROOT } from "../build-inventory";
 import type { RemoteHostTarget } from "../lib/core/contracts/team-backend";
 
 function target(hostId: string, hostKind: string, loginShell?: string): RemoteHostTarget {
@@ -127,5 +133,55 @@ describe("probeHooks EXECUTES the remote enforcement binary (not just stat)", ()
     const { run, calls } = recording({ status: 0, stdout: "GUILD_HOOKS_ENFORCING\n", stderr: "" });
     new SshRemoteTransport({ run }).probeHooks(target("box", "claude", "zsh"));
     expect(calls[0].args.at(-1)).toMatch(/^zsh -lic /);
+  });
+});
+
+// ── the snippet is REALLY executed, not just string-matched ──────────────────
+
+describe("the generated remote snippet behaves as claimed when actually run", () => {
+  /**
+   * Every other test here inspects the shell text or feeds back a canned marker.
+   * That proves the transport reads the signal, not that the signal means
+   * anything. These run the ACTUAL generated snippet under `sh` against real
+   * trees — the only way to know the conjuncts hold.
+   */
+  const snippet = (): string => {
+    let cmd = "";
+    new SshRemoteTransport({
+      run: (_c, a) => {
+        cmd = a.at(-1) ?? "";
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    }).probeHooks(target("box", "claude"));
+    return cmd;
+  };
+
+  const runSnippet = (root: string): string =>
+    spawnSync("sh", ["-c", snippet()], {
+      encoding: "utf8",
+      env: { ...process.env, GUILD_PLUGIN_ROOT: root },
+    }).stdout ?? "";
+
+  it("emits the signal against a real Guild plugin root", () => {
+    expect(runSnippet(PLUGIN_ROOT)).toContain("GUILD_HOOKS_ENFORCING");
+  });
+
+  /** The stale/partial-checkout false positive the old presence probe allowed. */
+  it("emits NOTHING for a tree that ships the binary but registers nothing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-remote94-"));
+    try {
+      fs.mkdirSync(path.join(dir, "hooks", "dist"), { recursive: true });
+      fs.copyFileSync(
+        path.join(PLUGIN_ROOT, "hooks", "dist", "pre-tool-use.js"),
+        path.join(dir, "hooks", "dist", "pre-tool-use.js"),
+      );
+      expect(runSnippet(dir)).not.toContain("GUILD_HOOKS_ENFORCING");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("emits nothing when no plugin root is set at all", () => {
+    expect(runSnippet("")).not.toContain("GUILD_HOOKS_ENFORCING");
   });
 });

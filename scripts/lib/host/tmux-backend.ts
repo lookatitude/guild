@@ -313,11 +313,11 @@ export function composeTmuxCommands(opts: {
       // already imports `paneCommand` from this file, so importing its class
       // back would close an import cycle for a one-line type test.
       const adapter = resolveAdapter("codex") as PaneAdapter & {
-        withLaunchArgs?: (args: string[]) => PaneAdapter;
+        withLaunchArgs?: (args: string[], projectCwd?: string) => PaneAdapter;
       };
       const codexAdapter =
         typeof adapter.withLaunchArgs === "function"
-          ? adapter.withLaunchArgs(resolveCodexTeamLaunchArgs(permissionConfig))
+          ? adapter.withLaunchArgs(resolveCodexTeamLaunchArgs(permissionConfig), cwd)
           : adapter;
       return codexAdapter.command({
         name: spec?.name ?? "orchestrator",

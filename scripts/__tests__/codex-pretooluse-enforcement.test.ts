@@ -59,7 +59,11 @@ import { buildHostPackages } from "../build-host-packages";
 import { PLUGIN_ROOT, UNSTAMPED_GENERATED_AT } from "../build-inventory";
 import { CODEX_CAPABILITIES } from "../lib/host-capabilities-schema";
 import { HOST_REGISTRY_ROWS } from "../lib/host-registry-schema";
-import { composeTmuxCommands, resolveCodexTeamLaunchArgs } from "../lib/host/tmux-backend";
+import {
+  composeTmuxCommands,
+  resolveCodexTeamLaunchArgs,
+  TmuxTeamBackend,
+} from "../lib/host/tmux-backend";
 import {
   CodexPaneAdapter,
   probeCodexPreToolUseEnforcement,
@@ -120,7 +124,17 @@ function makeCodexHome(opts: {
     fs.writeFileSync(
       bridgePath,
       bridgeDenies
-        ? `let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{` +
+        ? // A stand-in that behaves like the real gate in the two ways the probe
+          // depends on: it reads the event's `cwd`, and it only refuses under
+          // bypassPermissions when THAT project's settings say to. A stub that
+          // denied unconditionally could not detect a probe judging the wrong
+          // project's policy.
+          `const fs=require("fs"),path=require("path");let d="";` +
+            `process.stdin.on("data",c=>d+=c).on("end",()=>{` +
+            `const e=JSON.parse(d||"{}");let policy="audit";` +
+            `try{policy=JSON.parse(fs.readFileSync(path.join(e.cwd||"",".guild","settings.json"),"utf8"))` +
+            `.security.bypass_permissions_policy}catch{}` +
+            `if(e.permission_mode==="bypassPermissions"&&policy!=="deny"){process.exit(0)}` +
             `process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PreToolUse",` +
             `permissionDecision:"deny",permissionDecisionReason:"probe"}}))});`
         : // Silently allows — exactly what an untrusted/broken hook looks like.
@@ -248,11 +262,13 @@ describe("the generated Codex package wires PreToolUse to Guild's enforcement bi
 describe("probeCodexPreToolUseEnforcement proves the deny EXECUTES", () => {
   it("passes when the manifest registers PreToolUse AND the bridge really denies", () => {
     const { codexHome, env, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
     try {
-      const r = probeCodexPreToolUseEnforcement({ env });
+      const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
       expect(r.enforced).toBe(true);
       expect(r.checks.deny_functional).toBe(true);
     } finally {
+      project.cleanup();
       cleanup();
     }
   });
@@ -670,16 +686,146 @@ describe("ownership is proven independently of the command being vetted", () => 
   });
 });
 
+
+// ── 3e. round-3 hardening: the command that earns the grant is the one run ────
+
+describe("only an exactly-verifiable hook command earns the grant", () => {
+  const probeWith = (command: string) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex94-cmd-"));
+    const project = makeDenyingProject();
+    try {
+      const bridge = path.join(dir, "hooks", "dist", "pre-tool-use.js");
+      fs.mkdirSync(path.dirname(bridge), { recursive: true });
+      fs.writeFileSync(
+        bridge,
+        `let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{` +
+          `process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PreToolUse",` +
+          `permissionDecision:"deny"}}))});`,
+      );
+      fs.writeFileSync(
+        path.join(dir, "hooks.json"),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              { hooks: [{ type: "command", command: command.replace("<BRIDGE>", bridge) }] },
+            ],
+          },
+        }),
+      );
+      return probeCodexPreToolUseEnforcement({
+        env: { CODEX_HOME: dir, GUILD_PLUGIN_ROOT: dir },
+        cwd: project.cwd,
+      });
+    } finally {
+      project.cleanup();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("accepts the plain quoted-node-script shape Guild generates", () => {
+    expect(probeWith('node "<BRIDGE>"').enforced).toBe(true);
+  });
+
+  /**
+   * THE DEFECT: pulling the first quoted token out and running `node <token>`
+   * proves the TOKEN, not the command. The shell would run the trailing
+   * statement too, so the command that earns the grant must be exactly the
+   * command the probe executed.
+   */
+  it.each([
+    ['node "<BRIDGE>"; touch /tmp/guild94-marker', "a chained second command"],
+    ['node "<BRIDGE>" && curl http://evil', "an && continuation"],
+    ['node "<BRIDGE>" > /tmp/guild94-out', "a redirection"],
+    ['node "<BRIDGE>" | tee /tmp/guild94-out', "a pipe"],
+    ['EVIL=1 node "<BRIDGE>"', "a leading env assignment"],
+    ['node --require /tmp/evil.js "<BRIDGE>"', "an injected --require"],
+    [String.raw`sh -c 'node "<BRIDGE>"'`, "an indirect interpreter"],
+  ])("REJECTS %s (%s)", (command) => {
+    const r = probeWith(command);
+    expect(r.enforced).toBe(false);
+    expect(r.checks.deny_functional).toBe(false);
+  });
+});
+
+describe("expansion uses the shell's own bytes", () => {
+  /**
+   * `${VAR:-default}` uses a non-empty value VERBATIM. Trimming it made the
+   * probe vouch for a trimmed (valid) path while the real command kept the
+   * whitespace and failed to load — a grant for a gate that never runs.
+   */
+  it("FAILS when the declared root carries whitespace the shell would keep", () => {
+    const { codexHome, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      fs.writeFileSync(
+        path.join(codexHome, "hooks.json"),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                hooks: [
+                  { type: "command", command: 'node "${GUILD_PLUGIN_ROOT}/hooks/dist/pre-tool-use.js"' },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+      const r = probeCodexPreToolUseEnforcement({
+        env: { CODEX_HOME: codexHome, GUILD_PLUGIN_ROOT: `${codexHome} ` },
+        cwd: project.cwd,
+      });
+      expect(r.enforced).toBe(false);
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+
+  /** An empty value takes the default, exactly as the shell does. */
+  it("takes the :- default when the variable is set but empty", () => {
+    const { codexHome, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      const bridge = path.join(codexHome, "hooks", "dist", "pre-tool-use.js");
+      fs.writeFileSync(
+        path.join(codexHome, "hooks.json"),
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              { hooks: [{ type: "command", command: `node "\${EMPTY_VAR:-${bridge}}"` }] },
+            ],
+          },
+        }),
+      );
+      const r = probeCodexPreToolUseEnforcement({
+        env: { CODEX_HOME: codexHome, GUILD_PLUGIN_ROOT: codexHome, EMPTY_VAR: "" },
+        cwd: project.cwd,
+      });
+      expect(r.enforced).toBe(true);
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+});
+
 // ── 4. the pane bypass flag is gated on the probe ────────────────────────────
 
 const BYPASS_FLAG = "--dangerously-bypass-approvals-and-sandbox";
 const HOOK_TRUST_FLAG = "--dangerously-bypass-hook-trust";
 
 describe("the codex pane permission-bypass flag is gated on a PASSING probe", () => {
+  let project: { cwd: string; cleanup: () => void };
+  beforeEach(() => {
+    project = makeDenyingProject();
+  });
+  afterEach(() => project.cleanup());
+
   it("DEFAULT is bare — no bypass flag even on a fully enforcing host", () => {
     const { codexHome, env, cleanup } = makeCodexHome({});
     try {
-      const cmd = new CodexPaneAdapter({ env }).command(paneSpec());
+      const cmd = new CodexPaneAdapter({ env, projectCwd: project.cwd }).command(paneSpec());
       expect(cmd).not.toContain(BYPASS_FLAG);
     } finally {
       cleanup();
@@ -692,6 +838,7 @@ describe("the codex pane permission-bypass flag is gated on a PASSING probe", ()
       const cmd = new CodexPaneAdapter({
         env,
         codexLaunchArgs: [BYPASS_FLAG],
+        projectCwd: project.cwd,
       }).command(paneSpec());
       expect(cmd).toContain(BYPASS_FLAG);
     } finally {
@@ -705,6 +852,7 @@ describe("the codex pane permission-bypass flag is gated on a PASSING probe", ()
       const cmd = new CodexPaneAdapter({
         env,
         codexLaunchArgs: [BYPASS_FLAG],
+        projectCwd: project.cwd,
       }).command(paneSpec());
       expect(cmd).not.toContain(BYPASS_FLAG);
       // Still a working pane — withholding only ever launches bare.
@@ -733,6 +881,7 @@ describe("the codex pane permission-bypass flag is gated on a PASSING probe", ()
       const cmd = new CodexPaneAdapter({
         env,
         codexLaunchArgs: [BYPASS_FLAG],
+        projectCwd: project.cwd,
       }).command(paneSpec());
       expect(cmd).toContain(HOOK_TRUST_FLAG);
     } finally {
@@ -746,6 +895,7 @@ describe("the codex pane permission-bypass flag is gated on a PASSING probe", ()
       const cmd = new CodexPaneAdapter({
         env,
         codexLaunchArgs: [BYPASS_FLAG],
+        projectCwd: project.cwd,
       }).command(paneSpec());
       expect(cmd).not.toContain(HOOK_TRUST_FLAG);
     } finally {
@@ -759,6 +909,7 @@ describe("the codex pane permission-bypass flag is gated on a PASSING probe", ()
       const cmd = new CodexPaneAdapter({
         env,
         codexLaunchArgs: [BYPASS_FLAG],
+        projectCwd: project.cwd,
       }).command(paneSpec());
       expect(cmd).not.toContain(BYPASS_FLAG);
     } finally {
@@ -770,6 +921,12 @@ describe("the codex pane permission-bypass flag is gated on a PASSING probe", ()
 // ── 5. the pane the flag is granted to can actually enforce ──────────────────
 
 describe("a bypassed codex pane is one that can actually enforce", () => {
+  let project: { cwd: string; cleanup: () => void };
+  beforeEach(() => {
+    project = makeDenyingProject();
+  });
+  afterEach(() => project.cleanup());
+
   /**
    * The bridge resolves its host from the environment. A codex pane that
    * exported nothing read as Claude, chose `ask`, and codex — which has no ask
@@ -794,6 +951,7 @@ describe("a bypassed codex pane is one that can actually enforce", () => {
       const cmd = new CodexPaneAdapter({
         env,
         codexLaunchArgs: [BYPASS_FLAG],
+        projectCwd: project.cwd,
       }).command(paneSpec({ capability_scope: undefined }));
       expect(cmd).not.toContain(BYPASS_FLAG);
       expect(cmd).not.toContain(HOOK_TRUST_FLAG);
@@ -808,6 +966,7 @@ describe("a bypassed codex pane is one that can actually enforce", () => {
       const cmd = new CodexPaneAdapter({
         env,
         codexLaunchArgs: [BYPASS_FLAG],
+        projectCwd: project.cwd,
       }).command(paneSpec({ capability_scope: [] }));
       expect(cmd).not.toContain(BYPASS_FLAG);
     } finally {
@@ -819,6 +978,15 @@ describe("a bypassed codex pane is one that can actually enforce", () => {
 // ── 6. the gate is reachable from production, not only from tests ────────────
 
 describe("the codex bypass argv reaches a pane through the real compose path", () => {
+  let denyingProject: string;
+  let cleanupProject: () => void;
+  beforeEach(() => {
+    const p = makeDenyingProject();
+    denyingProject = p.cwd;
+    cleanupProject = p.cleanup;
+  });
+  afterEach(() => cleanupProject());
+
   const specialist = (over: Record<string, unknown> = {}) => ({
     name: "backend",
     host_kind: "codex",
@@ -830,7 +998,9 @@ describe("the codex bypass argv reaches a pane through the real compose path", (
     composeTmuxCommands({
       mode: "new-session",
       targetName: "guild-94",
-      cwd: PLUGIN_ROOT,
+      // The TARGET project, not the launcher's own directory — the probe judges
+      // this project's bypass policy.
+      cwd: denyingProject,
       slug: "codex-deny",
       runId: "run-94",
       specialists: [specialist()] as never,
@@ -900,5 +1070,60 @@ describe("only the codex adapter claims the codex host identity", () => {
     expect(resolver(kind as never).command(paneSpec({ hostKind: kind as never }))).not.toContain(
       "GUILD_HOST_ID=codex-cli",
     );
+  });
+});
+
+// ── 8. the planner, not just the composer ────────────────────────────────────
+
+describe("TmuxTeamBackend.plan judges the TARGET project, not the launcher's cwd", () => {
+  /**
+   * THE DEFECT: the adapter dropped the request's `cwd` and the probe fell back
+   * to `process.cwd()`. A launcher sitting in a hard-blocking project while
+   * dispatching into a permissive one therefore granted the flag on the wrong
+   * project's policy. The stub bridge here reads the event's `cwd` and honours
+   * that project's setting, so this test can actually see the difference.
+   */
+  const planFor = (targetCwd: string, codexHome: string): string => {
+    const backend = new TmuxTeamBackend({
+      resolveAdapter: resolveAdapter({
+        env: { CODEX_HOME: codexHome, GUILD_PLUGIN_ROOT: codexHome },
+      }),
+    });
+    return backend
+      .plan({
+        mode: "new-session",
+        targetName: "guild-94",
+        cwd: targetCwd,
+        slug: "codex-deny",
+        runId: "run-94",
+        specialists: [
+          { name: "backend", host_kind: "codex", capability_scope: ["Read", "Edit"] },
+        ],
+        orchestratorHostKind: "codex",
+      } as never)
+      .commands.map((c) => c.argv.join(" "))
+      .join("\n");
+  };
+
+  it("grants the flag when the TARGET project hard-blocks", () => {
+    const { codexHome, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      expect(planFor(project.cwd, codexHome)).toContain(BYPASS_FLAG);
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+
+  it("WITHHOLDS it when the target project is on the default audit policy", () => {
+    const { codexHome, cleanup } = makeCodexHome({});
+    const permissive = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex94-permissive-"));
+    try {
+      expect(planFor(permissive, codexHome)).not.toContain(BYPASS_FLAG);
+    } finally {
+      fs.rmSync(permissive, { recursive: true, force: true });
+      cleanup();
+    }
   });
 });

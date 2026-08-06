@@ -181,8 +181,11 @@ function resolveRunId(cwd: string): string | undefined {
 //   host supports PreToolUse ask  →  normal ask decision (unchanged behavior)
 //
 // The capability manifest is written at SessionStart by bootstrap.sh →
-// scripts/write-host-capability.ts (RE-5).  We read it best-effort; absent
-// manifest = safe fallback to the existing ask path (no regression).
+// scripts/write-host-capability.ts (RE-5). We read it best-effort. An ABSENT
+// manifest no longer means "assume ask works" unconditionally — see
+// hostSupportsPreToolUseAsk, which falls back to the registry capability row for
+// the narrow set of hosts that have a real refusal primitive and no ask (today:
+// codex-cli only). Every other host keeps the historical ask path.
 
 /** Shape of tool_support in the guild.host_capability.v1 manifest (HK-07 slice). */
 interface HostToolSupport {
