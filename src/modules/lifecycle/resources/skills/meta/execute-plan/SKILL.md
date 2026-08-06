@@ -27,7 +27,7 @@ Four strict phases per lane. A lane does not advance until the previous phase ha
 
 1. **Context bundle.** Invoke `guild:context-assemble` for the lane; it writes `.guild/context/<run-id>/<specialist>-<task-id>.md` per §9.3. Read back the bundle's handoff receipt to confirm `bundle_path`, `token_estimate`, `layers_included`. A missing bundle blocks the dispatch — do not paper over with chat context.
 2. **Tier resolution.** Auto-score the lane and resolve its tier per `## Tier resolution` — print the score + chosen tier (never silent). The resolved tier becomes the Agent `model` param at dispatch.
-3. **Dispatch.** **First write the lane's `guild.task_run.v1` descriptor** (TE-01 — see `## Task-run descriptor + routing persistence`); then spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the snapshot-resolved backend (`snapshot.effective.agent_mode`), passing the bundle path as the primary task brief. Before spawning, inject capability-scope env vars (`## Capability-scope env injection`) **and the canonical handoff protocol block** (`dispatch.md §"Handoff protocol"`) verbatim into the agent's prompt — substitute `<RECEIPT_PATH>` and `<TASK_ID>` for this lane before sending. The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, env injection, and handoff protocol injection: `dispatch.md`.
+3. **Dispatch.** **First write the lane's `guild.task_run.v1` descriptor** (TE-01 — see `## Task-run descriptor + routing persistence`); then spawn an **ephemeral one-agent-per-task** agent (see `## §task§agent lifecycle`) at the resolved tier, using the snapshot-resolved backend (`snapshot.effective.agent_mode`), passing the bundle path as the primary task brief. Before spawning, inject three things: the **producer marker** — prompt line 1 plus its env twin (`## Capability-scope env injection` steps (2b)/(2c); contract in `dispatch.md §"Producer marker (line-1 + env)"`); the **capability-scope env vars** (`## Capability-scope env injection`); and **the canonical handoff protocol block** verbatim into the agent's prompt (`dispatch.md §"Handoff protocol"`) — substituting `<RECEIPT_PATH>` and `<TASK_ID>` for this lane before sending. The agent escalates via `## Advisor escalation` if it hits something above its tier. Routing rules, backend mechanics, env injection, and handoff protocol injection: `dispatch.md`.
 4. **Receipt.** Confirm the agent wrote its handoff receipt to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per §8.2, **populate the receipt `host` block (`selected` / `degraded` / `independence`) from the lane's routing decision** (TE-03 — see `## Task-run descriptor + routing persistence`), then **extract its `learnings[]` and dismiss the agent** (lifecycle below). A missing or malformed receipt (no `evidence:` field, no `files changed`) → treat the lane as **FAILED**: record the failure in the run log and route it into `## Lane retry + dead-lettering` (retry up to `defaults.retry.max_attempts`, then checkpoint as dead) rather than immediately halting the run.
 
 A specialist dispatched without a bundle violates the context contract (§9); one that completes without a receipt violates the handoff contract (§8.2). Either condition blocks `guild:review`.
@@ -168,6 +168,36 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
 - **Subagent / in-process (`agent`) — model-driven path, this skill spawns via `Agent()`:** **write the scope file, then** set the env vars in the spawn `env` map at call time:
 
   ```ts
+  // (0) RESOLVE THE LANE'S SPECIALIST — do this FIRST; everything below reads it.
+  //     The plan lane carries `owner` (+ task-id, depends-on, scope). `definition`
+  //     and `definition_source` live on the TEAM file's `specialists[]`, keyed by
+  //     `name` — they are NOT lane fields. Join them explicitly and FAIL CLOSED.
+  //     Mirror `composeInProcessDispatch` EXACTLY (scripts/lib/host/inprocess-backend.ts):
+  //     for a project specialist the definition must be the role-matched path
+  //     `.guild/agents/<name>.md` — a missing, whitespace, arbitrary, or
+  //     role-MISMATCHED path is not a valid GUILD_AGENT_DEFINITION, and the
+  //     composer THROWS rather than emit a persona-stripped descriptor (#58).
+  //     On this rung the skill is the producer, so the skill owns that check.
+  const spec = team.specialists.find((s) => s.name === lane.owner);
+  if (!spec) throw new Error(`lane ${lane.taskId}: no specialist named ${lane.owner} in the team file`);
+  const isProject = spec.definition_source === "project";
+  //   NORMALIZE ONCE, then use `definitionPath` for BOTH carriers. The composer
+  //   compares TRIMMED, so a padded-but-canonical `"  .guild/agents/x.md  "`
+  //   passes validation — and emitting the RAW field would then produce the
+  //   malformed line-1 marker `GUILD_AGENT_DEFINITION=  .guild/agents/x.md  `,
+  //   which the whole-line parser rejects outright. Normalizing here makes the
+  //   two carriers agree by construction.
+  const definitionPath = isProject
+    ? (typeof spec.definition === "string" ? spec.definition.trim() : "")
+    : undefined;
+  if (isProject) {
+    const expected = `.guild/agents/${spec.name}.md`;   // role-matched — that is WHY every
+    if (definitionPath !== expected)                    // carrier can derive from spec.name
+      throw new Error(
+        `lane ${lane.taskId}: project specialist "${spec.name}" has an invalid definition ` +
+          `path ${JSON.stringify(spec.definition)} — expected "${expected}"`,
+      );
+  }
   // (1) FILE BACKSTOP — write before the spawn (backend-uniform; the file path the hook reads).
   if (lane.capability_scope) {
     const scopeDir = path.join(runDir, "scope");          // runDir = .guild/runs/<run-id>
@@ -179,27 +209,102 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
   }
   // (2) ENV — inject on the spawn env. GUILD_RUN_ID + GUILD_TASK_ID are REQUIRED for the hook to
   //     locate the scope file (it resolves the path from these); GUILD_CAPABILITY_SCOPE is the fast-path.
-  const env = { ...descriptorEnv };                       // carries GUILD_RUN_ID (in-process: descriptor.env)
+  //     `descriptor` is the lane's entry in `signal.dispatchPlan` on the in-process rung, and
+  //     `undefined` on the bare `subagent` rung (the launcher returned no plan) — that is the
+  //     value the FORK below branches on.
+  const descriptor = signal.dispatchPlan?.find((d) => d.name === lane.owner);
+  const env = { ...(descriptor?.env ?? {}) };             // in-process: descriptor.env; subagent: {}
   env.GUILD_RUN_ID = runId;
   env.GUILD_TASK_ID = lane.taskId;                        // ← without this the file backstop is unlocatable
   if (lane.capability_scope) env.GUILD_CAPABILITY_SCOPE = JSON.stringify(lane.capability_scope);
   if (autonomyRules?.length)  env.GUILD_AUTONOMY_CONTRACT = JSON.stringify(autonomyRules);
-  // (3) SPAWN — subagent_type is DEFINITION-SOURCE-RESOLVED (dispatch.md hard
-  //     constraint). Domain specialists are project instances: the host has no
-  //     registered agent under their name, so they dispatch as the host-generic
-  //     type with GUILD_AGENT_DEFINITION + the adoption prompt. Both carriers are
-  //     UNCONDITIONAL for a project specialist and ALWAYS present on the
-  //     descriptor (composeInProcessDispatch keys them on definition_source ===
-  //     "project" alone, and throws if the lane has no definition path — #58). A
-  //     PreToolUse dispatch-integrity guard DENIES any general-purpose Agent
-  //     dispatch that claims a specialist persona without GUILD_AGENT_DEFINITION,
-  //     so a persona-stripped call can no longer masquerade as a real lane. Only
-  //     a SHIPPED machinery/dev-team agent dispatches by bare name.
-  const subagentType =
-    lane.definition_source === "project" ? GENERIC_SUBAGENT_TYPE /* + definition env/prompt from the descriptor */
-                                         : lane.owner;
-  Agent({ subagent_type: subagentType, model: resolvedModel, prompt, env });
+  // ── FORK — TWO BRANCHES. Take exactly one; they do not share step (3). ─────
+  if (descriptor) {
+    // ── BRANCH A — IN-PROCESS (`agent`): a descriptor exists. ────────────────
+    //   `composeInProcessDispatch` + `buildPrompt` already built the WHOLE
+    //   dispatch: both producer-marker halves AND the teammate identity, lane
+    //   scope, context-bundle pointer, assignment read-ack gate and wait
+    //   instruction. Issue it AS-IS (`dispatch.md §"In-process dispatchPlan
+    //   consumption"`). The ONLY permitted layering is the resolved `model` and
+    //   the scope/run env keys built in steps (1)/(2). Do NOT rebuild the
+    //   prompt and do NOT recompute `subagentType` — a rebuild silently DROPS
+    //   everything in that list. Nothing below this branch applies.
+    Agent({
+      subagent_type: descriptor.subagentType,   // as-is — never recomputed here
+      model: resolvedModel,                     // tiering is orthogonal (backend sends model:null)
+      prompt: descriptor.prompt,                // as-is — never rebuilt here
+      env,                                      // descriptor.env + steps (1)/(2)
+    });
+  } else {
+    // ── BRANCH B — BARE `subagent` rung: NO descriptor. ──────────────────────
+    //   `agent-team-launcher.ts` returned a bare {backend, reason, slug} signal
+    //   for `resolvedMode !== "team"`, handing the whole `Agent()` construction
+    //   back to this skill. HERE the skill IS the producer, so it stamps what
+    //   composeInProcessDispatch/buildPrompt stamp on every other class.
+    //
+    // (2b) PRODUCER MARKER, ENV HALF — an env map is composed by whoever issues
+    //     the dispatch, so it is structurally out of reach of quoted prose.
+    env.GUILD_DISPATCH_PRODUCER = "guild.dispatch.v1";   // emit v1; parsers accept guild.dispatch.v<N>
+    env.GUILD_SPECIALIST = spec.name;                    // identity carrier the guards match on
+    if (resolvedTier) env.GUILD_TIER = resolvedTier;     // scored tier ?? default_tier — NEVER fabricate one
+    if (Number.isFinite(laneScore)) env.GUILD_TIER_SCORE = String(laneScore); // audit-only; 0 IS a real score
+    if (isProject) env.GUILD_AGENT_DEFINITION = definitionPath;  // #58 — unconditional for a project
+                                                                 // specialist; the NORMALIZED team path
+    // (2c) PRODUCER MARKER, PROMPT HALF — the line-1 twin of the env carrier, on
+    //     a producer-owned position the lane's appended scope text can neither
+    //     forge nor contradict. Emit exactly ONE line-1 marker, chosen by
+    //     definition source — never both, never neither:
+    //       project specialist → `GUILD_AGENT_DEFINITION=<definitionPath>`
+    //         (#58 — carries the role via its path AND is the machine adoption proof)
+    //       everything else    → `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=<name>`
+    //     The marker is the prompt's FIRST LINE, `\n`-terminated, with nothing
+    //     before it (no blank line, no leading whitespace, no preamble). Use the
+    //     NORMALIZED `definitionPath`, never the raw field: a padded value would
+    //     emit `GUILD_AGENT_DEFINITION=  .guild/agents/x.md  `, which the line-1
+    //     parser rejects. Every role-bearing carrier derives from `spec.name`.
+    const line1Marker = isProject
+      ? `GUILD_AGENT_DEFINITION=${definitionPath}\n`
+      : `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=${spec.name}\n`;
+    // (2d) ADOPTION INSTRUCTION — the marker is MACHINE proof for the guard; it
+    //     is NOT what makes the agent adopt the persona. A project specialist
+    //     dispatches as the host-generic type, so without this human-readable
+    //     instruction the lane runs as a generic agent that merely LOOKS
+    //     compliant — syntactically complete, functionally persona-stripped.
+    //     Emit the SAME instruction `buildPrompt` emits
+    //     (`src/modules/prompting/workflows/team-prompt.ts` — keep them in step):
+    const adoption = isProject
+      ? `Your role definition is at \`${definitionPath}\` — read it FIRST and adopt it ` +
+        `fully (persona, boundaries, TRIGGER / DO NOT TRIGGER limits). For each skill listed ` +
+        `in its frontmatter \`skills:\`, load the project-local instance at ` +
+        `\`.guild/skills/<skill>/SKILL.md\` when it exists before starting your lane. `
+      : "";
+    // The BRIEF — on this rung nothing built it for you, so build it here. It
+    // must carry what `buildPrompt` gives every other class; the marker and
+    // adoption text ADD to it and never replace it. NOTE what is deliberately
+    // ABSENT: the `$GUILD_TASK_ASSIGNMENT` read-ack gate is PANE-ONLY — only
+    // `tmux-backend.ts` / `pane-adapter.ts` export that variable, so instructing
+    // a subagent to read it would point the lane at an unset env var.
+    const handoffBlock = readHandoffProtocolBlock()               // the canonical block, verbatim
+      .replace("<RECEIPT_PATH>", `.guild/runs/${runId}/handoffs/${spec.name}-${lane.taskId}.md`)
+      .replace("<TASK_ID>", lane.taskId);                         // dispatch.md §"Handoff protocol"
+    const brief =
+      `You are the \`${spec.name}\` teammate for run-id \`${runId}\`. ` +
+      `Your lane scope: \`${lane.scope}\`. ` +
+      `Your context bundle is at \`.guild/context/${runId}/${spec.name}-${lane.taskId}.md\` — read it first. ` +
+      handoffBlock;
+    const prompt = line1Marker + adoption + brief;
+    // (3) SPAWN — subagent_type is DEFINITION-SOURCE-RESOLVED (dispatch.md hard
+    //     constraint). A project specialist has no host-registered agent under
+    //     its name, so it dispatches as the host-generic type carrying
+    //     GUILD_AGENT_DEFINITION + the adoption instruction above; a PreToolUse
+    //     guard DENIES a general-purpose dispatch that claims a persona without
+    //     them (#58). Only a SHIPPED machinery/dev-team agent goes by bare name.
+    const subagentType = isProject ? GENERIC_SUBAGENT_TYPE : spec.name;
+    Agent({ subagent_type: subagentType, model: resolvedModel, prompt, env });
+  }
   ```
+
+  **The line-1 producer marker is UNCONDITIONAL on the BARE `subagent` rung — it is what makes a direct `Agent()` dispatch attributable at all.** Every OTHER dispatch class (team/tmux panes, cmux surfaces, in-process descriptors, remote) gets its marker from `composeInProcessDispatch` / `buildPrompt` / `paneCommand` in code. The D5 `subagent` rung is the ONE class with no launcher descriptor — the launcher hands the whole `Agent()` construction back to this skill — so an unmarked lane here is a lane the PreToolUse guards and the run trace cannot tell apart from an arbitrary non-Guild `Agent` call. **On the in-process (`agent`) rung, do NOT construct any of this**: the descriptor already carries both marker halves and the full brief — issue `descriptor.prompt` / `descriptor.subagentType` verbatim (`dispatch.md §"In-process dispatchPlan consumption"`), because rebuilding the prompt drops the teammate identity, scope, context pointer, read-ack gate, and wait instruction `buildPrompt` put there. Stamp both halves (env + prompt line 1) on every lane you construct yourself, at the first attempt and at every retry, resumed-dead re-dispatch, and nudge-replacement spawn. Never invent a value to fill a slot: omit `GUILD_TIER` when no tier resolved and `GUILD_TIER_SCORE` when no real score exists — a fabricated tier is worse than an absent one, because the guard would verify the model against a fiction. Full marker contract, the parse rules the guards apply, and the per-class table: `dispatch.md §"Producer marker (line-1 + env)"`.
 
   **Absent `capability_scope` ⇒ write no file AND set no `GUILD_CAPABILITY_SCOPE`** (additive no-scoping; byte-identical to current). Still set `GUILD_RUN_ID`/`GUILD_TASK_ID` (they're harmless run-context, not scope) — but with no file and no scope env, the hook's `scope === null` clean fall-through applies. Omit each scope env key / the `autonomy_contract` value whose source field is absent — never set an empty/`"undefined"` value. The scope file is keyed by the lane's **task-id**, matching the hook's read path `.guild/runs/<run-id>/scope/<task-id>.json` (`hooks/pre-tool-use.ts` — it resolves that path from `GUILD_RUN_ID` + `GUILD_TASK_ID`).
 - **Team / tmux (`team`) and remote:** the **launcher** (`scripts/agent-team-launcher.ts`) writes the **same scope file** + does the per-pane env injection (tooling-owned) — this skill does not touch pane env/file. Same path, same JSON shape; one contract across backends.

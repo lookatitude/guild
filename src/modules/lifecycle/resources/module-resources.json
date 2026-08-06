@@ -169,21 +169,21 @@
       "id": "guild-execute-plan",
       "source_path": "skills/meta/execute-plan/SKILL.md",
       "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
-      "sha256": "df6fa2eed4a7199ed61e221d41cb7124e14c3421b86e44857f4e7d58d174c7e5"
+      "sha256": "4122cab9894e09aa269cec5c2fecb6b677a1e3d6433909237257dc3de2247f00"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan/dispatch.md",
       "source_path": "skills/meta/execute-plan/dispatch.md",
       "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
-      "sha256": "1829f7c3248cddd7df97c8b7965f2dee51bfdcebea78b8e73c6d10cb2124dc7f"
+      "sha256": "2904b6047f2aec25ec283dc0c6def57716517b72b944875dd3c257629615ab12"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan/scenarios.json",
       "source_path": "skills/meta/execute-plan/scenarios.json",
       "resource_path": "resources/skills/meta/execute-plan/scenarios.json",
-      "sha256": "a2ee21efb8f761c9fd775b7ceb9564fde05e4fa9e66f65555a9eccf8e71eacb8"
+      "sha256": "c251be21164772ae59f42d131efb1e593e4cc08e940cc1a093d0e19ab319ea5a"
     },
     {
       "category": "skills",

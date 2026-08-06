@@ -268,7 +268,7 @@
       "id": "projection:scripts/lib/core/contracts/team-backend.ts",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "de5837e48c59e9044a95c2625d4969e4c719d47e06d7f6922ae28e146ae2e2fd",
+      "sha256": "82edbdbc602cc1205ae407503518c5ccdb5ad63348d926f23d8bccd7684d5719",
       "projection_dependency": true
     },
     {
@@ -276,7 +276,7 @@
       "id": "projection:scripts/lib/host/inprocess-backend.ts",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "f2686434ea2ee1b390473c5ef4c380541cbaaaf7fe67292408cb676fc8a4cc72",
+      "sha256": "633d7d230b3be1ab24d0131ef3708b16024daf3fef4fe145fb60920e8a63d9b6",
       "projection_dependency": true
     },
     {
@@ -1300,7 +1300,7 @@
       "id": "projection:src/modules/prompting/workflows/team-prompt.ts",
       "source_path": "src/modules/prompting/workflows/team-prompt.ts",
       "resource_path": "resources/src/modules/prompting/workflows/team-prompt.ts",
-      "sha256": "f80057cb7dcb3ab34d83c8886b00873c6ff943b8b5969ca2ec1fd8dfbd5bb7f9",
+      "sha256": "89effe24da9a41ecec9fa60259194adbf1ec9a79e378081f093ad38166210f3c",
       "projection_dependency": true
     },
     {
