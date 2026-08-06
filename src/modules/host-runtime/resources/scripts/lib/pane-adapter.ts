@@ -634,21 +634,42 @@ export function probeCodexPreToolUseEnforcement(
     );
   }
 
-  // An inline `[hooks]` table in config.toml is likewise a source we cannot
-  // parse into commands with confidence, so its presence withholds the grant.
+  // config.toml decides TWO things the probe must respect.
+  //
+  //   (a) WHETHER HOOKS RUN AT ALL. `[features] hooks = false` (or `[hooks]
+  //       enabled = false`) turns the whole mechanism off. Every other check can
+  //       pass — the manifest registers, the bridge is present, it really
+  //       denies — and codex will still never invoke it. That is the E3 silent
+  //       no-op again, arriving through configuration instead of trust.
+  //   (b) WHETHER THERE ARE HOOK SOURCES WE CANNOT PARSE. Hooks defined inline
+  //       as `[hooks.<Event>]` / `[[hooks.<Event>]]` sub-tables are commands
+  //       Guild has not inspected, and the grant carries CODEX_HOOK_TRUST_FLAG.
+  //       A bare `[hooks]` table with scalar keys (the ordinary `enabled = true`
+  //       shape) is NOT that, and must not be refused — refusing it would shut
+  //       the gate on the very config that turns hooks on.
   const configPath = nodepath.join(codexHome, "config.toml");
+  let configRaw = "";
   try {
-    if (fsSeam.existsSync(configPath) && /^\s*\[hooks[.\]]/m.test(readSeam(configPath))) {
-      return fail(
-        `codex PreToolUse enforcement NOT proven (grant withheld): ${configPath} declares an ` +
-          `inline [hooks] table. Guild vouches only for hook sources it can parse into ` +
-          `commands. Move the hooks into hooks.json or drop the grant. Codex panes launch BARE.`,
-      );
-    }
+    configRaw = fsSeam.existsSync(configPath) ? readSeam(configPath) : "";
   } catch {
     return fail(
       `codex PreToolUse enforcement NOT proven: ${configPath} exists but cannot be read, so ` +
-        `its hooks cannot be vouched for. Codex panes launch BARE.`,
+        `neither its hook sources nor whether hooks are enabled can be established. ` +
+        `Codex panes launch BARE.`,
+    );
+  }
+  if (/^\s*hooks\s*=\s*false\b/m.test(configRaw) || /^\s*enabled\s*=\s*false\b/m.test(configRaw)) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: ${configPath} DISABLES hooks. The bridge is ` +
+        `registered and works, but codex will never invoke it — enforcement is off. ` +
+        `Codex panes launch BARE.`,
+    );
+  }
+  if (/^\s*\[\[?hooks\.[A-Za-z]/m.test(configRaw)) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven (grant withheld): ${configPath} defines hooks ` +
+        `inline. Guild vouches only for hook sources it can parse into commands, and the grant ` +
+        `carries ${CODEX_HOOK_TRUST_FLAG}. Move them into hooks.json. Codex panes launch BARE.`,
     );
   }
 

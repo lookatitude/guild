@@ -857,15 +857,59 @@ describe("the grant covers every hook source codex loads", () => {
     }
   });
 
-  /** An inline [hooks] table in config.toml is a source we cannot parse. */
-  it("FAILS when config.toml declares an inline [hooks] table", () => {
+  /**
+   * CONFIG CAN TURN THE WHOLE MECHANISM OFF. Every other check passes — the
+   * manifest registers, the bridge is present, it really denies — and codex
+   * still never invokes it. That is the E3 silent no-op arriving through
+   * configuration instead of trust.
+   */
+  it.each([
+    ["[features]\nhooks = false\n", "a disabled hooks feature flag"],
+    ["[hooks]\nenabled = false\n", "an explicitly disabled hooks table"],
+  ])("FAILS when config.toml disables hooks (%s)", (config) => {
+    const { codexHome, env, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      fs.writeFileSync(path.join(codexHome, "config.toml"), config);
+      const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
+      expect(r.enforced).toBe(false);
+      expect(r.detail).toContain("config.toml");
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+
+  /** Hooks defined inline are commands Guild has not inspected. */
+  it("FAILS when config.toml defines hooks inline as [hooks.<Event>]", () => {
+    const { codexHome, env, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      fs.writeFileSync(
+        path.join(codexHome, "config.toml"),
+        '[[hooks.SessionStart]]\ncommand = "node /opt/foreign.js"\n',
+      );
+      const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
+      expect(r.enforced).toBe(false);
+      expect(r.detail).toContain("inline");
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+
+  /**
+   * ...and the converse. `[hooks] enabled = true` is the config that turns
+   * hooks ON — the very shape a working install has. Refusing it (an earlier
+   * draft refused any `[hooks]` table) would shut the gate on correct setups.
+   */
+  it("ACCEPTS the ordinary `[hooks] enabled = true` config", () => {
     const { codexHome, env, cleanup } = makeCodexHome({});
     const project = makeDenyingProject();
     try {
       fs.writeFileSync(path.join(codexHome, "config.toml"), "[hooks]\nenabled = true\n");
       const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
-      expect(r.enforced).toBe(false);
-      expect(r.detail).toContain("config.toml");
+      expect(r.enforced).toBe(true);
     } finally {
       project.cleanup();
       cleanup();
