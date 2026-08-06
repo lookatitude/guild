@@ -166,6 +166,9 @@ function makeSnapshot(over: Partial<ResolvedSettingsSnapshot> = {}): ResolvedSet
       rigor: "deep",
       loops: "all",
       loop_cap: 16,
+      // #93: the backend-degradation guard's strict rung, frozen into every
+      // snapshot so hooks/lib/backend-degradation.ts can read the resolved value.
+      block_unmarked_lanes: false,
     },
     providers: {
       authorHost: "claude",

@@ -88,7 +88,7 @@ import {
   buildBackendDegradationEvent,
   buildDenyMessage,
   dispatchAssertsRunId,
-  isBlockUnmarkedEngaged,
+  resolveBlockUnmarkedLanes,
   isGuildLaneDispatch,
   isLeadProcess,
   isOverrideEngaged,
@@ -917,7 +917,13 @@ function evaluateBackendDegradation(
     overrideEngaged: isOverrideEngaged(process.env),
     isLead: true,
     runFresh,
-    blockUnmarked: isBlockUnmarkedEngaged(process.env),
+    // #93: the RESOLVED `defaults.dispatch.block_unmarked_lanes`, read from the
+    // same U6 snapshot file `readSnapshotAgentMode` above consulted — a SECOND
+    // readFileSync of that file, not a free ride on the first. It is paid only
+    // here, past every cheap-first short-circuit above, so it costs nothing on
+    // the overwhelming majority of tool calls that never reach this line.
+    // GUILD_BLOCK_UNMARKED_LANES is retained as the per-session override.
+    blockUnmarked: resolveBlockUnmarkedLanes(guildRoot, runId, process.env),
   });
   if (result.decision === "pass" || result.reason === undefined) return null;
 

@@ -6124,7 +6124,30 @@ var init_config_defaults = __esm({
          * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
          * activity count before the lifecycle gate advisory fires.
          */
-        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
+        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
+        /**
+         * Issue #93 — dispatch-safety knobs for the #56 backend-degradation guard
+         * (hooks/lib/backend-degradation.ts).
+         *
+         * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
+         * NO structured producer marker (`prompt_only` evidence — the hand-rolled
+         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+         *
+         * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
+         * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
+         * was merely QUOTED in a prompt as `prompt_only` too — by text it is
+         * indistinguishable from the real dispatch (backend-degradation.ts's
+         * lane-brief signature note, adversarial review round 3). So strict mode
+         * trades the no-false-positive-on-a-quoted-brief invariant for tighter drift
+         * coverage, which is an operator's call to make, never a shipped default.
+         *
+         * PR #85 (G3) shipped this rung as the env flag `GUILD_BLOCK_UNMARKED_LANES`
+         * only, deliberately deferring schema registration to avoid colliding with
+         * rf-wi-01's closed-schema work. That work landed (PR #87), so this is the
+         * promised followup: the key is now discoverable and validated, and the env
+         * var survives as a per-session OVERRIDE (both directions) on top of it.
+         */
+        dispatch: { block_unmarked_lanes: false }
       }
     });
   }
@@ -6334,6 +6357,15 @@ function validateDefaults(value, selfBuild) {
       rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
     }
   }
+  if (value["dispatch"] !== void 0 && !object(value["dispatch"])) {
+    rejects.push(`defaults.dispatch must be an object { block_unmarked_lanes? } (got ${JSON.stringify(value["dispatch"])})`);
+  } else if (object(value["dispatch"])) {
+    const dispatch = value["dispatch"];
+    rejects.push(...rejectUnknown(dispatch, /* @__PURE__ */ new Set(["block_unmarked_lanes"]), "defaults.dispatch"));
+    if (dispatch["block_unmarked_lanes"] !== void 0 && typeof dispatch["block_unmarked_lanes"] !== "boolean") {
+      rejects.push(`defaults.dispatch.block_unmarked_lanes must be a boolean (got ${JSON.stringify(dispatch["block_unmarked_lanes"])})`);
+    }
+  }
   if (object(value["update"])) {
     const update = value["update"];
     rejects.push(...rejectUnknown(update, /* @__PURE__ */ new Set(["mode", "cadence_hours"]), "defaults.update"));
@@ -6409,7 +6441,8 @@ var init_config_validation = __esm({
       "update",
       "allowed_tools",
       "lean_lead",
-      "lifecycle_gate"
+      "lifecycle_gate",
+      "dispatch"
     ]);
     INDEX_KEYS = /* @__PURE__ */ new Set([
       "enabled",
@@ -12831,7 +12864,10 @@ function runStartPreflight(opts) {
       review: config.review,
       rigor: config.rigor,
       loops: config.loops,
-      loop_cap: config.loop_cap
+      loop_cap: config.loop_cap,
+      // #93: the backend-degradation guard's strict rung, resolved once here so
+      // the per-tool-call hook never has to re-resolve it.
+      block_unmarked_lanes: config.defaults.dispatch.block_unmarked_lanes
     },
     providers: {
       authorHost: detection.authorHost,
@@ -21818,8 +21854,10 @@ var init_settings_reader = __esm({
       "update",
       // plugin-update-lifecycle AC-6
       "lean_lead",
-      "lifecycle_gate"
+      "lifecycle_gate",
       // rf-wi-01 (G1)
+      "dispatch"
+      // #93: { block_unmarked_lanes: bool }
     ]);
     RESOLVER_TIER1_KEYS = sealSet([
       "rigor",

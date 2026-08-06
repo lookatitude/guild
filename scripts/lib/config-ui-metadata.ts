@@ -304,6 +304,14 @@ const EXPLICIT: Record<string, ConfigUiMeta> = {
   "defaults.lean_lead.hands_on_edit_threshold": meta({ group: "lifecycle_guards", label: "Lean-lead edit threshold", control: "number", safety_class: "normal" }),
   "defaults.lifecycle_gate.enabled": meta({ group: "lifecycle_guards", label: "Lifecycle-gate ad-hoc-activity advisory", control: "boolean", safety_class: "normal" }),
   "defaults.lifecycle_gate.adhoc_activity_threshold": meta({ group: "lifecycle_guards", label: "Lifecycle-gate activity threshold", control: "number", safety_class: "normal" }),
+  // #93 — the #56 backend-degradation guard's STRICT rung. `security_sensitive`
+  // (codex-review round-2 P1): the first cut called this `advanced` on the grounds
+  // that turning it ON only adds denies — but that reads one direction only.
+  // Turning it OFF removes a PreToolUse permission denial, so it belongs with the
+  // enforcement keys, and `isSecuritySensitiveKey` must agree (V9 asserts the two
+  // stay in lockstep, and the class is what makes `reconcile repair` security-hold
+  // a malformed value instead of silently resolving the guard off).
+  "defaults.dispatch.block_unmarked_lanes": meta({ group: "lifecycle_guards", label: "Block unmarked lane dispatches (strict)", control: "boolean", safety_class: "security_sensitive" }),
 
   // ── Safety / platform ──────────────────────────────────────────────────
   "security.bypass_permissions_policy": meta({ group: "safety_platform", label: "Bypass-permissions policy", control: "enum", safety_class: "security_sensitive" }),

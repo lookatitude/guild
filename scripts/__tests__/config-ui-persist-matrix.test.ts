@@ -194,7 +194,9 @@ describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () 
     // S5 (cap-loc-D04): +4 — capability.{resolver_mode,suggestion_budget,
     // starter_roles,auto_create_policy}.
     // +1 (dynamic-host-model-routing T5): capability model_policy (guild.model_policy.v2).
-    expect(KEY_EDITS.length).toBe(142);
+    // +1 (#93): defaults.dispatch.block_unmarked_lanes — the backend-degradation
+    // guard's strict rung, promoted from the GUILD_BLOCK_UNMARKED_LANES env flag.
+    expect(KEY_EDITS.length).toBe(143);
     // every enum/object_editor key resolved to a concrete value (no generator throw)
     for (const e of KEY_EDITS) expect(typeof e.value).toBe("string");
   });

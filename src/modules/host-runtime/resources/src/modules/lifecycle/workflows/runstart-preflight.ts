@@ -141,6 +141,23 @@ export interface ResolvedSettingsSnapshot {
     rigor: ResolvedConfig["rigor"];
     loops: ResolvedConfig["loops"];
     loop_cap: ResolvedConfig["loop_cap"];
+    /**
+     * #93 — the resolved `defaults.dispatch.block_unmarked_lanes`, hoisted to the
+     * snapshot's flat `effective` block for the same reason `agent_mode` is here:
+     * `hooks/lib/backend-degradation.ts` runs inside `pre-tool-use.js`, which
+     * fires on EVERY tool call and therefore cannot afford to import the settings
+     * resolver (doing so takes that bundle from 110 KB to 923 KB). Reading the
+     * frozen snapshot gives the guard the FULL resolver fidelity — workspace
+     * inheritance, `settings.local.json`, the whole 5-layer chain — at the cost
+     * of one ADDITIONAL `fs.readFileSync` of the same snapshot file the guard
+     * path already opens for `agent_mode` (a second read, not a free ride on the
+     * first). That read is paid only after every cheap-first short-circuit in
+     * `pre-tool-use.ts` has passed, so it never lands on the ordinary tool call.
+     *
+     * OPTIONAL on the read side: a run whose snapshot predates #93 has no field,
+     * and the guard falls back to the registered default (OFF).
+     */
+    block_unmarked_lanes: ResolvedConfig["defaults"]["dispatch"]["block_unmarked_lanes"];
   };
   /** Provider detection snapshot (the OD-5 per-run detection). */
   providers: {
@@ -500,6 +517,9 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
       rigor: config.rigor,
       loops: config.loops,
       loop_cap: config.loop_cap,
+      // #93: the backend-degradation guard's strict rung, resolved once here so
+      // the per-tool-call hook never has to re-resolve it.
+      block_unmarked_lanes: config.defaults.dispatch.block_unmarked_lanes,
     },
     providers: {
       authorHost: detection.authorHost,
