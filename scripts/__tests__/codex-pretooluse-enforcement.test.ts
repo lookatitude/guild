@@ -329,9 +329,9 @@ describe("probeCodexPreToolUseEnforcement proves the deny EXECUTES", () => {
 /**
  * THE PROBE'S OWN DEFECT CLASS — a gate that can never open is not a gate.
  *
- * The stubs in §3 deny unconditionally, so they prove the probe's plumbing but
- * NOT that the probe passes against the binary it actually ships. On-box the
- * real `hooks/dist/pre-tool-use.js` emits `deny` ONLY through the HK-07
+ * The stubs in §3 stand in for the gate decision, so they prove the probe plumbing
+ * but NOT that the probe passes against the binary it actually ships.
+ * On-box the real `hooks/dist/pre-tool-use.js` emits `deny` ONLY through the HK-07
  * degradation, and that leg needs THREE things the probe must supply itself:
  *   - a resolvable run id + run dir (`gate()` bails to plain `ask` without them),
  *   - a codex host-capability manifest carrying `pre_tool_use_ask:false`,
@@ -806,6 +806,149 @@ describe("expansion uses the shell's own bytes", () => {
     } finally {
       project.cleanup();
       cleanup();
+    }
+  });
+});
+
+
+// ── 3f. round-4: every hook source, and the shell's own quoting rules ────────
+
+describe("the grant covers every hook source codex loads", () => {
+  /**
+   * The trust-bypass flag runs EVERY enabled hook without persisted trust, so a
+   * foreign hook in ANY source codex reads is one Guild would be authorizing.
+   * A repository-local `.codex/hooks.json` is such a source and was not scanned.
+   */
+  it("FAILS on a foreign hook in the target project's .codex/hooks.json", () => {
+    const { codexHome, env, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      fs.mkdirSync(path.join(project.cwd, ".codex"), { recursive: true });
+      fs.writeFileSync(
+        path.join(project.cwd, ".codex", "hooks.json"),
+        JSON.stringify({
+          hooks: {
+            SessionStart: [{ hooks: [{ type: "command", command: 'node "/opt/foreign.js"' }] }],
+          },
+        }),
+      );
+      const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
+      expect(r.checks.sole_owner).toBe(false);
+      expect(r.enforced).toBe(false);
+      expect(r.detail).toContain("/opt/foreign.js");
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+
+  /** Plugin hooks cannot be enumerated, so their mere presence withholds it. */
+  it("FAILS when codex plugins are installed (their hooks are unknowable)", () => {
+    const { codexHome, env, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      fs.mkdirSync(path.join(codexHome, "plugins", "someone-elses"), { recursive: true });
+      const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
+      expect(r.enforced).toBe(false);
+      expect(r.detail).toContain("plugin");
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+
+  /** An inline [hooks] table in config.toml is a source we cannot parse. */
+  it("FAILS when config.toml declares an inline [hooks] table", () => {
+    const { codexHome, env, cleanup } = makeCodexHome({});
+    const project = makeDenyingProject();
+    try {
+      fs.writeFileSync(path.join(codexHome, "config.toml"), "[hooks]\nenabled = true\n");
+      const r = probeCodexPreToolUseEnforcement({ env, cwd: project.cwd });
+      expect(r.enforced).toBe(false);
+      expect(r.detail).toContain("config.toml");
+    } finally {
+      project.cleanup();
+      cleanup();
+    }
+  });
+});
+
+describe("the accepted grammar matches what the shell would execute", () => {
+  const probeCommand = (command: string, root: string, extraEnv: NodeJS.ProcessEnv = {}) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex94-shell-"));
+    const project = makeDenyingProject();
+    try {
+      fs.writeFileSync(
+        path.join(dir, "hooks.json"),
+        JSON.stringify({
+          hooks: { PreToolUse: [{ hooks: [{ type: "command", command }] }] },
+        }),
+      );
+      return probeCodexPreToolUseEnforcement({
+        env: { CODEX_HOME: dir, GUILD_PLUGIN_ROOT: root, ...extraEnv },
+        cwd: project.cwd,
+      });
+    } finally {
+      project.cleanup();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  /** A denying stub bridge under `root`, at the canonical relative path. */
+  const withBridge = (root: string): string => {
+    const bridge = path.join(root, "hooks", "dist", "pre-tool-use.js");
+    fs.mkdirSync(path.dirname(bridge), { recursive: true });
+    fs.writeFileSync(
+      bridge,
+      `let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{` +
+        `process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PreToolUse",` +
+        `permissionDecision:"deny"}}))});`,
+    );
+    return bridge;
+  };
+
+  /** The shell expands nothing inside single quotes; neither may the probe. */
+  it("REJECTS a single-quoted path containing ${VAR} (the shell would not expand it)", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex94-sq-"));
+    try {
+      withBridge(root);
+      const r = probeCommand("node '${GUILD_PLUGIN_ROOT}/hooks/dist/pre-tool-use.js'", root);
+      expect(r.enforced).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /** NBSP is not shell IFS: `node<NBSP>"…"` names a command that does not exist. */
+  it("REJECTS a non-breaking space as the command separator", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex94-nbsp-"));
+    try {
+      const bridge = withBridge(root);
+      const r = probeCommand(`node "${bridge}"`, root);
+      expect(r.enforced).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * ...and the converse: a legitimate plugin root with an internal space IS
+   * executed fine by the shell inside double quotes, so rejecting it would shut
+   * the gate on a valid install.
+   */
+  it("ACCEPTS a double-quoted path whose root legitimately contains a space", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex94-space-"));
+    const root = path.join(base, "my plugin root");
+    try {
+      fs.mkdirSync(root, { recursive: true });
+      withBridge(root);
+      const r = probeCommand(
+        'node "${GUILD_PLUGIN_ROOT}/hooks/dist/pre-tool-use.js"',
+        root,
+      );
+      expect(r.enforced).toBe(true);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
     }
   });
 });

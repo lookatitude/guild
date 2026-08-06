@@ -58,7 +58,10 @@ const HOOK_PROBE_EVENT =
  * by keeping the remote bypass opt-in.
  *
  * NOW, two conjuncts, both required:
- *   1. REGISTRATION — `hooks/hooks.json` must actually name `pre-tool-use`.
+ *   1. REGISTRATION — `hooks/hooks.json` must bind the gate to the `PreToolUse`
+ *      EVENT specifically, parsed rather than grepped: a manifest naming the
+ *      same binary under a different event passed a whole-file substring match
+ *      while gating no tool call at all.
  *      Executing a binary the host never wired proves the binary works and
  *      nothing about the host: a tree carrying the script but no manifest
  *      passed the execution-only draft of this probe.
@@ -92,7 +95,14 @@ const HOOK_INSTALL_PROBE =
   'root="${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"; ' +
   '[ -n "$root" ] && [ -f "$root/hooks/hooks.json" ] && ' +
   '[ -f "$root/hooks/dist/pre-tool-use.js" ] && ' +
-  'grep -q "hooks/dist/pre-tool-use.js" "$root/hooks/hooks.json" && ' +
+  // PARSED, not grepped. A manifest that registers the binary under some OTHER
+  // event (SessionStart, say) satisfies a whole-file substring match while
+  // nothing gates a tool call — verified against the real snippet. `node` is
+  // already a hard requirement two lines down, so parsing costs nothing extra.
+  'node -e \'const m=require(process.argv[1]);' +
+  'const g=(m.hooks&&m.hooks.PreToolUse)||[];' +
+  'const hit=g.some(e=>(e.hooks||[]).some(h=>String(h.command||"").includes("pre-tool-use")));' +
+  'process.exit(hit?0:1)\' "$root/hooks/hooks.json" && ' +
   `out=$(printf '%s' '${HOOK_PROBE_EVENT}' | ` +
   'GUILD_CAPABILITY_SCOPE=\'["Read"]\' ' +
   'node "$root/hooks/dist/pre-tool-use.js" 2>/dev/null) && ' +

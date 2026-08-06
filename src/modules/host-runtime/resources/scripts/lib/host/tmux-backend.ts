@@ -95,7 +95,8 @@ export function isDebugShellTitle(title: string): boolean {
 // team pane adds no safety, only a stall.
 //
 // Scope, deliberately narrow: this overlay is wired ONLY inside
-// composeTmuxCommands below — for EVERY Claude pane it builds, whether or not
+// composeTmuxCommands below — for EVERY Claude pane it builds (and, since issue
+// #94, for a codex pane through its own separate resolver), whether or not
 // `resolveAdapter` is wired for other (non-Claude) panes in the same local
 // team. composeTmuxCommands is exclusively the LOCAL tmux path
 // (`TmuxTeamBackend.plan()`); `RemoteTeamBackend` (remote-backend.ts) owns an
@@ -115,7 +116,13 @@ export function isDebugShellTitle(title: string): boolean {
 //     (bypassing the bare adapter) — so the permission-mode flag reaches a
 //     remote pane exclusively behind the proven Guild-side guardrail. A host
 //     that fails the preflight still launches bare (recorded, never silent).
-//   - Codex is never touched here at all (see resolveClaudeTeamLaunchArgs).
+//   - Codex WAS never touched here. Issue #94 changed that: now that a codex
+//     pane's PreToolUse deny is wired and probe-verified, composeTmuxCommands
+//     also resolves a codex pane's argv (resolveCodexTeamLaunchArgs, same
+//     permissionConfig ladder) and hands it to the adapter — which still
+//     withholds it unless the pane is scoped AND the probe passes. The two
+//     resolvers stay separate functions so neither can be asked for the other
+//     host's flags.
 
 /**
  * Resolve the host_mode a spawned team pane should launch under, given the

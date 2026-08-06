@@ -440,13 +440,13 @@ function expandVarRefs(input: string, env: NodeJS.ProcessEnv): string | null {
  * (`; & | > < ( ) \` $ \\` and newline) is rejected before parsing.
  */
 const SAFE_HOOK_COMMAND_RE =
-  /^node\s+(?:"([^"]+)"|'([^']+)'|(\S+\.js))((?:\s+[A-Za-z0-9_.:/=@,+-]+)*)$/;
+  /^node[ \t]+(?:"([^"]+)"|'([^']+)'|([^ \t]+\.js))((?:[ \t]+[A-Za-z0-9_.:/=@,+-]+)*)$/;
 
 /** Shell characters that would give a command a second effect. */
 const SHELL_OPERATOR_RE = /[;&|<>()`\\\n\r]/;
 
 /**
- * Resolve the script path out of a registered hook command such as
+ * Resolve the script (and its args) out of a registered hook command such as
  * `node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/dist/x.js"`.
  *
  * ORDER MATTERS, and getting it wrong is exploitable: expanding variables into
@@ -454,7 +454,18 @@ const SHELL_OPERATOR_RE = /[;&|<>()`\\\n\r]/;
  * env VALUE be read as shell syntax, so the probe can resolve — and successfully
  * execute — a path that is not the one the shell would run. So the command is
  * matched against SAFE_HOOK_COMMAND_RE FIRST, unexpanded, and variables are
- * expanded only INSIDE the captured path, where their contents are inert text.
+ * expanded only INSIDE the captured token.
+ *
+ * QUOTING FOLLOWS THE SHELL, not convenience:
+ *   - double-quoted / bare  → `${VAR}` EXPANDS, and (double-quoted only) the
+ *     result may contain spaces, because the shell passes it as one word. A
+ *     legitimate plugin root with an internal space used to be rejected here.
+ *   - single-quoted         → the shell expands NOTHING, so a `${` inside one
+ *     is a literal path component. Expanding it would vouch for a path the
+ *     shell never produces, so such a command is refused outright.
+ *   - the separator is `[ \t]`, the shell's own IFS whitespace. JavaScript `\s`
+ *     also matches NBSP and friends, which the shell treats as part of the
+ *     WORD — `node<NBSP>"…"` is a command named `node<NBSP>"…"`, not `node`.
  *
  * An unset variable with no `:-` default yields null ("cannot resolve" ⇒ cannot
  * prove ⇒ FAIL), never the empty string — an empty expansion would turn
@@ -469,24 +480,40 @@ function parseHookCommand(
   if (SHELL_OPERATOR_RE.test(raw)) return null;
   const m = SAFE_HOOK_COMMAND_RE.exec(raw);
   if (m === null) return null;
-  const token = m[1] ?? m[2] ?? m[3] ?? "";
+  const doubleQuoted = m[1];
+  const singleQuoted = m[2];
+  const bare = m[3];
+  const token = doubleQuoted ?? singleQuoted ?? bare ?? "";
   if (token.length === 0) return null;
 
-  const expanded = expandVarRefs(token, env);
-  if (expanded === null || expanded.length === 0) return null;
-  // A value that smuggled quoting or expansion syntax in is not a path we can
-  // vouch for — the shell would read it differently than we just did.
-  if (/["'`$\\]/.test(expanded) || /\s/.test(expanded)) return null;
-  if (!expanded.endsWith(".js")) return null;
+  let script: string;
+  if (singleQuoted !== undefined) {
+    // The shell would use these bytes verbatim. A `${` here is literal, and a
+    // literal `${` in a path is not something Guild ever generates.
+    if (singleQuoted.includes("${")) return null;
+    script = singleQuoted;
+  } else {
+    const expanded = expandVarRefs(token, env);
+    if (expanded === null || expanded.length === 0) return null;
+    // A value that smuggled quoting or expansion syntax in is not a path we can
+    // vouch for — the shell would read it differently than we just did.
+    if (/["'`$\\]/.test(expanded)) return null;
+    // A BARE word is split on IFS, so an expansion carrying whitespace becomes
+    // several arguments. Inside double quotes it stays one word, so spaces are
+    // legitimate there.
+    if (doubleQuoted === undefined && /[ \t]/.test(expanded)) return null;
+    script = expanded;
+  }
+  if (!script.endsWith(".js")) return null;
 
   const args: string[] = [];
-  for (const arg of (m[4] ?? "").trim().split(/\s+/).filter((a) => a.length > 0)) {
+  for (const arg of (m[4] ?? "").split(/[ \t]+/).filter((a) => a.length > 0)) {
     const argExpanded = expandVarRefs(arg, env);
     if (argExpanded === null) return null;
-    if (/["'`$\\\s]/.test(argExpanded)) return null;
+    if (/["'`$\\]/.test(argExpanded) || /[ \t]/.test(argExpanded)) return null;
     args.push(argExpanded);
   }
-  return { script: expanded, args };
+  return { script, args };
 }
 
 /** The script path alone, for the ownership scan. */
@@ -561,11 +588,18 @@ export function probeCodexPreToolUseEnforcement(
 
   // 1. SOME Guild codex manifest registers PreToolUse.
   //
-  // Two locations, because they are two real deployments: an operator-installed
-  // `$CODEX_HOME/hooks.json`, and the manifest the generated codex package ships
-  // as `<plugin-root>/hooks/codex-hooks.json` (per-host-packaging points codex
-  // at that path). Reading only the first made the probe reject Guild's own
-  // shipped install.
+  // EVERY source codex loads is enumerated, not just the one that happens to
+  // register PreToolUse, because the grant carries CODEX_HOOK_TRUST_FLAG and
+  // that flag runs EVERY enabled hook without persisted trust — a foreign hook
+  // in any of them is a hook Guild would be authorizing. Per codex's hooks
+  // documentation the sources are:
+  //   - `$CODEX_HOME/hooks.json`         (operator-global)
+  //   - `$CODEX_HOME/config.toml`        (inline `[hooks]` table)
+  //   - `<project>/.codex/hooks.json`    (repository-local)
+  //   - enabled plugins                  (NOT enumerable from here — see below)
+  // plus the manifest Guild's generated codex package ships as
+  // `<plugin-root>/hooks/codex-hooks.json`.
+  const projectCwd = opts.cwd ?? process.cwd();
   const codexHome = (env["CODEX_HOME"] ?? "").trim() || nodepath.join(os.homedir(), ".codex");
   // NOT trimmed: the trusted root must be the bytes the shell would use, or the
   // probe vouches for a different path than the one that runs.
@@ -575,13 +609,52 @@ export function probeCodexPreToolUseEnforcement(
     opts.manifestPaths ??
     [
       nodepath.join(codexHome, "hooks.json"),
+      nodepath.join(projectCwd, ".codex", "hooks.json"),
       ...(pluginRoot.length > 0 ? [nodepath.join(pluginRoot, "hooks", "codex-hooks.json")] : []),
     ];
 
+  // PLUGINS ARE THE HONEST LIMIT. Codex plugins can carry their own hooks, and
+  // Guild has no reliable way to enumerate an enabled plugin's hook set from
+  // here. Rather than assert a containment it cannot check, the probe REFUSES
+  // the grant whenever a plugin directory is present at all: the trust-bypass
+  // flag would run those hooks too, and "we did not look" is not a proof.
+  const pluginsDir = nodepath.join(codexHome, "plugins");
+  let pluginEntries: string[] = [];
+  try {
+    pluginEntries = fsSeam.existsSync(pluginsDir) ? nodefs.readdirSync(pluginsDir) : [];
+  } catch {
+    pluginEntries = ["<unreadable>"];
+  }
+  if (pluginEntries.length > 0) {
+    return fail(
+      `codex PreToolUse enforcement NOT proven (grant withheld): ${pluginsDir} contains ` +
+        `${pluginEntries.length} plugin(s), whose hooks Guild cannot enumerate. The grant ` +
+        `carries ${CODEX_HOOK_TRUST_FLAG}, which would run them untrusted, and Guild will not ` +
+        `authorize hooks it has not inspected. Codex panes launch BARE.`,
+    );
+  }
+
+  // An inline `[hooks]` table in config.toml is likewise a source we cannot
+  // parse into commands with confidence, so its presence withholds the grant.
+  const configPath = nodepath.join(codexHome, "config.toml");
+  try {
+    if (fsSeam.existsSync(configPath) && /^\s*\[hooks[.\]]/m.test(readSeam(configPath))) {
+      return fail(
+        `codex PreToolUse enforcement NOT proven (grant withheld): ${configPath} declares an ` +
+          `inline [hooks] table. Guild vouches only for hook sources it can parse into ` +
+          `commands. Move the hooks into hooks.json or drop the grant. Codex panes launch BARE.`,
+      );
+    }
+  } catch {
+    return fail(
+      `codex PreToolUse enforcement NOT proven: ${configPath} exists but cannot be read, so ` +
+        `its hooks cannot be vouched for. Codex panes launch BARE.`,
+    );
+  }
+
   // EVERY candidate that exists is read, not just the first with a PreToolUse
   // entry. Codex loads them all, so an ownership proof drawn from one manifest
-  // says nothing about a foreign hook sitting in the other — and the grant
-  // carries a flag that would run that foreign hook untrusted.
+  // says nothing about a foreign hook sitting in another.
   const present: Array<{ path: string; raw: string }> = [];
   for (const candidate of candidates) {
     try {
@@ -686,7 +759,6 @@ export function probeCodexPreToolUseEnforcement(
   // The event's `cwd` is the REAL project root, so the policy under test is the
   // project's own rather than one the probe invented; the run dir is always a
   // scratch directory, so no probe artifact ever lands in a real run's file bus.
-  const projectCwd = opts.cwd ?? process.cwd();
   const sandbox = nodefs.mkdtempSync(nodepath.join(os.tmpdir(), "guild-codex-probe-"));
   const attempt = (
     permissionMode: string | undefined,

@@ -108,7 +108,8 @@ describe("probeHooks EXECUTES the remote enforcement binary (not just stat)", ()
     new SshRemoteTransport({ run }).probeHooks(target("box", "claude"));
     const remoteCmd = calls[0].args.at(-1) ?? "";
     expect(remoteCmd).toContain("hooks/hooks.json");
-    expect(remoteCmd).toContain(String.raw`grep -q "hooks/dist/pre-tool-use.js"`);
+    expect(remoteCmd).toContain("PreToolUse");
+    expect(remoteCmd).toContain("node -e");
   });
 
   /**
@@ -183,5 +184,35 @@ describe("the generated remote snippet behaves as claimed when actually run", ()
 
   it("emits nothing when no plugin root is set at all", () => {
     expect(runSnippet("")).not.toContain("GUILD_HOOKS_ENFORCING");
+  });
+
+  /**
+   * REGISTRATION MEANS THE EVENT, NOT THE FILENAME. A whole-file substring
+   * match passed a manifest that binds the gate binary to SessionStart while
+   * nothing gates a tool call — so the snippet parses the manifest and requires
+   * the binding under `PreToolUse` specifically.
+   */
+  it("emits nothing when the binary is registered under the WRONG event", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-remote94-evt-"));
+    try {
+      fs.mkdirSync(path.join(dir, "hooks", "dist"), { recursive: true });
+      fs.copyFileSync(
+        path.join(PLUGIN_ROOT, "hooks", "dist", "pre-tool-use.js"),
+        path.join(dir, "hooks", "dist", "pre-tool-use.js"),
+      );
+      fs.writeFileSync(
+        path.join(dir, "hooks", "hooks.json"),
+        JSON.stringify({
+          hooks: {
+            SessionStart: [
+              { hooks: [{ type: "command", command: "node hooks/dist/pre-tool-use.js" }] },
+            ],
+          },
+        }),
+      );
+      expect(runSnippet(dir)).not.toContain("GUILD_HOOKS_ENFORCING");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
