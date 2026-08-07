@@ -3,7 +3,7 @@
  *
  * Usage (library — no CLI, no process.exit):
  *   import { detectProviders, recommendProvider, selectReviewer } from "./lib/provider-detect";
- *   const detection = detectProviders({ cwd, host });           // probe author host + reviewers
+ *   const detection = detectProviders({ cwd, host, trust });    // probe author host + reviewers
  *   const rec = recommendProvider(detection, resolvedReview);   // OD-5 auto recommendation
  *   const sel = selectReviewer(detection, resolvedReview);      // AC-8 hard-rule selection
  *
@@ -104,10 +104,28 @@ export interface DetectedProvider {
   detail: string;
 }
 
+/**
+ * Trust of the author-host identity that fed this detection
+ * (guild.session_context.v1 §3): `asserted` = caller/env/envelope said so;
+ * `verified` = a native adapter/handshake confirmed it. ONLY `verified` can
+ * prove cross-family independence — the selection gates below require it and
+ * degrade on every other value (T3 R3-F1: the gates are fail-closed; an
+ * omitted trust is normalized to `asserted`, never treated as trusted).
+ */
+export type AuthorIdentityTrust = "asserted" | "verified";
+
 /** Result of a single detection pass. */
 export interface DetectionResult {
   /** The resolved author host family (the side that DRAFTED the artifact). */
   authorHost: HostFamily;
+  /**
+   * T3 F4 (+ R3-F1): trust of the identity `authorHost` was resolved from.
+   * NON-OPTIONAL — every detection carries an explicit trust so no consumer
+   * can ever see "trust unknown" and fail open. detectProviders normalizes an
+   * omitted input to "asserted" (a runtime backstop for non-TS callers); only
+   * a recorded native-adapter/handshake identity may supply "verified".
+   */
+  authorTrust: AuthorIdentityTrust;
   /** Every known provider with its detection state. */
   providers: DetectedProvider[];
 }
@@ -237,13 +255,18 @@ const KNOWN_FAMILIES = new Set<HostFamily>([
 
 /**
  * Map a host string (from settings `host:` or an explicit override) to a family.
- * "auto"/unset ⇒ claude (the expected reference host). Antigravity host-kinds
- * (`antigravity-2`) collapse to `antigravity`. Anything unrecognized ⇒ "unknown"
- * — a SAFE value: an unknown author family forces cross to degrade rather than
- * risk a same-family self-review masquerading as independent.
+ * "auto"/unset/"" ⇒ "unknown" — guild.session_context.v1 §3 (frozen 2026-07-30)
+ * retired the historical claude default here: unset, malformed, or unrecognized
+ * host input MUST NOT default to any family. Identity for the auto case comes
+ * from the §4 precedence chain (envelope/GUILD_HOST_ID → native adapter →
+ * handshake — see session-context.ts), never from a hardcoded fallback.
+ * Antigravity host-kinds (`antigravity-2`) collapse to `antigravity`. "unknown"
+ * is a SAFE terminal value: an unknown author family forces cross review to
+ * degrade rather than risk a same-family self-review masquerading as
+ * independent.
  */
 export function resolveAuthorHost(host?: string): HostFamily {
-  if (host === undefined || host === "auto" || host === "") return "claude";
+  if (host === undefined || host === "auto" || host === "") return "unknown";
   if (host.startsWith("antigravity")) return "antigravity";
   if (host.startsWith("claude")) return "claude"; // claude, claude-code-*, claude-ai-connector
   if (host.startsWith("codex")) return "codex"; // codex, codex-app
@@ -274,6 +297,15 @@ function probeAuth(spec: ProviderSpec, probe: ProbeEnv): boolean {
 export interface DetectOptions {
   cwd: string;
   host?: string;
+  /**
+   * T3 F4 (+ R3-F1): trust of the `host` identity input (session_context §3).
+   * NON-OPTIONAL — every caller must state how it knows the author identity.
+   * Pass "verified" ONLY from recorded native-adapter or handshake evidence;
+   * everything else is "asserted". Threaded through to
+   * DetectionResult.authorTrust so reviewer selection and role resolution can
+   * refuse strong-independence claims on anything but verified identity.
+   */
+  trust: AuthorIdentityTrust;
   /** Injected probe env. Defaults to the real shelling probes. */
   probe?: ProbeEnv;
 }
@@ -336,7 +368,14 @@ export function detectProviders(opts: DetectOptions): DetectionResult {
     };
   });
 
-  return { authorHost, providers };
+  return {
+    authorHost,
+    // R3-F1: the field is NEVER dropped. The type requires `trust`, but a
+    // plain-JS caller can still omit it — normalize that to "asserted" so an
+    // omitted trust can never read as more trustworthy than a stated one.
+    authorTrust: opts.trust ?? "asserted",
+    providers,
+  };
 }
 
 function describe(
@@ -391,6 +430,21 @@ export function recommendProvider(
       reason:
         "author host family is 'unknown' — cannot prove cross-family independence; " +
         "identify the author host before recommending a cross-family reviewer",
+    };
+  }
+
+  // SAFETY GATE (T3 F4 / R3-F1) — REQUIRE verified identity; fail closed on
+  // everything else. The author family is only trustworthy when a native
+  // adapter/handshake verified it (session_context §3) — an asserted (or
+  // absent) identity is a caller claim, so "different family than the claim"
+  // guarantees nothing. No recommendation without verification.
+  if (detection.authorTrust !== "verified") {
+    return {
+      recommended: null,
+      reason:
+        `author host identity '${detection.authorHost}' is not verified ` +
+        `(trust: ${detection.authorTrust ?? "absent"}) — an asserted-only/unverified identity ` +
+        `cannot prove cross-family independence until a native adapter/handshake verifies it`,
     };
   }
 
@@ -474,6 +528,29 @@ export function selectReviewer(
       provider: null,
       status: anyDetected ? "degraded-local" : "skipped",
       reason: unknownReason,
+    };
+  }
+
+  // SAFETY GATE (T3 F4 / R3-F1) — ONLY a VERIFIED author identity can satisfy
+  // review=cross (session_context §3: asserted ⇒ weak). Anything else —
+  // asserted, or absent on a rogue plain-JS caller — is an unverified caller
+  // claim: if the claim is wrong, a "different-family" reviewer may in fact be
+  // SAME-family — the false-signoff class AC-8 exists to kill. Fail CLOSED:
+  // the gate requires `verified`, never merely rejects a known-bad value.
+  // Applies to BOTH the pin path and the auto path: there is no branch that
+  // returns `selected` for a non-verified author. Degrade honestly
+  // (weak/local) when any reviewer exists; else skip with the reason.
+  if (detection.authorTrust !== "verified") {
+    const assertedReason =
+      `author host identity '${authorHost}' is not verified ` +
+      `(trust: ${detection.authorTrust ?? "absent"}) — an asserted-only/unverified identity ` +
+      `cannot prove cross-family independence; verify the author identity ` +
+      `(native adapter/handshake) to enable review=cross`;
+    const anyDetected = detection.providers.some((p) => p.kind !== "host" && p.detected);
+    return {
+      provider: null,
+      status: anyDetected ? "degraded-local" : "skipped",
+      reason: assertedReason,
     };
   }
 

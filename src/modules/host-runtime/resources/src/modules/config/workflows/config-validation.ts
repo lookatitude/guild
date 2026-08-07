@@ -24,7 +24,7 @@ const DEFAULT_KEYS = new Set([
   "auto_learn", "adversarial", "team", "review_workflow", "skill_policy",
   "gates", "wiki", "quality", "reporting", "index", "cross_host", "retry",
   "resume", "heartbeat_timeout_ms", "capability_manifest_ttl_s", "update",
-  "allowed_tools", "lean_lead", "lifecycle_gate",
+  "allowed_tools", "lean_lead", "lifecycle_gate", "dispatch",
 ]);
 const INDEX_KEYS = new Set([
   "enabled", "kg_node_threshold", "kg_size_threshold_mb", "links_edge_threshold",
@@ -245,6 +245,18 @@ export function validateDefaults(value: Record<string, unknown>, selfBuild: bool
     const threshold = lifecycleGate["adhoc_activity_threshold"];
     if (threshold !== undefined && (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1)) {
       rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
+    }
+  }
+  // #93: defaults.dispatch.* — the backend-degradation guard's strict rung. Same
+  // non-object-rejection posture as lean_lead/lifecycle_gate above: a wrong-shaped
+  // value must SURFACE rather than be silently ignored.
+  if (value["dispatch"] !== undefined && !object(value["dispatch"])) {
+    rejects.push(`defaults.dispatch must be an object { block_unmarked_lanes? } (got ${JSON.stringify(value["dispatch"])})`);
+  } else if (object(value["dispatch"])) {
+    const dispatch = value["dispatch"];
+    rejects.push(...rejectUnknown(dispatch, new Set(["block_unmarked_lanes"]), "defaults.dispatch"));
+    if (dispatch["block_unmarked_lanes"] !== undefined && typeof dispatch["block_unmarked_lanes"] !== "boolean") {
+      rejects.push(`defaults.dispatch.block_unmarked_lanes must be a boolean (got ${JSON.stringify(dispatch["block_unmarked_lanes"])})`);
     }
   }
   if (object(value["update"])) {

@@ -119,6 +119,35 @@ const ENTRY_ALLOWLIST = new Set<string>([
   // rf-wi-01 (G1) codex-review round-1 fix: settings.local.json layering tests.
   "hooks/lib/__tests__/lean-lead-guard.test.ts",
   "hooks/lib/__tests__/lifecycle-gate.test.ts",
+  // rf-wi-06 (issue #91) — the direct D5 subagent rung now stamps the line-1
+  // producer marker (guild:execute-plan SKILL.md steps (2b)/(2c)), so the LAST
+  // unmarked dispatch class is gone and the class-gated legacy 300-char
+  // producer-head parse is DELETED from the attribution resolver. Identity is
+  // read from producer-owned positions only (dispatch env + prompt line 1).
+  // The two dist bundles are recompiles of that one source change; the three
+  // test files re-express the (b)/(c) unmarked-rung fixtures in the now-marked
+  // shape and add the "legacy text is inert" properties the deletion adds.
+  "hooks/lib/dispatch-attribution.ts",
+  "hooks/dist/pre-tool-use.js",
+  "hooks/dist/post-tool-use.js",
+  "hooks/__tests__/dispatch-attribution.test.ts",
+  "hooks/__tests__/pre-tool-use-dispatch-guard.test.ts",
+  "hooks/lib/__tests__/backend-degradation.test.ts",
+  // #93 — promoting the backend-degradation guard's strict rung from the
+  // GUILD_BLOCK_UNMARKED_LANES env flag to the registered config key
+  // `defaults.dispatch.block_unmarked_lanes`. Same shape as rf-wi-01 above: a
+  // guard + its one call site, plus the esbuild bundles that transitively carry
+  // the canonical DEFAULTS tree the guard now sources its fallback from.
+  "hooks/lib/backend-degradation.ts",
+  "hooks/pre-tool-use.ts",
+  "hooks/lib/__tests__/block-unmarked-lanes-config.test.ts",
+  // The #56 guard's REAL-hook-path suite, extended with the #93 config-driven
+  // deny/allow cases (codex round-1 P2: the unit tests proved the resolution
+  // rules but nothing proved the hook wired them to a decision).
+  "hooks/__tests__/pre-tool-use-backend-guard.test.ts",
+  "hooks/dist/pre-compact.js",
+  "hooks/dist/gate-outcome-writer.js",
+  "hooks/dist/session-reanchor.js",
 ]);
 
 function gitLines(args: string[]): string[] {

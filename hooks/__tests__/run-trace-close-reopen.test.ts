@@ -46,8 +46,17 @@ function runScript(
   };
 }
 
-/** Minimal-but-valid guild.run.v1 manifest — enough for readStartFacts + flipRunStatus. */
-function writeRunYaml(root: string, runId: string): void {
+// T3 F2: closeRun fails closed without the run's minted binding — a real
+// started run always has one (startRun mints FIRST), so the fixture mints too.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { mintRunBinding } = require("../../scripts/lib/run-binding") as
+  typeof import("../../scripts/lib/run-binding");
+
+/** Minimal-but-valid guild.run.v1 manifest — enough for readStartFacts + flipRunStatus.
+ * Returns the minted binding nonce: rework F1 demands the caller PRESENT the
+ * pair (GUILD_RUN_ID + GUILD_RUN_BINDING_REF) — the close/re-close legs never
+ * recover the nonce from binding.json. */
+function writeRunYaml(root: string, runId: string): string {
   const runDir = path.join(root, ".guild", "runs", runId);
   fs.mkdirSync(runDir, { recursive: true });
   const yaml = [
@@ -77,6 +86,8 @@ function writeRunYaml(root: string, runId: string): void {
     "",
   ].join("\n");
   fs.writeFileSync(path.join(runDir, "run.yaml"), yaml, "utf8");
+  // T3 F2/§5: mint the run's binding exactly like startRun does at run start.
+  return mintRunBinding({ root, run_id: runId }).binding_ref;
 }
 
 function readProvenance(root: string, runId: string): { status: string; closed_at: string } {
@@ -86,13 +97,14 @@ function readProvenance(root: string, runId: string): { status: string; closed_a
 
 describe("run-trace-close.ts — reopen-on-activity", () => {
   let tmpDir: string;
+  let bindingRef: string;
   const stopPayload = fs.readFileSync(path.join(FIXTURES, "stop.json"), "utf8").toString();
   const RUN_ID = "test-run-reopen";
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-rtc-reopen-"));
     fs.mkdirSync(path.join(tmpDir, ".git"), { recursive: true });
-    writeRunYaml(tmpDir, RUN_ID);
+    bindingRef = writeRunYaml(tmpDir, RUN_ID);
   });
 
   afterEach(() => {
@@ -100,19 +112,20 @@ describe("run-trace-close.ts — reopen-on-activity", () => {
   });
 
   it("first Stop closes the run and writes provenance.json (status: closed)", () => {
-    const { exitCode } = runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID });
+    const { exitCode } = runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID, GUILD_RUN_BINDING_REF: bindingRef });
     expect(exitCode).toBe(0);
     const prov = readProvenance(tmpDir, RUN_ID);
     expect(prov.status).toBe("closed");
   });
 
   it("a second Stop with NO new activity is a genuine idempotent no-op", () => {
-    runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID });
+    runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID, GUILD_RUN_BINDING_REF: bindingRef });
     const firstProv = readProvenance(tmpDir, RUN_ID);
 
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: RUN_ID,
+      GUILD_RUN_BINDING_REF: bindingRef,
     });
     expect(exitCode).toBe(0);
     expect(stderr).not.toMatch(/re-closing/);
@@ -123,7 +136,7 @@ describe("run-trace-close.ts — reopen-on-activity", () => {
   });
 
   it("a second Stop AFTER new tool activity re-closes (the fix): a SECOND run_closed trace line is appended", () => {
-    runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID });
+    runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID, GUILD_RUN_BINDING_REF: bindingRef });
     const firstProv = readProvenance(tmpDir, RUN_ID);
 
     const logsDir = path.join(tmpDir, ".guild", "runs", RUN_ID, "logs");
@@ -140,6 +153,7 @@ describe("run-trace-close.ts — reopen-on-activity", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: RUN_ID,
+      GUILD_RUN_BINDING_REF: bindingRef,
     });
     expect(exitCode).toBe(0);
     expect(stderr).toMatch(/re-closing/);
@@ -163,10 +177,10 @@ describe("run-trace-close.ts — reopen-on-activity", () => {
     // Regression guard for the tolerance design note in newestPostCloseActivityMs:
     // run.yaml is deliberately excluded from the activity signal because
     // flipRunStatus() bumps its mtime as part of the very close being evaluated.
-    runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID });
+    runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID, GUILD_RUN_BINDING_REF: bindingRef });
     const firstProv = readProvenance(tmpDir, RUN_ID);
 
-    const { stderr } = runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID });
+    const { stderr } = runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: RUN_ID, GUILD_RUN_BINDING_REF: bindingRef });
     expect(stderr).not.toMatch(/re-closing/);
     const secondProv = readProvenance(tmpDir, RUN_ID);
     expect(secondProv.closed_at).toBe(firstProv.closed_at);

@@ -18,18 +18,25 @@
       "sha256": "89299832f7f9b4aaf8b26f5349cc5bf7b325422dfd6d2b5f73d2775820eba083"
     },
     {
+      "category": "scripts",
+      "id": "team-decide",
+      "source_path": "scripts/team-decide.ts",
+      "resource_path": "resources/scripts/team-decide.ts",
+      "sha256": "045a2589ecf8d8e30e3c2a959a1e181ebba99d1369e908c0acef52f2c6cbe38c"
+    },
+    {
       "category": "skills",
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
       "resource_path": "resources/skills/meta/create-specialist/SKILL.md",
-      "sha256": "a2a5fc561dfb76ed048172c2c0c7de0f8d57127f1e1376dbf3efd889faef861a"
+      "sha256": "32c6d424f518d2b7333a28bea2cb2885647bb583fa41f5b6118138c3668cb249"
     },
     {
       "category": "skills",
       "id": "guild-create-specialist/workflow.md",
       "source_path": "skills/meta/create-specialist/workflow.md",
       "resource_path": "resources/skills/meta/create-specialist/workflow.md",
-      "sha256": "6b8510ada364eae91708cb72a61d41c525a80747f5e67e5fdd1e27cd0ac67ee1"
+      "sha256": "7cbda1d848042f55bef4c42dc46e11bef5fe9711f26ea3619b90a49bcc895dab"
     },
     {
       "category": "skills",
@@ -43,14 +50,14 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
-      "sha256": "8c2cd2309073dd308cb124e7bf3711f006649d738b614139540bfaa090d74958"
+      "sha256": "9ef54254184bc770a6bb085262a31a36162fe692d07399479096d362e80cbd0a"
     },
     {
       "category": "skills",
       "id": "guild-team-compose/gap-handling.md",
       "source_path": "skills/meta/team-compose/gap-handling.md",
       "resource_path": "resources/skills/meta/team-compose/gap-handling.md",
-      "sha256": "165b0c45ef4ea9912cf88efc1b5896d6423313a27f058ae5f2060e731ab49526"
+      "sha256": "323bd8ee1214811fd406b6c6cf99b0bf9672370b37f7a10032e9e35fdd6c9081"
     },
     {
       "category": "skills",

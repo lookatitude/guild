@@ -22,7 +22,7 @@ Guild supports three execution backends. The choice is **resolved by the `agent_
 | `team` | unavailable | **Recorded, not blocked** — `agent-team-launcher.ts` downgrades this case itself with a stderr warning, so the detector only removes the silence. |
 | `auto` | unavailable | **Untouched** — the ladder resolves to `agent`/`subagent`, where `Agent` dispatch is the designed path. |
 
-**A DENY additionally requires STRUCTURED lane evidence** — a producer-set carrier in the dispatch's own `env` map (`GUILD_SPECIALIST` / `GUILD_TASK_ID` / `GUILD_AGENT_DEFINITION`, set by `composeInProcessDispatch`). An env map is composed by whoever issues the dispatch and is structurally out of reach of quoted text. Every PROMPT-derived signal — the canonical handoff block, and `#58`'s adoption marker / role anchor / dispatch prose — grades `lane_evidence: "prompt_only"` and is **recorded, never blocked**, because a prompt that merely *quotes* a live brief is text-identical to the brief itself. The deny message carries the **substrate-appropriate** remedy: the tmux launcher for tmux, and the cmux-surface rung (which bypasses that launcher) when `CMUX_WORKSPACE_ID` is set.
+**A DENY additionally requires STRUCTURED lane evidence** — a producer-set carrier in the dispatch's own `env` map (`GUILD_DISPATCH_PRODUCER` / `GUILD_SPECIALIST` / `GUILD_TASK_ID` / `GUILD_AGENT_DEFINITION` — set by `composeInProcessDispatch` on the descriptor rungs, and by this skill itself on the direct `subagent` rung; see `## Producer marker (line-1 + env)`). An env map is composed by whoever issues the dispatch and is structurally out of reach of quoted text. Every PROMPT-derived signal — the canonical handoff block and `#58`'s line-1 adoption marker (the legacy 300-char role-anchor / dispatch-prose parse was deleted once the marker reached every dispatch class, issue #91) — grades `lane_evidence: "prompt_only"` and is **recorded, never blocked**, because a prompt that merely *quotes* a live brief is text-identical to the brief itself. The deny message carries the **substrate-appropriate** remedy: the tmux launcher for tmux, and the cmux-surface rung (which bypasses that launcher) when `CMUX_WORKSPACE_ID` is set.
 
 **Every non-pass decision writes a `guild.backend_degradation.v1` receipt to `.guild/runs/<run-id>/logs/backend-degradation.jsonl`** (plus a `guild.security_event.v1` audit twin at `logs/security-events.jsonl`), carrying the reason code, the lane-evidence tier, the snapshot `agent_mode`, the substrate kind, the attempted `subagent_type`, and — when a team backend was actually reachable — `effective_backend` — a durable, greppable record of the downgrade. It is a **dedicated sink**, deliberately not `logs/v1.4-events.jsonl`, whose event vocabulary is frozen and validated. *Followup (not yet wired): `guild:verify-done` and `guild:reflect` do not read this sink yet — a degradation is auditable by path today, not surfaced automatically.*
 
@@ -71,6 +71,46 @@ The launcher (`InProcessTeamBackend.launch()`, constructed by the launcher's D5 
 
 `dryRun: true` on `InProcessTeamBackend` is semantically a no-op (no subprocess is suppressed — the plan is purely declarative); the launcher annotates a note and returns the same `dispatchPlan` so execute-plan can display the planned `Agent()` call strings.
 
+## Producer marker (line-1 + env)
+
+Every Guild-produced dispatch carries a **structured producer marker** in two halves — an unforgeable **env** carrier and its **prompt line-1** twin. The marker is what lets the PreToolUse guards and the run trace tell a real Guild lane from an arbitrary `Agent` call, and a producer-composed lane from a hand-rolled or persona-stripped one. Canonical constants: `scripts/lib/core/contracts/team-backend.ts` (`DISPATCH_PRODUCER_ENV` = `GUILD_DISPATCH_PRODUCER`, `DISPATCH_PRODUCER_TOKEN` = `guild.dispatch.v1`); the parser that reads it: `hooks/lib/dispatch-attribution.ts`.
+
+**Env half** — set on the dispatch's own `env` map (out of reach of quoted prose, so it is the only carrier a guard may BLOCK on):
+
+| Key | Value | When |
+|---|---|---|
+| `GUILD_DISPATCH_PRODUCER` | `guild.dispatch.v1` — **emit v1**; the parsers accept any `guild.dispatch.v<N>` (forward-compatible by design) but nothing else | **always** |
+| `GUILD_SPECIALIST` | the lane's `owner_role` | **always** |
+| `GUILD_RUN_ID` / `GUILD_TASK_ID` | the run-id / the lane's `task_id` | **always** |
+| `GUILD_AGENT_DEFINITION` | the specialist's **team-file `definition`** path (`.guild/agents/<name>.md`) — read it, never rebuild it from the role name | project specialist only (`definition_source: project`) — unconditional there (#58) |
+| `GUILD_TIER` | the resolved tier (scored `tier:` wins over the authoring `default_tier:`) | when a tier resolved — **omit rather than fabricate** |
+| `GUILD_TIER_SCORE` | the raw numeric score, stringified | when a real score exists (`0` is a real score) — audit-only, never gated on |
+
+**Prompt half** — exactly ONE marker on the prompt's **first line**, `\n`-terminated, with nothing before it, chosen by definition source:
+
+| Dispatch class | Line 1 |
+|---|---|
+| Project specialist (`definition_source: project`) | `GUILD_AGENT_DEFINITION=<team-file definition path>` — carries the role via its path AND is the #58 **machine** adoption proof |
+| Shipped specialist / machinery / orchestrator | `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=<owner_role>` |
+
+**The marker is machine proof, NOT the thing that makes the agent adopt its persona.** A project specialist dispatches as the host-generic type, so the prompt must ALSO carry the human-readable definition-adoption instruction (`read it FIRST and adopt it fully` + the project-skill load step) exactly as `buildPrompt` emits it. A dispatch with the line-1 marker but no adoption instruction satisfies the guard while running as a generic agent — syntactically compliant, functionally persona-stripped. Both, always.
+
+**`definition_source` and `definition` are TEAM fields, not lane fields.** The plan lane carries `owner`; join it to the team file's `specialists[]` by `name` and fail closed when there is no match, or when a `project` specialist carries no `definition` — the same fail-closed rule `composeInProcessDispatch` enforces in code by throwing. Never synthesize `.guild/agents/<owner>.md` as a substitute for the authoritative path.
+
+The producer-marker line is parsed **whole or not at all**: a malformed token, a value that is not `guild.dispatch.v<N>`, an out-of-bound role, or a duplicate `role=` rejects the entire line rather than yielding a partial guess. The VERSION is forward-compatible — `^guild\.dispatch\.v\d+$` in both `hooks/lib/dispatch-attribution.ts` and `hooks/lib/backend-degradation.ts`, so a future `v2` parses — but producers emit `v1` until the schema actually changes. So emit it verbatim — single spaces, no trailing punctuation, no wrapping backticks, no second `role=`.
+
+**Who stamps it, per class:**
+
+| Class | Stamped by |
+|---|---|
+| **Team / tmux panes**, **cmux surfaces**, **remote** | `paneCommand` / `buildPrompt` (launcher-side, in code) |
+| **In-process** (`result.dispatchPlan`) | `composeInProcessDispatch` + `buildPrompt` — already on `descriptor.env` and `descriptor.prompt`. Issue the descriptor **as-is** (layer only the resolved `model` and the scope/run env keys); do **not** rebuild the prompt or the `subagentType` — a reconstructed prompt drops the teammate identity, lane scope, context-bundle pointer, read-ack gate, and wait instruction `buildPrompt` emitted |
+| **Subagent** (direct `Agent()`, the D5 fallback rung) | **`guild:execute-plan` itself** — this is the ONE class with no launcher descriptor (`agent-team-launcher.ts` returns a bare `{backend, reason, slug}` signal for `resolvedMode !== "team"` and hands the whole `Agent()` construction back to the skill), so the skill IS the producer here. Construct both halves — plus the project-class adoption instruction — per `SKILL.md §"Capability-scope env injection"` steps (0)/(2b)/(2c)/(2d). This construction applies **only** to this rung. |
+
+**Identity consistency is checked, not assumed.** Every role-bearing carrier present on one dispatch — `GUILD_SPECIALIST`, the `GUILD_AGENT_DEFINITION` path's role, and the line-1 `role=` — must name the **same** role; disagreement is read as orchestrator drift (the lane would adopt the wrong persona) and fails the dispatch-integrity guard. Derive all three from the single `owner_role` value, never from three separate lookups.
+
+**Marker on every re-dispatch, not just the first.** A retry (`## Lane retry + dead-lettering`), a resumed dead lane, and a nudge-replacement spawn are each a **new** `Agent()` call and each needs its own marker — an unmarked retry re-opens the exact gap the marker closes.
+
 ## Tier → Agent `model` param
 
 The lane's resolved tier (`guild:execute-plan §"Tier resolution"`; ADR §2) maps to a model through the host-agnostic `models.tiers` map (ADR §1/§10 — bound by pointer, never re-spelled). Within Claude:
@@ -81,7 +121,7 @@ The lane's resolved tier (`guild:execute-plan §"Tier resolution"`; ADR §2) map
 | `mid` | `sonnet` | draft, reason, plan, extract relationships |
 | `powerful` | `opus` | architecture, security review, advisor pass |
 
-**Wiring.** For the subagent backend, pass the resolved model on the Agent tool: `Agent({ subagent_type: <owner_role>, model: <resolved-model>, ... })`. For agent-team teammates, the resolved model is set on the spawned teammate definition. The `model` param is the **only** tiering lever — tiering does not change `subagent_type` (the named agent is unchanged) and is orthogonal to the backend D5 selected. A `null` host slot in `models.tiers` means "this host has no model for this tier — fall through to the selected host's mapping" (the Codex seam is config + an adapter later; it is `null` now).
+**Wiring.** For the subagent backend, pass the resolved model on the Agent tool: `Agent({ subagent_type: <definition-source-resolved>, model: <resolved-model>, ... })` — `<definition-source-resolved>` is the shipped specialist's bare name, or the host-generic type for a **project** specialist (the hard constraint above; never a bare project name). For agent-team teammates, the resolved model is set on the spawned teammate definition. The `model` param is the **only** tiering lever — tiering does not change `subagent_type` (the named agent is unchanged) and is orthogonal to the backend D5 selected. A `null` host slot in `models.tiers` means "this host has no model for this tier — fall through to the selected host's mapping" (the Codex seam is config + an adapter later; it is `null` now).
 
 **Precedence at dispatch** (normative, ADR §2/§10): `--model-tier=` (pins every lane in the run) > per-lane plan `tier:` pin > `settings.json` `models.tiers`/`models.thresholds` > built-in default. Scoring is deterministic, so a dispatch trace is reproducible; the score + resolved tier + model are printed and recorded in the run record.
 
@@ -289,7 +329,7 @@ Then inject:
 
 | Backend | Injection point |
 |---|---|
-| **Subagent** (`Agent()`) | Append verbatim block to the end of the `prompt` passed to `Agent()`. |
+| **Subagent** (`Agent()`) | Append verbatim block to the end of the `prompt` passed to `Agent()`. The producer marker still owns line 1 (`## Producer marker (line-1 + env)`) — appending never displaces it. |
 | **cmux surface** (rung 0 of `team`) | Same injection timing as the agent-team row — include the block in the surface's initial prompt before the task brief; mechanics: `SKILL.md §"Backend + routing (summary)"`. |
 | **Agent-team** (tmux pane) | Include block in the pane's initial system prompt; the launcher injects it at pane spawn before the task brief. |
 | **In-process** (`result.dispatchPlan`) | Append to each descriptor's `prompt` in `dispatchPlan`, same as subagent. |
@@ -302,7 +342,12 @@ byte-identical run-wide — then role-shared, then task-specific; see
 `context-assemble` §Output); the per-lane substitutions (`<RECEIPT_PATH>`,
 `<TASK_ID>`) and the task brief sit as late as the structure allows. Never
 interleave a lane-specific value into run-constant or role-constant text — one
-early differing byte forfeits the cached prefix for everything after it.
+early differing byte forfeits the cached prefix for everything after it. The
+**one sanctioned exception is the line-1 producer marker** (`## Producer marker
+(line-1 + env)`): it is per-lane and it must stay first, because its whole value
+comes from occupying a fixed producer-owned position the lane's appended text
+cannot forge. It is a single short line, and every other backend already pays the
+same cost — parity with `buildPrompt`, not a regression.
 
 The block must appear in every brief without modification. If you find yourself rewriting it per-brief, that is the F1/F2 drift pattern recurring — stop and use the canonical block verbatim.
 

@@ -129,6 +129,8 @@ const VALUE_OVERRIDES: Record<string, string> = {
   // valid CSV for loops (a bare "x" would be dropped by the resolver's CSV validator)
   loops: "all",
   // object_editor shapes
+  // minimal guild.model_policy.v2 object accepted by the closed-key validator
+  model_policy: '{"version":2,"purposes":{}}',
   host_profiles: '{"claude-code-cli":{"enabled":true}}',
   "models.shortOutputThreshold": '{"impl":{"cheap":100}}',
   "defaults.cross_host.hosts": '{"box":{"address":"10.0.0.1"}}',
@@ -191,7 +193,10 @@ describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () 
     // defaults.lifecycle_gate.{enabled,adhoc_activity_threshold}.
     // S5 (cap-loc-D04): +4 — capability.{resolver_mode,suggestion_budget,
     // starter_roles,auto_create_policy}.
-    expect(KEY_EDITS.length).toBe(141);
+    // +1 (dynamic-host-model-routing T5): capability model_policy (guild.model_policy.v2).
+    // +1 (#93): defaults.dispatch.block_unmarked_lanes — the backend-degradation
+    // guard's strict rung, promoted from the GUILD_BLOCK_UNMARKED_LANES env flag.
+    expect(KEY_EDITS.length).toBe(143);
     // every enum/object_editor key resolved to a concrete value (no generator throw)
     for (const e of KEY_EDITS) expect(typeof e.value).toBe("string");
   });

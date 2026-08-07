@@ -8,7 +8,7 @@
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "resource_path": "resources/scripts/agent-team-launcher.ts",
-      "sha256": "2b90fa17fa1d616359e197adab63ded9ae27a731cd5eebd9025f3652d725d6fd"
+      "sha256": "29bb20d1ba97f7b46e1827e85149b679d4ec99dbd7ce14aed8b7065f106e9888"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "lib/core/contracts/team-backend",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "3d04b5414307997d218b7a504b4f77f0cc058bde8abd0c16c156974a06887caa"
+      "sha256": "82edbdbc602cc1205ae407503518c5ccdb5ad63348d926f23d8bccd7684d5719"
     },
     {
       "category": "scripts",
@@ -57,7 +57,7 @@
       "id": "lib/host/inprocess-backend",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "26cb6ad530068342447e91784206454bb195c48a6a9d4978279aed483bd4b9c7"
+      "sha256": "633d7d230b3be1ab24d0131ef3708b16024daf3fef4fe145fb60920e8a63d9b6"
     },
     {
       "category": "scripts",
@@ -71,14 +71,14 @@
       "id": "lib/host/remote-backend",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "12a57828166f7c6e0fa8a366aff7c595116b414132dae64e15505b7c0a62eb24"
+      "sha256": "83d5ed06d2ae7baa2ccd1bd174382062a8a6c0d9c22d6a43c37502a8d7a73854"
     },
     {
       "category": "scripts",
       "id": "lib/host/tmux-backend",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "ee08a29f15412f2f926c51455f03ce9a40e4fea999d1680b437093e149ec2816"
+      "sha256": "5bb28e17919edb9036fac9ead3d226f5c0530ca19dd5e2b5a79a22ac3bcda9de"
     },
     {
       "category": "scripts",

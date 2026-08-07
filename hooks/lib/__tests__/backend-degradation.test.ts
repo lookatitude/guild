@@ -181,9 +181,12 @@ describe("#56 — lane evidence tiers", () => {
     expect(classifyLaneEvidence(input, attrOf(input), input.prompt, RUN_ID)).toBe("none");
   });
 
-  it("a prompt QUOTING a live adoption prefix is prompt_only, NOT structured", () => {
-    // #58's isSpecialistLane/hasLaneSignature read the adoption marker, the role
-    // anchor and the dispatch prose out of the PROMPT — all forgeable by quoting.
+  it("a prompt QUOTING a live adoption prefix is never structured", () => {
+    // #58's isSpecialistLane reads the adoption marker out of the PROMPT, so a
+    // quote can look like a lane — but it can never grade `structured`, because
+    // that tier is decided by the dispatch's own env map. Since rf-wi-06 the
+    // marker only counts on LINE 1, so a quote that pushes it down (the shape
+    // below) is not even a lane signal any more.
     const quoted = {
       subagent_type: "Explore",
       prompt:
@@ -191,8 +194,20 @@ describe("#56 — lane evidence tiers", () => {
         ADOPTION_PROMPT,
     };
     const attr = attrOf(quoted);
-    expect(attr.isSpecialistLane).toBe(true); // #58 sees a lane...
+    expect(attr.isSpecialistLane).toBe(false);
+    // The weak "teammate for run-id" phrasing is still a lane SIGNATURE, so the
+    // quote grades prompt_only — observable, never blockable.
+    expect(attr.hasLaneSignature).toBe(true);
     expect(classifyLaneEvidence(quoted, attr, quoted.prompt, RUN_ID)).toBe("prompt_only");
+
+    // A quote that DOES lead with the marker is read as a lane — but still only
+    // `prompt_only`, never `structured`: no env carrier, so never blockable.
+    const quotedLeading = { subagent_type: "Explore", prompt: ADOPTION_PROMPT };
+    const leadingAttr = attrOf(quotedLeading);
+    expect(leadingAttr.isSpecialistLane).toBe(true);
+    expect(classifyLaneEvidence(quotedLeading, leadingAttr, quotedLeading.prompt, RUN_ID)).toBe(
+      "prompt_only",
+    );
   });
 
   it("GUILD_AGENT_DEFINITION ALONE is a structured carrier", () => {

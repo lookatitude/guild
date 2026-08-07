@@ -66,11 +66,11 @@
  * structured body. payload_ref on the event points at the sidecar. Sidecars are
  * size-capped (SIDECAR_MAX_BYTES) and share events.ndjson's retention story.
  *
- * Run-id resolution (priority order):
- *   1. GUILD_RUN_ID env var (set by tests or orchestrator)
- *   2. .guild/runs/current-run-id sentinel file (written by scripts/new-run-id.ts)
- *   3. stdin payload session_id field
- *   4. fallback: "run-session-<date>"
+ * Run-id resolution (T3b, session_context §5): the explicit binding env
+ * (GUILD_RUN_ID [+ GUILD_RUN_BINDING_REF]) verified against the run's minted
+ * binding — ONLY. No sentinel read, no session_id/date fallback: telemetry is
+ * a runtime write and fails closed (binding_rejected, no write) without a
+ * verifiable binding.
  *
  * Working directory resolution (priority order):
  *   1. GUILD_CWD env var (set by tests)
@@ -111,6 +111,7 @@ import {
 // in telemetry (the UserPromptSubmit prompt) through the built-in redaction +
 // the operator's secrets_policy.redaction_patterns, honoring fail_mode_telemetry.
 // Schema/settings bound BY POINTER — see lib/security/* headers.
+import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import { readSecurityConfig } from "./lib/security/config.js";
 import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
 import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "./lib/security/events.js";
@@ -182,24 +183,22 @@ function isOk(payload: GuildHookEvent): boolean {
   return true;
 }
 
-function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
-  try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : undefined;
-  } catch {
-    return undefined;
+/**
+ * T3b (session_context §5): telemetry is a runtime WRITE — its run identity
+ * comes from the explicit binding env only and the write is verified against
+ * the run's minted binding (authorizeHookWrite). The old chain (current-run-id
+ * sentinel → run-<session_id> → date fallback) is retired: a sentinel never
+ * authorizes a write (moving it mid-run must not redirect telemetry, SC-1) and
+ * a fabricated fallback run was an unbound write. Returns null on refusal —
+ * the caller skips every write for this event.
+ */
+function resolveBoundRunId(cwd: string): string | null {
+  const auth = authorizeHookWrite(resolveGuildRoot(cwd));
+  if (auth.ok === false) {
+    process.stderr.write(formatBindingRejected("capture-telemetry", auth));
+    return null;
   }
-}
-
-function resolveRunId(cwd: string, payload: GuildHookEvent): string {
-  const envRunId = process.env["GUILD_RUN_ID"];
-  if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  const currentRunId = readCurrentRunId(cwd);
-  if (currentRunId !== undefined) return currentRunId;
-  return payload.session_id
-    ? `run-${payload.session_id}`
-    : `run-session-${new Date().toISOString().slice(0, 10)}`;
+  return auth.run_id;
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
@@ -216,13 +215,11 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Resolve run context.
-  // Priority order: GUILD_RUN_ID env → current-run-id sentinel → run-<session_id> → date fallback.
-  // The sentinel file is written by scripts/lib/run-lifecycle.ts (startRun) at the start of each
-  // /guild invocation, allowing multiple /guild runs within one Claude session to produce distinct
-  // run directories.
+  // Resolve run context — explicit binding env ONLY, verified before any
+  // write (T3b, session_context §5). No sentinel, no session/date fallback.
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
-  const runId = resolveRunId(cwd, payload);
+  const runId = resolveBoundRunId(cwd);
+  if (runId === null) process.exit(0); // fail closed: no write, never block the session
 
   // Build event
   const eventName = payload.hook_event_name ?? "PostToolUse";

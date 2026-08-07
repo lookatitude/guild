@@ -327,6 +327,11 @@ export const DEFAULTS = deepFreeze({
   loops: null,
   loop_cap: 16,
   codex_cap: 5,
+  // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
+  // routing intent. null = not configured — v2 routing stays off and the legacy
+  // tier maps drive generic preferences for the §6 migration window. When set, the
+  // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
+  model_policy: null,
   defaults: {
     auto_learn: false,
     adversarial: "on",
@@ -368,5 +373,28 @@ export const DEFAULTS = deepFreeze({
      * activity count before the lifecycle gate advisory fires.
      */
     lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
+    /**
+     * Issue #93 — dispatch-safety knobs for the #56 backend-degradation guard
+     * (hooks/lib/backend-degradation.ts).
+     *
+     * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
+     * NO structured producer marker (`prompt_only` evidence — the hand-rolled
+     * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+     *
+     * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
+     * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
+     * was merely QUOTED in a prompt as `prompt_only` too — by text it is
+     * indistinguishable from the real dispatch (backend-degradation.ts's
+     * lane-brief signature note, adversarial review round 3). So strict mode
+     * trades the no-false-positive-on-a-quoted-brief invariant for tighter drift
+     * coverage, which is an operator's call to make, never a shipped default.
+     *
+     * PR #85 (G3) shipped this rung as the env flag `GUILD_BLOCK_UNMARKED_LANES`
+     * only, deliberately deferring schema registration to avoid colliding with
+     * rf-wi-01's closed-schema work. That work landed (PR #87), so this is the
+     * promised followup: the key is now discoverable and validated, and the env
+     * var survives as a per-session OVERRIDE (both directions) on top of it.
+     */
+    dispatch: { block_unmarked_lanes: false },
   },
 } as const);

@@ -8,12 +8,18 @@
  * Covers:
  *  - env gate: GUILD_RUN_ID + GUILD_SPECIALIST both required (either absent
  *    → no write, reason "env-absent", no fs side-effects)
+ *  - T3b rework F2: the COMPLETE binding envelope (GUILD_RUN_ID +
+ *    GUILD_RUN_BINDING_REF, verified against the run's minted binding) is
+ *    required BEFORE any fs touch — absent/blank/closed/mismatched refs
+ *    refuse (binding_rejected:<reason>) with no heartbeat and no temp file
  *  - written shape parses via readHeartbeat() (the read side's contract)
  *  - step: GUILD_STEP || null; last_action: hook payload tool_name
  *  - atomicity: no partial/.tmp sibling survives a write
  *  - fail-open: unwritable in-progress path → written:false, never throws
  *  - unsafe ids (path traversal) refused
- *  - REAL PATH: spawning post-tool-use.ts with env set writes the heartbeat
+ *  - REAL PATH: spawning post-tool-use.ts with the FULL envelope writes the
+ *    heartbeat; without the ref it writes NOTHING (source-level twin of the
+ *    compiled probes in dist-binding-probes.test.ts)
  */
 
 import { spawnSync } from "child_process";
@@ -26,6 +32,8 @@ import {
   writeHeartbeatFromEnv,
 } from "../lib/heartbeat-write";
 import { readHeartbeat, heartbeatPath } from "../lib/heartbeat";
+import { authorizeHookWrite } from "../lib/hook-binding";
+import { mintTestBinding } from "../test-support/mint-binding";
 
 const POST_TOOL_USE = path.resolve(__dirname, "../post-tool-use.ts");
 
@@ -34,6 +42,7 @@ const SPECIALIST = "hook-engineer";
 
 let root: string;
 let runDir: string;
+let bindingRef: string;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-hb-write-"));
@@ -41,11 +50,33 @@ beforeEach(() => {
   fs.mkdirSync(path.join(root, ".git"), { recursive: true });
   runDir = path.join(root, ".guild", "runs", RUN_ID);
   fs.mkdirSync(runDir, { recursive: true });
+  // T3b rework F2: writers require the run's minted binding + presented ref.
+  bindingRef = mintTestBinding(root, RUN_ID);
 });
 
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+/** The full valid envelope for the fixture run. */
+function boundEnv(extra: Record<string, string | undefined> = {}): Record<string, string | undefined> {
+  return {
+    GUILD_RUN_ID: RUN_ID,
+    GUILD_RUN_BINDING_REF: bindingRef,
+    GUILD_SPECIALIST: SPECIALIST,
+    ...extra,
+  };
+}
+
+/** Assert no heartbeat write happened: no in-progress dir, no temp files. */
+function expectNoWriteSideEffects(): void {
+  expect(fs.existsSync(path.join(runDir, "in-progress"))).toBe(false);
+  const stray = fs
+    .readdirSync(runDir, { recursive: true })
+    .map(String)
+    .filter((f) => f.includes(".tmp-"));
+  expect(stray).toEqual([]);
+}
 
 describe("writeHeartbeatFromEnv — env gate", () => {
   it("no-ops (env-absent) when GUILD_RUN_ID is missing", () => {
@@ -56,18 +87,18 @@ describe("writeHeartbeatFromEnv — env gate", () => {
     });
     expect(res.written).toBe(false);
     expect(res.reason).toBe("env-absent");
-    expect(fs.existsSync(path.join(runDir, "in-progress"))).toBe(false);
+    expectNoWriteSideEffects();
   });
 
   it("no-ops (env-absent) when GUILD_SPECIALIST is missing", () => {
     const res = writeHeartbeatFromEnv({
       toolName: "Bash",
       cwd: root,
-      env: { GUILD_RUN_ID: RUN_ID },
+      env: { GUILD_RUN_ID: RUN_ID, GUILD_RUN_BINDING_REF: bindingRef },
     });
     expect(res.written).toBe(false);
     expect(res.reason).toBe("env-absent");
-    expect(fs.existsSync(path.join(runDir, "in-progress"))).toBe(false);
+    expectNoWriteSideEffects();
   });
 
   it("no-ops on empty-string env values", () => {
@@ -82,10 +113,70 @@ describe("writeHeartbeatFromEnv — env gate", () => {
   it("refuses unsafe ids (path traversal) without throwing", () => {
     const res = writeHeartbeatFromEnv({
       cwd: root,
-      env: { GUILD_RUN_ID: RUN_ID, GUILD_SPECIALIST: "../evil" },
+      env: boundEnv({ GUILD_SPECIALIST: "../evil" }),
     });
     expect(res.written).toBe(false);
     expect(res.reason).toBe("unsafe-id");
+  });
+});
+
+describe("writeHeartbeatFromEnv — binding gate (T3b rework F2)", () => {
+  it("REFUSES when GUILD_RUN_BINDING_REF is absent (open record on disk — never recovered)", () => {
+    const res = writeHeartbeatFromEnv({
+      toolName: "Bash",
+      cwd: root,
+      env: { GUILD_RUN_ID: RUN_ID, GUILD_SPECIALIST: SPECIALIST },
+    });
+    expect(res.written).toBe(false);
+    expect(res.reason).toBe("binding_rejected:binding_absent");
+    expectNoWriteSideEffects();
+  });
+
+  it("REFUSES a whitespace-only ref", () => {
+    const res = writeHeartbeatFromEnv({
+      cwd: root,
+      env: boundEnv({ GUILD_RUN_BINDING_REF: "   " }),
+    });
+    expect(res.written).toBe(false);
+    expect(res.reason).toBe("binding_rejected:binding_absent");
+    expectNoWriteSideEffects();
+  });
+
+  it("REFUSES a closed binding even with the exact nonce", () => {
+    const closedRef = mintTestBinding(root, RUN_ID, { state: "closed" });
+    const res = writeHeartbeatFromEnv({
+      cwd: root,
+      env: boundEnv({ GUILD_RUN_BINDING_REF: closedRef }),
+    });
+    expect(res.written).toBe(false);
+    expect(res.reason).toBe("binding_rejected:binding_closed");
+    expectNoWriteSideEffects();
+  });
+
+  it("REFUSES a mismatched (forged / other-run) nonce", () => {
+    const res = writeHeartbeatFromEnv({
+      cwd: root,
+      env: boundEnv({ GUILD_RUN_BINDING_REF: "rb-forged-nonce" }),
+    });
+    expect(res.written).toBe(false);
+    expect(res.reason).toBe("binding_rejected:binding_mismatch");
+    expectNoWriteSideEffects();
+  });
+
+  it("REFUSES an unminted run (pair presented, no record)", () => {
+    const res = writeHeartbeatFromEnv({
+      cwd: root,
+      env: {
+        GUILD_RUN_ID: "run-never-minted",
+        GUILD_RUN_BINDING_REF: "rb-whatever",
+        GUILD_SPECIALIST: SPECIALIST,
+      },
+    });
+    expect(res.written).toBe(false);
+    expect(res.reason).toBe("binding_rejected:binding_not_minted");
+    expect(fs.existsSync(path.join(root, ".guild", "runs", "run-never-minted", "in-progress"))).toBe(
+      false,
+    );
   });
 });
 
@@ -94,7 +185,7 @@ describe("writeHeartbeatFromEnv — write shape", () => {
     const res = writeHeartbeatFromEnv({
       toolName: "Write",
       cwd: root,
-      env: { GUILD_RUN_ID: RUN_ID, GUILD_SPECIALIST: SPECIALIST },
+      env: boundEnv(),
     });
     expect(res.written).toBe(true);
     expect(res.path).toBe(heartbeatPath(runDir, SPECIALIST));
@@ -116,11 +207,7 @@ describe("writeHeartbeatFromEnv — write shape", () => {
     writeHeartbeatFromEnv({
       toolName: "Edit",
       cwd: root,
-      env: {
-        GUILD_RUN_ID: RUN_ID,
-        GUILD_SPECIALIST: SPECIALIST,
-        GUILD_STEP: "writing tests",
-      },
+      env: boundEnv({ GUILD_STEP: "writing tests" }),
     });
     const hb = readHeartbeat(runDir, SPECIALIST);
     expect(hb?.step).toBe("writing tests");
@@ -133,11 +220,7 @@ describe("writeHeartbeatFromEnv — write shape", () => {
       const res = writeHeartbeatFromEnv({
         toolName: "Bash",
         cwd: root,
-        env: {
-          GUILD_RUN_ID: RUN_ID,
-          GUILD_SPECIALIST: SPECIALIST,
-          GUILD_RUN_DIR: altDir,
-        },
+        env: boundEnv({ GUILD_RUN_DIR: altDir }),
       });
       expect(res.written).toBe(true);
       expect(readHeartbeat(altDir, SPECIALIST)).not.toBeNull();
@@ -153,7 +236,7 @@ describe("writeHeartbeatFromEnv — write shape", () => {
       const res = writeHeartbeatFromEnv({
         toolName: "Bash",
         cwd: root,
-        env: { GUILD_RUN_ID: RUN_ID, GUILD_SPECIALIST: SPECIALIST },
+        env: boundEnv(),
       });
       expect(res.written).toBe(true);
     }
@@ -169,16 +252,20 @@ describe("writeHeartbeatFromEnv — write shape", () => {
     const res = writeHeartbeatFromEnv({
       toolName: "Bash",
       cwd: root,
-      env: { GUILD_RUN_ID: RUN_ID, GUILD_SPECIALIST: SPECIALIST },
+      env: boundEnv(),
     });
     expect(res.written).toBe(false);
     expect(res.reason).toMatch(/^write-failed:/);
   });
 });
 
-describe("writeHeartbeat — direct atomic writer", () => {
-  it("creates in-progress/ and writes the exact record", () => {
-    const p = writeHeartbeat(runDir, SPECIALIST, {
+describe("writeHeartbeat — direct atomic writer (auth-carrying, F2)", () => {
+  it("writes the exact record when handed a real verified HookWriteAuth", () => {
+    const auth = authorizeHookWrite(root, {
+      env: { GUILD_RUN_ID: RUN_ID, GUILD_RUN_BINDING_REF: bindingRef },
+    });
+    expect(auth.ok).toBe(true);
+    const p = writeHeartbeat(auth, runDir, SPECIALIST, {
       timestamp: "2026-06-10T12:00:00.000Z",
       step: "implementing",
       last_action: "Read",
@@ -190,6 +277,19 @@ describe("writeHeartbeat — direct atomic writer", () => {
       step: "implementing",
       last_action: "Read",
     });
+  });
+
+  it("THROWS before any fs touch on a refused HookWriteAuth", () => {
+    const refused = authorizeHookWrite(root, { env: { GUILD_RUN_ID: RUN_ID } });
+    expect(refused.ok).toBe(false);
+    expect(() =>
+      writeHeartbeat(refused, runDir, SPECIALIST, {
+        timestamp: "2026-06-10T12:00:00.000Z",
+        step: null,
+        last_action: null,
+      }),
+    ).toThrow(/binding_rejected/);
+    expectNoWriteSideEffects();
   });
 });
 
@@ -213,15 +313,8 @@ describe("REAL PATH — post-tool-use.ts PostToolUse hook", () => {
     // Strip any ambient GUILD_* leakage (the suite itself may run inside a
     // guild lane that exports these) so the env gate is exercised honestly.
     const base: Record<string, string | undefined> = { ...process.env };
-    for (const k of [
-      "GUILD_RUN_ID",
-      "GUILD_SPECIALIST",
-      "GUILD_STEP",
-      "GUILD_RUN_DIR",
-      "GUILD_LANE_ID",
-      "GUILD_CWD",
-    ]) {
-      delete base[k];
+    for (const k of Object.keys(base)) {
+      if (k.startsWith("GUILD_")) delete base[k];
     }
     const result = spawnSync("npx", ["tsx", POST_TOOL_USE], {
       input: JSON.stringify(payloadFor("Bash")),
@@ -232,9 +325,10 @@ describe("REAL PATH — post-tool-use.ts PostToolUse hook", () => {
     return result.status ?? 1;
   }
 
-  it("writes the heartbeat when GUILD_RUN_ID + GUILD_SPECIALIST are exported", () => {
+  it("writes the heartbeat when the FULL envelope + GUILD_SPECIALIST are exported", () => {
     const status = runPostToolUse({
       GUILD_RUN_ID: RUN_ID,
+      GUILD_RUN_BINDING_REF: bindingRef,
       GUILD_SPECIALIST: SPECIALIST,
       GUILD_STEP: "lane work",
     });
@@ -247,8 +341,20 @@ describe("REAL PATH — post-tool-use.ts PostToolUse hook", () => {
   });
 
   it("writes NO heartbeat when GUILD_SPECIALIST is absent (env gate, real path)", () => {
-    const status = runPostToolUse({ GUILD_RUN_ID: RUN_ID });
+    const status = runPostToolUse({
+      GUILD_RUN_ID: RUN_ID,
+      GUILD_RUN_BINDING_REF: bindingRef,
+    });
     expect(status).toBe(0);
-    expect(fs.existsSync(path.join(runDir, "in-progress"))).toBe(false);
+    expectNoWriteSideEffects();
+  });
+
+  it("F2: writes NO heartbeat when GUILD_RUN_BINDING_REF is absent (run id + specialist alone)", () => {
+    const status = runPostToolUse({
+      GUILD_RUN_ID: RUN_ID,
+      GUILD_SPECIALIST: SPECIALIST,
+    });
+    expect(status).toBe(0);
+    expectNoWriteSideEffects();
   });
 });

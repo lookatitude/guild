@@ -62,6 +62,20 @@ import {
   type CapabilityAutoCreatePolicy,
   type CapabilityResolverMode,
 } from "./config-defaults";
+// T8R/F2: `config` is the LOWER substrate — `capability` already imports
+// config's tier-model resolver, so eagerly loading capability's public index at
+// config module-init closes a require cycle
+// (config/index → settings-resolver → settings-reader → capability/index →
+//  capability/router → config/index) and leaves settings-resolver
+// half-initialised in the real launcher process
+// (`import_settings_resolver.isPlainObject is not a function`). The one symbol
+// config needs from capability is resolved LAZILY, at call time, through the
+// SAME public module entrypoint the boundary rail requires.
+function validateModelPolicy(input: unknown): string[] {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const capability = require("../../capability") as typeof import("../../capability");
+  return capability.validateModelPolicy(input);
+}
 import { loadYamlApi, sealSet } from "../../kernel";
 
 const yaml = loadYamlApi() as { load: (src: string) => unknown };
@@ -110,6 +124,8 @@ interface DefaultsBlock {
   lean_lead: { enabled: boolean; hands_on_edit_threshold: number };
   // rf-wi-01 (G1): hooks/lib/lifecycle-gate.ts tolerant reader.
   lifecycle_gate: { enabled: boolean; adhoc_activity_threshold: number };
+  // #93: hooks/lib/backend-degradation.ts strict unmarked-lane blocking.
+  dispatch: { block_unmarked_lanes: boolean };
 }
 /**
  * P1-L10 host autonomy modes (permission-policy-schema.ts HOST_MODES — the SoT).
@@ -259,6 +275,12 @@ export interface ResolvedConfig {
   agent_mode: "team" | "agent" | "subagent" | "auto";
   workspace: WorkspaceBlock;
   models: ModelsBlock;
+  /**
+   * T5 (dynamic-host-model-routing): guild.model_policy.v2 — durable operator
+   * model-routing preferences. null = not configured (legacy tier maps drive
+   * generic preferences for the migration window).
+   */
+  model_policy: Record<string, unknown> | null;
   security: SecurityBlock;
   secrets_policy: SecretsPolicyBlock;
   mcp: McpBlock;
@@ -429,6 +451,7 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "allowed_tools",                  // R-020
   "update",                         // plugin-update-lifecycle AC-6
   "lean_lead", "lifecycle_gate",    // rf-wi-01 (G1)
+  "dispatch",                       // #93: { block_unmarked_lanes: bool }
 ]);
 /**
  * The resolver's OWN closed top-level key set.
@@ -449,6 +472,7 @@ export const RESOLVER_TIER1_KEYS: ReadonlySet<string> = sealSet([
   "statusline",                  // R-009
   "adversarial_review_provider", // R-008
   "loops", "loop_cap", "codex_cap", "defaults",
+  "model_policy",                // T5 dynamic-host-model-routing: guild.model_policy.v2 (optional closed key)
 ], "RESOLVER_TIER1_KEYS");
 
 /** S5 — closed sub-key set for `capability.*`, mirroring the CLI loader's. */
@@ -731,6 +755,14 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
       out.workspace = { mode: wsMode };
     }
   }
+  // T5 (dynamic-host-model-routing): guild.model_policy.v2 — copied only when
+  // it passes the closed-key validator. Resolve mode is non-blocking, so an
+  // invalid policy is DROPPED here (never half-applied); the --validate path
+  // (config-cli loadFileConfig) rejects it loudly with the per-rule messages.
+  if (parsed["model_policy"] === null) out.model_policy = null;
+  else if (isPlainObject(parsed["model_policy"]) &&
+      validateModelPolicy(parsed["model_policy"]).length === 0)
+    out.model_policy = parsed["model_policy"] as Record<string, unknown>;
   if (isPlainObject(parsed["models"])) {
     const rawModels = parsed["models"] as Record<string, unknown>;
     const sparse: Partial<ModelsBlock> = {};

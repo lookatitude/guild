@@ -14,6 +14,8 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import { spawnSync } from "child_process";
+// T6B-R2-B1: the audit CLI runs through the PACKAGE-LOCAL runtime (no ambient npx).
+import { runTsCli } from "./ts-runtime-helper";
 
 const AUDIT_SCRIPT = path.resolve(__dirname, "../../scripts/dot-guild/audit.ts");
 
@@ -30,8 +32,8 @@ function setupTempWorkspace(): { dir: string; cleanup: () => void } {
 }
 
 function runAudit(workspaceDir: string): { stdout: string; stderr: string; status: number | null } {
-  const result = spawnSync("npx", ["tsx", AUDIT_SCRIPT, `--workspace=${workspaceDir}`], { encoding: "utf8" });
-  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status };
+  const result = runTsCli(AUDIT_SCRIPT, [`--workspace=${workspaceDir}`]);
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
 }
 
 describe("nested-guild lint (FU-F): one .guild/ per repo root", () => {

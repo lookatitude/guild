@@ -1,5 +1,16 @@
 # schema_version: guild.initiatives_registry.v1
 initiatives:
+  - id: v23x-deferred-followups
+    title: "v2.3.x deferred followups — close the declared-deferred backlog from the v2.3.0/v2.3.1 waves (7 grouped goals, 18 receipt-sourced items)"
+    status: closed
+    execution_status: done
+    closed_at: 2026-08-05
+    released_in: v2.4.0
+    path: .guild/initiatives/archived/v23x-deferred-followups
+    created_at: 2026-07-23
+    target_repo: plugin
+    goals_doc: .guild/initiatives/archived/v23x-deferred-followups/goals.md
+    evidence: "run-305333a3 lead-summary (8 lanes, PRs #83–#90 all codex-gated, merged to next 2026-07-25); docs leg = workspace PR #24; shipped in v2.4.0 (release PR #106); successor followups filed as issues #91–#94"
   - id: cross-host-release-distribution
     title: "Cross-host release distribution — one version SoT, remote registration for remote-capable hosts, and a host-neutral staleness signal so every registry host tracks the released version"
     status: closed

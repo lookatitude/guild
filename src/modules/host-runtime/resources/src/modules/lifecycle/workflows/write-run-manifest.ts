@@ -307,6 +307,9 @@ export function runWriteRunManifestCli(argv: string[] = process.argv.slice(2)): 
   }
 }
 
-if (require.main === module) {
+if (
+  require.main === module &&
+  new RegExp("[\\\\/]write-run-manifest\\.[cm]?[jt]s$").test(process.argv[1] ?? "")
+) {
   runWriteRunManifestCli();
 }

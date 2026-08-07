@@ -9,10 +9,19 @@
     "config",
     "dispatch",
     "host-runtime",
-    "review"
+    "kernel",
+    "lifecycle",
+    "review",
+    "security",
+    "teams"
   ],
   "owns": {
+    "commands": [
+      "models"
+    ],
     "scripts": [
+      "score-tier",
+      "models-cmd",
       "capability-adopt",
       "capability-profile",
       "lib/core/contracts/project-capability-profile",

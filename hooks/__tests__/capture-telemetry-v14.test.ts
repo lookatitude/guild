@@ -32,6 +32,10 @@ import * as os from "os";
 const SCRIPT = path.resolve(__dirname, "../capture-telemetry.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 
+// T3b (session_context §5): telemetry writes are binding-gated; fixtures mint
+// the run's binding so the authorized write path is exercised.
+import { mintTestBinding } from "../test-support/mint-binding";
+
 function readFixture(name: string): string {
   return fs.readFileSync(path.join(FIXTURES, name), "utf8");
 }
@@ -43,7 +47,16 @@ function run(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input,
     encoding: "utf8",
-    env: { ...process.env, GUILD_RUN_ID: "test-run", ...env },
+    // Rework F1: writers demand the caller-PRESENTED pair — export the
+    // envelope by default ("rb-test-test-run" is mintTestBinding's
+    // deterministic nonce for run "test-run"). Tests that override
+    // GUILD_RUN_ID away from test-run break the envelope on purpose.
+    env: {
+      ...process.env,
+      GUILD_RUN_ID: "test-run",
+      GUILD_RUN_BINDING_REF: "rb-test-test-run",
+      ...env,
+    },
     timeout: 20000,
   });
   return {
@@ -72,6 +85,7 @@ describe("capture-telemetry.ts — canonical log routing (HK-01/HK-02)", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ct-v14-"));
     runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     fs.mkdirSync(runDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     canonicalFile = path.join(runDir, "logs", "v1.4-events.jsonl");
     legacyFile = path.join(runDir, "events.ndjson");
   });

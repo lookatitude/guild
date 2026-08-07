@@ -93,7 +93,10 @@ describe("host-router shim — parity after W3 split", () => {
     expect(decision.host).toBe("claude");
     expect(decision.tier).toBe("mid");
     expect(decision.degraded).toBe(false);
-    expect(decision.independence).toBe("strong");
+    // T7-H2: the router never self-asserts strong independence — that verdict
+    // exists only as a written §7a adjudication over both parties' finalized
+    // receipts. `hostDiversity` carries the honest host-axis fact instead.
+    expect(decision.independence).toBe("weak");
     expect(decision.model).toBe("sonnet");
   });
 
@@ -200,7 +203,7 @@ describe("host-router shim — parity after W3 split", () => {
     const freshDecision = route(BASIC_LANE, [fresh], { now: NOW });
     // Fresh → succeeds, not degraded.
     expect(freshDecision.degraded).toBe(false);
-    expect(freshDecision.independence).toBe("strong");
+    expect(freshDecision.independence).toBe("weak"); // T7-H2 — never strong from the router
     // Stale manifest is a hard POLICY gate (untrustworthy data), not a soft
     // capability gap — no policy-eligible host remains, so route() throws
     // rather than silently degrading to it. Different outcomes (value vs.

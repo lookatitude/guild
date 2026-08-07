@@ -31,6 +31,8 @@ import {
   detectProviders,
   recommendProvider,
   selectReviewer,
+  type DetectionResult,
+  type DetectOptions,
   type ProbeEnv,
   type DetectedProvider,
   type HostFamily,
@@ -89,15 +91,21 @@ function review(partial: Partial<ResolvedReview> = {}): ResolvedReview {
 // ---------------------------------------------------------------------------
 
 describe("detectProviders — author host family", () => {
-  it("defaults the author host to claude when host is unset/auto", () => {
-    const { authorHost } = detectProviders({ cwd: CWD, probe: makeProbe({}) });
-    expect(authorHost).toBe<HostFamily>("claude");
+  it("resolves the author host to 'unknown' when host is unset/auto (session_context §3 — no claude default)", () => {
+    // guild.session_context.v1 §3 (frozen 2026-07-30) retired the historical
+    // "auto"/unset ⇒ claude default: identity comes from the §4 precedence
+    // chain (explicit setting / native adapter), never a hardcoded family.
+    const { authorHost } = detectProviders({ cwd: CWD, trust: "asserted", probe: makeProbe({}) });
+    expect(authorHost).toBe<HostFamily>("unknown");
+    const auto = detectProviders({ cwd: CWD, host: "auto", trust: "asserted", probe: makeProbe({}) });
+    expect(auto.authorHost).toBe<HostFamily>("unknown");
   });
 
   it("honors an explicit host override and maps it to a family", () => {
     const { authorHost } = detectProviders({
       cwd: CWD,
       host: "codex",
+      trust: "asserted",
       probe: makeProbe({}),
     });
     expect(authorHost).toBe<HostFamily>("codex");
@@ -107,13 +115,14 @@ describe("detectProviders — author host family", () => {
     const { authorHost } = detectProviders({
       cwd: CWD,
       host: "weird-future-host",
+      trust: "asserted",
       probe: makeProbe({}),
     });
     expect(authorHost).toBe<HostFamily>("unknown");
   });
 
   it("always reports claude as the host-kind provider, detected on the host", () => {
-    const { providers } = detectProviders({ cwd: CWD, probe: makeProbe({}) });
+    const { providers } = detectProviders({ cwd: CWD, trust: "asserted", probe: makeProbe({}) });
     const claude = byId(providers, "claude");
     expect(claude.kind).toBe("host");
     expect(claude.detected).toBe(true);
@@ -136,7 +145,7 @@ describe("Claude host + codex-plugin available", () => {
   });
 
   it("detects codex-plugin and marks it SELECTABLE", () => {
-    const { providers } = detectProviders({ cwd: CWD, probe: world });
+    const { providers } = detectProviders({ cwd: CWD, trust: "asserted", probe: world });
     const plugin = byId(providers, "codex-plugin");
     expect(plugin.kind).toBe("plugin-adapter");
     expect(plugin.detected).toBe(true);
@@ -146,14 +155,14 @@ describe("Claude host + codex-plugin available", () => {
   });
 
   it("recommends codex-plugin for a Claude author on provider=auto (AC-7)", () => {
-    const detection = detectProviders({ cwd: CWD, probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: world });
     const rec = recommendProvider(detection, review());
     expect(rec.recommended).toBe("codex-plugin");
     expect(rec.reason).toMatch(/claude/i);
   });
 
   it("selects codex-plugin (different family) for review=cross", () => {
-    const detection = detectProviders({ cwd: CWD, probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: world });
     const sel = selectReviewer(detection, review());
     expect(sel.status).toBe("selected");
     expect(sel.provider).toBe("codex-plugin");
@@ -175,7 +184,7 @@ describe("Claude host + codex-cli only (authed via OPENAI_API_KEY)", () => {
   });
 
   it("marks codex-cli detected + authed + selectable", () => {
-    const { providers } = detectProviders({ cwd: CWD, probe: world });
+    const { providers } = detectProviders({ cwd: CWD, trust: "asserted", probe: world });
     const cli = byId(providers, "codex-cli");
     expect(cli.kind).toBe("cli");
     expect(cli.detected).toBe(true);
@@ -185,7 +194,7 @@ describe("Claude host + codex-cli only (authed via OPENAI_API_KEY)", () => {
 
   it("an UN-authed codex-cli is detected but NOT selectable (OD-6)", () => {
     const noAuth = makeProbe({ onPath: ["codex"], versionOk: ["codex"] });
-    const { providers } = detectProviders({ cwd: CWD, probe: noAuth });
+    const { providers } = detectProviders({ cwd: CWD, trust: "asserted", probe: noAuth });
     const cli = byId(providers, "codex-cli");
     expect(cli.detected).toBe(true);
     expect(cli.authed).toBe(false);
@@ -193,7 +202,7 @@ describe("Claude host + codex-cli only (authed via OPENAI_API_KEY)", () => {
   });
 
   it("selects a codex reviewer for review=cross when only the cli is available", () => {
-    const detection = detectProviders({ cwd: CWD, probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: world });
     const sel = selectReviewer(detection, review());
     expect(sel.status).toBe("selected");
     expect(sel.provider).toBe("codex-cli");
@@ -214,7 +223,7 @@ describe("AC-8 hard rule — same-family reviewer never satisfies review=cross",
       codexStoredAuth: true,
       pluginAdapters: ["codex-plugin"],
     });
-    const detection = detectProviders({ cwd: CWD, host: "codex", probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "codex", trust: "verified", probe: world });
     const sel = selectReviewer(detection, review());
 
     expect(sel.status).not.toBe("selected"); // the false-signoff guard
@@ -226,7 +235,7 @@ describe("AC-8 hard rule — same-family reviewer never satisfies review=cross",
   it("Claude author + ONLY a (hypothetical) claude-family reviewer ⇒ never selected", () => {
     // No different-family reviewer at all: only the host family is present.
     const world = makeProbe({}); // nothing on PATH; only host-family claude exists
-    const detection = detectProviders({ cwd: CWD, host: "claude", probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: world });
     const sel = selectReviewer(detection, review());
     expect(sel.status).not.toBe("selected");
     expect(["degraded-local", "skipped"]).toContain(sel.status);
@@ -240,7 +249,7 @@ describe("AC-8 hard rule — same-family reviewer never satisfies review=cross",
       pluginAdapters: ["codex-plugin"],
     });
     // Author = codex, operator pins codex-plugin (same family) → must refuse.
-    const detection = detectProviders({ cwd: CWD, host: "codex", probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "codex", trust: "verified", probe: world });
     const sel = selectReviewer(detection, review({ provider: "codex-plugin" }));
     expect(sel.status).not.toBe("selected");
     expect(sel.provider).toBeNull();
@@ -254,7 +263,7 @@ describe("AC-8 hard rule — same-family reviewer never satisfies review=cross",
 
 describe("no reviewer available + review=cross ⇒ skipped with reason", () => {
   it("returns skipped (not selected, not a signoff) with an explicit reason", () => {
-    const detection = detectProviders({ cwd: CWD, host: "claude", probe: makeProbe({}) });
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: makeProbe({}) });
     const sel = selectReviewer(detection, review());
     expect(sel.status).toBe("skipped");
     expect(sel.provider).toBeNull();
@@ -262,7 +271,7 @@ describe("no reviewer available + review=cross ⇒ skipped with reason", () => {
   });
 
   it("recommendProvider returns null with a reason when nothing is recommendable", () => {
-    const detection = detectProviders({ cwd: CWD, host: "claude", probe: makeProbe({}) });
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: makeProbe({}) });
     const rec = recommendProvider(detection, review());
     expect(rec.recommended).toBeNull();
     expect(rec.reason).toBeTruthy();
@@ -275,14 +284,14 @@ describe("no reviewer available + review=cross ⇒ skipped with reason", () => {
 
 describe("review modes other than cross", () => {
   it("review=local ⇒ degraded-local with reason (cross not requested)", () => {
-    const detection = detectProviders({ cwd: CWD, probe: makeProbe({}) });
+    const detection = detectProviders({ cwd: CWD, trust: "asserted", probe: makeProbe({}) });
     const sel = selectReviewer(detection, review({ mode: "local" }));
     expect(sel.status).toBe("degraded-local");
     expect(sel.provider).toBeNull();
   });
 
   it("review=off ⇒ skipped, no provider", () => {
-    const detection = detectProviders({ cwd: CWD, probe: makeProbe({}) });
+    const detection = detectProviders({ cwd: CWD, trust: "asserted", probe: makeProbe({}) });
     const sel = selectReviewer(detection, review({ mode: "off" }));
     expect(sel.status).toBe("skipped");
     expect(sel.provider).toBeNull();
@@ -296,7 +305,7 @@ describe("review modes other than cross", () => {
 describe("capability.json-declared provider detection (OD-6 manifest tier)", () => {
   it("detects an antigravity provider declared by a capability manifest (no CLI on PATH)", () => {
     const world = makeProbe({ capabilityProviders: ["antigravity"] });
-    const { providers } = detectProviders({ cwd: CWD, probe: world });
+    const { providers } = detectProviders({ cwd: CWD, trust: "asserted", probe: world });
     const ag = byId(providers, "antigravity");
     expect(ag.detected).toBe(true);
     expect(ag.detail).toMatch(/capability|manifest/i);
@@ -305,7 +314,7 @@ describe("capability.json-declared provider detection (OD-6 manifest tier)", () 
   });
 
   it("a provider with neither a PATH binary nor a manifest is not detected", () => {
-    const { providers } = detectProviders({ cwd: CWD, probe: makeProbe({}) });
+    const { providers } = detectProviders({ cwd: CWD, trust: "asserted", probe: makeProbe({}) });
     const pi = byId(providers, "pi");
     expect(pi.detected).toBe(false);
     expect(pi.selectable).toBe(false);
@@ -325,7 +334,7 @@ describe("different-family ranker — native plugin adapter beats authed CLI", (
       pluginAdapters: ["codex-plugin"], // plugin adapter installed
       env: { OPENAI_API_KEY: "sk-test" }, // makes codex-cli selectable too
     });
-    const detection = detectProviders({ cwd: CWD, probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: world });
     expect(byId(detection.providers, "codex-plugin").selectable).toBe(true);
     expect(byId(detection.providers, "codex-cli").selectable).toBe(true);
     const sel = selectReviewer(detection, review());
@@ -345,12 +354,18 @@ describe("OD-5 — provider=auto re-detects every call, no persistence", () => {
       codexStoredAuth: true,
       pluginAdapters: ["codex-plugin"],
     });
-    const rec1 = recommendProvider(detectProviders({ cwd: CWD, probe: rich }), review());
+    const rec1 = recommendProvider(
+      detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: rich }),
+      review()
+    );
     expect(rec1.recommended).toBe("codex-plugin");
 
     // Now codex disappears — a fresh detection must NOT remember the prior pin.
     const poor = makeProbe({});
-    const rec2 = recommendProvider(detectProviders({ cwd: CWD, probe: poor }), review());
+    const rec2 = recommendProvider(
+      detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: poor }),
+      review()
+    );
     expect(rec2.recommended).toBeNull();
   });
 });
@@ -362,7 +377,7 @@ describe("OD-5 — provider=auto re-detects every call, no persistence", () => {
 describe("AC-9 — provider choice never carries a comms field (broker owns the contract)", () => {
   it("selectReviewer output picks WHO, not HOW (no comms/transport key leaks)", () => {
     const world = makeProbe({ onPath: ["codex"], versionOk: ["codex"], codexStoredAuth: true });
-    const detection = detectProviders({ cwd: CWD, probe: world });
+    const detection = detectProviders({ cwd: CWD, trust: "asserted", probe: world });
     const sel = selectReviewer(detection, review());
     // The result describes the chosen provider + status + reason only — never a
     // packet/result/transport channel. The broker (review-broker SKILL) owns comms.
@@ -391,7 +406,7 @@ describe("authorHost unknown — cannot prove independence, never selected", () 
       pluginAdapters: ["codex-plugin"],
     });
     // "weird-future-host" resolves to authorHost:"unknown" (see section 1 above).
-    const detection = detectProviders({ cwd: CWD, host: "weird-future-host", probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "weird-future-host", trust: "verified", probe: world });
     expect(detection.authorHost).toBe<HostFamily>("unknown");
 
     const sel = selectReviewer(detection, review());
@@ -409,7 +424,7 @@ describe("authorHost unknown — cannot prove independence, never selected", () 
       codexStoredAuth: true,
       pluginAdapters: ["codex-plugin"],
     });
-    const detection = detectProviders({ cwd: CWD, host: "weird-future-host", probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "weird-future-host", trust: "verified", probe: world });
     expect(detection.authorHost).toBe<HostFamily>("unknown");
 
     const sel = selectReviewer(detection, review({ provider: "codex-plugin" }));
@@ -425,9 +440,120 @@ describe("authorHost unknown — cannot prove independence, never selected", () 
       codexStoredAuth: true,
       pluginAdapters: ["codex-plugin"],
     });
-    const detection = detectProviders({ cwd: CWD, host: "weird-future-host", probe: world });
+    const detection = detectProviders({ cwd: CWD, host: "weird-future-host", trust: "verified", probe: world });
     const rec = recommendProvider(detection, review());
     expect(rec.recommended).toBeNull();
     expect(rec.reason).toMatch(/unknown|author.*family|cannot prove/i);
+  });
+});
+
+
+// ── T3 rework F4 — asserted-trust gate (session_context §3: asserted ⇒ weak) ──
+
+describe("T3 F4 — asserted author identity never satisfies review=cross", () => {
+  const worldWithCodex = () =>
+    makeProbe({
+      onPath: ["codex"],
+      versionOk: ["codex"],
+      codexStoredAuth: true,
+      pluginAdapters: ["codex-plugin"],
+    });
+
+  it("detectProviders threads trust through to DetectionResult.authorTrust (omitted ⇒ normalized 'asserted', never dropped)", () => {
+    const asserted = detectProviders({ cwd: CWD, host: "claude", trust: "asserted", probe: worldWithCodex() });
+    expect(asserted.authorTrust).toBe("asserted");
+    const verified = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: worldWithCodex() });
+    expect(verified.authorTrust).toBe("verified");
+    // R3-F1 CORRECTION: the pre-R3 expectation here (omitted ⇒ undefined)
+    // encoded the fail-open trust hole — undefined bypassed every asserted
+    // gate. `trust` is now required by the type; a plain-JS caller that still
+    // omits it gets the fail-closed normalization: present, and "asserted".
+    const omitted = detectProviders({ cwd: CWD, host: "claude", probe: worldWithCodex() } as unknown as DetectOptions);
+    expect(omitted.authorTrust).toBe("asserted");
+  });
+
+  it("asserted author + selectable codex-plugin ⇒ NEVER selected (auto path)", () => {
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "asserted", probe: worldWithCodex() });
+    const sel = selectReviewer(detection, review());
+    expect(sel.status).not.toBe("selected");
+    expect(sel.provider).toBeNull();
+    expect(sel.status).toBe("degraded-local"); // a reviewer exists — degrade honestly, not silently
+    expect(sel.reason).toMatch(/asserted-only|unverified/i);
+  });
+
+  it("asserted author + explicit pin ⇒ NEVER selected (pin path has no asserted bypass)", () => {
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "asserted", probe: worldWithCodex() });
+    const sel = selectReviewer(detection, review({ provider: "codex-plugin" }));
+    expect(sel.status).not.toBe("selected");
+    expect(sel.provider).toBeNull();
+    expect(sel.reason).toMatch(/asserted-only|unverified/i);
+  });
+
+  it("asserted author ⇒ no recommendation either", () => {
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "asserted", probe: worldWithCodex() });
+    const rec = recommendProvider(detection, review());
+    expect(rec.recommended).toBeNull();
+    expect(rec.reason).toMatch(/asserted-only|unverified/i);
+  });
+
+  it("verified author keeps today's selection behavior (anti-vacuity)", () => {
+    const detection = detectProviders({ cwd: CWD, host: "claude", trust: "verified", probe: worldWithCodex() });
+    expect(selectReviewer(detection, review()).status).toBe("selected");
+    expect(recommendProvider(detection, review()).recommended).toBe("codex-plugin");
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// T3 rework R3-F1 — OMITTED trust fails CLOSED (the round-2 fail-open hole).
+//
+// Round 2 gated only `authorTrust === "asserted"`, so an OMITTED/undefined
+// trust bypassed every asserted-identity guard and let an unverified author
+// obtain a selected cross reviewer. The corrected contract requires
+// `authorTrust === "verified"` for any recommendation/selection; every other
+// value — asserted, or absent on a rogue plain-JS caller — degrades.
+// ---------------------------------------------------------------------------
+
+describe("T3 R3-F1 — omitted trust fails closed (no recommendation, no selected reviewer)", () => {
+  const worldWithCodex = () =>
+    makeProbe({
+      onPath: ["codex"],
+      versionOk: ["codex"],
+      codexStoredAuth: true,
+      pluginAdapters: ["codex-plugin"],
+    });
+  // A plain-JS caller omitting the (type-required) trust field.
+  const omittedDetection = () =>
+    detectProviders({ cwd: CWD, host: "claude", probe: worldWithCodex() } as unknown as DetectOptions);
+
+  it("omitted trust + selectable codex-plugin ⇒ NEVER selected (auto path degrades honestly)", () => {
+    const sel = selectReviewer(omittedDetection(), review());
+    expect(sel.status).not.toBe("selected");
+    expect(sel.provider).toBeNull();
+    expect(sel.status).toBe("degraded-local"); // a reviewer exists — degrade, don't silently skip
+    expect(sel.reason).toMatch(/not verified|unverified/i);
+  });
+
+  it("omitted trust + explicit pin ⇒ NEVER selected (pin path has no omission bypass)", () => {
+    const sel = selectReviewer(omittedDetection(), review({ provider: "codex-plugin" }));
+    expect(sel.status).not.toBe("selected");
+    expect(sel.provider).toBeNull();
+    expect(sel.reason).toMatch(/not verified|unverified/i);
+  });
+
+  it("omitted trust ⇒ no recommendation", () => {
+    const rec = recommendProvider(omittedDetection(), review());
+    expect(rec.recommended).toBeNull();
+    expect(rec.reason).toMatch(/not verified|unverified/i);
+  });
+
+  it("a hand-built DetectionResult with authorTrust STRIPPED still fails closed at both gates (runtime, not just types)", () => {
+    // Bypasses detectProviders' normalization entirely — the gates themselves
+    // must require "verified", not merely reject the literal "asserted".
+    const det = omittedDetection();
+    const stripped = { authorHost: det.authorHost, providers: det.providers } as unknown as DetectionResult;
+    expect(selectReviewer(stripped, review()).status).not.toBe("selected");
+    expect(selectReviewer(stripped, review()).provider).toBeNull();
+    expect(recommendProvider(stripped, review()).recommended).toBeNull();
   });
 });

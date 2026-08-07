@@ -409,6 +409,97 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     });
   });
 
+  describe("model_policy (T5 guild.model_policy.v2 closed key)", () => {
+    const VALID_POLICY = {
+      version: 2,
+      purposes: {
+        general: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "any",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [],
+              provider_default: "forbid",
+            },
+          ],
+        },
+      },
+    };
+
+    test("scaffold registers model_policy with default null (config-schema SoT)", () => {
+      const { status, out } = run(["--scaffold"]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.model_policy).toBeNull();
+      expect(j._help.model_policy).toMatch(/guild\.model_policy\.v2/);
+    });
+
+    test("null model_policy resolves clean (not configured — no validator run)", () => {
+      const dir = repo();
+      writeSettings(dir, { model_policy: null });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).not.toMatch(/model_policy/);
+    });
+
+    test("a valid v2 policy resolves through to the output", () => {
+      const dir = repo();
+      writeSettings(dir, { model_policy: VALID_POLICY });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.model_policy).toEqual(VALID_POLICY);
+    });
+
+    test("an invalid policy is rejected at load by --validate (fail closed, section 5)", () => {
+      const dir = repo();
+      writeSettings(dir, { model_policy: { version: 1 } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/model_policy\.version: must be 2/);
+    });
+
+    test("a research-floor bypass is rejected at load (research below hard never resolves)", () => {
+      const dir = repo();
+      writeSettings(dir, {
+        model_policy: {
+          version: 2,
+          purposes: {
+            research: {
+              min_effective_complexity: "easy",
+              independence: "none",
+              confirm_on_degradation: true,
+              routes: [
+                {
+                  complexity: "any",
+                  preferred: [{ selector: "expr:tier=cheap", effort: null, capabilities: [] }],
+                  fallbacks: [],
+                  provider_default: "forbid",
+                },
+              ],
+            },
+          },
+        },
+      });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(1);
+      expect(out).toMatch(/research/);
+    });
+
+    test("an invalid policy never leaks into resolve-mode output (strip + warn, not silently kept)", () => {
+      const dir = repo();
+      writeSettings(dir, { model_policy: { version: 1 }, rigor: "deep" });
+      const { status, out } = run(["--cwd", dir]);
+      expect(status).toBe(0);
+      const j = JSON.parse(out);
+      expect(j.model_policy ?? null).toBeNull();
+      expect(j.rigor).toBe("deep");
+    });
+  });
+
   // ── workspace.mode (guild.workspace.v1) ─────────────────────────────────────
   describe("workspace.mode (guild.workspace.v1)", () => {
     test("--scaffold includes workspace.mode: auto and _help entry", () => {

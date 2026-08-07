@@ -123,6 +123,28 @@ const CODEX_HOOK_COMMAND = 'node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_P
 const CODEX_UPDATE_CHECK_COMMAND =
   'node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/dist/update-check.js" --host codex-cli';
 
+// ISSUE #94 — the Codex PreToolUse DENY bridge.
+//
+// Codex panes used to launch with NO tool-call enforcement: this manifest wired
+// SessionStart (update-check) and UserPromptSubmit (prompt bridge) only. That is
+// exactly why rf-wi-04 / PR #88 refused to extend a permission-bypass flag to a
+// codex pane — a bypass without enforcement is a net safety regression.
+//
+// A REUSE, NOT A REWRITE. Codex's PreToolUse event payload is snake_case and
+// Claude-shaped — {session_id, cwd, hook_event_name, tool_name, tool_input, …}
+// (captured verbatim on codex-cli 0.146.0) — which is precisely what Guild's
+// existing, already-tested hooks/pre-tool-use.ts consumes, and it accepts the
+// same {"hookSpecificOutput":{"permissionDecision":"deny"}} response. So the
+// correct wiring is to register the SAME enforcement binary Claude uses rather
+// than author a parallel codex-only enforcement path that could drift.
+//
+// The ask -> deny leg is already handled: write-host-capability.ts emits
+// `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
+// pre-tool-use.ts's HK-07 gate turns an `ask` into a file-bus approval_request
+// plus a `deny` — the decision codex actually enforces. Verified end-to-end.
+const CODEX_PRE_TOOL_USE_COMMAND =
+  'node "${GUILD_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}}/hooks/dist/pre-tool-use.js"';
+
 function writeCodexHookBridge(root: string, dest: string): void {
   writeFileEnsured(
     path.join(dest, "hooks", "codex-hooks.json"),
@@ -148,6 +170,16 @@ function writeCodexHookBridge(root: string, dest: string): void {
             ],
           },
         ],
+        PreToolUse: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: CODEX_PRE_TOOL_USE_COMMAND,
+              },
+            ],
+          },
+        ],
       },
     })
   );
@@ -158,6 +190,16 @@ function writeCodexHookBridge(root: string, dest: string): void {
     path.join(root, "hooks", "dist", "update-check.js"),
     path.join(dest, "hooks", "dist", "update-check.js"),
     "hooks/dist/update-check.js"
+  );
+  // Same rule for the PreToolUse deny bridge (issue #94): a registered hook whose
+  // binary is absent is that same defect class — the manifest would advertise
+  // enforcement that can never fire, and the codex-pane bypass probe would be
+  // gating on a hook that silently no-ops. copyFileRequired (not
+  // copyFileEnsured) so a missing build FAILS the package build loudly.
+  copyFileRequired(
+    path.join(root, "hooks", "dist", "pre-tool-use.js"),
+    path.join(dest, "hooks", "dist", "pre-tool-use.js"),
+    "hooks/dist/pre-tool-use.js"
   );
   copyFileEnsured(
     path.join(root, "scripts", "codex-guild-prompt-bridge.ts"),

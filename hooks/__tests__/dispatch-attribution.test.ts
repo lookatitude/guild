@@ -8,6 +8,7 @@
 
 import {
   GENERIC_SUBAGENT_TYPE,
+  dispatchViolations,
   isPersonaStrippedDispatch,
   resolveDispatchAttribution,
 } from "../lib/dispatch-attribution";
@@ -23,7 +24,10 @@ describe("resolveDispatchAttribution", () => {
   it("resolves the role + definition from a correctly-carried project dispatch (env)", () => {
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
+      // Exactly what `buildPrompt` emits for a project specialist: the line-1
+      // adoption marker, then the human-readable instruction.
       prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
         "You are the `devops` teammate for run-id `run-x`. Your role definition is at " +
         "`.guild/agents/devops.md` — read it FIRST and adopt it fully.",
       env: {
@@ -47,6 +51,7 @@ describe("resolveDispatchAttribution", () => {
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
         "You are dispatched as the Guild **devops** specialist for lane **nim-wi-30**. " +
         "First READ and adopt the persona/constraints in `.guild/agents/devops.md`.",
       env: { GUILD_RUN_ID: "run-x" },
@@ -58,10 +63,12 @@ describe("resolveDispatchAttribution", () => {
     expect(isPersonaStrippedDispatch(attr!)).toBe(true);
   });
 
-  it("resolves role from the prose signature when the path is absent", () => {
+  it("resolves role from the line-1 adoption marker when the definition env is absent", () => {
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt: "You are dispatched as the Guild backend specialist for lane wi-7.",
+      prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/backend.md\n" +
+        "You are dispatched as the Guild backend specialist for lane wi-7.",
     });
     expect(attr!.specialist).toBe("backend");
     expect(attr!.isSpecialistLane).toBe(true);
@@ -158,6 +165,7 @@ describe("resolveDispatchAttribution", () => {
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/backend.md\n" +
         "Your role definition is at `.guild/agents/backend.md` — read it FIRST and adopt it.",
       env: {
         GUILD_SPECIALIST: "backend",
@@ -185,6 +193,7 @@ describe("resolveDispatchAttribution", () => {
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/frontend.md\n" +
         "Your role definition is at `.guild/agents/frontend.md` — read it FIRST and adopt it.",
       env: {
         GUILD_SPECIALIST: "backend",
@@ -198,9 +207,13 @@ describe("resolveDispatchAttribution", () => {
     expect(isPersonaStrippedDispatch(attr!)).toBe(true);
   });
 
-  it("flags the TRANSCRIPT-form wrong persona: prose says devops, adoption path says frontend", () => {
-    // Issue #58 evidence wording — the producer states the role in prose and the
-    // path separately; the two can drift apart (adversarial review round 3).
+  it("flags the TRANSCRIPT-form dispatch: prose persona claim is NOT adoption proof", () => {
+    // Issue #58 evidence wording. Since rf-wi-06 the prose is inert entirely —
+    // it is neither identity nor proof — so this dispatch is a lane only via its
+    // composed-lane env pair, and it is denied for the MISSING adoption marker.
+    // The wrong-persona (identity_mismatch) case is covered separately, on the
+    // producer-owned carriers that can actually disagree — see the "(c) the
+    // line-1 marker and the definition env disagreeing" test below.
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
@@ -213,10 +226,12 @@ describe("resolveDispatchAttribution", () => {
       },
     });
     expect(attr!.hasValidDefinition).toBe(true);
-    // Transcript prose carries no producer-owned adoption instruction, so it is
-    // a lane signature only — never proof (round 5).
     expect(attr!.hasAdoptionPrompt).toBe(false);
     expect(attr!.isSpecialistLane).toBe(true);
+    // The stray `.guild/agents/frontend.md` in prose is NOT an identity carrier,
+    // so identity stays consistent — the denial is specifically the missing marker.
+    expect(attr!.hasConsistentIdentity).toBe(true);
+    expect(dispatchViolations(attr!)).toEqual(["missing_adoption_prompt"]);
     expect(isPersonaStrippedDispatch(attr!)).toBe(true);
   });
 
@@ -245,6 +260,7 @@ describe("resolveDispatchAttribution", () => {
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
         "You are the `devops` teammate for run-id `run-x`. Your role definition is at " +
         "`.guild/agents/devops.md` — read it FIRST and adopt it fully. " +
         "Your lane scope: `review .guild/agents/frontend.md for drift`.",
@@ -262,7 +278,9 @@ describe("resolveDispatchAttribution", () => {
     const longRole = "a".repeat(100);
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt: `Your role definition is at \`.guild/agents/${longRole}.md\` — adopt it.`,
+      prompt:
+        `GUILD_AGENT_DEFINITION=.guild/agents/${longRole}.md\n` +
+        `Your role definition is at \`.guild/agents/${longRole}.md\` — adopt it.`,
       env: {
         GUILD_SPECIALIST: longRole,
         GUILD_TASK_ID: "wi-1",
@@ -274,16 +292,23 @@ describe("resolveDispatchAttribution", () => {
     expect(isPersonaStrippedDispatch(attr!)).toBe(false);
   });
 
-  it("fails CLOSED on an out-of-bounds role: no proof, no attribution, denied", () => {
+  it("fails CLOSED on an out-of-bounds role in the definition env: no proof, denied", () => {
+    // The line-1 marker makes this a lane and attributes it to `devops`; the
+    // definition env's role is past the identifier bound, so it is NOT valid
+    // proof and the dispatch is denied rather than let through on a
+    // shape-matching but unbounded path.
     const tooLong = "a".repeat(200);
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt: "You are dispatched as the Guild devops specialist for lane wi-1.",
+      prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
+        "You are dispatched as the Guild devops specialist for lane wi-1.",
       env: {
         GUILD_TASK_ID: "wi-1",
         GUILD_AGENT_DEFINITION: `.guild/agents/${tooLong}.md`,
       },
     });
+    expect(attr!.specialist).toBe("devops");
     expect(attr!.hasValidDefinition).toBe(false);
     expect(isPersonaStrippedDispatch(attr!)).toBe(true);
   });
@@ -390,15 +415,99 @@ describe("resolveDispatchAttribution", () => {
     expect(isPersonaStrippedDispatch(attr!)).toBe(false);
   });
 
-  // ── rf-wi-07c (G7c) — legacy 300-char producer-head parse, gated ─────────
+  // ── rf-wi-06 (issue #91) — the legacy producer-head parse is GONE ────────
   //
   // G3 (rf-wi-03) made the line-1 marker universal on every
   // composeInProcessDispatch/buildPrompt dispatch (team, tmux, in-process,
-  // remote). These pin the resulting contract: the legacy anchor/prose parse
-  // is DEAD the moment a line-1 marker is present (a), and still alive as the
-  // fallback for the one class that has neither marker yet — the direct
-  // D5 `subagent` rung, a skill-authored inline `Agent()` call with no
-  // launcher descriptor (owned by rf-wi-06) (b).
+  // remote); rf-wi-06 marked the LAST uncovered class — the direct D5
+  // `subagent` rung, a skill-authored inline `Agent()` call with no launcher
+  // descriptor (`guild:execute-plan` SKILL.md §"Capability-scope env
+  // injection" steps (2b)/(2c)). With every class marked, the class-gated
+  // legacy 300-char producer-head parse (`ROLE_DEF_ANCHOR_RE` /
+  // `DISPATCH_PROSE_RE`) is deleted: identity now comes from PRODUCER-OWNED
+  // POSITIONS ONLY — the dispatch env and the prompt's FIRST LINE.
+  //
+  // (a) pins that legacy-shaped text is inert when a marker IS present, and
+  // (b) that it is inert when NO marker is present — the property the
+  // deletion actually adds. Prompt prose is no longer an identity carrier
+  // anywhere.
+
+  it("(b) legacy ANCHOR text alone (no line-1 marker) is INERT — no attribution, no lane", () => {
+    // The pre-rf-wi-06 fallback attributed this to "devops" off the prose.
+    // Post-deletion the only carriers are env + line 1, and this dispatch has
+    // neither, so it is indistinguishable from an ordinary non-Guild Agent
+    // call — which is exactly what an UNMARKED dispatch now is. A real Guild
+    // lane on this rung always carries the marker; see the marked twin below.
+    const attr = resolveDispatchAttribution({
+      subagent_type: GENERIC_SUBAGENT_TYPE,
+      prompt:
+        "You are the `devops` teammate for run-id `run-x`. Your role definition is at " +
+        "`.guild/agents/devops.md` — read it FIRST and adopt it fully.",
+      env: { GUILD_RUN_ID: "run-x" },
+    });
+    expect(attr!.specialist).toBeUndefined();
+    expect(attr!.hasAdoptionPrompt).toBe(false);
+    expect(attr!.isSpecialistLane).toBe(false);
+    expect(isPersonaStrippedDispatch(attr!)).toBe(false);
+  });
+
+  it("(b) legacy PROSE text alone (no line-1 marker) is INERT — no attribution, no lane", () => {
+    const attr = resolveDispatchAttribution({
+      subagent_type: GENERIC_SUBAGENT_TYPE,
+      prompt: "You are dispatched as the Guild backend specialist for lane wi-7.",
+      env: { GUILD_RUN_ID: "run-x" },
+    });
+    expect(attr!.specialist).toBeUndefined();
+    expect(attr!.isSpecialistLane).toBe(false);
+    expect(isPersonaStrippedDispatch(attr!)).toBe(false);
+  });
+
+  it("(b) legacy text past the old 300-char head is equally inert — no bounded head remains for identity", () => {
+    const attr = resolveDispatchAttribution({
+      subagent_type: GENERIC_SUBAGENT_TYPE,
+      prompt:
+        "x".repeat(400) +
+        "\nYou are dispatched as the Guild backend specialist for lane wi-7.",
+      env: { GUILD_RUN_ID: "run-x" },
+    });
+    expect(attr!.specialist).toBeUndefined();
+    expect(attr!.isSpecialistLane).toBe(false);
+  });
+
+  it("(b) the MARKED direct-subagent rung still BLOCKS a persona-stripped dispatch", () => {
+    // The rf-wi-06 shape: the skill stamps the line-1 marker itself, so the
+    // #58 guard keeps its grip on this rung — a marker claiming `devops` with
+    // no GUILD_AGENT_DEFINITION env to back it is still denied.
+    const attr = resolveDispatchAttribution({
+      subagent_type: GENERIC_SUBAGENT_TYPE,
+      prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
+        "You are the `devops` teammate for run-id `run-x`.",
+      env: { GUILD_RUN_ID: "run-x", GUILD_TASK_ID: "wi-1" },
+    });
+    expect(attr!.specialist).toBe("devops");
+    expect(attr!.hasAdoptionPrompt).toBe(true);
+    expect(attr!.hasValidDefinition).toBe(false);
+    expect(isPersonaStrippedDispatch(attr!)).toBe(true);
+  });
+
+  it("(b) a role-bearing producer marker on a HOST-GENERIC dispatch is a class mismatch — blocked", () => {
+    // Producer contract (inprocess-backend.ts + team-prompt.ts + execute-plan
+    // step (2c)): the host-generic subagent_type is reserved for PROJECT
+    // specialists, whose line 1 is the GUILD_AGENT_DEFINITION marker. A
+    // `GUILD_DISPATCH_PRODUCER … role=` line 1 belongs to the by-name
+    // shipped/orchestrator class, so its appearance on a `general-purpose`
+    // dispatch means the lane claims a Guild persona with no adoption proof —
+    // the drift `hasProseSignature` used to catch, now caught structurally.
+    const attr = resolveDispatchAttribution({
+      subagent_type: GENERIC_SUBAGENT_TYPE,
+      prompt: "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=backend\nDo the lane.",
+      env: { GUILD_RUN_ID: "run-x", GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1" },
+    });
+    expect(attr!.specialist).toBe("backend");
+    expect(attr!.isSpecialistLane).toBe(true);
+    expect(isPersonaStrippedDispatch(attr!)).toBe(true);
+  });
 
   it("(a) ignores stray legacy anchor text once the GUILD_AGENT_DEFINITION line-1 marker resolves identity", () => {
     // The marker says "devops"; a stray legacy-shaped sentence later in the
@@ -442,20 +551,22 @@ describe("resolveDispatchAttribution", () => {
     expect(isPersonaStrippedDispatch(attr!)).toBe(false);
   });
 
-  it("(b) still attributes via the legacy anchor when NO line-1 marker is present (unmarked direct-subagent rung)", () => {
-    // Simulates guild:execute-plan's direct `subagent` rung (agent-team-launcher.ts
-    // hands this rung's Agent() construction to the skill with no descriptor —
-    // no GUILD_DISPATCH_PRODUCER env, no line-1 marker) but a correctly-carried
-    // GUILD_AGENT_DEFINITION. This is the one path rf-wi-06 has not yet marked;
-    // the legacy parse must keep attributing it until that lands.
+  it("(b) the MARKED direct-subagent rung with a correctly-carried definition PASSES", () => {
+    // guild:execute-plan's direct `subagent` rung, post-rf-wi-06: the skill
+    // stamps the line-1 marker and the definition env itself
+    // (SKILL.md §"Capability-scope env injection" steps (2b)/(2c)), so the rung
+    // is attributable without any prose parsing.
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
+        "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n" +
         "You are the `devops` teammate for run-id `run-x`. Your role definition is at " +
         "`.guild/agents/devops.md` — read it FIRST and adopt it fully.",
       env: {
         GUILD_RUN_ID: "run-x",
         GUILD_TASK_ID: "wi-1",
+        GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
+        GUILD_SPECIALIST: "devops",
         GUILD_AGENT_DEFINITION: ".guild/agents/devops.md",
       },
     });
@@ -465,42 +576,11 @@ describe("resolveDispatchAttribution", () => {
     expect(isPersonaStrippedDispatch(attr!)).toBe(false);
   });
 
-  it("(b) still attributes via the legacy prose signature when NO line-1 marker is present", () => {
-    const attr = resolveDispatchAttribution({
-      subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt: "You are dispatched as the Guild backend specialist for lane wi-7.",
-      env: { GUILD_RUN_ID: "run-x" },
-    });
-    expect(attr!.specialist).toBe("backend");
-    expect(attr!.isSpecialistLane).toBe(true);
-  });
-
-  it("(b) still BLOCKS a persona-stripped unmarked direct-subagent dispatch (the exact drift this fallback exists to catch)", () => {
-    // Same rung as above, but the definition env was never set — the real
-    // defect the legacy anchor parse protects against on this not-yet-marked
-    // rung: prose claims a persona with no GUILD_AGENT_DEFINITION to back it.
-    const attr = resolveDispatchAttribution({
-      subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt:
-        "You are the `devops` teammate for run-id `run-x`. Your role definition is at " +
-        "`.guild/agents/devops.md` — read it FIRST and adopt it fully.",
-      env: { GUILD_RUN_ID: "run-x", GUILD_TASK_ID: "wi-1" },
-    });
-    expect(attr!.specialist).toBe("devops");
-    expect(attr!.hasValidDefinition).toBe(false);
-    expect(isPersonaStrippedDispatch(attr!)).toBe(true);
-  });
-
-  it("(c) a REJECTED marker attempt on a NON-generic (by-name) dispatch is an accepted, security-inert residual", () => {
-    // Adversarial review (rf-wi-07c rounds 1-4): gating on env/prefix evidence
-    // to close this exactly reopened WORSE gaps (rounds 3 and 4 — see the
-    // gating doc above `hasProjectMarker`/`hasAnyMarker` for the full
-    // round-by-round tradeoff), so this is now a deliberately ACCEPTED
-    // residual rather than "fixed": a rejected marker attempt on a dispatch
-    // that is dispatched BY NAME (non-generic) may still have its
-    // `specialist` telemetry field resolved from unrelated legacy prose. This
-    // never affects a security decision — `isGeneric` is false, so
-    // `dispatchViolations` returns `[]` regardless of `specialist`.
+  it("(c) a REJECTED marker attempt now yields NO attribution at all (the legacy-prose residual is gone)", () => {
+    // Pre-rf-wi-06 this dispatch's `specialist` was resolved from the unrelated
+    // legacy sentence below the malformed marker — an accepted-but-untidy
+    // residual (security-inert only because `isGeneric` is false). With prose
+    // parsing deleted, a whole-line-rejected marker leaves nothing behind.
     const attr = resolveDispatchAttribution({
       subagent_type: "advisor",
       prompt:
@@ -509,20 +589,22 @@ describe("resolveDispatchAttribution", () => {
       env: { GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1" },
     });
     expect(attr!.isGeneric).toBe(false);
+    expect(attr!.specialist).toBeUndefined();
     expect(isPersonaStrippedDispatch(attr!)).toBe(false);
   });
 
-  it("(c) a GENERIC dispatch with a valid env producer-marker TOKEN but no role-bearing carrier still BLOCKS via the legacy anchor (round 3)", () => {
-    // Adversarial review round 3: env carrying a validly-formed
-    // GUILD_DISPATCH_PRODUCER TOKEN (which names no role) must NOT gate off
-    // the legacy anchor on its own — GUILD_SPECIALIST/GUILD_AGENT_DEFINITION
-    // were stripped, so the env token is the only non-legacy signal and it
-    // carries no identity. Suppressing the anchor here would leave the #58
-    // guard with NOTHING and silently PASS a persona-stripped dispatch it
-    // must BLOCK. Matches the origin/rf/wi-03-tier-env baseline byte-for-byte.
+  it("(c) a GENERIC dispatch whose role-bearing carriers were stripped still BLOCKS via the line-1 marker", () => {
+    // The rf-wi-07c round-3/round-5 shape, restated on marked carriers:
+    // GUILD_SPECIALIST/GUILD_AGENT_DEFINITION stripped, leaving a role-bearing
+    // line-1 marker on a host-generic dispatch. That is a class mismatch (the
+    // generic type is reserved for project specialists, whose line 1 is the
+    // GUILD_AGENT_DEFINITION marker), so it is denied — the protection the
+    // deleted prose signature used to provide, now structural.
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt: "Your role definition is at `.guild/agents/frontend.md` — read it FIRST and adopt it.",
+      prompt:
+        "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=frontend\n" +
+        "Do the lane.",
       env: {
         GUILD_RUN_ID: "run-x",
         GUILD_TASK_ID: "wi-1",
@@ -531,72 +613,37 @@ describe("resolveDispatchAttribution", () => {
     });
     expect(attr!.specialist).toBe("frontend");
     expect(attr!.isSpecialistLane).toBe(true);
+    expect(attr!.hasAdoptionPrompt).toBe(false);
     expect(attr!.hasValidDefinition).toBe(false);
     expect(isPersonaStrippedDispatch(attr!)).toBe(true);
   });
 
-  it("(c) a VALID producer marker (non-project class) does NOT gate off the legacy anchor (a different class) — still BLOCKS (round 4)", () => {
-    // Adversarial review round 4: a role-bearing, VALIDLY-PARSED
-    // GUILD_DISPATCH_PRODUCER line-1 marker (the shipped/orchestrator class)
-    // must not suppress `anchorRole` (the project-specialist class) — the two
-    // markers serve DIFFERENT purposes and their co-occurrence on one
-    // dispatch, with GUILD_SPECIALIST/GUILD_AGENT_DEFINITION stripped, is
-    // itself the corrupted/mixed-class shape the guard exists to catch.
+  it("(c) a GENERIC dispatch carrying ONLY the role-less env producer TOKEN is not a lane (no identity claimed)", () => {
+    // The env token names no role and the prompt claims no persona, so there is
+    // nothing to be stripped OF — this is a producer-composed fan-out, not a
+    // specialist lane. Blocking it would deny legitimate non-lane dispatches.
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt:
-        "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=frontend\n" +
-        "Your role definition is at `.guild/agents/frontend.md` — read it FIRST and adopt it.",
-      env: { GUILD_TASK_ID: "wi-1", GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1" },
-    });
-    expect(attr!.specialist).toBe("frontend");
-    expect(attr!.isSpecialistLane).toBe(true);
-    expect(attr!.hasAdoptionPrompt).toBe(true);
-    expect(attr!.hasValidDefinition).toBe(false);
-    expect(isPersonaStrippedDispatch(attr!)).toBe(true);
-  });
-
-  it("(c) prose's LANE-SIGNATURE role survives even when a marker gates its IDENTITY role (round 5)", () => {
-    // Adversarial review round 5, found independently of rounds 1-4 (no
-    // malformed marker, no env-only evidence, no cross-class anchor): a valid
-    // role-bearing producer marker (`producerMarkerRoleValue`) correctly
-    // suppresses `proseRole` as an IDENTITY source (round 4's fix — redundant/
-    // possibly-conflicting legacy prose shouldn't also feed `specialist`), but
-    // it must NOT suppress `hasProseSignature` — the prose is still a LANE
-    // SIGNATURE that `isSpecialistLane` depends on. Without it, a
-    // `general-purpose` dispatch with `GUILD_SPECIALIST`/`GUILD_AGENT_DEFINITION`
-    // stripped (leaving only the role-less producer TOKEN) and prose claiming a
-    // specialist persona had NO other signal to make `isSpecialistLane` true —
-    // a silent pass the pre-G7c baseline caught via `missing_definition` +
-    // `missing_adoption_prompt`.
-    const attr = resolveDispatchAttribution({
-      subagent_type: GENERIC_SUBAGENT_TYPE,
-      prompt:
-        "GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=frontend\n" +
-        "You are dispatched as the Guild frontend specialist for lane wi-1.",
+      prompt: "Analyse this subtree and return a CodebaseMap fragment.",
       env: {
         GUILD_RUN_ID: "run-x",
         GUILD_TASK_ID: "wi-1",
         GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
       },
     });
-    expect(attr!.specialist).toBe("frontend");
-    expect(attr!.isSpecialistLane).toBe(true);
-    expect(attr!.hasValidDefinition).toBe(false);
-    expect(isPersonaStrippedDispatch(attr!)).toBe(true);
+    expect(attr!.specialist).toBeUndefined();
+    expect(attr!.isSpecialistLane).toBe(false);
+    expect(isPersonaStrippedDispatch(attr!)).toBe(false);
   });
 
-  it("(c) GUILD_AGENT_DEFINITION env alone (no marker) does NOT gate off the legacy anchor — drift is still caught", () => {
-    // The gate is narrowly about MARKER evidence, not "any Guild env carrier":
-    // a GUILD_AGENT_DEFINITION env with no line-1 marker is exactly the
-    // not-yet-marker-covered shape (env def says "devops"; the legacy anchor
-    // text elsewhere disagrees, naming "frontend") — the legacy anchor must
-    // still fire so the mismatch is caught, not silently swallowed.
+  it("(c) the line-1 marker and the definition env disagreeing is still caught as drift", () => {
+    // env def says "devops"; the producer-owned line 1 says "frontend" — the
+    // lane would adopt the wrong persona.
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
-        "You are the `devops` teammate for run-id `run-x`. Your role definition is at " +
-        "`.guild/agents/frontend.md` — read it FIRST and adopt it.",
+        "GUILD_AGENT_DEFINITION=.guild/agents/frontend.md\n" +
+        "You are the `devops` teammate for run-id `run-x`.",
       env: {
         GUILD_RUN_ID: "run-x",
         GUILD_TASK_ID: "wi-1",
@@ -607,24 +654,26 @@ describe("resolveDispatchAttribution", () => {
     expect(isPersonaStrippedDispatch(attr!)).toBe(true);
   });
 
-  it("(c) a REJECTED GUILD_AGENT_DEFINITION marker attempt with NO backing env falls through to the legacy anchor (matches pre-G7c behavior, still fail-closed)", () => {
-    // Adversarial review (rf-wi-07c round 2): the SAME malformed line-1 marker
-    // as above, but with NO env evidence of producer composition at all — the
-    // direct-subagent D5 rung's exact unmarked shape. Here the legacy anchor
-    // MUST still fire (matching the pre-G7c baseline byte-for-byte): the
-    // dispatch is attributed to "frontend" (from the later legacy sentence)
-    // and, with no GUILD_AGENT_DEFINITION to back it, still BLOCKED as
-    // persona-stripped — never silently passed with zero attribution.
+  it("(c) a REJECTED GUILD_AGENT_DEFINITION marker attempt on a COMPOSED lane still fails closed", () => {
+    // The line-1 marker is malformed (trailing junk ⇒ whole line rejected), so
+    // it supplies no adoption proof. The composed-lane env pair
+    // (GUILD_SPECIALIST + GUILD_TASK_ID) still marks this as a lane, so the
+    // missing adoption prompt is caught rather than silently passed.
     const attr = resolveDispatchAttribution({
       subagent_type: GENERIC_SUBAGENT_TYPE,
       prompt:
         "GUILD_AGENT_DEFINITION=.guild/agents/devops.md trailing junk\n" +
-        "Your role definition is at `.guild/agents/frontend.md` — read it FIRST and adopt it.",
-      env: { GUILD_RUN_ID: "run-x", GUILD_TASK_ID: "wi-1" },
+        "Do the lane.",
+      env: {
+        GUILD_RUN_ID: "run-x",
+        GUILD_TASK_ID: "wi-1",
+        GUILD_SPECIALIST: "devops",
+        GUILD_AGENT_DEFINITION: ".guild/agents/devops.md",
+      },
     });
-    expect(attr!.specialist).toBe("frontend");
+    expect(attr!.specialist).toBe("devops");
     expect(attr!.isSpecialistLane).toBe(true);
-    expect(attr!.hasValidDefinition).toBe(false);
+    expect(attr!.hasAdoptionPrompt).toBe(false);
     expect(isPersonaStrippedDispatch(attr!)).toBe(true);
   });
 });

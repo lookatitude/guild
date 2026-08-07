@@ -173,12 +173,75 @@ For each round (1-indexed, up to `codex_cap`):
 1. Read the artifact at `artifact_path`.
 2. Build the adversarial prompt (see `## Adversarial prompt`).
 3. Dispatch: `Agent({ subagent_type: "codex:codex-rescue", prompt: <adversarial_prompt> })`.
-4. Parse Codex's response for the sentinel `## SATISFIED` on its own line (exact match, trimmed).
-5. Append round result to trail file `.guild/runs/<run-id>/codex-review/<gate>.md`.
-6. Emit `codex_review_round` event to `.guild/runs/<run-id>/logs/v1.4-events.jsonl` (see `## Telemetry`).
-7. If sentinel found → return `status: "satisfied"`.
-8. If round equals `codex_cap` → escalate (see `## Cap handling`).
-9. Otherwise → continue to next round, passing prior trail as context.
+4. Classify the dispatch result as VERDICT-LESS or REVIEWED — see
+   `## Verdict-less rounds` for the deterministic predicate. A verdict-less
+   round runs the bounded retry there and, if still verdict-less, terminates
+   the loop with `status: "no_verdict"`.
+5. Parse Codex's response for the sentinel `## SATISFIED` on its own line (exact match, trimmed).
+6. Append round result to trail file `.guild/runs/<run-id>/codex-review/<gate>.md`.
+7. Emit exactly ONE `codex_review_round` event per LOGICAL round to
+   `.guild/runs/<run-id>/logs/v1.4-events.jsonl`, after step 4's retry (if any)
+   has resolved — never one per transport attempt (see `## Telemetry`).
+8. If sentinel found → return `status: "satisfied"`.
+9. If round equals `codex_cap` → escalate (see `## Cap handling`).
+10. Otherwise → continue to next round, passing prior trail as context.
+
+## Verdict-less rounds
+
+A round is **VERDICT-LESS** when the dispatch produced no reviewable response at
+all. This is decided by a DETERMINISTIC predicate on the transport result, never
+by judging how substantive the prose looks:
+
+- the `Agent(...)` dispatch threw, timed out, or returned no content; **or**
+- the response is empty or whitespace-only; **or**
+- the provider declined to answer — the response is a provider-level refusal or
+  error envelope rather than a review (e.g. a `cybersecurity risk` /
+  `can't help with that` classifier message, or an `ERROR:`-prefixed transport
+  failure), carrying no assessment of the artifact.
+
+**Everything else is a REVIEWED round, including a rejection with no bullet
+list.** A response such as *"I cannot approve this because criterion X is
+missing"* IS a verdict — it assesses the artifact — and is handled as an
+ordinary non-satisfied round (continue, or escalate at cap). Prose that is
+merely terse, unstructured, or hard to parse is NEVER verdict-less. This
+deliberately matches the malformed-sentinel rule below: when in doubt the round
+is non-terminated and the loop continues. Erring the other way would let a
+substantive rejection exit the gate as `no_verdict` — an escape hatch.
+
+**Bounded retry — at most two transport attempts per logical round, no
+recursion:**
+
+1. Attempt 1 dispatches the round's prompt. If it is REVIEWED, the round
+   proceeds at step 5 above; the retry never runs.
+2. If attempt 1 is VERDICT-LESS: record the refusal verbatim in the trail, then
+   run attempt 2 ONCE with the SAME review request reframed — describe what the
+   component does and must not do, rather than enumerating attack
+   constructions. (Observed cause: a prompt reading as an attack catalogue trips
+   a provider's cyber-risk classifier when the artifact is security or scoping
+   code.)
+3. Classify attempt 2 by the same predicate. If REVIEWED, the round proceeds
+   normally — the reframed attempt IS the round's result, and the round counter
+   does not advance.
+4. If attempt 2 is also VERDICT-LESS, return `status: "no_verdict"`
+   immediately. Do not attempt a third time, do not advance the round counter,
+   and do not fall through to the cap escalation in step 9.
+
+**Terminal-disposition rule.** `satisfied` is the ONLY status meaning Codex
+reviewed the artifact and raised nothing. The others are not interchangeable:
+`cap_hit` / `cap_pushback` / `cap_verify` all assert substantive review happened
+and reached the cap; `skipped` asserts Codex was unavailable; `no_verdict`
+asserts the review never produced a judgement at all. Never report a
+verdict-less round as any cap status or as `satisfied` — a caller reading a cap
+status will believe the artifact was scrutinized N times.
+
+**Trail + broker disposition.** A `no_verdict` gate writes
+`final_status: no-verdict` verbatim in the trail. Like a bare `cap_hit`, that
+value is NOT in the validator's clean set, so it DELIBERATELY fails
+`scripts/verify-codex-review-trail.ts` as an audit exception — the gate did not
+clear and the trail says so. `guild:review-broker` must treat an adapter
+`no_verdict` as a non-clearing outcome that never resolves the gate (see that
+skill's `## Broker action by status`); it is specifically NOT mapped to the
+broker's `skipped`, which can legitimately continue the lifecycle.
 
 ## Adversarial prompt
 
@@ -263,7 +326,11 @@ type CodexReviewOutput = {
   // cap_hit remains the UN-audited cap exception (fails the trail validator).
   status:
     | "satisfied" | "skipped" | "cap_hit" | "force_passed" | "extended" | "rework"
-    | "cap_pushback" | "cap_verify";
+    | "cap_pushback" | "cap_verify"
+    // no_verdict: the review never produced a judgement (provider refusal,
+    // dispatch error, empty response) — see §Verdict-less rounds. Trail writes
+    // final_status: no-verdict, an audit exception like a bare cap_hit.
+    | "no_verdict";
   gate: string;
   rounds: number;               // total rounds executed
   trail_path: string;           // .guild/runs/<run-id>/codex-review/<gate>.md

@@ -1,6 +1,7 @@
 export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
 
 export * from "./workflows/specialist-contract";
+export * from "./workflows/shadow-routing";
 export * from "./workflows/task-cell-contract";
 
 // MH-04 execution transports (`guild.execution.transports.v1`). Exported here

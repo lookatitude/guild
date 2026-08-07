@@ -1,10 +1,10 @@
 {
   "schema_version": "guild.inventory.v1",
   "generated_at": "1970-01-01T00:00:00.000Z",
-  "plugin_version": "2.5.0",
+  "plugin_version": "2.6.0",
   "manifest": {
     "name": "guild",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
@@ -90,6 +90,11 @@
       "id": "migrate",
       "source_path": "commands/migrate.md",
       "description": "v1→v2 .guild converter — detect, snapshot, and convert a v1 .guild/ directory to v2 layout. Default mode is dry-run (safe: prints the plan; writes nothing except the migration report file — CF-W1c-1). Dispatches to the migrate-guild.ts CLI."
+    },
+    {
+      "id": "models",
+      "source_path": "commands/models.md",
+      "description": "Routing inspection — `models inspect` prints this run's model-routing evidence: identity trust, target evidence, catalog age + per-model evidence_state, policy rule path, selected model/effort, frozen fallbacks, actual model, review independence, and degradation. READ-ONLY (writes nothing) with honest unknowns: an unbindable field prints as `unknown`, never a guess. Delegates every judgement to the canonical inspection service; the rendered output is scrubbed through Guild's canonical redaction applier and the command fails closed rather than print a secret."
     },
     {
       "id": "ops",
@@ -509,7 +514,7 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "tier": "meta",
-      "description": "Match spec domains against the consuming repo's project specialists (`.guild/agents/*.md`, reused never re-created) AND Guild's shipped specialist TYPE templates (`templates/specialists/*.md` — a matched template is deterministically minted into `.guild/agents/` via roster-resolve mint); present existing + gaps with A/B/C/D options, enforce cap-6 and default 3–4 rules, assign each specialist a `default_tier` from its `model:` frontmatter (canonical roster ADR), derive an optional per-specialist `capability_scope:` (tool allow-list; absent ⇒ no scoping — additive) using the role→scope defaults table, resolve the execution backend via the agent_mode ladder (agent-team / tmux visible panes under tmux; subagent only as the no-tmux fallback), and write the per-phase `.guild/team/<slug>.<phase>.yaml` (per phase). TRIGGER on \"propose a team\", \"who should work on this\", \"compose specialists for the spec\", \"compose this phase's team\". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (that's guild:create-specialist in P6), reviewing completed work (guild:review)."
+      "description": "Match spec domains against the consuming repo's project specialists (`.guild/agents/*.md`, reused never re-created) AND Guild's shipped specialist TYPE templates (minted into `.guild/agents/` via roster-resolve mint); present existing + gaps with A/B/C/D options, propose the FULL justified logical team — task-derived, UNCAPPED, with necessity rationale + excluded roles (`guild.team_proposal.v2`) — then WAIT at the `guild.team_decision.v1` user gate (approve / restructure: add, remove, substitute, edit dependencies) before any dispatch, assign each specialist a `default_tier` from its frontmatter, derive an optional `capability_scope:` (absent ⇒ no scoping), and write the per-phase `.guild/team/<slug>.<phase>.yaml`. TRIGGER on \"propose a team\", \"who should work on this\", \"compose specialists for the spec\", \"compose this phase's team\". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (guild:create-specialist), reviewing completed work (guild:review)."
     },
     {
       "id": "guild-verify-done",
@@ -2065,6 +2070,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/run-binding",
+      "source_path": "scripts/lib/run-binding.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/run-events",
       "source_path": "scripts/lib/run-events.ts",
       "kind": "lib"
@@ -2102,6 +2112,11 @@
     {
       "id": "lib/self-update",
       "source_path": "scripts/lib/self-update.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/session-context",
+      "source_path": "scripts/lib/session-context.ts",
       "kind": "lib"
     },
     {
@@ -2200,6 +2215,11 @@
       "kind": "cli"
     },
     {
+      "id": "models-cmd",
+      "source_path": "scripts/models-cmd.ts",
+      "kind": "cli"
+    },
+    {
       "id": "oq11-gate-check",
       "source_path": "scripts/oq11-gate-check.ts",
       "kind": "cli"
@@ -2282,6 +2302,11 @@
     {
       "id": "sync-module-resources",
       "source_path": "scripts/sync-module-resources.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "team-decide",
+      "source_path": "scripts/team-decide.ts",
       "kind": "cli"
     },
     {

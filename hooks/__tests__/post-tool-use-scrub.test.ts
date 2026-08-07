@@ -23,6 +23,11 @@ import * as os from "os";
 
 const SCRIPT = path.resolve(__dirname, "../post-tool-use.ts");
 const RUN = "run-ptu-scrub-test";
+
+// T3b (session_context §5): run-dir writes are binding-gated; fixtures mint
+// the run's binding. hermeticEnv strips any outer Guild-lane env.
+import { mintTestBinding } from "../test-support/mint-binding";
+import { hermeticEnv } from "../test-support/hermetic-env";
 const FAKE_SECRET = "sk-ant-FAKESECRETVALUE1234567890";
 const INVALID_REGEX = "[unclosed-bracket-regex";
 
@@ -40,6 +45,7 @@ function setup(): { tmp: string; guildRoot: string; runDir: string } {
     RUN,
     "utf8",
   );
+  mintTestBinding(tmp, RUN);
   return { tmp, guildRoot: tmp, runDir };
 }
 
@@ -71,9 +77,10 @@ function spawnHook(
     input: JSON.stringify(payload),
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...hermeticEnv(),
       GUILD_CWD: tmp,
       GUILD_RUN_ID: RUN,
+      GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
     },
     timeout: 30000,
   });
@@ -350,7 +357,7 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
           input: JSON.stringify(payload),
           encoding: "utf8",
           env: {
-            ...process.env,
+            ...hermeticEnv(),
             GUILD_CWD: freshTmp,
             // Explicitly unset GUILD_RUN_ID and GUILD_RUN_DIR
             GUILD_RUN_ID: "",

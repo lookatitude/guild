@@ -6,11 +6,14 @@
   "implementation_mode": "workflow-backed",
   "description": "Transports prompts to Agent, tmux, in-process, remote, and deferred execution backends.",
   "depends_on": [
+    "capability",
     "communication",
     "host-runtime",
     "lifecycle",
     "prompting",
-    "state"
+    "review",
+    "state",
+    "teams"
   ],
   "owns": {
     "skills": [

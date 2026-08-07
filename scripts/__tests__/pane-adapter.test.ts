@@ -219,7 +219,16 @@ describe("CodexPaneAdapter", () => {
 
   it("env reports only the run id (no team gate)", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
-    expect(adapter.env(spec({ hostKind: "codex" }))).toEqual({ GUILD_RUN_ID: "run-001", GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1" });
+    // ISSUE #94: the codex host identity ships with every codex pane so the
+    // PreToolUse bridge resolves the codex capability row (which has no `ask`
+    // primitive) instead of defaulting to Claude and emitting an ask codex
+    // cannot honour. Still no team gate.
+    expect(adapter.env(spec({ hostKind: "codex" }))).toEqual({
+      GUILD_RUN_ID: "run-001",
+      GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
+      GUILD_HOST: "codex-cli",
+      GUILD_HOST_ID: "codex-cli",
+    });
   });
 
   // G-9 / C2-D1: env parity — Codex lane panes also export GUILD_SPECIALIST.
@@ -336,7 +345,13 @@ describe("CodexPaneAdapter", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
     const e = adapter.env(spec({ hostKind: "codex" })); // no taskId
     expect(e).not.toHaveProperty("GUILD_TASK_ID");
-    expect(e).toEqual({ GUILD_RUN_ID: "run-001", GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1" });
+    expect(e).toEqual({
+      GUILD_RUN_ID: "run-001",
+      GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
+      // ISSUE #94 — codex host identity, see the env-parity test above.
+      GUILD_HOST: "codex-cli",
+      GUILD_HOST_ID: "codex-cli",
+    });
   });
 });
 

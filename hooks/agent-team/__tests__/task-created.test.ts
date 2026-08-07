@@ -14,6 +14,11 @@ import * as os from "os";
 const SCRIPT = path.resolve(__dirname, "../task-created.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 
+// T3b (session_context §5): run-state seeding is binding-gated; fixtures mint
+// the run's binding. hermeticEnv strips outer Guild-lane env.
+import { mintTestBinding } from "../../test-support/mint-binding";
+import { hermeticEnv } from "../../test-support/hermetic-env";
+
 function runScript(
   fixtureFile: string,
   env: Record<string, string> = {}
@@ -22,7 +27,7 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...hermeticEnv(), ...env },
     timeout: 15000,
   });
   return {
@@ -39,7 +44,7 @@ function runScriptWithPayload(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input: payloadStr,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...hermeticEnv(), ...env },
     timeout: 15000,
   });
   return {
@@ -139,9 +144,12 @@ describe("task-created.ts", () => {
         team_name: "guild-team",
       });
 
+      // Rework F1: the run-state write demands the caller-PRESENTED pair.
+      const ref = mintTestBinding(tmpDir, runId);
       const { exitCode, stderr } = runScriptWithPayload(payload, {
         CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
         GUILD_RUN_ID: runId,
+        GUILD_RUN_BINDING_REF: ref,
       });
 
       expect(exitCode).toBe(0);
@@ -157,7 +165,11 @@ describe("task-created.ts", () => {
       expect(state.lanes[taskId].status).toBe("in_progress");
     });
 
-    it("falls back to run-<session_id> when GUILD_RUN_ID is unset", () => {
+    it("does NOT fabricate a run-<session_id> run when GUILD_RUN_ID is unset (T3b §5: fail closed, no write)", () => {
+      // CORRECTED (T3b): the session_id-derived run dir was a fabricated write
+      // identity with no minted binding. Under session_context §5 the seeding
+      // write is refused: exit stays 0 (validation still passed; a hook never
+      // blocks dispatch on a trace write) but no run-state lands anywhere.
       const sessionId = "sess-fallback";
       const taskId = "task-102";
       const payload = JSON.stringify({
@@ -171,8 +183,8 @@ describe("task-created.ts", () => {
         team_name: "guild-team",
       });
 
-      // Explicitly delete GUILD_RUN_ID from env so the fallback fires.
-      const envWithoutRunId = { ...process.env, CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" };
+      // Explicitly delete GUILD_RUN_ID from env so no explicit binding exists.
+      const envWithoutRunId = { ...hermeticEnv(), CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" };
       delete envWithoutRunId["GUILD_RUN_ID"];
       const result = spawnSync("npx", ["tsx", SCRIPT], {
         input: payload,
@@ -187,9 +199,7 @@ describe("task-created.ts", () => {
       const runStateFile = path.join(
         tmpDir, ".guild", "runs", `run-${sessionId}`, "run-state.json"
       );
-      expect(fs.existsSync(runStateFile)).toBe(true);
-      const state = JSON.parse(fs.readFileSync(runStateFile, "utf8"));
-      expect(state.lanes[taskId].status).toBe("in_progress");
+      expect(fs.existsSync(runStateFile)).toBe(false);
     });
 
     it("exits 0 even when run-state write fails (non-fatal: bad cwd)", () => {

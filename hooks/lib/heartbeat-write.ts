@@ -13,6 +13,12 @@
  *   - Fires ONLY when env GUILD_RUN_ID and GUILD_SPECIALIST are BOTH set
  *     (the dispatch path exports them per lane). When either is absent the
  *     call is near-zero-cost: two env reads, no fs touch.
+ *   - T3b rework F2: the write additionally requires the COMPLETE verified
+ *     hook binding envelope (GUILD_RUN_ID + GUILD_RUN_BINDING_REF, verified
+ *     via authorizeHookWrite against the run's minted binding) BEFORE any
+ *     filesystem touch — absent/blank/closed/mismatched refs refuse with
+ *     reason "binding_rejected:<reason>" and create no heartbeat and no
+ *     temp file. GUILD_RUN_ID + GUILD_SPECIALIST alone never authorize.
  *   - Record shape mirrors EXACTLY what readHeartbeat() parses:
  *       { timestamp: <ISO now>, step: env GUILD_STEP || null,
  *         last_action: <tool_name from the hook payload> }
@@ -30,6 +36,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "./guild-root.js";
 import { heartbeatPath } from "./heartbeat.js";
+import { authorizeHookWrite, type HookWriteAuth } from "./hook-binding.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -72,12 +79,25 @@ function isSafePathComponent(id: string): boolean {
  * `<runDir>/in-progress/<specialist>.json` (temp sibling + rename — rename
  * is atomic on a single filesystem, so readers never see a partial file).
  * Throws on I/O failure — writeHeartbeatFromEnv wraps it fail-open.
+ *
+ * T3b rework F2: accepts ONLY a pre-verified HookWriteAuth — a non-ok
+ * verdict throws before any fs touch, so no caller can reach the atomic
+ * writer without the run's verified binding envelope.
  */
 export function writeHeartbeat(
+  auth: HookWriteAuth,
   runDir: string,
   specialist: string,
   record: HeartbeatWriteRecord
 ): string {
+  // `!== true` literal comparison — the test runners compile non-strict,
+  // where truthiness narrowing of a boolean discriminant does not apply.
+  if (auth.ok !== true) {
+    throw new Error(
+      `binding_rejected (${auth.reason}): heartbeat write refused for run ` +
+        `${auth.run_id ?? "<unresolved>"} — no verified binding envelope.`
+    );
+  }
   const finalPath = heartbeatPath(runDir, specialist);
   fs.mkdirSync(path.dirname(finalPath), { recursive: true });
   const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random()
@@ -112,8 +132,10 @@ export interface WriteHeartbeatFromEnvOpts {
 
 /**
  * G-9: write the structured heartbeat when (and only when) GUILD_RUN_ID and
- * GUILD_SPECIALIST are both set. Resolution of the run dir mirrors
- * post-tool-use.ts: GUILD_RUN_DIR wins; else
+ * GUILD_SPECIALIST are both set AND the complete binding envelope
+ * (GUILD_RUN_ID + GUILD_RUN_BINDING_REF) verifies against the run's minted
+ * binding (T3b rework F2 — verified BEFORE any fs write). Resolution of the
+ * run dir mirrors post-tool-use.ts: GUILD_RUN_DIR wins; else
  * `<resolveGuildRoot(cwd)>/.guild/runs/<GUILD_RUN_ID>`.
  *
  * NEVER throws (fail-open by contract — a heartbeat failure must not break
@@ -137,16 +159,24 @@ export function writeHeartbeatFromEnv(
       return { written: false, path: null, reason: "unsafe-id" };
     }
 
+    // T3b rework F2: verify the COMPLETE binding envelope before the run-dir
+    // path is even computed. The nonce must be caller-presented in the env
+    // (GUILD_RUN_BINDING_REF) and verify against the run's minted binding —
+    // GUILD_RUN_ID + GUILD_SPECIALIST alone never authorize a write.
+    const root = resolveGuildRoot(opts.cwd ?? process.cwd());
+    const auth = authorizeHookWrite(root, {
+      runId,
+      env: env as Record<string, string | undefined>,
+    });
+    if (auth.ok !== true) {
+      return { written: false, path: null, reason: `binding_rejected:${auth.reason}` };
+    }
+
     const envRunDir = env["GUILD_RUN_DIR"];
     const runDir =
       typeof envRunDir === "string" && envRunDir.length > 0
         ? envRunDir
-        : path.join(
-            resolveGuildRoot(opts.cwd ?? process.cwd()),
-            ".guild",
-            "runs",
-            runId
-          );
+        : path.join(root, ".guild", "runs", runId);
 
     const step = env["GUILD_STEP"];
     const record: HeartbeatWriteRecord = {
@@ -158,7 +188,7 @@ export function writeHeartbeatFromEnv(
           : null,
     };
 
-    const finalPath = writeHeartbeat(runDir, specialist, record);
+    const finalPath = writeHeartbeat(auth, runDir, specialist, record);
     return { written: true, path: finalPath, reason: null };
   } catch (err) {
     // Fail-open: report, never throw.

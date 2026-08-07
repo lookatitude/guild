@@ -11,6 +11,7 @@ import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
 import { buildPrompt } from "../../../src/modules/prompting/workflows/team-prompt";
 import type {
   AdapterResolver,
+  PaneAdapter,
   LaunchMode,
   ParsedTmuxCommand,
   PaneSpec,
@@ -24,6 +25,8 @@ import type {
 } from "../core/contracts/team-backend";
 import {
   defaultRun,
+  dispatchModelForSpecialist,
+  dispatchModelParamsForSpecialist,
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
 } from "../core/contracts/team-backend";
@@ -92,7 +95,8 @@ export function isDebugShellTitle(title: string): boolean {
 // team pane adds no safety, only a stall.
 //
 // Scope, deliberately narrow: this overlay is wired ONLY inside
-// composeTmuxCommands below — for EVERY Claude pane it builds, whether or not
+// composeTmuxCommands below — for EVERY Claude pane it builds (and, since issue
+// #94, for a codex pane through its own separate resolver), whether or not
 // `resolveAdapter` is wired for other (non-Claude) panes in the same local
 // team. composeTmuxCommands is exclusively the LOCAL tmux path
 // (`TmuxTeamBackend.plan()`); `RemoteTeamBackend` (remote-backend.ts) owns an
@@ -112,7 +116,13 @@ export function isDebugShellTitle(title: string): boolean {
 //     (bypassing the bare adapter) — so the permission-mode flag reaches a
 //     remote pane exclusively behind the proven Guild-side guardrail. A host
 //     that fails the preflight still launches bare (recorded, never silent).
-//   - Codex is never touched here at all (see resolveClaudeTeamLaunchArgs).
+//   - Codex WAS never touched here. Issue #94 changed that: now that a codex
+//     pane's PreToolUse deny is wired and probe-verified, composeTmuxCommands
+//     also resolves a codex pane's argv (resolveCodexTeamLaunchArgs, same
+//     permissionConfig ladder) and hands it to the adapter — which still
+//     withholds it unless the pane is scoped AND the probe passes. The two
+//     resolvers stay separate functions so neither can be asked for the other
+//     host's flags.
 
 /**
  * Resolve the host_mode a spawned team pane should launch under, given the
@@ -139,6 +149,24 @@ export function resolveClaudeTeamLaunchArgs(
   return resolveHostLaunch("claude", resolveTeamPaneHostMode(config)).args;
 }
 
+/**
+ * ISSUE #94 — the Codex launch argv for a local team pane, resolved from the
+ * SAME `host_mode` ladder as Claude's. Codex used to be excluded here on
+ * purpose: with no PreToolUse enforcement on that host, handing a codex pane a
+ * bypass flag was a net safety regression. Now that the deny bridge is wired,
+ * the exclusion is obsolete — but this function is only HALF the decision.
+ *
+ * Returning args does NOT mean a pane gets them. `CodexPaneAdapter` applies them
+ * only behind its own gates: an explicit opt-in (these args), a scoped pane, and
+ * a probe proving the deny actually executes. Whatever this resolves to, an
+ * unproven box still launches bare.
+ */
+export function resolveCodexTeamLaunchArgs(
+  config: RuntimePermissionConfig = RUNTIME_DEFAULT_CONFIG,
+): string[] {
+  return resolveHostLaunch("codex", resolveTeamPaneHostMode(config)).args;
+}
+
 export function paneCommand(
   prompt: string,
   runId: string,
@@ -157,6 +185,13 @@ export function paneCommand(
    * other caller (ClaudePaneAdapter/remote dispatch) stays untouched.
    */
   launchArgs: string[] = [],
+  /**
+   * T6-R2-F5: the evidenced-M2 selected model this pane must run at. Absent ⇒
+   * the emitted command is byte-identical to the pre-model one (no --model, no
+   * GUILD_MODEL export) — the flag-off path never changes a single byte. Rides
+   * ALONGSIDE `launchArgs` (#54): the final argv is `${launchFragment}${modelArg}`.
+   */
+  model?: string,
 ): string {
   const taskFragment =
     taskId !== undefined && taskId.length > 0
@@ -185,12 +220,21 @@ export function paneCommand(
   // into a shell for the operator.
   const launchFragment = launchArgs.length > 0 ? `${launchArgs.map(shellQuote).join(" ")} ` : "";
   const debugTitle = DEBUG_PANE_TITLE_PREFIX + (specialist !== undefined && specialist.length > 0 ? specialist : "orchestrator");
+  // T6-R2-F5: `claude --model <selected>` is what makes the M2 selection real —
+  // the pane process itself runs at the resolver's frozen model. No model ⇒ the
+  // invocation is exactly the legacy `claude '<prompt>'`.
+  const modelArg =
+    model !== undefined && model.length > 0 ? `--model ${shellQuote(model)} ` : "";
+  const modelFragment =
+    model !== undefined && model.length > 0
+      ? `export GUILD_MODEL=${shellQuote(model)}; `
+      : "";
   const teardownTail = debug
-    ? `claude ${launchFragment}${shellQuote(prompt)}; ` +
+    ? `claude ${launchFragment}${modelArg}${shellQuote(prompt)}; ` +
       `tmux select-pane -t "$TMUX_PANE" -T ${shellQuote(debugTitle)} 2>/dev/null || true; ` +
       `echo ${shellQuote("[GUILD_PANE_DEBUG] worker process exited — this is an operator debug shell, NOT a live worker.")}; ` +
       `exec $SHELL`
-    : `claude ${launchFragment}${shellQuote(prompt)}`;
+    : `claude ${launchFragment}${modelArg}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     // rf-wi-03 (G3) — the universal structured producer marker on every pane env,
@@ -203,6 +247,7 @@ export function paneCommand(
     assignmentFragment +
     statuslineFragment +
     scopeFragment +
+    modelFragment +
     teardownTail
   );
 }
@@ -237,6 +282,11 @@ export function composeTmuxCommands(opts: {
   const commandFor = (spec: Specialist | null): string => {
     const hostKind: HostKind = spec?.host_kind ?? orchestratorHostKind;
     const prompt = buildPrompt(slug, runId, spec, teamPath, hostKind);
+    // T6-R2-F5: an evidenced-M2 selection reaches the pane spawn HERE — both
+    // the adapter path and the legacy inline path. `null` on every lane whose
+    // provenance is legacy/shadow, so M0/M1 panes stay byte-identical.
+    const model = dispatchModelForSpecialist(spec) ?? undefined;
+    const modelParams = dispatchModelParamsForSpecialist(spec);
     // Issue #54: EVERY local Claude pane gets the resolved launch flags —
     // whether or not `resolveAdapter` is wired for OTHER (non-Claude) panes
     // in this same local team. composeTmuxCommands is exclusively the LOCAL
@@ -256,9 +306,39 @@ export function composeTmuxCommands(opts: {
         spec?.capability_scope,
         spec?.taskId,
         spec?.name,
-        undefined,
+        undefined, // keep paneCommand's own GUILD_PANE_DEBUG default
         resolveClaudeTeamLaunchArgs(permissionConfig),
+        model,
       );
+    }
+    // ISSUE #94: a codex pane's opt-in bypass argv is resolved HERE, from the
+    // same permissionConfig-driven host_mode ladder the claude branch above
+    // uses. The adapter still withholds it unless the pane is scoped AND its
+    // PreToolUse deny probe passes — see CodexPaneAdapter.command().
+    if (hostKind === "codex" && resolveAdapter) {
+      // Duck-typed rather than `instanceof CodexPaneAdapter`: pane-adapter.ts
+      // already imports `paneCommand` from this file, so importing its class
+      // back would close an import cycle for a one-line type test.
+      const adapter = resolveAdapter("codex") as PaneAdapter & {
+        withLaunchArgs?: (args: string[], projectCwd?: string) => PaneAdapter;
+      };
+      const codexAdapter =
+        typeof adapter.withLaunchArgs === "function"
+          ? adapter.withLaunchArgs(resolveCodexTeamLaunchArgs(permissionConfig), cwd)
+          : adapter;
+      return codexAdapter.command({
+        name: spec?.name ?? "orchestrator",
+        scope: spec ? "lane" : "orchestrator",
+        runId,
+        slug,
+        prompt,
+        hostKind,
+        ...(spec?.taskId ? { taskId: spec.taskId } : {}),
+        ...(spec?.capability_scope ? { capability_scope: spec.capability_scope } : {}),
+        ...(spec?.name ? { specialist: spec.name } : {}),
+        ...(model ? { model } : {}),
+        ...(modelParams ? { modelParams } : {}),
+      });
     }
     if (!resolveAdapter) {
       // Pre-#54 fallback contract, preserved verbatim: no resolver and a
@@ -278,6 +358,8 @@ export function composeTmuxCommands(opts: {
       taskId: spec?.taskId,
       capability_scope: spec?.capability_scope,
       specialist: spec?.name,
+      ...(model !== undefined ? { model } : {}),
+      ...(modelParams !== undefined ? { modelParams } : {}),
     });
   };
 

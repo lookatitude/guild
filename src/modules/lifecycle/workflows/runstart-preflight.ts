@@ -49,9 +49,11 @@ import {
   defaultProbeEnv,
   recommendProvider,
   selectReviewer,
+  type AuthorIdentityTrust,
   type DetectionResult,
   type DetectedProvider,
   type HostFamily,
+  type NativeAdapterIdentity,
   type ProbeEnv,
 } from "../../host-runtime";
 // P1-L8: resolve the three per-run roles (host/advisory/adversarial) from the live
@@ -92,6 +94,14 @@ export interface PreflightProbe {
    * verify-done); null otherwise. Best-effort + non-throwing.
    */
   incompleteRun(): { runId: string; runDir: string } | null;
+  /**
+   * T3 (guild.session_context.v1 §4 step 2): identity injected by the native
+   * adapter that actually started this process — trust `verified`. The default
+   * probe reads the host-set process markers (e.g. CLAUDECODE / a plugin-root
+   * env the Claude Code host exports). Absent/undefined ⇒ no native identity,
+   * and an `auto` host resolves the honest `unknown` (§3) — never claude.
+   */
+  hostIdentity?(): NativeAdapterIdentity | null;
 }
 
 /** Options for runStartPreflight. */
@@ -131,10 +141,34 @@ export interface ResolvedSettingsSnapshot {
     rigor: ResolvedConfig["rigor"];
     loops: ResolvedConfig["loops"];
     loop_cap: ResolvedConfig["loop_cap"];
+    /**
+     * #93 — the resolved `defaults.dispatch.block_unmarked_lanes`, hoisted to the
+     * snapshot's flat `effective` block for the same reason `agent_mode` is here:
+     * `hooks/lib/backend-degradation.ts` runs inside `pre-tool-use.js`, which
+     * fires on EVERY tool call and therefore cannot afford to import the settings
+     * resolver (doing so takes that bundle from 110 KB to 923 KB). Reading the
+     * frozen snapshot gives the guard the FULL resolver fidelity — workspace
+     * inheritance, `settings.local.json`, the whole 5-layer chain — at the cost
+     * of one ADDITIONAL `fs.readFileSync` of the same snapshot file the guard
+     * path already opens for `agent_mode` (a second read, not a free ride on the
+     * first). That read is paid only after every cheap-first short-circuit in
+     * `pre-tool-use.ts` has passed, so it never lands on the ordinary tool call.
+     *
+     * OPTIONAL on the read side: a run whose snapshot predates #93 has no field,
+     * and the guard falls back to the registered default (OFF).
+     */
+    block_unmarked_lanes: ResolvedConfig["defaults"]["dispatch"]["block_unmarked_lanes"];
   };
   /** Provider detection snapshot (the OD-5 per-run detection). */
   providers: {
     authorHost: HostFamily;
+    /**
+     * T3 F4: trust of the author identity the detection ran under
+     * (session_context §3). `asserted` identity never yields a selected cross
+     * reviewer or a strong adversarial role — recorded so downstream consumers
+     * (execute-plan, review broker) can branch honestly.
+     */
+    authorTrust: AuthorIdentityTrust;
     detected: DetectedProvider[];
     recommended: string | null;
     /** The operator-selected provider id, if chosen before run-trace start. */
@@ -225,6 +259,8 @@ export interface PreflightResult {
   /** Provider detection + recommendation + R-008 selection. */
   providers: {
     authorHost: HostFamily;
+    /** T3 F4: trust of the author identity (see ResolvedSettingsSnapshot). */
+    authorTrust: AuthorIdentityTrust;
     detected: DetectedProvider[];
     recommended: string | null;
     reason: string;
@@ -236,6 +272,18 @@ export interface PreflightResult {
      * when non-undefined — `selected` has passed the AC-8 false-signoff guard.
      */
     selected?: string;
+  };
+  /**
+   * T3 (guild.session_context.v1): the adapter-injected identity inputs the
+   * run-start entrypoint threads into startRun's `session_identity` so the
+   * frozen session context records the §4 precedence honestly. `envelope_host`
+   * is the explicit (non-"auto") host setting — an ASSERTION; `native_adapter`
+   * is the probe-detected host identity — `verified`. Both may be absent, in
+   * which case the context records the terminal `unknown` (§3).
+   */
+  session_identity: {
+    envelope_host?: string;
+    native_adapter: NativeAdapterIdentity | null;
   };
   /**
    * The data object U6 will write to .guild/runs/<id>/resolved-settings.json.
@@ -378,14 +426,38 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
     provider: resolvedProvider,
   } as { mode: typeof config.review; provider: string };
 
+  // T3 — guild.session_context.v1 §3/§4: an explicit non-"auto" host setting
+  // is a caller ASSERTION (precedence step 1, canonical registry id from the
+  // settings resolver); the native-adapter identity is `verified` (step 2).
+  // Rework F4: downstream provider/reviewer/role resolution consumes the
+  // RESOLVED identity + trust:
+  //   - VERIFIED native evidence ALWAYS wins the resolved author family. A
+  //     verified value that CONTRADICTS the assertion REPLACES it before any
+  //     reviewer selection (the frozen session context records the conflict) —
+  //     a contradicted assertion can never steer a same-family reviewer into a
+  //     cross-family "strong" sign-off.
+  //   - An assertion with no verification stays `asserted`: it resolves the
+  //     family for detection, but selection/roles degrade (asserted ⇒ weak).
+  //   - Nothing present resolves the honest terminal "unknown"/`asserted`.
+  const explicitHost: string | undefined =
+    config.host && config.host !== "auto" ? config.host : undefined;
+  const nativeIdentity: NativeAdapterIdentity | null = probe.hostIdentity
+    ? safeProbe(() => probe.hostIdentity!(), null)
+    : null;
+  const identityHost: string | undefined = nativeIdentity
+    ? nativeIdentity.family
+    : explicitHost;
+  const identityTrust: AuthorIdentityTrust = nativeIdentity ? "verified" : "asserted";
+
   const detection: DetectionResult = safeProbe(
     () =>
       detectProviders({
         cwd,
-        host: config.host,
+        host: identityHost,
+        trust: identityTrust,
         probe: probe.providerProbe,
       }),
-    { authorHost: "unknown" as HostFamily, providers: [] }
+    { authorHost: "unknown" as HostFamily, authorTrust: "asserted", providers: [] }
   );
 
   const recResult = safeProbe(
@@ -422,6 +494,8 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
 
   const providers: PreflightResult["providers"] = {
     authorHost: detection.authorHost,
+    // R3-F1: authorTrust is non-optional on DetectionResult — always present.
+    authorTrust: detection.authorTrust,
     detected: detection.providers,
     recommended: recResult.recommended,
     reason: recResult.reason,
@@ -443,9 +517,13 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
       rigor: config.rigor,
       loops: config.loops,
       loop_cap: config.loop_cap,
+      // #93: the backend-degradation guard's strict rung, resolved once here so
+      // the per-tool-call hook never has to re-resolve it.
+      block_unmarked_lanes: config.defaults.dispatch.block_unmarked_lanes,
     },
     providers: {
       authorHost: detection.authorHost,
+      authorTrust: detection.authorTrust,
       detected: detection.providers,
       recommended: recResult.recommended,
       // R-008: store the selectReviewer decision in the persisted snapshot so U6/hooks
@@ -483,6 +561,10 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
     incompleteRun,
     providers,
     snapshot,
+    session_identity: {
+      ...(explicitHost !== undefined ? { envelope_host: explicitHost } : {}),
+      native_adapter: nativeIdentity,
+    },
   };
 }
 
@@ -512,6 +594,26 @@ export function defaultPreflightProbe(cwd: string): PreflightProbe {
         if (!existsSync(runDir)) return null;
         if (existsSync(join(runDir, "verify.md"))) return null;
         return { runId, runDir };
+      }, null),
+    // T3 — session_context §4 step 2: the Claude Code host sets CLAUDECODE=1
+    // (and a plugin-root env) in every process it spawns; that host-set marker
+    // is native-adapter evidence for family "claude". No marker ⇒ null — the
+    // caller then records the honest "unknown", never a defaulted family.
+    hostIdentity: () =>
+      safeProbe<NativeAdapterIdentity | null>(() => {
+        const env = process.env;
+        if (env["CLAUDECODE"] === "1" || env["CLAUDE_PLUGIN_ROOT"]) {
+          return {
+            family: "claude",
+            surface: "cli",
+            adapter_id: "claude-code-native",
+            adapter_version: env["CLAUDE_CODE_VERSION"] ?? "unknown",
+            evidence:
+              "host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) " +
+              "injected by the Claude Code host at spawn",
+          };
+        }
+        return null;
       }, null),
   };
 }

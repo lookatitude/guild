@@ -423,6 +423,9 @@ export function runCheckLaneLivenessCli(argv: string[] = process.argv.slice(2)):
   return 0; // report tool — never gates
 }
 
-if (require.main === module) {
+if (
+  require.main === module &&
+  new RegExp("[\\\\/]check-lane-liveness\\.[cm]?[jt]s$").test(process.argv[1] ?? "")
+) {
   process.exit(runCheckLaneLivenessCli());
 }

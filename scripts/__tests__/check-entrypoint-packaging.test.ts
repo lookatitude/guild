@@ -373,7 +373,15 @@ describe("CLI: check-entrypoint-packaging.ts", () => {
         for (const dir of ["commands", "skills", "agents", "hooks", "scripts", "src", ".claude-plugin"]) {
           fs.cpSync(path.join(PLUGIN_ROOT, dir), path.join(fixtureRoot, dir), {
             recursive: true,
-            filter: (src) => !src.includes(`${path.sep}node_modules${path.sep}`),
+            // Excluding only `/node_modules/` skips its CONTENTS but not the
+            // directory ENTRY itself. When `scripts/node_modules` is a SYMLINK — the
+            // ordinary shape in a git worktree that shares one install — the link is
+            // copied verbatim, so the per-dep copy below resolves src and dest to the
+            // same real path and Node throws "src and dest cannot be the same". The
+            // suite then fails for a reason that has nothing to do with packaging.
+            filter: (src) =>
+              !src.includes(`${path.sep}node_modules${path.sep}`) &&
+              path.basename(src) !== "node_modules",
           });
         }
         fs.copyFileSync(path.join(PLUGIN_ROOT, ".mcp.json"), path.join(fixtureRoot, ".mcp.json"));

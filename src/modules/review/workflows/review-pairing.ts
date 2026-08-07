@@ -1,3 +1,7 @@
+import {
+  adjudicateIndependence,
+  type ReviewPartyFacts,
+} from "../../capability";
 import { getRegistryEntry, resolveRung, type HostId } from "../../host-runtime";
 import {
   makePolicySkipProgress,
@@ -7,6 +11,14 @@ import {
 } from "./review-progress";
 
 export type ReviewPairingStatus = "selected" | "skipped" | "blocked";
+
+/**
+ * Host-identity trust for one side of a review pairing (model_resolution §7).
+ * Only a handshake-evidenced "verified" identity may contribute to a strong
+ * plan; a caller claim is "asserted". An absent/undefined value normalizes to
+ * "asserted" (fail closed) — omission can never grant what assertion cannot.
+ */
+export type ReviewIdentityTrust = "verified" | "asserted";
 export type ReviewLifecycleOutcome =
   | "succeeded"
   | "skipped"
@@ -25,10 +37,31 @@ export interface ReviewPairingPlan {
   progress: ReviewProgressEvent[];
 }
 
+/**
+ * Served-model evidence for one side of the pairing — the party's FINALIZED
+ * resolution receipt facts (model_resolution §7a). Without this evidence for
+ * BOTH sides a pairing can never be strong: §7a forbids provisional strong, so
+ * host-family difference + verified host trust alone stays weak (pending).
+ */
+export interface ReviewServedEvidence {
+  /** The finalized receipt's outcome.actual_model ("unknown" when unbound). */
+  served_model: string;
+  /** Catalog family of the SERVED model — never derived from the requested one. */
+  served_model_family: string;
+  /** True only when the party's resolution receipt is finalized (§8). */
+  finalized: boolean;
+  /** The finalized receipt's outcome.status. */
+  status: string;
+}
+
 export interface PlanReviewPairingInput extends ReviewProgressContext {
   policyAllowsSkip: boolean;
   reviewerAvailable: boolean;
   outcome?: ReviewLifecycleOutcome;
+  authorTrust?: ReviewIdentityTrust;
+  reviewerTrust?: ReviewIdentityTrust;
+  authorServed?: ReviewServedEvidence;
+  reviewerServed?: ReviewServedEvidence;
 }
 
 function event(ctx: ReviewProgressContext, sequence: number, state: ReviewProgressEvent["state"], message: string): ReviewProgressEvent {
@@ -81,16 +114,45 @@ export function progressScenariosForPair(ctx: ReviewProgressContext): Record<Rev
 export function planReviewPairing(input: PlanReviewPairingInput): ReviewPairingPlan {
   const author = getRegistryEntry(input.authorHost);
   const reviewer = getRegistryEntry(input.reviewerHost);
-  const strong = Boolean(author && reviewer && author.family !== reviewer.family);
-  if (reviewer && reviewer.result_adapter && input.reviewerAvailable && strong) {
+  const crossFamily = Boolean(author && reviewer && author.family !== reviewer.family);
+  // model_resolution section 7-7a: the verdict comes from the ONE deterministic
+  // truth table (adjudicateIndependence), never a pairing-local shortcut.
+  // Registry rows are asserted identity; strong requires VERIFIED host trust on
+  // both sides, differing host families, AND differing model families derived
+  // from the SERVED (actual) models of finalized receipts. Section 7a forbids
+  // provisional strong: absent served-model evidence the pairing is weak
+  // (adjudication pending), whatever the hosts and trust say.
+  const toFacts = (
+    entry: { family?: string } | null | undefined,
+    trust: ReviewIdentityTrust | undefined,
+    served: ReviewServedEvidence | undefined
+  ): ReviewPartyFacts => ({
+    host_family: entry?.family ?? "unknown",
+    host_trust: trust ?? "asserted",
+    served_model: served?.served_model ?? "unknown",
+    served_model_family: served?.served_model_family ?? "unknown",
+    finalized: served?.finalized === true,
+    status: served?.status ?? "unresolved",
+  });
+  const verdict = adjudicateIndependence({
+    producer: toFacts(author, input.authorTrust, input.authorServed),
+    reviewer: toFacts(reviewer, input.reviewerTrust, input.reviewerServed),
+  });
+  const independence: ReviewPairingPlan["independence"] = verdict.independence;
+  // Progress events must carry the COMPUTED independence, not a caller label.
+  const ctx = { ...input, independence };
+  if (reviewer && reviewer.result_adapter && input.reviewerAvailable && crossFamily) {
     return {
       schema_version: "guild.review_pairing_plan.v1",
       author_host: input.authorHost,
       reviewer_host: input.reviewerHost,
       status: "selected",
-      independence: "strong",
-      reason: `different-family reviewer ${input.reviewerHost} is selectable`,
-      progress: progressForOutcome(input, input.outcome ?? "succeeded"),
+      independence,
+      reason:
+        independence === "strong"
+          ? `different-family reviewer ${input.reviewerHost} is selectable; independence strong (section 7a adjudicated: verified hosts, cross-family served models)`
+          : `different-family reviewer ${input.reviewerHost} is selectable; independence weak (section 7a truth table unsatisfied - strong needs verified trust both sides AND cross-family SERVED-model evidence from finalized receipts)`,
+      progress: progressForOutcome(ctx, input.outcome ?? "succeeded"),
     };
   }
 
@@ -111,7 +173,7 @@ export function planReviewPairing(input: PlanReviewPairingInput): ReviewPairingP
       reason: `${reason}; policy forbids skip so caller must block`,
       progress: [
         makeReviewProgressEvent({
-          ...input,
+          ...ctx,
           state: "tool_error",
           sequence: 1,
           message: `${reason}; policy forbids skip`,
@@ -131,7 +193,7 @@ export function planReviewPairing(input: PlanReviewPairingInput): ReviewPairingP
     reason,
     progress: [
       makePolicySkipProgress({
-        ...input,
+        ...ctx,
         reason,
         degradationReceipt: resolveRung("semantic_tool", input.authorHost),
       }),

@@ -404,10 +404,17 @@ describe("route — RouteError + degradation trail", () => {
 // ── TE-03: degraded + independence fields ──────────────────────────────────────
 
 describe("route — TE-03: RoutingDecision.degraded + independence fields", () => {
-  it("normal qualifying path: degraded=false, independence=strong", () => {
+  // T7-H2: the qualifying path used to report independence:"strong" — meaning
+  // "a fully-qualifying host was found", but READING as a cross-family review
+  // sign-off once the launcher persisted it into the shared, git-tracked
+  // run-state.json. The router has no producer/reviewer pair, no identity-trust
+  // evidence and no served-model binding, so it can never adjudicate §7/§7a. It
+  // now reports the honest host-axis fact (hostDiversity) and always "weak".
+  it("normal qualifying path: degraded=false, independence=weak (never self-asserted strong)", () => {
     const d = route(lane(), [host()], baseOpts);
     expect(d.degraded).toBe(false);
-    expect(d.independence).toBe("strong");
+    expect(d.independence).toBe("weak");
+    expect(["distinct", "same", "unknown"]).toContain(d.hostDiversity);
   });
 
   it("degraded path: degraded=true, independence=weak", () => {
@@ -633,7 +640,8 @@ describe("planTeamRouting — GAP-A1/ARCH-2: capabilityRequirements end-to-end t
       opts
     );
     expect(routes[0].decision.degraded).toBe(false);
-    expect(routes[0].decision.independence).toBe("strong");
+    // T7-H2: qualifying != independent. Never "strong" from the router.
+    expect(routes[0].decision.independence).toBe("weak");
     expect(routes[0].decision.rejected).toHaveLength(0);
   });
 

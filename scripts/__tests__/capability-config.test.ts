@@ -84,7 +84,10 @@ describe("S5 — the four capability keys exist in the generated schema", () => 
 
   it("ANTI-VACUITY: adding the block did not disturb the rest of the schema", () => {
     // 137 before S5 + 4 = 141. A drop here means a key was displaced, not added.
-    expect(CONFIG_SCHEMA.length).toBe(141);
+    // +1 (dynamic-host-model-routing T5): capability model_policy (guild.model_policy.v2).
+    // +1 (#93): defaults.dispatch.block_unmarked_lanes — the backend-degradation
+    // guard's strict rung, promoted from the GUILD_BLOCK_UNMARKED_LANES env flag.
+    expect(CONFIG_SCHEMA.length).toBe(143);
     expect(new Set(CONFIG_SCHEMA.map((s) => s.key)).size).toBe(CONFIG_SCHEMA.length);
   });
 });

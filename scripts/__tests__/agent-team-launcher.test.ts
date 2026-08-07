@@ -22,6 +22,17 @@ import {
   writeTaskCell,
   type TaskCellDispatchInput,
 } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+// T3 F3: descriptor writers fail closed without the run's minted binding.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const launcherTestBinding = require("../../src/modules/lifecycle/workflows/run-binding") as
+  typeof import("../../src/modules/lifecycle/workflows/run-binding");
+function launcherTestBindFor(cwd: string, runId: string): { binding_ref: string } {
+  const existing = launcherTestBinding.loadRunBinding({ root: cwd, run_id: runId });
+  return {
+    binding_ref:
+      (existing ?? launcherTestBinding.mintRunBinding({ root: cwd, run_id: runId })).binding_ref,
+  };
+}
 import {
   buildAcceptance,
   markAttemptOrphaned,
@@ -44,6 +55,22 @@ function runScript(
   // does not accidentally trip the nested-tmux guard.
   const baseEnv: Record<string, string | undefined> = { ...process.env };
   delete baseEnv.TMUX;
+  // T3: scrub the ambient hook binding envelope too — a developer's live Guild
+  // session exports GUILD_RUN_ID (and telemetry writers key off it), which
+  // would leak a second run dir into the fixture and satisfy/skew the
+  // launcher's envelope-based binding resolution. Tests that exercise the
+  // envelope path set these explicitly via the `env` param.
+  delete baseEnv.GUILD_RUN_ID;
+  delete baseEnv.GUILD_RUN_BINDING_REF;
+  // T7R-R1-B1: approve-before-dispatch verification is now MANDATORY on the real
+  // launcher path, and these fixtures deliberately carry no proposal/decision
+  // trail — they exercise routing, scoping, tiering and teardown, not approval.
+  // Opt them into the ONE audited escape hatch, with a stated reason, so the
+  // gate is exercised rather than disabled. A test that means to exercise the
+  // gate itself passes GUILD_DISPATCH_APPROVAL_OVERRIDE: undefined via `env`.
+  // The gate's own pins live in __tests__/t7-h1-dispatch-approval.test.ts.
+  baseEnv.GUILD_DISPATCH_APPROVAL_OVERRIDE =
+    "launcher unit fixture: no team-plan trail; approval verification is pinned separately";
   const finalEnv: Record<string, string> = {};
   for (const [k, v] of Object.entries({ ...baseEnv, ...env })) {
     if (v !== undefined) finalEnv[k] = v;
@@ -1167,6 +1194,10 @@ describe("agent-team-launcher.ts", () => {
     it("tmux: caller --run-id names the ONE run directory (session + tasks + task-cells under it)", () => {
       const CALLER_ID = "run-g5-tmux-caller";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      // T3 F2/F3: the caller (execute-plan) starts the run — which mints its
+      // binding — BEFORE threading --run-id to the launcher. Descriptor writers
+      // fail closed without it.
+      launcherTestBindFor(tmpDir, CALLER_ID);
       // Two plan lanes so a real task-cells tree is written under the run id.
       const planDir = path.join(tmpDir, ".guild", "plan");
       fs.mkdirSync(planDir, { recursive: true });
@@ -1235,6 +1266,8 @@ describe("agent-team-launcher.ts", () => {
       const CALLER_ID = "run-g5-remote-caller";
       // Mixed-host fixture: architect stays local (claude), security routes remote.
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      launcherTestBindFor(tmpDir, CALLER_ID); // T3 F2/F3 — caller-started run mints first
+
       writeHostManifest(tmpDir, "claude", "claude");
       writeHostManifest(tmpDir, "codex-remote", "codex");
       writeSettingsCrossHost(tmpDir, {
@@ -1379,7 +1412,7 @@ describe("agent-team-launcher.ts", () => {
         now: SEED_NOW,
       };
       const cell = buildTaskCell(disp);
-      writeTaskCell(cwd, cell);
+      writeTaskCell(cwd, cell, launcherTestBindFor(cwd, cell.assignment.run_id));
       const validation = runDeterministicFloor({
         assignment: cell.assignment,
         submitted: {
@@ -1475,7 +1508,7 @@ describe("agent-team-launcher.ts", () => {
       };
     }
     function seedCellOnly(cwd: string, runId: string, logicalTaskId: string, workerRole: string): void {
-      writeTaskCell(cwd, buildTaskCell(makeDisp(runId, logicalTaskId, workerRole)));
+      writeTaskCell(cwd, buildTaskCell(makeDisp(runId, logicalTaskId, workerRole)), launcherTestBindFor(cwd, runId));
     }
     function writeSessionJsonRealPane(cwd: string, runId: string, specialist: string, paneId: string): void {
       const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
@@ -2320,7 +2353,11 @@ describe("agent-team-launcher.ts", () => {
       // Exact values — not just presence
       expect(arch?.host?.selected).toBe("claude");
       expect(arch?.host?.degraded).toBe(false);
-      expect(arch?.host?.independence).toBe("strong");
+      // T7-H2: the persisted independence is now ALWAYS "weak" from the router
+      // — run-state.json is a SHARED, git-tracked artifact, and a "strong"
+      // review verdict may reach it only behind a written §7a adjudication
+      // (upsertLane's assertPersistableIndependence refuses otherwise).
+      expect(arch?.host?.independence).toBe("weak");
       expect(["cheap", "mid", "powerful"]).toContain(arch?.host?.tier);
       expect(typeof arch?.host?.model).toBe("string");
       expect((arch?.host?.model as string).length).toBeGreaterThan(0);
@@ -2351,7 +2388,10 @@ describe("agent-team-launcher.ts", () => {
       expect(sec).toBeDefined();
       expect(sec?.host?.selected).toBe("codex-remote");
       expect(sec?.host?.degraded).toBe(false);
-      expect(sec?.host?.independence).toBe("strong");
+      // T7-H2: cross-HOST routing is not cross-family review INDEPENDENCE. A
+      // remote codex lane still persists "weak" — only a written §7a
+      // adjudication over both parties' finalized receipts can say otherwise.
+      expect(sec?.host?.independence).toBe("weak");
       expect(["cheap", "mid", "powerful"]).toContain(sec?.host?.tier);
     });
 
@@ -2842,9 +2882,25 @@ describe("agent-team-launcher.ts", () => {
     it("tmux team path: tmux dispatch resolves and executes through transportFor", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const fakeBin = makeFakeTmuxBin(tmpDir, ["other-window"]);
+      // T3b: mint the run binding so the launcher's binding-verified descriptor
+      // writers (guild.task_assignment.v1/v2) resolve the run's minted record on
+      // the REAL tmux dispatch path instead of failing closed (session_context §5).
+      launcherTestBindFor(tmpDir, "run-bf2-tmux");
       const { file, env } = probeEnv(tmpDir);
       const { exitCode, stdout } = runScript(
-        ["--team", teamPath, "--cwd", tmpDir, "--run-id", "run-bf2-tmux"],
+        [
+          "--team",
+          teamPath,
+          "--cwd",
+          tmpDir,
+          "--run-id",
+          "run-bf2-tmux",
+          // T7 approve-before-dispatch is MANDATORY on a real dispatch; this test
+          // focuses on the MH-04 transport wiring, so it uses the audited override
+          // (gate enforcement itself is pinned in t7-h1-dispatch-approval.test.ts).
+          "--approval-override",
+          "test: MH-04 tmux transport wiring",
+        ],
         {
           ...env,
           TMUX: "/tmp/tmux-1000/default,12345,0",

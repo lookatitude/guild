@@ -8,14 +8,14 @@
       "id": "config",
       "source_path": "commands/config.md",
       "resource_path": "resources/commands/config.md",
-      "sha256": "4c4daacb475acfc2a54e053047b6bfb0f77a51c8ee61e56bdaa0e76f26e17434"
+      "sha256": "b436d28f20c26da6a5ab8710300f0d94d2332ce6e25a5a807808974bd60fa140"
     },
     {
       "category": "scripts",
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "e3bbcdf9ee7fae64e7911c02fa1511835c367627669f5324be062d6de79b01df"
+      "sha256": "7c72b3b45028a25cd060dff8107831cee669b249d34ded13e0bc39c3f09e3d1b"
     },
     {
       "category": "scripts",
@@ -43,28 +43,28 @@
       "id": "lib/config-schema",
       "source_path": "scripts/lib/config-schema.ts",
       "resource_path": "resources/scripts/lib/config-schema.ts",
-      "sha256": "8f902b2ae5dd2bc7c4facef722dc082880880eec13085ad892f801a0b81df90d"
+      "sha256": "ad9e0b078926319fb549c07ca33349c1add979b966e6d3495e2e417ffcd53d8f"
     },
     {
       "category": "scripts",
       "id": "lib/config-ui-metadata",
       "source_path": "scripts/lib/config-ui-metadata.ts",
       "resource_path": "resources/scripts/lib/config-ui-metadata.ts",
-      "sha256": "260974d97a34f28199d8fc4b8907390e0b45c77314a8a7aa2f0a9ffebae6a743"
+      "sha256": "3936957214dc5a5b10617ebc080ab648b4d9515878b032306bd5e2c87f7741f7"
     },
     {
       "category": "scripts",
       "id": "lib/config-ui-surface",
       "source_path": "scripts/lib/config-ui-surface.ts",
       "resource_path": "resources/scripts/lib/config-ui-surface.ts",
-      "sha256": "d90a3ed1650b7808455438e04319096a5f178c3676b2195f85ce9846b279ed62"
+      "sha256": "1ae0a7db98ac8c2a44b6a4e603efefcf92b315addb68edb7698e88599d0f599c"
     },
     {
       "category": "scripts",
       "id": "lib/core/config-cli",
       "source_path": "scripts/lib/core/config-cli.ts",
       "resource_path": "resources/scripts/lib/core/config-cli.ts",
-      "sha256": "76f31806c7e628b46471146d77bd7ea72de8796134c47dda1db83b0d68ecf566"
+      "sha256": "c4a669625fbc183923f588dd5e223e5ee94c1bfdc3f9eaf85585179f55408347"
     },
     {
       "category": "scripts",

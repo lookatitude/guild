@@ -35,9 +35,33 @@ import * as os from "os";
 import * as path from "path";
 
 const SCRIPT = path.resolve(__dirname, "../pre-tool-use.ts");
+/**
+ * The COMPILED bundle the host actually runs (hooks.json points at dist/, not at
+ * the .ts source). Every other test here drives the source through tsx; the #93
+ * dist cases below drive this, so a bundle that was never rebuilt after a source
+ * edit cannot pass a green suite while shipping the old decision path.
+ */
+const DIST_SCRIPT = path.resolve(__dirname, "../dist/pre-tool-use.js");
 const RUN = "test-run";
 
 let tmp: string;
+
+function runDistHook(
+  payload: object,
+  env: Record<string, string> = {},
+): { exitCode: number; stdout: string; stderr: string } {
+  const result = spawnSync("node", [DIST_SCRIPT], {
+    input: JSON.stringify(payload),
+    encoding: "utf8",
+    env: { ...process.env, GUILD_CWD: tmp, GUILD_RUN_ID: RUN, ...env },
+    timeout: 20000,
+  });
+  return {
+    exitCode: result.status ?? 1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+}
 
 function runHook(
   payload: object,
@@ -81,13 +105,15 @@ function runOtherHook(rel: string, payload: object, env: Record<string, string>)
 /** Blank the lane-process env so the hook is treated as the run LEAD. */
 const AS_LEAD = { GUILD_LANE_ID: "", GUILD_TASK_ID: "", GUILD_SPECIALIST: "" };
 
-function writeSnapshot(agentMode: string): void {
+function writeSnapshot(agentMode: string, blockUnmarked?: boolean): void {
+  // #93: `block_unmarked_lanes` is written ONLY when the caller states one, so
+  // every pre-#93 call site keeps producing a snapshot with no such field —
+  // exactly the shape an old run leaves behind.
+  const effective: Record<string, unknown> = { agent_mode: agentMode };
+  if (blockUnmarked !== undefined) effective["block_unmarked_lanes"] = blockUnmarked;
   fs.writeFileSync(
     path.join(tmp, ".guild", "runs", RUN, "resolved-settings.json"),
-    JSON.stringify({
-      schema_version: "guild.resolved_settings.v1",
-      effective: { agent_mode: agentMode },
-    }),
+    JSON.stringify({ schema_version: "guild.resolved_settings.v1", effective }),
     "utf8",
   );
 }
@@ -266,6 +292,79 @@ describe("pre-tool-use.ts — #56 backend-degradation detector", () => {
       reason: "team_substrate_available",
       lane_evidence: "prompt_only",
     });
+  });
+
+  // ── #93: strict mode reached through CONFIG, on the REAL hook path ─────────
+  // The unit tests around `resolveBlockUnmarkedLanes` prove the resolution
+  // rules; these prove the hook actually WIRES them to a decision. Without
+  // them, a wrong call-site argument or dropped wiring passes every other #93
+  // test while strict mode silently never engages.
+
+  it("#93 — snapshot block_unmarked_lanes:true DENIES the prompt-only lane", () => {
+    writeSnapshot("team", true);
+    const { stdout } = runHook(handRolledLane(), { ...stubTmux(true), ...AS_LEAD });
+    expect(stdout).toContain("permissionDecision");
+    expect(receipts()[0]).toMatchObject({ decision: "deny", lane_evidence: "prompt_only" });
+  });
+
+  it("#93 — the deny message names the CONFIG KEY, not only the env var", () => {
+    writeSnapshot("team", true);
+    const { stdout } = runHook(handRolledLane(), { ...stubTmux(true), ...AS_LEAD });
+    expect(stdout).toContain("defaults.dispatch.block_unmarked_lanes");
+  });
+
+  it("#93 — snapshot block_unmarked_lanes:false keeps the record-not-block posture", () => {
+    writeSnapshot("team", false);
+    const { stdout } = runHook(handRolledLane(), { ...stubTmux(true), ...AS_LEAD });
+    expect(stdout).not.toContain("permissionDecision");
+    expect(receipts()[0]).toMatchObject({ decision: "allow_recorded" });
+  });
+
+  it("#93 — env=0 OVERRIDES a snapshot that says true (escape hatch works)", () => {
+    writeSnapshot("team", true);
+    const { stdout } = runHook(handRolledLane(), {
+      ...stubTmux(true),
+      ...AS_LEAD,
+      GUILD_BLOCK_UNMARKED_LANES: "0",
+    });
+    expect(stdout).not.toContain("permissionDecision");
+    expect(receipts()[0]).toMatchObject({ decision: "allow_recorded" });
+  });
+
+  it("#93 — env=1 OVERRIDES a snapshot that says false", () => {
+    writeSnapshot("team", false);
+    const { stdout } = runHook(handRolledLane(), {
+      ...stubTmux(true),
+      ...AS_LEAD,
+      GUILD_BLOCK_UNMARKED_LANES: "1",
+    });
+    expect(stdout).toContain("permissionDecision");
+    expect(receipts()[0]).toMatchObject({ decision: "deny" });
+  });
+
+  it("#93 — a pre-#93 snapshot (no field) falls back to the registered default OFF", () => {
+    writeSnapshot("team");
+    const { stdout } = runHook(handRolledLane(), { ...stubTmux(true), ...AS_LEAD });
+    expect(stdout).not.toContain("permissionDecision");
+    expect(receipts()[0]).toMatchObject({ decision: "allow_recorded" });
+  });
+
+  // The same two decisions against the COMPILED bundle the host really executes
+  // (codex round-2 P2). Source-only coverage cannot catch a stale dist/.
+
+  it("#93 [dist] snapshot block_unmarked_lanes:true DENIES on the compiled bundle", () => {
+    writeSnapshot("team", true);
+    const { stdout } = runDistHook(handRolledLane(), { ...stubTmux(true), ...AS_LEAD });
+    expect(stdout).toContain("permissionDecision");
+    expect(stdout).toContain("defaults.dispatch.block_unmarked_lanes");
+    expect(receipts()[0]).toMatchObject({ decision: "deny", lane_evidence: "prompt_only" });
+  });
+
+  it("#93 [dist] snapshot block_unmarked_lanes:false records without blocking", () => {
+    writeSnapshot("team", false);
+    const { stdout } = runDistHook(handRolledLane(), { ...stubTmux(true), ...AS_LEAD });
+    expect(stdout).not.toContain("permissionDecision");
+    expect(receipts()[0]).toMatchObject({ decision: "allow_recorded" });
   });
 
   it("DENIES when cmux is the only team substrate (tmux absent)", () => {

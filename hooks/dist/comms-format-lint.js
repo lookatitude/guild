@@ -4391,7 +4391,24 @@ var CODEX_CAPABILITIES = {
     // individually verified.
     session_start: true,
     user_prompt_submit: true,
-    pre_tool_use: false,
+    // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0, isolated CODEX_HOME).
+    // A PreToolUse hook emitting the Claude-shaped
+    // {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}
+    // BLOCKS the tool call:
+    //     hook: PreToolUse Blocked
+    //     ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: …
+    // and the model stops. CONTROL (same config, non-matching command) reached
+    // `hook: PreToolUse Completed` and executed — so the deny, not the sandbox,
+    // is causal. This retires the old INFERRED `false` (never verified).
+    //
+    // CAVEAT THAT DOES NOT BELONG IN THIS BOOLEAN, but governs how it may be
+    // consumed: codex gates hooks behind PERSISTED HOOK TRUST. With the same
+    // hooks.json but no trust, the hook SILENTLY never runs (no warning, tool
+    // executes). So "codex supports PreToolUse deny" (this row) must never be
+    // read as "enforcement is live on this box" — that needs a probe of actual
+    // execution (probeCodexPreToolUseEnforcement, scripts/lib/pane-adapter.ts),
+    // which is what the codex-pane bypass flag is gated on.
+    pre_tool_use: true,
     post_tool_use: false,
     stop: false,
     pre_compact: false,
@@ -4401,12 +4418,20 @@ var CODEX_CAPABILITIES = {
     teammate_idle: false
   },
   permissions: {
-    // INFERRED (Codex CLI approval model). Confirm on-box at L3.
-    deny: false,
+    // `deny` CONFIRMED ON-BOX (issue #94) — see hooks.pre_tool_use above: a
+    // PreToolUse hook decision of "deny" is honoured and blocks the call.
+    deny: true,
     ask: true,
     // Codex prompts for approval by default.
+    // STILL NULL, DELIBERATELY. Codex has a PreToolUse DENY layer but no
+    // PreToolUse ASK primitive (`permissionDecision:"ask"` is not an accepted
+    // codex decision). Guild's own enforcement already handles this: the
+    // manifest written by write-host-capability.ts carries
+    // `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
+    // hooks/pre-tool-use.ts's HK-07 gate degrades ask -> file-bus
+    // approval_request + `deny`. VERIFIED end-to-end for codex in issue #94.
+    // Flipping this to "pre_tool_use" would re-enable an ask codex rejects.
     ask_mode: null,
-    // No pre_tool_use layer; approval is interactive.
     accept_edits_without_prompt: false,
     // INFERRED
     auto_approve_tools: false,
@@ -4421,8 +4446,11 @@ var CODEX_CAPABILITIES = {
       // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
       // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
       // than guessed, so their absence reads as "degrade/record", not "supported".
+      // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0): the flag exists and
+      // takes effect. Note what it does NOT do — a PreToolUse hook deny still
+      // blocked the tool call under this flag, so the bypass suppresses codex's
+      // own approval/sandbox layer and leaves Guild's gate intact.
       bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
-      // INFERRED flag name — verify on-box (AC19).
     }
   },
   dispatch: {
@@ -5180,6 +5208,478 @@ var PROVIDER_REGISTRY = [
   // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
   { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
 ];
+
+// ../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts
+var FAILURE_REASONS = Object.freeze([
+  "timeout_budget_exceeded",
+  "parse_rejected",
+  "io_unavailable",
+  "tool_version_out_of_range",
+  "subprocess_failed",
+  "http_error",
+  "auth_unavailable",
+  "surface_absent"
+]);
+function isFailureReason(value) {
+  return typeof value === "string" && FAILURE_REASONS.includes(value);
+}
+var DiscoveryParseRejected = class extends Error {
+  constructor(detail) {
+    super(`provider output rejected by schema validation: ${detail}`);
+    this.name = "DiscoveryParseRejected";
+  }
+};
+function failureResult(adapter, status, failureReason, latencyMs, sourceRef) {
+  if (!isFailureReason(failureReason)) throw new Error("failure_reason outside the closed vocabulary");
+  return {
+    adapter_id: adapter.adapter_id,
+    adapter_version: adapter.adapter_version,
+    target_id: adapter.target_id,
+    method: adapter.method,
+    source_ref: sourceRef,
+    status,
+    latency_ms: latencyMs,
+    failure_reason: failureReason,
+    models: []
+  };
+}
+
+// ../src/modules/host-runtime/workflows/model-discovery/claude-api.ts
+var CLAUDE_API_ADAPTER_ID = "claude-api-models";
+var CLAUDE_API_ADAPTER_VERSION = "1.0.0";
+var CLAUDE_API_MODELS_URL = "https://api.anthropic.com/v1/models";
+var CLAUDE_API_VERSION_HEADER = "2023-06-01";
+var CLAUDE_API_MAX_PAGES = 5;
+var CLAUDE_EFFORT_LEVELS = Object.freeze(["low", "medium", "high", "xhigh", "max"]);
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseClaudeModelsPage(raw) {
+  if (!isRecord(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    if (entry.capabilities !== void 0 && !isRecord(entry.capabilities)) {
+      throw new DiscoveryParseRejected(`data[${i}].capabilities is not an object`);
+    }
+    models.push(entry);
+  });
+  return {
+    models,
+    hasMore: raw.has_more === true,
+    lastId: typeof raw.last_id === "string" ? raw.last_id : null
+  };
+}
+function effortsFromCapabilities(capabilities) {
+  const effort = capabilities?.effort;
+  if (!isRecord(effort)) return [];
+  return CLAUDE_EFFORT_LEVELS.filter((level) => effort[level] === true);
+}
+function normalizeClaudeApiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    model_family: "claude",
+    // this authenticated first-party catalog lists Claude models
+    reasoning_efforts: effortsFromCapabilities(m.capabilities),
+    default_effort: null,
+    // the listing carries support flags, not a default
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: isRecord(m.capabilities) ? m.capabilities : {},
+    evidence_source: "contract_api_list",
+    // The one row whose contract states availability for the requesting target.
+    contract_states_availability: true
+  }));
+}
+var claudeApiAdapter = {
+  adapter_id: CLAUDE_API_ADAPTER_ID,
+  adapter_version: CLAUDE_API_ADAPTER_VERSION,
+  target_id: "claude-api",
+  method: "contract_api_list",
+  tool_versions: null,
+  // versioned REST surface; gated by anthropic-version header, not CLI version
+  async discover(io) {
+    const started = io.monotonicMs();
+    const elapsed = () => Math.max(0, io.monotonicMs() - started);
+    if (!io.httpGetJson) {
+      return failureResult(this, "unsupported", "io_unavailable", elapsed(), CLAUDE_API_ADAPTER_ID);
+    }
+    const all = [];
+    let url = `${CLAUDE_API_MODELS_URL}?limit=1000`;
+    for (let page = 0; page < CLAUDE_API_MAX_PAGES; page += 1) {
+      const raw = await io.httpGetJson(url, { "anthropic-version": CLAUDE_API_VERSION_HEADER });
+      const { models, hasMore, lastId } = parseClaudeModelsPage(raw);
+      all.push(...normalizeClaudeApiModels(models));
+      if (!hasMore || !lastId) {
+        return {
+          adapter_id: CLAUDE_API_ADAPTER_ID,
+          adapter_version: CLAUDE_API_ADAPTER_VERSION,
+          target_id: "claude-api",
+          method: "contract_api_list",
+          source_ref: "claude-api GET /v1/models",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models: all
+        };
+      }
+      url = `${CLAUDE_API_MODELS_URL}?limit=1000&after_id=${encodeURIComponent(lastId)}`;
+    }
+    return {
+      adapter_id: CLAUDE_API_ADAPTER_ID,
+      adapter_version: CLAUDE_API_ADAPTER_VERSION,
+      target_id: "claude-api",
+      method: "contract_api_list",
+      source_ref: "claude-api GET /v1/models",
+      status: "partial",
+      latency_ms: elapsed(),
+      failure_reason: null,
+      models: all
+    };
+  }
+};
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts
+var CODEX_APP_SERVER_ADAPTER_ID = "codex-app-server-model-list";
+var CODEX_APP_SERVER_ADAPTER_VERSION = "1.0.0";
+var CODEX_APP_SERVER_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "2.0.0" };
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseModelListResult(raw) {
+  if (!isRecord2(raw)) throw new DiscoveryParseRejected("result is not an object");
+  const data = raw.data;
+  if (!Array.isArray(data)) throw new DiscoveryParseRejected("result.data is not an array");
+  const models = [];
+  data.forEach((entry, i) => {
+    if (!isRecord2(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.model !== "string" || entry.model.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].model is not a non-empty string`);
+    }
+    if (entry.supportedReasoningEfforts !== void 0) {
+      if (!Array.isArray(entry.supportedReasoningEfforts)) {
+        throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts is not an array`);
+      }
+      for (const [j, eff] of entry.supportedReasoningEfforts.entries()) {
+        if (!isRecord2(eff) || typeof eff.reasoningEffort !== "string") {
+          throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts[${j}].reasoningEffort missing`);
+        }
+      }
+    }
+    if (entry.hidden !== void 0 && typeof entry.hidden !== "boolean") {
+      throw new DiscoveryParseRejected(`data[${i}].hidden is not a boolean`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeAppServerModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.model,
+    display_name: typeof m.displayName === "string" ? m.displayName : void 0,
+    // No family field is provider-stated on this surface.
+    reasoning_efforts: (m.supportedReasoningEfforts ?? []).map((e) => e.reasoningEffort),
+    default_effort: typeof m.defaultReasoningEffort === "string" ? m.defaultReasoningEffort : null,
+    provider_priority: null,
+    // app-server exposes order, not a numeric priority field
+    provider_default: m.isDefault === true,
+    visibility: m.hidden === true ? "hidden" : "listed",
+    deprecation: {
+      upgrade_to: typeof m.upgrade === "string" ? m.upgrade : null,
+      migration_note: typeof m.upgradeInfo?.migrationMarkdown === "string" ? m.upgradeInfo.migrationMarkdown : null
+    },
+    capabilities: {
+      image_input: Array.isArray(m.inputModalities) ? m.inputModalities.includes("image") : void 0,
+      // Superset-schema extensions preserved from the provider listing:
+      service_tiers: Array.isArray(m.serviceTiers) ? m.serviceTiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additionalSpeedTiers) ? m.additionalSpeedTiers : [],
+      default_service_tier: typeof m.defaultServiceTier === "string" ? m.defaultServiceTier : null
+    },
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // entitlement semantics contractually undefined
+  }));
+}
+var codexAppServerAdapter = {
+  adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+  adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+  target_id: "codex-app-server",
+  method: "native_list",
+  tool_versions: CODEX_APP_SERVER_TOOL_VERSIONS,
+  async discover(io, opts = {}) {
+    const started = io.monotonicMs();
+    const elapsed = () => Math.max(0, io.monotonicMs() - started);
+    if (!io.jsonRpcCall) {
+      return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_APP_SERVER_ADAPTER_ID);
+    }
+    const includeHidden = opts.includeHidden === true;
+    const result = await io.jsonRpcCall("model/list", includeHidden ? { includeHidden: true } : {});
+    const models = normalizeAppServerModels(parseModelListResult(result));
+    return {
+      adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+      adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+      target_id: "codex-app-server",
+      method: "native_list",
+      source_ref: "codex-app-server model/list",
+      status: "ok",
+      latency_ms: elapsed(),
+      failure_reason: null,
+      models
+    };
+  }
+};
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts
+var CODEX_DEBUG_MODELS_ADAPTER_ID = "codex-debug-models";
+var CODEX_DEBUG_MODELS_ADAPTER_VERSION = "1.0.0";
+var CODEX_DEBUG_MODELS_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "0.147.0" };
+function isRecord3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseDebugModelsOutput(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new DiscoveryParseRejected("stdout is not valid JSON");
+  }
+  if (!isRecord3(parsed) || !Array.isArray(parsed.models)) {
+    throw new DiscoveryParseRejected("payload.models is not an array");
+  }
+  const entries = [];
+  parsed.models.forEach((entry, i) => {
+    if (!isRecord3(entry)) throw new DiscoveryParseRejected(`models[${i}] is not an object`);
+    if (typeof entry.slug !== "string" || entry.slug.length === 0) {
+      throw new DiscoveryParseRejected(`models[${i}].slug is not a non-empty string`);
+    }
+    if (entry.supported_reasoning_levels !== void 0) {
+      if (!Array.isArray(entry.supported_reasoning_levels)) {
+        throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels is not an array`);
+      }
+      for (const [j, lvl] of entry.supported_reasoning_levels.entries()) {
+        if (!isRecord3(lvl) || typeof lvl.effort !== "string") {
+          throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels[${j}].effort missing`);
+        }
+      }
+    }
+    entries.push(entry);
+  });
+  return entries;
+}
+function normalizeDebugModels(entries) {
+  return entries.map((m) => ({
+    canonical_id: m.slug,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    reasoning_efforts: (m.supported_reasoning_levels ?? []).map((l) => l.effort),
+    default_effort: typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null,
+    provider_priority: typeof m.priority === "number" ? m.priority : null,
+    provider_default: false,
+    // the debug catalog carries no default flag
+    visibility: m.visibility === "hide" ? "hidden" : "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {
+      // Advertised subscription-catalog metadata about the API target (F5):
+      // preserved verbatim as metadata, never treated as dispatch evidence.
+      supported_in_api: typeof m.supported_in_api === "boolean" ? m.supported_in_api : void 0,
+      service_tiers: Array.isArray(m.service_tiers) ? m.service_tiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additional_speed_tiers) ? m.additional_speed_tiers : []
+    },
+    evidence_source: "debug_catalog",
+    contract_states_availability: false
+  }));
+}
+var codexDebugModelsAdapter = {
+  adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+  adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+  target_id: "codex-cli-chatgpt",
+  method: "debug_catalog",
+  tool_versions: CODEX_DEBUG_MODELS_TOOL_VERSIONS,
+  async discover(io) {
+    const started = io.monotonicMs();
+    const elapsed = () => Math.max(0, io.monotonicMs() - started);
+    if (!io.execCapture) {
+      return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_DEBUG_MODELS_ADAPTER_ID);
+    }
+    const { stdout } = await io.execCapture(["codex", "debug", "models"]);
+    const models = normalizeDebugModels(parseDebugModelsOutput(stdout));
+    return {
+      adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+      adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+      target_id: "codex-cli-chatgpt",
+      method: "debug_catalog",
+      source_ref: "codex debug models",
+      status: "ok",
+      latency_ms: elapsed(),
+      failure_reason: null,
+      models
+    };
+  }
+};
+
+// ../src/modules/host-runtime/workflows/model-discovery/openai-api.ts
+var OPENAI_API_ADAPTER_ID = "openai-api-models";
+var OPENAI_API_ADAPTER_VERSION = "1.0.0";
+var OPENAI_API_MODELS_URL = "https://api.openai.com/v1/models";
+function isRecord4(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function openAiFamilyFor(id) {
+  if (id.startsWith("gpt-")) return "gpt";
+  return "unknown";
+}
+function parseOpenAiModelsResponse(raw) {
+  if (!isRecord4(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord4(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeOpenAiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    model_family: openAiFamilyFor(m.id),
+    reasoning_efforts: [],
+    // not stated on this surface — never copied from other targets
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // scope-ambiguous contract ⇒ advertised at most
+  }));
+}
+var openAiApiAdapter = {
+  adapter_id: OPENAI_API_ADAPTER_ID,
+  adapter_version: OPENAI_API_ADAPTER_VERSION,
+  target_id: "openai-api",
+  method: "native_list",
+  tool_versions: null,
+  async discover(io) {
+    const started = io.monotonicMs();
+    const elapsed = () => Math.max(0, io.monotonicMs() - started);
+    if (!io.httpGetJson) {
+      return failureResult(this, "unsupported", "io_unavailable", elapsed(), OPENAI_API_ADAPTER_ID);
+    }
+    const raw = await io.httpGetJson(OPENAI_API_MODELS_URL, {});
+    const models = normalizeOpenAiModels(parseOpenAiModelsResponse(raw));
+    return {
+      adapter_id: OPENAI_API_ADAPTER_ID,
+      adapter_version: OPENAI_API_ADAPTER_VERSION,
+      target_id: "openai-api",
+      method: "native_list",
+      source_ref: "openai-api GET /v1/models",
+      status: "ok",
+      latency_ms: elapsed(),
+      failure_reason: null,
+      models
+    };
+  }
+};
+
+// ../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts
+var HONEST_UNKNOWN_ADAPTER_VERSION = "1.0.0";
+function staticHintEntries(hints) {
+  return hints.map((h) => ({
+    canonical_id: h.canonical_id,
+    display_name: h.display_name,
+    aliases: h.aliases,
+    model_family: h.model_family,
+    reasoning_efforts: [],
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "static_hint",
+    contract_states_availability: false
+  }));
+}
+function makeHonestUnknownAdapter(targetId, opts = {}) {
+  const hints = opts.staticHints ?? [];
+  const adapterId = `honest-unknown-${targetId}`;
+  return {
+    adapter_id: adapterId,
+    adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+    target_id: targetId,
+    method: hints.length > 0 ? "static_hint" : "none",
+    tool_versions: null,
+    async discover(io) {
+      const started = io.monotonicMs();
+      return {
+        adapter_id: adapterId,
+        adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+        target_id: targetId,
+        method: hints.length > 0 ? "static_hint" : "none",
+        source_ref: opts.surfaceNote ?? "no evidenced availability-listing surface",
+        // The receipt itself is honest: no listing surface exists for this
+        // target, so discovery is `unsupported` and the target-level evidence
+        // state stays `unknown` (static hints only fill model metadata).
+        status: "unsupported",
+        latency_ms: Math.max(0, io.monotonicMs() - started),
+        failure_reason: "surface_absent",
+        models: staticHintEntries(hints)
+      };
+    }
+  };
+}
+var claudeCliSubscriptionAdapter = makeHonestUnknownAdapter("claude-cli-subscription", {
+  surfaceNote: "picker is interactive-only; headless entitlement unprovable pre-dispatch"
+});
+var claudeAppAdapter = makeHonestUnknownAdapter("claude-app", {
+  surfaceNote: "no programmatic discovery surface exists"
+});
+var claudeWebAdapter = makeHonestUnknownAdapter("claude-web", {
+  surfaceNote: "no programmatic discovery surface exists"
+});
+var claudeGatewayBedrockAdapter = makeHonestUnknownAdapter("claude-gateway-bedrock", {
+  surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+});
+var claudeGatewayVertexAdapter = makeHonestUnknownAdapter("claude-gateway-vertex", {
+  surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+});
+var claudeGatewayFoundryAdapter = makeHonestUnknownAdapter("claude-gateway-foundry", {
+  surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+});
+var codexCliApiKeyAdapter = makeHonestUnknownAdapter("codex-cli-api-key", {
+  surfaceNote: "no listing evidenced under API-key auth (distinct target from codex-cli-chatgpt)"
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/index.ts
+var DISCOVERY_ADAPTER_REGISTRY = Object.freeze({
+  "claude-cli-subscription": claudeCliSubscriptionAdapter,
+  "claude-app": claudeAppAdapter,
+  "claude-web": claudeWebAdapter,
+  "claude-api": claudeApiAdapter,
+  "claude-gateway-bedrock": claudeGatewayBedrockAdapter,
+  "claude-gateway-vertex": claudeGatewayVertexAdapter,
+  "claude-gateway-foundry": claudeGatewayFoundryAdapter,
+  "codex-cli-chatgpt": codexDebugModelsAdapter,
+  "codex-app-server": codexAppServerAdapter,
+  "codex-cli-api-key": codexCliApiKeyAdapter,
+  "openai-api": openAiApiAdapter
+});
+var CODEX_SEAM_PREFERENCE = Object.freeze(["app-server", "debug-models"]);
+var CODEX_SEAM_ADAPTERS = Object.freeze({
+  "app-server": codexAppServerAdapter,
+  "debug-models": codexDebugModelsAdapter
+});
 
 // ../src/modules/host-runtime/workflows/host-adapter-contract.ts
 var HOST_ADAPTER_OPERATIONS = Object.freeze([

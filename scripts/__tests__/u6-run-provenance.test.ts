@@ -166,9 +166,13 @@ function makeSnapshot(over: Partial<ResolvedSettingsSnapshot> = {}): ResolvedSet
       rigor: "deep",
       loops: "all",
       loop_cap: 16,
+      // #93: the backend-degradation guard's strict rung, frozen into every
+      // snapshot so hooks/lib/backend-degradation.ts can read the resolved value.
+      block_unmarked_lanes: false,
     },
     providers: {
       authorHost: "claude",
+      authorTrust: "verified",
       detected: [
         { id: "codex-plugin", kind: "plugin-adapter", detected: true, authed: true, selectable: true, family: "codex", detail: "codex plugin adapter" },
         { id: "codex-cli", kind: "cli", detected: false, authed: false, selectable: false, family: "codex", detail: "codex cli not found" },
@@ -244,6 +248,7 @@ describe("u6 — writeResolvedSettingsSnapshot", () => {
     const snapshot = makeSnapshot({
       providers: {
         authorHost: "claude" as const,
+        authorTrust: "verified" as const,
         detected: [],
         recommended: "codex-plugin",
         selected: "codex-plugin",
@@ -384,6 +389,7 @@ describe("u6 — startRun with snapshot (settings_ref in run.yaml)", () => {
     const snapshot = makeSnapshot({
       providers: {
         authorHost: "claude" as const,
+        authorTrust: "verified" as const,
         detected: [{ id: "codex-plugin", kind: "plugin-adapter", detected: true, authed: true, selectable: true, family: "codex" as const, detail: "codex plugin adapter" }],
         recommended: "codex-plugin",
         selected: "codex-plugin",
@@ -407,7 +413,10 @@ describe("u6 — startRun with snapshot (settings_ref in run.yaml)", () => {
 // ── back-compat: startRun WITHOUT snapshot ────────────────────────────────────
 
 describe("u6 — back-compat: startRun WITHOUT snapshot", () => {
-  it("writes EXACTLY run.yaml + current-run-id (no resolved-settings.json)", () => {
+  it("writes run.yaml + current-run-id + T3 binding/session-context (no resolved-settings.json)", () => {
+    // T3 (guild.session_context.v1): every startRun additionally mints
+    // binding.json and freezes session-context.json; the U6 point of this pin
+    // stands — NO resolved-settings.json lands when no snapshot is provided.
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts({ initiative: "compat-test" }));
@@ -416,6 +425,8 @@ describe("u6 — back-compat: startRun WITHOUT snapshot", () => {
       [
         path.join(ROOT, ".guild", "runs", "current-run-id"),
         path.join(ROOT, ".guild", "runs", runId, "run.yaml"),
+        path.join(ROOT, ".guild", "runs", runId, "binding.json"),
+        path.join(ROOT, ".guild", "runs", runId, "session-context.json"),
       ].sort()
     );
   });

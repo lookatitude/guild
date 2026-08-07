@@ -36,6 +36,46 @@
       "options": "VERIFY-DEPENDENT-CONTRACT|FANOUT-NOW",
       "expected": "VERIFY-DEPENDENT-CONTRACT",
       "setup": "--rigor=deep --auto-approve=all. Lane A is a spine (B/C/D depends-on A). Lane A's receipt just landed: it is WELL-FORMED (all fields present, non-vacuous evidence text) and its G-lane review has PASSED. Lanes B/C/D are queued. Before dispatching them, do you independently open and verify the artifacts B/C/D will consume (checking they exist on disk and match the receipt's claims), or fan out now since receipt validation and review both passed?"
+    },
+    {
+      "id": "S6-subagent-rung-producer-marker",
+      "answer_key": "PROMPT-LINE-1",
+      "options": "PRODUCER-MARKER|BRIEF-TEXT|BUNDLE-PATH|NOTHING",
+      "expected": "PRODUCER-MARKER",
+      "setup": "Resolved snapshot: effective.agent_mode=subagent (no tmux, no cmux, no independent-agent support). agent-team-launcher.ts returned the bare signal {backend:\"subagent\", reason, slug} \u2014 there is NO dispatchPlan and no descriptor. You are about to issue Agent() yourself for lane `backend` (definition_source: shipped, resolved tier `mid`, score 2). What is the FIRST LINE of the prompt you pass to Agent()?",
+      "note": "issue #91: the D5 direct-subagent rung is the one dispatch class with no launcher-side descriptor, so the SKILL is the producer and must stamp `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=backend` on prompt line 1 (plus the env half: GUILD_DISPATCH_PRODUCER, GUILD_SPECIALIST, GUILD_TIER=mid, GUILD_TIER_SCORE=2). An unmarked lane here is indistinguishable from a non-Guild Agent call."
+    },
+    {
+      "id": "S7-subagent-rung-marker-no-tier",
+      "answer_key": "TIER-ENV",
+      "options": "OMIT-GUILD-TIER|SET-CHEAP|SET-UNKNOWN|SET-EMPTY",
+      "expected": "OMIT-GUILD-TIER",
+      "setup": "Same subagent rung as S6, but the lane carries neither a scored `tier:` nor an authoring `default_tier:` in team.yaml. You still stamp the producer marker. What do you put in GUILD_TIER on the dispatch env?",
+      "note": "issue #91: omit rather than fabricate \u2014 the tier guard verifies the dispatched model AGAINST a declared GUILD_TIER, so a made-up tier makes the guard check the model against a fiction. Absent tier records `model_present`, which is correct."
+    },
+    {
+      "id": "S8-subagent-rung-project-specialist",
+      "answer_key": "PROJECT-DISPATCH",
+      "options": "GENERIC-PLUS-DEFINITION-MARKER-PLUS-ADOPTION|GENERIC-PLUS-MARKER-ONLY|BY-NAME-PLUS-PRODUCER-MARKER|GENERIC-PLUS-ADOPTION-ONLY",
+      "expected": "GENERIC-PLUS-DEFINITION-MARKER-PLUS-ADOPTION",
+      "setup": "Same subagent rung as S6, but the lane's owner is `kb-viz-engineer`, whose TEAM-file entry carries `definition_source: project` and `definition: .guild/agents/kb-viz-engineer.md`. How do you construct the Agent() call \u2014 subagent_type, prompt line 1, and the rest of the prompt?",
+      "note": "issue #91 codex round-1 finding 2: a project specialist dispatches as the host-generic type with (a) line 1 = `GUILD_AGENT_DEFINITION=<the team-file definition path>` AND (b) the human-readable adoption instruction buildPrompt emits (read it FIRST and adopt it fully + load project-local skills). The marker alone satisfies the #58 guard but leaves the agent generic \u2014 syntactically compliant, functionally persona-stripped. Both, always."
+    },
+    {
+      "id": "S9-lane-owner-definition-source-join",
+      "answer_key": "JOIN-AND-ON-FAILURE",
+      "options": "TEAM-SPECIALISTS-BY-NAME-THEN-ABORT-LANE|TEAM-SPECIALISTS-BY-NAME-THEN-ASSUME-SHIPPED|PLAN-LANE-FIELD|INFER-FROM-AGENTS-DIR",
+      "expected": "TEAM-SPECIALISTS-BY-NAME-THEN-ABORT-LANE",
+      "setup": "Same subagent rung. You need `definition_source` and `definition` to choose the subagent_type and the line-1 marker. The plan lane gives you `owner: kb-viz-engineer`, `task-id`, `depends-on`, `scope`. Name BOTH: where those two values come from, AND what you do when the lookup fails or the project specialist's `definition` is not the role-matched `.guild/agents/kb-viz-engineer.md` path. Answer with the source AND the failure behavior together.",
+      "note": "issue #91 codex rounds 1-3, finding 1: `definition_source`/`definition` are TEAM-file fields on `specialists[]`, keyed by `name` \u2014 NOT lane fields. Join `team.specialists.find(s => s.name === lane.owner)` AND FAIL CLOSED \u2014 abort the lane \u2014 on no match, or when the project specialist's definition is not the role-matched `.guild/agents/<name>.md` (absent / arbitrary / role-mismatched). Normalize the path ONCE (trim) and use that normalized value for BOTH carriers: `composeInProcessDispatch` compares trimmed, so a padded-but-canonical path passes validation, and emitting the RAW field would then produce a malformed line-1 marker the whole-line parser rejects. Grading requires BOTH halves: naming the source but continuing after a failed lookup is a FAIL, because that is what dispatches a project specialist under an unregistered name."
+    },
+    {
+      "id": "S10-retry-redispatch-marker",
+      "answer_key": "ON-RETRY",
+      "options": "STAMP-MARKER-AGAIN|REUSE-FIRST-PROMPT-UNMARKED|MARKER-ONLY-ON-FIRST-ATTEMPT|SKIP-ENV-HALF",
+      "expected": "STAMP-MARKER-AGAIN",
+      "setup": "Three re-dispatch situations in one run on the subagent rung: (a) a lane failed its receipt check and `## Lane retry + dead-lettering` says retry; (b) a dead-lettered lane is resumed later; (c) a silent lane is replaced by a nudge-replacement spawn. What does EACH of the three Agent() calls carry?",
+      "note": "issue #91: all three are NEW Agent() calls and each needs BOTH marker halves (env + prompt line 1), plus the project-class adoption instruction where applicable. Answering for the retry alone is incomplete \u2014 an unmarked resume or nudge-replacement re-opens exactly the gap the marker closes."
     }
   ]
 }

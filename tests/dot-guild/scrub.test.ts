@@ -14,12 +14,17 @@
  *
  * Strategy: copy fixture to a tmp dir, run scrub.ts as a subprocess with
  * --workspace=<tmp>, assert output files.
+ *
+ * T6B-R2-B1: the subprocess is launched through the PACKAGE-LOCAL runtime
+ * (tests/ts-runtime-helper.ts → the shipped resolveScrubRuntime), never ambient `npx` —
+ * a root-owned/unreadable ~/.npm cache must not be able to decide whether this security
+ * suite runs.
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { spawnSync } from "child_process";
+import { runTsCli } from "./ts-runtime-helper";
 
 const FIXTURE_DIR = path.resolve(__dirname, "fixtures/scrub");
 const SCRUB_SCRIPT = path.resolve(
@@ -55,19 +60,15 @@ function runScrub(
   const fixturePath = path.join(FIXTURE_DIR, fixtureName);
   copyRecursive(fixturePath, tmpDir);
 
-  const result = spawnSync(
-    "npx",
-    ["tsx", SCRUB_SCRIPT, `--workspace=${tmpDir}`, ...extraArgs],
-    { encoding: "utf8", cwd: tmpDir }
-  );
+  const result = runTsCli(SCRUB_SCRIPT, [`--workspace=${tmpDir}`, ...extraArgs], { cwd: tmpDir });
 
   return {
     workspaceDir: tmpDir,
     cleanup: () => {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
     },
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
+    stdout: result.stdout,
+    stderr: result.stderr,
   };
 }
 
@@ -278,13 +279,9 @@ describe("scrub: idempotency (Decision H.1)", () => {
       expect(afterFirstScrub).not.toBeNull();
 
       // Run scrub a second time on the already-scrubbed workspace
-      const result2 = spawnSync(
-        "npx",
-        ["tsx", SCRUB_SCRIPT, `--workspace=${workspaceDir}`],
-        { encoding: "utf8", cwd: workspaceDir }
-      );
+      const result2 = runTsCli(SCRUB_SCRIPT, [`--workspace=${workspaceDir}`], { cwd: workspaceDir });
 
-      const stdout2 = result2.stdout ?? "";
+      const stdout2 = result2.stdout;
 
       // Second run should report 0 changed files
       expect(stdout2).toMatch(/0 changed/);

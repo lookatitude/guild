@@ -5,6 +5,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -24,6 +27,21 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES;
+var init_module_manifest = __esm({
+  "../src/modules/kernel/workflows/module-manifest.ts"() {
+    OWNED_INVENTORY_CATEGORIES = Object.freeze([
+      "commands",
+      "skills",
+      "agents",
+      "hooks",
+      "mcp_servers",
+      "scripts"
+    ]);
+  }
+});
 
 // node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
@@ -3060,57 +3078,7 @@ var require_js_yaml = __commonJS({
   }
 });
 
-// agent-team/teammate-idle.ts
-var fs9 = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
-var readline = __toESM(require("readline"));
-
-// lib/guild-root.ts
-var fs = __toESM(require("node:fs"));
-var path = __toESM(require("node:path"));
-function resolveGuildRoot(startCwd) {
-  const resolvedStart = path.resolve(startCwd);
-  let current = resolvedStart;
-  let nearestGuildDir = null;
-  for (; ; ) {
-    if (fs.existsSync(path.join(current, ".git"))) {
-      return current;
-    }
-    if (nearestGuildDir === null) {
-      const guildDir = path.join(current, ".guild");
-      if (fs.existsSync(guildDir)) {
-        try {
-          if (fs.statSync(guildDir).isDirectory()) {
-            nearestGuildDir = current;
-          }
-        } catch {
-        }
-      }
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return nearestGuildDir ?? resolvedStart;
-    }
-    current = parent;
-  }
-}
-
-// lib/run-trace.ts
-var fs6 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
-
-// ../src/modules/kernel/workflows/module-manifest.ts
-var OWNED_INVENTORY_CATEGORIES = Object.freeze([
-  "commands",
-  "skills",
-  "agents",
-  "hooks",
-  "mcp_servers",
-  "scripts"
-]);
-
 // ../src/modules/kernel/workflows/yaml-loader.ts
-var path2 = __toESM(require("node:path"));
 function pluginLocalScriptsRoots() {
   return [
     // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
@@ -3147,6 +3115,18 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
+var path2;
+var init_yaml_loader = __esm({
+  "../src/modules/kernel/workflows/yaml-loader.ts"() {
+    path2 = __toESM(require("node:path"));
+  }
+});
+
+// ../src/modules/kernel/workflows/identifier-tokenize.ts
+var init_identifier_tokenize = __esm({
+  "../src/modules/kernel/workflows/identifier-tokenize.ts"() {
+  }
+});
 
 // ../src/modules/kernel/workflows/sealed-collections.ts
 function regExpWritesLastIndex(re) {
@@ -3157,7 +3137,6 @@ function freezeRegExpSafely(re) {
   Object.freeze(re);
   return true;
 }
-var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
 function refuseMutator(label, method) {
   return () => {
     throw new TypeError(
@@ -3232,676 +3211,451 @@ function deepFreeze(value, options = {}) {
   walk(value);
   return value;
 }
+var SEALED_BRAND;
+var init_sealed_collections = __esm({
+  "../src/modules/kernel/workflows/sealed-collections.ts"() {
+    SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+  }
+});
 
 // ../src/modules/kernel/workflows/path-containment.ts
-var CONTAINMENT_REFUSAL_CODES = Object.freeze([
-  "root-unresolvable",
-  "no-existing-ancestor",
-  "dangling-symlink",
-  "physical-symlink",
-  "outside-root",
-  "leaf-not-regular-file",
-  "mkdir-failed",
-  "parent-traversal",
-  "destination-moved"
-]);
+var CONTAINMENT_REFUSAL_CODES;
+var init_path_containment = __esm({
+  "../src/modules/kernel/workflows/path-containment.ts"() {
+    CONTAINMENT_REFUSAL_CODES = Object.freeze([
+      "root-unresolvable",
+      "no-existing-ancestor",
+      "dangling-symlink",
+      "physical-symlink",
+      "outside-root",
+      "leaf-not-regular-file",
+      "mkdir-failed",
+      "parent-traversal",
+      "destination-moved"
+    ]);
+  }
+});
 
-// ../src/modules/config/workflows/config-defaults.ts
-var DEFAULT_ESCALATION_MARKERS = Object.freeze([
-  "I'm not sure",
-  "unclear",
-  "cannot determine",
-  "I don't know",
-  "ambiguous",
-  "uncertain",
-  "not enough information"
-]);
-var NON_INHERITABLE_KEYS = sealSet([
-  "initiative_default",
-  // OD-1: attach-to-wrong-initiative risk
-  "workspace"
-  // workspace.mode is root-detection-only
-], "NON_INHERITABLE_KEYS");
-var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-var SIDECAR_MAX_BYTES = 1024 * 1024;
-var CAPABILITY_RESOLVER_MODES = Object.freeze([
-  "legacy",
-  "observe",
-  "shadow",
-  "project-local",
-  "strict"
-]);
-var CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
-var CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
-var CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
-var DEFAULTS = deepFreeze({
-  rigor: "standard",
-  auto_approve: [],
-  review: "local",
-  host: "auto",
-  /**
-   * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
-   * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
-   * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
-   * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
-   * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
-   * this top-level placement (sibling of the `host` dispatch selector) is the registered
-   * replacement. One of only three keys ever legitimately null-typed at the top level.
-   */
-  host_mode: null,
-  roles: { host: null, advisory: null, adversarial: null },
-  host_profiles: {},
-  initiative_default: null,
-  index: "auto",
-  record_status_runs: true,
-  codex_skip_enforcement: "warn",
-  agent_mode: "auto",
-  workspace: { mode: "auto" },
-  models: {
-    enabled: true,
-    // G4b (host-reachability): every host in the registry's HOST_IDS gets an
-    // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
-    // own contract, stated in the module doc comment above, is to stay free of
-    // internal runtime imports so core settings code can load it before the
-    // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
-    // roster (host-registry-schema.ts) enumerated by hand; a jest test
-    // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
-    // stay in sync so this can never silently drift again the way it had (7 of
-    // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
-    // non-null model — every other host's registry row carries `models.<tier>.model:
-    // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
-    // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
-    // equivalent this static scaffold mirrors).
-    tiers: {
-      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-      mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-      powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
-    },
-    scoreWeights: {
-      workType: 0,
-      blastRadius: 1,
-      dependsOn: 1,
-      security: 1,
-      priorEscalation: 1
-    },
-    thresholds: { mid: 1, powerful: 3 },
-    advisorRounds: 2,
-    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
-    recallBeforeRead: true,
-    recallScoreThreshold: 0.4,
-    structuredOutputRequired: true,
-    cacheTTL: { coordinator: "1h", leaf: "5m" },
-    importanceGate: 3,
-    compositeRecall: true,
-    importanceAtIngest: true,
-    ingestSimilarityGate: 0.8,
-    shortOutputThreshold: {},
-    knowledge: {
-      maxDepth: 8,
-      maxBranching: 12,
-      minTopicImportance: 0.4,
-      relMinConf: 0.5,
-      maxFiles: 3e3,
-      maxTokens: 1e6,
-      batchSize: 20
-    }
-  },
-  security: {
-    bypass_permissions_policy: "audit"
-  },
-  secrets_policy: {
-    env_allowlist: [],
-    redaction_patterns: [],
-    fail_mode_durable: "closed",
-    fail_mode_telemetry: "open"
-  },
-  mcp: {
-    tool_description_hashes: {},
-    stdio_available: true,
-    http_available: false,
-    bridge_package: null
-  },
-  /**
-   * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
-   * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
-   * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
-   *
-   * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
-   * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
-   * What a lane may DO stays with `capability_scope` and the permission keys.
-   *
-   * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
-   * already emits unconditionally — capability ownership is per project by
-   * definition (the umbrella and each child answer "what roles do I need"
-   * independently, and D03 has the four repos migrating at different rates). Per
-   * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
-   * out with zero generator change, and adding it would touch every existing key.
-   */
-  capability: {
-    /**
-     * Which resolver mode this project is in on D03's migration ladder. Config
-     * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
-     * gate criteria the initiative evaluates, and a mode change is a deliberate
-     * write.
-     *
-     * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
-     * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
-     * silently defaulted: an unset value resolves with provenance `default`, so
-     * `config show --sources` shows it was never chosen.
-     */
-    resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
-    /**
-     * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
-     * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
-     * the two cannot disagree. 0 is legal: "profile but never propose".
-     */
-    suggestion_budget: 4,
-    /**
-     * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
-     * ship a roster, which is precisely what localization exists to stop. Empty ⇒
-     * Learn proposes.
-     */
-    starter_roles: [],
-    /** Whether an approved proposal may auto-advance the resolver mode (D04). */
-    auto_create_policy: "on_approval"
-  },
-  statusline: false,
-  adversarial_review_provider: "auto",
-  loops: null,
-  loop_cap: 16,
-  codex_cap: 5,
-  defaults: {
-    auto_learn: false,
-    adversarial: "on",
-    team: { size: null, always_include: [] },
-    review_workflow: "standard",
-    skill_policy: "standard",
-    gates: { auto_approve: [] },
-    wiki: { share_mode: "team", autopromote: false },
-    quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
-    reporting: "standard",
-    index: {
-      enabled: true,
-      kg_node_threshold: 2e3,
-      kg_size_threshold_mb: 1,
-      links_edge_threshold: 2e3,
-      runs_threshold: 20,
-      wiki_file_threshold: 500
-    },
-    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
-    retry: { max_attempts: 1, backoff: "exponential" },
-    resume: { enabled: true },
-    heartbeat_timeout_ms: 6e5,
-    capability_manifest_ttl_s: 3600,
-    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
-    // the SessionStart signal; `auto` additionally stages the host apply path;
-    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
-    update: { mode: "notify", cadence_hours: 24 },
-    allowed_tools: [],
-    /**
-     * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
-     * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
-     * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
-     * "Inline shortcut under high autonomy").
-     */
-    lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
-    /**
-     * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
-     * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
-     * activity count before the lifecycle gate advisory fires.
-     */
-    lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 }
+// ../src/modules/kernel/index.ts
+var init_kernel = __esm({
+  "../src/modules/kernel/index.ts"() {
+    init_module_manifest();
+    init_yaml_loader();
+    init_identifier_tokenize();
+    init_sealed_collections();
+    init_path_containment();
   }
 });
 
 // ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
-var UPDATE_COMMANDS = {
-  marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
-  self_update: "guild-run update",
-  reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
-};
-var INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
-var INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
-var CLAUDE_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "claude",
-  family: "claude",
-  surface_kind: "cli",
-  package: {
-    installable: true,
-    installability: "verified",
-    manifest_format: "claude-plugin",
-    update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
-  },
-  bootstrap: {
-    context_injection: "hookSpecificOutput.additionalContext",
-    skill_autoload: true,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  commands: { slash_commands: true, command_files: "markdown" },
-  skills: { native_skills: true, skill_dir: ".claude/skills" },
-  agents: { native_agents: true, agent_format: "claude-md" },
-  injection: {
-    // No injection probe has EVER run on any host — the capability is unbuilt (S7
-    // landed the transport half only). A dispatch surface exists, so "target".
-    definition_injection: false,
-    definition_injection_support: "target",
-    skill_bundle_injection: false,
-    skill_bundle_injection_support: "target",
-    dynamic_registration: false,
-    dynamic_registration_support: "target",
-    fallback: "prompt_text",
-    definition_injection_verified_by: null,
-    skill_bundle_injection_verified_by: null,
-    dynamic_registration_verified_by: null
-  },
-  hooks: {
-    // All ten events are bound in the live hooks/hooks.json (verified).
-    session_start: true,
-    user_prompt_submit: true,
-    pre_tool_use: true,
-    post_tool_use: true,
-    stop: true,
-    pre_compact: true,
-    subagent_stop: true,
-    task_created: true,
-    task_completed: true,
-    teammate_idle: true
-  },
-  permissions: {
-    deny: true,
-    ask: true,
-    ask_mode: "pre_tool_use",
-    accept_edits_without_prompt: true,
-    auto_approve_tools: true,
-    bypass_prompts: true,
-    bypass_sandbox: false,
-    permission_prompt_layer: true,
-    launch_modes: {
-      read_only: ["--tools", "Read,Grep,Glob"],
-      ask: ["--permission-mode", "default"],
-      accept_edits: ["--permission-mode", "acceptEdits"],
-      auto: ["--permission-mode", "auto"],
-      bypass_all: ["--permission-mode", "bypassPermissions"]
-    }
-  },
-  dispatch: {
-    tmux_processes: true,
-    plain_processes: true,
-    independent_agents: true,
-    subagents: true,
-    inline: true
-  },
-  interaction: {
-    native_questions: true,
-    terminal_prompt: true,
-    file_bus_questions: true
-  },
-  sessions: { continue: true, resume_by_id: true, fork: true },
-  structured_output: {
-    native_json: true,
-    schema_validation: true,
-    repair_prompt: true
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "bridge",
-    web: "native",
-    mcp: "native"
-  },
-  mcp: { stdio: true, http: false },
-  models: {
-    cheap: { model: "haiku" },
-    mid: { model: "sonnet" },
-    powerful: { model: "opus" }
+var UPDATE_COMMANDS, INJECTION_SUPPORT, INJECTION_SUPPORT_SET, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES, REQUIRED_HOOK_EVENTS;
+var init_host_capabilities_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
+    UPDATE_COMMANDS = {
+      marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+      self_update: "guild-run update",
+      reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
+    };
+    INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+    INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
+    CLAUDE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "claude",
+      family: "claude",
+      surface_kind: "cli",
+      package: {
+        installable: true,
+        installability: "verified",
+        manifest_format: "claude-plugin",
+        update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
+      },
+      bootstrap: {
+        context_injection: "hookSpecificOutput.additionalContext",
+        skill_autoload: true,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: true, command_files: "markdown" },
+      skills: { native_skills: true, skill_dir: ".claude/skills" },
+      agents: { native_agents: true, agent_format: "claude-md" },
+      injection: {
+        // No injection probe has EVER run on any host — the capability is unbuilt (S7
+        // landed the transport half only). A dispatch surface exists, so "target".
+        definition_injection: false,
+        definition_injection_support: "target",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "target",
+        dynamic_registration: false,
+        dynamic_registration_support: "target",
+        fallback: "prompt_text",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
+      hooks: {
+        // All ten events are bound in the live hooks/hooks.json (verified).
+        session_start: true,
+        user_prompt_submit: true,
+        pre_tool_use: true,
+        post_tool_use: true,
+        stop: true,
+        pre_compact: true,
+        subagent_stop: true,
+        task_created: true,
+        task_completed: true,
+        teammate_idle: true
+      },
+      permissions: {
+        deny: true,
+        ask: true,
+        ask_mode: "pre_tool_use",
+        accept_edits_without_prompt: true,
+        auto_approve_tools: true,
+        bypass_prompts: true,
+        bypass_sandbox: false,
+        permission_prompt_layer: true,
+        launch_modes: {
+          read_only: ["--tools", "Read,Grep,Glob"],
+          ask: ["--permission-mode", "default"],
+          accept_edits: ["--permission-mode", "acceptEdits"],
+          auto: ["--permission-mode", "auto"],
+          bypass_all: ["--permission-mode", "bypassPermissions"]
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        plain_processes: true,
+        independent_agents: true,
+        subagents: true,
+        inline: true
+      },
+      interaction: {
+        native_questions: true,
+        terminal_prompt: true,
+        file_bus_questions: true
+      },
+      sessions: { continue: true, resume_by_id: true, fork: true },
+      structured_output: {
+        native_json: true,
+        schema_validation: true,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "bridge",
+        web: "native",
+        mcp: "native"
+      },
+      mcp: { stdio: true, http: false },
+      models: {
+        cheap: { model: "haiku" },
+        mid: { model: "sonnet" },
+        powerful: { model: "opus" }
+      }
+    };
+    CODEX_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "codex",
+      family: "codex",
+      surface_kind: "cli",
+      // installable:false is the honest MACHINE state — the Codex renderer exists but
+      // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+      // as installable until proven. installability:"target" records that the renderer
+      // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "codex-plugin",
+        // NOT self_update (operator decision, initiative cross-host-release-
+        // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
+        // list` tracks the registered marketplace source, so a Guild-side staged
+        // swap of the cache mutates manager state behind Codex's back and the next
+        // `codex plugin add` reinstalls the old payload. A minted receipt also
+        // cannot know a native install's channel, so a self-update could silently
+        // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
+        // populations: receipted installs re-render properly; host-native installs
+        // are detected and told the precise codex command for their registered
+        // source type (git → marketplace upgrade + plugin add; local → reinstall).
+        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+      },
+      bootstrap: {
+        // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+        // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+        prompt_transform: false,
+        // INFERRED
+        wrapper_injection: true
+        // The generated guild-run wrapper injects bootstrap.
+      },
+      commands: {
+        // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+        slash_commands: false,
+        command_files: "none"
+      },
+      skills: { native_skills: false, skill_dir: null },
+      // Verified (per-host-packaging).
+      agents: { native_agents: false, agent_format: null },
+      // Verified (per-host-packaging flags agents unsupported).
+      injection: {
+        // No injection probe has EVER run on any host — the capability is unbuilt (S7
+        // landed the transport half only). A dispatch surface exists, so "target".
+        definition_injection: false,
+        definition_injection_support: "target",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "target",
+        dynamic_registration: false,
+        dynamic_registration_support: "absent",
+        fallback: "prompt_text",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
+      hooks: {
+        // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+        // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+        // Claude-shaped hooks manifest and fires both events the generated
+        // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+        // bridge since the package existed, and SessionStart now carries the
+        // update-check signal, LIVE-VERIFIED in a real codex session (the model
+        // quoted the injected line verbatim). Remaining events stay false until
+        // individually verified.
+        session_start: true,
+        user_prompt_submit: true,
+        // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0, isolated CODEX_HOME).
+        // A PreToolUse hook emitting the Claude-shaped
+        // {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}
+        // BLOCKS the tool call:
+        //     hook: PreToolUse Blocked
+        //     ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: …
+        // and the model stops. CONTROL (same config, non-matching command) reached
+        // `hook: PreToolUse Completed` and executed — so the deny, not the sandbox,
+        // is causal. This retires the old INFERRED `false` (never verified).
+        //
+        // CAVEAT THAT DOES NOT BELONG IN THIS BOOLEAN, but governs how it may be
+        // consumed: codex gates hooks behind PERSISTED HOOK TRUST. With the same
+        // hooks.json but no trust, the hook SILENTLY never runs (no warning, tool
+        // executes). So "codex supports PreToolUse deny" (this row) must never be
+        // read as "enforcement is live on this box" — that needs a probe of actual
+        // execution (probeCodexPreToolUseEnforcement, scripts/lib/pane-adapter.ts),
+        // which is what the codex-pane bypass flag is gated on.
+        pre_tool_use: true,
+        post_tool_use: false,
+        stop: false,
+        pre_compact: false,
+        subagent_stop: false,
+        task_created: false,
+        task_completed: false,
+        teammate_idle: false
+      },
+      permissions: {
+        // `deny` CONFIRMED ON-BOX (issue #94) — see hooks.pre_tool_use above: a
+        // PreToolUse hook decision of "deny" is honoured and blocks the call.
+        deny: true,
+        ask: true,
+        // Codex prompts for approval by default.
+        // STILL NULL, DELIBERATELY. Codex has a PreToolUse DENY layer but no
+        // PreToolUse ASK primitive (`permissionDecision:"ask"` is not an accepted
+        // codex decision). Guild's own enforcement already handles this: the
+        // manifest written by write-host-capability.ts carries
+        // `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
+        // hooks/pre-tool-use.ts's HK-07 gate degrades ask -> file-bus
+        // approval_request + `deny`. VERIFIED end-to-end for codex in issue #94.
+        // Flipping this to "pre_tool_use" would re-enable an ask codex rejects.
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        // INFERRED
+        auto_approve_tools: false,
+        // INFERRED
+        bypass_prompts: true,
+        // Codex YOLO / --dangerously-bypass exists (AC19).
+        bypass_sandbox: true,
+        // INFERRED — YOLO bypasses the sandbox.
+        permission_prompt_layer: false,
+        // INFERRED
+        launch_modes: {
+          // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+          // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+          // than guessed, so their absence reads as "degrade/record", not "supported".
+          // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0): the flag exists and
+          // takes effect. Note what it does NOT do — a PreToolUse hook deny still
+          // blocked the tool call under this flag, so the bypass suppresses codex's
+          // own approval/sandbox layer and leaves Guild's gate intact.
+          bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
+        }
+      },
+      dispatch: {
+        tmux_processes: true,
+        // Codex is a CLI process — tmux panes work.
+        plain_processes: true,
+        independent_agents: false,
+        // INFERRED — no native agent-team primitive.
+        subagents: false,
+        // INFERRED
+        inline: true
+      },
+      interaction: {
+        native_questions: false,
+        // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+        terminal_prompt: true,
+        file_bus_questions: true
+        // Guild file-bus approval works on any FS host.
+      },
+      sessions: {
+        continue: true,
+        // INFERRED — Codex has session continuation.
+        resume_by_id: true,
+        // INFERRED
+        fork: false
+        // INFERRED
+      },
+      structured_output: {
+        native_json: false,
+        // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+        schema_validation: false,
+        // Guild-side validation (validateHandoffV2) instead.
+        repair_prompt: true
+        // Bounded repair prompt is the fallback (ADR §Result contracts).
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        // INFERRED — no native browser; record fallback (AC29).
+        web: "emulated",
+        // INFERRED
+        mcp: "native"
+        // Codex supports stdio MCP.
+      },
+      mcp: { stdio: true, http: false },
+      // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+      models: {
+        // Codex model ids are host-specific and not pinned in this repo yet; null =
+        // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    NO_HOOKS = {
+      session_start: false,
+      user_prompt_submit: false,
+      pre_tool_use: false,
+      post_tool_use: false,
+      stop: false,
+      pre_compact: false,
+      subagent_stop: false,
+      task_created: false,
+      task_completed: false,
+      teammate_idle: false
+    };
+    AGENTS_FILE_CAPABILITIES = {
+      schema_version: "guild.host_capabilities.v1",
+      host_kind: "agents-file",
+      family: "agents",
+      surface_kind: "file",
+      package: {
+        installable: false,
+        installability: "target",
+        manifest_format: "agents-file",
+        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+      },
+      bootstrap: {
+        context_injection: "instruction_file",
+        skill_autoload: false,
+        prompt_transform: false,
+        wrapper_injection: true
+      },
+      commands: { slash_commands: false, command_files: "none" },
+      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+      agents: { native_agents: false, agent_format: null },
+      injection: {
+        // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+        definition_injection: false,
+        definition_injection_support: "absent",
+        skill_bundle_injection: false,
+        skill_bundle_injection_support: "absent",
+        dynamic_registration: false,
+        dynamic_registration_support: "absent",
+        fallback: "none",
+        definition_injection_verified_by: null,
+        skill_bundle_injection_verified_by: null,
+        dynamic_registration_verified_by: null
+      },
+      hooks: NO_HOOKS,
+      permissions: {
+        deny: false,
+        ask: true,
+        ask_mode: null,
+        accept_edits_without_prompt: false,
+        auto_approve_tools: false,
+        bypass_prompts: false,
+        bypass_sandbox: false,
+        permission_prompt_layer: false,
+        launch_modes: {}
+      },
+      dispatch: {
+        tmux_processes: false,
+        plain_processes: false,
+        independent_agents: false,
+        subagents: false,
+        inline: false
+      },
+      interaction: {
+        native_questions: false,
+        terminal_prompt: false,
+        file_bus_questions: true
+      },
+      sessions: { continue: false, resume_by_id: false, fork: false },
+      structured_output: {
+        native_json: false,
+        schema_validation: false,
+        repair_prompt: true
+      },
+      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+      tools: {
+        read: "native",
+        search: "native",
+        shell: "native",
+        edit: "native",
+        write: "native",
+        browser: "none",
+        web: "emulated",
+        mcp: "none"
+      },
+      mcp: { stdio: false, http: false },
+      models: {
+        cheap: { model: null },
+        mid: { model: null },
+        powerful: { model: null }
+      }
+    };
+    REQUIRED_HOOK_EVENTS = Object.freeze([
+      "session_start",
+      "user_prompt_submit",
+      "pre_tool_use",
+      "post_tool_use",
+      "stop",
+      "pre_compact",
+      "subagent_stop",
+      "task_created",
+      "task_completed",
+      "teammate_idle"
+    ]);
   }
-};
-var CODEX_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "codex",
-  family: "codex",
-  surface_kind: "cli",
-  // installable:false is the honest MACHINE state — the Codex renderer exists but
-  // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
-  // as installable until proven. installability:"target" records that the renderer
-  // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
-  package: {
-    installable: false,
-    installability: "target",
-    manifest_format: "codex-plugin",
-    // NOT self_update (operator decision, initiative cross-host-release-
-    // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
-    // list` tracks the registered marketplace source, so a Guild-side staged
-    // swap of the cache mutates manager state behind Codex's back and the next
-    // `codex plugin add` reinstalls the old payload. A minted receipt also
-    // cannot know a native install's channel, so a self-update could silently
-    // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
-    // populations: receipted installs re-render properly; host-native installs
-    // are detected and told the precise codex command for their registered
-    // source type (git → marketplace upgrade + plugin add; local → reinstall).
-    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
-  },
-  bootstrap: {
-    // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
-    // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
-    prompt_transform: false,
-    // INFERRED
-    wrapper_injection: true
-    // The generated guild-run wrapper injects bootstrap.
-  },
-  commands: {
-    // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
-    slash_commands: false,
-    command_files: "none"
-  },
-  skills: { native_skills: false, skill_dir: null },
-  // Verified (per-host-packaging).
-  agents: { native_agents: false, agent_format: null },
-  // Verified (per-host-packaging flags agents unsupported).
-  injection: {
-    // No injection probe has EVER run on any host — the capability is unbuilt (S7
-    // landed the transport half only). A dispatch surface exists, so "target".
-    definition_injection: false,
-    definition_injection_support: "target",
-    skill_bundle_injection: false,
-    skill_bundle_injection_support: "target",
-    dynamic_registration: false,
-    dynamic_registration_support: "absent",
-    fallback: "prompt_text",
-    definition_injection_verified_by: null,
-    skill_bundle_injection_verified_by: null,
-    dynamic_registration_verified_by: null
-  },
-  hooks: {
-    // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
-    // Claude-equivalent hooks" claim was empirically false. Codex accepts a
-    // Claude-shaped hooks manifest and fires both events the generated
-    // codex-hooks.json registers — UserPromptSubmit has carried the prompt
-    // bridge since the package existed, and SessionStart now carries the
-    // update-check signal, LIVE-VERIFIED in a real codex session (the model
-    // quoted the injected line verbatim). Remaining events stay false until
-    // individually verified.
-    session_start: true,
-    user_prompt_submit: true,
-    pre_tool_use: false,
-    post_tool_use: false,
-    stop: false,
-    pre_compact: false,
-    subagent_stop: false,
-    task_created: false,
-    task_completed: false,
-    teammate_idle: false
-  },
-  permissions: {
-    // INFERRED (Codex CLI approval model). Confirm on-box at L3.
-    deny: false,
-    ask: true,
-    // Codex prompts for approval by default.
-    ask_mode: null,
-    // No pre_tool_use layer; approval is interactive.
-    accept_edits_without_prompt: false,
-    // INFERRED
-    auto_approve_tools: false,
-    // INFERRED
-    bypass_prompts: true,
-    // Codex YOLO / --dangerously-bypass exists (AC19).
-    bypass_sandbox: true,
-    // INFERRED — YOLO bypasses the sandbox.
-    permission_prompt_layer: false,
-    // INFERRED
-    launch_modes: {
-      // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
-      // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
-      // than guessed, so their absence reads as "degrade/record", not "supported".
-      bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
-      // INFERRED flag name — verify on-box (AC19).
-    }
-  },
-  dispatch: {
-    tmux_processes: true,
-    // Codex is a CLI process — tmux panes work.
-    plain_processes: true,
-    independent_agents: false,
-    // INFERRED — no native agent-team primitive.
-    subagents: false,
-    // INFERRED
-    inline: true
-  },
-  interaction: {
-    native_questions: false,
-    // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
-    terminal_prompt: true,
-    file_bus_questions: true
-    // Guild file-bus approval works on any FS host.
-  },
-  sessions: {
-    continue: true,
-    // INFERRED — Codex has session continuation.
-    resume_by_id: true,
-    // INFERRED
-    fork: false
-    // INFERRED
-  },
-  structured_output: {
-    native_json: false,
-    // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
-    schema_validation: false,
-    // Guild-side validation (validateHandoffV2) instead.
-    repair_prompt: true
-    // Bounded repair prompt is the fallback (ADR §Result contracts).
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    // INFERRED — no native browser; record fallback (AC29).
-    web: "emulated",
-    // INFERRED
-    mcp: "native"
-    // Codex supports stdio MCP.
-  },
-  mcp: { stdio: true, http: false },
-  // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
-  models: {
-    // Codex model ids are host-specific and not pinned in this repo yet; null =
-    // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null }
-  }
-};
-var NO_HOOKS = {
-  session_start: false,
-  user_prompt_submit: false,
-  pre_tool_use: false,
-  post_tool_use: false,
-  stop: false,
-  pre_compact: false,
-  subagent_stop: false,
-  task_created: false,
-  task_completed: false,
-  teammate_idle: false
-};
-var AGENTS_FILE_CAPABILITIES = {
-  schema_version: "guild.host_capabilities.v1",
-  host_kind: "agents-file",
-  family: "agents",
-  surface_kind: "file",
-  package: {
-    installable: false,
-    installability: "target",
-    manifest_format: "agents-file",
-    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
-  },
-  bootstrap: {
-    context_injection: "instruction_file",
-    skill_autoload: false,
-    prompt_transform: false,
-    wrapper_injection: true
-  },
-  commands: { slash_commands: false, command_files: "none" },
-  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-  agents: { native_agents: false, agent_format: null },
-  injection: {
-    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
-    definition_injection: false,
-    definition_injection_support: "absent",
-    skill_bundle_injection: false,
-    skill_bundle_injection_support: "absent",
-    dynamic_registration: false,
-    dynamic_registration_support: "absent",
-    fallback: "none",
-    definition_injection_verified_by: null,
-    skill_bundle_injection_verified_by: null,
-    dynamic_registration_verified_by: null
-  },
-  hooks: NO_HOOKS,
-  permissions: {
-    deny: false,
-    ask: true,
-    ask_mode: null,
-    accept_edits_without_prompt: false,
-    auto_approve_tools: false,
-    bypass_prompts: false,
-    bypass_sandbox: false,
-    permission_prompt_layer: false,
-    launch_modes: {}
-  },
-  dispatch: {
-    tmux_processes: false,
-    plain_processes: false,
-    independent_agents: false,
-    subagents: false,
-    inline: false
-  },
-  interaction: {
-    native_questions: false,
-    terminal_prompt: false,
-    file_bus_questions: true
-  },
-  sessions: { continue: false, resume_by_id: false, fork: false },
-  structured_output: {
-    native_json: false,
-    schema_validation: false,
-    repair_prompt: true
-  },
-  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-  tools: {
-    read: "native",
-    search: "native",
-    shell: "native",
-    edit: "native",
-    write: "native",
-    browser: "none",
-    web: "emulated",
-    mcp: "none"
-  },
-  mcp: { stdio: false, http: false },
-  models: {
-    cheap: { model: null },
-    mid: { model: null },
-    powerful: { model: null }
-  }
-};
-var REQUIRED_HOOK_EVENTS = Object.freeze([
-  "session_start",
-  "user_prompt_submit",
-  "pre_tool_use",
-  "post_tool_use",
-  "stop",
-  "pre_compact",
-  "subagent_stop",
-  "task_created",
-  "task_completed",
-  "teammate_idle"
-]);
+});
 
 // ../src/modules/host-runtime/workflows/host-registry-schema.ts
-var HOST_IDS = Object.freeze([
-  // keep CLI/file (5)
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  // keep-as-refuse (4) — RETAINED verbatim
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector",
-  // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
-  "cursor",
-  "github-copilot",
-  "opencode",
-  "rovo-dev",
-  // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
-  // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
-  "kiro",
-  "qoder",
-  "trae"
-]);
-var HOST_FAMILIES = Object.freeze([
-  "claude",
-  "codex",
-  "agents",
-  "pi",
-  "antigravity",
-  "cursor",
-  "copilot",
-  "opencode",
-  "rovo"
-]);
-var AUTH_PROBES = Object.freeze([
-  "codex_stored_or_env",
-  "none",
-  "cursor_stored",
-  "gh_auth",
-  "opencode_stored_or_env",
-  "acli_stored"
-]);
-var CLAUDE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-cli",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
-  installability: "native",
-  result_adapter: false,
-  // Claude is the reference author host, not a cross reviewer for itself.
-  dispatch_selectable: true,
-  capabilities: CLAUDE_CAPABILITIES,
-  provenance: "verified"
-};
-var CODEX_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "codex-cli",
-  family: "codex",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
-  // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
-  installability: "target",
-  result_adapter: true,
-  // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
-  dispatch_selectable: true,
-  capabilities: CODEX_CAPABILITIES,
-  provenance: "verified"
-  // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
-};
 function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
@@ -4009,512 +3763,1086 @@ function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectab
     models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
   };
 }
-var AGENTS_FILE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "agents-file",
-  family: "agents",
-  // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
-  // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
-  adapter_binding: "self",
-  // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
-  surface_kind: "file",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "target",
-  result_adapter: false,
-  // INFERRED — no cross-review adapter; verify at live-host availability.
-  // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
-  // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
-  // The prior value was annotated INFERRED with the rationale "a host consuming
-  // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
-  // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
-  // THIS row", and under that reading it is false by construction:
-  //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
-  //     TeamBackend/pane path can name it;
-  //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
-  //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
-  //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
-  //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
-  //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
-  //     package target, not a process launcher".
-  // The G4b lane carved this row out as a documented exception rather than flipping it.
-  // That carve-out is superseded here because the field has REAL per-row consumers that
-  // read it as selectability: config-cli.ts builds the operator-pinnable host set from
-  // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
-  // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
-  // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
-  // and then dispatch into an adapter that returns `command: null`. A concrete
-  // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
-  // this row is the render TARGET, never a dispatch destination.
-  dispatch_selectable: false,
-  capabilities: AGENTS_FILE_CAPABILITIES,
-  // file surface — matches top-level surface_kind.
-  provenance: "inferred"
-};
-var PI_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "pi-cli",
-  family: "pi",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
-  // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
-  installability: "target",
-  // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
-  result_adapter: false,
-  // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
-  dispatch_selectable: true,
-  // VERIFIED: pi is a CLI process a lane can run on.
-  capabilities: {
-    ...inferredCaps("pi-cli", "pi"),
-    // VERIFIED on-host (pi --help, 0.79.3):
-    sessions: { continue: true, resume_by_id: true, fork: true },
-    // --continue/-c, --resume/-r + --session-id, --fork
-    structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
-    // --mode json
-    permissions: {
-      ...inferredCaps("pi-cli", "pi").permissions,
-      // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
-      // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
-      // left false) — pi's --tools allowlist lets an invocation deny specific tools,
-      // so `deny:true` is the correct capability. Recorded here (not just in the
-      // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
-      deny: true
-    }
-  },
-  provenance: "verified"
-  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-};
-var ANTIGRAVITY_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "antigravity-cli",
-  family: "antigravity",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
-  detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
-  installability: "target",
-  // VERIFIED-as-target: CLI present; Guild-package install unproven.
-  result_adapter: false,
-  // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
-  dispatch_selectable: true,
-  // VERIFIED: agy is a CLI process a lane can run on.
-  capabilities: {
-    ...inferredCaps("antigravity-cli", "antigravity"),
-    // VERIFIED on-host (agy --help, 1.0.8):
-    sessions: { continue: true, resume_by_id: true, fork: false },
-    // --continue/-c, --conversation <id>; no fork flag
-    permissions: {
-      ...inferredCaps("antigravity-cli", "antigravity").permissions,
-      bypass_prompts: true,
-      // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
-      launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
-      // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
-      // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
-      // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
-      // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
-      // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
-      // Recorded here so the registry — not a second hand-authored row — is the one
-      // source of truth (closes the "two diverged capability truths" audit finding).
-      deny: true,
-      bypass_sandbox: true
-    }
-  },
-  provenance: "verified"
-  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-};
-var CLAUDE_APP_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-app",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-code-app", "claude", "app"),
-  provenance: "inferred"
-};
-var CLAUDE_WEB_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-code-web",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-code-web", "claude", "app"),
-  provenance: "inferred"
-};
-var CODEX_APP_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "codex-app",
-  family: "codex",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("codex-app", "codex", "app"),
-  provenance: "inferred"
-};
-var CLAUDE_AI_CONNECTOR_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "claude-ai-connector",
-  family: "claude",
-  adapter_binding: "self",
-  surface_kind: "app",
-  detection: { bin: null, requires_auth: false, auth_probe: "none" },
-  installability: "none",
-  result_adapter: false,
-  dispatch_selectable: false,
-  capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
-  provenance: "inferred"
-};
-var CURSOR_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "cursor",
-  family: "cursor",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("cursor", "cursor", "cli"),
-  // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
-  // were live-checked 2026-07-30, but no authenticated completion has run —
-  // partial verification does not flip the row.
-  provenance: "inferred"
-};
-var GITHUB_COPILOT_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "github-copilot",
-  family: "copilot",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // capability is a subcommand of the shared `gh` bin (`gh copilot`).
-  detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("github-copilot", "copilot", "cli"),
-  // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
-  // real completion end to end through guild-run; per-host receipt + live
-  // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
-  // INFERRED_HOSTS) until all cells are live-verified.
-  provenance: "verified"
-};
-var OPENCODE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "opencode",
-  family: "opencode",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("opencode", "opencode", "cli"),
-  // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
-  // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
-  // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
-  // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
-  provenance: "verified"
-};
-var ROVO_DEV_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "rovo-dev",
-  family: "rovo",
-  adapter_binding: "self",
-  surface_kind: "cli",
-  // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
-  detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
-  installability: "target",
-  result_adapter: false,
-  dispatch_selectable: true,
-  capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
-  provenance: "inferred"
-};
-var KIRO_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "kiro",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
-  // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
-  // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
-  // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
-  // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
-  // a row per registry id, but a capability row is not a dispatch surface). The
-  // honest column for a pane-less file surface is false.
-  dispatch_selectable: false,
-  capabilities: inferredCaps("kiro", "agents", "file"),
-  provenance: "inferred"
-};
-var QODER_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "qoder",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
-  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
-  dispatch_selectable: false,
-  capabilities: inferredCaps("qoder", "agents", "file"),
-  provenance: "inferred"
-};
-var TRAE_ENTRY = {
-  schema_version: "guild.host_registry.v1",
-  host_id: "trae",
-  family: "agents",
-  adapter_binding: "agents-file",
-  surface_kind: "file",
-  detection: {
-    bin: null,
-    requires_auth: false,
-    auth_probe: "none",
-    subcommand: null,
-    marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
-  },
-  installability: "target",
-  result_adapter: false,
-  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
-  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
-  dispatch_selectable: false,
-  capabilities: inferredCaps("trae", "agents", "file"),
-  provenance: "inferred"
-};
-var HOST_REGISTRY_ROWS = deepFreeze({
-  "claude-code-cli": CLAUDE_ENTRY,
-  "codex-cli": CODEX_ENTRY,
-  "pi-cli": PI_ENTRY,
-  "antigravity-cli": ANTIGRAVITY_ENTRY,
-  "agents-file": AGENTS_FILE_ENTRY,
-  "claude-code-app": CLAUDE_APP_ENTRY,
-  "claude-code-web": CLAUDE_WEB_ENTRY,
-  "codex-app": CODEX_APP_ENTRY,
-  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
-  cursor: CURSOR_ENTRY,
-  "github-copilot": GITHUB_COPILOT_ENTRY,
-  opencode: OPENCODE_ENTRY,
-  "rovo-dev": ROVO_DEV_ENTRY,
-  kiro: KIRO_ENTRY,
-  qoder: QODER_ENTRY,
-  trae: TRAE_ENTRY
+var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE_ENTRY, PI_ENTRY, ANTIGRAVITY_ENTRY, CLAUDE_APP_ENTRY, CLAUDE_WEB_ENTRY, CODEX_APP_ENTRY, CLAUDE_AI_CONNECTOR_ENTRY, CURSOR_ENTRY, GITHUB_COPILOT_ENTRY, OPENCODE_ENTRY, ROVO_DEV_ENTRY, KIRO_ENTRY, QODER_ENTRY, TRAE_ENTRY, HOST_REGISTRY_ROWS, HOST_ID_SET, FAMILY_SET, AUTH_PROBE_SET;
+var init_host_registry_schema = __esm({
+  "../src/modules/host-runtime/workflows/host-registry-schema.ts"() {
+    init_kernel();
+    init_host_capabilities_schema();
+    HOST_IDS = Object.freeze([
+      // keep CLI/file (5)
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      // keep-as-refuse (4) — RETAINED verbatim
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+      // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+      "kiro",
+      "qoder",
+      "trae"
+    ]);
+    HOST_FAMILIES = Object.freeze([
+      "claude",
+      "codex",
+      "agents",
+      "pi",
+      "antigravity",
+      "cursor",
+      "copilot",
+      "opencode",
+      "rovo"
+    ]);
+    AUTH_PROBES = Object.freeze([
+      "codex_stored_or_env",
+      "none",
+      "cursor_stored",
+      "gh_auth",
+      "opencode_stored_or_env",
+      "acli_stored"
+    ]);
+    CLAUDE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-cli",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
+      installability: "native",
+      result_adapter: false,
+      // Claude is the reference author host, not a cross reviewer for itself.
+      dispatch_selectable: true,
+      capabilities: CLAUDE_CAPABILITIES,
+      provenance: "verified"
+    };
+    CODEX_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-cli",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
+      // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
+      installability: "target",
+      result_adapter: true,
+      // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
+      dispatch_selectable: true,
+      capabilities: CODEX_CAPABILITIES,
+      provenance: "verified"
+      // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
+    };
+    AGENTS_FILE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "agents-file",
+      family: "agents",
+      // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+      // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+      adapter_binding: "self",
+      // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+      surface_kind: "file",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      result_adapter: false,
+      // INFERRED — no cross-review adapter; verify at live-host availability.
+      // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
+      // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
+      // The prior value was annotated INFERRED with the rationale "a host consuming
+      // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
+      // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
+      // THIS row", and under that reading it is false by construction:
+      //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
+      //     TeamBackend/pane path can name it;
+      //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
+      //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
+      //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
+      //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
+      //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
+      //     package target, not a process launcher".
+      // The G4b lane carved this row out as a documented exception rather than flipping it.
+      // That carve-out is superseded here because the field has REAL per-row consumers that
+      // read it as selectability: config-cli.ts builds the operator-pinnable host set from
+      // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
+      // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
+      // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
+      // and then dispatch into an adapter that returns `command: null`. A concrete
+      // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
+      // this row is the render TARGET, never a dispatch destination.
+      dispatch_selectable: false,
+      capabilities: AGENTS_FILE_CAPABILITIES,
+      // file surface — matches top-level surface_kind.
+      provenance: "inferred"
+    };
+    PI_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "pi-cli",
+      family: "pi",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
+      // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+      dispatch_selectable: true,
+      // VERIFIED: pi is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("pi-cli", "pi"),
+        // VERIFIED on-host (pi --help, 0.79.3):
+        sessions: { continue: true, resume_by_id: true, fork: true },
+        // --continue/-c, --resume/-r + --session-id, --fork
+        structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
+        // --mode json
+        permissions: {
+          ...inferredCaps("pi-cli", "pi").permissions,
+          // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
+          // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
+          // left false) — pi's --tools allowlist lets an invocation deny specific tools,
+          // so `deny:true` is the correct capability. Recorded here (not just in the
+          // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
+          deny: true
+        }
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    ANTIGRAVITY_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "antigravity-cli",
+      family: "antigravity",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+      detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+      installability: "target",
+      // VERIFIED-as-target: CLI present; Guild-package install unproven.
+      result_adapter: false,
+      // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+      dispatch_selectable: true,
+      // VERIFIED: agy is a CLI process a lane can run on.
+      capabilities: {
+        ...inferredCaps("antigravity-cli", "antigravity"),
+        // VERIFIED on-host (agy --help, 1.0.8):
+        sessions: { continue: true, resume_by_id: true, fork: false },
+        // --continue/-c, --conversation <id>; no fork flag
+        permissions: {
+          ...inferredCaps("antigravity-cli", "antigravity").permissions,
+          bypass_prompts: true,
+          // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+          launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+          // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
+          // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
+          // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
+          // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
+          // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
+          // Recorded here so the registry — not a second hand-authored row — is the one
+          // source of truth (closes the "two diverged capability truths" audit finding).
+          deny: true,
+          bypass_sandbox: true
+        }
+      },
+      provenance: "verified"
+      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+    };
+    CLAUDE_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-app",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-app", "claude", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_WEB_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-code-web",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-code-web", "claude", "app"),
+      provenance: "inferred"
+    };
+    CODEX_APP_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "codex-app",
+      family: "codex",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("codex-app", "codex", "app"),
+      provenance: "inferred"
+    };
+    CLAUDE_AI_CONNECTOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "claude-ai-connector",
+      family: "claude",
+      adapter_binding: "self",
+      surface_kind: "app",
+      detection: { bin: null, requires_auth: false, auth_probe: "none" },
+      installability: "none",
+      result_adapter: false,
+      dispatch_selectable: false,
+      capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+      provenance: "inferred"
+    };
+    CURSOR_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "cursor",
+      family: "cursor",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("cursor", "cursor", "cli"),
+      // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
+      // were live-checked 2026-07-30, but no authenticated completion has run —
+      // partial verification does not flip the row.
+      provenance: "inferred"
+    };
+    GITHUB_COPILOT_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "github-copilot",
+      family: "copilot",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+      detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+      // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
+      // real completion end to end through guild-run; per-host receipt + live
+      // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
+      // INFERRED_HOSTS) until all cells are live-verified.
+      provenance: "verified"
+    };
+    OPENCODE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "opencode",
+      family: "opencode",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("opencode", "opencode", "cli"),
+      // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
+      // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
+      // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
+      // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
+      provenance: "verified"
+    };
+    ROVO_DEV_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "rovo-dev",
+      family: "rovo",
+      adapter_binding: "self",
+      surface_kind: "cli",
+      // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+      detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+      installability: "target",
+      result_adapter: false,
+      dispatch_selectable: true,
+      capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+      provenance: "inferred"
+    };
+    KIRO_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "kiro",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
+      // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
+      // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
+      // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+      // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+      // a row per registry id, but a capability row is not a dispatch surface). The
+      // honest column for a pane-less file surface is false.
+      dispatch_selectable: false,
+      capabilities: inferredCaps("kiro", "agents", "file"),
+      provenance: "inferred"
+    };
+    QODER_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "qoder",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
+      capabilities: inferredCaps("qoder", "agents", "file"),
+      provenance: "inferred"
+    };
+    TRAE_ENTRY = {
+      schema_version: "guild.host_registry.v1",
+      host_id: "trae",
+      family: "agents",
+      adapter_binding: "agents-file",
+      surface_kind: "file",
+      detection: {
+        bin: null,
+        requires_auth: false,
+        auth_probe: "none",
+        subcommand: null,
+        marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
+      },
+      installability: "target",
+      result_adapter: false,
+      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+      dispatch_selectable: false,
+      capabilities: inferredCaps("trae", "agents", "file"),
+      provenance: "inferred"
+    };
+    HOST_REGISTRY_ROWS = deepFreeze({
+      "claude-code-cli": CLAUDE_ENTRY,
+      "codex-cli": CODEX_ENTRY,
+      "pi-cli": PI_ENTRY,
+      "antigravity-cli": ANTIGRAVITY_ENTRY,
+      "agents-file": AGENTS_FILE_ENTRY,
+      "claude-code-app": CLAUDE_APP_ENTRY,
+      "claude-code-web": CLAUDE_WEB_ENTRY,
+      "codex-app": CODEX_APP_ENTRY,
+      "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+      cursor: CURSOR_ENTRY,
+      "github-copilot": GITHUB_COPILOT_ENTRY,
+      opencode: OPENCODE_ENTRY,
+      "rovo-dev": ROVO_DEV_ENTRY,
+      kiro: KIRO_ENTRY,
+      qoder: QODER_ENTRY,
+      trae: TRAE_ENTRY
+    });
+    HOST_ID_SET = new Set(HOST_IDS);
+    FAMILY_SET = new Set(HOST_FAMILIES);
+    AUTH_PROBE_SET = new Set(AUTH_PROBES);
+  }
 });
-var HOST_ID_SET = new Set(HOST_IDS);
-var FAMILY_SET = new Set(HOST_FAMILIES);
-var AUTH_PROBE_SET = new Set(AUTH_PROBES);
 
 // ../src/modules/host-runtime/workflows/host-id-namespace.ts
-var HOST_ID_SET2 = new Set(HOST_IDS);
-var LEGACY_HOST_ALIASES = {
-  claude: "claude-code-cli",
-  "claude-code-desktop": "claude-code-app",
-  codex: "codex-cli",
-  "codex-plugin": "codex-cli",
-  agents: "agents-file",
-  ".agents": "agents-file",
-  pi: "pi-cli",
-  antigravity: "antigravity-cli",
-  "antigravity-2": "antigravity-cli"
-};
 function normalizeHostId(value) {
   const s = value.trim();
   if (HOST_ID_SET2.has(s)) return s;
   return LEGACY_HOST_ALIASES[s] ?? null;
 }
+var HOST_ID_SET2, LEGACY_HOST_ALIASES;
+var init_host_id_namespace = __esm({
+  "../src/modules/host-runtime/workflows/host-id-namespace.ts"() {
+    init_host_registry_schema();
+    HOST_ID_SET2 = new Set(HOST_IDS);
+    LEGACY_HOST_ALIASES = {
+      claude: "claude-code-cli",
+      "claude-code-desktop": "claude-code-app",
+      codex: "codex-cli",
+      "codex-plugin": "codex-cli",
+      agents: "agents-file",
+      ".agents": "agents-file",
+      pi: "pi-cli",
+      antigravity: "antigravity-cli",
+      "antigravity-2": "antigravity-cli"
+    };
+  }
+});
 
 // ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
-var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
-var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
-var INFERRED_HOSTS = sealSet([
-  "agents-file",
-  "pi-cli",
-  "antigravity-cli",
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector",
-  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
-  "cursor",
-  "github-copilot",
-  "opencode",
-  "rovo-dev",
-  "kiro",
-  "qoder",
-  "trae"
-], "INFERRED_HOSTS");
-var RUNG_SET = new Set(RUNGS);
-var SURFACE_SET = new Set(ADAPTER_SURFACES);
+var RUNGS, ADAPTER_SURFACES, INFERRED_HOSTS, RUNG_SET, SURFACE_SET;
+var init_adapter_fallback_ladders = __esm({
+  "../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"() {
+    init_host_registry_schema();
+    init_kernel();
+    RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
+    ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+    INFERRED_HOSTS = sealSet([
+      "agents-file",
+      "pi-cli",
+      "antigravity-cli",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+      "cursor",
+      "github-copilot",
+      "opencode",
+      "rovo-dev",
+      "kiro",
+      "qoder",
+      "trae"
+    ], "INFERRED_HOSTS");
+    RUNG_SET = new Set(RUNGS);
+    SURFACE_SET = new Set(ADAPTER_SURFACES);
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-profiles-validate.ts
-var KNOWN_HOST_IDS = new Set(HOST_IDS);
-var VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
-var VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
+var KNOWN_HOST_IDS, VALID_HOST_PROFILE_ENTRY_KEYS, VALID_HOST_PROFILE_MODEL_KEYS;
+var init_host_profiles_validate = __esm({
+  "../src/modules/host-runtime/workflows/host-profiles-validate.ts"() {
+    init_host_registry_schema();
+    init_kernel();
+    init_host_id_namespace();
+    KNOWN_HOST_IDS = new Set(HOST_IDS);
+    VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
+    VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-registry.ts
 function deriveCapabilityRow(row) {
   return row.capabilities;
 }
-var DERIVED_HOST_CAPABILITY_ROWS = (() => {
-  const out = {};
-  for (const id of HOST_IDS) {
-    out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
-  }
-  out["claude"] = out["claude-code-cli"];
-  out["codex"] = out["codex-cli"];
-  out["pi"] = out["pi-cli"];
-  out["antigravity"] = out["antigravity-cli"];
-  out["antigravity-2"] = out["antigravity-cli"];
-  return out;
-})();
-var FAMILY_TO_ROW = (() => {
-  const out = {};
-  for (const id of HOST_IDS) {
-    const row = HOST_REGISTRY_ROWS[id];
-    const existing = out[row.family];
-    if (!existing || !existing.result_adapter && row.result_adapter) {
-      out[row.family] = row;
-    }
-  }
-  return out;
-})();
 function resultAdapterForFamily(family) {
   return FAMILY_TO_ROW[family]?.result_adapter ?? false;
 }
+var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
+var init_host_registry = __esm({
+  "../src/modules/host-runtime/workflows/host-registry.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    DERIVED_HOST_CAPABILITY_ROWS = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
+      }
+      out["claude"] = out["claude-code-cli"];
+      out["codex"] = out["codex-cli"];
+      out["pi"] = out["pi-cli"];
+      out["antigravity"] = out["antigravity-cli"];
+      out["antigravity-2"] = out["antigravity-cli"];
+      return out;
+    })();
+    FAMILY_TO_ROW = (() => {
+      const out = {};
+      for (const id of HOST_IDS) {
+        const row = HOST_REGISTRY_ROWS[id];
+        const existing = out[row.family];
+        if (!existing || !existing.result_adapter && row.result_adapter) {
+          out[row.family] = row;
+        }
+      }
+      return out;
+    })();
+  }
+});
 
 // ../src/modules/host-runtime/workflows/provider-detect.ts
-var PROVIDER_REGISTRY = [
-  // The author host itself — always "detected on the host", never a cross reviewer
-  // for a same-family author (the AC-8 guard handles that).
-  { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
-  // Codex reference adapters (the only selectable cross reviewers today).
-  { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-  // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
-  // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
-  { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
-  // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
-  { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
-];
+var PROVIDER_REGISTRY;
+var init_provider_detect = __esm({
+  "../src/modules/host-runtime/workflows/provider-detect.ts"() {
+    init_host_registry();
+    PROVIDER_REGISTRY = [
+      // The author host itself — always "detected on the host", never a cross reviewer
+      // for a same-family author (the AC-8 guard handles that).
+      { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
+      // Codex reference adapters (the only selectable cross reviewers today).
+      { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+      // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
+      // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
+      { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
+      // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
+      { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
+    ];
+  }
+});
+
+// ../src/modules/host-runtime/workflows/session-context.ts
+var init_session_context = __esm({
+  "../src/modules/host-runtime/workflows/session-context.ts"() {
+    init_provider_detect();
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts
+function isFailureReason(value) {
+  return typeof value === "string" && FAILURE_REASONS.includes(value);
+}
+function failureResult(adapter, status, failureReason, latencyMs, sourceRef) {
+  if (!isFailureReason(failureReason)) throw new Error("failure_reason outside the closed vocabulary");
+  return {
+    adapter_id: adapter.adapter_id,
+    adapter_version: adapter.adapter_version,
+    target_id: adapter.target_id,
+    method: adapter.method,
+    source_ref: sourceRef,
+    status,
+    latency_ms: latencyMs,
+    failure_reason: failureReason,
+    models: []
+  };
+}
+var FAILURE_REASONS, DiscoveryParseRejected;
+var init_adapter_contract = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts"() {
+    init_session_context();
+    FAILURE_REASONS = Object.freeze([
+      "timeout_budget_exceeded",
+      "parse_rejected",
+      "io_unavailable",
+      "tool_version_out_of_range",
+      "subprocess_failed",
+      "http_error",
+      "auth_unavailable",
+      "surface_absent"
+    ]);
+    DiscoveryParseRejected = class extends Error {
+      constructor(detail) {
+        super(`provider output rejected by schema validation: ${detail}`);
+        this.name = "DiscoveryParseRejected";
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/claude-api.ts
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseClaudeModelsPage(raw) {
+  if (!isRecord(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    if (entry.capabilities !== void 0 && !isRecord(entry.capabilities)) {
+      throw new DiscoveryParseRejected(`data[${i}].capabilities is not an object`);
+    }
+    models.push(entry);
+  });
+  return {
+    models,
+    hasMore: raw.has_more === true,
+    lastId: typeof raw.last_id === "string" ? raw.last_id : null
+  };
+}
+function effortsFromCapabilities(capabilities) {
+  const effort = capabilities?.effort;
+  if (!isRecord(effort)) return [];
+  return CLAUDE_EFFORT_LEVELS.filter((level) => effort[level] === true);
+}
+function normalizeClaudeApiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    model_family: "claude",
+    // this authenticated first-party catalog lists Claude models
+    reasoning_efforts: effortsFromCapabilities(m.capabilities),
+    default_effort: null,
+    // the listing carries support flags, not a default
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: isRecord(m.capabilities) ? m.capabilities : {},
+    evidence_source: "contract_api_list",
+    // The one row whose contract states availability for the requesting target.
+    contract_states_availability: true
+  }));
+}
+var CLAUDE_API_ADAPTER_ID, CLAUDE_API_ADAPTER_VERSION, CLAUDE_API_MODELS_URL, CLAUDE_API_VERSION_HEADER, CLAUDE_API_MAX_PAGES, CLAUDE_EFFORT_LEVELS, claudeApiAdapter;
+var init_claude_api = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/claude-api.ts"() {
+    init_adapter_contract();
+    CLAUDE_API_ADAPTER_ID = "claude-api-models";
+    CLAUDE_API_ADAPTER_VERSION = "1.0.0";
+    CLAUDE_API_MODELS_URL = "https://api.anthropic.com/v1/models";
+    CLAUDE_API_VERSION_HEADER = "2023-06-01";
+    CLAUDE_API_MAX_PAGES = 5;
+    CLAUDE_EFFORT_LEVELS = Object.freeze(["low", "medium", "high", "xhigh", "max"]);
+    claudeApiAdapter = {
+      adapter_id: CLAUDE_API_ADAPTER_ID,
+      adapter_version: CLAUDE_API_ADAPTER_VERSION,
+      target_id: "claude-api",
+      method: "contract_api_list",
+      tool_versions: null,
+      // versioned REST surface; gated by anthropic-version header, not CLI version
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.httpGetJson) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CLAUDE_API_ADAPTER_ID);
+        }
+        const all = [];
+        let url = `${CLAUDE_API_MODELS_URL}?limit=1000`;
+        for (let page = 0; page < CLAUDE_API_MAX_PAGES; page += 1) {
+          const raw = await io.httpGetJson(url, { "anthropic-version": CLAUDE_API_VERSION_HEADER });
+          const { models, hasMore, lastId } = parseClaudeModelsPage(raw);
+          all.push(...normalizeClaudeApiModels(models));
+          if (!hasMore || !lastId) {
+            return {
+              adapter_id: CLAUDE_API_ADAPTER_ID,
+              adapter_version: CLAUDE_API_ADAPTER_VERSION,
+              target_id: "claude-api",
+              method: "contract_api_list",
+              source_ref: "claude-api GET /v1/models",
+              status: "ok",
+              latency_ms: elapsed(),
+              failure_reason: null,
+              models: all
+            };
+          }
+          url = `${CLAUDE_API_MODELS_URL}?limit=1000&after_id=${encodeURIComponent(lastId)}`;
+        }
+        return {
+          adapter_id: CLAUDE_API_ADAPTER_ID,
+          adapter_version: CLAUDE_API_ADAPTER_VERSION,
+          target_id: "claude-api",
+          method: "contract_api_list",
+          source_ref: "claude-api GET /v1/models",
+          status: "partial",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models: all
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts
+function isRecord2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseModelListResult(raw) {
+  if (!isRecord2(raw)) throw new DiscoveryParseRejected("result is not an object");
+  const data = raw.data;
+  if (!Array.isArray(data)) throw new DiscoveryParseRejected("result.data is not an array");
+  const models = [];
+  data.forEach((entry, i) => {
+    if (!isRecord2(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.model !== "string" || entry.model.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].model is not a non-empty string`);
+    }
+    if (entry.supportedReasoningEfforts !== void 0) {
+      if (!Array.isArray(entry.supportedReasoningEfforts)) {
+        throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts is not an array`);
+      }
+      for (const [j, eff] of entry.supportedReasoningEfforts.entries()) {
+        if (!isRecord2(eff) || typeof eff.reasoningEffort !== "string") {
+          throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts[${j}].reasoningEffort missing`);
+        }
+      }
+    }
+    if (entry.hidden !== void 0 && typeof entry.hidden !== "boolean") {
+      throw new DiscoveryParseRejected(`data[${i}].hidden is not a boolean`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeAppServerModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.model,
+    display_name: typeof m.displayName === "string" ? m.displayName : void 0,
+    // No family field is provider-stated on this surface.
+    reasoning_efforts: (m.supportedReasoningEfforts ?? []).map((e) => e.reasoningEffort),
+    default_effort: typeof m.defaultReasoningEffort === "string" ? m.defaultReasoningEffort : null,
+    provider_priority: null,
+    // app-server exposes order, not a numeric priority field
+    provider_default: m.isDefault === true,
+    visibility: m.hidden === true ? "hidden" : "listed",
+    deprecation: {
+      upgrade_to: typeof m.upgrade === "string" ? m.upgrade : null,
+      migration_note: typeof m.upgradeInfo?.migrationMarkdown === "string" ? m.upgradeInfo.migrationMarkdown : null
+    },
+    capabilities: {
+      image_input: Array.isArray(m.inputModalities) ? m.inputModalities.includes("image") : void 0,
+      // Superset-schema extensions preserved from the provider listing:
+      service_tiers: Array.isArray(m.serviceTiers) ? m.serviceTiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additionalSpeedTiers) ? m.additionalSpeedTiers : [],
+      default_service_tier: typeof m.defaultServiceTier === "string" ? m.defaultServiceTier : null
+    },
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // entitlement semantics contractually undefined
+  }));
+}
+var CODEX_APP_SERVER_ADAPTER_ID, CODEX_APP_SERVER_ADAPTER_VERSION, CODEX_APP_SERVER_TOOL_VERSIONS, codexAppServerAdapter;
+var init_codex_app_server = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts"() {
+    init_adapter_contract();
+    CODEX_APP_SERVER_ADAPTER_ID = "codex-app-server-model-list";
+    CODEX_APP_SERVER_ADAPTER_VERSION = "1.0.0";
+    CODEX_APP_SERVER_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "2.0.0" };
+    codexAppServerAdapter = {
+      adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+      adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+      target_id: "codex-app-server",
+      method: "native_list",
+      tool_versions: CODEX_APP_SERVER_TOOL_VERSIONS,
+      async discover(io, opts = {}) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.jsonRpcCall) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_APP_SERVER_ADAPTER_ID);
+        }
+        const includeHidden = opts.includeHidden === true;
+        const result = await io.jsonRpcCall("model/list", includeHidden ? { includeHidden: true } : {});
+        const models = normalizeAppServerModels(parseModelListResult(result));
+        return {
+          adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
+          adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
+          target_id: "codex-app-server",
+          method: "native_list",
+          source_ref: "codex-app-server model/list",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts
+function isRecord3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseDebugModelsOutput(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw new DiscoveryParseRejected("stdout is not valid JSON");
+  }
+  if (!isRecord3(parsed) || !Array.isArray(parsed.models)) {
+    throw new DiscoveryParseRejected("payload.models is not an array");
+  }
+  const entries = [];
+  parsed.models.forEach((entry, i) => {
+    if (!isRecord3(entry)) throw new DiscoveryParseRejected(`models[${i}] is not an object`);
+    if (typeof entry.slug !== "string" || entry.slug.length === 0) {
+      throw new DiscoveryParseRejected(`models[${i}].slug is not a non-empty string`);
+    }
+    if (entry.supported_reasoning_levels !== void 0) {
+      if (!Array.isArray(entry.supported_reasoning_levels)) {
+        throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels is not an array`);
+      }
+      for (const [j, lvl] of entry.supported_reasoning_levels.entries()) {
+        if (!isRecord3(lvl) || typeof lvl.effort !== "string") {
+          throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels[${j}].effort missing`);
+        }
+      }
+    }
+    entries.push(entry);
+  });
+  return entries;
+}
+function normalizeDebugModels(entries) {
+  return entries.map((m) => ({
+    canonical_id: m.slug,
+    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
+    reasoning_efforts: (m.supported_reasoning_levels ?? []).map((l) => l.effort),
+    default_effort: typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null,
+    provider_priority: typeof m.priority === "number" ? m.priority : null,
+    provider_default: false,
+    // the debug catalog carries no default flag
+    visibility: m.visibility === "hide" ? "hidden" : "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {
+      // Advertised subscription-catalog metadata about the API target (F5):
+      // preserved verbatim as metadata, never treated as dispatch evidence.
+      supported_in_api: typeof m.supported_in_api === "boolean" ? m.supported_in_api : void 0,
+      service_tiers: Array.isArray(m.service_tiers) ? m.service_tiers.map((t) => t.id) : [],
+      additional_speed_tiers: Array.isArray(m.additional_speed_tiers) ? m.additional_speed_tiers : []
+    },
+    evidence_source: "debug_catalog",
+    contract_states_availability: false
+  }));
+}
+var CODEX_DEBUG_MODELS_ADAPTER_ID, CODEX_DEBUG_MODELS_ADAPTER_VERSION, CODEX_DEBUG_MODELS_TOOL_VERSIONS, codexDebugModelsAdapter;
+var init_codex_debug_models = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts"() {
+    init_adapter_contract();
+    CODEX_DEBUG_MODELS_ADAPTER_ID = "codex-debug-models";
+    CODEX_DEBUG_MODELS_ADAPTER_VERSION = "1.0.0";
+    CODEX_DEBUG_MODELS_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "0.147.0" };
+    codexDebugModelsAdapter = {
+      adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+      adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+      target_id: "codex-cli-chatgpt",
+      method: "debug_catalog",
+      tool_versions: CODEX_DEBUG_MODELS_TOOL_VERSIONS,
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.execCapture) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_DEBUG_MODELS_ADAPTER_ID);
+        }
+        const { stdout } = await io.execCapture(["codex", "debug", "models"]);
+        const models = normalizeDebugModels(parseDebugModelsOutput(stdout));
+        return {
+          adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
+          adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
+          target_id: "codex-cli-chatgpt",
+          method: "debug_catalog",
+          source_ref: "codex debug models",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/openai-api.ts
+function isRecord4(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function openAiFamilyFor(id) {
+  if (id.startsWith("gpt-")) return "gpt";
+  return "unknown";
+}
+function parseOpenAiModelsResponse(raw) {
+  if (!isRecord4(raw)) throw new DiscoveryParseRejected("response is not an object");
+  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
+  const models = [];
+  raw.data.forEach((entry, i) => {
+    if (!isRecord4(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
+    }
+    models.push(entry);
+  });
+  return models;
+}
+function normalizeOpenAiModels(models) {
+  return models.map((m) => ({
+    canonical_id: m.id,
+    model_family: openAiFamilyFor(m.id),
+    reasoning_efforts: [],
+    // not stated on this surface — never copied from other targets
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "native_list",
+    contract_states_availability: false
+    // scope-ambiguous contract ⇒ advertised at most
+  }));
+}
+var OPENAI_API_ADAPTER_ID, OPENAI_API_ADAPTER_VERSION, OPENAI_API_MODELS_URL, openAiApiAdapter;
+var init_openai_api = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/openai-api.ts"() {
+    init_adapter_contract();
+    OPENAI_API_ADAPTER_ID = "openai-api-models";
+    OPENAI_API_ADAPTER_VERSION = "1.0.0";
+    OPENAI_API_MODELS_URL = "https://api.openai.com/v1/models";
+    openAiApiAdapter = {
+      adapter_id: OPENAI_API_ADAPTER_ID,
+      adapter_version: OPENAI_API_ADAPTER_VERSION,
+      target_id: "openai-api",
+      method: "native_list",
+      tool_versions: null,
+      async discover(io) {
+        const started = io.monotonicMs();
+        const elapsed = () => Math.max(0, io.monotonicMs() - started);
+        if (!io.httpGetJson) {
+          return failureResult(this, "unsupported", "io_unavailable", elapsed(), OPENAI_API_ADAPTER_ID);
+        }
+        const raw = await io.httpGetJson(OPENAI_API_MODELS_URL, {});
+        const models = normalizeOpenAiModels(parseOpenAiModelsResponse(raw));
+        return {
+          adapter_id: OPENAI_API_ADAPTER_ID,
+          adapter_version: OPENAI_API_ADAPTER_VERSION,
+          target_id: "openai-api",
+          method: "native_list",
+          source_ref: "openai-api GET /v1/models",
+          status: "ok",
+          latency_ms: elapsed(),
+          failure_reason: null,
+          models
+        };
+      }
+    };
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts
+function staticHintEntries(hints) {
+  return hints.map((h) => ({
+    canonical_id: h.canonical_id,
+    display_name: h.display_name,
+    aliases: h.aliases,
+    model_family: h.model_family,
+    reasoning_efforts: [],
+    default_effort: null,
+    provider_priority: null,
+    provider_default: false,
+    visibility: "listed",
+    deprecation: { upgrade_to: null, migration_note: null },
+    capabilities: {},
+    evidence_source: "static_hint",
+    contract_states_availability: false
+  }));
+}
+function makeHonestUnknownAdapter(targetId, opts = {}) {
+  const hints = opts.staticHints ?? [];
+  const adapterId = `honest-unknown-${targetId}`;
+  return {
+    adapter_id: adapterId,
+    adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+    target_id: targetId,
+    method: hints.length > 0 ? "static_hint" : "none",
+    tool_versions: null,
+    async discover(io) {
+      const started = io.monotonicMs();
+      return {
+        adapter_id: adapterId,
+        adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
+        target_id: targetId,
+        method: hints.length > 0 ? "static_hint" : "none",
+        source_ref: opts.surfaceNote ?? "no evidenced availability-listing surface",
+        // The receipt itself is honest: no listing surface exists for this
+        // target, so discovery is `unsupported` and the target-level evidence
+        // state stays `unknown` (static hints only fill model metadata).
+        status: "unsupported",
+        latency_ms: Math.max(0, io.monotonicMs() - started),
+        failure_reason: "surface_absent",
+        models: staticHintEntries(hints)
+      };
+    }
+  };
+}
+var HONEST_UNKNOWN_ADAPTER_VERSION, claudeCliSubscriptionAdapter, claudeAppAdapter, claudeWebAdapter, claudeGatewayBedrockAdapter, claudeGatewayVertexAdapter, claudeGatewayFoundryAdapter, codexCliApiKeyAdapter;
+var init_honest_unknown = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts"() {
+    HONEST_UNKNOWN_ADAPTER_VERSION = "1.0.0";
+    claudeCliSubscriptionAdapter = makeHonestUnknownAdapter("claude-cli-subscription", {
+      surfaceNote: "picker is interactive-only; headless entitlement unprovable pre-dispatch"
+    });
+    claudeAppAdapter = makeHonestUnknownAdapter("claude-app", {
+      surfaceNote: "no programmatic discovery surface exists"
+    });
+    claudeWebAdapter = makeHonestUnknownAdapter("claude-web", {
+      surfaceNote: "no programmatic discovery surface exists"
+    });
+    claudeGatewayBedrockAdapter = makeHonestUnknownAdapter("claude-gateway-bedrock", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    claudeGatewayVertexAdapter = makeHonestUnknownAdapter("claude-gateway-vertex", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    claudeGatewayFoundryAdapter = makeHonestUnknownAdapter("claude-gateway-foundry", {
+      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
+    });
+    codexCliApiKeyAdapter = makeHonestUnknownAdapter("codex-cli-api-key", {
+      surfaceNote: "no listing evidenced under API-key auth (distinct target from codex-cli-chatgpt)"
+    });
+  }
+});
+
+// ../src/modules/host-runtime/workflows/model-discovery/index.ts
+var DISCOVERY_ADAPTER_REGISTRY, CODEX_SEAM_PREFERENCE, CODEX_SEAM_ADAPTERS;
+var init_model_discovery = __esm({
+  "../src/modules/host-runtime/workflows/model-discovery/index.ts"() {
+    init_adapter_contract();
+    init_claude_api();
+    init_codex_app_server();
+    init_codex_debug_models();
+    init_openai_api();
+    init_honest_unknown();
+    init_adapter_contract();
+    init_codex_app_server();
+    init_codex_debug_models();
+    init_claude_api();
+    init_openai_api();
+    init_honest_unknown();
+    DISCOVERY_ADAPTER_REGISTRY = Object.freeze({
+      "claude-cli-subscription": claudeCliSubscriptionAdapter,
+      "claude-app": claudeAppAdapter,
+      "claude-web": claudeWebAdapter,
+      "claude-api": claudeApiAdapter,
+      "claude-gateway-bedrock": claudeGatewayBedrockAdapter,
+      "claude-gateway-vertex": claudeGatewayVertexAdapter,
+      "claude-gateway-foundry": claudeGatewayFoundryAdapter,
+      "codex-cli-chatgpt": codexDebugModelsAdapter,
+      "codex-app-server": codexAppServerAdapter,
+      "codex-cli-api-key": codexCliApiKeyAdapter,
+      "openai-api": openAiApiAdapter
+    });
+    CODEX_SEAM_PREFERENCE = Object.freeze(["app-server", "debug-models"]);
+    CODEX_SEAM_ADAPTERS = Object.freeze({
+      "app-server": codexAppServerAdapter,
+      "debug-models": codexDebugModelsAdapter
+    });
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-adapter-contract.ts
-var HOST_ADAPTER_OPERATIONS = Object.freeze([
-  "capabilities",
-  "bootstrap",
-  "preflight",
-  "dispatch",
-  "collect",
-  "renderCommandSurface",
-  "renderPackage",
-  "renderPermissionDecision",
-  "resolveModelParams",
-  "memory"
-]);
+var HOST_ADAPTER_OPERATIONS;
+var init_host_adapter_contract = __esm({
+  "../src/modules/host-runtime/workflows/host-adapter-contract.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    HOST_ADAPTER_OPERATIONS = Object.freeze([
+      "capabilities",
+      "bootstrap",
+      "preflight",
+      "dispatch",
+      "collect",
+      "renderCommandSurface",
+      "renderPackage",
+      "renderPermissionDecision",
+      "resolveModelParams",
+      "memory"
+    ]);
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
-var import_node_crypto = require("node:crypto");
-var HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
-var HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
-var HOST_CAPABILITY_IDS = Object.freeze([
-  "host.artifacts.direct_filesystem",
-  "host.artifacts.file_bus",
-  "host.bootstrap.context_injection",
-  "host.bootstrap.skill_autoload",
-  "host.bootstrap.wrapper_injection",
-  "host.commands.command_files",
-  "host.commands.slash_commands",
-  "host.dispatch.selectable",
-  "host.hooks.post_tool_use",
-  "host.hooks.pre_compact",
-  "host.hooks.pre_tool_use",
-  "host.hooks.session_start",
-  "host.hooks.stop",
-  "host.hooks.subagent_stop",
-  "host.hooks.task_completed",
-  "host.hooks.task_created",
-  "host.hooks.teammate_idle",
-  "host.hooks.user_prompt_submit",
-  "host.interaction.native_questions",
-  "host.mcp.http",
-  "host.mcp.stdio",
-  "host.models.tier_map",
-  "host.package.install",
-  "host.package.render",
-  "host.package.update",
-  "host.permissions.ask",
-  "host.permissions.deny",
-  "host.result_adapter",
-  "host.sessions.resume_by_id",
-  "host.structured_output.native_json"
-]);
-var CAPABILITY_READERS = {
-  "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
-  "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
-  "host.bootstrap.context_injection": (entry) => {
-    const injection = entry.capabilities.bootstrap.context_injection;
-    return typeof injection === "string" && injection.length > 0 && injection !== "none";
-  },
-  "host.bootstrap.skill_autoload": (entry) => entry.capabilities.bootstrap.skill_autoload,
-  "host.bootstrap.wrapper_injection": (entry) => entry.capabilities.bootstrap.wrapper_injection,
-  "host.commands.command_files": (entry) => entry.capabilities.commands.command_files !== "none",
-  "host.commands.slash_commands": (entry) => entry.capabilities.commands.slash_commands,
-  "host.dispatch.selectable": (entry) => entry.dispatch_selectable,
-  "host.hooks.post_tool_use": (entry) => entry.capabilities.hooks.post_tool_use,
-  "host.hooks.pre_compact": (entry) => entry.capabilities.hooks.pre_compact,
-  "host.hooks.pre_tool_use": (entry) => entry.capabilities.hooks.pre_tool_use,
-  "host.hooks.session_start": (entry) => entry.capabilities.hooks.session_start,
-  "host.hooks.stop": (entry) => entry.capabilities.hooks.stop,
-  "host.hooks.subagent_stop": (entry) => entry.capabilities.hooks.subagent_stop,
-  "host.hooks.task_completed": (entry) => entry.capabilities.hooks.task_completed,
-  "host.hooks.task_created": (entry) => entry.capabilities.hooks.task_created,
-  "host.hooks.teammate_idle": (entry) => entry.capabilities.hooks.teammate_idle,
-  "host.hooks.user_prompt_submit": (entry) => entry.capabilities.hooks.user_prompt_submit,
-  "host.interaction.native_questions": (entry) => entry.capabilities.interaction.native_questions,
-  "host.mcp.http": (entry) => entry.capabilities.mcp.http,
-  "host.mcp.stdio": (entry) => entry.capabilities.mcp.stdio,
-  "host.models.tier_map": (entry) => {
-    const models = entry.capabilities.models;
-    return Boolean(models.cheap.model || models.mid.model || models.powerful.model);
-  },
-  // `installability` is the REGISTRY column, and it is the one that decides
-  // whether an install is proven. A renderer that exists but was never installed
-  // is `target`, which is render-capable and install-INCAPABLE — collapsing the
-  // two is precisely the optimistic default this snapshot exists to prevent.
-  "host.package.install": (entry) => entry.installability === "native" && entry.capabilities.package.installable,
-  "host.package.render": (entry) => entry.installability !== "none",
-  "host.package.update": (entry) => entry.capabilities.package.update.apply !== "none",
-  "host.permissions.ask": (entry) => entry.capabilities.permissions.ask,
-  "host.permissions.deny": (entry) => entry.capabilities.permissions.deny,
-  "host.result_adapter": (entry) => entry.result_adapter,
-  "host.sessions.resume_by_id": (entry) => entry.capabilities.sessions.resume_by_id,
-  "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
-};
-var UNKNOWN_HOST_VERSION = "unknown";
 function canonicalJson(value) {
   if (value === null) return "null";
   const kind = typeof value;
@@ -4650,121 +4978,98 @@ function createHostCapabilitySnapshotStore() {
     }
   };
 }
-var DEFAULT_STORE = createHostCapabilitySnapshotStore();
+var import_node_crypto, HOST_CAPABILITY_SNAPSHOT_SCHEMA, HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA, HOST_CAPABILITY_IDS, CAPABILITY_READERS, UNKNOWN_HOST_VERSION, DEFAULT_STORE;
+var init_host_capability_snapshot = __esm({
+  "../src/modules/host-runtime/workflows/host-capability-snapshot.ts"() {
+    import_node_crypto = require("node:crypto");
+    init_kernel();
+    init_host_id_namespace();
+    init_host_registry_schema();
+    HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
+    HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
+    HOST_CAPABILITY_IDS = Object.freeze([
+      "host.artifacts.direct_filesystem",
+      "host.artifacts.file_bus",
+      "host.bootstrap.context_injection",
+      "host.bootstrap.skill_autoload",
+      "host.bootstrap.wrapper_injection",
+      "host.commands.command_files",
+      "host.commands.slash_commands",
+      "host.dispatch.selectable",
+      "host.hooks.post_tool_use",
+      "host.hooks.pre_compact",
+      "host.hooks.pre_tool_use",
+      "host.hooks.session_start",
+      "host.hooks.stop",
+      "host.hooks.subagent_stop",
+      "host.hooks.task_completed",
+      "host.hooks.task_created",
+      "host.hooks.teammate_idle",
+      "host.hooks.user_prompt_submit",
+      "host.interaction.native_questions",
+      "host.mcp.http",
+      "host.mcp.stdio",
+      "host.models.tier_map",
+      "host.package.install",
+      "host.package.render",
+      "host.package.update",
+      "host.permissions.ask",
+      "host.permissions.deny",
+      "host.result_adapter",
+      "host.sessions.resume_by_id",
+      "host.structured_output.native_json"
+    ]);
+    CAPABILITY_READERS = {
+      "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
+      "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
+      "host.bootstrap.context_injection": (entry) => {
+        const injection = entry.capabilities.bootstrap.context_injection;
+        return typeof injection === "string" && injection.length > 0 && injection !== "none";
+      },
+      "host.bootstrap.skill_autoload": (entry) => entry.capabilities.bootstrap.skill_autoload,
+      "host.bootstrap.wrapper_injection": (entry) => entry.capabilities.bootstrap.wrapper_injection,
+      "host.commands.command_files": (entry) => entry.capabilities.commands.command_files !== "none",
+      "host.commands.slash_commands": (entry) => entry.capabilities.commands.slash_commands,
+      "host.dispatch.selectable": (entry) => entry.dispatch_selectable,
+      "host.hooks.post_tool_use": (entry) => entry.capabilities.hooks.post_tool_use,
+      "host.hooks.pre_compact": (entry) => entry.capabilities.hooks.pre_compact,
+      "host.hooks.pre_tool_use": (entry) => entry.capabilities.hooks.pre_tool_use,
+      "host.hooks.session_start": (entry) => entry.capabilities.hooks.session_start,
+      "host.hooks.stop": (entry) => entry.capabilities.hooks.stop,
+      "host.hooks.subagent_stop": (entry) => entry.capabilities.hooks.subagent_stop,
+      "host.hooks.task_completed": (entry) => entry.capabilities.hooks.task_completed,
+      "host.hooks.task_created": (entry) => entry.capabilities.hooks.task_created,
+      "host.hooks.teammate_idle": (entry) => entry.capabilities.hooks.teammate_idle,
+      "host.hooks.user_prompt_submit": (entry) => entry.capabilities.hooks.user_prompt_submit,
+      "host.interaction.native_questions": (entry) => entry.capabilities.interaction.native_questions,
+      "host.mcp.http": (entry) => entry.capabilities.mcp.http,
+      "host.mcp.stdio": (entry) => entry.capabilities.mcp.stdio,
+      "host.models.tier_map": (entry) => {
+        const models = entry.capabilities.models;
+        return Boolean(models.cheap.model || models.mid.model || models.powerful.model);
+      },
+      // `installability` is the REGISTRY column, and it is the one that decides
+      // whether an install is proven. A renderer that exists but was never installed
+      // is `target`, which is render-capable and install-INCAPABLE — collapsing the
+      // two is precisely the optimistic default this snapshot exists to prevent.
+      "host.package.install": (entry) => entry.installability === "native" && entry.capabilities.package.installable,
+      "host.package.render": (entry) => entry.installability !== "none",
+      "host.package.update": (entry) => entry.capabilities.package.update.apply !== "none",
+      "host.permissions.ask": (entry) => entry.capabilities.permissions.ask,
+      "host.permissions.deny": (entry) => entry.capabilities.permissions.deny,
+      "host.result_adapter": (entry) => entry.result_adapter,
+      "host.sessions.resume_by_id": (entry) => entry.capabilities.sessions.resume_by_id,
+      "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
+    };
+    UNKNOWN_HOST_VERSION = "unknown";
+    DEFAULT_STORE = createHostCapabilitySnapshotStore();
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-event-normalizer.ts
-var HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
-var CLAUDE_NATIVE_EVENT_BINDINGS = Object.freeze([
-  Object.freeze({
-    native_event: "PostToolUse",
-    normalized_event: "tool.after",
-    rationale: "fires after a tool call completes"
-  }),
-  Object.freeze({
-    native_event: "PreCompact",
-    normalized_event: "context.compact",
-    rationale: "fires before the host compacts its context window"
-  }),
-  Object.freeze({
-    native_event: "PreToolUse",
-    normalized_event: "tool.before",
-    rationale: "fires before a tool call is admitted"
-  }),
-  Object.freeze({
-    native_event: "SessionStart",
-    normalized_event: "session.start",
-    rationale: "fires once when the host session opens"
-  }),
-  Object.freeze({
-    native_event: "Stop",
-    normalized_event: "run.stop",
-    rationale: "Guild's state model is run-centric, so the host's session stop is the run stop the core names"
-  }),
-  Object.freeze({
-    native_event: "SubagentStop",
-    normalized_event: null,
-    rationale: "a subagent finishing is not a task collection: the normative vocabulary has no subagent lifecycle name, and reusing the task-collection name would report a collection that never happened. Declared unmapped rather than approximated."
-  }),
-  Object.freeze({
-    native_event: "TaskCompleted",
-    normalized_event: "task.collect",
-    rationale: "the shipped task-completion producer the normative vocabulary was chosen to keep distinct"
-  }),
-  Object.freeze({
-    native_event: "TaskCreated",
-    normalized_event: "task.dispatch",
-    rationale: "the shipped task-creation producer the normative vocabulary was chosen to keep distinct"
-  }),
-  Object.freeze({
-    native_event: "TeammateIdle",
-    normalized_event: null,
-    rationale: "teammate idleness is a scheduling signal, not a lifecycle transition; the normative vocabulary declares no image for it. Declared unmapped rather than approximated."
-  }),
-  Object.freeze({
-    native_event: "UserPromptSubmit",
-    normalized_event: "prompt.submit",
-    rationale: "fires when the operator submits a prompt"
-  })
-]);
-var WRAPPER_NATIVE_EVENT_BINDINGS = Object.freeze([
-  Object.freeze({
-    native_event: "guild.wrapper.context_compact",
-    normalized_event: "context.compact",
-    rationale: "the wrapper reports a context reduction it performed on the host's behalf"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.prompt_submit",
-    normalized_event: "prompt.submit",
-    rationale: "the wrapper hands the host an operator prompt"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.run_resume",
-    normalized_event: "run.resume",
-    rationale: "the wrapper re-enters an existing run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.run_stop",
-    normalized_event: "run.stop",
-    rationale: "the wrapper observes the host process closing the run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.session_start",
-    normalized_event: "session.start",
-    rationale: "the wrapper opens the host process for this run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.task_collect",
-    normalized_event: "task.collect",
-    rationale: "the wrapper collects a finished task run"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.task_dispatch",
-    normalized_event: "task.dispatch",
-    rationale: "the wrapper dispatches a task run onto the host"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.tool_after",
-    normalized_event: "tool.after",
-    rationale: "the wrapper observes a completed tool call"
-  }),
-  Object.freeze({
-    native_event: "guild.wrapper.tool_before",
-    normalized_event: "tool.before",
-    rationale: "the wrapper observes a tool call about to run"
-  })
-]);
-var NATIVE_BINDINGS_BY_FAMILY = Object.freeze({
-  claude: CLAUDE_NATIVE_EVENT_BINDINGS
-});
 function advertisesNativeHooks(entry) {
   return Object.values(entry.capabilities.hooks).some(Boolean);
 }
-var NO_SOURCE = Object.freeze({
-  schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
-  host_id: null,
-  kind: "none",
-  bindings: Object.freeze([])
-});
 function hostEventSource(host) {
   const hostId = normalizeHostId(String(host ?? ""));
   const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
@@ -4801,50 +5106,124 @@ function hostEventSource(host) {
     bindings: WRAPPER_NATIVE_EVENT_BINDINGS
   });
 }
+var HOST_EVENT_NORMALIZATION_SCHEMA, CLAUDE_NATIVE_EVENT_BINDINGS, WRAPPER_NATIVE_EVENT_BINDINGS, NATIVE_BINDINGS_BY_FAMILY, NO_SOURCE;
+var init_host_event_normalizer = __esm({
+  "../src/modules/host-runtime/workflows/host-event-normalizer.ts"() {
+    init_host_id_namespace();
+    init_host_registry_schema();
+    HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
+    CLAUDE_NATIVE_EVENT_BINDINGS = Object.freeze([
+      Object.freeze({
+        native_event: "PostToolUse",
+        normalized_event: "tool.after",
+        rationale: "fires after a tool call completes"
+      }),
+      Object.freeze({
+        native_event: "PreCompact",
+        normalized_event: "context.compact",
+        rationale: "fires before the host compacts its context window"
+      }),
+      Object.freeze({
+        native_event: "PreToolUse",
+        normalized_event: "tool.before",
+        rationale: "fires before a tool call is admitted"
+      }),
+      Object.freeze({
+        native_event: "SessionStart",
+        normalized_event: "session.start",
+        rationale: "fires once when the host session opens"
+      }),
+      Object.freeze({
+        native_event: "Stop",
+        normalized_event: "run.stop",
+        rationale: "Guild's state model is run-centric, so the host's session stop is the run stop the core names"
+      }),
+      Object.freeze({
+        native_event: "SubagentStop",
+        normalized_event: null,
+        rationale: "a subagent finishing is not a task collection: the normative vocabulary has no subagent lifecycle name, and reusing the task-collection name would report a collection that never happened. Declared unmapped rather than approximated."
+      }),
+      Object.freeze({
+        native_event: "TaskCompleted",
+        normalized_event: "task.collect",
+        rationale: "the shipped task-completion producer the normative vocabulary was chosen to keep distinct"
+      }),
+      Object.freeze({
+        native_event: "TaskCreated",
+        normalized_event: "task.dispatch",
+        rationale: "the shipped task-creation producer the normative vocabulary was chosen to keep distinct"
+      }),
+      Object.freeze({
+        native_event: "TeammateIdle",
+        normalized_event: null,
+        rationale: "teammate idleness is a scheduling signal, not a lifecycle transition; the normative vocabulary declares no image for it. Declared unmapped rather than approximated."
+      }),
+      Object.freeze({
+        native_event: "UserPromptSubmit",
+        normalized_event: "prompt.submit",
+        rationale: "fires when the operator submits a prompt"
+      })
+    ]);
+    WRAPPER_NATIVE_EVENT_BINDINGS = Object.freeze([
+      Object.freeze({
+        native_event: "guild.wrapper.context_compact",
+        normalized_event: "context.compact",
+        rationale: "the wrapper reports a context reduction it performed on the host's behalf"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.prompt_submit",
+        normalized_event: "prompt.submit",
+        rationale: "the wrapper hands the host an operator prompt"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.run_resume",
+        normalized_event: "run.resume",
+        rationale: "the wrapper re-enters an existing run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.run_stop",
+        normalized_event: "run.stop",
+        rationale: "the wrapper observes the host process closing the run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.session_start",
+        normalized_event: "session.start",
+        rationale: "the wrapper opens the host process for this run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.task_collect",
+        normalized_event: "task.collect",
+        rationale: "the wrapper collects a finished task run"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.task_dispatch",
+        normalized_event: "task.dispatch",
+        rationale: "the wrapper dispatches a task run onto the host"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.tool_after",
+        normalized_event: "tool.after",
+        rationale: "the wrapper observes a completed tool call"
+      }),
+      Object.freeze({
+        native_event: "guild.wrapper.tool_before",
+        normalized_event: "tool.before",
+        rationale: "the wrapper observes a tool call about to run"
+      })
+    ]);
+    NATIVE_BINDINGS_BY_FAMILY = Object.freeze({
+      claude: CLAUDE_NATIVE_EVENT_BINDINGS
+    });
+    NO_SOURCE = Object.freeze({
+      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
+      host_id: null,
+      kind: "none",
+      bindings: Object.freeze([])
+    });
+  }
+});
 
 // ../src/modules/host-runtime/workflows/host-adapter-boundary.ts
-var HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
-var HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
-var HOST_ADAPTER_OWNERSHIP_SCHEMA = "guild.host_adapter_ownership.v1";
-var HOST_ADAPTER_REASON_CODES = Object.freeze([
-  "boundary_membership_mismatch",
-  "capability_absent",
-  "capability_snapshot_mismatch",
-  "execution_failed",
-  "unknown_event"
-]);
-var HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
-  "host_identity_resolution",
-  "host_entry_point_binding",
-  "host_capability_snapshot",
-  "host_native_event_normalization"
-]);
-var HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
-  "lifecycle_state",
-  "gate_policy",
-  "artifact_semantics",
-  "document_rendering",
-  "transport_execution"
-]);
-var CONCERN_OWNERS = Object.freeze({
-  host_identity_resolution: "host-adapters",
-  host_entry_point_binding: "host-adapters",
-  host_capability_snapshot: "host-adapters",
-  host_native_event_normalization: "host-adapters",
-  lifecycle_state: "host-neutral-core",
-  gate_policy: "host-neutral-core",
-  artifact_semantics: "artifact-document-services",
-  document_rendering: "artifact-document-services",
-  transport_execution: "execution-transports"
-});
-var OWNERSHIP = Object.freeze({
-  schema_version: HOST_ADAPTER_OWNERSHIP_SCHEMA,
-  boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
-  owned: Object.freeze([...HOST_ADAPTER_OWNED_CONCERNS]),
-  not_owned: Object.freeze([...HOST_ADAPTER_NOT_OWNED_CONCERNS]),
-  owners: CONCERN_OWNERS
-});
-var DEFAULT_INSTRUCTION_FILE = "AGENTS.md";
 function entryPointFor(hostId) {
   const row = HOST_REGISTRY_ROWS[hostId];
   const subcommand = row.detection.subcommand ?? null;
@@ -4864,76 +5243,641 @@ function entryPointFor(hostId) {
     dispatch_selectable: row.dispatch_selectable
   });
 }
-var HOST_ENTRY_POINTS = Object.freeze(
-  HOST_IDS.reduce(
-    (accumulator, hostId) => {
-      accumulator[hostId] = entryPointFor(hostId);
-      return accumulator;
-    },
-    {}
-  )
-);
-var BOUNDARY_STORE = createHostCapabilitySnapshotStore();
+var HOST_ADAPTER_BOUNDARY_SCHEMA, HOST_ENTRY_POINT_SCHEMA, HOST_ADAPTER_OWNERSHIP_SCHEMA, HOST_ADAPTER_REASON_CODES, HOST_ADAPTER_OWNED_CONCERNS, HOST_ADAPTER_NOT_OWNED_CONCERNS, CONCERN_OWNERS, OWNERSHIP, DEFAULT_INSTRUCTION_FILE, HOST_ENTRY_POINTS, BOUNDARY_STORE;
+var init_host_adapter_boundary = __esm({
+  "../src/modules/host-runtime/workflows/host-adapter-boundary.ts"() {
+    init_host_adapter_contract();
+    init_host_id_namespace();
+    init_host_registry_schema();
+    init_host_capability_snapshot();
+    init_host_event_normalizer();
+    HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
+    HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
+    HOST_ADAPTER_OWNERSHIP_SCHEMA = "guild.host_adapter_ownership.v1";
+    HOST_ADAPTER_REASON_CODES = Object.freeze([
+      "boundary_membership_mismatch",
+      "capability_absent",
+      "capability_snapshot_mismatch",
+      "execution_failed",
+      "unknown_event"
+    ]);
+    HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
+      "host_identity_resolution",
+      "host_entry_point_binding",
+      "host_capability_snapshot",
+      "host_native_event_normalization"
+    ]);
+    HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
+      "lifecycle_state",
+      "gate_policy",
+      "artifact_semantics",
+      "document_rendering",
+      "transport_execution"
+    ]);
+    CONCERN_OWNERS = Object.freeze({
+      host_identity_resolution: "host-adapters",
+      host_entry_point_binding: "host-adapters",
+      host_capability_snapshot: "host-adapters",
+      host_native_event_normalization: "host-adapters",
+      lifecycle_state: "host-neutral-core",
+      gate_policy: "host-neutral-core",
+      artifact_semantics: "artifact-document-services",
+      document_rendering: "artifact-document-services",
+      transport_execution: "execution-transports"
+    });
+    OWNERSHIP = Object.freeze({
+      schema_version: HOST_ADAPTER_OWNERSHIP_SCHEMA,
+      boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
+      owned: Object.freeze([...HOST_ADAPTER_OWNED_CONCERNS]),
+      not_owned: Object.freeze([...HOST_ADAPTER_NOT_OWNED_CONCERNS]),
+      owners: CONCERN_OWNERS
+    });
+    DEFAULT_INSTRUCTION_FILE = "AGENTS.md";
+    HOST_ENTRY_POINTS = Object.freeze(
+      HOST_IDS.reduce(
+        (accumulator, hostId) => {
+          accumulator[hostId] = entryPointFor(hostId);
+          return accumulator;
+        },
+        {}
+      )
+    );
+    BOUNDARY_STORE = createHostCapabilitySnapshotStore();
+  }
+});
+
+// ../src/modules/host-runtime/index.ts
+var init_host_runtime = __esm({
+  "../src/modules/host-runtime/index.ts"() {
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    init_host_profiles_validate();
+    init_host_registry();
+    init_host_registry_schema();
+    init_provider_detect();
+    init_session_context();
+    init_model_discovery();
+    init_host_adapter_contract();
+    init_host_adapter_boundary();
+    init_host_capability_snapshot();
+    init_host_event_normalizer();
+  }
+});
+
+// ../src/modules/config/workflows/config-defaults.ts
+var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_AFTER_F7, CAPABILITY_RESOLVER_MODE_DEFAULT, DEFAULTS;
+var init_config_defaults = __esm({
+  "../src/modules/config/workflows/config-defaults.ts"() {
+    init_kernel();
+    DEFAULT_ESCALATION_MARKERS = Object.freeze([
+      "I'm not sure",
+      "unclear",
+      "cannot determine",
+      "I don't know",
+      "ambiguous",
+      "uncertain",
+      "not enough information"
+    ]);
+    NON_INHERITABLE_KEYS = sealSet([
+      "initiative_default",
+      // OD-1: attach-to-wrong-initiative risk
+      "workspace"
+      // workspace.mode is root-detection-only
+    ], "NON_INHERITABLE_KEYS");
+    LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+    SIDECAR_MAX_BYTES = 1024 * 1024;
+    CAPABILITY_RESOLVER_MODES = Object.freeze([
+      "legacy",
+      "observe",
+      "shadow",
+      "project-local",
+      "strict"
+    ]);
+    CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
+    CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
+    CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
+    DEFAULTS = deepFreeze({
+      rigor: "standard",
+      auto_approve: [],
+      review: "local",
+      host: "auto",
+      /**
+       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+       * this top-level placement (sibling of the `host` dispatch selector) is the registered
+       * replacement. One of only three keys ever legitimately null-typed at the top level.
+       */
+      host_mode: null,
+      roles: { host: null, advisory: null, adversarial: null },
+      host_profiles: {},
+      initiative_default: null,
+      index: "auto",
+      record_status_runs: true,
+      codex_skip_enforcement: "warn",
+      agent_mode: "auto",
+      workspace: { mode: "auto" },
+      models: {
+        enabled: true,
+        // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+        // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+        // own contract, stated in the module doc comment above, is to stay free of
+        // internal runtime imports so core settings code can load it before the
+        // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+        // roster (host-registry-schema.ts) enumerated by hand; a jest test
+        // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+        // stay in sync so this can never silently drift again the way it had (7 of
+        // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+        // non-null model — every other host's registry row carries `models.<tier>.model:
+        // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+        // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+        // equivalent this static scaffold mirrors).
+        tiers: {
+          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
+        },
+        scoreWeights: {
+          workType: 0,
+          blastRadius: 1,
+          dependsOn: 1,
+          security: 1,
+          priorEscalation: 1
+        },
+        thresholds: { mid: 1, powerful: 3 },
+        advisorRounds: 2,
+        escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+        recallBeforeRead: true,
+        recallScoreThreshold: 0.4,
+        structuredOutputRequired: true,
+        cacheTTL: { coordinator: "1h", leaf: "5m" },
+        importanceGate: 3,
+        compositeRecall: true,
+        importanceAtIngest: true,
+        ingestSimilarityGate: 0.8,
+        shortOutputThreshold: {},
+        knowledge: {
+          maxDepth: 8,
+          maxBranching: 12,
+          minTopicImportance: 0.4,
+          relMinConf: 0.5,
+          maxFiles: 3e3,
+          maxTokens: 1e6,
+          batchSize: 20
+        }
+      },
+      security: {
+        bypass_permissions_policy: "audit"
+      },
+      secrets_policy: {
+        env_allowlist: [],
+        redaction_patterns: [],
+        fail_mode_durable: "closed",
+        fail_mode_telemetry: "open"
+      },
+      mcp: {
+        tool_description_hashes: {},
+        stdio_available: true,
+        http_available: false,
+        bridge_package: null
+      },
+      /**
+       * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+       * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+       * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+       *
+       * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+       * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+       * What a lane may DO stays with `capability_scope` and the permission keys.
+       *
+       * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+       * already emits unconditionally — capability ownership is per project by
+       * definition (the umbrella and each child answer "what roles do I need"
+       * independently, and D03 has the four repos migrating at different rates). Per
+       * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+       * out with zero generator change, and adding it would touch every existing key.
+       */
+      capability: {
+        /**
+         * Which resolver mode this project is in on D03's migration ladder. Config
+         * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+         * gate criteria the initiative evaluates, and a mode change is a deliberate
+         * write.
+         *
+         * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
+         * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
+         * silently defaulted: an unset value resolves with provenance `default`, so
+         * `config show --sources` shows it was never chosen.
+         */
+        resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+        /**
+         * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+         * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+         * the two cannot disagree. 0 is legal: "profile but never propose".
+         */
+        suggestion_budget: 4,
+        /**
+         * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+         * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+         * Learn proposes.
+         */
+        starter_roles: [],
+        /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+        auto_create_policy: "on_approval"
+      },
+      statusline: false,
+      adversarial_review_provider: "auto",
+      loops: null,
+      loop_cap: 16,
+      codex_cap: 5,
+      // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
+      // routing intent. null = not configured — v2 routing stays off and the legacy
+      // tier maps drive generic preferences for the §6 migration window. When set, the
+      // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
+      model_policy: null,
+      defaults: {
+        auto_learn: false,
+        adversarial: "on",
+        team: { size: null, always_include: [] },
+        review_workflow: "standard",
+        skill_policy: "standard",
+        gates: { auto_approve: [] },
+        wiki: { share_mode: "team", autopromote: false },
+        quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+        reporting: "standard",
+        index: {
+          enabled: true,
+          kg_node_threshold: 2e3,
+          kg_size_threshold_mb: 1,
+          links_edge_threshold: 2e3,
+          runs_threshold: 20,
+          wiki_file_threshold: 500
+        },
+        cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+        retry: { max_attempts: 1, backoff: "exponential" },
+        resume: { enabled: true },
+        heartbeat_timeout_ms: 6e5,
+        capability_manifest_ttl_s: 3600,
+        // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+        // the SessionStart signal; `auto` additionally stages the host apply path;
+        // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+        update: { mode: "notify", cadence_hours: 24 },
+        allowed_tools: [],
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+         * "Inline shortcut under high autonomy").
+         */
+        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+         * activity count before the lifecycle gate advisory fires.
+         */
+        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
+        /**
+         * Issue #93 — dispatch-safety knobs for the #56 backend-degradation guard
+         * (hooks/lib/backend-degradation.ts).
+         *
+         * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
+         * NO structured producer marker (`prompt_only` evidence — the hand-rolled
+         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+         *
+         * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
+         * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
+         * was merely QUOTED in a prompt as `prompt_only` too — by text it is
+         * indistinguishable from the real dispatch (backend-degradation.ts's
+         * lane-brief signature note, adversarial review round 3). So strict mode
+         * trades the no-false-positive-on-a-quoted-brief invariant for tighter drift
+         * coverage, which is an operator's call to make, never a shipped default.
+         *
+         * PR #85 (G3) shipped this rung as the env flag `GUILD_BLOCK_UNMARKED_LANES`
+         * only, deliberately deferring schema registration to avoid colliding with
+         * rf-wi-01's closed-schema work. That work landed (PR #87), so this is the
+         * promised followup: the key is now discoverable and validated, and the env
+         * var survives as a per-session OVERRIDE (both directions) on top of it.
+         */
+        dispatch: { block_unmarked_lanes: false }
+      }
+    });
+  }
+});
+
+// ../src/modules/config/workflows/config-validation.ts
+var init_config_validation = __esm({
+  "../src/modules/config/workflows/config-validation.ts"() {
+    init_host_runtime();
+  }
+});
 
 // ../src/modules/security/workflows/safe-object.ts
-var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+var PROTO_POISON_KEYS;
+var init_safe_object = __esm({
+  "../src/modules/security/workflows/safe-object.ts"() {
+    init_kernel();
+    PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+  }
+});
+
+// ../src/modules/security/workflows/injection-guard.ts
+var init_injection_guard = __esm({
+  "../src/modules/security/workflows/injection-guard.ts"() {
+  }
+});
 
 // ../src/modules/security/workflows/redact-log.ts
-var FIELD_SIZE_CAP_BYTES = 4 * 1024;
-var TOKEN_SHAPE_PATTERNS = Object.freeze([
-  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
-  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
-  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
-  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
-  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
-  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
-  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
-  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
-  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
-]);
-var SENSITIVE_HOME_DIRS = Object.freeze([
-  ".claude",
-  ".codex",
-  ".ssh",
-  ".aws",
-  ".gnupg"
-]);
-var REDACTABLE_FIELD_NAMES = Object.freeze([
-  "command_redacted",
-  "result_excerpt_redacted",
-  "payload_excerpt_redacted",
-  "prompt_excerpt",
-  "assumption_text",
-  "result"
-]);
-var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+function redactTokenShapes(input) {
+  let out = input;
+  for (const re of TOKEN_SHAPE_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
+  }
+  return out;
+}
+function redactHomeDirPaths(input) {
+  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
+    return `${root}/${dir}/${PATH_REDACTED}`;
+  });
+}
+function redactKeyValueSecrets(input) {
+  return input.replace(
+    KV_SECRET_PATTERN,
+    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
+  );
+}
+function allWordsWordish(words) {
+  let opaqueBudget = 1;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    let upper = 0;
+    let lower = 0;
+    let digits = 0;
+    for (const ch of word) {
+      if (ch >= "a" && ch <= "z") lower++;
+      else if (ch >= "A" && ch <= "Z") upper++;
+      else digits++;
+    }
+    if (lower === 0) {
+      if (word.length > 8) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+    } else if (upper > 3 || digits > 4) {
+      return false;
+    }
+  }
+  return true;
+}
+function isRelativePathToken(candidate, fullInput, matchIndex) {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
+  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
+    return false;
+  }
+  let end = matchIndex + candidate.length;
+  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
+  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
+    return false;
+  }
+  const token = fullInput.slice(start, end);
+  if (token.length > MAX_PATH_TOKEN_LEN) return false;
+  if (!PATH_SHAPE.test(token)) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
+}
+function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
+  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
+    return true;
+  }
+  const lookBackStart = Math.max(0, matchIndex - 16);
+  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
+  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
+    return true;
+  }
+  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
+    return true;
+  }
+  return false;
+}
+function redactHighEntropy(input) {
+  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
+    if (isWhitelistedHighEntropy(match, input, offset)) {
+      return match;
+    }
+    return HIGH_ENTROPY_REDACTED;
+  });
+}
+function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
+  const byteLen = Buffer.byteLength(input, "utf8");
+  if (byteLen <= cap) return input;
+  const buf = Buffer.from(input, "utf8");
+  const truncated = buf.slice(0, cap).toString("utf8");
+  const cleaned = truncated.replace(/\uFFFD+$/u, "");
+  return cleaned + TRUNCATION_SUFFIX;
+}
+function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
+  if (typeof input !== "string") return input;
+  let out = redactTokenShapes(input);
+  out = redactHomeDirPaths(out);
+  out = redactKeyValueSecrets(out);
+  out = redactHighEntropy(out);
+  out = truncateToCap(out, cap);
+  return out;
+}
+function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
+  const out = { ...event };
+  for (const [k, v] of Object.entries(out)) {
+    if (REDACTABLE_FIELDS.has(k) && typeof v === "string") {
+      out[k] = redactField(v, cap);
+    }
+  }
+  return out;
+}
+var TOKEN_REDACTED, PATH_REDACTED, KV_REDACTED, HIGH_ENTROPY_REDACTED, TRUNCATION_SUFFIX, FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, HOME_DIR_PATTERN, KV_SECRET_PATTERN, PATH_TOKEN_CHAR, PATH_SHAPE, PATH_EXTENSION, MAX_PATH_TOKEN_LEN, HIGH_ENTROPY_PATTERN, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
+var init_redact_log = __esm({
+  "../src/modules/security/workflows/redact-log.ts"() {
+    init_kernel();
+    TOKEN_REDACTED = "[REDACTED_TOKEN]";
+    PATH_REDACTED = "[REDACTED]";
+    KV_REDACTED = "[REDACTED]";
+    HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
+    TRUNCATION_SUFFIX = "... [TRUNCATED]";
+    FIELD_SIZE_CAP_BYTES = 4 * 1024;
+    TOKEN_SHAPE_PATTERNS = Object.freeze([
+      Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+      Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+      Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+      Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+      Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+      Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+      Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+    ]);
+    SENSITIVE_HOME_DIRS = Object.freeze([
+      ".claude",
+      ".codex",
+      ".ssh",
+      ".aws",
+      ".gnupg"
+    ]);
+    HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
+    KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
+    PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+    PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+    PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+    MAX_PATH_TOKEN_LEN = 512;
+    HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
+    REDACTABLE_FIELD_NAMES = Object.freeze([
+      "command_redacted",
+      "result_excerpt_redacted",
+      "payload_excerpt_redacted",
+      "prompt_excerpt",
+      "assumption_text",
+      "result"
+    ]);
+    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+  }
+});
+
+// ../src/modules/security/workflows/secrets.ts
+var init_secrets = __esm({
+  "../src/modules/security/workflows/secrets.ts"() {
+    init_redact_log();
+  }
+});
+
+// ../src/modules/state/workflows/plugin-install-guard.ts
+function assertNotUnderPluginInstall(absPath, pluginInstallRoot) {
+  const root = pluginInstallRoot ?? process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["CODEX_PLUGIN_ROOT"];
+  if (!root) return;
+  const resolvedRoot = path3.resolve(root);
+  const rel = path3.relative(resolvedRoot, path3.resolve(absPath));
+  if (rel === "" || !rel.startsWith("..") && !path3.isAbsolute(rel)) {
+    const underOwnDotGuild = rel === ".guild" || rel.startsWith(`.guild${path3.sep}`);
+    if (underOwnDotGuild && fs2.existsSync(path3.join(resolvedRoot, ".git"))) return;
+    throw new Error(`project-created Guild artifact would be written under plugin install dir: ${absPath}`);
+  }
+}
+var fs2, path3;
+var init_plugin_install_guard = __esm({
+  "../src/modules/state/workflows/plugin-install-guard.ts"() {
+    fs2 = __toESM(require("node:fs"));
+    path3 = __toESM(require("node:path"));
+  }
+});
+
+// ../src/modules/state/workflows/atomic-write.ts
+function atomicWrite(targetPath, content, pluginInstallRoot) {
+  assertNotUnderPluginInstall(targetPath, pluginInstallRoot);
+  const dir = path4.dirname(targetPath);
+  fs3.mkdirSync(dir, { recursive: true });
+  const unique = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+  const tmpPath = path4.join(dir, `.${path4.basename(targetPath)}.tmp-${unique}`);
+  fs3.writeFileSync(tmpPath, content, "utf8");
+  try {
+    fs3.renameSync(tmpPath, targetPath);
+  } catch (err) {
+    try {
+      fs3.unlinkSync(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
+}
+var fs3, path4, crypto;
+var init_atomic_write = __esm({
+  "../src/modules/state/workflows/atomic-write.ts"() {
+    fs3 = __toESM(require("fs"));
+    path4 = __toESM(require("path"));
+    crypto = __toESM(require("crypto"));
+    init_plugin_install_guard();
+  }
+});
 
 // ../src/modules/state/workflows/dependency-graph-schema.ts
-var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
-var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
-  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
-  nodes: [
-    { id: "guild-plugin", path: "plugin" },
-    { id: "guild-website", path: "website" },
-    { id: "guild-benchmark", path: "benchmark" }
-  ],
-  edges: [
-    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
-    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
-  ]
+var DEPENDENCY_GRAPH_SCHEMA_VERSION, DEPENDENCY_GRAPH_V1_EXAMPLE;
+var init_dependency_graph_schema = __esm({
+  "../src/modules/state/workflows/dependency-graph-schema.ts"() {
+    init_kernel();
+    DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+    DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+      schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+      nodes: [
+        { id: "guild-plugin", path: "plugin" },
+        { id: "guild-website", path: "website" },
+        { id: "guild-benchmark", path: "benchmark" }
+      ],
+      edges: [
+        { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+        { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+      ]
+    });
+  }
+});
+
+// ../src/modules/state/workflows/dependency-graph-reader.ts
+var init_dependency_graph_reader = __esm({
+  "../src/modules/state/workflows/dependency-graph-reader.ts"() {
+    init_dependency_graph_schema();
+  }
+});
+
+// ../src/modules/state/workflows/frontmatter.ts
+var init_frontmatter = __esm({
+  "../src/modules/state/workflows/frontmatter.ts"() {
+    init_kernel();
+  }
+});
+
+// ../src/modules/state/workflows/guild-root.ts
+function resolveGuildRoot2(startDir) {
+  const resolvedStart = path5.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs4.existsSync(path5.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path5.join(current, ".guild");
+      try {
+        if (fs4.existsSync(guildDir) && fs4.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path5.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+var fs4, path5;
+var init_guild_root = __esm({
+  "../src/modules/state/workflows/guild-root.ts"() {
+    fs4 = __toESM(require("node:fs"));
+    path5 = __toESM(require("node:path"));
+  }
+});
+
+// ../src/modules/state/workflows/guild-discovery.ts
+var init_guild_discovery = __esm({
+  "../src/modules/state/workflows/guild-discovery.ts"() {
+    init_guild_root();
+  }
 });
 
 // ../src/modules/migrations/workflows/index-migrate.ts
-var import_node_child_process = require("node:child_process");
-var fs2 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA busy_timeout = 5000");
   return db;
 }
-var CURRENT_SCHEMA_VERSION = 3;
 function resolveGuildRoot3(cwd) {
   try {
     const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
@@ -4941,180 +5885,18 @@ function resolveGuildRoot3(cwd) {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const abs = path3.isAbsolute(raw) ? raw : path3.resolve(cwd, raw);
-    const root = path3.dirname(abs);
-    if (fs2.existsSync(root)) return root;
+    const abs = path6.isAbsolute(raw) ? raw : path6.resolve(cwd, raw);
+    const root = path6.dirname(abs);
+    if (fs5.existsSync(root)) return root;
   } catch {
   }
-  return path3.resolve(cwd);
+  return path6.resolve(cwd);
 }
-var MIGRATIONS = [
-  // ── v1: core tables ───────────────────────────────────────────────────────
-  {
-    version: 1,
-    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_nodes;
-        DROP TABLE IF EXISTS kg_edges;
-        DROP TABLE IF EXISTS kl_edges;
-        DROP TABLE IF EXISTS run_provenance;
-        DROP TABLE IF EXISTS wiki_fts;
-        DROP TABLE IF EXISTS _fingerprints;
-      `);
-      db.exec(`
-        CREATE TABLE kg_nodes (
-          id         TEXT NOT NULL PRIMARY KEY,
-          type       TEXT,
-          name       TEXT,
-          source_refs TEXT,
-          confidence TEXT,
-          layer      TEXT,
-          data       TEXT
-        );
-
-        CREATE TABLE kg_edges (
-          id        INTEGER PRIMARY KEY,
-          source    TEXT NOT NULL,
-          target    TEXT NOT NULL,
-          type      TEXT,
-          direction TEXT,
-          weight    REAL,
-          data      TEXT
-        );
-
-        CREATE TABLE kl_edges (
-          id        INTEGER PRIMARY KEY,
-          from_node TEXT NOT NULL,
-          to_node   TEXT NOT NULL,
-          type      TEXT,
-          run_id    TEXT,
-          data      TEXT
-        );
-
-        CREATE TABLE run_provenance (
-          run_id TEXT NOT NULL PRIMARY KEY,
-          ts     TEXT,
-          data   TEXT
-        );
-
-        CREATE TABLE _fingerprints (
-          table_name   TEXT NOT NULL PRIMARY KEY,
-          source_path  TEXT NOT NULL,
-          sha256       TEXT NOT NULL,
-          populated_at TEXT NOT NULL
-        );
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE wiki_fts USING fts5(
-            path      UNINDEXED,
-            title,
-            content,
-            tokenize='porter ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE wiki_fts (
-            path    TEXT,
-            title   TEXT,
-            content TEXT
-          );
-        `);
-      }
-    }
-  },
-  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
-  //
-  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
-  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
-  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
-  //
-  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
-  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
-  // invalidate function (ensureFederationWikiCache) was removed in
-  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
-  // schema migration is retained (harmless empty table) since altering the
-  // migration ladder is a separate, out-of-scope decision.
-  {
-    version: 2,
-    tables: ["federation_wiki_cache"],
-    up(db) {
-      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
-      db.exec(`
-        CREATE TABLE federation_wiki_cache (
-          sub_guild_root TEXT NOT NULL,
-          path           TEXT NOT NULL,
-          title          TEXT,
-          snippet        TEXT,
-          PRIMARY KEY (sub_guild_root, path)
-        );
-      `);
-    }
-  },
-  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
-  //
-  // Two OPTIONAL acceleration tables projected from the canonical, file-first
-  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
-  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
-  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
-  // remains the source of truth that returns IDENTICAL answers.
-  //
-  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
-  //                    indexed on source AND target so the call-graph BFS
-  //                    (kgTrace / kgDeadCode) is fetched without parsing the
-  //                    whole JSON graph.
-  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
-  //                    node, so identifier search (`process_order` →
-  //                    `processOrder`) is an index lookup, not a full node scan.
-  //                    Tokens are PRE-SPLIT with the shared identifier-aware
-  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
-  //                    document and query side, so the FTS built-in tokenizer
-  //                    only has to whitespace-split — the camel/snake behaviour
-  //                    lives in the (deterministic, model-free) projection feed.
-  {
-    version: 3,
-    tables: ["kg_calls", "kg_symbols_fts"],
-    up(db) {
-      db.exec(`
-        DROP TABLE IF EXISTS kg_calls;
-        DROP TABLE IF EXISTS kg_symbols_fts;
-      `);
-      db.exec(`
-        CREATE TABLE kg_calls (
-          id         INTEGER PRIMARY KEY,
-          source     TEXT NOT NULL,
-          target     TEXT NOT NULL,
-          confidence TEXT
-        );
-        CREATE INDEX kg_calls_source ON kg_calls (source);
-        CREATE INDEX kg_calls_target ON kg_calls (target);
-      `);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
-            node_id UNINDEXED,
-            name_tokens,
-            tokenize='ascii'
-          );
-        `);
-      } catch {
-        db.exec(`
-          CREATE TABLE kg_symbols_fts (
-            node_id     TEXT,
-            name_tokens TEXT
-          );
-        `);
-      }
-    }
-  }
-];
 function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
   try {
-    fs2.mkdirSync(path3.dirname(dbPath), { recursive: true });
+    fs5.mkdirSync(path6.dirname(dbPath), { recursive: true });
     db = openDatabase(dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA synchronous = NORMAL");
@@ -5179,7 +5961,7 @@ function runIndexMigrateCli() {
   }
   if (!dbPath) {
     const guildRoot = resolveGuildRoot3(cwd);
-    dbPath = path3.join(guildRoot, ".guild", "index.sqlite");
+    dbPath = path6.join(guildRoot, ".guild", "index.sqlite");
   }
   const result = runMigrations(dbPath);
   if (result.ok) {
@@ -5193,397 +5975,5499 @@ function runIndexMigrateCli() {
     process.exit(1);
   }
 }
-if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  runIndexMigrateCli();
-}
+var import_node_child_process, fs5, path6, CURRENT_SCHEMA_VERSION, MIGRATIONS;
+var init_index_migrate = __esm({
+  "../src/modules/migrations/workflows/index-migrate.ts"() {
+    import_node_child_process = require("node:child_process");
+    fs5 = __toESM(require("node:fs"));
+    path6 = __toESM(require("node:path"));
+    CURRENT_SCHEMA_VERSION = 3;
+    MIGRATIONS = [
+      // ── v1: core tables ───────────────────────────────────────────────────────
+      {
+        version: 1,
+        tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+        up(db) {
+          db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+          db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+          try {
+            db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+          } catch {
+            db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+          }
+        }
+      },
+      // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+      //
+      // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+      // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+      // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+      //
+      // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+      // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+      // invalidate function (ensureFederationWikiCache) was removed in
+      // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+      // schema migration is retained (harmless empty table) since altering the
+      // migration ladder is a separate, out-of-scope decision.
+      {
+        version: 2,
+        tables: ["federation_wiki_cache"],
+        up(db) {
+          db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+          db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+        }
+      },
+      // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+      //
+      // Two OPTIONAL acceleration tables projected from the canonical, file-first
+      // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+      // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+      // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+      // remains the source of truth that returns IDENTICAL answers.
+      //
+      //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+      //                    indexed on source AND target so the call-graph BFS
+      //                    (kgTrace / kgDeadCode) is fetched without parsing the
+      //                    whole JSON graph.
+      //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+      //                    node, so identifier search (`process_order` →
+      //                    `processOrder`) is an index lookup, not a full node scan.
+      //                    Tokens are PRE-SPLIT with the shared identifier-aware
+      //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+      //                    document and query side, so the FTS built-in tokenizer
+      //                    only has to whitespace-split — the camel/snake behaviour
+      //                    lives in the (deterministic, model-free) projection feed.
+      {
+        version: 3,
+        tables: ["kg_calls", "kg_symbols_fts"],
+        up(db) {
+          db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+          db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+          try {
+            db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+          } catch {
+            db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+          }
+        }
+      }
+    ];
+    if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+      runIndexMigrateCli();
+    }
+  }
+});
 
 // ../src/modules/migrations/workflows/wiki-importance.ts
-var STRUCTURAL_BASENAMES = sealSet([
-  "index.md",
-  "readme.md",
-  "log.md",
-  "query.md",
-  "transfer-manifest.md"
-], "STRUCTURAL_BASENAMES");
+var STRUCTURAL_BASENAMES;
+var init_wiki_importance = __esm({
+  "../src/modules/migrations/workflows/wiki-importance.ts"() {
+    init_kernel();
+    init_state();
+    STRUCTURAL_BASENAMES = sealSet([
+      "index.md",
+      "readme.md",
+      "log.md",
+      "query.md",
+      "transfer-manifest.md"
+    ], "STRUCTURAL_BASENAMES");
+  }
+});
+
+// ../src/modules/migrations/index.ts
+var init_migrations = __esm({
+  "../src/modules/migrations/index.ts"() {
+    init_index_migrate();
+    init_wiki_importance();
+  }
+});
+
+// ../src/modules/state/workflows/index-cache.ts
+var init_index_cache = __esm({
+  "../src/modules/state/workflows/index-cache.ts"() {
+    init_migrations();
+    init_kernel();
+  }
+});
+
+// ../src/modules/state/index.ts
+var init_state = __esm({
+  "../src/modules/state/index.ts"() {
+    init_atomic_write();
+    init_dependency_graph_reader();
+    init_dependency_graph_schema();
+    init_frontmatter();
+    init_guild_discovery();
+    init_guild_root();
+    init_index_cache();
+  }
+});
+
+// ../src/modules/security/workflows/config.ts
+var init_config = __esm({
+  "../src/modules/security/workflows/config.ts"() {
+    init_state();
+  }
+});
 
 // ../src/modules/security/workflows/events.ts
-var KNOWN_GUILD_HOST_KINDS = Object.freeze([
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector"
-]);
-var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+var KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET;
+var init_events = __esm({
+  "../src/modules/security/workflows/events.ts"() {
+    init_state();
+    init_redact_log();
+    KNOWN_GUILD_HOST_KINDS = Object.freeze([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector"
+    ]);
+    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+  }
+});
+
+// ../src/modules/security/workflows/scrubbed-write.ts
+var init_scrubbed_write = __esm({
+  "../src/modules/security/workflows/scrubbed-write.ts"() {
+    init_secrets();
+    init_config();
+    init_events();
+  }
+});
 
 // ../src/modules/security/workflows/share-set.ts
-var SHARED_SCRUBBED_NAMES = sealSet([
-  "verify.md",
-  "review.md",
-  "provenance.json",
-  "summary.md",
-  "run.yaml",
-  "run-state.json"
-], "SHARED_SCRUBBED_NAMES");
+var SHARED_SCRUBBED_NAMES;
+var init_share_set = __esm({
+  "../src/modules/security/workflows/share-set.ts"() {
+    init_kernel();
+    SHARED_SCRUBBED_NAMES = sealSet([
+      "verify.md",
+      "review.md",
+      "provenance.json",
+      "summary.md",
+      "run.yaml",
+      "run-state.json"
+    ], "SHARED_SCRUBBED_NAMES");
+  }
+});
+
+// ../src/modules/security/workflows/secret-patterns.ts
+var SECRET_PATTERNS;
+var init_secret_patterns = __esm({
+  "../src/modules/security/workflows/secret-patterns.ts"() {
+    SECRET_PATTERNS = Object.freeze([
+      // NOTE: labels deliberately drop the `=` so the redaction replacement
+      // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+      // on a subsequent scrub pass. Idempotency depends on this — every label below
+      // is checked against every pattern above it, and none re-matches.
+      Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+      Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+      Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+      Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+      Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+      Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+      Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+      Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+      // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+      // Round-1 review proved the list above blind to the shapes an inspection
+      // surface is most likely to echo out of a persisted artifact: an
+      // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+      // `<something>_token = …` assignment family. A display surface that renders
+      // a persisted evidence string verbatim leaked all three past the applier.
+      //
+      // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+      // stays specific, and each replacement label is inert against every pattern
+      // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+      // which is what keeps `redact` idempotent.
+      Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+      Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+      Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+      // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+      Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+      Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+      Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+      Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+      Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+      Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+      // High-entropy string heuristic: 40+ hex chars (SHA-like)
+      Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+    ]);
+  }
+});
+
+// ../src/modules/security/workflows/scrub-redact.ts
+var init_scrub_redact = __esm({
+  "../src/modules/security/workflows/scrub-redact.ts"() {
+    init_secret_patterns();
+  }
+});
+
+// ../src/modules/security/index.ts
+var init_security = __esm({
+  "../src/modules/security/index.ts"() {
+    init_safe_object();
+    init_injection_guard();
+    init_scrubbed_write();
+    init_redact_log();
+    init_share_set();
+    init_scrub_redact();
+    init_secret_patterns();
+  }
+});
+
+// ../src/modules/config/workflows/workspace-manifest.ts
+var init_workspace_manifest = __esm({
+  "../src/modules/config/workflows/workspace-manifest.ts"() {
+  }
+});
 
 // ../src/modules/config/workflows/settings-reader.ts
-var yaml = loadYamlApi();
-var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
-var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
-var DISPATCH_HOST_IDS = new Set(
-  HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
-);
-var RESOLVER_TIER1_KEYS = sealSet([
-  "rigor",
-  "auto_approve",
-  "review",
-  "host",
-  "host_mode",
-  "roles",
-  "host_profiles",
-  "initiative_default",
-  "index",
-  "record_status_runs",
-  "codex_skip_enforcement",
-  "agent_mode",
-  "workspace",
-  "models",
-  "security",
-  "secrets_policy",
-  "mcp",
-  "capability",
-  // S5 (cap-loc-D04) — capability localization policy
-  "statusline",
-  // R-009
-  "adversarial_review_provider",
-  // R-008
-  "loops",
-  "loop_cap",
-  "codex_cap",
-  "defaults"
-], "RESOLVER_TIER1_KEYS");
+var yaml, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, DISPATCH_HOST_IDS, RESOLVER_TIER1_KEYS;
+var init_settings_reader = __esm({
+  "../src/modules/config/workflows/settings-reader.ts"() {
+    init_host_runtime();
+    init_host_runtime();
+    init_host_runtime();
+    init_security();
+    init_config_defaults();
+    init_kernel();
+    init_workspace_manifest();
+    yaml = loadYamlApi();
+    VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
+    KNOWN_HOST_IDS2 = new Set(HOST_IDS);
+    DISPATCH_HOST_IDS = new Set(
+      HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+    );
+    RESOLVER_TIER1_KEYS = sealSet([
+      "rigor",
+      "auto_approve",
+      "review",
+      "host",
+      "host_mode",
+      "roles",
+      "host_profiles",
+      "initiative_default",
+      "index",
+      "record_status_runs",
+      "codex_skip_enforcement",
+      "agent_mode",
+      "workspace",
+      "models",
+      "security",
+      "secrets_policy",
+      "mcp",
+      "capability",
+      // S5 (cap-loc-D04) — capability localization policy
+      "statusline",
+      // R-009
+      "adversarial_review_provider",
+      // R-008
+      "loops",
+      "loop_cap",
+      "codex_cap",
+      "defaults",
+      "model_policy"
+      // T5 dynamic-host-model-routing: guild.model_policy.v2 (optional closed key)
+    ], "RESOLVER_TIER1_KEYS");
+  }
+});
 
 // ../src/modules/telemetry/workflows/guild-trace-events.ts
-var GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
-  "guild.trace.dispatch.v1",
-  "guild.trace.recall.v1",
-  "guild.trace.recall_decision.v1",
-  "guild.trace.config_resolution.v1",
-  "guild.trace.security_decision.v1",
-  "guild.trace.degradation.v1"
-]);
+function validateBase(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const e = ev;
+  if (typeof e["schema_version"] !== "string" || e["schema_version"] === "") {
+    return { ok: false, reason: "schema_version must be a non-empty string" };
+  }
+  if (!GUILD_TRACE_SCHEMA_VERSIONS.includes(e["schema_version"])) {
+    return { ok: false, reason: `unknown schema_version: ${e["schema_version"]}` };
+  }
+  if (typeof e["ts"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["ts"])) {
+    return { ok: false, reason: "ts must be an ISO-8601 timestamp string" };
+  }
+  if (typeof e["run_id"] !== "string" || e["run_id"] === "") {
+    return { ok: false, reason: "run_id must be a non-empty string" };
+  }
+  if (typeof e["lane_id"] !== "string") {
+    return { ok: false, reason: "lane_id must be a string (empty string for lead session)" };
+  }
+  return { ok: true };
+}
+function validateDispatchEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.dispatch.v1") {
+    return { ok: false, reason: `wrong schema_version for dispatch: ${e["schema_version"]}` };
+  }
+  if (typeof e["specialist"] !== "string" || e["specialist"] === "") {
+    return { ok: false, reason: "specialist must be a non-empty string" };
+  }
+  if (typeof e["phase"] !== "string" || e["phase"] === "") {
+    return { ok: false, reason: "phase must be a non-empty string" };
+  }
+  if (typeof e["task_id"] !== "string" || e["task_id"] === "") {
+    return { ok: false, reason: "task_id must be a non-empty string" };
+  }
+  if (!DISPATCH_BACKENDS.includes(e["backend"])) {
+    return { ok: false, reason: `backend must be one of: ${DISPATCH_BACKENDS.join(", ")}` };
+  }
+  if (typeof e["backend_rung"] !== "number" || e["backend_rung"] < 0 || e["backend_rung"] > 4) {
+    return { ok: false, reason: "backend_rung must be a number 0-4" };
+  }
+  if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"])) {
+    return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
+  }
+  for (const optKey of ["attribution_specialist", "pane_id", "pane_target", "pane_backend"]) {
+    if (e[optKey] === void 0) continue;
+    if (typeof e[optKey] !== "string" || e[optKey] === "") {
+      return { ok: false, reason: `${optKey}, when present, must be a non-empty string` };
+    }
+  }
+  if (e["pane_backend"] !== void 0) {
+    if (e["backend"] !== "unknown") {
+      return {
+        ok: false,
+        reason: `pane_backend is only for a surface the backend enum cannot name; it must not accompany backend "${e["backend"]}"`
+      };
+    }
+    if (e["backend_rung"] < 1) {
+      return {
+        ok: false,
+        reason: "pane_backend marks a CONFIRMED dispatch, so backend_rung must be >= 1"
+      };
+    }
+  }
+  return { ok: true };
+}
+function validateRecallEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall.v1") {
+    return { ok: false, reason: `wrong schema_version for recall: ${e["schema_version"]}` };
+  }
+  if (typeof e["query"] !== "string" || e["query"] === "") {
+    return { ok: false, reason: "query must be a non-empty string" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["had_quarantine"] !== "boolean") {
+    return { ok: false, reason: "had_quarantine must be a boolean" };
+  }
+  if (typeof e["cwd_redacted"] !== "string") {
+    return { ok: false, reason: "cwd_redacted must be a string" };
+  }
+  return { ok: true };
+}
+function validateRecallDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["query_hash"] !== "string" || !/^[0-9a-f]{16}$/.test(e["query_hash"])) {
+    return { ok: false, reason: "query_hash must be exactly 16 lowercase hex chars (sha256[:16])" };
+  }
+  if (typeof e["query_preview"] !== "string") {
+    return { ok: false, reason: "query_preview must be a string (may be empty)" };
+  }
+  if (e["query_preview"].length > 60) {
+    return { ok: false, reason: "query_preview must be <= 60 chars (no raw-query leak)" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["top_score"] !== "number" || e["top_score"] < 0 || !isFinite(e["top_score"])) {
+    return { ok: false, reason: "top_score must be a finite number >= 0" };
+  }
+  if (typeof e["threshold"] !== "number" || e["threshold"] < 0 || !isFinite(e["threshold"])) {
+    return { ok: false, reason: "threshold must be a finite number >= 0" };
+  }
+  if (typeof e["read_skip_fired"] !== "boolean") {
+    return { ok: false, reason: "read_skip_fired must be a boolean" };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["scored"] !== "boolean") {
+    return { ok: false, reason: "scored must be a boolean" };
+  }
+  if (!LANE_OUTCOMES.includes(e["lane_outcome"])) {
+    return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
+  }
+  return { ok: true };
+}
+function validateConfigResolutionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.config_resolution.v1") {
+    return { ok: false, reason: `wrong schema_version for config_resolution: ${e["schema_version"]}` };
+  }
+  if (typeof e["rigor"] !== "string" || e["rigor"] === "") {
+    return { ok: false, reason: "rigor must be a non-empty string" };
+  }
+  if (typeof e["agent_mode"] !== "string" || e["agent_mode"] === "") {
+    return { ok: false, reason: "agent_mode must be a non-empty string" };
+  }
+  if (typeof e["layers"] !== "object" || e["layers"] === null) {
+    return { ok: false, reason: "layers must be an object" };
+  }
+  const layers = e["layers"];
+  for (const boolKey of ["workspace", "workspace_local", "project", "project_local", "cli"]) {
+    if (typeof layers[boolKey] !== "boolean") {
+      return { ok: false, reason: `layers.${boolKey} must be a boolean` };
+    }
+  }
+  if (layers["rigor"] !== null && typeof layers["rigor"] !== "string") {
+    return { ok: false, reason: "layers.rigor must be a string or null" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["config_fingerprint"] !== "string" || e["config_fingerprint"] === "") {
+    return { ok: false, reason: "config_fingerprint must be a non-empty string" };
+  }
+  return { ok: true };
+}
+function validateSecurityDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.security_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for security_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["tool_name"] !== "string" || e["tool_name"] === "") {
+    return { ok: false, reason: "tool_name must be a non-empty string" };
+  }
+  if (!SECURITY_OUTCOMES.includes(e["decision"])) {
+    return { ok: false, reason: `decision must be one of: ${SECURITY_OUTCOMES.join(", ")}` };
+  }
+  if (typeof e["bypass_mode"] !== "boolean") {
+    return { ok: false, reason: "bypass_mode must be a boolean" };
+  }
+  if (typeof e["policy_forced"] !== "boolean") {
+    return { ok: false, reason: "policy_forced must be a boolean" };
+  }
+  if (typeof e["autonomy_mode"] !== "string" || e["autonomy_mode"] === "") {
+    return { ok: false, reason: "autonomy_mode must be a non-empty string" };
+  }
+  if (!["env", "file", "none"].includes(e["scope_source"])) {
+    return { ok: false, reason: "scope_source must be 'env', 'file', or 'none'" };
+  }
+  return { ok: true };
+}
+function validateDegradationEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.degradation.v1") {
+    return { ok: false, reason: `wrong schema_version for degradation: ${e["schema_version"]}` };
+  }
+  if (!DEGRADATION_SURFACES.includes(e["surface"])) {
+    return { ok: false, reason: `surface must be one of: ${DEGRADATION_SURFACES.join(", ")}` };
+  }
+  if (typeof e["reason"] !== "string" || e["reason"] === "") {
+    return { ok: false, reason: "reason must be a non-empty string" };
+  }
+  if (typeof e["attempted"] !== "string" || e["attempted"] === "") {
+    return { ok: false, reason: "attempted must be a non-empty string" };
+  }
+  if (typeof e["fallback"] !== "string" || e["fallback"] === "") {
+    return { ok: false, reason: "fallback must be a non-empty string" };
+  }
+  if (!["warn", "error"].includes(e["severity"])) {
+    return { ok: false, reason: "severity must be 'warn' or 'error'" };
+  }
+  return { ok: true };
+}
+function validateModelInspectionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.model_inspection.v1") {
+    return { ok: false, reason: `wrong schema_version for model_inspection: ${e["schema_version"]}` };
+  }
+  for (const key of ["host_family", "host_surface", "identity_trust", "catalog_state", "actual_model", "independence"]) {
+    if (typeof e[key] !== "string" || e[key] === "") {
+      return { ok: false, reason: `${key} must be a non-empty string` };
+    }
+  }
+  if (e["selection_model"] !== null && (typeof e["selection_model"] !== "string" || e["selection_model"] === "")) {
+    return { ok: false, reason: "selection_model must be a non-empty string or null" };
+  }
+  if (typeof e["unknowns_count"] !== "number" || e["unknowns_count"] < 0 || !Number.isInteger(e["unknowns_count"])) {
+    return { ok: false, reason: "unknowns_count must be a non-negative integer" };
+  }
+  return { ok: true };
+}
+function validateGuildTraceEvent(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const sv = ev["schema_version"];
+  switch (sv) {
+    case "guild.trace.model_inspection.v1":
+      return validateModelInspectionEvent(ev);
+    case "guild.trace.dispatch.v1":
+      return validateDispatchEvent(ev);
+    case "guild.trace.recall.v1":
+      return validateRecallEvent(ev);
+    case "guild.trace.recall_decision.v1":
+      return validateRecallDecisionEvent(ev);
+    case "guild.trace.config_resolution.v1":
+      return validateConfigResolutionEvent(ev);
+    case "guild.trace.security_decision.v1":
+      return validateSecurityDecisionEvent(ev);
+    case "guild.trace.degradation.v1":
+      return validateDegradationEvent(ev);
+    default:
+      return { ok: false, reason: `unknown schema_version: ${sv}` };
+  }
+}
+function makeDispatchEvent(fields) {
+  return { schema_version: "guild.trace.dispatch.v1", ...fields };
+}
+var GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
+var init_guild_trace_events = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
+    GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
+      "guild.trace.dispatch.v1",
+      "guild.trace.recall.v1",
+      "guild.trace.recall_decision.v1",
+      "guild.trace.config_resolution.v1",
+      "guild.trace.security_decision.v1",
+      "guild.trace.degradation.v1",
+      "guild.trace.model_inspection.v1"
+    ]);
+    DISPATCH_BACKENDS = ["agent", "tmux", "remote", "unknown"];
+    RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
+    SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
+    DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
+    LANE_OUTCOMES = ["success", "failure", "unknown"];
+  }
+});
+
+// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+function liveLogPath(runDir2) {
+  return path7.join(runDir2, "logs", "v1.4-events.jsonl");
+}
+function emitTraceEvent(event, runDir2) {
+  if (!runDir2) return false;
+  const validationResult = validateGuildTraceEvent(event);
+  if (!validationResult.ok) {
+    const schemaVersion = event["schema_version"];
+    const failResult = validationResult;
+    process.stderr.write(
+      `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}
+`
+    );
+    return false;
+  }
+  try {
+    const live = liveLogPath(runDir2);
+    const dir = path7.dirname(live);
+    fs6.mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify(event) + "\n";
+    fs6.appendFileSync(live, line, "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `[guild-trace-emit] WARN: could not write trace event to ${runDir2}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+var fs6, path7;
+var init_guild_trace_emit = __esm({
+  "../src/modules/telemetry/workflows/guild-trace-emit.ts"() {
+    fs6 = __toESM(require("node:fs"));
+    path7 = __toESM(require("node:path"));
+    init_guild_trace_events();
+  }
+});
 
 // ../src/modules/telemetry/workflows/receipt-journal.ts
-var RECEIPT_DISPOSITIONS = Object.freeze([
-  "succeeded",
-  "refused",
-  "unsupported",
-  "failed",
-  "degraded"
-]);
-var OBSERVATION_STATES = Object.freeze([
-  "checked_clean",
-  "not_applicable",
-  "not_observed",
-  "observation_failed"
-]);
-var RECEIPT_EVENT_NAMES = Object.freeze([
-  "session.start",
-  "prompt.submit",
-  "tool.before",
-  "tool.after",
-  "context.compact",
-  "task.dispatch",
-  "task.collect",
-  "run.resume",
-  "run.stop",
-  "package.render",
-  "package.install",
-  "package.activate",
-  "package.update",
-  "runtime.verify",
-  "receipt.append",
-  "receipt.reconcile",
-  "migration.shadow",
-  "migration.cutover",
-  "migration.rollback"
-]);
-var RECEIPT_OUTCOME_TYPES = Object.freeze([
-  "guild.lifecycle_outcome.v1",
-  "guild.normalized_event_outcome.v1",
-  "guild.support_transition_outcome.v1",
-  "guild.capability_outcome.v1",
-  "guild.policy_outcome.v1",
-  "guild.receipt_outcome.v1",
-  "guild.reconciliation_outcome.v1",
-  "guild.boundary_outcome.v1",
-  "guild.migration_outcome.v1",
-  "guild.version_compatibility_outcome.v1"
-]);
+var RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES;
+var init_receipt_journal = __esm({
+  "../src/modules/telemetry/workflows/receipt-journal.ts"() {
+    init_state();
+    RECEIPT_DISPOSITIONS = Object.freeze([
+      "succeeded",
+      "refused",
+      "unsupported",
+      "failed",
+      "degraded"
+    ]);
+    OBSERVATION_STATES = Object.freeze([
+      "checked_clean",
+      "not_applicable",
+      "not_observed",
+      "observation_failed"
+    ]);
+    RECEIPT_EVENT_NAMES = Object.freeze([
+      "session.start",
+      "prompt.submit",
+      "tool.before",
+      "tool.after",
+      "context.compact",
+      "task.dispatch",
+      "task.collect",
+      "run.resume",
+      "run.stop",
+      "package.render",
+      "package.install",
+      "package.activate",
+      "package.update",
+      "runtime.verify",
+      "receipt.append",
+      "receipt.reconcile",
+      "migration.shadow",
+      "migration.cutover",
+      "migration.rollback"
+    ]);
+    RECEIPT_OUTCOME_TYPES = Object.freeze([
+      "guild.lifecycle_outcome.v1",
+      "guild.normalized_event_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.capability_outcome.v1",
+      "guild.policy_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.reconciliation_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.version_compatibility_outcome.v1"
+    ]);
+  }
+});
+
+// ../src/modules/telemetry/workflows/receipt-reconcile.ts
+var init_receipt_reconcile = __esm({
+  "../src/modules/telemetry/workflows/receipt-reconcile.ts"() {
+    init_receipt_journal();
+  }
+});
 
 // ../src/modules/telemetry/workflows/debug-bundle.ts
-var DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
-  "capability_snapshot",
-  "normalized_event",
-  "policy_decision",
-  "transport_attempt",
-  "artifact",
-  "conformance"
-]);
+var DEBUG_BUNDLE_SECTION_KINDS;
+var init_debug_bundle = __esm({
+  "../src/modules/telemetry/workflows/debug-bundle.ts"() {
+    init_receipt_journal();
+    DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
+      "capability_snapshot",
+      "normalized_event",
+      "policy_decision",
+      "transport_attempt",
+      "artifact",
+      "conformance"
+    ]);
+  }
+});
+
+// ../src/modules/telemetry/index.ts
+var init_telemetry = __esm({
+  "../src/modules/telemetry/index.ts"() {
+    init_guild_trace_emit();
+    init_guild_trace_events();
+    init_receipt_journal();
+    init_receipt_reconcile();
+    init_debug_bundle();
+  }
+});
+
+// ../src/modules/config/workflows/settings-resolver.ts
+var init_settings_resolver = __esm({
+  "../src/modules/config/workflows/settings-resolver.ts"() {
+    init_settings_reader();
+    init_settings_reader();
+    init_telemetry();
+    init_telemetry();
+  }
+});
+
+// ../src/modules/config/workflows/tier-model.ts
+var init_tier_model = __esm({
+  "../src/modules/config/workflows/tier-model.ts"() {
+    init_host_runtime();
+  }
+});
+
+// ../src/modules/config/index.ts
+var init_config2 = __esm({
+  "../src/modules/config/index.ts"() {
+    init_config_defaults();
+    init_config_validation();
+    init_settings_resolver();
+    init_tier_model();
+  }
+});
+
+// ../src/modules/lifecycle/workflows/run-binding.ts
+function realBindingFs() {
+  return {
+    mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
+    writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    readFile: (p) => fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null,
+    exists: (p) => fsReal.existsSync(p)
+  };
+}
+function runBindingPath(root, runId) {
+  return path8.join(root, ".guild", "runs", runId, "binding.json");
+}
+function validateRunBindingRecord(parsed, expectedRunId) {
+  if (parsed === null || typeof parsed !== "object") return null;
+  const o = parsed;
+  if (o["schema_version"] !== "guild.run_binding.v1") return null;
+  if (typeof o["run_id"] !== "string" || o["run_id"] !== expectedRunId) return null;
+  const ref = o["binding_ref"];
+  if (typeof ref !== "string" || !/^rb-[A-Za-z0-9_-]+$/.test(ref)) return null;
+  if (o["state"] !== "open" && o["state"] !== "closed") return null;
+  return {
+    schema_version: "guild.run_binding.v1",
+    run_id: o["run_id"],
+    binding_ref: ref,
+    state: o["state"]
+  };
+}
+function readRunBindingRecord(opts) {
+  const fs18 = opts.fs ?? realBindingFs();
+  const raw = fs18.readFile(runBindingPath(opts.root, opts.run_id));
+  if (raw === null) return { status: "absent" };
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { status: "malformed" };
+  }
+  const record = validateRunBindingRecord(parsed, opts.run_id);
+  if (record === null) return { status: "malformed" };
+  return { status: "ok", record };
+}
+function verifyRunBinding(input) {
+  const reject2 = (reason) => ({
+    ok: false,
+    diagnostic: "binding_rejected",
+    reason
+  });
+  if (!input.run_id || !input.binding_ref) return reject2("binding_absent");
+  if (!input.root) return reject2("binding_unverifiable");
+  const read = readRunBindingRecord({ root: input.root, run_id: input.run_id, fs: input.fs });
+  if (read.status === "absent") return reject2("binding_not_minted");
+  if (read.status === "malformed") return reject2("binding_malformed");
+  const record = read.record;
+  if (record.state === "closed") return reject2("binding_closed");
+  if (record.binding_ref !== input.binding_ref || record.run_id !== input.run_id) {
+    return reject2("binding_mismatch");
+  }
+  return { ok: true, binding: record };
+}
+function readHookBindingEnvelope(env) {
+  const run_id = env[HOOK_BINDING_ENV_RUN_ID]?.trim();
+  const binding_ref = env[HOOK_BINDING_ENV_BINDING_REF]?.trim();
+  if (!run_id || !binding_ref) return null;
+  return { run_id, binding_ref };
+}
+var fsReal, path8, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
+var init_run_binding = __esm({
+  "../src/modules/lifecycle/workflows/run-binding.ts"() {
+    fsReal = __toESM(require("fs"));
+    path8 = __toESM(require("path"));
+    HOOK_BINDING_ENV_RUN_ID = "GUILD_RUN_ID";
+    HOOK_BINDING_ENV_BINDING_REF = "GUILD_RUN_BINDING_REF";
+  }
+});
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
-var CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
+var CANONICAL_PHASES;
+var init_run_lifecycle = __esm({
+  "../src/modules/lifecycle/workflows/run-lifecycle.ts"() {
+    init_kernel();
+    init_host_runtime();
+    init_config2();
+    init_state();
+    init_run_binding();
+    init_security();
+    CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
+  }
+});
+
+// ../src/modules/capability/workflows/catalog-cache.ts
+var MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, CACHE_KEY_COMPONENTS;
+var init_catalog_cache = __esm({
+  "../src/modules/capability/workflows/catalog-cache.ts"() {
+    MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
+    MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME]);
+    MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
+    CACHE_KEY_COMPONENTS = Object.freeze([
+      "target_id",
+      "family",
+      "surface",
+      "provider_kind",
+      "auth_mode",
+      "account_fingerprint",
+      "endpoint_fingerprint",
+      "org_fingerprint",
+      "tool_version",
+      "adapter_id",
+      "adapter_version",
+      "run_scope"
+    ]);
+  }
+});
 
 // ../src/modules/capability/workflows/compatibility-usage.ts
-var COMPATIBILITY_ASSET_KINDS = Object.freeze([
-  "shipped_template",
-  "shipped_domain_skill"
-]);
-var COMPATIBILITY_READ_REASONS = Object.freeze([
-  "no_project_definition",
-  "explicit_legacy_mode",
-  "rollback",
-  "mint_source",
-  "shadow_comparison"
-]);
-var BENIGN_COMPATIBILITY_READ_REASONS = Object.freeze(["mint_source", "shadow_comparison"]);
-var DEPENDENCE_COMPATIBILITY_READ_REASONS = Object.freeze(
-  COMPATIBILITY_READ_REASONS.filter(
-    (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r)
-  )
-);
-var BENIGN_REASON_SET = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
-var READ_REASON_SET = new Set(COMPATIBILITY_READ_REASONS);
-var ASSET_KIND_SET = new Set(COMPATIBILITY_ASSET_KINDS);
-var RESOLVER_MODE_SET = new Set(CAPABILITY_RESOLVER_MODES);
+var COMPATIBILITY_ASSET_KINDS, COMPATIBILITY_READ_REASONS, BENIGN_COMPATIBILITY_READ_REASONS, DEPENDENCE_COMPATIBILITY_READ_REASONS, BENIGN_REASON_SET, READ_REASON_SET, ASSET_KIND_SET, RESOLVER_MODE_SET;
+var init_compatibility_usage = __esm({
+  "../src/modules/capability/workflows/compatibility-usage.ts"() {
+    init_config2();
+    COMPATIBILITY_ASSET_KINDS = Object.freeze([
+      "shipped_template",
+      "shipped_domain_skill"
+    ]);
+    COMPATIBILITY_READ_REASONS = Object.freeze([
+      "no_project_definition",
+      "explicit_legacy_mode",
+      "rollback",
+      "mint_source",
+      "shadow_comparison"
+    ]);
+    BENIGN_COMPATIBILITY_READ_REASONS = Object.freeze(["mint_source", "shadow_comparison"]);
+    DEPENDENCE_COMPATIBILITY_READ_REASONS = Object.freeze(
+      COMPATIBILITY_READ_REASONS.filter(
+        (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r)
+      )
+    );
+    BENIGN_REASON_SET = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
+    READ_REASON_SET = new Set(COMPATIBILITY_READ_REASONS);
+    ASSET_KIND_SET = new Set(COMPATIBILITY_ASSET_KINDS);
+    RESOLVER_MODE_SET = new Set(CAPABILITY_RESOLVER_MODES);
+  }
+});
 
 // ../src/modules/capability/workflows/resolver-mode.ts
-var RESOLVER_AUTHORITIES = Object.freeze(["legacy", "project-local"]);
-var CAPABILITY_RESOLUTION_INTENTS = Object.freeze([
-  /** A live lane needs this definition to run. */
-  "dispatch",
-  /** Minting a project-local role FROM a shipped template. The migration WORKING. */
-  "mint",
-  /** The A-side of a shadow comparison. Also the migration working. */
-  "shadow_compare",
-  /** Replaying a historical run record against the compatibility surface. */
-  "replay",
-  /** A deliberate return to the legacy path after a failed adoption. */
-  "rollback"
-]);
-var MODE_POLICIES = /* @__PURE__ */ new Map([
-  [
-    "legacy",
-    Object.freeze({
-      mode: "legacy",
-      authority: "legacy",
-      project_resolver_runs: false,
-      capability_writes_permitted: false,
-      project_side_effects_permitted: false,
-      compatibility_available: true,
-      compatibility_intents: Object.freeze([
-        "dispatch",
-        "mint",
-        "replay",
-        "rollback"
-      ]),
-      local_creation_permitted: false,
-      profiles_emitted: false
-    })
-  ],
-  [
-    "observe",
-    Object.freeze({
-      mode: "observe",
-      authority: "legacy",
-      project_resolver_runs: true,
-      // THE defining constraint of observe. D03's advance condition is a
-      // before/after tree hash proving zero live writes; a policy that permitted
-      // writes here would make that condition unprovable by construction.
-      capability_writes_permitted: false,
-      project_side_effects_permitted: false,
-      compatibility_available: true,
-      compatibility_intents: Object.freeze([
-        "dispatch",
-        "mint",
-        "replay",
-        "rollback"
-      ]),
-      local_creation_permitted: false,
-      profiles_emitted: true
-    })
-  ],
-  [
-    "shadow",
-    Object.freeze({
-      mode: "shadow",
-      authority: "legacy",
-      project_resolver_runs: true,
-      // Local creation is a HUMAN authority event, so it is permitted; but the
-      // project-local RESOLVER still may not originate a mint or a dispatch. The
-      // two are deliberately separate flags: collapsing them would either block
-      // the approvals the phase exists to collect, or let the shadow side act.
-      capability_writes_permitted: true,
-      project_side_effects_permitted: false,
-      compatibility_available: true,
-      compatibility_intents: Object.freeze([
-        "dispatch",
-        "mint",
-        "shadow_compare",
-        "replay",
-        "rollback"
-      ]),
-      local_creation_permitted: true,
-      profiles_emitted: true
-    })
-  ],
-  [
-    "project-local",
-    Object.freeze({
-      mode: "project-local",
-      authority: "project-local",
-      project_resolver_runs: true,
-      capability_writes_permitted: true,
-      project_side_effects_permitted: true,
-      compatibility_available: true,
-      // NOT `dispatch`. A live dispatch with no project definition must FAIL
-      // TYPED, not quietly read a shipped template — that silent read is the
-      // exact behaviour the mode exists to end.
-      compatibility_intents: Object.freeze(["replay", "rollback", "mint"]),
-      local_creation_permitted: true,
-      profiles_emitted: true
-    })
-  ],
-  [
-    "strict",
-    Object.freeze({
-      mode: "strict",
-      authority: "project-local",
-      project_resolver_runs: true,
-      capability_writes_permitted: true,
-      project_side_effects_permitted: true,
-      // The end state: the surface is gone. No intent reaches it, including
-      // replay — a strict project that still needs to replay history must step
-      // back down the ladder deliberately, which is a recorded mode change.
-      compatibility_available: false,
-      compatibility_intents: Object.freeze([]),
-      local_creation_permitted: true,
-      profiles_emitted: true
-    })
-  ]
-]);
-var RESOLVER_MODE_POLICIES = Object.freeze(
-  // Built from the PRIVATE policy map's own keys, NOT from the mutable exported
-  // ladder — same reasoning as MODE_RANK below (CODEX #8).
-  Object.fromEntries([...MODE_POLICIES].map(([m, p]) => [m, p]))
-);
-var MODE_RANK = new Map(
-  [...MODE_POLICIES.keys()].map((m, i) => [m, i])
-);
-var RESOLVER_MODE_FAILURES = Object.freeze([
-  /** The request itself was malformed (proxy, accessor, unknown key, bad scalar). */
-  "invalid_request",
-  /** `mode` is not a member of the ladder. NEVER coerced to the default. */
-  "unknown_mode",
-  /** No project-local definition exists, and the mode does not permit a compatibility read. */
-  "no_project_definition",
-  /** The mode has no compatibility surface at all (strict). */
-  "compatibility_unavailable_in_mode",
-  /** The surface exists, but not for this intent (e.g. `dispatch` under project-local). */
-  "intent_not_permitted_in_mode",
-  /** Neither a project definition nor a compatibility asset was supplied. */
-  "no_definition_anywhere",
-  /** The mode forbids the write this request would require. */
-  "write_not_permitted_in_mode",
-  /** A mode transition that skips rungs without an explicit acknowledgement. */
-  "transition_skips_rungs",
-  /** A downward transition without a recorded reason. */
-  "transition_regresses_without_reason",
-  /** Source and target are the same rung. */
-  "transition_is_noop"
-]);
-var RESOLVER_MODE_FAILURE_SET = new Set(RESOLVER_MODE_FAILURES);
-var READ_REASON_SET2 = new Set(COMPATIBILITY_READ_REASONS);
-var MODE_TRANSITION_DIRECTIONS = Object.freeze(["advance", "regress"]);
+var RESOLVER_AUTHORITIES, CAPABILITY_RESOLUTION_INTENTS, MODE_POLICIES, RESOLVER_MODE_POLICIES, MODE_RANK, RESOLVER_MODE_FAILURES, RESOLVER_MODE_FAILURE_SET, READ_REASON_SET2, MODE_TRANSITION_DIRECTIONS;
+var init_resolver_mode = __esm({
+  "../src/modules/capability/workflows/resolver-mode.ts"() {
+    init_compatibility_usage();
+    RESOLVER_AUTHORITIES = Object.freeze(["legacy", "project-local"]);
+    CAPABILITY_RESOLUTION_INTENTS = Object.freeze([
+      /** A live lane needs this definition to run. */
+      "dispatch",
+      /** Minting a project-local role FROM a shipped template. The migration WORKING. */
+      "mint",
+      /** The A-side of a shadow comparison. Also the migration working. */
+      "shadow_compare",
+      /** Replaying a historical run record against the compatibility surface. */
+      "replay",
+      /** A deliberate return to the legacy path after a failed adoption. */
+      "rollback"
+    ]);
+    MODE_POLICIES = /* @__PURE__ */ new Map([
+      [
+        "legacy",
+        Object.freeze({
+          mode: "legacy",
+          authority: "legacy",
+          project_resolver_runs: false,
+          capability_writes_permitted: false,
+          project_side_effects_permitted: false,
+          compatibility_available: true,
+          compatibility_intents: Object.freeze([
+            "dispatch",
+            "mint",
+            "replay",
+            "rollback"
+          ]),
+          local_creation_permitted: false,
+          profiles_emitted: false
+        })
+      ],
+      [
+        "observe",
+        Object.freeze({
+          mode: "observe",
+          authority: "legacy",
+          project_resolver_runs: true,
+          // THE defining constraint of observe. D03's advance condition is a
+          // before/after tree hash proving zero live writes; a policy that permitted
+          // writes here would make that condition unprovable by construction.
+          capability_writes_permitted: false,
+          project_side_effects_permitted: false,
+          compatibility_available: true,
+          compatibility_intents: Object.freeze([
+            "dispatch",
+            "mint",
+            "replay",
+            "rollback"
+          ]),
+          local_creation_permitted: false,
+          profiles_emitted: true
+        })
+      ],
+      [
+        "shadow",
+        Object.freeze({
+          mode: "shadow",
+          authority: "legacy",
+          project_resolver_runs: true,
+          // Local creation is a HUMAN authority event, so it is permitted; but the
+          // project-local RESOLVER still may not originate a mint or a dispatch. The
+          // two are deliberately separate flags: collapsing them would either block
+          // the approvals the phase exists to collect, or let the shadow side act.
+          capability_writes_permitted: true,
+          project_side_effects_permitted: false,
+          compatibility_available: true,
+          compatibility_intents: Object.freeze([
+            "dispatch",
+            "mint",
+            "shadow_compare",
+            "replay",
+            "rollback"
+          ]),
+          local_creation_permitted: true,
+          profiles_emitted: true
+        })
+      ],
+      [
+        "project-local",
+        Object.freeze({
+          mode: "project-local",
+          authority: "project-local",
+          project_resolver_runs: true,
+          capability_writes_permitted: true,
+          project_side_effects_permitted: true,
+          compatibility_available: true,
+          // NOT `dispatch`. A live dispatch with no project definition must FAIL
+          // TYPED, not quietly read a shipped template — that silent read is the
+          // exact behaviour the mode exists to end.
+          compatibility_intents: Object.freeze(["replay", "rollback", "mint"]),
+          local_creation_permitted: true,
+          profiles_emitted: true
+        })
+      ],
+      [
+        "strict",
+        Object.freeze({
+          mode: "strict",
+          authority: "project-local",
+          project_resolver_runs: true,
+          capability_writes_permitted: true,
+          project_side_effects_permitted: true,
+          // The end state: the surface is gone. No intent reaches it, including
+          // replay — a strict project that still needs to replay history must step
+          // back down the ladder deliberately, which is a recorded mode change.
+          compatibility_available: false,
+          compatibility_intents: Object.freeze([]),
+          local_creation_permitted: true,
+          profiles_emitted: true
+        })
+      ]
+    ]);
+    RESOLVER_MODE_POLICIES = Object.freeze(
+      // Built from the PRIVATE policy map's own keys, NOT from the mutable exported
+      // ladder — same reasoning as MODE_RANK below (CODEX #8).
+      Object.fromEntries([...MODE_POLICIES].map(([m, p]) => [m, p]))
+    );
+    MODE_RANK = new Map(
+      [...MODE_POLICIES.keys()].map((m, i) => [m, i])
+    );
+    RESOLVER_MODE_FAILURES = Object.freeze([
+      /** The request itself was malformed (proxy, accessor, unknown key, bad scalar). */
+      "invalid_request",
+      /** `mode` is not a member of the ladder. NEVER coerced to the default. */
+      "unknown_mode",
+      /** No project-local definition exists, and the mode does not permit a compatibility read. */
+      "no_project_definition",
+      /** The mode has no compatibility surface at all (strict). */
+      "compatibility_unavailable_in_mode",
+      /** The surface exists, but not for this intent (e.g. `dispatch` under project-local). */
+      "intent_not_permitted_in_mode",
+      /** Neither a project definition nor a compatibility asset was supplied. */
+      "no_definition_anywhere",
+      /** The mode forbids the write this request would require. */
+      "write_not_permitted_in_mode",
+      /** A mode transition that skips rungs without an explicit acknowledgement. */
+      "transition_skips_rungs",
+      /** A downward transition without a recorded reason. */
+      "transition_regresses_without_reason",
+      /** Source and target are the same rung. */
+      "transition_is_noop"
+    ]);
+    RESOLVER_MODE_FAILURE_SET = new Set(RESOLVER_MODE_FAILURES);
+    READ_REASON_SET2 = new Set(COMPATIBILITY_READ_REASONS);
+    MODE_TRANSITION_DIRECTIONS = Object.freeze(["advance", "regress"]);
+  }
+});
 
 // ../src/modules/capability/workflows/compatibility-catalog.ts
-var SHIPPED_TEMPLATE_COUNT = 15;
-var SHIPPED_DOMAIN_SKILL_COUNT = 58;
-var SHIPPED_COMPATIBILITY_ASSET_COUNT = SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
-var COMPATIBILITY_ASSET_ROOTS = Object.freeze({
-  shipped_template: "templates/specialists",
-  shipped_domain_skill: "skills/specialists"
+var SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET;
+var init_compatibility_catalog = __esm({
+  "../src/modules/capability/workflows/compatibility-catalog.ts"() {
+    init_compatibility_usage();
+    init_resolver_mode();
+    SHIPPED_TEMPLATE_COUNT = 15;
+    SHIPPED_DOMAIN_SKILL_COUNT = 58;
+    SHIPPED_COMPATIBILITY_ASSET_COUNT = SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
+    COMPATIBILITY_ASSET_ROOTS = Object.freeze({
+      shipped_template: "templates/specialists",
+      shipped_domain_skill: "skills/specialists"
+    });
+    COMPATIBILITY_DEPRECATION_STATES = Object.freeze([
+      "active",
+      "deprecated",
+      "removal_cleared"
+    ]);
+    DEPRECATION_STATE_SET = new Set(COMPATIBILITY_DEPRECATION_STATES);
+  }
 });
-var COMPATIBILITY_DEPRECATION_STATES = Object.freeze([
-  "active",
-  "deprecated",
-  "removal_cleared"
-]);
-var DEPRECATION_STATE_SET = new Set(COMPATIBILITY_DEPRECATION_STATES);
+
+// ../src/modules/capability/workflows/confirmation-arbiter.ts
+var CONFIRMATION_KEY_COMPONENTS;
+var init_confirmation_arbiter = __esm({
+  "../src/modules/capability/workflows/confirmation-arbiter.ts"() {
+    CONFIRMATION_KEY_COMPONENTS = Object.freeze([
+      "run_id",
+      "purpose",
+      "target_id",
+      "policy_hash",
+      "catalog_hash",
+      "fallback_hash"
+    ]);
+  }
+});
+
+// ../src/modules/capability/workflows/independence-predicates.ts
+var init_independence_predicates = __esm({
+  "../src/modules/capability/workflows/independence-predicates.ts"() {
+  }
+});
+
+// ../src/modules/capability/workflows/independence-record.ts
+var init_independence_record = __esm({
+  "../src/modules/capability/workflows/independence-record.ts"() {
+    init_independence_predicates();
+  }
+});
+
+// ../src/modules/documents/workflows/document-safe.ts
+function safeGet(target, key) {
+  try {
+    return { ok: true, value: target[key] };
+  } catch {
+    return { ok: false, reason: "property read threw" };
+  }
+}
+function safeOwnKeys(target) {
+  try {
+    return { ok: true, keys: Object.keys(target) };
+  } catch {
+    return { ok: false, reason: "own-key enumeration threw" };
+  }
+}
+function safeHasOwn(target, key) {
+  try {
+    return Object.prototype.hasOwnProperty.call(target, key);
+  } catch {
+    return false;
+  }
+}
+function safeIsArray(value) {
+  try {
+    return Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
+function safeArrayLength(value) {
+  const read = safeGet(value, "length");
+  if (read.ok === false) return { ok: false, reason: read.reason };
+  const length = read.value;
+  if (typeof length !== "number" || !Number.isInteger(length) || length < 0) {
+    return { ok: false, reason: "array length is not a non-negative integer" };
+  }
+  return { ok: true, length };
+}
+function isObjectLike(value) {
+  return typeof value === "object" && value !== null && !safeIsArray(value);
+}
+function issue(path23, code, message) {
+  return { path: path23, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+}
+function pushIssue(issues, path23, code, message) {
+  if (issues.length >= MAX_ISSUES) return;
+  issues.push(issue(path23, code, message));
+}
+function sortIssues(issues) {
+  return [...issues].sort(
+    (a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0) || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0) || (a.message < b.message ? -1 : a.message > b.message ? 1 : 0)
+  );
+}
+function canonicalDocumentJson(value) {
+  const errors = [];
+  const active = /* @__PURE__ */ new Set();
+  let nodes = 0;
+  const walk = (node, path23, depth) => {
+    if (errors.length >= MAX_ISSUES) return null;
+    if (depth > MAX_CANONICAL_DEPTH) {
+      pushIssue(errors, path23, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      return null;
+    }
+    nodes += 1;
+    if (nodes > MAX_CANONICAL_NODES) {
+      pushIssue(errors, path23, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      return null;
+    }
+    if (node === null) return "null";
+    const kind = typeof node;
+    if (kind === "boolean") return node === true ? "true" : "false";
+    if (kind === "string") {
+      const text = node;
+      if (text.length > MAX_STRING_LENGTH) {
+        pushIssue(errors, path23, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        return null;
+      }
+      return JSON.stringify(text);
+    }
+    if (kind === "number") {
+      const num = node;
+      if (!Number.isFinite(num)) {
+        pushIssue(errors, path23, "non_finite_number", "numbers must be finite");
+        return null;
+      }
+      return Object.is(num, -0) ? "0" : String(num);
+    }
+    if (kind !== "object") {
+      pushIssue(errors, path23, "unsupported_type", `${kind} has no canonical JSON form`);
+      return null;
+    }
+    if (active.has(node)) {
+      pushIssue(errors, path23, "cycle_detected", "value contains a cycle");
+      return null;
+    }
+    active.add(node);
+    try {
+      if (safeIsArray(node)) {
+        const length = safeArrayLength(node);
+        if (length.ok === false) {
+          pushIssue(errors, path23, "array_length_unreadable", length.reason);
+          return null;
+        }
+        if (length.length > MAX_ARRAY_ITEMS) {
+          pushIssue(errors, path23, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          return null;
+        }
+        const parts2 = [];
+        for (let index = 0; index < length.length; index += 1) {
+          const key = String(index);
+          if (!safeHasOwn(node, key)) {
+            pushIssue(errors, `${path23}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            return null;
+          }
+          const read = safeGet(node, key);
+          if (read.ok === false) {
+            pushIssue(errors, `${path23}[${index}]`, "property_read_threw", read.reason);
+            return null;
+          }
+          const encoded = walk(read.value, `${path23}[${index}]`, depth + 1);
+          if (encoded === null) return null;
+          parts2.push(encoded);
+        }
+        return `[${parts2.join(",")}]`;
+      }
+      const keys = safeOwnKeys(node);
+      if (keys.ok === false) {
+        pushIssue(errors, path23, "own_keys_threw", keys.reason);
+        return null;
+      }
+      if (keys.keys.length > MAX_OBJECT_KEYS) {
+        pushIssue(errors, path23, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        return null;
+      }
+      const sorted = [...keys.keys].sort();
+      const parts = [];
+      for (const key of sorted) {
+        const read = safeGet(node, key);
+        if (read.ok === false) {
+          pushIssue(errors, `${path23}.${key}`, "property_read_threw", read.reason);
+          return null;
+        }
+        if (read.value === void 0) {
+          pushIssue(errors, `${path23}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          return null;
+        }
+        const encoded = walk(read.value, `${path23}.${key}`, depth + 1);
+        if (encoded === null) return null;
+        parts.push(`${JSON.stringify(key)}:${encoded}`);
+      }
+      return `{${parts.join(",")}}`;
+    } finally {
+      active.delete(node);
+    }
+  };
+  let json;
+  try {
+    json = walk(value, "$", 0);
+  } catch {
+    pushIssue(errors, "$", "internal_guard", "canonical JSON walk was interrupted");
+    json = null;
+  }
+  if (json === null) {
+    if (errors.length === 0) {
+      pushIssue(errors, "$", "internal_guard", "canonical JSON walk produced no output");
+    }
+    return { ok: false, errors: sortIssues(errors) };
+  }
+  return { ok: true, json };
+}
+function sha256Of(text) {
+  return `sha256:${(0, import_node_crypto2.createHash)("sha256").update(text, "utf8").digest("hex")}`;
+}
+function hashCanonicalValue(value) {
+  const canonical = canonicalDocumentJson(value);
+  if (canonical.ok === false) return { ok: false, errors: canonical.errors };
+  return { ok: true, hash: sha256Of(canonical.json) };
+}
+function deepFreeze2(value) {
+  if (typeof value !== "object" || value === null) return value;
+  if (Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const key of Object.keys(value)) {
+    deepFreeze2(value[key]);
+  }
+  return value;
+}
+var import_node_crypto2, DOCUMENTS_ERROR_NAMESPACE, MAX_CANONICAL_DEPTH, MAX_CANONICAL_NODES, MAX_ARRAY_ITEMS, MAX_OBJECT_KEYS, MAX_STRING_LENGTH, MAX_ISSUES;
+var init_document_safe = __esm({
+  "../src/modules/documents/workflows/document-safe.ts"() {
+    import_node_crypto2 = require("node:crypto");
+    DOCUMENTS_ERROR_NAMESPACE = "guild.documents";
+    MAX_CANONICAL_DEPTH = 32;
+    MAX_CANONICAL_NODES = 2e4;
+    MAX_ARRAY_ITEMS = 512;
+    MAX_OBJECT_KEYS = 128;
+    MAX_STRING_LENGTH = 2e4;
+    MAX_ISSUES = 64;
+  }
+});
+
+// ../src/modules/documents/workflows/document-records.ts
+function readShape(issues, value, path23, allowed) {
+  if (value === null || typeof value !== "object") {
+    pushIssue(issues, path23, "not_an_object", `${path23} must be an object`);
+    return false;
+  }
+  if (safeIsArray(value)) {
+    pushIssue(issues, path23, "not_an_object", `${path23} must be an object, not an array`);
+    return false;
+  }
+  const keys = safeOwnKeys(value);
+  if (keys.ok === false) {
+    pushIssue(issues, path23, "own_keys_threw", `${path23}: ${keys.reason}`);
+    return false;
+  }
+  const allowedSet = new Set(allowed);
+  let ok = true;
+  for (const key of [...keys.keys].sort()) {
+    if (!allowedSet.has(key)) {
+      pushIssue(issues, `${path23}.${key}`, "unexpected_key", `${path23}.${key} is not part of the closed schema`);
+      ok = false;
+    }
+  }
+  for (const key of allowed) {
+    if (!safeHasOwn(value, key)) {
+      pushIssue(issues, `${path23}.${key}`, "missing_field", `${path23}.${key} is required`);
+      ok = false;
+    }
+  }
+  return ok;
+}
+function readString(issues, parent, path23, key, options = {}) {
+  const fieldPath = `${path23}.${key}`;
+  const read = safeGet(parent, key);
+  if (read.ok === false) {
+    pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
+    return null;
+  }
+  const value = read.value;
+  if (typeof value !== "string") {
+    pushIssue(issues, fieldPath, "not_a_string", `${fieldPath} must be a string`);
+    return null;
+  }
+  if (!options.allowEmpty && value.length === 0) {
+    pushIssue(issues, fieldPath, "empty_string", `${fieldPath} must not be empty`);
+    return null;
+  }
+  const maxLength = options.maxLength ?? MAX_STRING_LENGTH;
+  if (value.length > maxLength) {
+    pushIssue(issues, fieldPath, "string_too_long", `${fieldPath} exceeds ${maxLength} characters`);
+    return null;
+  }
+  if (options.enumOf !== void 0 && !options.enumOf.includes(value)) {
+    pushIssue(
+      issues,
+      fieldPath,
+      "value_not_in_vocabulary",
+      `${fieldPath} must be one of ${options.enumOf.join("|")}`
+    );
+    return null;
+  }
+  if (options.pattern !== void 0 && !options.pattern.test(value)) {
+    pushIssue(issues, fieldPath, "pattern_mismatch", `${fieldPath} does not match ${String(options.pattern)}`);
+    return null;
+  }
+  return value;
+}
+function readArray(issues, parent, path23, key, options = {}) {
+  const fieldPath = `${path23}.${key}`;
+  const read = safeGet(parent, key);
+  if (read.ok === false) {
+    pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
+    return null;
+  }
+  if (!safeIsArray(read.value)) {
+    pushIssue(issues, fieldPath, "not_an_array", `${fieldPath} must be an array`);
+    return null;
+  }
+  const length = safeArrayLength(read.value);
+  if (length.ok === false) {
+    pushIssue(issues, fieldPath, "array_length_unreadable", `${fieldPath}: ${length.reason}`);
+    return null;
+  }
+  const max = options.max ?? MAX_ARRAY_ITEMS;
+  if (length.length > max) {
+    pushIssue(issues, fieldPath, "array_too_long", `${fieldPath} exceeds ${max} items`);
+    return null;
+  }
+  if (options.min !== void 0 && length.length < options.min) {
+    pushIssue(issues, fieldPath, "array_too_short", `${fieldPath} requires at least ${options.min} items`);
+    return null;
+  }
+  const items = [];
+  let ok = true;
+  for (let index = 0; index < length.length; index += 1) {
+    const indexKey = String(index);
+    if (!safeHasOwn(read.value, indexKey)) {
+      pushIssue(issues, `${fieldPath}[${index}]`, "sparse_array_hole", `${fieldPath}[${index}] is an array hole`);
+      ok = false;
+      continue;
+    }
+    const item = safeGet(read.value, indexKey);
+    if (item.ok === false) {
+      pushIssue(issues, `${fieldPath}[${index}]`, "property_read_threw", `${fieldPath}[${index}]: property read threw`);
+      ok = false;
+      continue;
+    }
+    items.push(item.value);
+  }
+  return ok ? items : null;
+}
+function readStringArray(issues, parent, path23, key, options = {}) {
+  const items = readArray(issues, parent, path23, key, options);
+  if (items === null) return null;
+  const fieldPath = `${path23}.${key}`;
+  const out = [];
+  let ok = true;
+  for (let index = 0; index < items.length; index += 1) {
+    const value = items[index];
+    const itemPath = `${fieldPath}[${index}]`;
+    if (typeof value !== "string") {
+      pushIssue(issues, itemPath, "not_a_string", `${itemPath} must be a string`);
+      ok = false;
+      continue;
+    }
+    if (value.length === 0) {
+      pushIssue(issues, itemPath, "empty_string", `${itemPath} must not be empty`);
+      ok = false;
+      continue;
+    }
+    const itemMax = options.itemMaxLength ?? MAX_STRING_LENGTH;
+    if (value.length > itemMax) {
+      pushIssue(issues, itemPath, "string_too_long", `${itemPath} exceeds ${itemMax} characters`);
+      ok = false;
+      continue;
+    }
+    out.push(value);
+  }
+  return ok ? out : null;
+}
+function readItemArray(issues, parent, path23, key, options, readItem) {
+  const items = readArray(issues, parent, path23, key, options);
+  if (items === null) return null;
+  const fieldPath = `${path23}.${key}`;
+  const out = [];
+  const firstIndexById = /* @__PURE__ */ new Map();
+  let ok = true;
+  for (let index = 0; index < items.length; index += 1) {
+    const itemPath = `${fieldPath}[${index}]`;
+    const parsed = readItem(issues, items[index], itemPath);
+    if (parsed === null) {
+      ok = false;
+      continue;
+    }
+    const firstIndex = firstIndexById.get(parsed.id);
+    if (firstIndex !== void 0) {
+      pushIssue(
+        issues,
+        `${itemPath}.id`,
+        "duplicate_item_id",
+        `${itemPath}.id duplicates ${fieldPath}[${firstIndex}].id (${parsed.id})`
+      );
+      ok = false;
+      continue;
+    }
+    firstIndexById.set(parsed.id, index);
+    out.push(parsed);
+  }
+  return ok ? out : null;
+}
+function readProvenance(issues, parent, path23) {
+  const read = safeGet(parent, "provenance");
+  if (read.ok === false) {
+    pushIssue(issues, `${path23}.provenance`, "property_read_threw", `${path23}.provenance: property read threw`);
+    return null;
+  }
+  const provenancePath = `${path23}.provenance`;
+  if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
+  const source = read.value;
+  const authorId = readString(issues, source, provenancePath, "author_id", {
+    pattern: DOCUMENT_ID_PATTERN
+  });
+  const authorFamily = readString(issues, source, provenancePath, "author_family", {
+    pattern: DOCUMENT_ID_PATTERN
+  });
+  const hostId = readString(issues, source, provenancePath, "host_id", {
+    pattern: DOCUMENT_ID_PATTERN
+  });
+  const createdAt = readString(issues, source, provenancePath, "created_at", {
+    pattern: DOCUMENT_TIMESTAMP_PATTERN
+  });
+  const provenanceSource = readString(issues, source, provenancePath, "source", {
+    enumOf: DOCUMENT_PROVENANCE_SOURCES
+  });
+  if (createdAt !== null) {
+    const parsed = Date.parse(createdAt);
+    if (Number.isNaN(parsed) || new Date(parsed).toISOString() !== createdAt) {
+      pushIssue(
+        issues,
+        `${provenancePath}.created_at`,
+        "not_a_real_instant",
+        `${provenancePath}.created_at is not a real UTC instant`
+      );
+      return null;
+    }
+  }
+  if (authorId === null || authorFamily === null || hostId === null || createdAt === null || provenanceSource === null) {
+    return null;
+  }
+  return {
+    author_id: authorId,
+    author_family: authorFamily,
+    host_id: hostId,
+    created_at: createdAt,
+    source: provenanceSource
+  };
+}
+function readPlanBody(issues, body, path23) {
+  if (!readShape(issues, body, path23, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path23, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path23, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+    if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
+    const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+    const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
+    const status = readString(itemIssues, item, itemPath, "status", { enumOf: PLAN_STEP_STATUSES });
+    if (id === null || title === null || status === null) return null;
+    return { id, title, status };
+  });
+  if (objectives === null || steps === null) return null;
+  return { objectives, steps };
+}
+function readSpecBody(issues, body, path23) {
+  if (!readShape(issues, body, path23, ["requirements"])) return null;
+  const requirements = readItemArray(
+    issues,
+    body,
+    path23,
+    "requirements",
+    { min: 1, max: 256 },
+    (itemIssues, item, itemPath) => {
+      if (!readShape(itemIssues, item, itemPath, ["id", "statement", "priority"])) return null;
+      const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+      const statement = readString(itemIssues, item, itemPath, "statement", { maxLength: 2e3 });
+      const priority = readString(itemIssues, item, itemPath, "priority", {
+        enumOf: SPEC_REQUIREMENT_PRIORITIES
+      });
+      if (id === null || statement === null || priority === null) return null;
+      return { id, statement, priority };
+    }
+  );
+  if (requirements === null) return null;
+  return { requirements };
+}
+function readHandoffBody(issues, body, path23) {
+  if (!readShape(issues, body, path23, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path23, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path23, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path23, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path23, "issues", { max: 256, itemMaxLength: 1e3 });
+  if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
+  return { task_id: taskId, status, artifacts, issues: handoffIssues };
+}
+function readReviewBody(issues, body, path23) {
+  if (!readShape(issues, body, path23, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path23, "verdict", { enumOf: REVIEW_VERDICTS });
+  const findings = readItemArray(
+    issues,
+    body,
+    path23,
+    "findings",
+    { max: 256 },
+    (itemIssues, item, itemPath) => {
+      if (!readShape(itemIssues, item, itemPath, ["id", "severity", "statement"])) return null;
+      const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+      const severity = readString(itemIssues, item, itemPath, "severity", { enumOf: REVIEW_SEVERITIES });
+      const statement = readString(itemIssues, item, itemPath, "statement", { maxLength: 2e3 });
+      if (id === null || severity === null || statement === null) return null;
+      return { id, severity, statement };
+    }
+  );
+  if (verdict === null || findings === null) return null;
+  return { verdict, findings };
+}
+function readVerifyBody(issues, body, path23) {
+  if (!readShape(issues, body, path23, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path23, "outcome", { enumOf: VERIFY_OUTCOMES });
+  const checks = readItemArray(
+    issues,
+    body,
+    path23,
+    "checks",
+    { min: 1, max: 256 },
+    (itemIssues, item, itemPath) => {
+      if (!readShape(itemIssues, item, itemPath, ["id", "name", "result"])) return null;
+      const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+      const name = readString(itemIssues, item, itemPath, "name", { maxLength: 500 });
+      const result = readString(itemIssues, item, itemPath, "result", { enumOf: VERIFY_CHECK_RESULTS });
+      if (id === null || name === null || result === null) return null;
+      return { id, name, result };
+    }
+  );
+  if (outcome === null || checks === null) return null;
+  return { outcome, checks };
+}
+function failure(errors) {
+  return { valid: false, errors: sortIssues(errors), record: null };
+}
+function validateDocumentRecord(input) {
+  const errors = [];
+  try {
+    if (!isObjectLike(input)) {
+      pushIssue(errors, "$", "not_an_object", "document record must be an object");
+      return failure(errors);
+    }
+    if (!readShape(errors, input, "$", TOP_LEVEL_KEYS)) return failure(errors);
+    const schemaVersion = readString(errors, input, "$", "schema_version", {
+      enumOf: [DOCUMENT_SCHEMA_VERSION]
+    });
+    const kind = readString(errors, input, "$", "kind", { enumOf: DOCUMENT_KINDS });
+    const id = readString(errors, input, "$", "id", { pattern: DOCUMENT_ID_PATTERN });
+    const title = readString(errors, input, "$", "title", { maxLength: 500 });
+    const provenance = readProvenance(errors, input, "$");
+    const bodyRead = safeGet(input, "body");
+    if (bodyRead.ok === false) {
+      pushIssue(errors, "$.body", "property_read_threw", "$.body: property read threw");
+      return failure(errors);
+    }
+    if (schemaVersion === null || kind === null || id === null || title === null || provenance === null) {
+      return failure(errors);
+    }
+    const base = { schema_version: DOCUMENT_SCHEMA_VERSION, id, title, provenance };
+    let record = null;
+    if (kind === "plan") {
+      const body = readPlanBody(errors, bodyRead.value, "$.body");
+      if (body !== null) record = { ...base, kind: "plan", body };
+    } else if (kind === "spec") {
+      const body = readSpecBody(errors, bodyRead.value, "$.body");
+      if (body !== null) record = { ...base, kind: "spec", body };
+    } else if (kind === "handoff") {
+      const body = readHandoffBody(errors, bodyRead.value, "$.body");
+      if (body !== null) record = { ...base, kind: "handoff", body };
+    } else if (kind === "review") {
+      const body = readReviewBody(errors, bodyRead.value, "$.body");
+      if (body !== null) record = { ...base, kind: "review", body };
+    } else if (kind === "verify") {
+      const body = readVerifyBody(errors, bodyRead.value, "$.body");
+      if (body !== null) record = { ...base, kind: "verify", body };
+    }
+    if (record === null || errors.length > 0) return failure(errors);
+    return { valid: true, errors: [], record: deepFreeze2(record) };
+  } catch {
+    pushIssue(errors, "$", "internal_guard", "validation was interrupted");
+    return failure(errors);
+  }
+}
+var DOCUMENT_SCHEMA_VERSION, DOCUMENT_KINDS, DOCUMENT_PROVENANCE_SOURCES, PLAN_STEP_STATUSES, SPEC_REQUIREMENT_PRIORITIES, HANDOFF_STATUSES, REVIEW_VERDICTS, REVIEW_SEVERITIES, VERIFY_OUTCOMES, VERIFY_CHECK_RESULTS, DOCUMENT_ID_PATTERN, DOCUMENT_ITEM_ID_PATTERN, DOCUMENT_TIMESTAMP_PATTERN, TOP_LEVEL_KEYS, PROVENANCE_KEYS;
+var init_document_records = __esm({
+  "../src/modules/documents/workflows/document-records.ts"() {
+    init_document_safe();
+    DOCUMENT_SCHEMA_VERSION = "guild.document.v1";
+    DOCUMENT_KINDS = Object.freeze([
+      "plan",
+      "spec",
+      "handoff",
+      "review",
+      "verify"
+    ]);
+    DOCUMENT_PROVENANCE_SOURCES = Object.freeze([
+      "authored",
+      "imported",
+      "migrated"
+    ]);
+    PLAN_STEP_STATUSES = Object.freeze([
+      "pending",
+      "active",
+      "done",
+      "blocked"
+    ]);
+    SPEC_REQUIREMENT_PRIORITIES = Object.freeze(["must", "should", "may"]);
+    HANDOFF_STATUSES = Object.freeze([
+      "completed",
+      "partial",
+      "blocked",
+      "failed"
+    ]);
+    REVIEW_VERDICTS = Object.freeze(["approved", "issues", "rejected"]);
+    REVIEW_SEVERITIES = Object.freeze([
+      "blocking",
+      "major",
+      "minor",
+      "note"
+    ]);
+    VERIFY_OUTCOMES = Object.freeze(["pass", "fail", "inconclusive"]);
+    VERIFY_CHECK_RESULTS = Object.freeze(["pass", "fail", "skip"]);
+    DOCUMENT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{2,63}$/;
+    DOCUMENT_ITEM_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+    DOCUMENT_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+    TOP_LEVEL_KEYS = Object.freeze([
+      "schema_version",
+      "kind",
+      "id",
+      "title",
+      "provenance",
+      "body"
+    ]);
+    PROVENANCE_KEYS = Object.freeze([
+      "author_id",
+      "author_family",
+      "host_id",
+      "created_at",
+      "source"
+    ]);
+  }
+});
+
+// ../src/modules/documents/workflows/document-hash.ts
+function hashDocumentRecord(record) {
+  const hashed = hashCanonicalValue(record);
+  if (hashed.ok) return hashed.hash;
+  return "sha256:unhashable";
+}
+var init_document_hash = __esm({
+  "../src/modules/documents/workflows/document-hash.ts"() {
+    init_document_safe();
+    init_document_records();
+  }
+});
+
+// ../src/modules/documents/workflows/document-projection.ts
+function deriveDisposition(record) {
+  if (record.kind === "verify") {
+    const failed = record.body.checks.filter((check) => check.result === "fail").map((check) => check.id);
+    if (record.body.outcome === "pass" && failed.length > 0) {
+      return {
+        disposition: "failed",
+        signals: ["outcome_demoted_by_failed_check", ...failed]
+      };
+    }
+    if (record.body.outcome === "pass") return { disposition: "succeeded", signals: [] };
+    if (record.body.outcome === "fail") return { disposition: "failed", signals: failed };
+    return { disposition: "unknown", signals: failed };
+  }
+  if (record.kind === "review") {
+    const blocking = record.body.findings.filter((finding) => finding.severity === "blocking").map((finding) => finding.id);
+    if (record.body.verdict === "approved" && blocking.length > 0) {
+      return {
+        disposition: "in_review",
+        signals: ["verdict_demoted_by_blocking_findings", ...blocking]
+      };
+    }
+    if (record.body.verdict === "approved") return { disposition: "succeeded", signals: [] };
+    if (record.body.verdict === "rejected") return { disposition: "failed", signals: blocking };
+    return { disposition: "in_review", signals: blocking };
+  }
+  if (record.kind === "handoff") {
+    const openIssues = record.body.issues;
+    if (record.body.status === "completed" && openIssues.length > 0) {
+      return {
+        disposition: "in_review",
+        signals: ["status_demoted_by_open_issues"]
+      };
+    }
+    if (record.body.status === "completed") return { disposition: "succeeded", signals: [] };
+    if (record.body.status === "failed") return { disposition: "failed", signals: [] };
+    if (record.body.status === "blocked") return { disposition: "blocked", signals: [] };
+    return { disposition: "in_review", signals: [] };
+  }
+  if (record.kind === "plan") {
+    const blocked = record.body.steps.filter((step) => step.status === "blocked").map((step) => step.id);
+    if (blocked.length > 0) return { disposition: "blocked", signals: blocked };
+    const allDone = record.body.steps.every((step) => step.status === "done");
+    return { disposition: allDone ? "succeeded" : "planned", signals: [] };
+  }
+  const musts = record.body.requirements.filter((requirement) => requirement.priority === "must").map((requirement) => requirement.id);
+  return { disposition: "planned", signals: musts };
+}
+function bindingFor(core) {
+  const hashed = hashCanonicalValue(core);
+  return hashed.ok ? hashed.hash : "sha256:unbindable";
+}
+function projectValidatedRecord(record) {
+  const derived = deriveDisposition(record);
+  const core = {
+    schema_version: DOCUMENT_PROJECTION_SCHEMA_VERSION,
+    record_id: record.id,
+    record_kind: record.kind,
+    record_schema_version: DOCUMENT_SCHEMA_VERSION,
+    content_hash: hashDocumentRecord(record),
+    disposition: derived.disposition,
+    signals: derived.signals
+  };
+  return deepFreeze2({ ...core, binding: bindingFor(core) });
+}
+function validateDocumentProjection(input) {
+  const errors = [];
+  try {
+    if (!isObjectLike(input)) {
+      pushIssue(errors, "$", "not_an_object", "projection must be an object");
+      return { valid: false, errors: sortIssues(errors) };
+    }
+    const asRecord = input;
+    for (const key of PROJECTION_KEYS) {
+      let value;
+      try {
+        value = asRecord[key];
+      } catch {
+        pushIssue(errors, `$.${key}`, "property_read_threw", `$.${key}: property read threw`);
+        continue;
+      }
+      if (value === void 0) {
+        pushIssue(errors, `$.${key}`, "missing_field", `$.${key} is required`);
+      }
+    }
+    return { valid: errors.length === 0, errors: sortIssues(errors) };
+  } catch {
+    pushIssue(errors, "$", "internal_guard", "projection validation was interrupted");
+    return { valid: false, errors: sortIssues(errors) };
+  }
+}
+function verifyProjectionAgainstRecord(claimed, record) {
+  const mismatches = [];
+  const expected = projectValidatedRecord(record);
+  const shape = validateDocumentProjection(claimed);
+  if (!shape.valid) return ["projection_malformed"];
+  const claimedRecord = claimed;
+  const read = (key) => {
+    try {
+      return claimedRecord[key];
+    } catch {
+      return void 0;
+    }
+  };
+  if (read("schema_version") !== DOCUMENT_PROJECTION_SCHEMA_VERSION) {
+    mismatches.push("projection_schema_version_mismatch");
+  }
+  if (read("record_id") !== expected.record_id) mismatches.push("projection_record_id_mismatch");
+  if (read("record_kind") !== expected.record_kind) mismatches.push("projection_record_kind_mismatch");
+  if (read("record_schema_version") !== expected.record_schema_version) {
+    mismatches.push("projection_record_schema_version_mismatch");
+  }
+  if (read("content_hash") !== expected.content_hash) mismatches.push("projection_stale");
+  if (read("disposition") !== expected.disposition) mismatches.push("projection_disposition_mismatch");
+  const claimedSignals = read("signals");
+  const signalsHash = hashCanonicalValue(claimedSignals);
+  const expectedSignalsHash = hashCanonicalValue(expected.signals);
+  if (!signalsHash.ok || !expectedSignalsHash.ok || signalsHash.hash !== expectedSignalsHash.hash) {
+    mismatches.push("projection_signals_mismatch");
+  }
+  if (read("binding") !== expected.binding) mismatches.push("projection_binding_mismatch");
+  return [...new Set(mismatches)].sort();
+}
+var DOCUMENT_PROJECTION_SCHEMA_VERSION, DOCUMENT_DISPOSITIONS, PROJECTION_KEYS;
+var init_document_projection = __esm({
+  "../src/modules/documents/workflows/document-projection.ts"() {
+    init_document_safe();
+    init_document_hash();
+    init_document_records();
+    DOCUMENT_PROJECTION_SCHEMA_VERSION = "guild.document_projection.v1";
+    DOCUMENT_DISPOSITIONS = Object.freeze([
+      "succeeded",
+      "failed",
+      "blocked",
+      "in_review",
+      "planned",
+      "unknown"
+    ]);
+    PROJECTION_KEYS = Object.freeze([
+      "schema_version",
+      "record_id",
+      "record_kind",
+      "record_schema_version",
+      "content_hash",
+      "disposition",
+      "signals",
+      "binding"
+    ]);
+  }
+});
+
+// ../src/modules/documents/workflows/document-html.ts
+var ALLOWED_ELEMENTS, ALLOWED_ATTRIBUTES, ENTITY_VALUES, META_KEYS;
+var init_document_html = __esm({
+  "../src/modules/documents/workflows/document-html.ts"() {
+    init_document_safe();
+    init_kernel();
+    init_document_hash();
+    init_document_records();
+    init_document_projection();
+    ALLOWED_ELEMENTS = Object.freeze(
+      /* @__PURE__ */ new Set([
+        "html",
+        "head",
+        "meta",
+        "title",
+        "body",
+        "article",
+        "section",
+        "header",
+        "h1",
+        "h2",
+        "dl",
+        "dt",
+        "dd",
+        "ul",
+        "li",
+        "p",
+        "span",
+        "time",
+        "footer"
+      ])
+    );
+    ALLOWED_ATTRIBUTES = Object.freeze(
+      /* @__PURE__ */ new Set(["lang", "charset", "name", "content", "class", "id"])
+    );
+    ENTITY_VALUES = Object.freeze({
+      amp: "&",
+      lt: "<",
+      gt: ">",
+      quot: '"',
+      "#39": "'"
+    });
+    META_KEYS = deepFreeze([
+      ["record_id", "guild.record_id"],
+      ["record_kind", "guild.record_kind"],
+      ["schema_version", "guild.schema_version"],
+      ["content_hash", "guild.content_hash"],
+      ["projection_binding", "guild.projection_binding"]
+    ]);
+  }
+});
+
+// ../src/modules/documents/workflows/document-legacy-import.ts
+var LEGACY_IMPORT_BOUNDS, KIND_HINTS;
+var init_document_legacy_import = __esm({
+  "../src/modules/documents/workflows/document-legacy-import.ts"() {
+    init_document_safe();
+    init_kernel();
+    init_document_records();
+    LEGACY_IMPORT_BOUNDS = Object.freeze({
+      max_characters: 65536,
+      max_lines: 2e3,
+      max_sections: 64,
+      max_section_characters: 4e3
+    });
+    KIND_HINTS = deepFreeze([
+      [/\bplan\b/i, "plan"],
+      [/\bspec(?:ification)?\b/i, "spec"],
+      [/\b(?:handoff|receipt)\b/i, "handoff"],
+      [/\breview\b/i, "review"],
+      [/\bverif(?:y|ication)\b/i, "verify"]
+    ]);
+  }
+});
+
+// ../src/modules/documents/workflows/document-versioning.ts
+var SUPPORTED_DOCUMENT_SCHEMA_VERSIONS, MIGRATABLE_DOCUMENT_SCHEMA_VERSIONS;
+var init_document_versioning = __esm({
+  "../src/modules/documents/workflows/document-versioning.ts"() {
+    init_document_safe();
+    init_document_hash();
+    init_document_records();
+    init_document_safe();
+    init_document_html();
+    init_document_projection();
+    SUPPORTED_DOCUMENT_SCHEMA_VERSIONS = Object.freeze([
+      DOCUMENT_SCHEMA_VERSION
+    ]);
+    MIGRATABLE_DOCUMENT_SCHEMA_VERSIONS = Object.freeze([
+      "guild.document.v0"
+    ]);
+  }
+});
+
+// ../src/modules/documents/workflows/document-decisions.ts
+function present(value) {
+  return value !== void 0 && value !== null;
+}
+function resolveDocumentAuthority(sources) {
+  const refusals = [];
+  const evidence = [];
+  try {
+    if (sources === null || typeof sources !== "object") {
+      return { authority: "none", record: null, refusals: ["sources_not_an_object"], evidence: [] };
+    }
+    const read = {};
+    let unreadable = false;
+    for (const key of SOURCE_KEYS) {
+      const value = safeGet(sources, key);
+      if (value.ok === false) {
+        unreadable = true;
+        continue;
+      }
+      read[key] = value.value;
+    }
+    if (unreadable) refusals.push("source_unreadable");
+    const recordSource = read["record"];
+    const projectionSource = read["projection"];
+    if (present(recordSource)) {
+      const validation = validateDocumentRecord(recordSource);
+      if (!validation.valid || validation.record === null) {
+        refusals.push("record_invalid");
+        evidence.push(...validation.errors);
+        return {
+          authority: "none",
+          record: null,
+          refusals: [...new Set(refusals)].sort(),
+          evidence: sortIssues(evidence)
+        };
+      }
+      if (present(projectionSource)) {
+        const mismatches = verifyProjectionAgainstRecord(projectionSource, validation.record);
+        refusals.push(...mismatches);
+      }
+      return {
+        authority: "canonical_record",
+        record: validation.record,
+        refusals: [...new Set(refusals)].sort(),
+        evidence: sortIssues(evidence)
+      };
+    }
+    if (present(projectionSource)) {
+      refusals.push("projection_unbound_no_canonical_record");
+      const shape = validateDocumentProjection(projectionSource);
+      if (!shape.valid) {
+        refusals.push("projection_malformed");
+        evidence.push(...shape.errors);
+      }
+    }
+    if (present(read["legacy_record"])) refusals.push("legacy_record_is_not_canonical");
+    if (present(read["html"])) refusals.push("html_is_not_machine_authority");
+    if (present(read["markdown"])) refusals.push("markdown_is_not_machine_authority");
+    if (refusals.length === 0) refusals.push("no_document_source");
+    return {
+      authority: "none",
+      record: null,
+      refusals: [...new Set(refusals)].sort(),
+      evidence: sortIssues(evidence)
+    };
+  } catch {
+    return { authority: "none", record: null, refusals: ["internal_guard"], evidence: [] };
+  }
+}
+function decideFromDocumentSources(sources) {
+  try {
+    const resolution = resolveDocumentAuthority(sources);
+    if (resolution.authority !== "canonical_record" || resolution.record === null) {
+      return { ...REFUSED, authority: resolution.authority, refusals: resolution.refusals, evidence: resolution.evidence };
+    }
+    if (resolution.refusals.length > 0) {
+      return {
+        ...REFUSED,
+        authority: resolution.authority,
+        refusals: resolution.refusals,
+        evidence: resolution.evidence
+      };
+    }
+    const projection = projectValidatedRecord(resolution.record);
+    return {
+      authority: "canonical_record",
+      gate_signal: projection.disposition === "succeeded" ? "advance" : "hold",
+      disposition: projection.disposition,
+      content_hash: hashDocumentRecord(resolution.record),
+      projection,
+      refusals: [],
+      evidence: []
+    };
+  } catch {
+    return { ...REFUSED, authority: "none", refusals: ["internal_guard"], evidence: [] };
+  }
+}
+var SOURCE_KEYS, REFUSED;
+var init_document_decisions = __esm({
+  "../src/modules/documents/workflows/document-decisions.ts"() {
+    init_document_safe();
+    init_document_hash();
+    init_document_records();
+    init_document_projection();
+    SOURCE_KEYS = Object.freeze([
+      "record",
+      "projection",
+      "legacy_record",
+      "html",
+      "markdown"
+    ]);
+    REFUSED = {
+      gate_signal: "refuse",
+      disposition: "unknown",
+      content_hash: null,
+      projection: null
+    };
+  }
+});
+
+// ../src/modules/documents/workflows/document-receipts.ts
+function readReceiptFrontmatter(text) {
+  const match = RECEIPT_FRONTMATTER_BLOCK.exec(text);
+  if (match === null) {
+    return { ok: false, reason: "receipt frontmatter is missing or unterminated" };
+  }
+  const frontmatter = match[1] ?? "";
+  if (frontmatter.split("\n").length + 2 > RECEIPT_PARSE_BOUNDS.max_frontmatter_lines) {
+    return { ok: false, reason: "frontmatter exceeds the line bound" };
+  }
+  let parsed;
+  try {
+    const yaml2 = loadYamlApi();
+    parsed = yaml2.load(frontmatter, { schema: yaml2.JSON_SCHEMA });
+  } catch {
+    return { ok: false, reason: "frontmatter is not a valid YAML mapping" };
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, reason: "frontmatter is not a valid YAML mapping" };
+  }
+  const fields = /* @__PURE__ */ Object.create(null);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+      continue;
+    }
+    const scalar = String(value);
+    if (scalar !== "") fields[key] = scalar;
+  }
+  return { ok: true, fields };
+}
+function readReceiptMachineBlock(text) {
+  const fence = /^```([^\n]*)\n([\s\S]*?)\n```[ \t]*$/gm;
+  const candidates = [];
+  let match;
+  let seen = 0;
+  while ((match = fence.exec(text)) !== null) {
+    seen += 1;
+    if (seen > RECEIPT_PARSE_BOUNDS.max_json_blocks) {
+      return { ok: false, reason: "receipt exceeds the fenced-block scan bound" };
+    }
+    const info = (match[1] ?? "").trim().toLowerCase();
+    if (info !== "" && info !== "json" && info !== "jsonc") continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(match[2] ?? "");
+    } catch {
+      continue;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    const version = safeGet(parsed, "schema_version");
+    if (version.ok && version.value === RECEIPT_MACHINE_SCHEMA_VERSION) {
+      candidates.push(parsed);
+    }
+  }
+  if (candidates.length === 0) {
+    return { ok: false, reason: `no ${RECEIPT_MACHINE_SCHEMA_VERSION} block found` };
+  }
+  if (candidates.length > 1) {
+    return { ok: false, reason: `receipt contains ${candidates.length} ${RECEIPT_MACHINE_SCHEMA_VERSION} blocks` };
+  }
+  return { ok: true, block: candidates[0] };
+}
+function firstField(fields, keys) {
+  for (const key of keys) {
+    const value = fields[key];
+    if (typeof value === "string" && value !== "") return value;
+  }
+  return null;
+}
+function parseReceiptDocument(input) {
+  const errors = [];
+  try {
+    if (typeof input !== "string") {
+      pushIssue(errors, "$", "not_a_string", "receipt document must be a string");
+      return { status: "unparsable", record: null, errors: sortIssues(errors) };
+    }
+    if (input.length > RECEIPT_PARSE_BOUNDS.max_characters) {
+      pushIssue(errors, "$", "receipt_too_large", "receipt exceeds the parse bound");
+      return { status: "unparsable", record: null, errors: sortIssues(errors) };
+    }
+    const frontmatter = readReceiptFrontmatter(input);
+    if (frontmatter.ok === false) {
+      pushIssue(errors, "$.frontmatter", "frontmatter_unreadable", frontmatter.reason);
+      return { status: "unparsable", record: null, errors: sortIssues(errors) };
+    }
+    const block = readReceiptMachineBlock(input);
+    if (block.ok === false) {
+      pushIssue(errors, "$.machine_block", "machine_block_unreadable", block.reason);
+      return { status: "unparsable", record: null, errors: sortIssues(errors) };
+    }
+    const fields = frontmatter.fields;
+    const declaredEnvelope = firstField(fields, ["schema_version"]);
+    if (declaredEnvelope === null) {
+      pushIssue(
+        errors,
+        "$.frontmatter.schema_version",
+        "missing_frontmatter_schema",
+        `frontmatter schema_version is required and must be ${RECEIPT_FRONTMATTER_SCHEMA_VERSION}`
+      );
+    } else if (declaredEnvelope !== RECEIPT_FRONTMATTER_SCHEMA_VERSION) {
+      pushIssue(
+        errors,
+        "$.frontmatter.schema_version",
+        "wrong_frontmatter_schema",
+        `frontmatter schema_version must be ${RECEIPT_FRONTMATTER_SCHEMA_VERSION}`
+      );
+    }
+    const authorId = firstField(fields, ["agent", "specialist"]);
+    const authorFamily = firstField(fields, ["model_family", "family"]);
+    const hostId = firstField(fields, ["host"]);
+    const createdAt = firstField(fields, ["generated_at"]);
+    if (authorId === null) {
+      pushIssue(errors, "$.frontmatter.agent", "missing_provenance", "frontmatter agent/specialist is required");
+    }
+    if (authorFamily === null) {
+      pushIssue(errors, "$.frontmatter.model_family", "missing_provenance", "frontmatter model_family/family is required");
+    }
+    if (hostId === null) {
+      pushIssue(errors, "$.frontmatter.host", "missing_provenance", "frontmatter host is required");
+    }
+    if (createdAt === null) {
+      pushIssue(errors, "$.frontmatter.generated_at", "missing_provenance", "frontmatter generated_at is required");
+    }
+    const taskIdRead = safeGet(block.block, "task_id");
+    const taskId = taskIdRead.ok && typeof taskIdRead.value === "string" ? taskIdRead.value : null;
+    if (taskId === null) {
+      pushIssue(errors, "$.machine_block.task_id", "missing_field", "task_id must be a string");
+    }
+    const statusRead = safeGet(block.block, "status");
+    const rawStatus = statusRead.ok && typeof statusRead.value === "string" ? statusRead.value : null;
+    const mappedStatus = rawStatus !== null && Object.prototype.hasOwnProperty.call(RECEIPT_STATUS_MAP, rawStatus) ? RECEIPT_STATUS_MAP[rawStatus] : void 0;
+    if (mappedStatus === void 0) {
+      pushIssue(
+        errors,
+        "$.machine_block.status",
+        "unknown_receipt_status",
+        `status must be one of ${Object.keys(RECEIPT_STATUS_MAP).sort().join("|")}`
+      );
+    }
+    if (errors.length > 0 || taskId === null) {
+      return { status: "unparsable", record: null, errors: sortIssues(errors) };
+    }
+    const recordId = `doc-handoff-${taskId.toLowerCase()}`;
+    if (!DOCUMENT_ID_PATTERN.test(recordId)) {
+      pushIssue(
+        errors,
+        "$.machine_block.task_id",
+        "derived_id_invalid",
+        `task_id does not yield a stable record id (${recordId})`
+      );
+      return { status: "unparsable", record: null, errors: sortIssues(errors) };
+    }
+    const artifactsRead = safeGet(block.block, "artifacts");
+    const issuesRead = safeGet(block.block, "issues");
+    const titleField = firstField(fields, ["task", "title"]);
+    const candidate = {
+      schema_version: DOCUMENT_SCHEMA_VERSION,
+      kind: "handoff",
+      id: recordId,
+      title: titleField ?? taskId,
+      provenance: {
+        author_id: authorId,
+        author_family: authorFamily,
+        host_id: hostId,
+        created_at: createdAt,
+        // The record is derived from a receipt document, not authored as a
+        // canonical record — say so rather than claiming authorship.
+        source: "imported"
+      },
+      body: {
+        task_id: taskId,
+        status: mappedStatus,
+        artifacts: artifactsRead.ok ? artifactsRead.value : void 0,
+        issues: issuesRead.ok ? issuesRead.value : void 0
+      }
+    };
+    const validation = validateDocumentRecord(candidate);
+    if (!validation.valid || validation.record === null || validation.record.kind !== "handoff") {
+      return { status: "unparsable", record: null, errors: validation.errors };
+    }
+    return { status: "parsed", record: validation.record, errors: [] };
+  } catch {
+    pushIssue(errors, "$", "internal_guard", "receipt parse was interrupted");
+    return { status: "unparsable", record: null, errors: sortIssues(errors) };
+  }
+}
+function decideFromReceiptDocument(input) {
+  const parsed = parseReceiptDocument(input);
+  if (parsed.status !== "parsed" || parsed.record === null) {
+    const refusals = /* @__PURE__ */ new Set(["receipt_not_structured"]);
+    for (const error of parsed.errors) {
+      if (Object.prototype.hasOwnProperty.call(RECEIPT_REFUSAL_BY_ERROR_CODE, error.code)) {
+        refusals.add(RECEIPT_REFUSAL_BY_ERROR_CODE[error.code]);
+      }
+    }
+    return {
+      authority: "none",
+      gate_signal: "refuse",
+      disposition: "unknown",
+      content_hash: null,
+      projection: null,
+      refusals: [...refusals].sort(),
+      evidence: parsed.errors
+    };
+  }
+  return decideFromDocumentSources({ record: parsed.record });
+}
+var RECEIPT_MACHINE_SCHEMA_VERSION, RECEIPT_FRONTMATTER_SCHEMA_VERSION, RECEIPT_PARSE_BOUNDS, RECEIPT_FRONTMATTER_BLOCK, RECEIPT_STATUS_MAP, RECEIPT_REFUSAL_BY_ERROR_CODE;
+var init_document_receipts = __esm({
+  "../src/modules/documents/workflows/document-receipts.ts"() {
+    init_kernel();
+    init_document_safe();
+    init_document_records();
+    init_document_decisions();
+    RECEIPT_MACHINE_SCHEMA_VERSION = "guild.handoff.v2";
+    RECEIPT_FRONTMATTER_SCHEMA_VERSION = "guild.handoff_receipt.v1";
+    RECEIPT_PARSE_BOUNDS = Object.freeze({
+      max_characters: 524288,
+      max_frontmatter_lines: 200,
+      max_json_blocks: 20
+    });
+    RECEIPT_FRONTMATTER_BLOCK = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+    RECEIPT_STATUS_MAP = Object.freeze({
+      complete: "completed",
+      completed: "completed",
+      done: "completed",
+      partial: "partial",
+      blocked: "blocked",
+      failed: "failed"
+    });
+    RECEIPT_REFUSAL_BY_ERROR_CODE = Object.freeze({
+      missing_frontmatter_schema: "receipt_envelope_schema_unsupported",
+      wrong_frontmatter_schema: "receipt_envelope_schema_unsupported"
+    });
+  }
+});
+
+// ../src/modules/documents/workflows/document-service-boundary.ts
+var DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES, DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES, REGEX_PRECEDING, DOCUMENTS_MODULE_SOURCE_FILES;
+var init_document_service_boundary = __esm({
+  "../src/modules/documents/workflows/document-service-boundary.ts"() {
+    DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES = Object.freeze([
+      "kernel",
+      "lifecycle",
+      "telemetry"
+    ]);
+    DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES = Object.freeze([]);
+    REGEX_PRECEDING = new Set("=(,:[!&|?{};+-*%~^<>".split(""));
+    DOCUMENTS_MODULE_SOURCE_FILES = Object.freeze([
+      "src/modules/documents/index.ts",
+      "src/modules/documents/workflows/document-safe.ts",
+      "src/modules/documents/workflows/document-records.ts",
+      "src/modules/documents/workflows/document-hash.ts",
+      "src/modules/documents/workflows/document-projection.ts",
+      "src/modules/documents/workflows/document-html.ts",
+      "src/modules/documents/workflows/document-legacy-import.ts",
+      "src/modules/documents/workflows/document-versioning.ts",
+      "src/modules/documents/workflows/document-decisions.ts",
+      "src/modules/documents/workflows/document-receipts.ts",
+      "src/modules/documents/workflows/document-service-boundary.ts"
+    ]);
+  }
+});
+
+// ../src/modules/documents/index.ts
+var init_documents = __esm({
+  "../src/modules/documents/index.ts"() {
+    init_document_safe();
+    init_document_records();
+    init_document_hash();
+    init_document_projection();
+    init_document_html();
+    init_document_legacy_import();
+    init_document_versioning();
+    init_document_decisions();
+    init_document_receipts();
+    init_document_service_boundary();
+  }
+});
+
+// ../src/modules/lifecycle/workflows/check-lane-liveness.ts
+function readJsonObject(p) {
+  let raw;
+  try {
+    raw = fs7.readFileSync(p, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+  }
+  return null;
+}
+function readRunStateLanes(runDir2) {
+  const obj = readJsonObject(path9.join(runDir2, "run-state.json"));
+  if (obj === null) return null;
+  const lanes = obj["lanes"];
+  if (typeof lanes !== "object" || lanes === null || Array.isArray(lanes)) {
+    return {};
+  }
+  return lanes;
+}
+function readHeartbeatAges(runDir2, now = Date.now()) {
+  const ages = /* @__PURE__ */ new Map();
+  const dir = path9.join(runDir2, "in-progress");
+  let names;
+  try {
+    names = fs7.readdirSync(dir);
+  } catch {
+    return ages;
+  }
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const stem = name.slice(0, -".json".length);
+    const filePath = path9.join(dir, name);
+    const obj = readJsonObject(filePath);
+    const ts = obj !== null && typeof obj["timestamp"] === "string" ? Date.parse(obj["timestamp"]) : NaN;
+    if (!Number.isNaN(ts)) {
+      ages.set(stem, Math.max(0, now - ts));
+      continue;
+    }
+    try {
+      const stat = fs7.statSync(filePath);
+      ages.set(stem, Math.max(0, now - stat.mtimeMs));
+    } catch {
+    }
+  }
+  return ages;
+}
+function readReceiptEvidence(runDir2) {
+  const dir = path9.join(runDir2, "handoffs");
+  let names;
+  try {
+    names = fs7.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const evidence = [];
+  for (const name of names.sort()) {
+    if (!name.endsWith(".md")) continue;
+    const stem = name.slice(0, -".md".length);
+    const filePath = path9.join(dir, name);
+    let text = null;
+    try {
+      if (fs7.statSync(filePath).size <= MAX_RECEIPT_BYTES) {
+        text = fs7.readFileSync(filePath, "utf8");
+      }
+    } catch {
+      text = null;
+    }
+    const decision = decideFromReceiptDocument(text);
+    evidence.push({
+      stem,
+      authority: decision.authority,
+      disposition: decision.disposition,
+      refusals: decision.refusals,
+      trusted: decision.authority === "canonical_record" && decision.gate_signal !== "refuse"
+    });
+  }
+  return evidence;
+}
+function isStalled(status, receiptClearsStall, signalAgeMs, timeoutMs) {
+  if (receiptClearsStall) return false;
+  if (TERMINAL_STATUSES.has(status)) return false;
+  if (status === "pending" && signalAgeMs === null) return false;
+  if (status === "in_progress") {
+    return signalAgeMs === null || signalAgeMs >= timeoutMs;
+  }
+  return signalAgeMs !== null && signalAgeMs >= timeoutMs;
+}
+function sweepLaneLiveness(runDir2, timeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS, now = Date.now()) {
+  const lanes = readRunStateLanes(runDir2);
+  const heartbeats = readHeartbeatAges(runDir2, now);
+  const receiptEvidence = readReceiptEvidence(runDir2);
+  const receipts = receiptEvidence.map((entry) => entry.stem);
+  const evidenceByStem = new Map(receiptEvidence.map((entry) => [entry.stem, entry]));
+  const consumedHeartbeats = /* @__PURE__ */ new Set();
+  const rows = [];
+  if (lanes !== null) {
+    for (const [laneId2, lane] of Object.entries(lanes)) {
+      const status = typeof lane.status === "string" ? lane.status : "unknown";
+      const receiptStem = receipts.find((s) => s.endsWith(`-${laneId2}`));
+      const receiptPresent = receiptStem !== void 0 || typeof lane.receipt_ref === "string" && lane.receipt_ref.length > 0;
+      const evidence = receiptStem !== void 0 ? evidenceByStem.get(receiptStem) ?? NO_RECEIPT : NO_RECEIPT;
+      let hbKey;
+      if (heartbeats.has(laneId2)) {
+        hbKey = laneId2;
+      } else {
+        hbKey = [...heartbeats.keys()].find((k) => k.endsWith(`-${laneId2}`));
+        if (hbKey === void 0 && receiptStem !== void 0) {
+          const specialist = receiptStem.slice(
+            0,
+            receiptStem.length - laneId2.length - 1
+          );
+          if (heartbeats.has(specialist)) hbKey = specialist;
+        }
+      }
+      const heartbeatAgeMs = hbKey !== void 0 ? heartbeats.get(hbKey) : null;
+      if (hbKey !== void 0) consumedHeartbeats.add(hbKey);
+      let signalAgeMs = heartbeatAgeMs;
+      if (signalAgeMs === null && typeof lane.updated_at === "string") {
+        const ts = Date.parse(lane.updated_at);
+        if (!Number.isNaN(ts)) signalAgeMs = Math.max(0, now - ts);
+      }
+      rows.push({
+        lane: laneId2,
+        status,
+        receipt_present: receiptPresent,
+        receipt_authority: evidence.authority,
+        receipt_disposition: evidence.disposition,
+        receipt_refusals: evidence.refusals,
+        heartbeat_age_ms: heartbeatAgeMs,
+        stalled: isStalled(status, evidence.trusted, signalAgeMs, timeoutMs)
+      });
+    }
+  } else {
+    for (const entry of receiptEvidence) {
+      const stem = entry.stem;
+      const hbKey = [...heartbeats.keys()].find(
+        (k) => k === stem || stem.startsWith(`${k}-`)
+      );
+      const heartbeatAgeMs = hbKey !== void 0 ? heartbeats.get(hbKey) : null;
+      if (hbKey !== void 0) consumedHeartbeats.add(hbKey);
+      rows.push({
+        lane: stem,
+        status: "unknown",
+        receipt_present: true,
+        receipt_authority: entry.authority,
+        receipt_disposition: entry.disposition,
+        receipt_refusals: entry.refusals,
+        heartbeat_age_ms: heartbeatAgeMs,
+        stalled: isStalled("unknown", entry.trusted, heartbeatAgeMs, timeoutMs)
+      });
+    }
+  }
+  for (const [stem, ageMs] of heartbeats) {
+    if (consumedHeartbeats.has(stem)) continue;
+    const matchedStem = receipts.find((s) => s === stem || s.startsWith(`${stem}-`));
+    const evidence = matchedStem !== void 0 ? evidenceByStem.get(matchedStem) ?? NO_RECEIPT : NO_RECEIPT;
+    rows.push({
+      lane: stem,
+      status: "unknown",
+      receipt_present: matchedStem !== void 0,
+      receipt_authority: evidence.authority,
+      receipt_disposition: evidence.disposition,
+      receipt_refusals: evidence.refusals,
+      heartbeat_age_ms: ageMs,
+      stalled: isStalled("unknown", evidence.trusted, ageMs, timeoutMs)
+    });
+  }
+  return {
+    run_dir: runDir2,
+    run_state_present: lanes !== null,
+    timeout_ms: timeoutMs,
+    generated_at: new Date(now).toISOString(),
+    lanes: rows
+  };
+}
+function resolveTimeoutMs(env = process.env) {
+  const raw = env["GUILD_HEARTBEAT_TIMEOUT_MS"];
+  if (raw === void 0) return DEFAULT_HEARTBEAT_TIMEOUT_MS;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) return n;
+  return DEFAULT_HEARTBEAT_TIMEOUT_MS;
+}
+function runCheckLaneLivenessCli(argv = process.argv.slice(2)) {
+  let runDir2;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--run-dir" && argv[i + 1] !== void 0) {
+      runDir2 = argv[++i];
+    } else if (arg.startsWith("--run-dir=")) {
+      runDir2 = arg.slice("--run-dir=".length);
+    } else {
+      process.stderr.write(`unknown argument: ${arg}
+${USAGE}
+`);
+      return 1;
+    }
+  }
+  if (!runDir2) {
+    process.stderr.write(USAGE + "\n");
+    return 1;
+  }
+  const report = sweepLaneLiveness(runDir2, resolveTimeoutMs());
+  process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  return 0;
+}
+var fs7, path9, DEFAULT_HEARTBEAT_TIMEOUT_MS, TERMINAL_STATUSES, MAX_RECEIPT_BYTES, NO_RECEIPT, USAGE;
+var init_check_lane_liveness = __esm({
+  "../src/modules/lifecycle/workflows/check-lane-liveness.ts"() {
+    fs7 = __toESM(require("node:fs"));
+    path9 = __toESM(require("node:path"));
+    init_documents();
+    DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+    TERMINAL_STATUSES = /* @__PURE__ */ new Set(["done", "skipped", "dead", "failed"]);
+    MAX_RECEIPT_BYTES = 512 * 1024;
+    NO_RECEIPT = {
+      authority: "none",
+      disposition: "unknown",
+      refusals: [],
+      trusted: false
+    };
+    USAGE = "usage: check-lane-liveness.ts --run-dir <abs .guild/runs/<id>>";
+    if (require.main === module && new RegExp("[\\\\/]check-lane-liveness\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      process.exit(runCheckLaneLivenessCli());
+    }
+  }
+});
+
+// ../src/modules/lifecycle/workflows/event-log-schema.ts
+function isSafeRunId(id) {
+  return RUN_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function isSafeLaneId(id) {
+  return LANE_ID_RE.test(id) && id !== "." && id !== "..";
+}
+function assertSafeRunId(id) {
+  if (!isSafeRunId(id)) {
+    throw new Error(`log-jsonl: invalid run_id ${JSON.stringify(id)}`);
+  }
+}
+function assertSafeLaneId(id) {
+  if (!isSafeLaneId(id)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(id)}`);
+  }
+}
+function validateEventIds(event) {
+  assertSafeRunId(event.run_id);
+  if ("lane_id" in event && event.lane_id !== void 0) {
+    assertSafeLaneId(event.lane_id);
+  }
+}
+var TOOL_CALL_TOOL_VALUES, HOOK_EVENT_NAMES, EVENT_TYPES, RUN_ID_RE, LANE_ID_RE;
+var init_event_log_schema = __esm({
+  "../src/modules/lifecycle/workflows/event-log-schema.ts"() {
+    init_kernel();
+    TOOL_CALL_TOOL_VALUES = Object.freeze([
+      "Read",
+      "Write",
+      "Edit",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Agent",
+      "Skill",
+      "AskUserQuestion",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "BashOutput",
+      "KillShell"
+    ]);
+    HOOK_EVENT_NAMES = Object.freeze([
+      "SessionStart",
+      "SessionEnd",
+      "UserPromptSubmit",
+      "PreToolUse",
+      "PostToolUse",
+      "Notification",
+      "Stop",
+      "SubagentStop",
+      "PreCompact",
+      "TaskCreated",
+      "TaskCompleted",
+      "TeammateIdle"
+    ]);
+    EVENT_TYPES = sealSet([
+      "phase_start",
+      "phase_end",
+      "specialist_dispatch",
+      "specialist_receipt",
+      "loop_round_start",
+      "loop_round_end",
+      "tool_call",
+      "hook_event",
+      "gate_decision",
+      "assumption_logged",
+      "escalation",
+      "codex_review_round"
+    ], "EVENT_TYPES");
+    RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+    LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+  }
+});
+
+// ../src/modules/lifecycle/workflows/stable-lock.ts
+function stableLockPath(runDir2) {
+  return (0, import_node_path.join)(runDir2, "logs", ".lock");
+}
+function exclusionSentinelPath(runDir2) {
+  return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
+}
+function initStableLockfile(runDir2) {
+  const path23 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path23), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path23)) return;
+  try {
+    const fd = (0, import_node_fs.openSync)(path23, "wx");
+    (0, import_node_fs.closeSync)(fd);
+  } catch (err) {
+    if (err?.code !== "EEXIST") throw err;
+  }
+}
+function sleepSyncMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+  }
+}
+function withStableLock(runDir2, fn, opts = {}) {
+  initStableLockfile(runDir2);
+  const sentinel = exclusionSentinelPath(runDir2);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
+  const start = Date.now();
+  let attempt = 0;
+  for (; ; ) {
+    try {
+      const fd = (0, import_node_fs.openSync)(sentinel, "wx");
+      try {
+        (0, import_node_fs.writeSync)(fd, `${process.pid}
+`);
+      } catch {
+      }
+      (0, import_node_fs.closeSync)(fd);
+      try {
+        return fn();
+      } finally {
+        try {
+          (0, import_node_fs.unlinkSync)(sentinel);
+        } catch {
+        }
+      }
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") throw err;
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(
+          `v1.4-lock: timed out waiting for ${sentinel} (${timeoutMs}ms). Stale lock? Remove the file if you are sure no other process holds it.`
+        );
+      }
+      const idx = Math.min(attempt, backoff.length - 1);
+      sleepSyncMs(backoff[idx]);
+      attempt += 1;
+    }
+  }
+}
+var import_node_fs, import_node_path, DEFAULT_BACKOFF_MS, DEFAULT_TIMEOUT_MS;
+var init_stable_lock = __esm({
+  "../src/modules/lifecycle/workflows/stable-lock.ts"() {
+    import_node_fs = require("node:fs");
+    import_node_path = require("node:path");
+    DEFAULT_BACKOFF_MS = [2, 5, 10, 25, 50, 100, 200];
+    DEFAULT_TIMEOUT_MS = 5e3;
+  }
+});
+
+// ../src/modules/lifecycle/workflows/trace-v2.ts
+function pruneUndefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
+var SIDECAR_MAX_BYTES2;
+var init_trace_v2 = __esm({
+  "../src/modules/lifecycle/workflows/trace-v2.ts"() {
+    SIDECAR_MAX_BYTES2 = 16 * 1024;
+  }
+});
+
+// ../src/modules/lifecycle/workflows/event-log-writer.ts
+function liveLogPath2(runDir2) {
+  return (0, import_node_path2.join)(runDir2, "logs", "v1.4-events.jsonl");
+}
+function archiveDir(runDir2) {
+  return (0, import_node_path2.join)(runDir2, "logs", "archive");
+}
+function archivePath(runDir2, n) {
+  return (0, import_node_path2.join)(archiveDir(runDir2), `v1.4-events.${n}.jsonl.gz`);
+}
+function laneFallbackPath(runDir2, laneId2) {
+  if (!isSafeLaneId(laneId2)) {
+    throw new Error(`log-jsonl: invalid lane_id ${JSON.stringify(laneId2)}`);
+  }
+  return (0, import_node_path2.join)(runDir2, "logs", `lane-${laneId2}-events.jsonl`);
+}
+function appendEvent(runDir2, event, opts = {}) {
+  validateEventIds(event);
+  const cap = opts.fieldCap;
+  const redacted = redactEventFields(event, cap);
+  const withV2 = opts.traceV2 !== void 0 ? { ...redacted, ...pruneUndefined(opts.traceV2) } : redacted;
+  const line = JSON.stringify(withV2) + "\n";
+  if (opts.forceFallback || process.platform === "win32") {
+    const laneId2 = opts.laneId ?? "global";
+    const path23 = laneFallbackPath(runDir2, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path23), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path23, "a");
+    try {
+      (0, import_node_fs2.writeSync)(fd, line);
+    } finally {
+      (0, import_node_fs2.closeSync)(fd);
+    }
+    return;
+  }
+  const live = liveLogPath2(runDir2);
+  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(live), { recursive: true });
+  withStableLock(runDir2, () => {
+    const fd = (0, import_node_fs2.openSync)(live, "a");
+    try {
+      (0, import_node_fs2.writeSync)(fd, line);
+    } finally {
+      (0, import_node_fs2.closeSync)(fd);
+    }
+    maybeRotateLocked(runDir2, opts.rotationThresholdBytes ?? ROTATION_THRESHOLD_BYTES);
+  });
+}
+function nextRotationIndex(runDir2) {
+  const dir = archiveDir(runDir2);
+  if (!(0, import_node_fs2.existsSync)(dir)) return 1;
+  let max = 0;
+  for (const entry of (0, import_node_fs2.readdirSync)(dir)) {
+    const m = /^v1\.4-events\.(\d+)\.jsonl\.gz$/.exec(entry);
+    if (m && m[1] !== void 0) {
+      const n = Number.parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+  }
+  return max + 1;
+}
+function maybeRotateLocked(runDir2, thresholdBytes) {
+  const live = liveLogPath2(runDir2);
+  if (!(0, import_node_fs2.existsSync)(live)) return;
+  const size = (0, import_node_fs2.statSync)(live).size;
+  if (size < thresholdBytes) return;
+  rotateLocked(runDir2);
+}
+function rotateLocked(runDir2) {
+  const live = liveLogPath2(runDir2);
+  const archive = archiveDir(runDir2);
+  (0, import_node_fs2.mkdirSync)(archive, { recursive: true });
+  const n = nextRotationIndex(runDir2);
+  const stagingPath = (0, import_node_path2.join)(archive, `v1.4-events.${n}.jsonl`);
+  const finalArchive = archivePath(runDir2, n);
+  (0, import_node_fs2.renameSync)(live, stagingPath);
+  const raw = (0, import_node_fs2.readFileSync)(stagingPath);
+  const gzipped = (0, import_node_zlib.gzipSync)(raw);
+  (0, import_node_fs2.writeFileSync)(finalArchive, gzipped);
+  (0, import_node_fs2.unlinkSync)(stagingPath);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const fd = (0, import_node_fs2.openSync)(live, "wx");
+      (0, import_node_fs2.closeSync)(fd);
+      return;
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") throw err;
+      try {
+        (0, import_node_fs2.unlinkSync)(live);
+      } catch {
+      }
+    }
+  }
+  throw new Error(
+    `log-jsonl: failed to recreate live log at ${live} with O_EXCL after 5 retries`
+  );
+}
+var import_node_fs2, import_node_path2, import_node_zlib, ROTATION_THRESHOLD_BYTES;
+var init_event_log_writer = __esm({
+  "../src/modules/lifecycle/workflows/event-log-writer.ts"() {
+    import_node_fs2 = require("node:fs");
+    import_node_path2 = require("node:path");
+    import_node_zlib = require("node:zlib");
+    init_security();
+    init_stable_lock();
+    init_trace_v2();
+    init_event_log_schema();
+    ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+  }
+});
+
+// ../src/modules/lifecycle/workflows/event-log-sidecar.ts
+var SIDECAR_MAX_BYTES3;
+var init_event_log_sidecar = __esm({
+  "../src/modules/lifecycle/workflows/event-log-sidecar.ts"() {
+    init_security();
+    init_stable_lock();
+    init_event_log_schema();
+    init_event_log_writer();
+    SIDECAR_MAX_BYTES3 = 1024 * 1024;
+  }
+});
+
+// ../src/modules/lifecycle/workflows/event-log.ts
+var init_event_log = __esm({
+  "../src/modules/lifecycle/workflows/event-log.ts"() {
+    init_event_log_schema();
+    init_event_log_writer();
+    init_event_log_sidecar();
+  }
+});
+
+// ../src/modules/lifecycle/workflows/emit-loop-event.ts
+function parseArgs(argv) {
+  const result = {};
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--event" && argv[i + 1]) result.event = argv[++i];
+    else if (arg === "--layer" && argv[i + 1]) result.layer = argv[++i];
+    else if (arg === "--lane" && argv[i + 1]) result.lane = argv[++i];
+    else if (arg === "--round" && argv[i + 1]) result.round = parseInt(argv[++i], 10);
+    else if (arg === "--cap" && argv[i + 1]) result.cap = parseInt(argv[++i], 10);
+    else if (arg === "--gate" && argv[i + 1]) result.gate = argv[++i];
+    else if (arg === "--terminated" && argv[i + 1]) result.terminated = argv[++i];
+    else if (arg === "--terminator" && argv[i + 1]) result.terminator = argv[++i];
+    else if (arg === "--run-id" && argv[i + 1]) result.runId = argv[++i];
+    else if (arg === "--cwd" && argv[i + 1]) result.cwd = argv[++i];
+  }
+  return result;
+}
+function readSentinel(cwd) {
+  const sentinelPath = path10.join(cwd, ".guild", "runs", "current-run-id");
+  try {
+    const value = fs8.readFileSync(sentinelPath, "utf8").trim();
+    return value.length > 0 ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function runEmitLoopEventCli() {
+  const args = parseArgs(process.argv.slice(2));
+  const cwd = resolveGuildRoot2(args.cwd ?? process.env["GUILD_CWD"] ?? process.cwd());
+  if (!args.event || !VALID_EVENTS.has(args.event)) {
+    process.stderr.write(
+      `[emit-loop-event] ERROR: --event must be one of: ${[...VALID_EVENTS].join(", ")}
+`
+    );
+    process.exit(0);
+  }
+  const envRunId = process.env["GUILD_RUN_ID"];
+  const runId = args.runId ?? (typeof envRunId === "string" && envRunId.length > 0 ? envRunId : void 0) ?? readSentinel(cwd) ?? `run-session-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
+  if (!isSafeRunId(runId)) {
+    process.stderr.write("[emit-loop-event] ERROR: resolved run id is invalid\n");
+    process.exit(0);
+  }
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  let event;
+  if (args.event === "loop_round_start" || args.event === "loop_round_end") {
+    if (!args.layer || !VALID_LAYERS.has(args.layer)) {
+      process.stderr.write("[emit-loop-event] ERROR: --layer is required for loop round events\n");
+      process.exit(0);
+    }
+    if (!args.lane || !isSafeLaneId(args.lane)) {
+      process.stderr.write("[emit-loop-event] ERROR: --lane is required and must be safe\n");
+      process.exit(0);
+    }
+    if (typeof args.round !== "number" || !Number.isInteger(args.round) || args.round < 1) {
+      process.stderr.write("[emit-loop-event] ERROR: --round must be a positive integer\n");
+      process.exit(0);
+    }
+    if (args.event === "loop_round_start") {
+      if (typeof args.cap !== "number" || !Number.isInteger(args.cap) || args.cap < 1) {
+        process.stderr.write(
+          "[emit-loop-event] ERROR: --cap must be a positive integer for loop_round_start\n"
+        );
+        process.exit(0);
+      }
+      event = {
+        ts,
+        event: "loop_round_start",
+        run_id: runId,
+        lane_id: args.lane,
+        loop_layer: args.layer,
+        round_number: args.round,
+        cap: args.cap
+      };
+    } else {
+      if (!args.terminated || !VALID_TERMINATED.has(args.terminated)) {
+        process.stderr.write(
+          `[emit-loop-event] ERROR: --terminated must be one of: ${[...VALID_TERMINATED].join(", ")}
+`
+        );
+        process.exit(0);
+      }
+      event = {
+        ts,
+        event: "loop_round_end",
+        run_id: runId,
+        lane_id: args.lane,
+        loop_layer: args.layer,
+        round_number: args.round,
+        terminated: args.terminated,
+        terminator: args.terminator ?? ""
+      };
+    }
+  } else {
+    if (!args.gate) {
+      process.stderr.write("[emit-loop-event] ERROR: --gate is required for codex_review_round\n");
+      process.exit(0);
+    }
+    if (typeof args.round !== "number" || !Number.isInteger(args.round) || args.round < 1) {
+      process.stderr.write("[emit-loop-event] ERROR: --round must be a positive integer\n");
+      process.exit(0);
+    }
+    event = {
+      ts,
+      event: "codex_review_round",
+      run_id: runId,
+      gate: args.gate,
+      round_number: args.round,
+      terminated_by_satisfied: args.terminated === "satisfied" || args.terminated === "true"
+    };
+  }
+  try {
+    appendEvent(path10.join(cwd, ".guild", "runs", runId), event);
+  } catch (err) {
+    process.stderr.write(
+      `[emit-loop-event] ERROR: could not write event: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
+}
+var fs8, path10, VALID_EVENTS, VALID_LAYERS, VALID_TERMINATED;
+var init_emit_loop_event = __esm({
+  "../src/modules/lifecycle/workflows/emit-loop-event.ts"() {
+    fs8 = __toESM(require("fs"));
+    path10 = __toESM(require("path"));
+    init_event_log();
+    init_state();
+    VALID_EVENTS = /* @__PURE__ */ new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
+    VALID_LAYERS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review"]);
+    VALID_TERMINATED = /* @__PURE__ */ new Set([
+      "satisfied",
+      "malformed_termination",
+      "cap_hit",
+      "escalation",
+      "error"
+    ]);
+    if (require.main === module && new RegExp("[\\\\/]emit-loop-event\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runEmitLoopEventCli();
+    }
+  }
+});
+
+// ../src/modules/lifecycle/workflows/run-state.ts
+function runStatePath(runDir2) {
+  return path11.join(runDir2, "run-state.json");
+}
+function loadRunState(runDir2) {
+  let raw;
+  try {
+    raw = fs9.readFileSync(runStatePath(runDir2), "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed) || parsed["schema_version"] !== RUN_STATE_SCHEMA_VERSION) {
+    return null;
+  }
+  return parsed;
+}
+function writeRunStateAtomic(runDir2, state) {
+  fs9.mkdirSync(runDir2, { recursive: true });
+  const finalPath = runStatePath(runDir2);
+  const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  fs9.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
+  try {
+    fs9.renameSync(tmpPath, finalPath);
+  } catch (err) {
+    try {
+      fs9.unlinkSync(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
+}
+function newCheckpoint(init2, now) {
+  return {
+    schema_version: RUN_STATE_SCHEMA_VERSION,
+    run_id: init2.runId,
+    plan_slug: init2.planSlug ?? init2.runId,
+    program_id: init2.programId ?? null,
+    wave_index: init2.waveIndex ?? 0,
+    lanes: {},
+    last_checkpoint_at: now
+  };
+}
+function upsertLane(runDir, init, laneId, patch) {
+  if (patch.host?.independence === "strong") {
+    const capability = eval("require")("../../capability");
+    capability.assertPersistableIndependence(
+      runDir,
+      patch.host?.independence,
+      `run-state lane "${laneId}"`,
+      {
+        lane_id: laneId,
+        producer_ref: patch.host?.independence_ref?.producer_ref,
+        reviewer_ref: patch.host?.independence_ref?.reviewer_ref
+      }
+    );
+  }
+  return withStableLock(runDir, () => {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const state = loadRunState(runDir) ?? newCheckpoint(init, now);
+    const prev = state.lanes[laneId];
+    const merged = {
+      status: patch.status ?? prev?.status ?? "pending",
+      attempt: patch.attempt ?? prev?.attempt ?? 1,
+      depends_on: patch.depends_on ?? prev?.depends_on ?? [],
+      receipt_ref: patch.receipt_ref !== void 0 ? patch.receipt_ref : prev?.receipt_ref ?? null,
+      updated_at: now
+    };
+    const tier = patch.tier ?? prev?.tier;
+    if (tier !== void 0) merged.tier = tier;
+    const host = patch.host ?? prev?.host;
+    if (host !== void 0) merged.host = host;
+    state.lanes[laneId] = merged;
+    state.last_checkpoint_at = now;
+    writeRunStateAtomic(runDir, state);
+    return state;
+  });
+}
+function markLaneInProgress(runDir2, init2, laneId2, opts = {}) {
+  return upsertLane(runDir2, init2, laneId2, {
+    status: "in_progress",
+    tier: opts.tier,
+    attempt: opts.attempt,
+    depends_on: opts.depends_on
+  });
+}
+function laneResumeCheckpointPath(runDir2, laneId2) {
+  return path11.join(runDir2, "lanes", laneId2, "resume.json");
+}
+function readResumeEnabled(cwd) {
+  const settingsPath = path11.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
+  try {
+    const raw = fs9.readFileSync(settingsPath, "utf8");
+    const parsed = JSON.parse(raw);
+    const defs = parsed["defaults"];
+    if (typeof defs === "object" && defs !== null && !Array.isArray(defs)) {
+      const resume = defs["resume"];
+      if (typeof resume === "object" && resume !== null && !Array.isArray(resume)) {
+        const enabled = resume["enabled"];
+        if (typeof enabled === "boolean") return enabled;
+      }
+    }
+  } catch {
+  }
+  return true;
+}
+function loadLaneResumeCheckpoint(runDir2, laneId2) {
+  try {
+    const raw = fs9.readFileSync(laneResumeCheckpointPath(runDir2, laneId2), "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed?.schema_version !== LANE_RESUME_SCHEMA_VERSION) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+function markLaneDead(runDir2, init2, laneId2, signal, cwd) {
+  const state = upsertLane(runDir2, init2, laneId2, {
+    status: "dead",
+    attempt: signal.attempts
+  });
+  if (readResumeEnabled(cwd)) {
+    const checkpoint = {
+      schema_version: LANE_RESUME_SCHEMA_VERSION,
+      lane_id: laneId2,
+      run_id: init2.runId,
+      attempts: signal.attempts,
+      last_attempt_at: signal.lastAttemptAt,
+      resumable_at: (/* @__PURE__ */ new Date()).toISOString(),
+      ...typeof signal.lastError === "string" ? { last_error: signal.lastError } : {}
+    };
+    const checkpointPath = laneResumeCheckpointPath(runDir2, laneId2);
+    fs9.mkdirSync(path11.dirname(checkpointPath), { recursive: true });
+    fs9.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2) + "\n", "utf8");
+  }
+  return state;
+}
+var fs9, path11, RUN_STATE_SCHEMA_VERSION, LANE_RESUME_SCHEMA_VERSION;
+var init_run_state = __esm({
+  "../src/modules/lifecycle/workflows/run-state.ts"() {
+    fs9 = __toESM(require("node:fs"));
+    path11 = __toESM(require("node:path"));
+    init_stable_lock();
+    init_state();
+    RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
+    LANE_RESUME_SCHEMA_VERSION = "guild.lane_resume.v1";
+  }
+});
+
+// ../src/modules/lifecycle/workflows/mark-lane-dead.ts
+function parseMarkLaneDeadArgs(argv) {
+  const positionals = [];
+  let attempts;
+  let lastError;
+  let runId;
+  let planSlug;
+  let programId;
+  let waveIndex;
+  let cwd;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--attempts" && argv[i + 1] !== void 0) {
+      attempts = Number(argv[++i]);
+    } else if (arg.startsWith("--attempts=")) {
+      attempts = Number(arg.slice("--attempts=".length));
+    } else if (arg === "--last-error" && argv[i + 1] !== void 0) {
+      lastError = argv[++i];
+    } else if (arg.startsWith("--last-error=")) {
+      lastError = arg.slice("--last-error=".length);
+    } else if (arg === "--run-id" && argv[i + 1] !== void 0) {
+      runId = argv[++i];
+    } else if (arg.startsWith("--run-id=")) {
+      runId = arg.slice("--run-id=".length);
+    } else if (arg === "--plan-slug" && argv[i + 1] !== void 0) {
+      planSlug = argv[++i];
+    } else if (arg.startsWith("--plan-slug=")) {
+      planSlug = arg.slice("--plan-slug=".length);
+    } else if (arg === "--program-id" && argv[i + 1] !== void 0) {
+      programId = argv[++i];
+    } else if (arg.startsWith("--program-id=")) {
+      programId = arg.slice("--program-id=".length);
+    } else if (arg === "--wave-index" && argv[i + 1] !== void 0) {
+      waveIndex = Number(argv[++i]);
+    } else if (arg.startsWith("--wave-index=")) {
+      waveIndex = Number(arg.slice("--wave-index=".length));
+    } else if (arg === "--cwd" && argv[i + 1] !== void 0) {
+      cwd = argv[++i];
+    } else if (arg.startsWith("--cwd=")) {
+      cwd = arg.slice("--cwd=".length);
+    } else if (!arg.startsWith("--")) {
+      positionals.push(arg);
+    }
+  }
+  const [runDir2, laneId2] = positionals;
+  if (!runDir2 || !laneId2) {
+    return {
+      error: "usage: mark-lane-dead.ts <runDir> <laneId> --attempts <n> [--last-error <s>] [--run-id <s>] [--plan-slug <s>] [--program-id <s>] [--wave-index <n>] [--cwd <p>]"
+    };
+  }
+  if (attempts === void 0 || !Number.isFinite(attempts) || attempts < 1) {
+    return { error: `--attempts <n> is required and must be an integer \u2265 1 (got ${argv.join(" ")})` };
+  }
+  return {
+    runDir: runDir2,
+    laneId: laneId2,
+    attempts: Math.floor(attempts),
+    lastError,
+    runId,
+    planSlug,
+    programId,
+    waveIndex: waveIndex !== void 0 && Number.isFinite(waveIndex) ? Math.floor(waveIndex) : void 0,
+    cwd
+  };
+}
+function repoRootFromRunDir(runDir2) {
+  return path12.resolve(runDir2, "..", "..", "..");
+}
+function markLaneDeadFromArgs(args) {
+  const cwd = args.cwd ?? repoRootFromRunDir(args.runDir);
+  const runId = args.runId ?? path12.basename(args.runDir);
+  const init2 = {
+    runId,
+    planSlug: args.planSlug,
+    programId: args.programId ?? null,
+    waveIndex: args.waveIndex
+  };
+  const signal = {
+    attempts: args.attempts,
+    lastAttemptAt: (/* @__PURE__ */ new Date()).toISOString(),
+    lastError: args.lastError
+  };
+  try {
+    markLaneDead(args.runDir, init2, args.laneId, signal, cwd);
+    return 0;
+  } catch (e) {
+    process.stderr.write(`[mark-lane-dead] ERROR: ${e.message}
+`);
+    return 1;
+  }
+}
+function runMarkLaneDeadCli() {
+  const parsed = parseMarkLaneDeadArgs(process.argv.slice(2));
+  if ("error" in parsed) {
+    process.stderr.write(`[mark-lane-dead] ${parsed.error}
+`);
+    process.exit(1);
+  }
+  const code = markLaneDeadFromArgs(parsed);
+  if (code === 0) {
+    process.stdout.write(
+      `[mark-lane-dead] lane "${parsed.laneId}" marked dead (attempts=${parsed.attempts}) in ${parsed.runDir}
+`
+    );
+  }
+  process.exit(code);
+}
+var path12;
+var init_mark_lane_dead = __esm({
+  "../src/modules/lifecycle/workflows/mark-lane-dead.ts"() {
+    path12 = __toESM(require("path"));
+    init_run_state();
+    if (require.main === module && new RegExp("[\\\\/]mark-lane-dead\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runMarkLaneDeadCli();
+    }
+  }
+});
+
+// ../src/modules/lifecycle/workflows/resume-lanes.ts
+function parseResumeLanesArgs(argv) {
+  const positionals = [];
+  let json = false;
+  let cwd;
+  let slug;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--json") json = true;
+    else if (arg === "--cwd" && argv[i + 1] !== void 0) cwd = argv[++i];
+    else if (arg.startsWith("--cwd=")) cwd = arg.slice("--cwd=".length);
+    else if (arg === "--slug" && argv[i + 1] !== void 0) slug = argv[++i];
+    else if (arg.startsWith("--slug=")) slug = arg.slice("--slug=".length);
+    else if (!arg.startsWith("--")) positionals.push(arg);
+  }
+  const [runDir2] = positionals;
+  if (!runDir2) {
+    return { error: "usage: resume-lanes.ts <runDir> [--json] [--cwd <repo-root>] [--slug <slug>]" };
+  }
+  return { runDir: runDir2, json, cwd, slug };
+}
+function repoRootFromRunDir2(runDir2) {
+  return path13.resolve(runDir2, "..", "..", "..");
+}
+function scanResumableLanes(runDir2, cwd, slug) {
+  const repoRoot = cwd ?? repoRootFromRunDir2(runDir2);
+  if (!readResumeEnabled(repoRoot)) {
+    return [];
+  }
+  const lanesDir = path13.join(runDir2, "lanes");
+  let entries;
+  try {
+    entries = fs10.readdirSync(lanesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const runState = loadRunState(runDir2);
+  const planSlug = slug ?? runState?.plan_slug ?? null;
+  const planTaskIds = planSlug ? readPlanTaskIdSet(repoRoot, planSlug) : /* @__PURE__ */ new Set();
+  const validateAgainstPlan = planTaskIds.size > 0;
+  const omittedOrphans = [];
+  const out = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const laneId2 = entry.name;
+    const cp = loadLaneResumeCheckpoint(runDir2, laneId2);
+    if (!cp) continue;
+    if (validateAgainstPlan && !planTaskIds.has(cp.lane_id)) {
+      omittedOrphans.push(cp.lane_id);
+      continue;
+    }
+    const tier = runState?.lanes?.[laneId2]?.tier;
+    out.push(tier !== void 0 ? { ...cp, tier } : { ...cp });
+  }
+  if (omittedOrphans.length > 0) {
+    process.stderr.write(
+      `[resume-lanes] WARN: omitted ${omittedOrphans.length} non-resumable checkpoint(s) whose lane_id is not a plan task-id (orphan/fallback/name-keyed): ${omittedOrphans.join(", ")} \u2014 these cannot be auto-mapped to a plan lane (plan slug: ${planSlug}).
+`
+    );
+  }
+  out.sort((a, b) => a.lane_id.localeCompare(b.lane_id));
+  return out;
+}
+function renderHuman(runDir2, lanes) {
+  if (lanes.length === 0) {
+    return `[resume-lanes] no resumable dead lanes in ${runDir2}
+`;
+  }
+  const rows = [
+    `[resume-lanes] ${lanes.length} resumable dead lane(s) in ${runDir2}:`,
+    `  ${"LANE".padEnd(28)} ${"TIER".padEnd(9)} ${"ATTEMPTS".padEnd(9)} LAST_ERROR`,
+    `  ${"\u2500".repeat(28)} ${"\u2500".repeat(9)} ${"\u2500".repeat(9)} ${"\u2500".repeat(40)}`
+  ];
+  for (const c of lanes) {
+    const err = (c.last_error ?? "").slice(0, 60).replace(/\n/g, " ");
+    rows.push(
+      `  ${c.lane_id.padEnd(28)} ${(c.tier ?? "\u2014").padEnd(9)} ${String(c.attempts).padEnd(9)} ${err}`
+    );
+  }
+  return rows.join("\n") + "\n";
+}
+function runResumeLanesCli() {
+  const parsed = parseResumeLanesArgs(process.argv.slice(2));
+  if ("error" in parsed) {
+    process.stderr.write(`[resume-lanes] ${parsed.error}
+`);
+    process.exit(1);
+  }
+  const lanes = scanResumableLanes(parsed.runDir, parsed.cwd, parsed.slug);
+  if (parsed.json) {
+    process.stdout.write(JSON.stringify(lanes, null, 2) + "\n");
+  } else {
+    process.stdout.write(renderHuman(parsed.runDir, lanes));
+  }
+  process.exit(0);
+}
+var fs10, path13;
+var init_resume_lanes = __esm({
+  "../src/modules/lifecycle/workflows/resume-lanes.ts"() {
+    fs10 = __toESM(require("fs"));
+    path13 = __toESM(require("path"));
+    init_run_state();
+    init_teams();
+    if (require.main === module && new RegExp("[\\\\/]resume-lanes\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runResumeLanesCli();
+    }
+  }
+});
+
+// ../src/modules/lifecycle/workflows/retry-lane.ts
+var init_retry_lane = __esm({
+  "../src/modules/lifecycle/workflows/retry-lane.ts"() {
+    init_config2();
+  }
+});
+
+// ../src/modules/lifecycle/workflows/write-run-manifest.ts
+function manifestPathFor(cwd, slug) {
+  return path14.join(cwd, ".guild", "programs", slug, "manifest.json");
+}
+function readRunManifest(cwd, slug) {
+  try {
+    const raw = fs11.readFileSync(manifestPathFor(cwd, slug), "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+function computeCurrentWave(waves) {
+  if (waves.length === 0) return null;
+  const sorted = [...waves].sort((a, b) => a.wave_index - b.wave_index);
+  const pending = sorted.find((w) => w.status !== "completed");
+  return pending ? pending.wave_index : sorted[sorted.length - 1].wave_index;
+}
+function writeRunManifest(cwd, manifest) {
+  manifest.waves.sort((a, b) => a.wave_index - b.wave_index);
+  manifest.current_wave = computeCurrentWave(manifest.waves);
+  const out = manifestPathFor(cwd, manifest.slug);
+  atomicWrite(out, JSON.stringify(manifest, null, 2) + "\n");
+  return out;
+}
+function initRunManifest(cwd, slug, opts = {}) {
+  const existing = readRunManifest(cwd, slug);
+  if (existing) return existing;
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const manifest = {
+    schema_version: "guild.run_manifest.v1",
+    slug,
+    title: opts.title ?? null,
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    current_wave: null,
+    waves: []
+  };
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function upsertWave(cwd, slug, patch2) {
+  const manifest = readRunManifest(cwd, slug) ?? initRunManifest(cwd, slug);
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  let wave = manifest.waves.find((w) => w.wave_index === patch2.wave_index);
+  if (!wave) {
+    wave = {
+      wave_index: patch2.wave_index,
+      name: patch2.name ?? `wave-${patch2.wave_index}`,
+      status: patch2.status ?? "pending",
+      run_id: patch2.run_id ?? null,
+      started_at: patch2.started_at ?? null,
+      completed_at: patch2.completed_at ?? null,
+      handoff_summary: patch2.handoff_summary ?? null
+    };
+    manifest.waves.push(wave);
+  } else {
+    if (patch2.name !== void 0) wave.name = patch2.name;
+    if (patch2.status !== void 0) wave.status = patch2.status;
+    if (patch2.run_id !== void 0) wave.run_id = patch2.run_id;
+    if (patch2.started_at !== void 0) wave.started_at = patch2.started_at;
+    if (patch2.completed_at !== void 0) wave.completed_at = patch2.completed_at;
+    if (patch2.handoff_summary !== void 0) wave.handoff_summary = patch2.handoff_summary;
+  }
+  if (wave.status === "active" && wave.started_at === null && patch2.started_at === void 0) {
+    wave.started_at = now;
+  }
+  if ((wave.status === "completed" || wave.status === "failed") && wave.completed_at === null && patch2.completed_at === void 0) {
+    wave.completed_at = now;
+  }
+  manifest.updated_at = now;
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function setProgramStatus(cwd, slug, status) {
+  const manifest = readRunManifest(cwd, slug) ?? initRunManifest(cwd, slug);
+  manifest.status = status;
+  manifest.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function parseArgs2(argv) {
+  const out = {
+    cwd: process.env["GUILD_CWD"] ?? process.cwd(),
+    slug: null,
+    init: false,
+    show: false
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--cwd" && argv[i + 1]) out.cwd = argv[++i];
+    else if (a === "--slug" && argv[i + 1]) out.slug = argv[++i];
+    else if (a === "--init") out.init = true;
+    else if (a === "--title" && argv[i + 1]) out.title = argv[++i];
+    else if (a === "--wave" && argv[i + 1]) {
+      const n = Number.parseInt(argv[++i], 10);
+      if (Number.isFinite(n)) out.wave = n;
+    } else if (a === "--wave-name" && argv[i + 1]) out.waveName = argv[++i];
+    else if (a === "--wave-status" && argv[i + 1]) {
+      const v = argv[++i];
+      if (WAVE_STATUSES.has(v)) out.waveStatus = v;
+    } else if (a === "--run-id" && argv[i + 1]) out.runId = argv[++i];
+    else if (a === "--handoff-summary" && argv[i + 1]) out.handoffSummary = argv[++i];
+    else if (a === "--status" && argv[i + 1]) {
+      const v = argv[++i];
+      if (PROGRAM_STATUSES.has(v)) out.status = v;
+    } else if (a === "--show") out.show = true;
+  }
+  return out;
+}
+function runWriteRunManifestCli(argv = process.argv.slice(2)) {
+  const args = parseArgs2(argv);
+  if (!args.slug) {
+    process.stderr.write("[write-run-manifest] ERROR: --slug <slug> is required.\n");
+    process.exit(1);
+  }
+  if (!fs11.existsSync(args.cwd) || !fs11.statSync(args.cwd).isDirectory()) {
+    process.stderr.write(`[write-run-manifest] ERROR: --cwd "${args.cwd}" is not a directory
+`);
+    process.exit(1);
+  }
+  try {
+    let manifest = null;
+    if (args.init) {
+      manifest = initRunManifest(args.cwd, args.slug, { title: args.title });
+    }
+    if (args.wave !== void 0) {
+      manifest = upsertWave(args.cwd, args.slug, {
+        wave_index: args.wave,
+        name: args.waveName,
+        status: args.waveStatus,
+        run_id: args.runId,
+        handoff_summary: args.handoffSummary
+      });
+    }
+    if (args.status !== void 0) {
+      manifest = setProgramStatus(args.cwd, args.slug, args.status);
+    }
+    if (!args.init && args.wave === void 0 && args.status === void 0) {
+      manifest = readRunManifest(args.cwd, args.slug);
+      if (!manifest) {
+        process.stderr.write(
+          `[write-run-manifest] ERROR: no manifest for slug "${args.slug}" (pass --init to create one).
+`
+        );
+        process.exit(1);
+      }
+    }
+    if (args.show) {
+      process.stdout.write(JSON.stringify(manifest, null, 2) + "\n");
+    } else {
+      process.stdout.write(manifestPathFor(args.cwd, args.slug) + "\n");
+    }
+  } catch (e) {
+    process.stderr.write(`[write-run-manifest] ERROR: ${e.message}
+`);
+    process.exit(2);
+  }
+}
+var fs11, path14, WAVE_STATUSES, PROGRAM_STATUSES;
+var init_write_run_manifest = __esm({
+  "../src/modules/lifecycle/workflows/write-run-manifest.ts"() {
+    fs11 = __toESM(require("fs"));
+    path14 = __toESM(require("path"));
+    init_state();
+    WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
+    PROGRAM_STATUSES = /* @__PURE__ */ new Set(["active", "completed", "paused", "aborted"]);
+    if (require.main === module && new RegExp("[\\\\/]write-run-manifest\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runWriteRunManifestCli();
+    }
+  }
+});
+
+// ../src/modules/lifecycle/workflows/run-manifest-wiring.ts
+function validateRunManifest(raw) {
+  const errors = [];
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { valid: false, errors: ["manifest must be a non-null object"] };
+  }
+  const obj = raw;
+  if (obj["schema_version"] !== "guild.run_manifest.v1") {
+    errors.push(
+      `schema_version must be "guild.run_manifest.v1"; got ${JSON.stringify(obj["schema_version"])}`
+    );
+  }
+  for (const k of MANIFEST_REQUIRED_KEYS) {
+    if (k === "schema_version") continue;
+    if (!(k in obj)) {
+      errors.push(`missing required key: ${k}`);
+    }
+  }
+  if ("status" in obj) {
+    const s = obj["status"];
+    if (!PROGRAM_STATUSES2.includes(s)) {
+      errors.push(
+        `status must be one of ${PROGRAM_STATUSES2.join("|")}; got ${JSON.stringify(s)}`
+      );
+    }
+  }
+  if ("current_wave" in obj) {
+    const cw = obj["current_wave"];
+    if (cw !== null && typeof cw !== "number") {
+      errors.push(`current_wave must be a number or null; got ${JSON.stringify(cw)}`);
+    }
+  }
+  if ("waves" in obj) {
+    if (!Array.isArray(obj["waves"])) {
+      errors.push("waves must be an array");
+    } else {
+      const waves = obj["waves"];
+      waves.forEach((w, i) => {
+        if (w === null || typeof w !== "object" || Array.isArray(w)) {
+          errors.push(`waves[${i}] must be an object`);
+          return;
+        }
+        const wObj = w;
+        for (const k of WAVE_REQUIRED_KEYS) {
+          if (!(k in wObj)) {
+            errors.push(`waves[${i}] missing required key: ${k}`);
+          }
+        }
+        if ("wave_index" in wObj) {
+          const wi = wObj["wave_index"];
+          if (typeof wi !== "number" || !Number.isInteger(wi) || wi < 0) {
+            errors.push(
+              `waves[${i}].wave_index must be a non-negative integer; got ${JSON.stringify(wi)}`
+            );
+          }
+        }
+        if ("status" in wObj) {
+          const ws = wObj["status"];
+          const allWaveStatuses = [...WAVE_STATUSES2, "active", "pending"];
+          if (!allWaveStatuses.includes(ws)) {
+            errors.push(
+              `waves[${i}].status must be one of ${allWaveStatuses.join("|")}; got ${JSON.stringify(ws)}`
+            );
+          }
+        }
+      });
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+function wireRunManifest(opts) {
+  const { cwd, slug, now, title, wave, programStatus } = opts;
+  let manifest = readRunManifest(cwd, slug);
+  if (!manifest) {
+    manifest = _buildInitialManifest(slug, title ?? null, now);
+    writeRunManifest(cwd, manifest);
+  }
+  if (wave !== void 0) {
+    manifest = _upsertWaveWithNow(cwd, slug, wave, now);
+  }
+  if (programStatus !== void 0) {
+    manifest = _setProgramStatusWithNow(cwd, slug, programStatus, now);
+  }
+  const onDisk = readRunManifest(cwd, slug);
+  if (!onDisk) {
+    throw new Error(
+      `[run-manifest-wiring] wireRunManifest: manifest not found on disk after write (cwd=${cwd}, slug=${slug})`
+    );
+  }
+  const manifestPath = manifestPathFor(cwd, slug);
+  const validation = validateRunManifest(onDisk);
+  return { manifest: onDisk, manifestPath, validation };
+}
+function _buildInitialManifest(slug, title, now) {
+  return {
+    schema_version: "guild.run_manifest.v1",
+    slug,
+    title,
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    current_wave: null,
+    waves: []
+  };
+}
+function _upsertWaveWithNow(cwd, slug, wave, now) {
+  const manifest = upsertWave(cwd, slug, wave);
+  manifest.updated_at = now;
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function _setProgramStatusWithNow(cwd, slug, status, now) {
+  const manifest = setProgramStatus(cwd, slug, status);
+  manifest.updated_at = now;
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function runRunManifestWiringCli(args = process.argv.slice(2)) {
+  function getArg(flag) {
+    const i = args.indexOf(flag);
+    return i >= 0 ? args[i + 1] : void 0;
+  }
+  const cwd = getArg("--cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+  const slug = getArg("--slug");
+  const now = getArg("--now") ?? (/* @__PURE__ */ new Date()).toISOString();
+  const title = getArg("--title");
+  const waveIndexRaw = getArg("--wave");
+  const waveStatus = getArg("--wave-status");
+  const runId = getArg("--run-id");
+  const handoffSummary = getArg("--handoff-summary");
+  const programStatus = getArg("--status");
+  if (!slug) {
+    process.stderr.write("[run-manifest-wiring] ERROR: --slug <slug> is required.\n");
+    process.exit(1);
+  }
+  const wave = waveIndexRaw !== void 0 ? {
+    wave_index: parseInt(waveIndexRaw, 10),
+    status: waveStatus,
+    run_id: runId ?? null,
+    handoff_summary: handoffSummary ?? null
+  } : void 0;
+  try {
+    const result = wireRunManifest({
+      cwd,
+      slug,
+      title,
+      now,
+      wave,
+      programStatus
+    });
+    if (!result.validation.valid) {
+      process.stderr.write(
+        `[run-manifest-wiring] WARN: validation errors after write:
+` + result.validation.errors.map((e) => `  - ${e}`).join("\n") + "\n"
+      );
+    }
+    process.stdout.write(result.manifestPath + "\n");
+  } catch (e) {
+    process.stderr.write(`[run-manifest-wiring] ERROR: ${e.message}
+`);
+    process.exit(2);
+  }
+}
+var PROGRAM_STATUSES2, WAVE_STATUSES2, MANIFEST_REQUIRED_KEYS, WAVE_REQUIRED_KEYS;
+var init_run_manifest_wiring = __esm({
+  "../src/modules/lifecycle/workflows/run-manifest-wiring.ts"() {
+    init_write_run_manifest();
+    PROGRAM_STATUSES2 = Object.freeze(["active", "completed", "paused", "aborted"]);
+    WAVE_STATUSES2 = Object.freeze(["pending", "active", "completed", "failed"]);
+    MANIFEST_REQUIRED_KEYS = Object.freeze([
+      "schema_version",
+      "slug",
+      "status",
+      "created_at",
+      "updated_at",
+      "current_wave",
+      "waves"
+    ]);
+    WAVE_REQUIRED_KEYS = Object.freeze([
+      "wave_index",
+      "status",
+      "run_id",
+      "started_at",
+      "completed_at"
+    ]);
+    if (require.main === module && new RegExp("[\\\\/]run-manifest-wiring\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runRunManifestWiringCli();
+    }
+  }
+});
+
+// ../src/modules/lifecycle/workflows/write-task-run.ts
+function taskRunPath(cwd, runId, taskId) {
+  return path15.join(cwd, ".guild", "runs", runId, "task-runs", `${taskId}.yaml`);
+}
+function writeTaskRun(cwd, runId, taskId, params) {
+  const {
+    initiativeId = null,
+    taskRunId = "trun-001",
+    specialist = "unknown",
+    objective = "",
+    contextBundle = "",
+    phase = "execute",
+    inputs = [],
+    expectedOutputs = [],
+    dependsOn = [],
+    permissions = {},
+    budget = {},
+    autonomyPolicy = "autonomous_after_plan_approval",
+    loopsApplicable = "none",
+    host = {}
+  } = params;
+  const capReqs = host.capabilityRequirements ?? {};
+  const eventsRef = `.guild/runs/${runId}/logs/v1.4-events.jsonl`;
+  const taskRun = {
+    schema_version: "guild.task_run.v1",
+    ids: {
+      initiative_id: initiativeId,
+      run_id: runId,
+      task_id: taskId,
+      task_run_id: taskRunId
+    },
+    specialist,
+    objective,
+    context_bundle: contextBundle,
+    inputs,
+    expected_outputs: expectedOutputs,
+    depends_on: dependsOn,
+    permissions: {
+      read: permissions.read ?? ["repo"],
+      write: permissions.write ?? ["assigned_worktree"],
+      network: permissions.network ?? "disabled_by_default",
+      shell: permissions.shell ?? "approval_required",
+      destructive: permissions.destructive ?? "approval_required"
+    },
+    budget: {
+      max_turns: budget.maxTurns ?? 20,
+      max_tokens: budget.maxTokens ?? 8e4
+    },
+    autonomy_policy: autonomyPolicy,
+    loops_applicable: loopsApplicable,
+    host: {
+      requested: host.requested ?? "any",
+      selected: null,
+      capability_requirements: {
+        needs_pr: capReqs.needsPr ?? false,
+        needs_parallel: capReqs.needsParallel ?? false,
+        needs_network: capReqs.needsNetwork ?? false,
+        isolation: capReqs.isolation ?? "worktree"
+      },
+      model_params: host.modelParams ?? null
+    },
+    trace: {
+      events_ref: eventsRef
+    }
+  };
+  const doc = { task_run: taskRun };
+  const outPath = taskRunPath(cwd, runId, taskId);
+  const yamlStr = loadYamlApi().dump(doc, {
+    indent: 2,
+    lineWidth: -1,
+    // no forced line wraps
+    quotingType: '"',
+    forceQuotes: false
+  });
+  atomicWrite(outPath, yamlStr);
+  try {
+    const _traceRunDir = path15.join(cwd, ".guild", "runs", runId);
+    const _traceTs = (/* @__PURE__ */ new Date()).toISOString();
+    const _traceBackend = "unknown";
+    emitTraceEvent(
+      makeDispatchEvent({
+        ts: _traceTs,
+        run_id: runId,
+        lane_id: taskId,
+        specialist,
+        phase,
+        task_id: taskId,
+        backend: _traceBackend,
+        backend_rung: 0,
+        // not yet determined at write-task-run time
+        dispatched_at: _traceTs
+      }),
+      _traceRunDir
+    );
+  } catch {
+  }
+  return outPath;
+}
+function parseArgs3(argv) {
+  let cwd = "";
+  let runId = "";
+  let taskId = "";
+  let taskRunId = "trun-001";
+  let specialist = "unknown";
+  let objective = "";
+  let contextBundle = "";
+  let initiativeId = null;
+  let phase = "execute";
+  let dependsOnRaw = "";
+  let autonomyPolicy = "autonomous_after_plan_approval";
+  let loopsApplicable = "none";
+  let maxTurns = 20;
+  let maxTokens = 8e4;
+  let hostRequested = "any";
+  let needsPr = false;
+  let needsParallel = false;
+  let needsNetwork = false;
+  let isolation = "worktree";
+  let modelParams = null;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    const next = argv[i + 1];
+    switch (a) {
+      case "--cwd":
+        cwd = next;
+        i++;
+        break;
+      case "--run-id":
+        runId = next;
+        i++;
+        break;
+      case "--task-id":
+        taskId = next;
+        i++;
+        break;
+      case "--task-run-id":
+        taskRunId = next;
+        i++;
+        break;
+      case "--specialist":
+        specialist = next;
+        i++;
+        break;
+      case "--objective":
+        objective = next;
+        i++;
+        break;
+      case "--context-bundle":
+        contextBundle = next;
+        i++;
+        break;
+      case "--initiative-id":
+        initiativeId = next;
+        i++;
+        break;
+      case "--phase":
+        phase = next;
+        i++;
+        break;
+      case "--depends-on":
+        dependsOnRaw = next;
+        i++;
+        break;
+      case "--autonomy-policy":
+        autonomyPolicy = next;
+        i++;
+        break;
+      case "--loops-applicable":
+        loopsApplicable = next;
+        i++;
+        break;
+      case "--host-requested":
+        hostRequested = next;
+        i++;
+        break;
+      case "--max-turns":
+        maxTurns = parseInt(next, 10);
+        i++;
+        break;
+      case "--max-tokens":
+        maxTokens = parseInt(next, 10);
+        i++;
+        break;
+      case "--needs-pr":
+        needsPr = true;
+        break;
+      case "--needs-parallel":
+        needsParallel = true;
+        break;
+      case "--needs-network":
+        needsNetwork = true;
+        break;
+      case "--isolation":
+        isolation = next;
+        i++;
+        break;
+      case "--model-params": {
+        try {
+          const parsed = JSON.parse(next);
+          if (parsed && typeof parsed.model === "string" && parsed.model.trim()) {
+            modelParams = parsed;
+          }
+        } catch {
+          return { error: "--model-params must be JSON with a non-empty model string" };
+        }
+        i++;
+        break;
+      }
+    }
+  }
+  if (!cwd) return { error: "--cwd is required" };
+  if (!runId) return { error: "--run-id is required" };
+  if (!taskId) return { error: "--task-id is required" };
+  const dependsOn = dependsOnRaw ? dependsOnRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  return {
+    cwd,
+    runId,
+    taskId,
+    params: {
+      initiativeId,
+      taskRunId,
+      specialist,
+      objective,
+      contextBundle,
+      phase,
+      dependsOn,
+      autonomyPolicy,
+      loopsApplicable,
+      budget: { maxTurns, maxTokens },
+      host: {
+        requested: hostRequested,
+        capabilityRequirements: { needsPr, needsParallel, needsNetwork, isolation },
+        modelParams
+      }
+    }
+  };
+}
+function runWriteTaskRunCli(argv = process.argv.slice(2)) {
+  const parsed = parseArgs3(argv);
+  if ("error" in parsed) {
+    process.stderr.write(`[write-task-run] ${parsed.error}
+`);
+    process.exit(1);
+  }
+  try {
+    const outPath = writeTaskRun(parsed.cwd, parsed.runId, parsed.taskId, parsed.params);
+    process.stdout.write(outPath + "\n");
+    process.exit(0);
+  } catch (err) {
+    process.stderr.write(`[write-task-run] Error: ${err}
+`);
+    process.exit(2);
+  }
+}
+var path15;
+var init_write_task_run = __esm({
+  "../src/modules/lifecycle/workflows/write-task-run.ts"() {
+    path15 = __toESM(require("path"));
+    init_telemetry();
+    init_kernel();
+    init_state();
+    if (require.main === module && new RegExp("[\\\\/]write-task-run\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runWriteTaskRunCli();
+    }
+  }
+});
+
+// ../src/modules/lifecycle/workflows/neutral-runtime-contracts.ts
+function neutralFreeze(value) {
+  const seen = /* @__PURE__ */ new Set();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof RegExp) {
+      if (!node.global && !node.sticky) Object.freeze(node);
+      return;
+    }
+    if (node instanceof Set || node instanceof Map) {
+      throw new TypeError(
+        "neutralFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership, and the neutral core cannot build a sealed facade. Pass a frozen array or a plain record instead (outside the core, use sealSet()/sealMap())."
+      );
+    }
+    Object.freeze(node);
+    for (const key of Object.keys(node)) {
+      walk(node[key]);
+    }
+  };
+  walk(value);
+  return value;
+}
+var NEUTRAL_LIFECYCLE_PHASES, NEUTRAL_DISPOSITIONS, NEUTRAL_OBSERVATION_STATES, NEUTRAL_OUTCOME_TYPES, NEUTRAL_EVENT_NAMES, NEUTRAL_SUPPORT_STATES, NEUTRAL_SUPPORT_STATUS_VALUES, NEUTRAL_SCENARIO_CATEGORIES, NEUTRAL_REASON_CODES, NEUTRAL_EVENT_COMPATIBILITY_KINDS, NEUTRAL_EVENT_COMPATIBILITY_RULES, NEUTRAL_SUPERSEDED_EVENT_NAMES_V1, NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2, NEUTRAL_NORMALIZED_EVENT_VOCABULARY;
+var init_neutral_runtime_contracts = __esm({
+  "../src/modules/lifecycle/workflows/neutral-runtime-contracts.ts"() {
+    NEUTRAL_LIFECYCLE_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
+    NEUTRAL_DISPOSITIONS = Object.freeze([
+      "succeeded",
+      "refused",
+      "unsupported",
+      "failed",
+      "degraded"
+    ]);
+    NEUTRAL_OBSERVATION_STATES = Object.freeze([
+      "checked_clean",
+      "not_applicable",
+      "not_observed",
+      "observation_failed"
+    ]);
+    NEUTRAL_OUTCOME_TYPES = Object.freeze([
+      "guild.lifecycle_outcome.v1",
+      "guild.normalized_event_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.capability_outcome.v1",
+      "guild.policy_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.reconciliation_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.version_compatibility_outcome.v1"
+    ]);
+    NEUTRAL_EVENT_NAMES = Object.freeze([
+      "session.start",
+      "prompt.submit",
+      "tool.before",
+      "tool.after",
+      "context.compact",
+      "task.dispatch",
+      "task.collect",
+      "run.resume",
+      "run.stop",
+      "package.render",
+      "package.install",
+      "package.activate",
+      "package.update",
+      "runtime.verify",
+      "receipt.append",
+      "receipt.reconcile",
+      "migration.shadow",
+      "migration.cutover",
+      "migration.rollback"
+    ]);
+    NEUTRAL_SUPPORT_STATES = Object.freeze([
+      "recognized",
+      "rendered",
+      "installed",
+      "activated",
+      "updated",
+      "conformant"
+    ]);
+    NEUTRAL_SUPPORT_STATUS_VALUES = Object.freeze([
+      "not_evaluated",
+      "unsupported",
+      "failed",
+      "satisfied"
+    ]);
+    NEUTRAL_SCENARIO_CATEGORIES = Object.freeze([
+      "lifecycle",
+      "normalized_event",
+      "support_state",
+      "unsupported_refusal",
+      "receipt_integrity",
+      "module_boundary",
+      "strangler_migration",
+      "version_drift"
+    ]);
+    NEUTRAL_REASON_CODES = Object.freeze([
+      // lifecycle + gate
+      "gate_unsatisfied",
+      "unknown_event",
+      "unknown_phase",
+      "unknown_observation_state",
+      "unknown_terminal_state",
+      "run_already_closed",
+      "capability_snapshot_mismatch",
+      "required_observation_missing",
+      "required_observation_failed",
+      "required_gate_outcome_missing",
+      // capability + policy
+      "capability_absent",
+      "authentication_failed",
+      "policy_denied",
+      "approval_required",
+      // admission (MH-02-R1-B01): the lifecycle path decides, it never trusts a verdict
+      "admission_context_missing",
+      // one-snapshot-per-run (MH-02-R2-B01): the snapshot a decision is EVALUATED
+      // against and the snapshot the run is BOUND to must be the same snapshot, or
+      // no outcome from that run can be attributed to a capability truth at all.
+      "admission_context_snapshot_mismatch",
+      "execution_failed",
+      // not-applicable rule binding (MH-02-R1-B02)
+      "not_applicable_rule_missing",
+      "not_applicable_rule_unknown",
+      "not_applicable_rule_mismatch",
+      // normalized-event vocabulary compatibility (MH-02-R1-B05)
+      "event_vocabulary_superseded",
+      "event_vocabulary_ambiguous",
+      // support + conformance
+      "support_precondition_unproven",
+      "support_operation_failed",
+      "scenario_evidence_incomplete",
+      "scenario_result_mismatch",
+      "scenario_registry_invalid",
+      // conformance evidence binding (MH-02-R1-B04)
+      "scenario_suite_version_mismatch",
+      "scenario_required_set_mismatch",
+      "scenario_results_unordered",
+      "scenario_receipt_reference_missing",
+      "scenario_runtime_binding_mismatch",
+      "scenario_evidence_stale",
+      // conformance evidence integrity (MH-02-R2-B03): nominal metadata is not
+      // evidence. Each code names exactly which forgery the decision caught.
+      "scenario_reason_code_unrecognized",
+      "scenario_receipt_reference_ambiguous",
+      "scenario_contract_version_unrecognized",
+      "scenario_runtime_version_unrecognized",
+      // source-bound conformance evidence (MH-02-R3-B02): a self-consistent bundle
+      // of caller-authored labels is not evidence of anything. Promotion requires an
+      // AUTHORITATIVE input the claimant does not author, identities the core
+      // RECOGNIZES rather than merely parses, and receipt references BOUND by a
+      // commitment to that authority instead of merely shaped like references. The
+      // commitment is a deterministic UNKEYED digest, NOT a cryptographic MAC — see
+      // `neutralReceiptReference`, which states that limit where the code is.
+      "scenario_evidence_authority_missing",
+      "scenario_identity_binding_mismatch",
+      "scenario_source_identity_unrecognized",
+      "scenario_host_identity_unrecognized",
+      "scenario_receipt_binding_unverified",
+      // journal-bound conformance evidence (MH-02-R4-B02): round 4's authority
+      // carried an identity, a journal NAME, and a numeric range — no entries. So the
+      // decision recomputed every commitment from the claimant's own package and two
+      // caller-authored objects agreeing promoted `conformant=true`. Promotion now
+      // requires a chain-linked, gap-free journal whose per-entry commitments are
+      // TRANSPORTED and compared against the package, a quorum of distinct recognized
+      // attestors over its root, and a claimant that is none of them.
+      "scenario_journal_chain_unverified",
+      "scenario_journal_attestation_insufficient",
+      "scenario_claimant_not_independent",
+      // independently anchored conformance authority (MH-02-R5-B01): rounds 3, 4 and
+      // 5 all bound the evidence to itself more tightly and all left the same hole —
+      // every value the decision compared was derivable from public data, so one
+      // party supplying the package, the journal, the commitments, the attestor
+      // names, and the authority still promoted. An attestation is now a SIGNATURE
+      // verified against a verification key pinned in this core, which is the one
+      // input a claimant cannot author. This code names a quorum that failed that
+      // verification, as distinct from one that was merely malformed.
+      "scenario_attestation_signature_unverified",
+      // core boundary
+      "boundary_forbidden_edge",
+      "boundary_unclassified_edge",
+      "boundary_membership_mismatch",
+      // import closure fails closed (MH-02-R2-B02): an edge whose destination
+      // cannot be RESOLVED, and a source whose lexing is ambiguous in a way that
+      // could hide an edge, are both "closure unproven" — never "closure proven".
+      "boundary_unresolved_edge",
+      "boundary_ambiguous_source",
+      // capability closure (MH-02-R3-B01): module edges are not the only way out of
+      // the core. A call the scan cannot reduce to a named destination, and a
+      // reference to an ambient binding the core neither declares nor imports, each
+      // reach code the closure argument never covered.
+      "boundary_indirect_callee",
+      "boundary_ambient_capability",
+      // capability PROVENANCE (MH-02-R4-B01): recognizing a call SHAPE is not
+      // recognizing a capability. Round 4 rejected `x["k"](…)` only when the `]` was
+      // immediately followed by the call parenthesis, so binding the same computed
+      // value to a local first — `const load = module["require"].bind(module)` — and
+      // calling the local passed with zero findings. Two codes close that: a REACH is
+      // the point where a capability enters the file (a computed access whose base is
+      // not a clean local or pure intrinsic, or a walk up the prototype chain), and an
+      // ALIAS is any later use of a value that flowed from one.
+      "boundary_capability_reach",
+      "boundary_capability_alias"
+    ]);
+    NEUTRAL_EVENT_COMPATIBILITY_KINDS = Object.freeze([
+      "unchanged",
+      "renamed",
+      "ambiguous_split"
+    ]);
+    NEUTRAL_EVENT_COMPATIBILITY_RULES = neutralFreeze([
+      { from: "session.start", to: "session.start", kind: "unchanged", candidates: [] },
+      { from: "prompt.submit", to: "prompt.submit", kind: "unchanged", candidates: [] },
+      { from: "context.compact", to: "context.compact", kind: "unchanged", candidates: [] },
+      { from: "session.resume", to: "run.resume", kind: "renamed", candidates: [] },
+      { from: "tool.pre", to: "tool.before", kind: "renamed", candidates: [] },
+      { from: "tool.post", to: "tool.after", kind: "renamed", candidates: [] },
+      { from: "session.stop", to: "run.stop", kind: "renamed", candidates: [] },
+      {
+        from: "task.transition",
+        to: null,
+        kind: "ambiguous_split",
+        candidates: ["task.dispatch", "task.collect"]
+      }
+    ]);
+    NEUTRAL_SUPERSEDED_EVENT_NAMES_V1 = Object.freeze([
+      "session.start",
+      "session.resume",
+      "prompt.submit",
+      "tool.pre",
+      "tool.post",
+      "context.compact",
+      "task.transition",
+      "session.stop"
+    ]);
+    NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2 = Object.freeze(NEUTRAL_EVENT_NAMES.filter(
+      (name) => !NEUTRAL_EVENT_COMPATIBILITY_RULES.some(
+        (rule) => rule.to === name || rule.candidates.indexOf(name) !== -1
+      )
+    ));
+    NEUTRAL_NORMALIZED_EVENT_VOCABULARY = neutralFreeze({
+      block_id: "guild.normalized_event_vocabulary.v1",
+      normative_version: "guild.normalized_event.v2",
+      reconciles: "MH-02-R1-B05",
+      vocabulary_owner: "host-neutral-core",
+      native_mapping_owner: "host-adapters",
+      transport_fact_owner: "execution-transports",
+      consumer: "host-neutral-core",
+      normative_event_names: [...NEUTRAL_EVENT_NAMES],
+      superseded_versions: [
+        {
+          version: "guild.normalized_event.v1",
+          status: "superseded",
+          superseded_by: "guild.normalized_event.v2",
+          event_types: [...NEUTRAL_SUPERSEDED_EVENT_NAMES_V1]
+        }
+      ],
+      compatibility: {
+        policy: "explicit_typed_mapping",
+        mapping_totality: "partial",
+        superseded_disposition: "refused",
+        superseded_reason_code: "event_vocabulary_superseded",
+        ambiguous_disposition: "refused",
+        ambiguous_reason_code: "event_vocabulary_ambiguous",
+        unmapped_disposition: "refused",
+        unmapped_reason_code: "unknown_event",
+        rules: NEUTRAL_EVENT_COMPATIBILITY_RULES.map((rule) => ({
+          from: rule.from,
+          to: rule.to,
+          kind: rule.kind,
+          candidates: [...rule.candidates]
+        })),
+        introduced_in_v2: [...NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2]
+      }
+    });
+  }
+});
+
+// ../src/modules/lifecycle/workflows/neutral-gate-policy.ts
+var init_neutral_gate_policy = __esm({
+  "../src/modules/lifecycle/workflows/neutral-gate-policy.ts"() {
+    init_neutral_runtime_contracts();
+  }
+});
+
+// ../src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts
+var NEUTRAL_RUN_STATUSES, NEUTRAL_TERMINAL_RUN_STATUSES;
+var init_neutral_lifecycle_machine = __esm({
+  "../src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts"() {
+    init_neutral_runtime_contracts();
+    init_neutral_gate_policy();
+    NEUTRAL_RUN_STATUSES = Object.freeze(["open", "completed", "aborted"]);
+    NEUTRAL_TERMINAL_RUN_STATUSES = Object.freeze(["completed", "aborted"]);
+  }
+});
+
+// ../src/modules/lifecycle/workflows/neutral-conformance-core.ts
+var NEUTRAL_CORE_WAVE_OWNER, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_CORE_SCENARIOS, NEUTRAL_UNEVALUATED_SUPPORT, NEUTRAL_SUPPORT_TRANSITIONS, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_RECEIPT_REF_PATTERN, NEUTRAL_RUNTIME_VERSION_PATTERN, NEUTRAL_RECOGNIZED_PLATFORMS, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_SOURCE_COMMIT_PATTERN, NEUTRAL_PACKAGE_HASH_PATTERN, NEUTRAL_ADAPTER_VERSION_PATTERN, NEUTRAL_RELEASE_ID_PATTERN, NEUTRAL_SEMVER_PATTERN, NEUTRAL_JOURNAL_ID_PATTERN, NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS, NEUTRAL_ATTESTATION_REF_PATTERN, NEUTRAL_ATTESTATION_SIGNATURE_PATTERN, NEUTRAL_COMMITMENT_PATTERN, NEUTRAL_CLAIMANT_ID_PATTERN, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_SHA256_HEX_PATTERN;
+var init_neutral_conformance_core = __esm({
+  "../src/modules/lifecycle/workflows/neutral-conformance-core.ts"() {
+    init_neutral_runtime_contracts();
+    NEUTRAL_CORE_WAVE_OWNER = neutralFreeze({
+      wave_id: "W1",
+      work_item_id: "MH-02",
+      key: "W1/MH-02"
+    });
+    NEUTRAL_EVIDENCE_PROFILES = neutralFreeze({
+      "E-LIFECYCLE": {
+        required_kinds: ["capability_snapshot", "normalized_event_log", "typed_outcome", "receipt_journal"],
+        required_bindings: [
+          "run_id",
+          "operation_id",
+          "scenario_id",
+          "host_id",
+          "host_version",
+          "runtime_version",
+          "contract_version"
+        ]
+      },
+      "E-REFUSAL": {
+        required_kinds: ["capability_snapshot", "typed_outcome", "receipt_journal"],
+        required_bindings: ["scenario_id", "operation_id", "reason_code", "host_id", "runtime_version"]
+      }
+    });
+    NEUTRAL_CORE_SCENARIOS = neutralFreeze([
+      {
+        stable_id: "MHRC-LIF-001",
+        category: "lifecycle",
+        title: "Equivalent phase entry produces equivalent lifecycle state",
+        preconditions: [
+          "two hosts expose the required phase-entry capability",
+          "both runs use byte-identical immutable capability snapshots",
+          "both runs start in the same lifecycle state"
+        ],
+        action_event: {
+          name: "prompt.submit",
+          input: {
+            semantic_intent: "enter_phase",
+            phase_matrix: ["init", "ideate", "plan", "build", "qa", "ops"]
+          }
+        },
+        expected_typed_outcome: {
+          type: "guild.lifecycle_outcome.v1",
+          disposition: "succeeded",
+          assertions: [
+            "host pairs reach the same semantic phase state",
+            "host pairs emit the same lifecycle decision code",
+            "host-native fields are excluded from equivalence comparison"
+          ]
+        },
+        evidence_requirements: [
+          {
+            profile: "E-LIFECYCLE",
+            assertions: [
+              "one event/outcome pair per host and phase",
+              "capability snapshot hash is constant within each run"
+            ]
+          }
+        ],
+        implementation_wave_owner: NEUTRAL_CORE_WAVE_OWNER
+      },
+      {
+        stable_id: "MHRC-LIF-002",
+        category: "lifecycle",
+        title: "Equivalent gate violation produces equivalent refusal",
+        preconditions: [
+          "two hosts support the normalized pre-tool event",
+          "the same policy and lifecycle state apply",
+          "the proposed operation violates the same gate"
+        ],
+        action_event: {
+          name: "tool.before",
+          input: { operation_class: "mutating", gate_condition: "unsatisfied" }
+        },
+        expected_typed_outcome: {
+          type: "guild.lifecycle_outcome.v1",
+          disposition: "refused",
+          assertions: [
+            "both hosts preserve the prior state",
+            "both hosts return the same refusal reason code",
+            "no tool side effect occurs"
+          ]
+        },
+        evidence_requirements: [
+          {
+            profile: "E-LIFECYCLE",
+            assertions: [
+              "pre-state and post-state hashes match",
+              "refusal receipt precedes any terminal run receipt"
+            ]
+          }
+        ],
+        implementation_wave_owner: NEUTRAL_CORE_WAVE_OWNER
+      },
+      {
+        stable_id: "MHRC-LIF-003",
+        category: "lifecycle",
+        title: "Compaction and resume preserve lifecycle identity",
+        preconditions: [
+          "an open run has durable state and receipts",
+          "the host supports compact or resume observation",
+          "no capability snapshot mutation is permitted"
+        ],
+        action_event: { name: "context.compact", input: { then: "run.resume" } },
+        expected_typed_outcome: {
+          type: "guild.lifecycle_outcome.v1",
+          disposition: "succeeded",
+          assertions: [
+            "run_id and capability snapshot hash are unchanged",
+            "resume continues from the last durable lifecycle state",
+            "already-applied transitions are not repeated"
+          ]
+        },
+        evidence_requirements: [
+          {
+            profile: "E-LIFECYCLE",
+            assertions: [
+              "pre-compact checkpoint links to post-resume event",
+              "receipt sequences remain monotonic"
+            ]
+          }
+        ],
+        implementation_wave_owner: NEUTRAL_CORE_WAVE_OWNER
+      },
+      {
+        stable_id: "MHRC-LIF-004",
+        category: "lifecycle",
+        title: "Run close requires equivalent terminal evidence",
+        preconditions: [
+          "two runs have equivalent normalized histories",
+          "all required gates have typed outcomes",
+          "receipt reconciliation is complete"
+        ],
+        action_event: { name: "run.stop", input: { requested_terminal_state: "completed" } },
+        expected_typed_outcome: {
+          type: "guild.lifecycle_outcome.v1",
+          disposition: "succeeded",
+          assertions: [
+            "both hosts reach the same terminal state",
+            "completion is refused if any required observation is missing or failed",
+            "terminal receipt is last in logical order"
+          ]
+        },
+        evidence_requirements: [
+          {
+            profile: "E-LIFECYCLE",
+            assertions: [
+              "gate-outcome set is complete",
+              "reconciliation checkpoint covers the terminal sequence"
+            ]
+          }
+        ],
+        implementation_wave_owner: NEUTRAL_CORE_WAVE_OWNER
+      },
+      {
+        stable_id: "MHRC-UNS-002",
+        category: "unsupported_refusal",
+        title: "Policy refusal is distinct from unsupported capability",
+        preconditions: [
+          "the capability exists",
+          "policy denies the requested operation",
+          "the caller has not supplied required approval"
+        ],
+        action_event: { name: "tool.before", input: { policy_decision: "deny" } },
+        expected_typed_outcome: {
+          type: "guild.policy_outcome.v1",
+          disposition: "refused",
+          assertions: [
+            "reason code identifies policy denial",
+            "capability remains supported",
+            "no operation side effect occurs"
+          ]
+        },
+        evidence_requirements: [
+          {
+            profile: "E-REFUSAL",
+            assertions: [
+              "policy version and decision inputs are bound",
+              "receipt distinguishes refused from unsupported"
+            ]
+          }
+        ],
+        implementation_wave_owner: NEUTRAL_CORE_WAVE_OWNER
+      }
+    ]);
+    NEUTRAL_UNEVALUATED_SUPPORT = neutralFreeze({
+      recognized: "not_evaluated",
+      rendered: "not_evaluated",
+      installed: "not_evaluated",
+      activated: "not_evaluated",
+      updated: "not_evaluated",
+      conformant: "not_evaluated"
+    });
+    NEUTRAL_SUPPORT_TRANSITIONS = neutralFreeze([
+      { operation: "render", requires: ["recognized:satisfied"], may_satisfy: "rendered", resets: [] },
+      { operation: "install", requires: ["rendered:satisfied"], may_satisfy: "installed", resets: [] },
+      { operation: "activate", requires: ["installed:satisfied"], may_satisfy: "activated", resets: [] },
+      {
+        operation: "update",
+        requires: ["installed:satisfied"],
+        may_satisfy: "updated",
+        // An update invalidates any prior activation and conformance proof: the bytes
+        // that were verified are no longer the bytes that are installed.
+        resets: ["activated", "conformant"]
+      },
+      { operation: "verify", requires: ["activated:satisfied"], may_satisfy: "conformant", resets: [] }
+    ]);
+    NEUTRAL_REQUIRED_CORE_SCENARIO_IDS = neutralFreeze(
+      NEUTRAL_CORE_SCENARIOS.map((scenario) => scenario.stable_id)
+    );
+    NEUTRAL_RECEIPT_REF_PATTERN = new RegExp(
+      "^guild\\.receipt_ref\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})#(0|[1-9][0-9]*)@(nec1:[0-9a-f]{16})$"
+    );
+    NEUTRAL_RUNTIME_VERSION_PATTERN = new RegExp(
+      "^guild-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+    );
+    NEUTRAL_RECOGNIZED_PLATFORMS = neutralFreeze([
+      "darwin-arm64",
+      "darwin-x64",
+      "linux-arm64",
+      "linux-x64",
+      "win32-x64"
+    ]);
+    NEUTRAL_RECOGNIZED_HOST_IDS = neutralFreeze([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity"
+    ]);
+    NEUTRAL_SOURCE_COMMIT_PATTERN = new RegExp("^[0-9a-f]{40}$");
+    NEUTRAL_PACKAGE_HASH_PATTERN = new RegExp("^sha256:[0-9a-f]{64}$");
+    NEUTRAL_ADAPTER_VERSION_PATTERN = new RegExp(
+      "^guild\\.host_adapter\\.v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    );
+    NEUTRAL_RELEASE_ID_PATTERN = new RegExp("^rel-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-z]{1,16}$");
+    NEUTRAL_SEMVER_PATTERN = new RegExp(
+      "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+    );
+    NEUTRAL_JOURNAL_ID_PATTERN = new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{2,}$");
+    NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS = Object.freeze(["fresh", "stale", "unknown"]);
+    NEUTRAL_ATTESTATION_MESSAGE_CHAINS = 64;
+    NEUTRAL_ATTESTATION_CHECKSUM_CHAINS = 3;
+    NEUTRAL_ATTESTATION_CHAINS = NEUTRAL_ATTESTATION_MESSAGE_CHAINS + NEUTRAL_ATTESTATION_CHECKSUM_CHAINS;
+    NEUTRAL_ATTESTATION_TREE_HEIGHT = 4;
+    NEUTRAL_ATTESTOR_TRUST_ROOT = neutralFreeze([
+      {
+        attestor_id: "guild.release-attestor",
+        verification_root: "2cd0a7a8986e79ec2cb25b5752d5a85a80d10c4d133d6590b91417bf976f3539"
+      },
+      {
+        attestor_id: "guild.host-conformance-witness",
+        verification_root: "584d8e28a2a5c109a2b892b627a3154fef9da46efc45eb79d042611bf09d09ef"
+      },
+      {
+        attestor_id: "guild.distribution-notary",
+        verification_root: "4dd9eb1f20a5194d38c6ac9cf308dac017ceebac0e85bcd7fbfa26fc43945f37"
+      }
+    ]);
+    NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS = neutralFreeze(
+      NEUTRAL_ATTESTOR_TRUST_ROOT.map((key) => key.attestor_id)
+    );
+    NEUTRAL_ATTESTATION_REF_PATTERN = new RegExp(
+      "^guild\\.journal_attestation\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})@(nad1:[0-9a-f]{64})$"
+    );
+    NEUTRAL_ATTESTATION_SIGNATURE_PATTERN = new RegExp(
+      `^nws1:([0-9a-f]{2}):([0-9a-f]{${NEUTRAL_ATTESTATION_CHAINS * 64}}):([0-9a-f]{${NEUTRAL_ATTESTATION_TREE_HEIGHT * 64}})$`
+    );
+    NEUTRAL_COMMITMENT_PATTERN = new RegExp("^nec1:[0-9a-f]{16}$");
+    NEUTRAL_CLAIMANT_ID_PATTERN = new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{2,}$");
+    NEUTRAL_EVIDENCE_IDENTITY_FIELDS = neutralFreeze([
+      "source_commit",
+      "package_hash",
+      "runtime_version",
+      "adapter_version",
+      "host_id",
+      "host_version",
+      "platform",
+      "contract_version",
+      "scenario_suite_id",
+      "scenario_suite_version",
+      "release_id"
+    ]);
+    NEUTRAL_SHA256_HEX_PATTERN = new RegExp("^[0-9a-f]{64}$");
+  }
+});
+
+// ../src/modules/lifecycle/workflows/neutral-core-boundary.ts
+var NEUTRAL_CORE_MEMBERS, NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS, DEPENDENCY_WORD, NEUTRAL_PURE_INTRINSIC_ROOTS, NEUTRAL_LANGUAGE_WORDS, NEUTRAL_PROTOTYPE_CHAIN_PROPERTIES, NEUTRAL_REFLECTION_METHOD_NAMES;
+var init_neutral_core_boundary = __esm({
+  "../src/modules/lifecycle/workflows/neutral-core-boundary.ts"() {
+    init_neutral_runtime_contracts();
+    NEUTRAL_CORE_MEMBERS = Object.freeze([
+      "neutral-runtime-contracts.ts",
+      "neutral-gate-policy.ts",
+      "neutral-lifecycle-machine.ts",
+      "neutral-conformance-core.ts",
+      "neutral-core-boundary.ts"
+    ]);
+    NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS = neutralFreeze([
+      {
+        id: "host_adapter",
+        boundary: "host-adapters",
+        pattern: new RegExp("(^|/)(host-runtime|host-adapter|host-adapters|[a-z0-9-]+-host-adapter)(/|$)")
+      },
+      {
+        id: "hook_implementation",
+        boundary: "compatibility-shims",
+        pattern: new RegExp("(^|/)hooks(/|$)")
+      },
+      {
+        id: "wrapper_or_launcher",
+        boundary: "execution-transports",
+        pattern: new RegExp("(launcher|wrapper|guild-run|agent-team|agent-bus)")
+      },
+      {
+        id: "execution_transport",
+        boundary: "execution-transports",
+        pattern: new RegExp("(pane-adapter|pane|tmux|remote-exec|process-exec|transport|dispatch)")
+      },
+      {
+        id: "benchmark_internals",
+        boundary: "benchmark-internals",
+        pattern: new RegExp("(^|/)(benchmark|benchmarks|evals)(/|$)")
+      },
+      {
+        id: "website_internals",
+        boundary: "website-internals",
+        pattern: new RegExp("(^|/)(website|site|docs-site)(/|$)")
+      },
+      {
+        id: "generated_mirror",
+        boundary: "generated-projections",
+        pattern: new RegExp("(^|/)(resources|dist)(/|$)")
+      },
+      {
+        id: "compatibility_shim",
+        boundary: "compatibility-shims",
+        pattern: new RegExp("(^|/)(scripts|shim|shims|compat)(/|$)")
+      },
+      {
+        id: "node_io_builtin",
+        boundary: "node-runtime",
+        pattern: new RegExp(
+          "^(node:)?(fs|path|os|child_process|crypto|net|http|https|process|worker_threads|readline|tty|zlib|stream|url|util|module|vm|dns|cluster)$"
+        )
+      }
+    ]);
+    DEPENDENCY_WORD = new RegExp("(^|[^A-Za-z0-9_$])(import|require)([^A-Za-z0-9_$]|$)");
+    NEUTRAL_PURE_INTRINSIC_ROOTS = neutralFreeze([
+      "Object",
+      "Array",
+      "String",
+      "Number",
+      "Boolean",
+      "Math",
+      "JSON",
+      "RegExp",
+      "Error",
+      "TypeError",
+      "RangeError",
+      "SyntaxError",
+      "Map",
+      "Set",
+      "Symbol",
+      "isNaN",
+      "isFinite",
+      "parseInt",
+      "parseFloat",
+      "NaN",
+      "Infinity",
+      "undefined"
+    ]);
+    NEUTRAL_LANGUAGE_WORDS = neutralFreeze([
+      // statement + expression keywords
+      "import",
+      "export",
+      "from",
+      "as",
+      "default",
+      "const",
+      "let",
+      "var",
+      "function",
+      "class",
+      "extends",
+      "implements",
+      "return",
+      "if",
+      "else",
+      "for",
+      "while",
+      "do",
+      "switch",
+      "case",
+      "break",
+      "continue",
+      "new",
+      "delete",
+      "typeof",
+      "instanceof",
+      "in",
+      "of",
+      "void",
+      "null",
+      "true",
+      "false",
+      "throw",
+      "try",
+      "catch",
+      "finally",
+      "yield",
+      "await",
+      "async",
+      "static",
+      "public",
+      "private",
+      "protected",
+      "readonly",
+      "abstract",
+      "declare",
+      "namespace",
+      "enum",
+      "get",
+      "set",
+      "with",
+      "debugger",
+      "label",
+      // type-level vocabulary (erased at runtime)
+      "type",
+      "interface",
+      "keyof",
+      "infer",
+      "is",
+      "asserts",
+      "satisfies",
+      "unique",
+      "out",
+      "override",
+      "accessor",
+      "using",
+      "string",
+      "number",
+      "boolean",
+      "unknown",
+      "any",
+      "never",
+      "object",
+      "symbol",
+      "bigint",
+      "Record",
+      "Readonly",
+      "Partial",
+      "Required",
+      "Pick",
+      "Omit",
+      "Exclude",
+      "Extract",
+      "ReturnType",
+      "Parameters",
+      "NonNullable",
+      "Awaited"
+    ]);
+    NEUTRAL_PROTOTYPE_CHAIN_PROPERTIES = neutralFreeze([
+      "constructor",
+      "prototype",
+      "__proto__"
+    ]);
+    NEUTRAL_REFLECTION_METHOD_NAMES = neutralFreeze([
+      "getPrototypeOf",
+      "setPrototypeOf",
+      "getOwnPropertyDescriptor",
+      "getOwnPropertyDescriptors",
+      "getOwnPropertyNames",
+      "getOwnPropertySymbols",
+      "defineProperty",
+      "bind",
+      "call",
+      "apply"
+    ]);
+  }
+});
+
+// ../src/modules/lifecycle/index.ts
+var init_lifecycle = __esm({
+  "../src/modules/lifecycle/index.ts"() {
+    init_check_lane_liveness();
+    init_emit_loop_event();
+    init_mark_lane_dead();
+    init_resume_lanes();
+    init_retry_lane();
+    init_run_binding();
+    init_run_lifecycle();
+    init_run_manifest_wiring();
+    init_runstart_preflight();
+    init_write_run_manifest();
+    init_write_task_run();
+    init_neutral_runtime_contracts();
+    init_neutral_gate_policy();
+    init_neutral_lifecycle_machine();
+    init_neutral_conformance_core();
+    init_neutral_core_boundary();
+  }
+});
+
+// ../src/modules/teams/workflows/team-file.ts
+function readPlanOwnerTaskIds(guildRoot, slug) {
+  const map = /* @__PURE__ */ new Map();
+  let raw;
+  try {
+    raw = fs12.readFileSync(path16.join(guildRoot, ".guild", "plan", `${slug}.md`), "utf8");
+  } catch {
+    return map;
+  }
+  const lines = raw.split("\n");
+  const blocks = [];
+  let current = null;
+  for (const line of lines) {
+    if (/^\s*##\s+Lane:/.test(line)) {
+      current = [];
+      blocks.push(current);
+      continue;
+    }
+    if (current) current.push(line);
+  }
+  for (const block of blocks) {
+    let taskId = null;
+    let owner = null;
+    for (const line of block) {
+      if (taskId === null) {
+        const m = line.match(/^\s*-\s*task-id:\s*(\S+)/);
+        if (m) {
+          taskId = m[1];
+          continue;
+        }
+      }
+      if (owner === null) {
+        const m = line.match(/^\s*-\s*owner:\s*(\S+)/);
+        if (m) {
+          owner = m[1];
+          continue;
+        }
+      }
+      if (taskId !== null && owner !== null) break;
+    }
+    if (taskId && owner) {
+      const arr = map.get(owner) ?? [];
+      arr.push(taskId);
+      map.set(owner, arr);
+    }
+  }
+  return map;
+}
+function readPlanTaskIdSet(guildRoot, slug) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const taskIds of readPlanOwnerTaskIds(guildRoot, slug).values()) {
+    for (const id of taskIds) ids.add(id);
+  }
+  return ids;
+}
+var fs12, path16;
+var init_team_file = __esm({
+  "../src/modules/teams/workflows/team-file.ts"() {
+    fs12 = __toESM(require("fs"));
+    path16 = __toESM(require("path"));
+    init_lifecycle();
+    init_state();
+  }
+});
+
+// ../src/modules/teams/workflows/canonical-hash.ts
+var init_canonical_hash = __esm({
+  "../src/modules/teams/workflows/canonical-hash.ts"() {
+  }
+});
+
+// ../src/modules/teams/index.ts
+var init_teams = __esm({
+  "../src/modules/teams/index.ts"() {
+    init_team_file();
+    init_canonical_hash();
+  }
+});
+
+// ../src/modules/capability/workflows/model-catalog.ts
+var EVIDENCE_STATES, NO_LISTING_GROUNDING, LISTING_AUTHORITY, LEGAL_EVIDENCE_TRANSITIONS;
+var init_model_catalog = __esm({
+  "../src/modules/capability/workflows/model-catalog.ts"() {
+    init_catalog_cache();
+    init_kernel();
+    EVIDENCE_STATES = Object.freeze(["available", "advertised", "unknown", "unavailable"]);
+    NO_LISTING_GROUNDING = Object.freeze({
+      ceiling: "advertised",
+      available_grounding: null
+    });
+    LISTING_AUTHORITY = Object.freeze({
+      // The ONLY row carrying the /v1/models availability contract (matrix §3 [C2]).
+      "claude-api": Object.freeze({
+        ceiling: "available",
+        available_grounding: Object.freeze({ adapter_id: "claude-api-models", source: "contract_api_list" })
+      }),
+      // Interactive-only picker; honest-unknown row — a picker listing can NEVER ground available.
+      "claude-cli-subscription": NO_LISTING_GROUNDING,
+      "claude-app": NO_LISTING_GROUNDING,
+      "claude-web": NO_LISTING_GROUNDING,
+      // Gateways: gateway-NATIVE evidence only, none evidenced today (§6 gateway rule) —
+      // a listing caps at static-hint/native advertised; only §4 dispatch evidence upgrades.
+      "claude-gateway-bedrock": NO_LISTING_GROUNDING,
+      "claude-gateway-vertex": NO_LISTING_GROUNDING,
+      "claude-gateway-foundry": NO_LISTING_GROUNDING,
+      // Codex auth-list surfaces: entitlement semantics contractually undefined.
+      "codex-app-server": NO_LISTING_GROUNDING,
+      "codex-cli-chatgpt": NO_LISTING_GROUNDING,
+      "codex-cli-api-key": NO_LISTING_GROUNDING,
+      "openai-api": NO_LISTING_GROUNDING
+    });
+    LEGAL_EVIDENCE_TRANSITIONS = sealSet([
+      "unknown->advertised",
+      "unknown->available",
+      "advertised->available",
+      "advertised->unavailable",
+      "available->unavailable",
+      "advertised->unknown",
+      "available->unknown",
+      "unavailable->unknown"
+    ]);
+  }
+});
+
+// ../src/modules/capability/workflows/model-policy.ts
+var POLICY_PURPOSES, REVIEW_CLASS_PURPOSES, COMPLEXITIES, CONDITION_KINDS, INDEPENDENCE_LEVELS, POLICY_TIERS, OPERATOR_BASELINE_POLICY;
+var init_model_policy = __esm({
+  "../src/modules/capability/workflows/model-policy.ts"() {
+    init_kernel();
+    POLICY_PURPOSES = Object.freeze([
+      "general",
+      "implementation",
+      "planning",
+      "research",
+      "advisory",
+      "adversarial",
+      "security",
+      "adversarial-security"
+    ]);
+    REVIEW_CLASS_PURPOSES = Object.freeze([
+      "advisory",
+      "adversarial",
+      "security",
+      "adversarial-security"
+    ]);
+    COMPLEXITIES = Object.freeze(["easy", "medium", "hard"]);
+    CONDITION_KINDS = Object.freeze([
+      "always",
+      "producer_model_family_is",
+      "producer_model_family_is_not"
+    ]);
+    INDEPENDENCE_LEVELS = Object.freeze(["none", "prefer_cross_family", "require_cross_family"]);
+    POLICY_TIERS = Object.freeze(["cheap", "mid", "powerful"]);
+    OPERATOR_BASELINE_POLICY = deepFreeze({
+      version: 2,
+      allow_advertised_attempt: false,
+      purposes: {
+        general: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        implementation: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        planning: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        research: {
+          // Redundant with the §3 forced floor; stated for closure.
+          min_effective_complexity: "hard",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "hard",
+              // the ONLY reachable value (research_always_hard, §3)
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        advisory: {
+          min_effective_complexity: "easy",
+          independence: "prefer_cross_family",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "expr:model_family=gpt;tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        adversarial: {
+          min_effective_complexity: "easy",
+          // Same-family fallback allowed but ALWAYS weak-labelled (resolution §7a).
+          independence: "prefer_cross_family",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              // Producer is not gpt-family → gpt reviewer is cross-family.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              // may be same-family as producer ⇒ weak, labelled
+              provider_default: "forbid"
+            },
+            {
+              // Producer IS gpt-family → claude reviewer restores independence.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is", model_family: "gpt" },
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+              provider_default: "forbid"
+            },
+            {
+              // Producer family unknown → weak either way (resolution §7a); review still runs.
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        security: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          // same-family claude is deliberate (pinned-model rationale)
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "any",
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              // pinned id REQUIRED (§5)
+              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        "adversarial-security": {
+          min_effective_complexity: "easy",
+          independence: "require_cross_family",
+          // adjudicated weak ⇒ NO strong sign-off (resolution §7a)
+          confirm_on_degradation: true,
+          routes: [
+            {
+              // Producer not gpt-family → gpt reviewer is cross-family.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              // Cannot restore independence on this branch ⇒ weak ⇒ NO strong sign-off.
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            },
+            {
+              // Producer IS gpt-family → claude restores family independence.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is", model_family: "gpt" },
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              fallbacks: [],
+              // nothing further — beyond this there is NO strong sign-off
+              provider_default: "forbid"
+            },
+            {
+              // Producer family unknown → weak regardless; NO strong sign-off.
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            }
+          ]
+        }
+      }
+    });
+  }
+});
+
+// ../src/modules/capability/workflows/model-resolver.ts
+var FALLBACK_FAILURE_TAXONOMY, RESOLUTION_STATUSES;
+var init_model_resolver = __esm({
+  "../src/modules/capability/workflows/model-resolver.ts"() {
+    init_teams();
+    init_model_catalog();
+    init_model_policy();
+    FALLBACK_FAILURE_TAXONOMY = Object.freeze({
+      model_overloaded: true,
+      model_unavailable: true,
+      server_nonretryable: true,
+      auth_error: false,
+      billing_error: false,
+      rate_limited: false,
+      request_invalid: false,
+      transport_error: false,
+      policy_refusal: false
+    });
+    RESOLUTION_STATUSES = Object.freeze([
+      "served",
+      "fallback_served",
+      "exhausted",
+      "user_declined",
+      "failed_closed",
+      "interrupted"
+    ]);
+  }
+});
+
+// ../src/modules/capability/workflows/model-inspect.ts
+var init_model_inspect = __esm({
+  "../src/modules/capability/workflows/model-inspect.ts"() {
+    init_model_resolver();
+    init_independence_predicates();
+  }
+});
+
+// ../src/modules/capability/workflows/inspection-persist.ts
+var init_inspection_persist = __esm({
+  "../src/modules/capability/workflows/inspection-persist.ts"() {
+    init_model_inspect();
+  }
+});
+
+// ../src/modules/capability/workflows/routing-rollout.ts
+var ROUTING_FLAG_KEYS, ROUTING_FLAG_DEFAULTS, FLAG_GROUPS;
+var init_routing_rollout = __esm({
+  "../src/modules/capability/workflows/routing-rollout.ts"() {
+    init_teams();
+    ROUTING_FLAG_KEYS = Object.freeze([
+      "model_routing.identity_v2",
+      "model_routing.binding_enforce",
+      "model_routing.discovery",
+      "model_routing.inspect",
+      "model_routing.shadow",
+      "model_routing.enabled",
+      "teams.proposal_v2"
+    ]);
+    ROUTING_FLAG_DEFAULTS = Object.freeze({
+      "model_routing.identity_v2": "on",
+      "model_routing.binding_enforce": "on",
+      "model_routing.discovery": "on",
+      "model_routing.inspect": "on",
+      "model_routing.shadow": "off",
+      "model_routing.enabled": "off",
+      "teams.proposal_v2": "on"
+    });
+    FLAG_GROUPS = Object.freeze({
+      model_routing: [
+        "identity_v2",
+        "binding_enforce",
+        "discovery",
+        "inspect",
+        "shadow",
+        "enabled"
+      ],
+      teams: ["proposal_v2"]
+    });
+  }
+});
+
+// ../src/modules/capability/workflows/models-command.ts
+var MODELS_COMMAND_USAGE;
+var init_models_command = __esm({
+  "../src/modules/capability/workflows/models-command.ts"() {
+    init_host_runtime();
+    init_security();
+    init_catalog_cache();
+    init_model_inspect();
+    init_routing_rollout();
+    MODELS_COMMAND_USAGE = [
+      "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
+      "",
+      "  inspect   READ-ONLY view of this run's model routing: identity trust, target",
+      "            evidence, catalog age, policy path, selection, fallbacks, actual",
+      "            model, independence and degradation - with honest unknowns.",
+      "",
+      "  --cwd     repo root that owns .guild/ (default: process cwd)",
+      "  --run-id  inspect this run (default: the intake candidate run, labeled)",
+      "  --json    emit the same view model as JSON instead of text"
+    ].join("\n");
+  }
+});
+
+// ../src/modules/capability/workflows/inspection-record.ts
+var init_inspection_record = __esm({
+  "../src/modules/capability/workflows/inspection-record.ts"() {
+    init_model_inspect();
+    init_inspection_persist();
+    init_models_command();
+  }
+});
+
+// ../src/modules/capability/workflows/policy-migration.ts
+var LEGACY_FILLABLE_PURPOSES;
+var init_policy_migration = __esm({
+  "../src/modules/capability/workflows/policy-migration.ts"() {
+    init_model_policy();
+    LEGACY_FILLABLE_PURPOSES = Object.freeze(["general", "implementation"]);
+  }
+});
+
+// ../src/modules/capability/workflows/purpose-provenance.ts
+var AUTHORITATIVE_PURPOSE_SOURCES;
+var init_purpose_provenance = __esm({
+  "../src/modules/capability/workflows/purpose-provenance.ts"() {
+    init_model_policy();
+    AUTHORITATIVE_PURPOSE_SOURCES = Object.freeze([
+      "skill_metadata",
+      "registry_metadata",
+      "lane_lock",
+      "broker_gate"
+    ]);
+  }
+});
+
+// ../src/modules/capability/workflows/tier-defaults.ts
+var init_tier_defaults = __esm({
+  "../src/modules/capability/workflows/tier-defaults.ts"() {
+    init_host_runtime();
+    init_host_runtime();
+  }
+});
+
+// ../src/modules/capability/workflows/rank.ts
+var init_rank = __esm({
+  "../src/modules/capability/workflows/rank.ts"() {
+    init_host_runtime();
+    init_tier_defaults();
+  }
+});
 
 // ../src/modules/capability/workflows/role-model-schema.ts
-var ROLES = Object.freeze(["host", "advisory", "adversarial"]);
-var ROLE_STRENGTHS = Object.freeze(["strong", "weak"]);
-var ROLE_SET = new Set(ROLES);
-var STRENGTH_SET = new Set(ROLE_STRENGTHS);
-var HOST_ID_SET3 = new Set(HOST_IDS);
+var ROLES, ROLE_STRENGTHS, ROLE_SET, STRENGTH_SET, HOST_ID_SET3;
+var init_role_model_schema = __esm({
+  "../src/modules/capability/workflows/role-model-schema.ts"() {
+    init_host_runtime();
+    ROLES = Object.freeze(["host", "advisory", "adversarial"]);
+    ROLE_STRENGTHS = Object.freeze(["strong", "weak"]);
+    ROLE_SET = new Set(ROLES);
+    STRENGTH_SET = new Set(ROLE_STRENGTHS);
+    HOST_ID_SET3 = new Set(HOST_IDS);
+  }
+});
 
 // ../src/modules/review/workflows/review-progress.ts
-var REVIEW_PROGRESS_STATES = Object.freeze([
-  "launched",
-  "running",
-  "heartbeat",
-  "activity",
-  "no_output",
-  "reviewer_error",
-  "tool_error",
-  "cancelled",
-  "skipped",
-  "succeeded"
-]);
-var STATE_SET = new Set(REVIEW_PROGRESS_STATES);
+var REVIEW_PROGRESS_STATES, STATE_SET;
+var init_review_progress = __esm({
+  "../src/modules/review/workflows/review-progress.ts"() {
+    REVIEW_PROGRESS_STATES = Object.freeze([
+      "launched",
+      "running",
+      "heartbeat",
+      "activity",
+      "no_output",
+      "reviewer_error",
+      "tool_error",
+      "cancelled",
+      "skipped",
+      "succeeded"
+    ]);
+    STATE_SET = new Set(REVIEW_PROGRESS_STATES);
+  }
+});
+
+// ../src/modules/review/workflows/review-pairing.ts
+var init_review_pairing = __esm({
+  "../src/modules/review/workflows/review-pairing.ts"() {
+    init_capability();
+    init_host_runtime();
+    init_review_progress();
+  }
+});
 
 // ../src/modules/review/resources/scripts/lib/advisory-record.ts
-var ADVISORY_RECORD_SCHEMA = "guild.advisory.v1";
-var ADVISORY_BACKENDS = Object.freeze([
-  "tmux_team",
-  "host_subagents",
-  "single_agent"
-]);
-var ADVISORY_SUBSTRATES = Object.freeze([
-  "claude-code-cli",
-  "codex-cli",
-  "pi-cli",
-  "antigravity-cli",
-  "agents-file",
-  "claude-code-app",
-  "claude-code-web",
-  "codex-app",
-  "claude-ai-connector",
-  // Legacy substrate labels accepted for older records.
-  "claude",
-  "codex",
-  ".agents",
-  "pi",
-  "antigravity"
-]);
-var ADVISORY_CONFIDENCE = Object.freeze(["high", "medium", "low"]);
-var ADVISORY_PHASES = Object.freeze([
-  "init",
-  "ideation",
-  "planning",
-  "execution",
-  "review",
-  "ops",
-  "reflect"
-]);
-var BACKEND_SET = new Set(ADVISORY_BACKENDS);
-var CONFIDENCE_SET = new Set(ADVISORY_CONFIDENCE);
-var SUBSTRATE_SET = new Set(ADVISORY_SUBSTRATES);
 function makeAdvisoryRecord(input) {
   const rec = {
     schema_version: ADVISORY_RECORD_SCHEMA,
@@ -5609,32 +11493,220 @@ function makeAdvisoryRecord(input) {
   }
   return rec;
 }
-if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
-  const skeleton = makeAdvisoryRecord({
-    id: `advisory-example-001`,
-    recorded_at: now,
-    phase: "ideation",
-    backend: "single_agent",
-    question: "Which architecture path should this initiative take?",
-    advisors: [
-      { role: "product", model_tier: "cheap" },
-      { role: "architecture", model_tier: "mid" }
-    ],
-    recommendations: [
-      { role: "product", recommendation: "Prefer the simpler layered approach.", confidence: "medium" },
-      { role: "architecture", recommendation: "Event-driven boundary fits better for scale.", confidence: "high" }
-    ],
-    synthesis: "Use event-driven boundaries at service edges; keep internal domain logic layered.",
-    confidence: "high",
-    unresolved_questions: []
-  });
-  process.stdout.write(JSON.stringify(skeleton, null, 2) + "\n");
+var ADVISORY_RECORD_SCHEMA, ADVISORY_BACKENDS, ADVISORY_SUBSTRATES, ADVISORY_CONFIDENCE, ADVISORY_PHASES, BACKEND_SET, CONFIDENCE_SET, SUBSTRATE_SET;
+var init_advisory_record = __esm({
+  "../src/modules/review/resources/scripts/lib/advisory-record.ts"() {
+    ADVISORY_RECORD_SCHEMA = "guild.advisory.v1";
+    ADVISORY_BACKENDS = Object.freeze([
+      "tmux_team",
+      "host_subagents",
+      "single_agent"
+    ]);
+    ADVISORY_SUBSTRATES = Object.freeze([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // Legacy substrate labels accepted for older records.
+      "claude",
+      "codex",
+      ".agents",
+      "pi",
+      "antigravity"
+    ]);
+    ADVISORY_CONFIDENCE = Object.freeze(["high", "medium", "low"]);
+    ADVISORY_PHASES = Object.freeze([
+      "init",
+      "ideation",
+      "planning",
+      "execution",
+      "review",
+      "ops",
+      "reflect"
+    ]);
+    BACKEND_SET = new Set(ADVISORY_BACKENDS);
+    CONFIDENCE_SET = new Set(ADVISORY_CONFIDENCE);
+    SUBSTRATE_SET = new Set(ADVISORY_SUBSTRATES);
+    if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+      const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
+      const skeleton = makeAdvisoryRecord({
+        id: `advisory-example-001`,
+        recorded_at: now,
+        phase: "ideation",
+        backend: "single_agent",
+        question: "Which architecture path should this initiative take?",
+        advisors: [
+          { role: "product", model_tier: "cheap" },
+          { role: "architecture", model_tier: "mid" }
+        ],
+        recommendations: [
+          { role: "product", recommendation: "Prefer the simpler layered approach.", confidence: "medium" },
+          { role: "architecture", recommendation: "Event-driven boundary fits better for scale.", confidence: "high" }
+        ],
+        synthesis: "Use event-driven boundaries at service edges; keep internal domain logic layered.",
+        confidence: "high",
+        unresolved_questions: []
+      });
+      process.stdout.write(JSON.stringify(skeleton, null, 2) + "\n");
+    }
+  }
+});
+
+// ../src/modules/review/workflows/advisory-contract.ts
+var init_advisory_contract = __esm({
+  "../src/modules/review/workflows/advisory-contract.ts"() {
+    init_advisory_record();
+  }
+});
+
+// ../src/modules/review/index.ts
+var init_review = __esm({
+  "../src/modules/review/index.ts"() {
+    init_review_pairing();
+    init_review_progress();
+    init_advisory_contract();
+  }
+});
+
+// ../src/modules/capability/workflows/role-resolver.ts
+var init_role_resolver = __esm({
+  "../src/modules/capability/workflows/role-resolver.ts"() {
+    init_host_runtime();
+    init_role_model_schema();
+    init_review();
+  }
+});
+
+// ../src/modules/capability/workflows/tiebreak.ts
+var init_tiebreak = __esm({
+  "../src/modules/capability/workflows/tiebreak.ts"() {
+    init_rank();
+  }
+});
+
+// ../src/modules/capability/workflows/router.ts
+var init_router = __esm({
+  "../src/modules/capability/workflows/router.ts"() {
+    init_config2();
+    init_rank();
+    init_tiebreak();
+  }
+});
+
+// ../src/modules/capability/index.ts
+var init_capability = __esm({
+  "../src/modules/capability/index.ts"() {
+    init_catalog_cache();
+    init_compatibility_catalog();
+    init_compatibility_usage();
+    init_confirmation_arbiter();
+    init_independence_predicates();
+    init_independence_record();
+    init_inspection_persist();
+    init_inspection_record();
+    init_model_catalog();
+    init_model_inspect();
+    init_model_policy();
+    init_model_resolver();
+    init_policy_migration();
+    init_purpose_provenance();
+    init_resolver_mode();
+    init_rank();
+    init_role_model_schema();
+    init_routing_rollout();
+    init_role_resolver();
+    init_router();
+    init_tiebreak();
+    init_tier_defaults();
+  }
+});
+
+// ../src/modules/lifecycle/workflows/runstart-preflight.ts
+var init_runstart_preflight = __esm({
+  "../src/modules/lifecycle/workflows/runstart-preflight.ts"() {
+    init_config2();
+    init_host_runtime();
+    init_capability();
+    init_config2();
+  }
+});
+
+// agent-team/teammate-idle.ts
+var fs17 = __toESM(require("fs"));
+var path22 = __toESM(require("path"));
+var readline = __toESM(require("readline"));
+
+// lib/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startCwd) {
+  const resolvedStart = path.resolve(startCwd);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      return current;
+    }
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      if (fs.existsSync(guildDir)) {
+        try {
+          if (fs.statSync(guildDir).isDirectory()) {
+            nearestGuildDir = current;
+          }
+        } catch {
+        }
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return nearestGuildDir ?? resolvedStart;
+    }
+    current = parent;
+  }
+}
+
+// ../scripts/lib/run-lifecycle.ts
+init_run_lifecycle();
+
+// ../scripts/lib/runstart-preflight.ts
+init_runstart_preflight();
+
+// ../scripts/lib/run-binding.ts
+init_run_binding();
+
+// lib/hook-binding.ts
+function reject(reason, run_id) {
+  return { ok: false, diagnostic: "binding_rejected", reason, run_id };
+}
+function authorizeHookWrite(root, opts = {}) {
+  const env = opts.env ?? process.env;
+  const envelope = readHookBindingEnvelope(env);
+  const envRunId = env["GUILD_RUN_ID"]?.trim();
+  const runId = opts.runId ?? envelope?.run_id ?? (envRunId || void 0);
+  if (!runId) return reject("binding_absent", null);
+  const ref = opts.bindingRef ?? (envelope && envelope.run_id === runId ? envelope.binding_ref : void 0);
+  if (ref === void 0 || ref.trim().length === 0) {
+    return reject("binding_absent", runId);
+  }
+  const verdict = verifyRunBinding({ root, run_id: runId, binding_ref: ref });
+  if (verdict.ok === false) return reject(verdict.reason, runId);
+  return { ok: true, run_id: runId, binding_ref: verdict.binding.binding_ref };
+}
+function formatBindingRejected(hook, auth) {
+  if (auth.ok !== false) return "";
+  return `[${hook}] binding_rejected (${auth.reason}) for run ${auth.run_id ?? "<unresolved>"} \u2014 no write performed (session_context \xA75: writers fail closed; sentinels are intake-only).
+`;
 }
 
 // emit-learning-checkpoint.ts
-var fs3 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+var fs13 = __toESM(require("fs"));
+var path17 = __toESM(require("path"));
 
 // ../src/modules/initiatives/workflows/classify-proposal.ts
 function classifyProposal(input) {
@@ -6175,12 +12247,12 @@ function buildYaml(opts) {
 }
 function appendKnowledgeLinksIndex(guildRoot, links) {
   if (links.length === 0) return;
-  const indexDir = path4.join(guildRoot, ".guild", "indexes");
-  const indexPath = path4.join(indexDir, "knowledge-links.json");
+  const indexDir = path17.join(guildRoot, ".guild", "indexes");
+  const indexPath = path17.join(indexDir, "knowledge-links.json");
   let existing = [];
-  if (fs3.existsSync(indexPath)) {
+  if (fs13.existsSync(indexPath)) {
     try {
-      const raw = fs3.readFileSync(indexPath, "utf8");
+      const raw = fs13.readFileSync(indexPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed["links"])) {
         existing = parsed["links"];
@@ -6202,8 +12274,8 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
   if (novel.length === 0) return;
   const merged = [...existing, ...novel];
   try {
-    fs3.mkdirSync(indexDir, { recursive: true });
-    fs3.writeFileSync(
+    fs13.mkdirSync(indexDir, { recursive: true });
+    fs13.writeFileSync(
       indexPath,
       JSON.stringify(
         { schema_version: "guild.knowledge_links.v1", links: merged },
@@ -6222,14 +12294,14 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
 function appendReflections(guildRoot, runId, phase, decisions) {
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return;
-  const reflectionsDir = path4.join(guildRoot, ".guild", "reflections");
-  fs3.mkdirSync(reflectionsDir, { recursive: true });
-  const reflPath = path4.join(reflectionsDir, `${runId}.md`);
+  const reflectionsDir = path17.join(guildRoot, ".guild", "reflections");
+  fs13.mkdirSync(reflectionsDir, { recursive: true });
+  const reflPath = path17.join(reflectionsDir, `${runId}.md`);
   const entry = `
 ## Phase: ${phase} (${runId})
 
 ` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
-  fs3.appendFileSync(reflPath, entry, "utf8");
+  fs13.appendFileSync(reflPath, entry, "utf8");
 }
 function writeCheckpoint(opts) {
   assertPhase(opts.phase);
@@ -6238,11 +12310,11 @@ function writeCheckpoint(opts) {
   assertNodePrefixes(links);
   const guildRoot = opts.guildRoot ?? process.cwd();
   const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
-  const learningDir = path4.join(guildRoot, ".guild", "runs", opts.runId, "learning");
-  fs3.mkdirSync(learningDir, { recursive: true });
-  const checkpointFile = path4.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const learningDir = path17.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  fs13.mkdirSync(learningDir, { recursive: true });
+  const checkpointFile = path17.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path4.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path17.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
   const observed = opts.observed ?? [];
   const yaml2 = buildYaml({
     runId: opts.runId,
@@ -6254,7 +12326,7 @@ function writeCheckpoint(opts) {
     knowledgeLinksBatch: links,
     ...opts.backstop === true ? { backstop: true } : {}
   });
-  fs3.writeFileSync(checkpointFile, yaml2, "utf8");
+  fs13.writeFileSync(checkpointFile, yaml2, "utf8");
   appendReflections(guildRoot, opts.runId, opts.phase, decisions);
   appendKnowledgeLinksIndex(guildRoot, links);
   void reflectionsAbsPath;
@@ -6279,7 +12351,7 @@ function main() {
   let decisions;
   if (verdictPath) {
     try {
-      const raw = fs3.readFileSync(verdictPath, "utf8");
+      const raw = fs13.readFileSync(verdictPath, "utf8");
       decisions = JSON.parse(raw);
     } catch (e) {
       process.stderr.write(
@@ -6290,7 +12362,7 @@ function main() {
   }
   if (decisions === void 0 && artifactsJsonPath) {
     try {
-      const rawArtifacts = fs3.readFileSync(artifactsJsonPath, "utf8");
+      const rawArtifacts = fs13.readFileSync(artifactsJsonPath, "utf8");
       const artifacts = JSON.parse(rawArtifacts);
       if (!artifacts.runId) artifacts.runId = runId;
       if (!artifacts.phase) artifacts.phase = phase ?? void 0;
@@ -6311,7 +12383,7 @@ function main() {
   let knowledgeLinksBatch = [];
   if (linksPath) {
     try {
-      const raw = fs3.readFileSync(linksPath, "utf8");
+      const raw = fs13.readFileSync(linksPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         knowledgeLinksBatch = parsed;
@@ -6350,37 +12422,14 @@ if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-check
 }
 
 // lib/heartbeat.ts
-var fs5 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var fs14 = __toESM(require("node:fs"));
+var path18 = __toESM(require("node:path"));
 
-// ../src/modules/lifecycle/workflows/run-state.ts
-var fs4 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
-var RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
-function runStatePath(runDir) {
-  return path5.join(runDir, "run-state.json");
-}
-function loadRunState(runDir) {
-  let raw;
-  try {
-    raw = fs4.readFileSync(runStatePath(runDir), "utf8");
-  } catch {
-    return null;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed) || parsed["schema_version"] !== RUN_STATE_SCHEMA_VERSION) {
-    return null;
-  }
-  return parsed;
-}
+// lib/run-state.ts
+init_run_state();
 
 // lib/heartbeat.ts
-var DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
+var DEFAULT_HEARTBEAT_TIMEOUT_MS2 = 10 * 60 * 1e3;
 var TIER_HEARTBEAT_TIMEOUTS_MS = {
   cheap: 18e4,
   // 3 min
@@ -6392,16 +12441,16 @@ var TIER_HEARTBEAT_TIMEOUTS_MS = {
 function isLaneTier(t) {
   return t === "cheap" || t === "mid" || t === "powerful";
 }
-function heartbeatPath(runDir, specialist) {
-  return path6.join(runDir, "in-progress", `${specialist}.json`);
+function heartbeatPath(runDir2, specialist) {
+  return path18.join(runDir2, "in-progress", `${specialist}.json`);
 }
-function legacyLogPath(runDir, specialist) {
-  return path6.join(runDir, "in-progress", `${specialist}.log`);
+function legacyLogPath(runDir2, specialist) {
+  return path18.join(runDir2, "in-progress", `${specialist}.log`);
 }
-function readHeartbeat(runDir, specialist) {
+function readHeartbeat(runDir2, specialist) {
   let raw;
   try {
-    raw = fs5.readFileSync(heartbeatPath(runDir, specialist), "utf8");
+    raw = fs14.readFileSync(heartbeatPath(runDir2, specialist), "utf8");
   } catch {
     return null;
   }
@@ -6425,10 +12474,10 @@ function readHeartbeat(runDir, specialist) {
   return hb;
 }
 function readExplicitHeartbeatTimeoutMs(cwd) {
-  const settingsPath = path6.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path18.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs5.readFileSync(settingsPath, "utf8");
+    raw = fs14.readFileSync(settingsPath, "utf8");
   } catch {
     return null;
   }
@@ -6451,9 +12500,9 @@ function readExplicitHeartbeatTimeoutMs(cwd) {
   }
   return null;
 }
-function resolveLaneTier(runDir, specialist, assignedTaskIds = []) {
+function resolveLaneTier(runDir2, specialist, assignedTaskIds = []) {
   try {
-    const state = loadRunState(runDir);
+    const state = loadRunState(runDir2);
     if (state === null) return null;
     for (const taskId of assignedTaskIds) {
       const tier = state.lanes[taskId]?.tier;
@@ -6471,8 +12520,8 @@ function resolveHeartbeatTimeoutMs(cwd, tier) {
   if (explicit !== null) return explicit;
   return TIER_HEARTBEAT_TIMEOUTS_MS[isLaneTier(tier) ? tier : "mid"];
 }
-function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
-  const hb = readHeartbeat(runDir, specialist);
+function assessLiveness(runDir2, specialist, timeoutMs, now = Date.now()) {
+  const hb = readHeartbeat(runDir2, specialist);
   if (hb) {
     const parsedMs = Date.parse(hb.timestamp);
     const ageMs = Number.isNaN(parsedMs) ? 0 : Math.max(0, now - parsedMs);
@@ -6485,9 +12534,9 @@ function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
     if (hb.pct_complete !== void 0) out.pctComplete = hb.pct_complete;
     return out;
   }
-  const logPath = legacyLogPath(runDir, specialist);
+  const logPath = legacyLogPath(runDir2, specialist);
   try {
-    const stat = fs5.statSync(logPath);
+    const stat = fs14.statSync(logPath);
     const ageMs = Math.max(0, now - stat.mtimeMs);
     return { source: "mtime", fresh: ageMs < timeoutMs, ageMs };
   } catch {
@@ -6496,6 +12545,7 @@ function assessLiveness(runDir, specialist, timeoutMs, now = Date.now()) {
 }
 
 // lib/handoff-v2.ts
+init_sealed_collections();
 var SUMMARY_MAX_CHARS = 600;
 var NOTES_MAX_CHARS = 200;
 var ALLOWED_INJECTION_CLEAN_VALUES = sealSet([
@@ -6624,27 +12674,15 @@ function extractHandoffEnvelope(content) {
 }
 
 // lib/run-trace.ts
-function resolveRunIdForTrace(root, env) {
+function resolveRunIdForTrace(_root, env) {
   const fromEnv = env.GUILD_RUN_ID;
   if (typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
-  const legacy = readSentinel(path7.join(root, ".guild", "runs", "current-run-id"));
-  if (legacy) return legacy;
-  const b2 = readSentinel(path7.join(root, ".guild", "current-run-id"));
-  if (b2) return b2;
   return null;
-}
-function readSentinel(p) {
-  try {
-    const v = fs6.readFileSync(p, "utf8").trim();
-    return v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
 }
 
 // lib/bus-emit.ts
-var fs7 = __toESM(require("node:fs"));
-var path8 = __toESM(require("node:path"));
+var fs15 = __toESM(require("node:fs"));
+var path19 = __toESM(require("node:path"));
 var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
 function buildBusEvent(input) {
   const rec = {
@@ -6661,13 +12699,13 @@ function buildBusEvent(input) {
   if (typeof input.detail === "string" && input.detail.length > 0) rec.detail = input.detail;
   return rec;
 }
-function emitBusEvent(runDir, input) {
+function emitBusEvent(runDir2, input) {
   try {
-    const busDir = path8.join(runDir, "agent-bus");
-    fs7.mkdirSync(busDir, { recursive: true });
+    const busDir = path19.join(runDir2, "agent-bus");
+    fs15.mkdirSync(busDir, { recursive: true });
     const record = buildBusEvent(input);
-    fs7.appendFileSync(
-      path8.join(busDir, "events.ndjson"),
+    fs15.appendFileSync(
+      path19.join(busDir, "events.ndjson"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -6682,11 +12720,11 @@ function emitBusEvent(runDir, input) {
 }
 
 // ../src/modules/dispatch/workflows/task-cell-acceptance.ts
-var fs8 = __toESM(require("fs"));
-var path10 = __toESM(require("path"));
+var fs16 = __toESM(require("fs"));
+var path21 = __toESM(require("path"));
 
 // ../src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts
-var path9 = __toESM(require("path"));
+var path20 = __toESM(require("path"));
 var TASK_CELL_STATES = Object.freeze([
   "declared",
   "instantiated",
@@ -6751,23 +12789,23 @@ function taskCellPaths(ids, opts = {}) {
     throw new Error(`attempt must be an integer >= 1, got ${JSON.stringify(ids.attempt)}`);
   }
   const guildDir = opts.guildDir ?? ".guild";
-  const run_dir = path9.join(guildDir, "runs", ids.run_id);
-  const cell_dir = path9.join(run_dir, "task-cells", ids.logical_task_id);
-  const attempt_dir = path9.join(cell_dir, "attempts", String(ids.attempt));
-  const instance_dir = path9.join(attempt_dir, "instances", ids.instance_id);
+  const run_dir = path20.join(guildDir, "runs", ids.run_id);
+  const cell_dir = path20.join(run_dir, "task-cells", ids.logical_task_id);
+  const attempt_dir = path20.join(cell_dir, "attempts", String(ids.attempt));
+  const instance_dir = path20.join(attempt_dir, "instances", ids.instance_id);
   const paths = {
     run_dir,
     cell_dir,
     attempt_dir,
     instance_dir,
-    attempt_path: path9.join(attempt_dir, "attempt.json"),
-    assignment_path: path9.join(instance_dir, "assignment.json"),
-    handoff_path: path9.join(instance_dir, "handoff.json"),
-    heartbeat_path: path9.join(instance_dir, "heartbeat.json"),
-    cancel_channel: path9.join(instance_dir, "cancel"),
-    validation_path: path9.join(instance_dir, "handoff-validation.json"),
-    acceptance_path: path9.join(instance_dir, "handoff-acceptance.json"),
-    terminal_path: path9.join(instance_dir, "terminal.json")
+    attempt_path: path20.join(attempt_dir, "attempt.json"),
+    assignment_path: path20.join(instance_dir, "assignment.json"),
+    handoff_path: path20.join(instance_dir, "handoff.json"),
+    heartbeat_path: path20.join(instance_dir, "heartbeat.json"),
+    cancel_channel: path20.join(instance_dir, "cancel"),
+    validation_path: path20.join(instance_dir, "handoff-validation.json"),
+    acceptance_path: path20.join(instance_dir, "handoff-acceptance.json"),
+    terminal_path: path20.join(instance_dir, "terminal.json")
   };
   for (const [key, value] of Object.entries(paths)) {
     if (key === "run_dir") continue;
@@ -6775,10 +12813,10 @@ function taskCellPaths(ids, opts = {}) {
   }
   return paths;
 }
-function assertWithinRunTree(runDir, p, label = "path") {
-  const rel = path9.relative(path9.resolve(runDir), path9.resolve(p));
-  if (rel === "" || rel.startsWith("..") || path9.isAbsolute(rel)) {
-    throw new Error(`${label} escapes the run tree ${runDir}: ${p}`);
+function assertWithinRunTree(runDir2, p, label = "path") {
+  const rel = path20.relative(path20.resolve(runDir2), path20.resolve(p));
+  if (rel === "" || rel.startsWith("..") || path20.isAbsolute(rel)) {
+    throw new Error(`${label} escapes the run tree ${runDir2}: ${p}`);
   }
 }
 var ACCEPTANCE_AUTHORITIES = Object.freeze([
@@ -6790,7 +12828,7 @@ var HANDOFF_ACCEPTANCE_SCHEMA = "guild.handoff_acceptance.v1";
 
 // ../src/modules/dispatch/workflows/task-cell-acceptance.ts
 function absUnderCwd(cwd, relPath) {
-  return path10.resolve(cwd, relPath);
+  return path21.resolve(cwd, relPath);
 }
 function isTerminationAuthorized(a) {
   return a.termination_authorized_at !== null;
@@ -6798,7 +12836,7 @@ function isTerminationAuthorized(a) {
 function readAcceptanceForInstance(cwd, ids) {
   const paths = taskCellPaths(ids);
   try {
-    const raw = fs8.readFileSync(absUnderCwd(cwd, paths.acceptance_path), "utf8");
+    const raw = fs16.readFileSync(absUnderCwd(cwd, paths.acceptance_path), "utf8");
     const obj = JSON.parse(raw);
     if (obj["schema_version"] !== HANDOFF_ACCEPTANCE_SCHEMA) return null;
     return obj;
@@ -6809,7 +12847,7 @@ function readAcceptanceForInstance(cwd, ids) {
 function readAssignmentForInstance(cwd, ids) {
   const paths = taskCellPaths(ids);
   try {
-    const raw = fs8.readFileSync(absUnderCwd(cwd, paths.assignment_path), "utf8");
+    const raw = fs16.readFileSync(absUnderCwd(cwd, paths.assignment_path), "utf8");
     const obj = JSON.parse(raw);
     if (obj["schema_version"] !== "guild.task_assignment.v2") return null;
     return obj;
@@ -6818,29 +12856,29 @@ function readAssignmentForInstance(cwd, ids) {
   }
 }
 function findRunAcceptances(cwd, runId) {
-  const cellsRoot = path10.join(cwd, ".guild", "runs", runId, "task-cells");
+  const cellsRoot = path21.join(cwd, ".guild", "runs", runId, "task-cells");
   const out = [];
   let logicalTaskDirs;
   try {
-    logicalTaskDirs = fs8.readdirSync(cellsRoot);
+    logicalTaskDirs = fs16.readdirSync(cellsRoot);
   } catch {
     return out;
   }
   for (const logical_task_id of logicalTaskDirs) {
-    const attemptsRoot = path10.join(cellsRoot, logical_task_id, "attempts");
+    const attemptsRoot = path21.join(cellsRoot, logical_task_id, "attempts");
     let attemptDirs;
     try {
-      attemptDirs = fs8.readdirSync(attemptsRoot);
+      attemptDirs = fs16.readdirSync(attemptsRoot);
     } catch {
       continue;
     }
     for (const attemptStr of attemptDirs) {
       const attempt = Number.parseInt(attemptStr, 10);
       if (!Number.isInteger(attempt) || attempt < 1) continue;
-      const instancesRoot = path10.join(attemptsRoot, attemptStr, "instances");
+      const instancesRoot = path21.join(attemptsRoot, attemptStr, "instances");
       let instanceDirs;
       try {
-        instanceDirs = fs8.readdirSync(instancesRoot);
+        instanceDirs = fs16.readdirSync(instancesRoot);
       } catch {
         continue;
       }
@@ -6858,20 +12896,20 @@ function findRunAcceptances(cwd, runId) {
 function deriveRunId(sessionId, guildRoot) {
   return resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ?? `run-${sessionId}`;
 }
-function assessReceipts(runDir, teammate) {
-  const handoffsDir = path11.join(runDir, "handoffs");
-  if (!fs9.existsSync(handoffsDir)) return [];
+function assessReceipts(runDir2, teammate) {
+  const handoffsDir = path22.join(runDir2, "handoffs");
+  if (!fs17.existsSync(handoffsDir)) return [];
   const prefix = `${teammate}-`;
   const results = [];
-  const files = fs9.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
+  const files = fs17.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
   for (const file of files) {
     const taskId = file.slice(prefix.length, -".md".length);
-    const rPath = path11.join(handoffsDir, file);
+    const rPath = path22.join(handoffsDir, file);
     let envelopeValid = false;
     let envelopeErrors = [];
     let envelopeStatus;
     try {
-      const content = fs9.readFileSync(rPath, "utf8");
+      const content = fs17.readFileSync(rPath, "utf8");
       const rawEnvelope = extractHandoffEnvelope(content);
       if (rawEnvelope !== null) {
         const result = validateHandoffV2(rawEnvelope);
@@ -6894,12 +12932,12 @@ function assessReceipts(runDir, teammate) {
   return results;
 }
 function findAssignedTaskIds(cwd, teammate) {
-  const planDir = path11.join(resolveGuildRoot(cwd), ".guild", "plan");
-  if (!fs9.existsSync(planDir)) return [];
-  const files = fs9.readdirSync(planDir).filter((f) => f.endsWith(".md"));
+  const planDir = path22.join(resolveGuildRoot(cwd), ".guild", "plan");
+  if (!fs17.existsSync(planDir)) return [];
+  const files = fs17.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids = [];
   for (const file of files) {
-    const content = fs9.readFileSync(path11.join(planDir, file), "utf8");
+    const content = fs17.readFileSync(path22.join(planDir, file), "utf8");
     const blocks = content.split(/\n(?=[-*#]|\w)/);
     for (const block of blocks) {
       const isAssigned = new RegExp(`(?:owner|assigned|teammate):\\s*${teammate}\\b`, "i").test(block);
@@ -7029,17 +13067,17 @@ async function main2() {
   const cwd = payload.cwd ?? process.cwd();
   const guildRootForRun = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId, guildRootForRun);
-  const runDir = path11.join(guildRootForRun, ".guild", "runs", runId);
-  const receiptAssessments = assessReceipts(runDir, teammate);
+  const runDir2 = path22.join(guildRootForRun, ".guild", "runs", runId);
+  const receiptAssessments = assessReceipts(runDir2, teammate);
   const validReceiptTaskIds = receiptAssessments.filter((r) => r.envelopeValid).map((r) => r.taskId);
   const invalidReceiptTaskIds = receiptAssessments.filter((r) => !r.envelopeValid).map((r) => r.taskId);
   const completedIds = new Set(receiptAssessments.map((r) => r.taskId));
   const assignedIds = findAssignedTaskIds(cwd, teammate);
   const pendingTaskIds = assignedIds.filter((id) => !completedIds.has(id));
   const hasReceipt = receiptAssessments.length > 0;
-  const laneTier = resolveLaneTier(runDir, teammate, assignedIds);
+  const laneTier = resolveLaneTier(runDir2, teammate, assignedIds);
   const timeoutMs = resolveHeartbeatTimeoutMs(cwd, laneTier);
-  const liveness = assessLiveness(runDir, teammate, timeoutMs);
+  const liveness = assessLiveness(runDir2, teammate, timeoutMs);
   let acceptedLanes = [];
   try {
     acceptedLanes = resolveAcceptedLanes(guildRootForRun, runId, teammate);
@@ -7065,16 +13103,22 @@ async function main2() {
     validReceiptTaskIds,
     validReceipts,
     acceptedLanes,
-    runDir
+    runDir: runDir2
   };
   process.stdout.write(composeNudge(ctx));
-  emitBusEvent(runDir, {
-    run_id: runId,
-    event: "idle",
-    lane_id: teammate,
-    team_name: teamName !== "unknown" ? teamName : void 0,
-    detail: ctx.pendingTaskIds.length > 0 ? `pending tasks: [${ctx.pendingTaskIds.join(", ")}]` : void 0
-  });
+  const writeAuth = authorizeHookWrite(guildRootForRun);
+  if (writeAuth.ok === true) {
+    const boundRunDir = path22.join(guildRootForRun, ".guild", "runs", writeAuth.run_id);
+    emitBusEvent(boundRunDir, {
+      run_id: writeAuth.run_id,
+      event: "idle",
+      lane_id: teammate,
+      team_name: teamName !== "unknown" ? teamName : void 0,
+      detail: ctx.pendingTaskIds.length > 0 ? `pending tasks: [${ctx.pendingTaskIds.join(", ")}]` : void 0
+    });
+  } else {
+    process.stderr.write(formatBindingRejected("teammate-idle", writeAuth));
+  }
   process.exit(0);
 }
 main2().catch((err) => {

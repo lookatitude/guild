@@ -46,7 +46,7 @@ import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { markLaneInProgress } from "../lib/run-state.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
-import { resolveRunIdForTrace } from "../lib/run-trace.js";
+import { authorizeHookWrite, formatBindingRejected } from "../lib/hook-binding.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -181,38 +181,43 @@ async function main(): Promise<void> {
   // is seeded from the launch side (launcher owns the authoritative write;
   // this hook-side write is the earliest observable hook checkpoint).
   // Non-fatal: run-state is a rebuildable cache, never the system of record.
-  // resolveRunIdForTrace (env → legacy sentinel → B2 sentinel) is the SAME
-  // resolver run-trace-close.ts/learning-backstop.ts use — a session without
-  // the agent-team launcher's GUILD_RUN_ID env (lead session creating tasks,
-  // or a pane the launcher failed to seed) still converges on the sentinel
-  // run instead of a divorced run-<session_id> directory (audit finding).
+  // T3b (session_context §5): the run-state write is binding-gated — run
+  // identity comes from the launcher-exported binding env (GUILD_RUN_ID [+
+  // GUILD_RUN_BINDING_REF]) verified against the run's minted binding. No
+  // sentinel and no run-<session_id> fallback: an unbound write is refused
+  // (structured binding_rejected note), never redirected.
   const guildRootForRun = resolveGuildRoot(cwd);
-  const runId =
-    resolveRunIdForTrace(guildRootForRun, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
-    `run-${payload.session_id ?? "unknown"}`;
-  const runDir = path.join(guildRootForRun, ".guild", "runs", runId);
-  try {
-    markLaneInProgress(runDir, { runId }, taskId);
-    process.stderr.write(
-      `[task-created] run-state: lane "${taskId}" → in_progress ` +
-        `(${path.join(runDir, "run-state.json")}).\n`
-    );
-  } catch (err) {
-    process.stderr.write(
-      `[task-created] WARN: run-state in_progress write failed (non-fatal, ` +
-        `rebuildable cache): ${err instanceof Error ? err.message : String(err)}\n`
-    );
-  }
+  const runStateAuth = authorizeHookWrite(guildRootForRun);
+  if (runStateAuth.ok === false) {
+    process.stderr.write(formatBindingRejected("task-created", runStateAuth));
+  } else {
+    const runId = runStateAuth.run_id;
+    const runDir = path.join(guildRootForRun, ".guild", "runs", runId);
+    try {
+      markLaneInProgress(runDir, { runId }, taskId);
+      process.stderr.write(
+        `[task-created] run-state: lane "${taskId}" → in_progress ` +
+          `(${path.join(runDir, "run-state.json")}).\n`
+      );
+    } catch (err) {
+      process.stderr.write(
+        `[task-created] WARN: run-state in_progress write failed (non-fatal, ` +
+          `rebuildable cache): ${err instanceof Error ? err.message : String(err)}\n`
+      );
+    }
 
-  // All validations passed — emit bus event (SK-5 / CMD-007: agent-bus producer).
-  // Best-effort: a write failure logs a warning and never blocks the task.
-  emitBusEvent(runDir, {
-    run_id: runId,
-    event: "dispatched",
-    lane_id: owner,
-    task_id: taskId,
-    team_name: (payload.team_name ?? "").trim() || undefined,
-  });
+    // All validations passed — emit bus event (SK-5 / CMD-007: agent-bus
+    // producer). Best-effort: a write failure logs a warning and never blocks
+    // the task. Same binding gate as run-state: the bus file lives under the
+    // run dir, so an unbound event is refused above, never redirected.
+    emitBusEvent(runDir, {
+      run_id: runId,
+      event: "dispatched",
+      lane_id: owner,
+      task_id: taskId,
+      team_name: (payload.team_name ?? "").trim() || undefined,
+    });
+  }
 
   process.stderr.write(
     `[task-created] OK: task "${taskId}" owned by "${owner}" passed all validations.\n`

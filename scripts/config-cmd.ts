@@ -157,6 +157,8 @@ const TIER1_KEYS = new Set([
   "secrets_policy",
   "mcp",
   "defaults",
+  // T5 dynamic-host-model-routing: guild.model_policy.v2 (object; null = unset)
+  "model_policy",
   // LW1-6 schema extension (SC-W1-7/W1-8): the per-run role pins + per-host render
   // overrides. They live in DEFAULTS, are written by `config role` AND materialized by
   // `reconcile sync`/`config init`, and resolved by the resolver — so the closed key-set
@@ -300,7 +302,11 @@ const DEFAULTS_ALLOWED_KEYS = new Set([
   "update",                    // plugin-update-lifecycle AC-6
   "lean_lead",                 // rf-wi-01 (G1)
   "lifecycle_gate",            // rf-wi-01 (G1)
+  "dispatch",                  // #93
 ]);
+
+/** Valid sub-keys for defaults.dispatch.* (#93) */
+const DEFAULTS_DISPATCH_KEYS = new Set(["block_unmarked_lanes"]);
 
 /** Valid sub-keys for defaults.lean_lead.* (rf-wi-01 / G1) */
 const DEFAULTS_LEAN_LEAD_KEYS = new Set(["enabled", "hands_on_edit_threshold"]);
@@ -575,6 +581,13 @@ function validateKeyPath(keyPath: string): string | null {
       }
       return null;
     }
+    // #93: defaults.dispatch.* sub-path
+    if (seg1 === "dispatch") {
+      if (!DEFAULTS_DISPATCH_KEYS.has(seg2)) {
+        return `unknown defaults.dispatch key "${seg2}" (valid: ${[...DEFAULTS_DISPATCH_KEYS].join(", ")})`;
+      }
+      return null;
+    }
     // plugin-update-lifecycle AC-6: defaults.update.{mode,cadence_hours}
     if (seg1 === "update") {
       if (parts.length > 2 && seg2 !== "mode" && seg2 !== "cadence_hours") {
@@ -619,6 +632,10 @@ const BOOLEAN_PATHS = new Set([
   "models.importanceAtIngest",
   "defaults.lean_lead.enabled",        // rf-wi-01 (G1)
   "defaults.lifecycle_gate.enabled",   // rf-wi-01 (G1)
+  // #93: without this, `config set defaults.dispatch.block_unmarked_lanes true`
+  // persists the STRING "true", which the resolver then drops as a non-boolean —
+  // the operator would see a written setting that never reaches the guard.
+  "defaults.dispatch.block_unmarked_lanes",
 ]);
 
 /** Paths that must be integers (whole number strings). */
@@ -2306,10 +2323,15 @@ export function cmdProvidersDetect(cwd: string, probe?: ProbeEnv): number {
   // way to inject a fake probe is via direct function call from test code.
   const resolvedProbe: ProbeEnv = probe ?? defaultProbeEnv(cwd);
 
-  // Run detection
+  // Run detection. T3 R3-F1: the settings `host:` key is a caller ASSERTION —
+  // this informational CLI surface records no native-adapter/handshake
+  // evidence, so it must never supply "verified" (the run-start preflight is
+  // the authoritative trust resolver). Asserted identity means the cross-review
+  // recommendation below honestly degrades to (none) with the reason.
   const detection = detectProviders({
     cwd,
     host: resolvedHost,
+    trust: "asserted",
     probe: resolvedProbe,
   });
 
@@ -2324,6 +2346,7 @@ export function cmdProvidersDetect(cwd: string, probe?: ProbeEnv): number {
 
   lines.push(`[config-cmd] providers detect`);
   lines.push(`  author host family : ${detection.authorHost}`);
+  lines.push(`  author trust       : ${detection.authorTrust} (settings host is a caller claim; only the run-start preflight can verify)`);
   lines.push(`  review.mode        : ${resolvedReview.mode}`);
   lines.push("");
   lines.push(

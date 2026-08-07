@@ -48,9 +48,15 @@ const ERROR_EVENT = JSON.stringify({
   ms: 300,
 });
 
+// T3b (session_context §5): reflection-side writes are binding-gated; every
+// fixture run mints its binding. hermeticEnv strips outer Guild-lane env.
+import { mintTestBinding } from "../test-support/mint-binding";
+import { hermeticEnv } from "../test-support/hermetic-env";
+
 function makeRunDir(tmpDir: string, runId: string, events: string[]): string {
   const runDir = path.join(tmpDir, ".guild", "runs", runId);
   fs.mkdirSync(runDir, { recursive: true });
+  mintTestBinding(tmpDir, runId);
   if (events.length > 0) {
     fs.writeFileSync(
       path.join(runDir, "events.ndjson"),
@@ -68,7 +74,7 @@ function runScript(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...hermeticEnv(), ...env },
     timeout: 15000,
   });
   return {
@@ -98,6 +104,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       // Must emit a line telling orchestrator to invoke guild:reflect
@@ -110,6 +117,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
     });
@@ -122,6 +130,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -135,6 +144,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -151,6 +161,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -162,9 +173,11 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       // Create run dir but no events file
       const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
       fs.mkdirSync(runDir, { recursive: true });
+      mintTestBinding(tmpDir, "test-run");
       const { exitCode, stdout } = runScript(stopPayload, {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
       expect(stdout.trim()).toBe("");
@@ -177,6 +190,7 @@ describe("maybe-reflect.ts — heuristic gate", () => {
       const { exitCode } = runScript("not valid json", {
         GUILD_CWD: tmpDir,
         GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       });
       expect(exitCode).toBe(0);
     });
@@ -205,6 +219,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     // Write events ONLY to canonical file — legacy events.ndjson absent
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
@@ -215,6 +230,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("GUILD_REFLECT");
@@ -224,6 +240,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     // makeRunDir writes to events.ndjson only
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     fs.mkdirSync(runDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     fs.writeFileSync(
       path.join(runDir, "events.ndjson"),
       [SPECIALIST_EVENT, FILE_EDIT_EVENT].join("\n") + "\n",
@@ -233,6 +250,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("GUILD_REFLECT");
@@ -242,6 +260,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     // Canonical has passing events; legacy has an error event that would fail the gate
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
@@ -257,6 +276,7 @@ describe("maybe-reflect.ts — HK-04 canonical telemetry reader", () => {
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     // Gate passes because canonical (no error) is used, not legacy (has error)
     expect(exitCode).toBe(0);
@@ -311,6 +331,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
       [SPECIALIST_EVENT, TOOL_CALL_WRITE].join("\n") + "\n",
@@ -320,6 +341,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("GUILD_REFLECT");
@@ -329,6 +351,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const runDir = path.join(tmpDir, ".guild", "runs", "test-run");
     const logsDir = path.join(runDir, "logs");
     fs.mkdirSync(logsDir, { recursive: true });
+    mintTestBinding(tmpDir, "test-run");
     fs.writeFileSync(
       path.join(logsDir, "v1.4-events.jsonl"),
       [SPECIALIST_EVENT, TOOL_CALL_WRITE, TOOL_CALL_ERR].join("\n") + "\n",
@@ -338,6 +361,7 @@ describe("maybe-reflect.ts — reads the canonical `tool_call` shape (post-tool-
     const { exitCode, stdout } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stdout.trim()).toBe("");
@@ -402,6 +426,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       // Explicitly clear the env var so we exercise the default-off path.
       GUILD_ENABLE_DEVTEAM_REFLECT: "",
     });
@@ -416,6 +441,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
     });
     expect(exitCode).toBe(0);
@@ -429,6 +455,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
     });
     expect(exitCode).toBe(0);
@@ -442,6 +469,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
       GUILD_SPEC_SLUG: "v1.3.0-deferred-cleanup",
     });
@@ -455,6 +483,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
       GUILD_SPEC_SLUG: "nonexistent-spec",
     });
@@ -469,6 +498,7 @@ describe("maybe-reflect.ts — F12 dev-team SubagentStop branch", () => {
     const { exitCode, stdout, stderr } = runScript(subagentPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
       GUILD_ENABLE_DEVTEAM_REFLECT: "1",
     });
     expect(exitCode).toBe(0);
@@ -517,7 +547,14 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
   }
 
   // Write a reflection file with a codex-skip marker in the given format.
-  type MarkerStyle = "frontmatter" | "legacy-list" | "body-marker" | "none";
+  type MarkerStyle =
+    | "frontmatter"
+    | "legacy-list"
+    | "body-marker"
+    | "none"
+    | "ran"
+    | "ran-and-proposes"
+    | "declared-unknown";
   function writeReflection(
     cwd: string,
     name: string,
@@ -542,6 +579,21 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
       case "none":
         body = "---\nschema_version: guild.reflection.v1\n---\n\n# reflection\n";
         break;
+      case "ran":
+        body =
+          "---\nschema_version: guild.reflection.v1\ncodex_review: RAN\n---\n\n# reflection\n";
+        break;
+      case "ran-and-proposes":
+        // The shape that actually sits in .guild/reflections today: review RAN,
+        // AND the run proposed improving the codex-review skill. Declaration
+        // and inference disagree; the declaration must win.
+        body =
+          "---\nschema_version: guild.reflection.v1\ncodex_review: RAN\nproposals:\n  skill_improvement: [guild:codex-review, guild:execute-plan]\n---\n\n# reflection\n";
+        break;
+      case "declared-unknown":
+        body =
+          "---\nschema_version: guild.reflection.v1\ncodex_review: PARTIAL\n---\n\n# reflection\n";
+        break;
     }
     fs.writeFileSync(path.join(dir, name), body, "utf8");
   }
@@ -555,6 +607,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stderr).not.toMatch(/DISCIPLINE/);
@@ -571,6 +624,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(
@@ -587,6 +641,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).not.toBe(0);
     expect(stderr).toMatch(/DISCIPLINE/);
@@ -595,6 +650,136 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const data = JSON.parse(fs.readFileSync(sentinel, "utf8"));
     expect(data.streak).toBeGreaterThanOrEqual(3);
     expect(data.blocked).toBe(true);
+  });
+
+  // ── Declaration beats inference (the FU-E false positive) ────────────────
+  //
+  // Regression pins for the defect that blocked a real repo: three reflections
+  // that each DECLARED `codex_review: RAN` were counted as three consecutive
+  // SKIPS, because each also proposed improving the guild:codex-review skill
+  // and the three marker tests were ORed with no precedence. Engaging with the
+  // review discipline was what marked a run as having evaded it — and every
+  // clearing path the banner printed was then either already satisfied or a
+  // no-op, leaving the operator override as the only working exit.
+
+  it("does NOT count a reflection that declares RAN while also proposing guild:codex-review", () => {
+    seedSelfBuild(tmpDir);
+    writeReflection(tmpDir, "r1.md", "ran-and-proposes");
+    writeReflection(tmpDir, "r2.md", "ran-and-proposes");
+    writeReflection(tmpDir, "r3.md", "ran-and-proposes");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).not.toMatch(/DISCIPLINE/);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".guild", "codex-skip-streak.json")),
+    ).toBe(false);
+  });
+
+  it("lets a newest RAN reflection break an older run of genuine skips", () => {
+    seedSelfBuild(tmpDir);
+    // Older files are genuine skips; the NEWEST declares RAN. Consecutive-from-
+    // newest means the streak must be 0, not 3.
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    writeReflection(tmpDir, "r2.md", "frontmatter");
+    writeReflection(tmpDir, "r3.md", "frontmatter");
+    writeReflection(tmpDir, "r4-newest.md", "ran");
+    const dir = path.join(tmpDir, ".guild", "reflections");
+    const now = Date.now();
+    // Pin mtimes explicitly — the guard sorts newest-first by mtime, and files
+    // written in the same millisecond would otherwise order arbitrarily.
+    fs.utimesSync(path.join(dir, "r1.md"), now / 1000 - 400, now / 1000 - 400);
+    fs.utimesSync(path.join(dir, "r2.md"), now / 1000 - 300, now / 1000 - 300);
+    fs.utimesSync(path.join(dir, "r3.md"), now / 1000 - 200, now / 1000 - 200);
+    fs.utimesSync(
+      path.join(dir, "r4-newest.md"),
+      now / 1000 - 100,
+      now / 1000 - 100,
+    );
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(stderr).not.toMatch(/DISCIPLINE/);
+    expect(
+      fs.existsSync(path.join(tmpDir, ".guild", "codex-skip-streak.json")),
+    ).toBe(false);
+  });
+
+  it("retires a stale sentinel once the streak drops below threshold", () => {
+    // The sentinel used to be write-only: nothing removed it when the streak
+    // fell, so `blocked: true` outlived its justification and the next G-gate
+    // kept refusing. Both "run a real review" and "record a non-skip
+    // reflection" act on the STREAK, so neither could ever clear the FILE —
+    // leaving the operator override as the only exit that worked.
+    seedSelfBuild(tmpDir);
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.mkdirSync(guildDir, { recursive: true });
+    const sentinel = path.join(guildDir, "codex-skip-streak.json");
+    fs.writeFileSync(
+      sentinel,
+      JSON.stringify({ streak: 3, threshold: 3, blocked: true }) + "\n",
+      "utf8",
+    );
+    // Only one genuine skip now — well below threshold.
+    writeReflection(tmpDir, "r1.md", "frontmatter");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).toBe(0);
+    expect(fs.existsSync(sentinel)).toBe(false);
+  });
+
+  it("does NOT retire the sentinel outside self-build context", () => {
+    // A consuming repo's session must never delete Guild's own state.
+    const guildDir = path.join(tmpDir, ".guild");
+    fs.mkdirSync(guildDir, { recursive: true });
+    const sentinel = path.join(guildDir, "codex-skip-streak.json");
+    fs.writeFileSync(sentinel, JSON.stringify({ blocked: true }) + "\n", "utf8");
+    writeReflection(tmpDir, "r1.md", "ran");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    runScript(stopPayload, { GUILD_CWD: tmpDir, GUILD_RUN_ID: "test-run" });
+    expect(fs.existsSync(sentinel)).toBe(true);
+  });
+
+  it("fails CLOSED on an unrecognised declared value (counts as a skip)", () => {
+    // A discipline rail must not read "PARTIAL" as proof review happened. A
+    // spurious block costs a conversation; a spurious pass ships unreviewed
+    // self-build work.
+    seedSelfBuild(tmpDir);
+    writeReflection(tmpDir, "r1.md", "declared-unknown");
+    writeReflection(tmpDir, "r2.md", "declared-unknown");
+    writeReflection(tmpDir, "r3.md", "declared-unknown");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/DISCIPLINE/);
+  });
+
+  it("still infers a skip from the legacy list when NO value is declared", () => {
+    // The fallback must survive — undeclared legacy documents are the reason
+    // the heuristic exists at all.
+    seedSelfBuild(tmpDir);
+    writeReflection(tmpDir, "r1.md", "legacy-list");
+    writeReflection(tmpDir, "r2.md", "legacy-list");
+    writeReflection(tmpDir, "r3.md", "legacy-list");
+    makeRunDir(tmpDir, "test-run", [SPECIALIST_EVENT, FILE_EDIT_EVENT]);
+    const { exitCode, stderr } = runScript(stopPayload, {
+      GUILD_CWD: tmpDir,
+      GUILD_RUN_ID: "test-run",
+    });
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/DISCIPLINE/);
   });
 
   it("counts mixed marker formats (frontmatter + legacy + body) toward the streak", () => {
@@ -606,6 +791,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).not.toBe(0);
     expect(stderr).toMatch(/DISCIPLINE/);
@@ -630,6 +816,7 @@ describe("maybe-reflect.ts — codex-skip discipline guard (FU-E)", () => {
     const { exitCode, stderr } = runScript(stopPayload, {
       GUILD_CWD: tmpDir,
       GUILD_RUN_ID: "test-run",
+        GUILD_RUN_BINDING_REF: "rb-test-test-run",
     });
     expect(exitCode).toBe(0);
     expect(stderr).not.toMatch(/DISCIPLINE/);

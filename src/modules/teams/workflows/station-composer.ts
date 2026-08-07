@@ -20,7 +20,12 @@
  *   `.guild/wiki/entities/team-composition.md`
  *     §Phase Team Defaults      → STATION_POLICY[*].default_roster / optional_roster / advisory_memory
  *     §Implied Specialist Rules → IMPLIED_RULES
- *     §Team Size Rules          → cap-6 / default 3-4, orchestrator uncounted
+ *
+ * UNCAPPED (dynamic-host-model-routing, team-contracts §2 — T2b): the logical
+ * team is task-derived and UNCAPPED. The v2.3-era numeric team-cap constant,
+ * the `cap` config override, and the tail-drop path are RETIRED — every
+ * justified role survives composition; backend/host limits affect scheduling
+ * waves only (`team-schedule.ts`), never the roster.
  * Where this table EXTENDS the doc (the `research` / `definition` / `learn`
  * stations the doc's 6-row §Phase Team Defaults omits), the station carries a
  * `note` and `extends_doc: true` so G6b can reconcile the doc in the same rollout.
@@ -340,9 +345,9 @@ export interface AdvisoryPanelPolicy {
 
 /**
  * The RESOLVED advisory panel on a composed `team_plan`. The producer + challengers
- * are ADVISORY — they do NOT enter the `roster`, do NOT count toward cap-6, and are
- * independent of roster resolution (a challenger role may or may not also appear in
- * the roster; they are different lists).
+ * are ADVISORY — they do NOT enter the `roster` and are independent of roster
+ * resolution (a challenger role may or may not also appear in the roster; they
+ * are different lists).
  */
 export interface AdvisoryPanelV1 {
   /** Copied verbatim from the policy (may be null; G6b-2b may fill a null later). */
@@ -430,8 +435,8 @@ export const STATION_POLICY_SCHEMA = "guild.station_policy.v1" as const;
 /**
  * The default team for one station, as DATA. Mirrors a §Phase Team Defaults row:
  * `default_roster` are the always-present specialists, `optional_roster` the
- * doc's "optional …" / "… when needed" roles (dropped first under the cap-6
- * ceiling), `advisory_memory` the doc's "advisory memory" attachment. `fanout` is
+ * doc's "optional …" / "… when needed" roles (signal-gated, never truncated),
+ * `advisory_memory` the doc's "advisory memory" attachment. `fanout` is
  * the D1 BASELINE table value (`lead_only`) — never a scored value here (G8 owns
  * scoring, via the composer's `scoreFanout` seam).
  */
@@ -460,7 +465,7 @@ export interface StationDefault {
    * baseline/gated challengers, as DATA. Replaces the old hardcoded per-skill
    * combos (guild-quality's `producer qa-test-strategy; challengers [security,
    * architect]`, guild-operations, …) with composer policy. ADVISORY only — never
-   * enters the roster, never counts toward cap-6.
+   * enters the roster.
    */
   advisory_panel: AdvisoryPanelPolicy;
   /** D1 baseline fan-out for every lane at this station; G8 may raise it. */
@@ -644,10 +649,16 @@ export const STATION_POLICY: Readonly<Record<StationId, StationDefault>> = deepF
   },
 });
 
-// ── Team size rules (§Team Size Rules) ───────────────────────────────────────
+// ── Team size policy (team-contracts §2 — UNCAPPED) ──────────────────────────
 
-/** Doc §Team Size Rules: max 6 specialists (the orchestrator/lead does not count). */
-export const TEAM_CAP = 6 as const;
+/**
+ * The logical team is TASK-DERIVED AND UNCAPPED (team-contracts §2). There is
+ * NO numeric specialist-count limit, NO default size target, and NO
+ * truncation/tail-drop path anywhere in this composer or its validators — the
+ * retired v2.3-era numeric cap must not be reintroduced under any name.
+ * Execution concurrency is a SCHEDULING concern owned by `team-schedule.ts`.
+ */
+export const TEAM_SIZE_POLICY = "uncapped_task_derived" as const;
 
 // ── guild.team_plan.v1 ───────────────────────────────────────────────────────
 
@@ -690,19 +701,22 @@ export interface TeamPlanLane {
 /**
  * `guild.team_plan.v1` — the deterministic output of `composeStationTeam`. A typed
  * team the run can dispatch: the station, the resolved roster (roles + per-lane
- * tier + fan-out), which implied rules fired, and the cap-6 outcome.
+ * tier + fan-out), and which implied rules fired. UNCAPPED (team-contracts §2):
+ * the composed shape carries NO cap/capped/dropped_roles fields — v2 never
+ * emits them, and the validator rejects a plan that smuggles one in. Legacy
+ * capped artifacts are read ONLY through `team-plan-compat.ts`.
  */
 export interface TeamPlanV1 {
   schema_version: typeof TEAM_PLAN_SCHEMA;
   station: StationId;
-  /** The resolved specialist lanes (cap-6, orchestrator/advisory uncounted). */
+  /** The resolved specialist lanes (UNCAPPED; orchestrator/advisory are not lanes). */
   roster: TeamPlanLane[];
   /**
    * EVERY rule whose signal fired for this composition — implied-rule ids AND
    * `opt:<station>:<role>` conditional-roster ids — recorded on the SIGNAL, NOT on
    * lane survival. A rule stays listed even when its role was already a default
-   * (deduped) or dropped by the cap, so the audit trail never loses fired-rule
-   * evidence. Order-stable, deduped.
+   * (deduped), so the audit trail never loses fired-rule evidence. Order-stable,
+   * deduped.
    */
   fired_rules: string[];
   /**
@@ -712,12 +726,12 @@ export interface TeamPlanV1 {
    * from the actual spec/plan. Present so downstream has an explicit slot.
    */
   plan_driven_slots: string[];
-  /** Whether an advisory-memory agent should attach (does not count toward cap-6). */
+  /** Whether an advisory-memory agent should attach (advisory — never a roster lane). */
   advisory_memory: boolean;
   /**
    * The RESOLVED advisory challenger panel — producer + resolved challengers +
    * fired gated-challenger rule ids. ADVISORY: independent of the roster, never
-   * counts toward cap-6. (REQUIRED field — G6b-2b consumes it.)
+   * a roster lane. (REQUIRED field — G6b-2b consumes it.)
    */
   advisory_panel: AdvisoryPanelV1;
   /**
@@ -727,12 +741,6 @@ export interface TeamPlanV1 {
    * is authoritative). REQUIRED — decision 5 mandates the evidence on every cell.
    */
   composition_trace: CompositionTraceV1;
-  /** The cap applied. */
-  cap: number;
-  /** true iff the cap-6 ceiling truncated the roster (optionals dropped first). */
-  capped: boolean;
-  /** Roles dropped by the cap (empty when `capped` is false). */
-  dropped_roles: string[];
 }
 
 // ── guild.team_result.v1 ─────────────────────────────────────────────────────
@@ -816,8 +824,6 @@ export interface StationComposeConfig {
    * programming error and throws (like an unknown station).
    */
   fanoutOverride?: FanoutOverride;
-  /** Override the specialist cap (default `TEAM_CAP` = 6). */
-  cap?: number;
   /**
    * Fallback tier for a role absent from `tierIndex` (should not happen for a
    * canonical role — every policy/implied role is a shipped template). Defaults to
@@ -840,13 +846,13 @@ export interface StationComposeConfig {
  *      (source: "optional", `fired_rule` = `opt:<station>:<role>`).
  *   3. For each `IMPLIED_RULES` whose `signal` is truthy in `signals`, append its
  *      `adds` (source: "implied", `fired_rule` = rule id). Every rule whose signal
- *      fires is recorded in `fired_rules` — even if its role is deduped or capped.
+ *      fires is recorded in `fired_rules` — even if its role is deduped.
  *   4. Dedupe by role, keeping the FIRST occurrence (so a default/optional role is
  *      never downgraded to "implied", and an implied role added by two rules keeps
  *      the first rule's provenance).
- *   5. Apply cap-6: if the specialist count exceeds `cap`, drop from the tail
- *      (optionals are last in priority order, so they go first), recording
- *      `dropped_roles` and `capped: true`. The advisory-memory agent never counts.
+ *   5. UNCAPPED (team-contracts §2): every deduped justified role survives — there
+ *      is no numeric limit and no tail-drop. A caller supplying the RETIRED `cap`
+ *      override is rejected loudly (a logical-size limiter is not accepted).
  *   6. SCORE the fan-out mode (G8): derive decomposition signals from `signals`,
  *      merge `config.decompositionSignals` over them, `scoreFanoutMode(...)` →
  *      `lead_only | lead_plus_one | lead_plus_many` (signal-gated, NOT cost-gated).
@@ -870,13 +876,20 @@ export function composeStationTeam(
       `station-composer: unknown station "${station}" — must be one of ${STATIONS.join(", ")}`
     );
   }
-  const cap = config.cap ?? TEAM_CAP;
+  // team-contracts §2: the numeric cap override is RETIRED. Reject it loudly —
+  // honoring it would silently truncate a justified team; ignoring it would let
+  // a caller believe a limiter applied. Backend limits belong to scheduling.
+  if ("cap" in (config as unknown as Record<string, unknown>)) {
+    throw new Error(
+      "station-composer: the numeric team cap is retired (team-contracts §2 — the logical team is task-derived and uncapped); backend capacity shapes scheduling waves only, never the roster"
+    );
+  }
   const fallbackTier = config.fallbackTier ?? "mid";
 
   // `fired_rules` is SIGNAL-driven — a rule is recorded the moment its signal fires,
-  // independent of whether the resulting role survives dedup or the cap. The audit
-  // trail of "which conditions triggered which policy" must never be lost just
-  // because the role was already a default (deduped) or dropped by cap-6.
+  // independent of whether the resulting role survives dedup. The audit trail of
+  // "which conditions triggered which policy" must never be lost just because the
+  // role was already a default (deduped).
   const fired_rules: string[] = [];
   const firedSet = new Set<string>();
   const recordFired = (id: string): void => {
@@ -901,7 +914,7 @@ export function composeStationTeam(
     candidates.push({ role, source: "optional", fired_rule: ruleId });
   }
   // (3) global implied rules — when the signal fires; record the rule id even if the
-  // role is later deduped/capped.
+  // role is later deduped.
   for (const rule of IMPLIED_RULES) {
     if (signals[rule.signal] !== true) continue;
     recordFired(rule.id);
@@ -927,16 +940,9 @@ export function composeStationTeam(
     ordered.push(c);
   }
 
-  // (5) — cap-6. Tail drop preserves defaults > implied > (trailing) optionals.
-  const rank: Record<LaneSource, number> = { default: 0, implied: 1, optional: 2 };
-  const prioritized = ordered
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => rank[a.c.source] - rank[b.c.source] || a.i - b.i)
-    .map((x) => x.c);
-
-  const kept = prioritized.slice(0, cap);
-  const dropped = prioritized.slice(cap);
-  const dropped_roles = dropped.map((c) => c.role);
+  // (5) — UNCAPPED (team-contracts §2): EVERY deduped justified role survives.
+  // No numeric limit, no priority sort for dropping, no truncation artifact.
+  const kept = ordered;
 
   // (6) — SCORE the fan-out mode (G8). Signal-gated, NOT cost-gated (decision 5).
   // Derive decomposition signals from `signals`, merge the caller's explicit ones
@@ -990,10 +996,9 @@ export function composeStationTeam(
     override,
   };
 
-  // (7) — resolve tier + scope per surviving lane, in original priority order. Every
+  // (7) — resolve tier + scope per lane, in original priority order. Every
   // lane's `fanout` mirrors the resolved cell mode (the trace is authoritative).
   const roster: TeamPlanLane[] = kept
-    .sort((a, b) => ordered.indexOf(a) - ordered.indexOf(b))
     .map((c) => {
       const lane: TeamPlanLane = {
         role: c.role,
@@ -1050,9 +1055,6 @@ export function composeStationTeam(
     advisory_memory: policy.advisory_memory,
     advisory_panel,
     composition_trace,
-    cap,
-    capped: dropped_roles.length > 0,
-    dropped_roles,
   };
 
   // INVARIANT (the trust anchor for the composition_trace contract): the composer is
@@ -1299,14 +1301,16 @@ function isCompositionTraceV1(v: unknown): v is CompositionTraceV1 {
 }
 
 /**
- * Fail-closed validation of a `guild.team_plan.v1`. Returns the typed plan or
- * NULL — never throws, never repairs. Rejects an unknown station, a malformed
- * lane, a non-boolean `advisory_memory`/`capped`, a bad `cap`, or a `fired_rules`
- * / `dropped_roles` that is not a string array. Also rejects a plan whose
- * `capped` flag disagrees with `dropped_roles` (a `capped:true` with no dropped
- * role, or vice versa), a malformed / self-inconsistent `composition_trace` (G8),
- * a lane whose `fanout` diverges from the trace mode, or a trace `worker_lanes`
- * that disagrees with the roster size — the parts must be consistent.
+ * Fail-closed validation of a `guild.team_plan.v1` (the UNCAPPED v2-composed
+ * shape). Returns the typed plan or NULL — never throws, never repairs.
+ * Rejects an unknown station, a malformed lane, a non-boolean
+ * `advisory_memory`, a non-string-array `fired_rules`, a malformed /
+ * self-inconsistent `composition_trace` (G8), a lane whose `fanout` diverges
+ * from the trace mode, or a trace `worker_lanes` that disagrees with the
+ * roster size. It also rejects ANY retired truncation key (`cap` / `capped` /
+ * `dropped_roles` / `max_team_size` / `team_size`) — team-contracts §2/§7: v2
+ * never emits them, and a truncation artifact must not masquerade as a
+ * composed plan (legacy capped artifacts go through `team-plan-compat.ts`).
  */
 export function validateTeamPlanV1(obj: unknown): TeamPlanV1 | null {
   // Contract: NEVER throws. An exotic input (a Proxy trap / throwing own getter on
@@ -1333,8 +1337,10 @@ function validateTeamPlanV1Inner(obj: unknown): TeamPlanV1 | null {
     return null;
   }
   if (!isStrArr(o["plan_driven_slots"])) return null; // isStrArr accepts [] (empty is legal)
-  if (!(Array.isArray(o["dropped_roles"]) && denseEvery(o["dropped_roles"], (x) => typeof x === "string"))) {
-    return null;
+  // team-contracts §2/§7: retired truncation keys reject outright — a numeric
+  // logical-size limiter or a drop artifact cannot ride a v2-composed plan.
+  for (const retired of ["cap", "capped", "dropped_roles", "max_team_size", "team_size"]) {
+    if (retired in o) return null;
   }
   if (typeof o["advisory_memory"] !== "boolean") return null;
   // advisory_panel is REQUIRED and must be a well-formed resolved panel for THIS
@@ -1350,12 +1356,6 @@ function validateTeamPlanV1Inner(obj: unknown): TeamPlanV1 | null {
   // authoritative; a lane claiming a different fan-out than the cell resolved is a
   // fabricated plan). Dense check for the sparse-array hole.
   if (!denseEvery(o["roster"] as unknown[], (x) => (x as TeamPlanLane).fanout === trace.mode)) return null;
-  if (typeof o["capped"] !== "boolean") return null;
-  if (!Number.isInteger(o["cap"]) || (o["cap"] as number) < 1) return null;
-  // capped ⇔ at least one dropped role.
-  if (o["capped"] !== (o["dropped_roles"] as unknown[]).length > 0) return null;
-  // Roster must not exceed the declared cap.
-  if ((o["roster"] as unknown[]).length > (o["cap"] as number)) return null;
   // cost_estimate.worker_lanes MUST equal the roster size (the composer sets it so;
   // a mismatch means a tampered trace).
   if (trace.cost_estimate.worker_lanes !== (o["roster"] as unknown[]).length) {

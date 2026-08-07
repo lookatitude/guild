@@ -154,6 +154,59 @@ is replayable from the entrypoint. `--initiative` forwarded only when
 user-supplied (NN#5); the init skill writes `.guild/init/` not
 `.guild/initiatives/` — orthogonal and not a NN#5 concern.
 
+## Team decision gate (blocking — team-contracts §4/§5)
+
+Before this phase dispatches **any** participant — worker, advisor, challenger,
+or local/cross-host reviewer — a **persisted** team decision must authorize it.
+An advisory label is never a bypass, and Guild never auto-approves.
+
+1. **Present the proposal** and let the user answer in the decision vocabulary
+   — `approve · add · remove · substitute · edit_dependencies · restructure`
+   (the four edit verbs record a `restructure`, never an approve). The review
+   prints the proposed team, each participant's necessity rationale, excluded
+   roles, obligation coverage, and per-kind gate coverage:
+
+```bash
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts review \
+  --proposal .guild/runs/<run-id>/team-plan/init.proposal.v<n>.yaml
+```
+
+2. **Restructure loop** — idempotent: each pass produces a NEW proposal version
+   (parent hash chained, prior versions preserved) and returns to `pending`; it
+   never edits approved bytes and never approves anything:
+
+```bash
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts restructure \
+  --proposal <parent-proposal> --edits <edits.json> \
+  --decided-by user --channel interactive_prompt
+```
+
+   It prints the user's edits, the **coverage impact** (obligations that lost
+   their last owner), and any edit already satisfied by the parent. It exits
+   non-zero on an uncited roster change or a re-introduced cap key — a
+   specialist can never be dropped silently.
+
+3. **Gate the dispatch** — run this and **STOP on a non-zero exit**. It reads
+   the PERSISTED decision trail under `.guild/runs/<run-id>/team-plan/`; an
+   in-memory or agent-asserted approval is never accepted:
+
+```bash
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts gate \
+  --proposal <proposal> --cwd "$(pwd)"
+```
+
+Exit `0` authorizes dispatch and prints the final approved team plus the
+backend scheduling waves. Exit `3` **BLOCKS** — no persisted decision, a
+restructure rather than an approval, a tampered artifact, or a stale /
+hash-mismatched decision after any change to a participant, obligation,
+dependency, tier/purpose, capability scope, backend, wave structure,
+concurrency, cost posture, or review independence. Renewed user approval is
+required; never proceed past a refusal.
+
+Backend capacity shapes **waves**, never the roster: if the backend cannot run
+the approved team at once, propose waves or another backend and ask. Never drop
+a role to fit a host UI or backend.
+
 ## Dispatch
 
 Resolve `guild.phase_entry.v1` (pointer above), confirm the new-product

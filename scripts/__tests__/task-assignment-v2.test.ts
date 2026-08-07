@@ -35,6 +35,20 @@ import {
   validateTaskAttemptV1,
 } from "../lib/core/contracts/task-cell-backend";
 
+import {
+  BindingRejectedError,
+  closeRunBinding,
+  loadRunBinding,
+  mintRunBinding,
+  runBindingPath,
+} from "../../src/modules/lifecycle/workflows/run-binding";
+
+/** T3 F3: mint-or-load the run's binding under this test root (writers verify it). */
+function bindFor(cwd: string, runId: string): { binding_ref: string } {
+  const existing = loadRunBinding({ root: cwd, run_id: runId });
+  return { binding_ref: (existing ?? mintRunBinding({ root: cwd, run_id: runId })).binding_ref };
+}
+
 const FIXED_NOW = () => "2026-07-15T00:00:00.000Z";
 
 function tmpCwd(): string {
@@ -123,8 +137,8 @@ describe("AT1 — one specialist owning two ready tasks (no overwrite)", () => {
     const cellA = buildTaskCell(dispatch({ logicalTaskId: "T1-backend" }));
     const cellB = buildTaskCell(dispatch({ logicalTaskId: "T2-backend" }));
 
-    const a = writeTaskCell(cwd, cellA);
-    const b = writeTaskCell(cwd, cellB);
+    const a = writeTaskCell(cwd, cellA, bindFor(cwd, "run-g3"));
+    const b = writeTaskCell(cwd, cellB, bindFor(cwd, "run-g3"));
 
     // Two files, two distinct canonical paths — the v1 per-specialist collapse is gone.
     expect(a.assignmentPath).not.toBe(b.assignmentPath);
@@ -151,21 +165,21 @@ describe("AT1 — one specialist owning two ready tasks (no overwrite)", () => {
   it("refuses to overwrite an already-written immutable assignment (D6)", () => {
     const cwd = tmpCwd();
     const cell = buildTaskCell(dispatch());
-    writeTaskCell(cwd, cell);
+    writeTaskCell(cwd, cell, bindFor(cwd, "run-g3"));
     // A second write to the same (task_run_id, attempt, instance_id) is the v1
     // overwrite class — it THROWS, it never clobbers.
-    expect(() => writeTaskAssignmentV2(cwd, cell.assignment)).toThrow(/overwrite refused|immutable/i);
+    expect(() => writeTaskAssignmentV2(cwd, cell.assignment, bindFor(cwd, "run-g3"))).toThrow(/overwrite refused|immutable/i);
   });
 
   it("keeps the attempt companion idempotent but refuses a divergent rewrite", () => {
     const cwd = tmpCwd();
     const cell = buildTaskCell(dispatch());
-    const p1 = writeTaskAttemptV1(cwd, cell.attempt);
+    const p1 = writeTaskAttemptV1(cwd, cell.attempt, bindFor(cwd, "run-g3"));
     // Re-writing the identical record is a no-op (idempotent).
-    expect(writeTaskAttemptV1(cwd, cell.attempt)).toBe(p1);
+    expect(writeTaskAttemptV1(cwd, cell.attempt, bindFor(cwd, "run-g3"))).toBe(p1);
     // A DIFFERENT record at the same attempt path is refused (terminal-immutability, D4).
     expect(() =>
-      writeTaskAttemptV1(cwd, { ...cell.attempt, orphaned: true })
+      writeTaskAttemptV1(cwd, { ...cell.attempt, orphaned: true }, bindFor(cwd, "run-g3"))
     ).toThrow(/overwrite refused|immutable/i);
   });
 });
@@ -175,7 +189,7 @@ describe("AT3 — a malformed/missing assignment is a hard dispatch failure", ()
     const cwd = tmpCwd();
     const { assignment } = buildTaskCell(dispatch());
     const malformed = { ...(assignment as object), objective: "" };
-    expect(() => writeTaskAssignmentV2(cwd, malformed as never)).toThrow(/malformed|fail-closed/i);
+    expect(() => writeTaskAssignmentV2(cwd, malformed as never, bindFor(cwd, "run-g3"))).toThrow(/malformed|fail-closed/i);
     // Nothing was persisted.
     expect(fs.existsSync(path.resolve(cwd, assignment.assignment_path))).toBe(false);
   });
@@ -202,7 +216,7 @@ describe("reader roundtrip", () => {
   it("writes then reads back the exact validated assignment", () => {
     const cwd = tmpCwd();
     const cell = buildTaskCell(dispatch());
-    writeTaskCell(cwd, cell);
+    writeTaskCell(cwd, cell, bindFor(cwd, "run-g3"));
     const back = readTaskAssignmentV2(cwd, cell.assignment.assignment_path);
     expect(back).toEqual(cell.assignment);
   });
@@ -212,7 +226,7 @@ describe("D5 ack primitive", () => {
   it("writes an ack marker beside the assignment that read-back returns", () => {
     const cwd = tmpCwd();
     const cell = buildTaskCell(dispatch());
-    writeTaskCell(cwd, cell);
+    writeTaskCell(cwd, cell, bindFor(cwd, "run-g3"));
 
     const ids = {
       run_id: "run-g3",
@@ -237,5 +251,108 @@ describe("D5 ack primitive", () => {
     const { assignment } = buildTaskCell(dispatch());
     const malformed = { ...(assignment as object), instance_id: "" };
     expect(() => acknowledgeAssignment(cwd, malformed as never, FIXED_NOW)).toThrow(/malformed|ack gate/i);
+  });
+});
+
+// ── T3 rework F3 — reviewer probe regressions (session_context §5) ───────────
+// The G-lane round-1 live probe built a valid guild.task_assignment.v1/v2 and
+// the writers persisted it with NO run binding (ACCEPTED_FAIL_OPEN). These pin
+// the fail-closed posture for every §5 failure class on the v2 channel.
+
+describe("T3 F3 — v2 descriptor writers fail closed on the run binding", () => {
+  const fsx = require("fs") as typeof import("fs");
+
+  it("MISSING: no minted binding for the run → BindingRejectedError(binding_not_minted), nothing written", () => {
+    const cwd = tmpCwd();
+    const cell = buildTaskCell(dispatch());
+    expect(() => writeTaskCell(cwd, cell, { binding_ref: "rb-unminted" }))
+      .toThrow(BindingRejectedError);
+    expect(fsx.existsSync(path.resolve(cwd, cell.assignment.assignment_path))).toBe(false);
+    expect(fsx.existsSync(path.resolve(cwd, taskCellPaths({
+      run_id: "run-g3", logical_task_id: "T1-backend", attempt: 1, instance_id: "T1-backend.a1.i1",
+    }).attempt_path))).toBe(false);
+  });
+
+  it("ABSENT REF: an empty/undefined binding_ref is rejected (binding_absent)", () => {
+    const cwd = tmpCwd();
+    bindFor(cwd, "run-g3"); // binding exists — the CALLER still must present it
+    const cell = buildTaskCell(dispatch());
+    try {
+      writeTaskCell(cwd, cell, { binding_ref: undefined as unknown as string });
+      throw new Error("unreachable — writer must throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(BindingRejectedError);
+      expect((e as InstanceType<typeof BindingRejectedError>).reason).toBe("binding_absent");
+    }
+    expect(fsx.existsSync(path.resolve(cwd, cell.assignment.assignment_path))).toBe(false);
+  });
+
+  it("MALFORMED: a corrupt persisted binding record (state outside the enum) rejects the write", () => {
+    const cwd = tmpCwd();
+    const ref = bindFor(cwd, "run-g3").binding_ref;
+    // The reviewer's exact probe shape: a schema-invalid state value.
+    fsx.writeFileSync(
+      runBindingPath(cwd, "run-g3"),
+      JSON.stringify({
+        schema_version: "guild.run_binding.v1",
+        run_id: "run-g3",
+        binding_ref: ref,
+        state: "corrupt-openish",
+      }, null, 2) + "\n",
+    );
+    const cell = buildTaskCell(dispatch());
+    try {
+      writeTaskCell(cwd, cell, { binding_ref: ref });
+      throw new Error("unreachable — writer must throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(BindingRejectedError);
+      expect((e as InstanceType<typeof BindingRejectedError>).reason).toBe("binding_malformed");
+    }
+    expect(fsx.existsSync(path.resolve(cwd, cell.assignment.assignment_path))).toBe(false);
+  });
+
+  it("CLOSED: a revoked binding rejects the write (binding_closed)", () => {
+    const cwd = tmpCwd();
+    const bind = bindFor(cwd, "run-g3");
+    closeRunBinding({ root: cwd, run_id: "run-g3" });
+    const cell = buildTaskCell(dispatch());
+    try {
+      writeTaskCell(cwd, cell, bind);
+      throw new Error("unreachable — writer must throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(BindingRejectedError);
+      expect((e as InstanceType<typeof BindingRejectedError>).reason).toBe("binding_closed");
+    }
+  });
+
+  it("MISMATCHED: another run's nonce rejects the write (binding_mismatch)", () => {
+    const cwd = tmpCwd();
+    bindFor(cwd, "run-g3");
+    const other = bindFor(cwd, "run-other");
+    const cell = buildTaskCell(dispatch());
+    try {
+      writeTaskCell(cwd, cell, other);
+      throw new Error("unreachable — writer must throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(BindingRejectedError);
+      expect((e as InstanceType<typeof BindingRejectedError>).reason).toBe("binding_mismatch");
+    }
+  });
+
+  it("MOVED SENTINEL: repointing the workspace sentinel cannot redirect or authorize a descriptor write (SC-1)", () => {
+    const cwd = tmpCwd();
+    const bind = bindFor(cwd, "run-g3");
+    // Another actor points BOTH sentinels at a different run mid-dispatch.
+    fsx.mkdirSync(path.join(cwd, ".guild", "runs"), { recursive: true });
+    fsx.writeFileSync(path.join(cwd, ".guild", "runs", "current-run-id"), "run-hijack\n");
+    fsx.writeFileSync(path.join(cwd, ".guild", "current-run-id"), "run-hijack\n");
+    // The bound write still lands under ITS OWN run tree — never the sentinel's.
+    const cell = buildTaskCell(dispatch());
+    const out = writeTaskCell(cwd, cell, bind);
+    expect(out.assignmentPath).toContain(path.join(".guild", "runs", "run-g3"));
+    expect(out.assignmentPath).not.toContain("run-hijack");
+    // And the hijacked run id (no minted binding) cannot authorize anything.
+    const hijacked = buildTaskCell(dispatch({ runId: "run-hijack", logicalTaskId: "T9-x" }));
+    expect(() => writeTaskCell(cwd, hijacked, bind)).toThrow(BindingRejectedError);
   });
 });

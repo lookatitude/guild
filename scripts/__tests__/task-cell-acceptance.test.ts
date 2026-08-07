@@ -60,6 +60,19 @@ function tmpCwd(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "guild-task-cell-acceptance-"));
 }
 
+// T3 F3: the v2 descriptor writers fail closed without the run's minted binding.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const runBindingMod = require("../../src/modules/lifecycle/workflows/run-binding") as
+  typeof import("../../src/modules/lifecycle/workflows/run-binding");
+
+/** Mint-or-load the run's binding under this test root. */
+function bindFor(cwd: string, runId: string): { binding_ref: string } {
+  const existing = runBindingMod.loadRunBinding({ root: cwd, run_id: runId });
+  return {
+    binding_ref: (existing ?? runBindingMod.mintRunBinding({ root: cwd, run_id: runId })).binding_ref,
+  };
+}
+
 function dispatch(over: Partial<TaskCellDispatchInput> = {}): TaskCellDispatchInput {
   const logicalTaskId = over.logicalTaskId ?? "lt-api";
   return {
@@ -233,7 +246,7 @@ describe("shutdown — a valid accepted receipt releases downstream + seals a te
   it("acceptance releases downstream, authorizes termination, and gates a dependent lane open", () => {
     const cwd = tmpCwd();
     const { assignment } = buildTaskCell(dispatch());
-    writeTaskCell(cwd, buildTaskCell(dispatch()));
+    writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
 
     const validation = runDeterministicFloor({
       assignment,
@@ -266,7 +279,7 @@ describe("shutdown — a valid accepted receipt releases downstream + seals a te
   it("sealTerminalAttempt writes a terminal guild.task_attempt.v1 after acceptance", () => {
     const cwd = tmpCwd();
     const { assignment } = buildTaskCell(dispatch());
-    writeTaskCell(cwd, buildTaskCell(dispatch()));
+    writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     const ids = idsOf(assignment);
 
     // Before termination the attempt companion is non-terminal.
@@ -294,7 +307,7 @@ describe("shutdown — a valid accepted receipt releases downstream + seals a te
   it("a terminal attempt is IMMUTABLE — re-sealing to a different state throws (D4)", () => {
     const cwd = tmpCwd();
     const { assignment } = buildTaskCell(dispatch());
-    writeTaskCell(cwd, buildTaskCell(dispatch()));
+    writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     const ids = idsOf(assignment);
     sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: null, now: FIXED_NOW });
     expect(() =>
@@ -309,7 +322,7 @@ describe("AT6 — a failed teardown parks the attempt orphaned; a reaper retry s
   it("markAttemptOrphaned leaves the attempt non-terminal + bumps reap_attempts", () => {
     const cwd = tmpCwd();
     const { assignment } = buildTaskCell(dispatch());
-    writeTaskCell(cwd, buildTaskCell(dispatch()));
+    writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     const ids = idsOf(assignment);
 
     const orphaned = markAttemptOrphaned(cwd, ids);
@@ -340,7 +353,7 @@ describe("rejection — a rejected receipt writes a DURABLE record, never a sile
   it("rejection blocks downstream but authorizes a rejection terminal event", () => {
     const cwd = tmpCwd();
     const { assignment } = buildTaskCell(dispatch());
-    writeTaskCell(cwd, buildTaskCell(dispatch()));
+    writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     const validation = runDeterministicFloor({
       assignment,
       submitted: validReceipt(),
@@ -381,7 +394,7 @@ describe("rejection — a rejected receipt writes a DURABLE record, never a sile
 describe("findRunAcceptances — walks the run tree; only authorized records gate dismissal", () => {
   it("returns nothing when only a receipt exists (no acceptance record written)", () => {
     const cwd = tmpCwd();
-    writeTaskCell(cwd, buildTaskCell(dispatch()));
+    writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     // No writeAcceptanceRecord → the run tree carries an assignment + attempt but
     // no acceptance. Dismissal discovery must find nothing.
     expect(findRunAcceptances(cwd, "run-g4")).toEqual([]);
@@ -390,7 +403,7 @@ describe("findRunAcceptances — walks the run tree; only authorized records gat
   it("finds the acceptance + resolves the sibling assignment worker_role", () => {
     const cwd = tmpCwd();
     const { assignment } = buildTaskCell(dispatch());
-    writeTaskCell(cwd, buildTaskCell(dispatch()));
+    writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     const validation = runDeterministicFloor({
       assignment,
       submitted: validReceipt(),

@@ -39,8 +39,10 @@
  * never reach a later Stop at all — that guard finalizes truly-abandoned
  * still-open runs; this one keeps a still-active run's CLOSED record current.
  *
- * Run-id resolution: GUILD_RUN_ID → .guild/runs/current-run-id (legacy) →
- *                    .guild/current-run-id (B2 sentinel). See lib/run-trace.ts.
+ * Run-id resolution: GUILD_RUN_ID env ONLY (session_context §5 / T3b —
+ * sentinels are interactive intake, never a writer identity); the close write
+ * is verified against the run's minted binding inside emitRunClosed and the
+ * reopen leg below. See lib/run-trace.ts + lib/hook-binding.ts.
  *
  * Host: resolved host-neutrally via defaultResolveHost (GUILD_HOST-driven,
  * never claude-pinned in logic), passed to createRealEnv inside emitRunClosed.
@@ -71,6 +73,16 @@ import {
   readHookStdin,
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
+// T3 §5: the reopen-on-activity leg re-opens the run's binding with the run's
+// OWN exact nonce before re-closing (reopenRunBinding is fail-closed on
+// absent/malformed/mismatched records). Rework F1: the nonce is CALLER-
+// PRESENTED only — the GUILD_RUN_BINDING_REF env envelope naming this exact
+// run. It is NEVER recovered from binding.json (possession of a run id +
+// filesystem readability is not write authorization).
+import {
+  readHookBindingEnvelope,
+  reopenRunBinding,
+} from "../scripts/lib/run-binding.js";
 
 /**
  * Tolerance window (ms) for the reopen-on-activity check (see header). Newer
@@ -186,6 +198,31 @@ async function main(): Promise<void> {
         `[run-trace-close] run ${runId} received tool activity after its prior close ` +
           `(closed_at=${new Date(closedAtMs).toISOString()}) — re-closing with the latest state.\n`,
       );
+      // T3 §5: the run is being REOPENED (it was not genuinely done), so its
+      // binding state follows — reopen with the run's own exact nonce, fail
+      // closed on absent/malformed/mismatch. Rework F1: the nonce comes ONLY
+      // from the caller-presented env envelope naming this exact run — never
+      // recovered from binding.json. Without it the re-close is refused
+      // (emitRunClosed also fails closed downstream).
+      const envelope = readHookBindingEnvelope(process.env);
+      const recloseRef =
+        envelope && envelope.run_id === runId ? envelope.binding_ref : undefined;
+      if (recloseRef === undefined) {
+        process.stderr.write(
+          `[run-trace-close] WARN: binding_rejected — cannot re-close ${runId}: the ` +
+            `GUILD_RUN_BINDING_REF envelope does not name this run. No write performed.\n`,
+        );
+        process.exit(0);
+      }
+      try {
+        reopenRunBinding({ root, run_id: runId }, recloseRef);
+      } catch (err) {
+        process.stderr.write(
+          `[run-trace-close] WARN: ${err instanceof Error ? err.message : String(err)} — ` +
+            `re-close refused (fail closed).\n`,
+        );
+        process.exit(0);
+      }
       // Fall through — recompute + re-emit the close below.
     }
     // terminal === false (e.g. status: "resumable") falls through unconditionally.
@@ -202,16 +239,17 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-// CLI gate — only run main() when this file is the actual process entrypoint
-// (the `npx tsx` shebang invocation, or the bundled dist/run-trace-close.js
-// run directly). Without this guard, merely `import`/`require`-ing this
-// module (e.g. a test pulling in `findTerminalCheckpoint`) executes main()
-// as a side effect of module load: it reads stdin, fails to parse it, and
-// hits the catch at line 137, which calls `process.exit(0)` — killing the
-// whole jest process and truncating the reporter before its Tests:/Suites:
-// summary (#74). This file isn't imported into any other hook's bundle, so
-// `require.main === module` is safe here (see emit-learning-checkpoint.ts
-// for the case where it isn't).
+// T3b rework F4 / #74: main() runs ONLY when this file is the actual process
+// entrypoint (the `npx tsx` shebang invocation, or the bundled
+// dist/run-trace-close.js run directly via hooks.json). Without this guard,
+// merely `import`/`require`-ing this module (e.g. a test pulling in
+// `findTerminalCheckpoint`) executes main() as a side effect of module load:
+// it reads stdin, fails to parse it, and hits the catch at line 137, which
+// calls `process.exit(0)` — killing the whole jest worker mid-run and
+// truncating the reporter before its Tests:/Suites: summary, turning
+// `npm test` into a false green. This file isn't imported into any other
+// hook's bundle, so `require.main === module` is safe here (see
+// emit-learning-checkpoint.ts for the case where it isn't).
 if (require.main === module) {
   main().catch((err: unknown) => {
     process.stderr.write(

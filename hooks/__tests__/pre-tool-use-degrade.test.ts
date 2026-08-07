@@ -32,6 +32,11 @@ import * as os from "os";
 const SCRIPT = path.resolve(__dirname, "../pre-tool-use.ts");
 const RUN = "test-run";
 
+// T3b: run-dir writes (approval requests, security events) are binding-gated;
+// fixtures mint the run's binding. hermeticEnv strips any outer Guild-lane env.
+import { mintTestBinding } from "../test-support/mint-binding";
+import { hermeticEnv } from "../test-support/hermetic-env";
+
 function run(
   payload: object,
   env: Record<string, string>,
@@ -39,7 +44,7 @@ function run(
   const result = spawnSync("npx", ["tsx", SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: { ...hermeticEnv(), ...env },
     timeout: 20000,
   });
   return {
@@ -120,6 +125,7 @@ describe("pre-tool-use.ts — boundary-guard degrade path (HK-07 second ask)", (
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ptu-bgdegrade-"));
     fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
     fs.mkdirSync(path.join(tmp, ".guild", "runs", RUN), { recursive: true });
+    mintTestBinding(tmp, RUN);
   });
 
   afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -127,6 +133,7 @@ describe("pre-tool-use.ts — boundary-guard degrade path (HK-07 second ask)", (
   const baseEnv = (over: Record<string, string> = {}) => ({
     GUILD_CWD: tmp,
     GUILD_RUN_ID: RUN,
+      GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
     ...over,
   });
 
@@ -228,6 +235,7 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ptu-degrade-"));
     fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
     fs.mkdirSync(path.join(tmp, ".guild", "runs", RUN), { recursive: true });
+    mintTestBinding(tmp, RUN);
   });
 
   afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -235,6 +243,7 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
   const baseEnv = (over: Record<string, string> = {}) => ({
     GUILD_CWD: tmp,
     GUILD_RUN_ID: RUN,
+      GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
     GUILD_LANE_ID: "backend",
     // Declare a capability scope so the enforcement path is exercised
     GUILD_CAPABILITY_SCOPE: JSON.stringify({
@@ -261,6 +270,40 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
       // NO approval_request file written (host can ask natively)
       const approvals = approvalRequests(tmp);
       expect(approvals.length).toBe(0);
+    });
+
+    /**
+     * ISSUE #94 — the manifest-absent branch is no longer an unconditional
+     * assume-ask. Codex's SessionStart wiring runs update-check, not the
+     * bootstrap that writes this manifest, so a codex pane hit that branch every
+     * time and Guild emitted an `ask` codex has no primitive for: the gate looked
+     * armed and enforced nothing. With no manifest, a codex host now degrades
+     * from the registry capability row instead.
+     */
+    it("degrades to deny for codex when the manifest is absent (registry fallback)", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "codex", GUILD_HOST_ID: "codex-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"deny"');
+      expect(approvalRequests(tmp).length).toBe(1);
+    });
+
+    /**
+     * ...and the fallback is NARROW. `ask_mode:null` alone is not the test —
+     * nearly every non-Claude row carries it, including rows that also declare
+     * no PreToolUse hook and no deny. Degrading those would swap a merely
+     * imperfect decision for an unenforceable one on a dozen unverified hosts.
+     */
+    it("does NOT degrade a host that lacks a usable deny primitive", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "pi", GUILD_HOST_ID: "pi-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"ask"');
+      expect(approvalRequests(tmp).length).toBe(0);
     });
   });
 
@@ -355,6 +398,40 @@ describe("pre-tool-use.ts — cross-host degradation (HK-07)", () => {
       // The tool either asks or falls through — it MUST NOT write an approval_request
       const approvals = approvalRequests(tmp);
       expect(approvals.length).toBe(0);
+    });
+
+    /**
+     * ISSUE #94 — the manifest-absent branch is no longer an unconditional
+     * assume-ask. Codex's SessionStart wiring runs update-check, not the
+     * bootstrap that writes this manifest, so a codex pane hit that branch every
+     * time and Guild emitted an `ask` codex has no primitive for: the gate looked
+     * armed and enforced nothing. With no manifest, a codex host now degrades
+     * from the registry capability row instead.
+     */
+    it("degrades to deny for codex when the manifest is absent (registry fallback)", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "codex", GUILD_HOST_ID: "codex-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"deny"');
+      expect(approvalRequests(tmp).length).toBe(1);
+    });
+
+    /**
+     * ...and the fallback is NARROW. `ask_mode:null` alone is not the test —
+     * nearly every non-Claude row carries it, including rows that also declare
+     * no PreToolUse hook and no deny. Degrading those would swap a merely
+     * imperfect decision for an unenforceable one on a dozen unverified hosts.
+     */
+    it("does NOT degrade a host that lacks a usable deny primitive", () => {
+      const { stdout, exitCode } = run(
+        { tool_name: "Bash", tool_input: { command: "rm -rf /" } },
+        baseEnv({ GUILD_HOST: "pi", GUILD_HOST_ID: "pi-cli" }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('"permissionDecision":"ask"');
+      expect(approvalRequests(tmp).length).toBe(0);
     });
   });
 

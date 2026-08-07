@@ -127,6 +127,29 @@ describe("P1 SC-4 — route() A-side golden (pre-registry baseline)", () => {
     expect(hosts).toContain("codex"); // adversarial-review/powerful routes to codex
     expect(hosts).toContain("claude");
   });
+
+  // T7-H2 REGRESSION PIN. The router used to set `independence: "strong"`
+  // unconditionally on every non-degraded route — including the claude→claude
+  // case, where there is no cross-host anything. The launcher persisted that
+  // value into `run-state.json`, which is in the share-set AND git re-included,
+  // so an unverified "strong" reached a committed artifact while the honest
+  // §7a adjudication was never written at all. No route may claim strong again.
+  it("T7-H2: NO routing decision in the golden claims independence:'strong'", () => {
+    for (const [name, d] of Object.entries(golden)) {
+      expect({ name, independence: (d as { independence: string }).independence }).toEqual({
+        name,
+        independence: "weak",
+      });
+    }
+  });
+
+  it("T7-H2: the real route() never returns independence:'strong', and reports hostDiversity instead", () => {
+    for (const c of routingAbCases()) {
+      const decision = runRoutingCase(c) as unknown as Record<string, unknown>;
+      expect(decision["independence"]).toBe("weak");
+      expect(["distinct", "same", "unknown"]).toContain(decision["hostDiversity"]);
+    }
+  });
 });
 
 // ── (2b) A-side golden pin — real selectReviewer() decisions ────────────────

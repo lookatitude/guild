@@ -333,15 +333,112 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * against the OLD pins on this exact tree before the bump — SC-W2-5(1) naming
  * `M commands/dashboard.md` + `M commands/status.md`, SC-W3-6(B) naming the
  * `.claude-plugin` manifest hashes, and both naming the six skills files.
+ *
+ * ── 2026-08-04 re-ratification (skills only) ───────────────────────────────────
+ * `skills` moves 74d8b37c → 66362ad2; `commands` does NOT move and neither
+ * manifest hash does. The surface delta is exactly two files, both from the
+ * codex-review evolve round (`a verdict-less round is not an unsatisfied round`):
+ * `M skills/meta/codex-review/SKILL.md` and `A skills/meta/codex-review/scenarios.json`.
+ *
+ * Plus a third change found by `check-plugin-root-fallback.ts` while re-ratifying:
+ * SKILL.md:315 shipped the FORBIDDEN two-level `${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}`
+ * with no terminal $HOME default, which resolves to an empty path on a host that sets
+ * neither. Repaired to the required triple fallback in the same commit, so the pinned
+ * tree is the CORRECTED surface rather than the authored one.
+ *
+ * The C5 mirror under `src/modules/review/resources/**` was already correct for the
+ * evolve edit in the authoring commit — `sync-module-resources.ts` produced a ZERO
+ * diff over 645 resources across 31 modules — and was re-synced after the fallback
+ * repair, with `--check` clean both times.
+ *
+ * ANTI-VACUITY: both guards were observed RED against the OLD pin on this exact
+ * tree before the bump, and RED for the right reason — SC-W2-5(1) and SC-W3-6(B)
+ * each named those two skills files and NOTHING else, so the pin move is scoped to
+ * the intended change rather than papering over unrelated drift.
+ *
+ * ── 2026-08-06 re-ratification (skills only, issue #91) ────────────────────────
+ * `skills` moves a800ffa5 → e92d7dbb; `commands` does NOT move and neither
+ * manifest hash does. The surface delta is exactly three files, all the skill half
+ * of issue #91 (the D5 direct-subagent dispatch rung was the ONE dispatch class
+ * PR #85's universal producer marker did not cover, because the launcher hands
+ * that rung's whole `Agent()` construction back to the skill and there is no
+ * launcher-side descriptor to stamp):
+ *   `M skills/meta/execute-plan/SKILL.md`  — §"Capability-scope env injection"
+ *      gains steps (2b)/(2c): the producer marker's env half
+ *      (`GUILD_DISPATCH_PRODUCER=guild.dispatch.v1` + `GUILD_SPECIALIST`, plus
+ *      `GUILD_TIER`/`GUILD_TIER_SCORE` where a tier/score actually resolves, plus
+ *      `GUILD_AGENT_DEFINITION` for a project specialist) and its prompt half
+ *      (the line-1 marker), plus the unconditional-on-this-rung invariant.
+ *   `M skills/meta/execute-plan/dispatch.md` — new §"Producer marker (line-1 +
+ *      env)" carrying the per-class stamping table and the parse rules, plus
+ *      three pointer updates (structured-carrier list, handoff-injection row,
+ *      prompt-cache exception).
+ *   `M skills/meta/execute-plan/scenarios.json` — five added behavioral scenarios
+ *      (S6 line-1 marker on the subagent rung, S7 omit-vs-fabricate GUILD_TIER,
+ *      S8 the PROJECT-class dispatch shape, S9 the lane-owner→team-specialist
+ *      join, S10 marker on every retry/re-dispatch) so the body change is
+ *      eval-gated; S8-S10 close coverage gaps the adversarial review found. The trigger fixtures in `evals.json` are
+ *      unchanged: no frontmatter `description`/`when_to_use` field moved, so the
+ *      skill's trigger surface is byte-identical.
+ * No command, agent, or manifest surface changed. The SAME commit also carries
+ * the hook half of issue #91 — `hooks/lib/dispatch-attribution.ts` deletes the
+ * class-gated legacy 300-char producer-head parse now that the marker covers
+ * every dispatch class — but `hooks/**` is NOT part of either ratified tree, so
+ * it moves no pin here; it is covered by the hooks suite + the module-resource
+ * drift gates instead.
+ *
+ * Pins below were computed AFTER `hooks && npm run build` and
+ * `sync-module-resources.ts`, with both `sync-module-resources.ts --check` and
+ * `sync-live-resources.ts --check` clean (645 resources across 31 modules); the
+ * C5 mirror `src/modules/lifecycle/resources/skills/meta/execute-plan/**` moved
+ * with the live files as expected.
+ *
+ * ANTI-VACUITY: both guards were observed RED against the OLD pin on this exact
+ * tree before the bump, and RED for the right reason — SC-W2-5(1), SC-W3-6(B)
+ * and the check-surface-pins drift report each named the `skills/` tree and the
+ * three `skills/meta/execute-plan/**` files above and NOTHING else, so the pin
+ * move is scoped to the intended change rather than papering over unrelated
+ * drift.
+ *
+ * ── 2026-08-06 re-ratification (skills only) — v1 regression repair (PR #136),
+ *    rebased over the issue #91 pin move above ─────────────────────────────────
+ * `skills` moves e92d7dbb → the pin below; `commands` does NOT move and neither
+ * manifest hash does. The delta is exactly three files:
+ * `M skills/meta/codex-review/SKILL.md`, `M skills/meta/codex-review/scenarios.json`,
+ * `M skills/meta/review-broker/SKILL.md`.
+ *
+ * WHY: the evolve edit merged in PR #135 was authored as a whole-file copy from a
+ * STALE snapshot, so landing it silently DELETED the `## Cap handling` §"two named
+ * cap terminal states" section and the `cap_pushback` / `cap_verify` statuses from
+ * the output union and the trail-format table (351 → 334 lines; `cap_pushback`
+ * 4 → 0 occurrences). `main` never carried the loss; `next` did, and the tree-hash
+ * guards could not see it because the pin was re-ratified in the same commit as the
+ * deletion. This bump pins the REPAIRED surface: the `no_verdict` terminal is kept
+ * and re-derived as an additive PATCH (334 → 418 lines), the cap terminal states
+ * are restored verbatim from `main`, and `review-broker` gains the fail-closed
+ * `no_verdict` mapping it was missing — an adapter `no_verdict` reaching the broker
+ * had no defined handling on `next`.
+ *
+ * `skills/meta/review-broker/SKILL.md` is GENERATED: the edit was made in
+ * `skill-src/skill-registry.json` and re-rendered via `renderSkillFromRegistry`, so
+ * render-equivalence (p2-w2-sc1) still holds. The triple `${GUILD_PLUGIN_ROOT:-…}`
+ * fallback repaired in the prior re-ratification is carried forward unchanged.
+ *
+ * Pins computed AFTER `sync-module-resources` (645 resources / 31 modules, `--check`
+ * clean). ANTI-VACUITY: both guards were observed RED against the OLD pin on this
+ * exact tree before the bump, and RED for the right reason — SC-W2-5(1) and
+ * SC-W3-6(B) each named those three skills files and NOTHING else. (The
+ * 310323f6 pin from the pre-rebase derivation was superseded by this rebase;
+ * the repair content is identical, re-hashed over the #91 skill tree.)
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "6e911d9f724f1d1bf831386509e4269254a78102",
-  skills: "931c854c3e1557857b3408d9e555ea875ee9661b",
+  commands: "c32076fa811c45d181314e3b2664663b5bce5dd2",
+  skills: "1521571d8db27b878c439b67557cfd1e4f8ec98c",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "14ac5fc1f859d90e6da4025398ef8b83939dee19b7eed8fa49260b76a834f197",
+  ".claude-plugin/plugin.json": "969bb2779e081266c436a29b53f6b2fc8d5a16c550c8364df502e2ef1eba7a39",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 
