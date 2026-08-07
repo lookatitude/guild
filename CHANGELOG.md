@@ -10,6 +10,37 @@ from v1.0.0 onward.
 
 _Entries are generated at the release cut by `scripts/release-changelog.ts`._
 
+## [2.6.0] — 2026-08-07
+
+### Added
+
+- routing: dynamic per-run host and model routing (M0 inspect-only) ([#130](https://github.com/lookatitude/guild/pull/130)) — @lookatitude
+- config: register defaults.dispatch.block_unmarked_lanes in the closed schema ([#141](https://github.com/lookatitude/guild/pull/141)) — @lookatitude
+- codex: wire PreToolUse deny enforcement and gate the codex-pane bypass on it ([#142](https://github.com/lookatitude/guild/pull/142)) — @lookatitude
+
+### Fixed
+
+- codex-review: restore the cap terminal states next lost in #135 ([#136](https://github.com/lookatitude/guild/pull/136)) — @lookatitude
+- dispatch: mark the D5 direct-subagent rung, drop the legacy 300-char fallback ([#140](https://github.com/lookatitude/guild/pull/140)) — @lookatitude
+- hooks: PreCompact must emit plain text, not the hookSpecificOutput envelope ([#143](https://github.com/lookatitude/guild/pull/143)) — @lookatitude
+
+### Documentation
+
+- wiki: capture docs-v2-reconciliation-verifies-shipped-code decision (v23x close) ([#95](https://github.com/lookatitude/guild/pull/95)) — @lookatitude
+
+### Internal
+
+- initiatives: archive v23x-deferred-followups — closed, released in v2.4.0 ([#137](https://github.com/lookatitude/guild/pull/137)) — @lookatitude
+
+### Changed
+
+- Fix a real packaging defect, and make suite runs reproducible ([#120](https://github.com/lookatitude/guild/pull/120)) — @lookatitude
+- DESIGN (not adopted): one validated placement locator — two rejections, nine P1s, blocked on a missing authority ([#128](https://github.com/lookatitude/guild/pull/128)) — @lookatitude
+- Make the codex-skip guard able to tell "ran" from "skipped" ([#134](https://github.com/lookatitude/guild/pull/134)) — @lookatitude
+- codex-review: a verdict-less round is not an unsatisfied round ([#135](https://github.com/lookatitude/guild/pull/135)) — @lookatitude
+
+**Full Changelog**: https://github.com/lookatitude/guild/compare/v2.5.0...v2.6.0
+
 ## [2.5.0] — 2026-08-02
 
 ### Added
