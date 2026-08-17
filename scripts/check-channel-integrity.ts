@@ -19,43 +19,72 @@
  * anywhere reported it. Prose does not enforce process — CI does.
  *
  * WHAT IT CHECKS.
- * Reads `.claude-plugin/plugin.json`'s `version` from both channel refs and
- * fails when next < main. Version, not commit identity, is deliberate: `next`
- * legitimately carries commits `main` lacks (that is what an integration branch
- * IS), so "next is behind main" can only be judged on the released version.
+ * Channel mode reads `.claude-plugin/plugin.json` from both refs. Stable must
+ * be literal MAJOR.MINOR.PATCH. Divergent next must be a newer literal
+ * MAJOR.MINOR.PATCH-beta.N; equal bare versions are valid only when both refs
+ * resolve to the same commit. Promotion mode validates a release PR's
+ * prospective merge commit against hash-bound evidence, the exact frozen
+ * 31-scenario tuple, the neutral conformance evaluator, and source ancestry.
  *
- * PRERELEASE HANDLING — full SemVer §11 precedence, NOT a bare triple compare.
+ * PRERELEASE ORDERING — full SemVer §11 precedence, NOT a bare triple compare.
  * A naive "ignore the suffix" comparison produces a FALSE PASS on exactly the
  * case that matters: `main` at `2.3.2` with `next` at `2.3.2-rc1` would read as
  * "in sync" when SemVer says `2.3.2-rc1 < 2.3.2` — beta genuinely trailing
  * stable. So: equal triples ⇒ a version WITH a prerelease is LOWER than one
  * without; two prereleases compare identifier-by-identifier (numeric
- * identifiers numerically and below alphanumerics). `next` at `2.4.0-rc1` is
- * still correctly ahead of `main` at `2.3.2`.
+ * identifiers numerically and below alphanumerics). Channel policy is stricter
+ * than the generic parser: next accepts only the exact `beta.N` spelling.
  *
- * DETECTION, NOT PREVENTION — stated plainly so nobody over-trusts this.
- * `release.yml` tags and publishes on the merged-PR event; a workflow triggered
- * by `push` runs concurrently and CANNOT block that publication. This gate
- * reports that the sync-back debt exists; it does not stop a release from being
- * cut while the debt is outstanding. Closing that gap means adding the check to
- * the release path itself — a followup, not this lane.
+ * PREVENTION AND DEFENSE IN DEPTH.
+ * `branch-policy.yml` runs promotion mode against GitHub's prospective merge
+ * commit before a release PR may enter stable. `release.yml` re-runs the same
+ * check at the actual merge commit before tagging or publishing. The standing
+ * channel workflow separately reports sync-back debt on pushes and schedule.
  *
  * NOT A MERGE-SHAPE CHECK. Rule 8 also constrains HOW the sync-back lands (a
  * fast-forward when ancestry allows, otherwise a delta-copy PR). That is a
  * property of the fix, not of the resulting state, and is left to review. This
- * gate answers exactly one question: is beta behind stable?
+ * Channel mode answers whether the channel identities are valid and ordered;
+ * promotion mode answers whether a specific stable candidate is evidence-bound.
  *
  * Usage:
  *   npx tsx scripts/check-channel-integrity.ts [--stable <ref>] [--beta <ref>] [--json]
+ *   npx tsx scripts/check-channel-integrity.ts promotion --release-branch release/vX.Y.Z --head <merge-sha>
  *
- * Exit: 0 ok (beta >= stable) · 2 gate failure (beta trails stable) · 1 IO/usage error.
+ * Exit: 0 ok · 2 policy/promotion refusal · 1 IO/usage error.
  *
  * Owned by tooling-engineer. Read-only: it runs `git show` and nothing else.
  */
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import {
+  evaluateNeutralConformanceDecision,
+  NEUTRAL_SCENARIO_SUITE_ID,
+  NEUTRAL_SCENARIO_SUITE_VERSION,
+  type NeutralConformanceAuthority,
+  type NeutralConformanceEvidence,
+} from "../src/modules/lifecycle/workflows/neutral-conformance-core";
 
 export const MANIFEST_PATH = ".claude-plugin/plugin.json";
+export const FROZEN_CONFORMANCE_SCENARIOS = 31;
+export const FROZEN_SCENARIO_CONTRACT_SHA256 =
+  "09d2b6f4c9d98245dd13da4f834fb193e1b21f76625471538e12533d70fa165e";
+export const FROZEN_SCENARIO_IDS = Object.freeze([
+  "MHRC-LIF-001", "MHRC-LIF-002", "MHRC-LIF-003", "MHRC-LIF-004",
+  "MHRC-EVT-001", "MHRC-EVT-002",
+  "MHRC-SUP-001", "MHRC-SUP-002", "MHRC-SUP-003", "MHRC-SUP-004", "MHRC-SUP-005", "MHRC-SUP-006",
+  "MHRC-UNS-001", "MHRC-UNS-002", "MHRC-UNS-003",
+  "MHRC-RCT-001", "MHRC-RCT-002", "MHRC-RCT-003", "MHRC-RCT-004", "MHRC-RCT-005",
+  "MHRC-MOD-001", "MHRC-MOD-002", "MHRC-MOD-003", "MHRC-MOD-004",
+  "MHRC-STR-001", "MHRC-STR-002", "MHRC-STR-003", "MHRC-STR-004",
+  "MHRC-VER-001", "MHRC-VER-002", "MHRC-VER-003",
+] as const);
+
+const BARE_CHANNEL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const BETA_CHANNEL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 
 export interface ParsedVersion {
   /** Raw MAJOR/MINOR/PATCH digit strings — compared without a precision ceiling. */
@@ -67,10 +96,40 @@ export interface ParsedVersion {
 
 export interface ChannelState {
   ref: string;
+  commit: string;
   version: string;
   core: [string, string, string];
   triple: [number, number, number];
   prerelease: string[];
+}
+
+export type PromotionDecision = "conformance_pass" | "accepted_override";
+
+export interface PromotionRecord {
+  schema: "guild.release_promotion.v1";
+  version: string;
+  source_commit: string;
+  evidence_path: string;
+  evidence_sha256: string;
+  scenario_contract_sha256: string;
+  decision: PromotionDecision;
+  override_reason?: string;
+  known_gap?: string;
+}
+
+export interface PromotionConformancePayload {
+  schema: "guild.release_conformance.v1";
+  scenario_contract_sha256: string;
+  evidence: NeutralConformanceEvidence;
+  authority: NeutralConformanceAuthority;
+}
+
+export interface PromotionResult {
+  ok: boolean;
+  version: string;
+  releaseDir: string;
+  recordPath: string;
+  reason: string;
 }
 
 export interface IntegrityResult {
@@ -194,39 +253,185 @@ function gitShowManifest(ref: string): string {
   });
 }
 
+function gitResolveRef(ref: string): string {
+  return execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
 export function checkChannelIntegrity(
   stableRef: string,
   betaRef: string,
-  read: (r: string) => string = gitShowManifest
+  read: (r: string) => string = gitShowManifest,
+  resolveRef: (r: string) => string = read === gitShowManifest ? gitResolveRef : (r) => r
 ): IntegrityResult {
   const sv = versionAtRef(stableRef, read);
   const bv = versionAtRef(betaRef, read);
   const sp = parseVersion(sv);
   const bp = parseVersion(bv);
-  const stable: ChannelState = { ref: stableRef, version: sv, ...sp };
-  const beta: ChannelState = { ref: betaRef, version: bv, ...bp };
+  const stable = { ref: stableRef, commit: resolveRef(stableRef), version: sv, ...sp };
+  const beta = { ref: betaRef, commit: resolveRef(betaRef), version: bv, ...bp };
   const cmp = compareVersions(bp, sp);
-  return cmp < 0
-    ? {
-        stable,
-        beta,
-        ok: false,
-        reason:
-          `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — ` +
-          `beta users are running OLDER code than stable. The release-discipline rule-8 sync-back did not land.`,
-      }
-    : {
-        stable,
-        beta,
-        ok: true,
-        reason:
-          cmp === 0
-            ? `both channels at ${bv} — in sync.`
-            : `beta (${bv}) is ahead of stable (${sv}) — normal for an integration branch.`,
-      };
+  const coreCmp = compareVersions({ ...bp, prerelease: [] }, { ...sp, prerelease: [] });
+
+  if (!BARE_CHANNEL_VERSION.test(sv)) {
+    return { stable, beta, ok: false, reason: `stable channel (${stableRef}) must use exact MAJOR.MINOR.PATCH; found ${sv}.` };
+  }
+  if (stable.commit === beta.commit) {
+    return sv === bv
+      ? { stable, beta, ok: true, reason: `both channels at ${bv} on the same commit — in sync at a quiescent sync-back point.` }
+      : { stable, beta, ok: false, reason: `the same commit reports different channel versions (${sv} vs ${bv}).` };
+  }
+  if (cmp <= 0) {
+    return {
+      stable,
+      beta,
+      ok: false,
+      reason: cmp < 0
+        ? `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — beta users are running OLDER code than stable. The release-discipline rule-8 sync-back did not land.`
+        : `diverged channels may not share bare version ${bv}; next must identify the newer beta runtime.`,
+    };
+  }
+  if (!BETA_CHANNEL_VERSION.test(bv)) {
+    return { stable, beta, ok: false, reason: `diverged next must use MAJOR.MINOR.PATCH-beta.N; found ${bv}.` };
+  }
+  if (coreCmp <= 0) {
+    return { stable, beta, ok: false, reason: `next beta core ${bp.core.join(".")} must be newer than stable ${sp.core.join(".")}.` };
+  }
+  return { stable, beta, ok: true, reason: `beta (${bv}) is ahead of stable (${sv}) and identifies the divergent runtime.` };
+}
+
+function assertContainedRegularFile(root: string, candidate: string, label: string): string {
+  if (isAbsolute(candidate)) throw new Error(`${label} must be repository-relative`);
+  const rootReal = realpathSync(root);
+  const resolved = resolve(rootReal, candidate);
+  const real = realpathSync(resolved);
+  const rel = relative(rootReal, real);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) throw new Error(`${label} escapes the repository`);
+  if (!statSync(real).isFile()) throw new Error(`${label} is not a regular file`);
+  return real;
+}
+
+function sha256(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function git(args: string[], cwd: string): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
+
+export function checkStablePromotion(options: {
+  root: string;
+  releaseBranch: string;
+  head: string;
+  labels?: string[];
+}, evaluateConformance: (
+  evidence: NeutralConformanceEvidence,
+  authority: NeutralConformanceAuthority,
+) => { disposition?: unknown; facts?: Record<string, unknown> } = evaluateNeutralConformanceDecision): PromotionResult {
+  const { root, releaseBranch, head, labels = [] } = options;
+  const match = /^release\/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(releaseBranch);
+  if (!match) throw new Error(`release branch must be release/vX.Y.Z; found ${releaseBranch}`);
+  const version = `${match[1]}.${match[2]}.${match[3]}`;
+  const manifest = JSON.parse(readFileSync(resolve(root, MANIFEST_PATH), "utf8")) as { version?: unknown };
+  if (manifest.version !== version) throw new Error(`release branch ${releaseBranch} disagrees with manifest version ${String(manifest.version)}`);
+
+  const releaseRel = `.guild/artifacts/release/v${version}`;
+  const releaseDir = resolve(root, releaseRel);
+  const recordRel = `${releaseRel}/promotion.json`;
+  const evidenceRel = `${releaseRel}/conformance.json`;
+  const recordPath = assertContainedRegularFile(root, recordRel, "promotion record");
+  const evidencePath = assertContainedRegularFile(root, evidenceRel, "conformance evidence");
+  const record = JSON.parse(readFileSync(recordPath, "utf8")) as PromotionRecord;
+  if (record.schema !== "guild.release_promotion.v1" || record.version !== version) throw new Error("promotion record schema/version mismatch");
+  if (record.evidence_path !== evidenceRel) throw new Error(`evidence_path must be ${evidenceRel}`);
+  if (!/^[0-9a-f]{64}$/.test(record.evidence_sha256)) throw new Error("promotion evidence_sha256 must be lowercase SHA-256");
+  const evidenceBytes = readFileSync(evidencePath);
+  if (sha256(evidenceBytes) !== record.evidence_sha256) throw new Error("conformance evidence SHA-256 mismatch");
+  const payload = JSON.parse(evidenceBytes.toString("utf8")) as PromotionConformancePayload;
+  if (payload.schema !== "guild.release_conformance.v1") {
+    throw new Error("conformance payload schema mismatch");
+  }
+  if (
+    record.scenario_contract_sha256 !== FROZEN_SCENARIO_CONTRACT_SHA256 ||
+    payload.scenario_contract_sha256 !== FROZEN_SCENARIO_CONTRACT_SHA256
+  ) {
+    throw new Error("promotion is not pinned to the frozen 31-scenario contract");
+  }
+  if (
+    payload.evidence?.suite_id !== NEUTRAL_SCENARIO_SUITE_ID ||
+    payload.evidence?.suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION
+  ) {
+    throw new Error("conformance evidence is not pinned to the frozen suite id/version");
+  }
+  if (
+    !Array.isArray(payload.evidence.required_scenario_ids) ||
+    payload.evidence.required_scenario_ids.length !== FROZEN_CONFORMANCE_SCENARIOS ||
+    payload.evidence.required_scenario_ids.some((id, index) => id !== FROZEN_SCENARIO_IDS[index])
+  ) {
+    throw new Error("conformance evidence must name all 31 frozen scenario IDs in canonical order");
+  }
+  if (!/^[0-9a-f]{40}$/.test(record.source_commit)) {
+    throw new Error("promotion record source_commit must be an exact lowercase commit SHA");
+  }
+  if (
+    payload.evidence.activated_runtime?.source_commit !== record.source_commit ||
+    payload.authority?.identity?.source_commit !== record.source_commit
+  ) {
+    throw new Error("promotion source_commit does not match evidence and authority runtime identity");
+  }
+  const headCommit = git(["rev-parse", "--verify", `${head}^{commit}`], root);
+  // `merge-base --is-ancestor` succeeds with empty stdout; non-ancestry throws.
+  git(["merge-base", "--is-ancestor", record.source_commit, headCommit], root);
+  const changed = git(["diff", "--name-only", `${record.source_commit}..${headCommit}`], root)
+    .split("\n")
+    .filter(Boolean);
+  const allowed = new Set([recordRel, evidenceRel, MANIFEST_PATH, "CHANGELOG.md", "guild.inventory.json"]);
+  const runtimeChange = changed.find((p) => !allowed.has(p));
+  if (runtimeChange) throw new Error(`runtime change after conformance evidence: ${runtimeChange}`);
+
+  if (record.decision === "conformance_pass") {
+    const outcome = evaluateConformance(payload.evidence, payload.authority);
+    if (outcome.disposition !== "succeeded" || outcome.facts?.may_promote_conformant !== true) {
+      throw new Error("the frozen conformance evaluator did not approve all 31 scenarios");
+    }
+  } else if (record.decision === "accepted_override") {
+    if (!record.override_reason?.trim() || !record.known_gap?.trim()) throw new Error("accepted_override requires override_reason and known_gap");
+    if (!labels.includes("release-conformance-override-accepted")) throw new Error("accepted_override requires the exact acceptance label");
+  } else {
+    throw new Error(`unsupported promotion decision ${String(record.decision)}`);
+  }
+  return { ok: true, version, releaseDir, recordPath, reason: `hash-bound promotion evidence accepted for v${version}` };
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  if (argv[0] === "promotion") {
+    let releaseBranch = "";
+    let head = "HEAD";
+    let root = process.cwd();
+    let labels: string[] = [];
+    for (let i = 1; i < argv.length; i++) {
+      const a = argv[i];
+      if (a === "--release-branch" && argv[i + 1]) releaseBranch = argv[++i];
+      else if (a.startsWith("--release-branch=")) releaseBranch = a.slice(17);
+      else if (a === "--head" && argv[i + 1]) head = argv[++i];
+      else if (a.startsWith("--head=")) head = a.slice(7);
+      else if (a === "--root" && argv[i + 1]) root = argv[++i];
+      else if (a.startsWith("--root=")) root = a.slice(7);
+      else if (a === "--labels-json" && argv[i + 1]) labels = JSON.parse(argv[++i]);
+      else if (a.startsWith("--labels-json=")) labels = JSON.parse(a.slice(14));
+      else { process.stderr.write(`unknown promotion argument: ${a}\n`); return 1; }
+    }
+    try {
+      const result = checkStablePromotion({ root, releaseBranch, head, labels });
+      process.stdout.write(`check-channel-integrity: OK — ${result.reason}\n`);
+      return 0;
+    } catch (err) {
+      process.stderr.write(`check-channel-integrity: PROMOTION GATE FAILURE — ${String(err instanceof Error ? err.message : err)}\n`);
+      return 2;
+    }
+  }
   let stableRef = "origin/main";
   let betaRef = "origin/next";
   let json = false;

@@ -208,6 +208,34 @@ export function redactKeyValueSecrets(input: string): string {
 const PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
 const PATH_SHAPE =
   /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+/** Narrow hidden-root exemption: Guild's own durable repo-relative namespace. */
+const DOT_GUILD_PATH_SHAPE =
+  /^(?:\.{1,2}\/)?\.guild(?:\/[A-Za-z0-9._-]+)+$/;
+const DOT_GUILD_ROOTS: ReadonlySet<string> = new Set([
+  "agents",
+  "artifacts",
+  "context",
+  "evolve",
+  "indexes",
+  "init",
+  "initiatives",
+  "knowledge",
+  "loops",
+  "memory",
+  "plan",
+  "prd",
+  "raw",
+  "reflections",
+  "runs",
+  "skills",
+  "spec",
+  "team",
+  "teams",
+  "wiki",
+  "workflows",
+  "workspace",
+  "workspace-knowledge",
+]);
 const PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
 /** Longest plausible real path token; longer expansions bail to "redact". */
 const MAX_PATH_TOKEN_LEN = 512;
@@ -245,6 +273,43 @@ function allWordsWordish(words: string[]): boolean {
   return true;
 }
 
+/**
+ * Guild-owned paths are stricter than general source paths: canonical
+ * `.guild/` roots and filenames are lowercase/kebab-case, with only short
+ * task/version initials such as `W4` allowed as opaque words. Rejecting
+ * mixed-case words and repeated numeric chunks closes the path-shaped secret
+ * bypass without touching normal source paths (where camelCase is real).
+ */
+function isSafeDotGuildToken(token: string): boolean {
+  const normalized = token.replace(/^(?:\.{1,2}\/)?\.guild\//, "");
+  const root = normalized.split("/", 1)[0] ?? "";
+  if (!DOT_GUILD_ROOTS.has(root)) return false;
+
+  const runNormalized = normalized.replace(
+    /(^|\/)run-\d{8}-\d{6}-/g,
+    "$1run-",
+  );
+  const words = runNormalized.split(/[/._-]+/).filter(Boolean);
+  let opaqueBudget = 1;
+  let numericWords = 0;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    if (/^[a-z][a-z0-9]*$/.test(word)) continue;
+    if (/^\d+$/.test(word)) {
+      numericWords += 1;
+      if (numericWords > 3) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    if (/^[A-Z][A-Z0-9]{0,7}$/.test(word)) {
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
 export function isRelativePathToken(
   candidate: string,
   fullInput: string,
@@ -265,9 +330,11 @@ export function isRelativePathToken(
   }
   const token = fullInput.slice(start, end);
   if (token.length > MAX_PATH_TOKEN_LEN) return false;
-  if (!PATH_SHAPE.test(token)) return false;
+  const isDotGuildPath = DOT_GUILD_PATH_SHAPE.test(token);
+  if (!PATH_SHAPE.test(token) && !isDotGuildPath) return false;
   const slashCount = token.split("/").length - 1;
   if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  if (isDotGuildPath) return isSafeDotGuildToken(token);
   return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
 }
 

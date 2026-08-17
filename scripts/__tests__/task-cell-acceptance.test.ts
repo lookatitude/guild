@@ -98,6 +98,8 @@ function dispatch(over: Partial<TaskCellDispatchInput> = {}): TaskCellDispatchIn
     hostId: "claude-code-cli",
     adapterId: "claude-code-cli@1",
     hostCapabilitiesHash: "sha256:caps",
+    substrate: "tmux",
+    modelTier: "mid",
     objective: `implement ${logicalTaskId}`,
     nonGoals: [],
     scopePaths: ["src/api"],

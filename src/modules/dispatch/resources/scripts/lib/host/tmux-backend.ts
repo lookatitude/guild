@@ -22,13 +22,16 @@ import type {
   TeamLaunchResult,
   TmuxPlan,
   TmuxSpawnOutcome,
+  GuildDispatchDescriptor,
 } from "../core/contracts/team-backend";
+import type { ProjectDefinitionRefV1 } from "../core/contracts/project-definition-ref";
 import {
   defaultRun,
   dispatchModelForSpecialist,
   dispatchModelParamsForSpecialist,
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
+  specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
 // P1-L10 permission-policy machinery (issue #54): resolve the host-native
@@ -192,6 +195,19 @@ export function paneCommand(
    * ALONGSIDE `launchArgs` (#54): the final argv is `${launchFragment}${modelArg}`.
    */
   model?: string,
+  /** Exact v2 assignment pointer for a concrete TaskCell launch lane. */
+  assignmentPath?: string,
+  /** Exact TaskCell runtime identity for lifecycle trace and usage attribution. */
+  taskCellInstanceId?: string,
+  /**
+   * Fix A (run-identity-and-dispatch W4/W5 lane): the pinned
+   * `guild.project_definition_ref.v1` for this lane, exported verbatim as
+   * GUILD_DEFINITION_REF so a claude tmux pane carries the EXACT hash-bound
+   * definition bundle instead of dropping it (the pre-fix claude branch passed
+   * nothing here while the codex/generic adapter branches carried the ref).
+   * Absent ⇒ the emitted command is byte-identical to the pre-fix one.
+   */
+  definitionRef?: ProjectDefinitionRefV1,
 ): string {
   const taskFragment =
     taskId !== undefined && taskId.length > 0
@@ -201,17 +217,35 @@ export function paneCommand(
     specialist !== undefined && specialist.length > 0
       ? `export GUILD_SPECIALIST=${shellQuote(specialist)}; `
       : "";
-  // guild.task_assignment.v1 — point the pane at its own assignment file so it can
-  // read its bounded task via readTaskAssignment (docs/v2 §08). Run-relative path.
+  // Concrete TaskCell lanes carry the immutable v2 pointer. Legacy callers that
+  // have not expanded per task retain the v1 specialist channel temporarily.
   const assignmentFragment =
     specialist !== undefined && specialist.length > 0
-      ? `export GUILD_TASK_ASSIGNMENT=${shellQuote(`.guild/runs/${runId}/tasks/${specialist}.json`)}; `
+      ? `export GUILD_TASK_ASSIGNMENT=${shellQuote(assignmentPath ?? `.guild/runs/${runId}/tasks/${specialist}.json`)}; `
+      : "";
+  const taskCellInstanceFragment =
+    taskCellInstanceId !== undefined && taskCellInstanceId.length > 0
+      ? `export GUILD_TASK_CELL_INSTANCE_ID=${shellQuote(taskCellInstanceId)}; `
       : "";
   const statuslineFragment =
     process.env["GUILD_STATUSLINE"] === "1" ? `export GUILD_STATUSLINE=1; ` : "";
   const scopeFragment =
     capabilityScope !== undefined
       ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(capabilityScope))}; `
+      : "";
+  // Fix A: the hash-bound definition bundle rides the pane env verbatim. The
+  // pane then READS and equality-checks that exact value before the host starts:
+  // forwarding is therefore consumed on the substrate, not merely asserted by
+  // the launcher. Any mutation or omission exits before `claude` can spawn.
+  const serializedDefinitionRef =
+    definitionRef !== undefined ? JSON.stringify(definitionRef) : null;
+  const quotedDefinitionRef =
+    serializedDefinitionRef !== null ? shellQuote(serializedDefinitionRef) : null;
+  const definitionRefFragment =
+    quotedDefinitionRef !== null
+      ? `export GUILD_DEFINITION_REF=${quotedDefinitionRef}; ` +
+        `test "$GUILD_DEFINITION_REF" = ${quotedDefinitionRef} || { ` +
+        `echo '[GUILD_DEFINITION_REF] exact-carriage check failed' >&2; exit 66; }; `
       : "";
   // Worker teardown tail. Default (debug OFF): the pane closes when `claude` exits
   // — no lingering shell, so "pane alive" unambiguously means "worker alive".
@@ -230,11 +264,11 @@ export function paneCommand(
       ? `export GUILD_MODEL=${shellQuote(model)}; `
       : "";
   const teardownTail = debug
-    ? `claude ${launchFragment}${modelArg}${shellQuote(prompt)}; ` +
+    ? `command claude ${launchFragment}${modelArg}${shellQuote(prompt)}; ` +
       `tmux select-pane -t "$TMUX_PANE" -T ${shellQuote(debugTitle)} 2>/dev/null || true; ` +
       `echo ${shellQuote("[GUILD_PANE_DEBUG] worker process exited — this is an operator debug shell, NOT a live worker.")}; ` +
       `exec $SHELL`
-    : `claude ${launchFragment}${modelArg}${shellQuote(prompt)}`;
+    : `command claude ${launchFragment}${modelArg}${shellQuote(prompt)}`;
   return (
     `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; ` +
     // rf-wi-03 (G3) — the universal structured producer marker on every pane env,
@@ -245,9 +279,14 @@ export function paneCommand(
     taskFragment +
     specialistFragment +
     assignmentFragment +
+    taskCellInstanceFragment +
     statuslineFragment +
     scopeFragment +
     modelFragment +
+    // Keep the exact-carriage guard adjacent to the real host launch. The
+    // verifier accepts only this generated grammar, so no wrapper, mutation,
+    // or decoy command can fit between the equality check and `claude`.
+    definitionRefFragment +
     teardownTail
   );
 }
@@ -309,6 +348,12 @@ export function composeTmuxCommands(opts: {
         undefined, // keep paneCommand's own GUILD_PANE_DEBUG default
         resolveClaudeTeamLaunchArgs(permissionConfig),
         model,
+        spec?.task_cell_assignment_path,
+        spec?.task_cell_instance_id,
+        // Fix A: the claude branch was the ONE local pane path that dropped the
+        // pinned definition bundle (codex + generic adapter branches already
+        // carried it). The exact hash-bound ref now rides GUILD_DEFINITION_REF.
+        spec?.definition_ref,
       );
     }
     // ISSUE #94: a codex pane's opt-in bypass argv is resolved HERE, from the
@@ -327,7 +372,7 @@ export function composeTmuxCommands(opts: {
           ? adapter.withLaunchArgs(resolveCodexTeamLaunchArgs(permissionConfig), cwd)
           : adapter;
       return codexAdapter.command({
-        name: spec?.name ?? "orchestrator",
+        name: spec ? specialistDispatchKey(spec) : "orchestrator",
         scope: spec ? "lane" : "orchestrator",
         runId,
         slug,
@@ -336,6 +381,9 @@ export function composeTmuxCommands(opts: {
         ...(spec?.taskId ? { taskId: spec.taskId } : {}),
         ...(spec?.capability_scope ? { capability_scope: spec.capability_scope } : {}),
         ...(spec?.name ? { specialist: spec.name } : {}),
+        ...(spec?.task_cell_assignment_path ? { assignmentPath: spec.task_cell_assignment_path } : {}),
+        ...(spec?.task_cell_instance_id ? { taskCellInstanceId: spec.task_cell_instance_id } : {}),
+        ...(spec?.definition_ref ? { definition_ref: spec.definition_ref } : {}),
         ...(model ? { model } : {}),
         ...(modelParams ? { modelParams } : {}),
       });
@@ -346,10 +394,13 @@ export function composeTmuxCommands(opts: {
       // `adapterBacked` gate, but composeTmuxCommands is also called
       // directly in tests) — paneCommand always builds a plain `claude`
       // invocation with no launch flags.
-      return paneCommand(prompt, runId, spec?.capability_scope, spec?.taskId, spec?.name);
+      return paneCommand(
+        prompt, runId, spec?.capability_scope, spec?.taskId, spec?.name,
+        undefined, [], undefined, spec?.task_cell_assignment_path, spec?.task_cell_instance_id,
+      );
     }
     return resolveAdapter(hostKind).command({
-      name: spec?.name ?? "orchestrator",
+      name: spec ? specialistDispatchKey(spec) : "orchestrator",
       scope: spec?.scope ?? "",
       runId,
       slug,
@@ -358,6 +409,9 @@ export function composeTmuxCommands(opts: {
       taskId: spec?.taskId,
       capability_scope: spec?.capability_scope,
       specialist: spec?.name,
+      assignmentPath: spec?.task_cell_assignment_path,
+      taskCellInstanceId: spec?.task_cell_instance_id,
+      ...(spec?.definition_ref ? { definition_ref: spec.definition_ref } : {}),
       ...(model !== undefined ? { model } : {}),
       ...(modelParams !== undefined ? { modelParams } : {}),
     });
@@ -402,8 +456,8 @@ export function composeTmuxCommands(opts: {
         `-c ${shellQuote(cwd)} ${shellQuote(cmd)}`,
     });
     cmds.push({
-      argv: ["tmux", "select-pane", "-T", spec.name],
-      display: `tmux select-pane -T ${shellQuote(spec.name)}`,
+      argv: ["tmux", "select-pane", "-T", specialistDispatchKey(spec)],
+      display: `tmux select-pane -T ${shellQuote(specialistDispatchKey(spec))}`,
     });
   }
 
@@ -527,6 +581,221 @@ export function terminatePane(
 }
 
 // ── TmuxTeamBackend ───────────────────────────────────────────────────────────
+
+/**
+ * Fix A (run-identity-and-dispatch): the per-specialist FORWARDING PROOF for
+ * pinned definition bundles on the tmux substrate.
+ *
+ * The declaring dispatch port (`supports_definition_injection: true`) verifies
+ * carriage via `portHonoredInjection` against the launch result's dispatch
+ * plan. A tmux launch used to return NO plan, so the port could never verify —
+ * and therefore could never declare — leaving exact project `definition_ref`
+ * injection refused on tmux.
+ *
+ * This helper derives one declarative entry per specialist from the COMPOSED
+ * PLAN, not from the request: a specialist's `definition_ref` appears on its
+ * entry ONLY when its own pane command demonstrably carries the ref bytes
+ * (the GUILD_DEFINITION_REF export including the exact content_hash). An echo
+ * of the request without carriage would be a fabricated proof; a backend that
+ * drops the ref therefore produces an entry WITHOUT it, which the declaring
+ * port fails as `invalid_request` — detection, not trust.
+ */
+export function dispatchPlanFromTmuxPlan(
+  specialists: readonly Specialist[],
+  commands: readonly ParsedTmuxCommand[],
+  runId?: string,
+): GuildDispatchDescriptor[] {
+  return specialists.map((spec) => {
+    const key = specialistDispatchKey(spec);
+    const titleLikeIndexes: number[] = [];
+    const titleIndexes = commands.flatMap((c, index) =>
+      (
+        c.argv.length >= 4 &&
+        c.argv[0] === "tmux" &&
+        c.argv[1] === "select-pane" &&
+        c.argv[2] === "-T" &&
+        c.argv[3] === key
+      )
+        ? (titleLikeIndexes.push(index), c.argv.length === 4 ? [index] : [])
+        : [],
+    );
+    // One generated specialist lane has exactly one exact title command.
+    // Prefix matches and duplicate titles are ambiguous and cannot prove
+    // which payload the substrate associates with this dispatch key.
+    const titleIndex =
+      titleLikeIndexes.length === 1 && titleIndexes.length === 1
+        ? titleIndexes[0]
+        : -1;
+    const paneCmd = titleIndex > 0 ? commands[titleIndex - 1] : undefined;
+    const carried =
+      spec.definition_ref !== undefined &&
+      paneCmd !== undefined &&
+      commandCarriesAndConsumesDefinitionRef(paneCmd.argv, spec, runId);
+    return {
+      // `name` is the dispatch-plan handle, not the semantic role name. A
+      // specialist may own multiple task lanes, so the role name cannot bind
+      // proof to one concrete launch identity.
+      name: key,
+      // Declarative pane metadata, not an Agent-tool descriptor: the lane runs
+      // as a tmux pane process, so there is no subagent type or prompt replay
+      // here — the prompt already rides the pane command itself.
+      subagentType: "tmux-pane",
+      model: dispatchModelForSpecialist(spec),
+      env: {},
+      prompt: "",
+      ...(carried ? { definition_ref: spec.definition_ref } : {}),
+    };
+  });
+}
+
+/** Exact, mutation-sensitive evidence over the argv handed to tmux. */
+function carriesPreSpawnDefinitionProof(
+  command: string,
+  exported: string,
+  consumed: string,
+  prefixMatchesLane: (prefix: string) => boolean,
+): boolean {
+  const guard =
+    `${exported} ${consumed} { ` +
+    `echo '[GUILD_DEFINITION_REF] exact-carriage check failed' >&2; exit 66; }; `;
+  const guardIndex = command.indexOf(guard);
+  if (guardIndex < 0 || command.indexOf(guard, guardIndex + guard.length) >= 0) return false;
+  const launchIndex = guardIndex + guard.length;
+  if (!command.startsWith("command claude ", launchIndex)) return false;
+  const prefix = command.slice(0, guardIndex);
+  return isGeneratedPreGuardExportPrefix(prefix) && prefixMatchesLane(prefix);
+}
+
+const GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
+  "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+  "GUILD_DISPATCH_PRODUCER",
+  "GUILD_RUN_ID",
+  "GUILD_TASK_ID",
+  "GUILD_SPECIALIST",
+  "GUILD_TASK_ASSIGNMENT",
+  "GUILD_TASK_CELL_INSTANCE_ID",
+  "GUILD_STATUSLINE",
+  "GUILD_CAPABILITY_SCOPE",
+  "GUILD_MODEL",
+] as const);
+
+function consumeGeneratedShellWord(input: string, start: number): number {
+  if (input[start] === "'") {
+    let cursor = start + 1;
+    while (cursor < input.length) {
+      if (input[cursor] !== "'") {
+        cursor++;
+        continue;
+      }
+      if (input.slice(cursor, cursor + 4) === "'\\''") {
+        cursor += 4;
+        continue;
+      }
+      return cursor + 1;
+    }
+    return -1;
+  }
+  let cursor = start;
+  while (cursor < input.length && /[A-Za-z0-9_@%+=:,./-]/.test(input[cursor])) cursor++;
+  return cursor === start ? -1 : cursor;
+}
+
+/** Accept only the ordered `export KEY=shellQuote(value); ` grammar emitted by paneCommand. */
+function isGeneratedPreGuardExportPrefix(prefix: string): boolean {
+  let cursor = 0;
+  let previousRank = -1;
+  const seen = new Set<string>();
+  while (cursor < prefix.length) {
+    if (!prefix.startsWith("export ", cursor)) return false;
+    cursor += "export ".length;
+    const equals = prefix.indexOf("=", cursor);
+    if (equals < 0) return false;
+    const key = prefix.slice(cursor, equals);
+    if (!/^[A-Z][A-Z0-9_]*$/.test(key) || seen.has(key)) return false;
+    const rank = GENERATED_PRE_GUARD_EXPORTS.indexOf(key as typeof GENERATED_PRE_GUARD_EXPORTS[number]);
+    if (rank < 0 || rank <= previousRank) return false;
+    const wordEnd = consumeGeneratedShellWord(prefix, equals + 1);
+    if (wordEnd < 0 || !prefix.startsWith("; ", wordEnd)) return false;
+    seen.add(key);
+    previousRank = rank;
+    cursor = wordEnd + 2;
+  }
+  return (
+    seen.has("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") &&
+    seen.has("GUILD_DISPATCH_PRODUCER") &&
+    seen.has("GUILD_RUN_ID")
+  );
+}
+
+/**
+ * Return only the shell payload tmux actually executes for the exact
+ * specialist split-window shape emitted by composeTmuxCommands.
+ *
+ * Never scan arbitrary argv elements for proof: targets, working directories,
+ * and unused trailing arguments are metadata, not executable carriage.
+ */
+function tmuxSpecialistPayload(argv: readonly string[]): string | null {
+  return (
+    argv.length === 7 &&
+    argv[0] === "tmux" &&
+    argv[1] === "split-window" &&
+    argv[2] === "-t" &&
+    argv[4] === "-c"
+  )
+    ? argv[6]
+    : null;
+}
+
+function generatedPrefixCarriesLaneIdentity(
+  prefix: string,
+  spec: Specialist,
+  runId?: string,
+): boolean {
+  const hasExport = (key: string): boolean => prefix.includes(`export ${key}=`);
+  const hasExactExport = (key: string, value: string): boolean =>
+    prefix.includes(`export ${key}=${shellQuote(value)}; `);
+  if (runId !== undefined && !hasExactExport("GUILD_RUN_ID", runId)) return false;
+  if (!hasExactExport("GUILD_SPECIALIST", spec.name)) return false;
+  if (spec.taskId !== undefined && spec.taskId.length > 0) {
+    if (!hasExactExport("GUILD_TASK_ID", spec.taskId)) return false;
+  } else if (hasExport("GUILD_TASK_ID")) {
+    return false;
+  }
+  const assignment =
+    spec.task_cell_assignment_path ??
+    (runId === undefined ? null : `.guild/runs/${runId}/tasks/${spec.name}.json`);
+  if (assignment !== null && !hasExactExport("GUILD_TASK_ASSIGNMENT", assignment)) return false;
+  if (spec.task_cell_instance_id !== undefined && spec.task_cell_instance_id.length > 0) {
+    if (!hasExactExport("GUILD_TASK_CELL_INSTANCE_ID", spec.task_cell_instance_id)) return false;
+  } else if (hasExport("GUILD_TASK_CELL_INSTANCE_ID")) {
+    return false;
+  }
+  return true;
+}
+
+function commandCarriesAndConsumesDefinitionRef(
+  argv: readonly string[],
+  spec: Specialist,
+  runId?: string,
+): boolean {
+  const ref = spec.definition_ref;
+  if (ref === undefined) return false;
+  try {
+    const payload = tmuxSpecialistPayload(argv);
+    if (payload === null) return false;
+    const quoted = shellQuote(JSON.stringify(ref));
+    const exported = `export GUILD_DEFINITION_REF=${quoted};`;
+    const consumed = `test "$GUILD_DEFINITION_REF" = ${quoted} ||`;
+    return carriesPreSpawnDefinitionProof(
+      payload,
+      exported,
+      consumed,
+      (prefix) => generatedPrefixCarriesLaneIdentity(prefix, spec, runId),
+    );
+  } catch {
+    return false;
+  }
+}
 
 export class TmuxTeamBackend implements TeamBackend {
   readonly kind = "tmux" as const;
@@ -667,6 +936,10 @@ export class TmuxTeamBackend implements TeamBackend {
   launch(req: TeamLaunchRequest): TeamLaunchResult {
     const plan = this.plan(req);
     const plannedCommands = plan.commands.map((c) => c.display);
+    // Fix A: the per-specialist forwarding proof (see dispatchPlanFromTmuxPlan)
+    // rides every launch result — dry and real — so the declaring dispatch
+    // port can verify exact definition_ref carriage on this substrate.
+    const dispatchPlan = dispatchPlanFromTmuxPlan(req.specialists, plan.commands, req.runId);
     if (req.dryRun) {
       return {
         kind: this.kind,
@@ -675,6 +948,7 @@ export class TmuxTeamBackend implements TeamBackend {
         orchestratorPaneId: null,
         teammatePaneIds: {},
         notes: ["dry-run: tmux not invoked"],
+        dispatchPlan,
       };
     }
     const outcome = this.spawn(plan);
@@ -690,6 +964,7 @@ export class TmuxTeamBackend implements TeamBackend {
             `tmux command failed: ${outcome.failedCommand?.display ?? "(unknown)"}`,
             outcome.stderr,
           ].filter(Boolean),
+      dispatchPlan,
     };
   }
 }

@@ -52,12 +52,20 @@ import { recordDecision, writeDecision } from "../../src/modules/teams/workflows
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
-const RUN_ID = "run-t7h1-0001";
+const RUN_ID = "run-20260811-020000-t7h1-approval";
 const SLUG = "t7h1";
 const PHASE = "build";
 
 /** The three approved worker lanes the launcher is expected to spawn. */
 const APPROVED_WORKERS = ["backend", "frontend", "qa"];
+
+function seedLifecycleContexts(root: string): void {
+  const dir = path.join(root, ".guild", "context", RUN_ID);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const role of APPROVED_WORKERS) {
+    fs.writeFileSync(path.join(dir, `${role}-${role}.md`), `# ${role} context\n`, "utf8");
+  }
+}
 
 interface LaunchResult {
   exitCode: number;
@@ -112,6 +120,7 @@ function seedApprovedRepo(): { root: string; teamPath: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t7-h1-"));
   fs.mkdirSync(path.join(root, ".guild", "runs", RUN_ID), { recursive: true });
   mintRunBinding({ root, run_id: RUN_ID });
+  seedLifecycleContexts(root);
 
   const participants = [
     ...APPROVED_WORKERS.map((id) => ({
@@ -372,6 +381,7 @@ function seedUnapprovedRepo(): { root: string; teamPath: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t7-h1-noapproval-"));
   fs.mkdirSync(path.join(root, ".guild", "runs", RUN_ID), { recursive: true });
   mintRunBinding({ root, run_id: RUN_ID });
+  seedLifecycleContexts(root);
   const teamDir = path.join(root, ".guild", "team");
   fs.mkdirSync(teamDir, { recursive: true });
   const teamPath = path.join(teamDir, `${SLUG}.${PHASE}.yaml`);
@@ -433,7 +443,7 @@ describe("T7R-R1-B1 — NO TRAIL AT ALL: the default path fails CLOSED (non-dry,
     const run = launchWith(root, teamPath, { dryRun: false, runId: null });
 
     expect(run.exitCode).not.toBe(0);
-    expect(run.stderr).toContain("no_run_id");
+    expect(run.stderr).toContain("lifecycle run id required");
     expect(run.tmuxInvocations).toEqual([]);
     expect(sessionManifests(root)).toEqual([]);
   });

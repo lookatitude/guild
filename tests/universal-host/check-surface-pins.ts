@@ -52,7 +52,7 @@ import {
   validateCommandRegistryV1,
   type CommandRegistryV1,
 } from "../../scripts/lib/command-registry";
-import { PLUGIN_ROOT, RATIFIED_TREES, worktreeTreeHash } from "./live-surface-anchor";
+import { PLUGIN_ROOT, RATIFIED_TREES, withLiveSurfaceLock, worktreeTreeHash } from "./live-surface-anchor";
 
 /** A single checklist failure, with the deterministic fix. */
 export interface SurfacePinViolation {
@@ -96,6 +96,22 @@ const RERATIFY_REMEDY =
  * drift to prove the detector is live.
  */
 export function checkSurfacePins(options: SurfacePinOptions = {}): SurfacePinReport {
+  // Codex round-2 item 7: ONE mutex acquisition covers the COMPLETE default
+  // live-surface read window — the registry round-trip file reads (skills dir,
+  // commands dir, every committed command body) AND the tree hashing — so a
+  // parallel guard suite's anti-vacuity perturbation window can never be
+  // observed anywhere inside a single checklist evaluation (round 1 locked
+  // only the hash step; the registry reads could still see a mid-window probe
+  // and report a false registry_stale). The lock is non-reentrant, so it is
+  // lifted here to the top of the path and the inner default reader below is
+  // the bare lock-free `worktreeTreeHash`. An injected `treeHashOf` (the
+  // suite's synthetic-drift probes) is untouched — what the checklist asserts
+  // is unchanged.
+  return withLiveSurfaceLock(() => checkSurfacePinsHoldingLock(options));
+}
+
+/** The checklist body. Callers hold the live-surface lock (see above). */
+function checkSurfacePinsHoldingLock(options: SurfacePinOptions = {}): SurfacePinReport {
   const root = options.pluginRoot ?? PLUGIN_ROOT;
   const ratified = options.ratifiedTrees ?? RATIFIED_TREES;
   const treeHashOf = options.treeHashOf ?? worktreeTreeHash;

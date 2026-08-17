@@ -705,4 +705,23 @@ describe("task-completed.ts", () => {
       expect(lines[0].lane_id).toBe("backend");
     });
   });
+
+  describe("RID W3 — read-only fallback identity", () => {
+    it("uses the canonical date-first shape and emits a visible warning", () => {
+      const { exitCode, stderr } = runScript(
+        {
+          session_id: "Session W3 Example",
+          cwd: tmpDir,
+          hook_event_name: "TaskCompleted",
+          task_id: "task-w3",
+          teammate_name: "backend",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" },
+      );
+      expect(exitCode).toBe(1); // no receipt exists at the degraded read target
+      expect(stderr).toMatch(/WARN.*read-only fallback/i);
+      expect(stderr).toMatch(/run-\d{8}-\d{6}-session-w3-example/);
+      expect(stderr).not.toContain("run-Session W3 Example");
+    });
+  });
 });

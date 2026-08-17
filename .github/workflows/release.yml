@@ -41,6 +41,25 @@ jobs:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install scripts dependencies
+        run: npm --prefix scripts ci --prefer-offline
+
+      - name: Re-verify hash-bound promotion evidence before publication
+        env:
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          MERGE_HEAD: ${{ github.event.pull_request.merge_commit_sha }}
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          npm --prefix scripts run check:channel-integrity -- promotion \
+            --release-branch "$RELEASE_BRANCH" \
+            --head "$MERGE_HEAD" \
+            --labels-json "$LABELS_JSON"
+
       - name: Derive version tag from branch name
         id: ver
         run: |

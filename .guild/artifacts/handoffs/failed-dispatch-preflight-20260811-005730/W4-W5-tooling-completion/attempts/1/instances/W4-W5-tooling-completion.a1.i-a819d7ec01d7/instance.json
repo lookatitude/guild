@@ -1,0 +1,46 @@
+{
+  "schema_version": "guild.agent_instance.v1",
+  "instance_id": "W4-W5-tooling-completion.a1.i-a819d7ec01d7",
+  "run_id": "run-20260811-000117-run-identity-and-dispatch",
+  "cell_id": "cell-W4-W5-tooling-completion",
+  "logical_task_id": "W4-W5-tooling-completion",
+  "task_run_id": "W4-W5-tooling-completion.tr1",
+  "attempt": 1,
+  "attempt_id": "W4-W5-tooling-completion.att1",
+  "worker_role": "tooling-engineer",
+  "specialist_type_id": "tooling-engineer",
+  "specialist_type_version": "1",
+  "specialist_type_hash": "a953b202609e7a09d4e8fe6e1c8ea4e39ef78c477578466c756a658b3ae5f4a3",
+  "specialist_profile_id": "tooling-engineer",
+  "specialist_profile_hash": "621b611addae42be5086295fedf37eae5cd4ca006d9718d6517f29ca53f49910",
+  "host_id": "claude-code-cli",
+  "adapter_id": "claude-code-cli@1",
+  "host_capabilities_hash": "sha256:e81a56fff8cba563569a9f52a31927e3d677ec1a449100e50239596d3919c953",
+  "substrate": "tmux",
+  "model_tier": "powerful",
+  "model_id": null,
+  "context_bundle_id": ".guild/context/run-20260811-000117-run-identity-and-dispatch/tooling-engineer-W4-W5-tooling-completion.md",
+  "context_bundle_hash": "sha256:41b60c177a8fd34f9adb7993f6abef25d0d35ec6f99ef7f79bd56be5b2493700",
+  "projection": {
+    "tools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Glob",
+      "Grep"
+    ],
+    "permissions": [],
+    "recorded_losses": []
+  },
+  "budgets": {
+    "tokens": null,
+    "wall_clock_ms": null,
+    "cost_usd": null
+  },
+  "created_at": "2026-08-11T00:57:30.305Z",
+  "started_at": null,
+  "terminated_at": null,
+  "terminal_state": null,
+  "terminal_reason": null
+}

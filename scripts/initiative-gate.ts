@@ -47,9 +47,12 @@
  *   already accepted by the real repo corpus predates the v2 enum in places,
  *   e.g. `execution_status: in_progress` or `documentation_status: pending`;
  *   an UNRECOGNIZED value is treated as UNRESOLVED — fail closed — never
- *   guessed toward "resolved"), then calls `d8CloseGate`. Prints
- *   `{ initiative_id, manifest_path, inputs, warnings, result, pass }` to
- *   stdout. Exit 0 pass, 1 fail (unmet criteria), 2 usage/read error.
+ *   guessed toward "resolved"), then calls `d8CloseGate`. It also binds the
+ *   verdict to every path cited by `close_gate.evidence` and every work-item
+ *   `evidence_refs` list; missing, malformed, absolute, or escaping refs fail
+ *   closed. Prints `{ initiative_id, manifest_path, inputs, warnings, result,
+ *   evidence, pass }` to stdout. Exit 0 pass, 1 fail (unmet criteria), 2
+ *   usage/read error.
  *
  * docs-workitems
  *   Same manifest read + `d8CloseGate` call, then
@@ -196,6 +199,185 @@ export function buildD8Input(raw: Record<string, unknown>, execVerified: boolean
   return { input, warnings };
 }
 
+// ── Evidence-reference existence binding ───────────────────────────────────
+
+export interface EvidenceRefRecord {
+  ref: string;
+  source: string;
+  resolved_path: string;
+}
+
+export interface InvalidEvidenceRef {
+  ref: unknown;
+  source: string;
+  reason: string;
+}
+
+export interface InitiativeEvidenceCheck {
+  valid: boolean;
+  /** Canonical path-shaped refs presented to the filesystem; missing refs also appear in `missing`. */
+  checked: EvidenceRefRecord[];
+  missing: EvidenceRefRecord[];
+  invalid: InvalidEvidenceRef[];
+}
+
+function isPathContained(rootPath: string, candidatePath: string): boolean {
+  return candidatePath === rootPath || candidatePath.startsWith(rootPath + path.sep);
+}
+
+function classifyEvidenceRef(root: string, source: string, rawRef: unknown):
+  | { kind: "valid"; record: EvidenceRefRecord }
+  | { kind: "invalid"; record: InvalidEvidenceRef } {
+  if (typeof rawRef !== "string" || rawRef.length === 0) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a non-empty string" } };
+  }
+  if (/\s|[\u0000-\u001f\u007f]/.test(rawRef)) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a path, not prose/control text" } };
+  }
+
+  // HTML fragments identify a location inside the cited file, not a distinct
+  // filesystem object. Existence binds to the bytes before `#`.
+  const fileRef = rawRef.split("#", 1)[0];
+  if (!fileRef || path.isAbsolute(fileRef)) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be repository-relative" } };
+  }
+  const segments = fileRef.split(/[\\/]/);
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a canonical contained path" } };
+  }
+  const rootAbs = path.resolve(root);
+  const resolved = path.resolve(rootAbs, fileRef);
+  if (!isPathContained(rootAbs, resolved)) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref escapes repository root" } };
+  }
+  return {
+    kind: "valid",
+    record: { ref: rawRef, source, resolved_path: resolved },
+  };
+}
+
+/**
+ * Bind D8 to cited bytes. Every path under `close_gate.evidence` and every
+ * work-item `evidence_refs` entry must be a canonical repository-relative path
+ * that exists on disk. Missing/malformed work-item files fail closed too.
+ */
+export function checkInitiativeEvidenceRefs(
+  root: string,
+  initiativeDir: string,
+  manifest: Record<string, unknown>,
+): InitiativeEvidenceCheck {
+  const checked: EvidenceRefRecord[] = [];
+  const missing: EvidenceRefRecord[] = [];
+  const invalid: InvalidEvidenceRef[] = [];
+
+  const consume = (source: string, rawRefs: unknown): void => {
+    if (rawRefs === undefined) return;
+    if (!Array.isArray(rawRefs)) {
+      invalid.push({ ref: rawRefs, source, reason: "evidence refs must be an array" });
+      return;
+    }
+    for (const rawRef of rawRefs) {
+      const classified = classifyEvidenceRef(root, source, rawRef);
+      if (classified.kind === "invalid") {
+        invalid.push(classified.record);
+        continue;
+      }
+      if (!fs.existsSync(classified.record.resolved_path)) {
+        checked.push(classified.record);
+        missing.push(classified.record);
+        continue;
+      }
+      try {
+        const rootReal = fs.realpathSync.native(path.resolve(root));
+        const evidenceReal = fs.realpathSync.native(classified.record.resolved_path);
+        if (!isPathContained(rootReal, evidenceReal)) {
+          invalid.push({
+            ref: classified.record.ref,
+            source,
+            reason: "evidence ref resolves outside repository root",
+          });
+          continue;
+        }
+        if (!fs.statSync(evidenceReal).isFile()) {
+          invalid.push({
+            ref: classified.record.ref,
+            source,
+            reason: "evidence ref must resolve to a regular file",
+          });
+          continue;
+        }
+      } catch {
+        invalid.push({
+          ref: classified.record.ref,
+          source,
+          reason: "evidence ref cannot be resolved or read",
+        });
+        continue;
+      }
+      checked.push(classified.record);
+    }
+  };
+
+  const closeGate = manifest["close_gate"];
+  if (closeGate !== undefined) {
+    if (!closeGate || typeof closeGate !== "object" || Array.isArray(closeGate)) {
+      invalid.push({ ref: closeGate, source: "initiative.yaml#close_gate", reason: "close_gate must be an object" });
+    } else {
+      consume("initiative.yaml#close_gate.evidence", (closeGate as Record<string, unknown>)["evidence"]);
+    }
+  }
+
+  const workItemsDir = path.join(initiativeDir, "work-items");
+  if (fs.existsSync(workItemsDir)) {
+    let names: string[];
+    try {
+      const entries = fs.readdirSync(workItemsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+      names = entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".yaml"))
+        .map((entry) => entry.name)
+        .sort();
+      for (const entry of entries) {
+        if (entry.name.endsWith(".yaml") && !entry.isFile()) {
+          invalid.push({
+            ref: entry.name,
+            source: `work-items/${entry.name}`,
+            reason: "work-item YAML entries must be regular files",
+          });
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        if (/\.ya?ml$/i.test(entry.name) && !entry.name.endsWith(".yaml")) {
+          invalid.push({
+            ref: entry.name,
+            source: `work-items/${entry.name}`,
+            reason: "work-item files must use the canonical .yaml extension",
+          });
+        }
+      }
+    } catch {
+      invalid.push({ ref: "work-items/", source: "work-items/", reason: "work-items directory is unreadable" });
+      names = [];
+    }
+    for (const name of names) {
+      const source = `work-items/${name}`;
+      let parsed: unknown;
+      try {
+        parsed = parseYaml(fs.readFileSync(path.join(workItemsDir, name), "utf8"));
+      } catch {
+        invalid.push({ ref: name, source, reason: "work item is unreadable or malformed YAML" });
+        continue;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        invalid.push({ ref: name, source, reason: "work item must parse to an object" });
+        continue;
+      }
+      consume(source, (parsed as Record<string, unknown>)["evidence_refs"]);
+    }
+  }
+
+  return { valid: missing.length === 0 && invalid.length === 0, checked, missing, invalid };
+}
+
 // ── Arg parsing ──────────────────────────────────────────────────────────────
 
 export interface GateArgs {
@@ -243,6 +425,7 @@ export interface CloseCheckOutput {
   inputs: D8Input;
   warnings: string[];
   result: D8Result;
+  evidence: InitiativeEvidenceCheck;
   pass: boolean;
 }
 
@@ -253,13 +436,15 @@ export function runCloseCheck(root: string, initiativeId: string, execVerified: 
   }
   const { input, warnings } = buildD8Input(manifest.raw, execVerified);
   const result = d8CloseGate(input);
+  const evidence = checkInitiativeEvidenceRefs(root, path.dirname(manifest.path), manifest.raw);
   return {
     initiative_id: initiativeId,
     manifest_path: manifest.path,
     inputs: input,
     warnings,
     result,
-    pass: result.canClose,
+    evidence,
+    pass: result.canClose && evidence.valid,
   };
 }
 

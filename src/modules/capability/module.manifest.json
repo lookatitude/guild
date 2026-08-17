@@ -13,10 +13,13 @@
     "lifecycle",
     "review",
     "security",
+    "state",
+    "telemetry",
     "teams"
   ],
   "owns": {
     "commands": [
+      "adopt",
       "models"
     ],
     "scripts": [
@@ -24,6 +27,9 @@
       "models-cmd",
       "capability-adopt",
       "capability-profile",
+      "definition-ref-for-dispatch",
+      "self-build-canonicalize",
+      "workspace-role-localize",
       "lib/core/contracts/project-capability-profile",
       "lib/role-model-schema",
       "lib/role-resolver",

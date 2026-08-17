@@ -6,6 +6,7 @@
   "implementation_mode": "workflow-backed",
   "description": "Owns capture hooks, trace events, run trace, the shared run-event reader, trace summaries, and guild-telemetry MCP.",
   "depends_on": [
+    "kernel",
     "state"
   ],
   "owns": {
@@ -25,6 +26,8 @@
     "scripts": [
       "audit-run-sinks",
       "recall-stats",
+      "run-analysis",
+      "task-cell-telemetry",
       "trace-summarize",
       "v1.4-log-validator",
       "lib/guild-trace-emit",

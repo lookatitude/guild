@@ -97,7 +97,8 @@ function validPolicy(): Record<string, unknown> {
 
 function runLauncher(
   cwd: string,
-  extraArgs: string[] = []
+  extraArgs: string[] = [],
+  opts: { dryRun?: boolean } = {}
 ): { exitCode: number; stdout: string; stderr: string } {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -125,7 +126,13 @@ function runLauncher(
       "guild-t6-realpath",
       "--cwd",
       cwd,
-      "--dry-run",
+      // FIC-48: the in-process (agent-mode) rung plans lane models ONLY on a
+      // non-dry run — a dry preflight persists nothing, and the model planner
+      // records M0/M1 evidence. Tests that read the model off the in-process
+      // dispatch descriptor must therefore run that rung non-dry (the
+      // in-process port is declarative: it emits cells + a dispatchPlan
+      // signal; it spawns no processes).
+      ...(opts.dryRun === false ? [] : ["--dry-run"]),
       ...extraArgs,
     ],
     { encoding: "utf8", env, timeout: 120_000 }
@@ -135,6 +142,44 @@ function runLauncher(
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
   };
+}
+
+/**
+ * FIC-48 fixture reconciliation with the CANONICAL run-id contract.
+ *
+ * The production launcher is now a dispatch CONSUMER, never a run-starting
+ * actor (`resolveLifecycleRunId`): it requires a canonical
+ * `run-<yyyymmdd-hhmmss>-<slug>` id — from `--run-id` or the lifecycle's
+ * `.guild/runs/current-run-id` sentinel — AND a pre-minted run binding, and it
+ * refuses anything else. These fixtures therefore seed the run identity the
+ * LIFECYCLE would own, through the SAME production binding writer, instead of
+ * expecting the launcher to mint a fresh run. The contract itself is pinned by
+ * the "run-identity contract" probes at the bottom of this file — the fixtures
+ * adapt to the contract; they never soften it.
+ */
+function seedLifecycleRun(root: string, runId: string): string {
+  const binding = mintRunBinding({ root, run_id: runId });
+  const runsDir = path.join(root, ".guild", "runs");
+  fs.mkdirSync(runsDir, { recursive: true });
+  fs.writeFileSync(path.join(runsDir, "current-run-id"), `${runId}\n`, "utf8");
+  return binding.binding_ref;
+}
+
+/**
+ * A NON-dry cell emission fail-closes on a missing per-lane context bundle
+ * (production contract: guild:context-assemble runs before dispatch). Seed the
+ * minimal bundles the fixture team's three lanes require.
+ */
+function seedContextBundles(root: string, runId: string): void {
+  const dir = path.join(root, ".guild", "context", runId);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const lane of ["architect", "backend", "qa"]) {
+    fs.writeFileSync(
+      path.join(dir, `${lane}-${lane}.md`),
+      `# ${lane} context bundle (fixture)\n\nScope: dispatch-model realpath fixture lane.\n`,
+      "utf8"
+    );
+  }
 }
 
 function setupConsumerRepo(tmp: string, settings: Record<string, unknown>): void {
@@ -166,10 +211,12 @@ describe("REAL PATH (F5): production dispatch emits M1 shadow provenance", () =>
   });
 
   test("dispatch through the PRODUCTION entrypoint with shadow on → shadow receipt + hash-verified comparison per task cell, in the BOUND run tree", () => {
+    const seededRunId = "run-20260730-140000-shadow-realpath";
     setupConsumerRepo(tmp, {
       model_routing: { shadow: "on" },
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
     });
+    seedLifecycleRun(tmp, seededRunId);
     const { exitCode, stdout, stderr } = runLauncher(tmp);
     expect([stderr, exitCode]).toEqual([stderr, 0]);
 
@@ -177,12 +224,20 @@ describe("REAL PATH (F5): production dispatch emits M1 shadow provenance", () =>
     expect(runDirs).toHaveLength(1);
     const runDir = runDirs[0];
     const runId = path.basename(runDir);
+    // The launcher dispatched into the LIFECYCLE's run (inherited via the
+    // current-run-id sentinel) — it did not mint a second run of its own.
+    expect(runId).toBe(seededRunId);
 
-    // The run is BOUND: the launcher minted the binding before any write.
+    // The run is BOUND: the lifecycle minted the binding (seeded above through
+    // the production writer); the launcher verified it before any write.
     expect(loadRunBinding({ root: tmp, run_id: runId })).not.toBeNull();
 
-    // Task cells were emitted on the production channel...
-    expect(stdout).toMatch(/emitted 3 guild\.task_assignment\.v2 cell\(s\)/);
+    // Task cells were emitted on the production channel. A dry preflight
+    // persists no cells and prints no "emitted" summary line (FIC-48) — the
+    // dispatch channel it exposes is the pane spec itself, where every lane
+    // carries its guild.task_assignment.v2 ref:
+    expect(stdout.match(/GUILD_TASK_ASSIGNMENT=/g)).toHaveLength(3);
+    expect(stdout).toMatch(/task-cells\/architect\/attempts\/1\/instances\//);
     // ...and EVERY cell carried an M1 shadow leg (the F5 wiring):
     expect(stdout.match(/M1 shadow comparison recorded/g)).toHaveLength(3);
 
@@ -218,6 +273,7 @@ describe("REAL PATH (F5): production dispatch emits M1 shadow provenance", () =>
     setupConsumerRepo(tmp, {
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
     });
+    seedLifecycleRun(tmp, "run-20260730-140000-legacy-control");
     const { exitCode, stdout } = runLauncher(tmp);
     expect(exitCode).toBe(0);
     const runDirs = findRunDirs(tmp);
@@ -225,8 +281,9 @@ describe("REAL PATH (F5): production dispatch emits M1 shadow provenance", () =>
     expect(fs.existsSync(path.join(runDirs[0], "shadow"))).toBe(false);
     expect(stdout).not.toMatch(/M1 shadow comparison recorded/);
     expect(stdout).not.toMatch(/M2 v2 selection/);
-    // The production channel still dispatched normally:
-    expect(stdout).toMatch(/emitted 3 guild\.task_assignment\.v2 cell\(s\)/);
+    // The production channel still dispatched normally (dry-run signal — the
+    // per-lane assignment refs in the pane spec, FIC-48):
+    expect(stdout.match(/GUILD_TASK_ASSIGNMENT=/g)).toHaveLength(3);
   });
 });
 
@@ -290,7 +347,7 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
    * evidence the gate requires (a precondition, not the thing under test).
    */
   test("enabled on + verified M0/M1 → the launcher SPAWNS at the selected model: `claude --model` in the tmux pane spec AND model on the in-process descriptor", () => {
-    const runId = "run-m2-realpath";
+    const runId = "run-20260730-140000-m2-realpath";
     setupConsumerRepo(tmp, {
       model_routing: { enabled: "on" },
       model_policy: validPolicy(),
@@ -315,7 +372,10 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
     }
 
     // ── in-process rung: the descriptor guild:execute-plan dispatches from ──
-    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"]);
+    // Non-dry (FIC-48): the agent rung plans lane models only on a real run,
+    // and a real emission requires the per-lane context bundles.
+    seedContextBundles(tmp, runId);
+    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"], { dryRun: false });
     expect([agentRun.stderr, agentRun.exitCode]).toEqual([agentRun.stderr, 0]);
     const signalLine = agentRun.stdout
       .split("\n")
@@ -334,7 +394,7 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
   });
 
   test("CONTROL (flag off, same bound tree + same evidence): the launcher spawns the LEGACY pane command — no --model, no GUILD_MODEL, no v2 selection", () => {
-    const runId = "run-m2-realpath-off";
+    const runId = "run-20260730-140000-m2-realpath-off";
     setupConsumerRepo(tmp, {
       // model_routing.enabled absent ⇒ ADR default off. Everything else identical.
       model_policy: validPolicy(),
@@ -352,7 +412,11 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
       expect(line).not.toContain("GUILD_MODEL");
     }
 
-    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"]);
+    // Non-dry for the same reason as the enabled-on rung (FIC-48): a dry
+    // preflight skips model planning entirely, which would make this flag-off
+    // control's `model: null` expectation pass VACUOUSLY.
+    seedContextBundles(tmp, runId);
+    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"], { dryRun: false });
     expect(agentRun.exitCode).toBe(0);
     const signal = JSON.parse(
       agentRun.stdout.split("\n").filter((l) => l.trim().startsWith("{")).pop() as string
@@ -541,7 +605,7 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
   }
 
   test("shadow on: the launcher RECORDS this run's M0 inspection report, and loadVerifiedM0Reports accepts it", () => {
-    const runId = "run-f3-writer";
+    const runId = "run-20260730-140000-f3-writer";
     setupConsumerRepo(tmp, {
       model_routing: { shadow: "on" },
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
@@ -598,7 +662,7 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
    * this asserts it as it really behaves rather than rounding it up to 3/3.
    */
   test("shadow+enabled on: M2 reaches a v2 selection END-TO-END from evidence the run RECORDED ITSELF — no pre-seeded artifact, no caller-supplied resolver inputs", () => {
-    const runId = "run-f3-reachable";
+    const runId = "run-20260730-140000-f3-reachable";
     setupConsumerRepo(tmp, {
       model_routing: { shadow: "on", enabled: "on" },
       model_policy: validPolicy(),
@@ -637,7 +701,7 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
   });
 
   test("CONTROL (anti-vacuity): ADR-default flags over the SAME identity tree → NO inspection report is written at all", () => {
-    const runId = "run-f3-control";
+    const runId = "run-20260730-140000-f3-control";
     setupConsumerRepo(tmp, {
       // model_routing absent ⇒ shadow off, enabled off. Everything else identical.
       model_policy: validPolicy(),
@@ -651,6 +715,60 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
     expect(stdout).not.toMatch(/M2 v2 selection/);
     expect(fs.existsSync(path.join(tmp, ".guild", "runs", runId, "inspection"))).toBe(false);
     // The dispatch still happened — the recorder is inert, not blocking.
-    expect(stdout).toMatch(/emitted 3 guild\.task_assignment\.v2 cell\(s\)/);
+    // (Dry-run dispatch signal: the per-lane assignment refs, FIC-48.)
+    expect(stdout.match(/GUILD_TASK_ASSIGNMENT=/g)).toHaveLength(3);
+  });
+});
+
+/**
+ * FIC-48 — the run-identity contract these fixtures were reconciled AGAINST,
+ * pinned as refusal probes. The fixtures above seed canonical, lifecycle-bound
+ * run identities; these probes prove that adaptation did not weaken the
+ * contract — each forbidden identity shape is still REFUSED by the production
+ * launcher with nothing dispatched and nothing persisted.
+ */
+describe("REAL PATH (FIC-48): the launcher's run-identity contract stays strict", () => {
+  let tmp: string;
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-runid-contract-"));
+  });
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test("PROBE: a legacy non-canonical --run-id (the exact pre-reconciliation fixture shape) is REFUSED — no pane, no cells, no run tree", () => {
+    setupConsumerRepo(tmp, {
+      models: { tiers: { mid: { claude: "legacy-model-9" } } },
+    });
+    const legacyId = "run-m2-realpath"; // what these fixtures passed before FIC-48
+    const { exitCode, stdout, stderr } = runLauncher(tmp, ["--run-id", legacyId]);
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/canonical run id required \(run-<yyyymmdd-hhmmss>-<slug>\)/);
+    expect(stdout).not.toMatch(/emitted \d+ guild\.task_assignment\.v2 cell/);
+    expect(fs.existsSync(path.join(tmp, ".guild", "runs", legacyId))).toBe(false);
+  });
+
+  test("PROBE: a canonical --run-id WITHOUT a minted binding is REFUSED (binding_rejected) — the launcher never mints on a caller's behalf", () => {
+    setupConsumerRepo(tmp, {
+      models: { tiers: { mid: { claude: "legacy-model-9" } } },
+    });
+    const { exitCode, stdout, stderr } = runLauncher(tmp, [
+      "--run-id",
+      "run-20260730-140000-unbound",
+    ]);
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/binding_rejected/);
+    expect(stdout).not.toMatch(/emitted \d+ guild\.task_assignment\.v2 cell/);
+  });
+
+  test("PROBE: no --run-id and no lifecycle sentinel is REFUSED — the launcher is a consumer, never a run-starting actor", () => {
+    setupConsumerRepo(tmp, {
+      models: { tiers: { mid: { claude: "legacy-model-9" } } },
+    });
+    const { exitCode, stdout, stderr } = runLauncher(tmp);
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/lifecycle run id required/);
+    expect(stdout).not.toMatch(/emitted \d+ guild\.task_assignment\.v2 cell/);
+    expect(findRunDirs(tmp)).toHaveLength(0);
   });
 });

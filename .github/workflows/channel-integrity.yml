@@ -24,10 +24,15 @@ name: channel-integrity
 #                       with no pushes stays silently broken.
 #   workflow_dispatch — manual re-check after an operator fixes it.
 #
-# Deliberately NOT `pull_request`: an unrelated contributor's PR must not fail
-# for a channel-state problem they neither caused nor can fix.
+# Pull requests to `next` validate GitHub's prospective merge commit so the
+# same-commit quiescent exception cannot be satisfied by the head alone while
+# the merge result would diverge. Push/schedule checks retain the standing
+# channel-debt signal.
 
 on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [next]
   push:
     branches: [main, next]
   schedule:
@@ -70,4 +75,6 @@ jobs:
       # root-level `npx` would not find it and would silently fetch another copy
       # from the network (slower, and unpinned relative to the lockfile).
       - name: Beta channel must not trail stable (release-discipline rule 8)
-        run: npm --prefix scripts run check:channel-integrity -- --json
+        env:
+          BETA_REF: ${{ github.event_name == 'pull_request' && github.sha || 'origin/next' }}
+        run: npm --prefix scripts run check:channel-integrity -- --stable origin/main --beta "$BETA_REF" --json

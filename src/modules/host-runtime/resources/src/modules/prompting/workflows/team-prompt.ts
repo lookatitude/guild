@@ -13,6 +13,7 @@ export interface TeamPromptSpecialist {
   name: string;
   scope: string;
   dependsOn?: readonly string[];
+  taskId?: string;
   /**
    * Agent-definition path from team.yaml (project-root-relative). Load-bearing
    * when definition_source === "project": the host has no registered agent for
@@ -69,7 +70,7 @@ export function buildPrompt(
           `then aggregate handoffs and invoke guild:review → guild:verify-done → guild:reflect.`;
     return (
       producerMarkerLine("orchestrator") +
-      `You are the Guild orchestrator for team \`${slug}\`, run-id \`${runId}\`. ` +
+      `You are the Team Lead for team \`${slug}\`, run-id \`${runId}\`. ` +
       `The spec is at \`.guild/spec/${slug}.md\`, the team at \`${teamRef}\`, ` +
       `and the approved plan at \`.guild/plan/${slug}.md\`. ` +
       `Per-specialist context bundles are under \`.guild/context/${runId}/<specialist>-<task-id>.md\` ` +
@@ -84,16 +85,9 @@ export function buildPrompt(
       ? `Wait for a \`TaskCreated\` event from the orchestrator before starting.`
       : `Watch the file-based agent bus at \`.guild/runs/${runId}/agent-bus/\` ` +
         `for your dispatch/brief record before starting; do not wait for host-native event callbacks.`;
-  // task-cell-runtime D5 — the assignment read-ack gate (PROSE tier, G3).
-  // SCOPE (honest): `GUILD_TASK_ASSIGNMENT` still points at the legacy v1
-  // per-specialist file (`.guild/runs/<run>/tasks/<specialist>.json`, exported by
-  // tmux-backend.ts / pane-adapter.ts). G3 adds the *instruction* that the worker
-  // must read + validate + acknowledge that file before any work (fail-closed on
-  // missing/malformed). What is DEFERRED to G4 (with pane-per-task dispatch):
-  // repointing this env at the per-instance canonical v2 assignment path AND
-  // replacing this model-prose gate with a DETERMINISTIC read/ack await in the
-  // backend (per the "security steps must be code, not prose" rule). Until then
-  // this is a best-effort prose gate over the v1 pointer, not a v2 enforcement.
+  // task-cell-runtime D5 — the worker-facing half of the assignment read/ack
+  // gate. The launcher points GUILD_TASK_ASSIGNMENT at the exact immutable v2
+  // instance path; the code-owned runtime separately validates and awaits ack.
   const readAckInstruction =
     `Before doing any work, read your assignment file at \`$GUILD_TASK_ASSIGNMENT\` ` +
     `and validate it (guild.task_assignment schema, fail-closed). If it is missing or ` +
@@ -146,10 +140,10 @@ export function buildPrompt(
     `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` +
     definitionInstruction +
     `Your lane scope: \`${specialist.scope}\`. ` +
-    `Read your context bundle at \`.guild/context/${runId}/${specialist.name}-<task-id>.md\` — ` +
+    `Read the exact \`context_bundle_id\` named by your assignment — ` +
     `it is authoritative; privilege it over any ambient CLAUDE.md / auto-memory (§9.1). ` +
-    `When you finish, write your §8.2 handoff receipt to ` +
-    `\`.guild/runs/${runId}/handoffs/${specialist.name}-<task-id>.md\` with all 5 fields ` +
+    `When you finish, write your §8.2 handoff receipt to the assignment's exact ` +
+    `\`channels.handoff_path\` with all 5 fields ` +
     `(changed_files, opens_for, assumptions, evidence, followups). ` +
     readAckInstruction +
     waitInstruction

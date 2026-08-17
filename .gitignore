@@ -41,6 +41,7 @@ node_modules/
 # committable-by-default with no re-include line at all.
 .guild/*
 !.guild/guild.yaml
+!.guild/adoption-manifest.json
 !.guild/agents/
 !.guild/agents/**
 !.guild/skills/
@@ -103,6 +104,8 @@ node_modules/
 !.guild/runs/*/summary.md
 !.guild/runs/*/share-payloads.flag
 !.guild/runs/*/run-state.json
+!.guild/runs/_archive/rename-manifest.yaml
+!.guild/runs/_archive/rename-runs.mjs
 
 # Re-deny operator-private / local-only sub-paths (D-SHR-4 + Decision G), plus
 # derived/runtime artifacts named explicitly for the audit trail even though the
@@ -114,6 +117,7 @@ node_modules/
 .guild/hosts/
 .guild/index.sqlite
 .guild/runs/current-run-id
+.guild/indexes/model-catalog/
 
 # Fixture .guild/ dirs must be tracked (they are static test fixtures, not live runtime state).
 # These exemptions are non-negotiable — preserved verbatim per share-dot-guild constraints.

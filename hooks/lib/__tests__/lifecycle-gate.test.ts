@@ -37,6 +37,7 @@ import {
   gateStatePath,
   effectiveThreshold,
   isDriftCurrent,
+  isGateDecisionReply,
   isLifecycleSkillCall,
   isOverridden,
   isPastBuildStart,
@@ -321,6 +322,49 @@ describe("lifecycle-gate — isOverridden", () => {
     expect(isOverridden({}, `fix the thing ${PROMPT_OVERRIDE_TOKEN}`)).toBe(true);
     expect(isOverridden({}, "fix the thing [GUILD:GATE-OVERRIDE]")).toBe(true);
     expect(isOverridden({}, "fix the thing guild:gate-override")).toBe(false); // brackets required
+  });
+});
+
+describe("lifecycle-gate — isGateDecisionReply", () => {
+  it.each(["approve", "approved", " APPROVED "])(
+    "accepts the exact approval reply %j",
+    (raw) => {
+      expect(isGateDecisionReply(raw)).toBe(true);
+    },
+  );
+
+  it("accepts an exact approval request inside Codex's ambient browser-context envelope", () => {
+    const codexPrompt = `
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request.
+# In app browser:
+- Current URL: file:///tmp/report.html
+</in-app-browser-context>
+
+## My request:
+approve
+`;
+
+    expect(isGateDecisionReply(codexPrompt)).toBe(true);
+  });
+
+  it.each([
+    `<in-app-browser-context source="ambient-ui-state">\ncontext\n</in-app-browser-context>\n\n## My request:\napprove\nthen keep working`,
+    `untrusted prefix\n<in-app-browser-context source="ambient-ui-state">\ncontext\n</in-app-browser-context>\n\n## My request:\napprove`,
+    `<in-app-browser-context source="user-authored">\ncontext\n</in-app-browser-context>\n\n## My request:\napprove`,
+    `<in-app-browser-context source="ambient-ui-state">\ncontext\n</in-app-browser-context>\n\n## My request: approve`,
+  ])("rejects a non-canonical or non-exact enriched approval prompt %j", (raw) => {
+    expect(isGateDecisionReply(raw)).toBe(false);
+  });
+
+  it.each([
+    null,
+    "",
+    "add",
+    "approved by Alice",
+    "approved — keep implementing outside the lifecycle",
+  ])("rejects non-control prompt %j", (raw) => {
+    expect(isGateDecisionReply(raw)).toBe(false);
   });
 });
 
@@ -774,6 +818,54 @@ describe("lifecycle-gate — evaluateLifecycleGate (real fixtures)", () => {
     const third = await evaluateLifecycleGate(root, RUN_ID, "keep going", cleanEnv());
     expect(third.block).toBeNull();
     expect(third.context).toBeNull();
+  });
+
+  it("lets an exact approval reply reach the pending gate and injects the correction", async () => {
+    appendAdHoc(runDir, 6, 3);
+
+    const approved = await evaluateLifecycleGate(root, RUN_ID, "approve", cleanEnv());
+
+    expect(approved.block).toBeNull();
+    expect(approved.context).toContain(LIFECYCLE_GATE_MARKER);
+    expect(loadGateState(runDir)?.last_fired_at_count).toBe(6);
+    expect(loadGateState(runDir)?.pending_correction).toBe(false);
+
+    // The crossing was consumed and the correction was delivered on the same
+    // accepted prompt, so it must not block or resurface on the next prompt.
+    const next = await evaluateLifecycleGate(root, RUN_ID, "keep going", cleanEnv());
+    expect(next.block).toBeNull();
+    expect(next.context).toBeNull();
+  });
+
+  it("does not turn approval prose into a lifecycle bypass", async () => {
+    appendAdHoc(runDir, 6, 3);
+
+    const prose = await evaluateLifecycleGate(
+      root,
+      RUN_ID,
+      "approved — now keep implementing outside the lifecycle",
+      cleanEnv(),
+    );
+
+    expect(prose.block).toContain(LIFECYCLE_GATE_MARKER);
+    expect(prose.context).toBeNull();
+  });
+
+  it("lets Codex Desktop's exact ambient-context approval reach the pending gate", async () => {
+    appendAdHoc(runDir, 6, 3);
+    const codexPrompt = `<in-app-browser-context source="ambient-ui-state">
+context
+</in-app-browser-context>
+
+## My request:
+approve`;
+
+    const approved = await evaluateLifecycleGate(root, RUN_ID, codexPrompt, cleanEnv());
+
+    expect(approved.block).toBeNull();
+    expect(approved.context).toContain(LIFECYCLE_GATE_MARKER);
+    expect(loadGateState(runDir)?.last_fired_at_count).toBe(6);
+    expect(loadGateState(runDir)?.pending_correction).toBe(false);
   });
 
   it("re-arms after another threshold's worth of ad-hoc drift", async () => {
@@ -1357,6 +1449,19 @@ describe("lifecycle-gate — dist bundle wiring", () => {
     expect(parsed.reason).toContain("guild:resume");
     // Also mirrored on stderr for hosts that ignore the JSON reason.
     expect(r.stderr).toContain(LIFECYCLE_GATE_MARKER);
+  });
+
+  it("UserPromptSubmit accepts the exact approve token and sends correction context to the model", () => {
+    appendAdHoc(runDir, 6, 3);
+    const r = runBundle({ hook_event_name: "UserPromptSubmit", cwd: root, prompt: "approve" });
+    expect(r.code).toBe(0);
+    const parsed = JSON.parse(r.stdout) as {
+      decision?: string;
+      hookSpecificOutput?: { additionalContext?: string };
+    };
+    expect(parsed.decision).toBeUndefined();
+    expect(parsed.hookSpecificOutput?.additionalContext).toContain(LIFECYCLE_GATE_MARKER);
+    expect(r.stderr).not.toContain(LIFECYCLE_GATE_MARKER);
   });
 
   it("UserPromptSubmit emits NOTHING when there is no drift", () => {

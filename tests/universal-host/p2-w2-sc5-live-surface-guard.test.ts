@@ -52,6 +52,7 @@ import {
   manifestStrippedHash,
   ratifiedSurfaceTree,
   stripVersions,
+  withLiveSurfaceLock,
   worktreeTreeHash,
 } from "./live-surface-anchor";
 const LIVE_PATHS = [".claude-plugin", "commands", "skills"];
@@ -162,38 +163,48 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
   });
 
   it("anti-vacuity: worktreeTreeHash DETECTS a perturbation (it is not a constant)", () => {
-    const victim = path.join(PLUGIN_ROOT, "commands", "init.md");
-    const original = fs.readFileSync(victim);
-    const before = worktreeTreeHash("commands");
-    try {
-      fs.appendFileSync(victim, "\n<!-- anti-vacuity probe -->\n");
-      expect(worktreeTreeHash("commands")).not.toBe(before);
-    } finally {
-      fs.writeFileSync(victim, original);
-    }
-    expect(worktreeTreeHash("commands")).toBe(before);
+    // FIC-48: this suite's perturbation victim TREE is `commands/` (SC-W3-6's is
+    // `skills/`), and the whole before→perturb→restore→after window holds the
+    // cross-worker live-surface lock — a sibling worker hashing `commands` inside
+    // this window would otherwise capture the probe and false-fail at restore time.
+    withLiveSurfaceLock(() => {
+      const victim = path.join(PLUGIN_ROOT, "commands", "init.md");
+      const original = fs.readFileSync(victim);
+      const before = worktreeTreeHash("commands");
+      try {
+        fs.appendFileSync(victim, "\n<!-- anti-vacuity probe -->\n");
+        expect(worktreeTreeHash("commands")).not.toBe(before);
+      } finally {
+        fs.writeFileSync(victim, original);
+      }
+      expect(worktreeTreeHash("commands")).toBe(before);
+    });
   });
 
   it("strict ZERO delta under .claude-plugin/ + commands/ + skills/ vs the ratified surface", () => {
     // Tree hashes compare the RATIFIED CONTENT to the WORKING TREE, so this catches BOTH a
     // committed and an uncommitted live-surface mutation — and, unlike the old commit pin,
     // it is not orphaned by a squash-merge.
-    for (const p of Object.keys(RATIFIED_TREES)) {
-      const actual = worktreeTreeHash(p);
-      if (actual !== RATIFIED_TREES[p]) {
-        throw new Error(
-          `SC-W2-5: ${p}/ changed vs the ratified tree ${RATIFIED_TREES[p]}:\n  ` +
-            describeTreeDelta(p, RATIFIED_TREES[p]!, actual).join("\n  ") +
-            "\n\nIf DELIBERATE, re-ratify RATIFIED_TREES in live-surface-anchor.ts in the SAME commit."
-        );
+    // FIC-48: reads every pinned live tree, so it takes the same lock the
+    // perturbation windows hold — a probe mid-flight is a sibling's, not drift.
+    withLiveSurfaceLock(() => {
+      for (const p of Object.keys(RATIFIED_TREES)) {
+        const actual = worktreeTreeHash(p);
+        if (actual !== RATIFIED_TREES[p]) {
+          throw new Error(
+            `SC-W2-5: ${p}/ changed vs the ratified tree ${RATIFIED_TREES[p]}:\n  ` +
+              describeTreeDelta(p, RATIFIED_TREES[p]!, actual).join("\n  ") +
+              "\n\nIf DELIBERATE, re-ratify RATIFIED_TREES in live-surface-anchor.ts in the SAME commit."
+          );
+        }
+        expect(actual).toBe(RATIFIED_TREES[p]);
       }
-      expect(actual).toBe(RATIFIED_TREES[p]);
-    }
-    // `.claude-plugin/` is per-file (release version bump is exempt) + an exact file set.
-    for (const [m, expected] of Object.entries(RATIFIED_MANIFESTS)) {
-      expect(manifestStrippedHash(m)).toBe(expected);
-    }
-    expect(claudePluginFileSet()).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
+      // `.claude-plugin/` is per-file (release version bump is exempt) + an exact file set.
+      for (const [m, expected] of Object.entries(RATIFIED_MANIFESTS)) {
+        expect(manifestStrippedHash(m)).toBe(expected);
+      }
+      expect(claudePluginFileSet()).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
+    });
   });
 
   it("anti-vacuity: the SAME live-surface evaluator rejects widened, missing, or frozen-surface deltas", () => {
@@ -273,7 +284,8 @@ describe("SC-W2-5 (1) — EMPTY-SET live-surface guard (pinned ratified-v2 basel
 describe("SC-W2-5 (2) — build-inventory resolved-entry A/B (GENUINE pre/post)", () => {
   /** Run the REAL `discoverSurfaces` resolver against the live trees at `baseSha`. */
   const pre = resolveAtRatifiedBaseline();
-  const cur = discoverSurfaces(PLUGIN_ROOT);
+  // FIC-48: the live-tree resolution also excludes sibling perturbation windows.
+  const cur = withLiveSurfaceLock(() => discoverSurfaces(PLUGIN_ROOT));
 
   it("baseline resolution actually produced a non-empty resolved set (not vacuous)", () => {
     expect((pre.skills as unknown[]).length).toBeGreaterThan(0);

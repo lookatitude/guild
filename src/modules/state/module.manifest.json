@@ -19,6 +19,8 @@
       "lib/guild-artifact-paths",
       "lib/guild-discovery",
       "lib/guild-root",
+      "lib/definition-artifact-resolver",
+      "lib/workspace-project-root",
       "lib/index-cache",
       "lib/replay-rundir",
       "lib/run-events",

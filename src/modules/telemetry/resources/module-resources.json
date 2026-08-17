@@ -15,21 +15,21 @@
       "id": "PostToolUse:capture-telemetry.js",
       "source_path": "hooks/dist/capture-telemetry.js",
       "resource_path": "resources/hooks/dist/capture-telemetry.js",
-      "sha256": "d742a9954dbd69b575048a67cfee1e9a650af0df66393ed26dc6fd035cabe558"
+      "sha256": "5cd30a070768faf105a82a9e1393055d618dba38f721e290c63b13ebbc53ebb5"
     },
     {
       "category": "hooks",
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "2e751e1de15363b7fad7c077f948d2fc77cb27a5853fd482dd5a971bcbb1810e"
+      "sha256": "de8e453ef6d5cf76f5570eb9ca6b9d748992a2c6ede0e2dfc43c1bf300c46843"
     },
     {
       "category": "hooks",
       "id": "UserPromptSubmit:run-trace-start.js",
       "source_path": "hooks/dist/run-trace-start.js",
       "resource_path": "resources/hooks/dist/run-trace-start.js",
-      "sha256": "9c3edb3ed7ac300a47dc3527018da2dbdb3b8c6f92c0954dedaaaad12b8f075f"
+      "sha256": "ea11e1e5795322a9ef570e94a58b0bc38df700b7ed812cbb94729cdc6d9eac28"
     },
     {
       "category": "mcp_servers",
@@ -50,7 +50,7 @@
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "bcc6e37c524def61841802342e306f9bce9b8f5cf5e91b3f5d4db46901d9575a"
+      "sha256": "eec9c0975cd36d879dcc52b7aaed673a2ba97341b7e139c5c4c388c8f4bcb045"
     },
     {
       "category": "scripts",
@@ -79,6 +79,20 @@
       "source_path": "scripts/recall-stats.ts",
       "resource_path": "resources/scripts/recall-stats.ts",
       "sha256": "b719c47104dc45915c9e3ccbca0d41cbd8b2f1c3ed55be26facb8097f715091f"
+    },
+    {
+      "category": "scripts",
+      "id": "run-analysis",
+      "source_path": "scripts/run-analysis.ts",
+      "resource_path": "resources/scripts/run-analysis.ts",
+      "sha256": "45be42e12974839330b6814486fa1668e199b5331c60bafe89acdf5573938594"
+    },
+    {
+      "category": "scripts",
+      "id": "task-cell-telemetry",
+      "source_path": "scripts/task-cell-telemetry.ts",
+      "resource_path": "resources/scripts/task-cell-telemetry.ts",
+      "sha256": "3650d4540db2da8d1789005a3a446689a082d2a1c3841782c467bad89a8db5e8"
     },
     {
       "category": "scripts",

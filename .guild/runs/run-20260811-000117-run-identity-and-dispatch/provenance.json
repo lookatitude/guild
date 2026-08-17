@@ -1,0 +1,30 @@
+{
+  "schema_version": "guild.provenance.v1",
+  "run_id": "run-20260811-000117-run-identity-and-dispatch",
+  "command": "/guild:build",
+  "initiative": "run-identity-and-dispatch",
+  "retention_class": "until-archive",
+  "started_at": "2026-08-11T00:01:17Z",
+  "closed_at": "2026-08-11T01:02:03Z",
+  "status": "closed",
+  "run_class": "full",
+  "terminal_trace_event": {
+    "event_id": "evt-6883ac0d-38ea-41dc-a471-9e6f62c4644e",
+    "event_name": "run_closed",
+    "at": "2026-08-11T01:02:03Z",
+    "log_ref": ".guild/runs/run-20260811-000117-run-identity-and-dispatch/logs/v1.4-events.jsonl"
+  },
+  "final_learning_checkpoint": null,
+  "gates": {},
+  "touched": {
+    "tasks": [],
+    "agents": [],
+    "skills": [],
+    "decisions": [],
+    "features": [],
+    "files": [],
+    "runs": []
+  },
+  "artifacts": {},
+  "benchmark_eligible": true
+}

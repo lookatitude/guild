@@ -5604,7 +5604,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep2) => `${key}${sep2}${KV_REDACTED}`
+    (_match, key, sep3) => `${key}${sep3}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -5628,6 +5628,34 @@ function allWordsWordish(words) {
   }
   return true;
 }
+function isSafeDotGuildToken(token) {
+  const normalized = token.replace(/^(?:\.{1,2}\/)?\.guild\//, "");
+  const root = normalized.split("/", 1)[0] ?? "";
+  if (!DOT_GUILD_ROOTS.has(root)) return false;
+  const runNormalized = normalized.replace(
+    /(^|\/)run-\d{8}-\d{6}-/g,
+    "$1run-"
+  );
+  const words = runNormalized.split(/[/._-]+/).filter(Boolean);
+  let opaqueBudget = 1;
+  let numericWords = 0;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    if (/^[a-z][a-z0-9]*$/.test(word)) continue;
+    if (/^\d+$/.test(word)) {
+      numericWords += 1;
+      if (numericWords > 3) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    if (/^[A-Z][A-Z0-9]{0,7}$/.test(word)) {
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
 function isRelativePathToken(candidate, fullInput, matchIndex) {
   if (candidate.includes("+") || candidate.includes("=")) return false;
   let start = matchIndex;
@@ -5644,9 +5672,11 @@ function isRelativePathToken(candidate, fullInput, matchIndex) {
   }
   const token = fullInput.slice(start, end);
   if (token.length > MAX_PATH_TOKEN_LEN) return false;
-  if (!PATH_SHAPE.test(token)) return false;
+  const isDotGuildPath = DOT_GUILD_PATH_SHAPE.test(token);
+  if (!PATH_SHAPE.test(token) && !isDotGuildPath) return false;
   const slashCount = token.split("/").length - 1;
   if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  if (isDotGuildPath) return isSafeDotGuildToken(token);
   return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
 }
 function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
@@ -5700,7 +5730,7 @@ function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
   }
   return out;
 }
-var TOKEN_REDACTED, PATH_REDACTED, KV_REDACTED, HIGH_ENTROPY_REDACTED, TRUNCATION_SUFFIX, FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, HOME_DIR_PATTERN, KV_SECRET_PATTERN, PATH_TOKEN_CHAR, PATH_SHAPE, PATH_EXTENSION, MAX_PATH_TOKEN_LEN, HIGH_ENTROPY_PATTERN, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
+var TOKEN_REDACTED, PATH_REDACTED, KV_REDACTED, HIGH_ENTROPY_REDACTED, TRUNCATION_SUFFIX, FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, HOME_DIR_PATTERN, KV_SECRET_PATTERN, PATH_TOKEN_CHAR, PATH_SHAPE, DOT_GUILD_PATH_SHAPE, DOT_GUILD_ROOTS, PATH_EXTENSION, MAX_PATH_TOKEN_LEN, HIGH_ENTROPY_PATTERN, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
 var init_redact_log = __esm({
   "../src/modules/security/workflows/redact-log.ts"() {
     init_kernel();
@@ -5732,6 +5762,32 @@ var init_redact_log = __esm({
     KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
     PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
     PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+    DOT_GUILD_PATH_SHAPE = /^(?:\.{1,2}\/)?\.guild(?:\/[A-Za-z0-9._-]+)+$/;
+    DOT_GUILD_ROOTS = /* @__PURE__ */ new Set([
+      "agents",
+      "artifacts",
+      "context",
+      "evolve",
+      "indexes",
+      "init",
+      "initiatives",
+      "knowledge",
+      "loops",
+      "memory",
+      "plan",
+      "prd",
+      "raw",
+      "reflections",
+      "runs",
+      "skills",
+      "spec",
+      "team",
+      "teams",
+      "wiki",
+      "workflows",
+      "workspace",
+      "workspace-knowledge"
+    ]);
     PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
     MAX_PATH_TOKEN_LEN = 512;
     HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
@@ -6609,12 +6665,138 @@ function validateModelInspectionEvent(ev) {
   }
   return { ok: true };
 }
+function validateAnalysisTraceEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.analysis.v2") {
+    return { ok: false, reason: `wrong schema_version for analysis trace: ${e["schema_version"]}` };
+  }
+  if (!ANALYSIS_EVENT_CLASSES.includes(e["event_class"])) {
+    return { ok: false, reason: `unknown analysis event_class: ${e["event_class"]}` };
+  }
+  if (!["lead", "agent", "user", "tool", "system"].includes(e["actor_type"])) {
+    return { ok: false, reason: "actor_type must be lead|agent|user|tool|system" };
+  }
+  if (typeof e["actor_id"] !== "string" || e["actor_id"] === "") {
+    return { ok: false, reason: "actor_id must be a non-empty string" };
+  }
+  if (!["ok", "error", "denied", "incomplete", "unknown"].includes(e["status"])) {
+    return { ok: false, reason: "status must be ok|error|denied|incomplete|unknown" };
+  }
+  const allowedKeys = /* @__PURE__ */ new Set([
+    "schema_version",
+    "ts",
+    "run_id",
+    "lane_id",
+    "event_class",
+    "actor_type",
+    "actor_id",
+    "status",
+    "span_id",
+    "parent_span_id",
+    "phase",
+    "task_id",
+    "initiative_id",
+    "run_scope",
+    "prompt_hash",
+    "payload_ref",
+    "redaction",
+    "duration_ms",
+    "tokens",
+    "config_snapshot_ref",
+    "signature"
+  ]);
+  for (const key of Object.keys(e)) {
+    if (!allowedKeys.has(key)) return { ok: false, reason: `unknown analysis field: ${key}` };
+  }
+  if (e["run_scope"] !== void 0 && !["initiative", "independent"].includes(e["run_scope"])) {
+    return { ok: false, reason: "run_scope must be initiative|independent when present" };
+  }
+  if (e["duration_ms"] !== void 0 && (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0)) {
+    return { ok: false, reason: "duration_ms must be a non-negative number when present" };
+  }
+  for (const key of ["span_id", "parent_span_id", "phase", "task_id", "initiative_id", "prompt_hash", "payload_ref", "config_snapshot_ref", "signature"]) {
+    if (e[key] !== void 0 && (typeof e[key] !== "string" || e[key] === "")) {
+      return { ok: false, reason: `${key} must be a non-empty string when present` };
+    }
+  }
+  if (e["redaction"] !== void 0 && !["none", "redacted", "omitted"].includes(e["redaction"])) {
+    return { ok: false, reason: "redaction must be none|redacted|omitted when present" };
+  }
+  if (e["tokens"] !== void 0) {
+    if (typeof e["tokens"] !== "object" || e["tokens"] === null || Array.isArray(e["tokens"])) {
+      return { ok: false, reason: "tokens must be an object when present" };
+    }
+    for (const [key, value] of Object.entries(e["tokens"])) {
+      if (!["input", "output", "cached", "cost_usd"].includes(key) || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return { ok: false, reason: `tokens.${key} must be a non-negative finite number` };
+      }
+    }
+  }
+  const eventClass = e["event_class"];
+  if (eventClass === "run_started" && e["run_scope"] === void 0) {
+    return { ok: false, reason: "run_started requires run_scope" };
+  }
+  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
+  }
+  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0) {
+    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
+  }
+  const promptClasses = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
+  if (promptClasses.includes(eventClass) && (e["prompt_hash"] === void 0 || e["redaction"] === void 0 || e["span_id"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
+  }
+  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) && (e["span_id"] === void 0 || e["prompt_hash"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
+  }
+  if (eventClass.startsWith("tool_call_") && e["span_id"] === void 0) {
+    return { ok: false, reason: `${eventClass} requires span_id` };
+  }
+  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === void 0) {
+    return { ok: false, reason: `${eventClass} requires duration_ms` };
+  }
+  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) && (e["task_id"] === void 0 || e["span_id"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
+  }
+  if (eventClass === "agent_handoff_written" && e["payload_ref"] === void 0) {
+    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
+  }
+  if (eventClass === "agent_response_received" && e["span_id"] === void 0) {
+    return { ok: false, reason: "agent_response_received requires span_id" };
+  }
+  if (eventClass.startsWith("loop_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  if (eventClass.startsWith("phase_") && (e["span_id"] === void 0 || e["phase"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and phase` };
+  }
+  if (eventClass.startsWith("gate_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  const evidenceClasses = [
+    "instruction_violation_detected",
+    "user_steering_received",
+    "correction_applied",
+    "repeated_failure_detected",
+    "recommendation_created",
+    "recommendation_routed",
+    "bug_report_prompted"
+  ];
+  if (evidenceClasses.includes(eventClass) && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  return { ok: true };
+}
 function validateGuildTraceEvent(ev) {
   if (typeof ev !== "object" || ev === null) {
     return { ok: false, reason: "event must be a non-null object" };
   }
   const sv = ev["schema_version"];
   switch (sv) {
+    case "guild.trace.analysis.v2":
+      return validateAnalysisTraceEvent(ev);
     case "guild.trace.model_inspection.v1":
       return validateModelInspectionEvent(ev);
     case "guild.trace.dispatch.v1":
@@ -6636,9 +6818,46 @@ function validateGuildTraceEvent(ev) {
 function makeDispatchEvent(fields) {
   return { schema_version: "guild.trace.dispatch.v1", ...fields };
 }
-var GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
+var ANALYSIS_EVENT_CLASSES, GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
 var init_guild_trace_events = __esm({
   "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
+    ANALYSIS_EVENT_CLASSES = Object.freeze([
+      "run_started",
+      "run_closed",
+      "run_attachment_resolved",
+      "config_snapshot_written",
+      "prompt_received",
+      "prompt_normalized",
+      "clarifying_question_asked",
+      "implementation_authorized",
+      "agent_dispatched",
+      "agent_prompt_sent",
+      "agent_response_received",
+      "agent_handoff_written",
+      "knowledge_lookup_started",
+      "knowledge_lookup_result",
+      "memory_lookup_started",
+      "memory_lookup_result",
+      "tool_call_started",
+      "tool_call_finished",
+      "tool_call_denied",
+      "tool_call_failed",
+      "loop_entered",
+      "loop_iteration",
+      "loop_exited",
+      "loop_cap_hit",
+      "phase_entered",
+      "phase_concluded",
+      "gate_started",
+      "gate_concluded",
+      "instruction_violation_detected",
+      "user_steering_received",
+      "correction_applied",
+      "repeated_failure_detected",
+      "recommendation_created",
+      "recommendation_routed",
+      "bug_report_prompted"
+    ]);
     GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
       "guild.trace.dispatch.v1",
       "guild.trace.recall.v1",
@@ -6646,9 +6865,10 @@ var init_guild_trace_events = __esm({
       "guild.trace.config_resolution.v1",
       "guild.trace.security_decision.v1",
       "guild.trace.degradation.v1",
-      "guild.trace.model_inspection.v1"
+      "guild.trace.model_inspection.v1",
+      "guild.trace.analysis.v2"
     ]);
-    DISPATCH_BACKENDS = ["agent", "tmux", "remote", "unknown"];
+    DISPATCH_BACKENDS = ["agent", "cmux", "tmux", "remote", "unknown"];
     RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
     SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
     DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
@@ -6693,6 +6913,54 @@ var init_guild_trace_emit = __esm({
     fs6 = __toESM(require("node:fs"));
     path7 = __toESM(require("node:path"));
     init_guild_trace_events();
+  }
+});
+
+// ../src/modules/telemetry/workflows/run-analysis.ts
+var REQUIRED_COVERAGE, COMPLETENESS_REQUIREMENTS, EVENT_CLASS_CATEGORY;
+var init_run_analysis = __esm({
+  "../src/modules/telemetry/workflows/run-analysis.ts"() {
+    init_state();
+    init_guild_trace_events();
+    REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
+    COMPLETENESS_REQUIREMENTS = Object.freeze(["run identity", "plugin-config-snapshot.json", "trace parseability", "trace validity", ...REQUIRED_COVERAGE]);
+    EVENT_CLASS_CATEGORY = Object.freeze({
+      run_started: null,
+      run_closed: "close",
+      run_attachment_resolved: null,
+      config_snapshot_written: null,
+      prompt_received: "prompt",
+      prompt_normalized: "prompt",
+      clarifying_question_asked: "prompt",
+      implementation_authorized: "gate",
+      agent_dispatched: "agent",
+      agent_prompt_sent: "agent",
+      agent_response_received: "agent",
+      agent_handoff_written: "agent",
+      knowledge_lookup_started: "knowledge",
+      knowledge_lookup_result: "knowledge",
+      memory_lookup_started: "memory",
+      memory_lookup_result: "memory",
+      tool_call_started: "tool",
+      tool_call_finished: "tool",
+      tool_call_denied: "tool",
+      tool_call_failed: "tool",
+      loop_entered: "loop",
+      loop_iteration: "loop",
+      loop_exited: "loop",
+      loop_cap_hit: "loop",
+      phase_entered: "phase",
+      phase_concluded: "phase",
+      gate_started: "gate",
+      gate_concluded: "gate",
+      instruction_violation_detected: "steering",
+      user_steering_received: "steering",
+      correction_applied: "correction",
+      repeated_failure_detected: "correction",
+      recommendation_created: null,
+      recommendation_routed: null,
+      bug_report_prompted: null
+    });
   }
 });
 
@@ -6773,14 +7041,44 @@ var init_debug_bundle = __esm({
   }
 });
 
+// ../src/modules/telemetry/workflows/task-cell-telemetry.ts
+var TASK_CELL_LIFECYCLE_EVENTS, EVENT_NAMES;
+var init_task_cell_telemetry = __esm({
+  "../src/modules/telemetry/workflows/task-cell-telemetry.ts"() {
+    init_kernel();
+    TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
+      "spawn_started",
+      "spawned",
+      "ready",
+      "assignment_delivered",
+      "assignment_acknowledged",
+      "running",
+      "handoff_submitted",
+      "handoff_validated",
+      "handoff_accepted",
+      "termination_started",
+      "terminated",
+      "failed",
+      "cancelled",
+      "timed_out",
+      "rejected",
+      "orphaned",
+      "reaped"
+    ]);
+    EVENT_NAMES = new Set(TASK_CELL_LIFECYCLE_EVENTS);
+  }
+});
+
 // ../src/modules/telemetry/index.ts
 var init_telemetry = __esm({
   "../src/modules/telemetry/index.ts"() {
     init_guild_trace_emit();
     init_guild_trace_events();
+    init_run_analysis();
     init_receipt_journal();
     init_receipt_reconcile();
     init_debug_bundle();
+    init_task_cell_telemetry();
   }
 });
 
@@ -6887,15 +7185,54 @@ var init_run_binding = __esm({
 });
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
-var CANONICAL_PHASES;
+function utcCompact(nowIso) {
+  const d = new Date(nowIso);
+  const iso = Number.isNaN(d.getTime()) ? nowIso : d.toISOString();
+  const m = iso.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+  if (m) return `${m[1]}${m[2]}${m[3]}-${m[4]}${m[5]}${m[6]}`;
+  const digits = iso.replace(/\D/g, "");
+  return `${digits.slice(0, 8)}-${digits.slice(8, 14)}`;
+}
+function isCanonicalRunId(runId) {
+  const match = CANONICAL_RUN_ID_RE.exec(runId);
+  if (!match) return false;
+  const [, date, time] = match;
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(4, 6));
+  const day = Number(date.slice(6, 8));
+  const hour = Number(time.slice(0, 2));
+  const minute = Number(time.slice(2, 4));
+  const second = Number(time.slice(4, 6));
+  const stamp = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  return stamp.getUTCFullYear() === year && stamp.getUTCMonth() === month - 1 && stamp.getUTCDate() === day && stamp.getUTCHours() === hour && stamp.getUTCMinutes() === minute && stamp.getUTCSeconds() === second;
+}
+function assertCanonicalRunId(runId) {
+  if (!isCanonicalRunId(runId)) {
+    throw new Error(
+      `canonical run id required (run-<yyyymmdd-hhmmss>-<slug>); received ${JSON.stringify(runId)}`
+    );
+  }
+  return runId;
+}
+function runSlug(value) {
+  return value.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80).replace(/-+$/g, "");
+}
+function makeCanonicalRunId(nowIso, slugSource) {
+  const slug = runSlug(slugSource) || crypto2.randomUUID();
+  return assertCanonicalRunId(`run-${utcCompact(nowIso)}-${slug}`);
+}
+var crypto2, CANONICAL_RUN_ID_RE, CANONICAL_PHASES;
 var init_run_lifecycle = __esm({
   "../src/modules/lifecycle/workflows/run-lifecycle.ts"() {
+    crypto2 = __toESM(require("crypto"));
     init_kernel();
     init_host_runtime();
     init_config2();
     init_state();
     init_run_binding();
     init_security();
+    init_telemetry();
+    CANONICAL_RUN_ID_RE = /^run-(\d{8})-(\d{6})-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$/;
     CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
   }
 });
@@ -7109,13 +7446,73 @@ var init_resolver_mode = __esm({
 });
 
 // ../src/modules/capability/workflows/compatibility-catalog.ts
-var SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET;
+var SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET;
 var init_compatibility_catalog = __esm({
   "../src/modules/capability/workflows/compatibility-catalog.ts"() {
     init_compatibility_usage();
     init_resolver_mode();
     SHIPPED_TEMPLATE_COUNT = 15;
-    SHIPPED_DOMAIN_SKILL_COUNT = 58;
+    SHIPPED_DOMAIN_SKILL_IDS = Object.freeze([
+      "architect-adr-writer",
+      "architect-systems-design",
+      "architect-tradeoff-matrix",
+      "backend-api-contract",
+      "backend-data-layer",
+      "backend-migration-writer",
+      "backend-service-integration",
+      "copywriter-email-sequences",
+      "copywriter-long-form",
+      "copywriter-product-microcopy",
+      "copywriter-voice-guide",
+      "devops-ci-cd-pipeline",
+      "devops-incident-runbook",
+      "devops-infrastructure-as-code",
+      "devops-observability-setup",
+      "doc-writer-doc-site",
+      "doc-writer-onboarding-doc",
+      "doc-writer-product-guide",
+      "doc-writer-readme",
+      "frontend-a11y",
+      "frontend-bundler-config",
+      "frontend-react",
+      "frontend-state-management",
+      "marketing-ab-copy-variants",
+      "marketing-campaign-brief",
+      "marketing-launch-plan",
+      "marketing-positioning",
+      "mobile-android-kotlin",
+      "mobile-ios-swift",
+      "mobile-performance-tuning",
+      "mobile-react-native",
+      "qa-flaky-test-hunter",
+      "qa-property-based-tests",
+      "qa-snapshot-tests",
+      "qa-test-strategy",
+      "researcher-comparison-table",
+      "researcher-deep-dive",
+      "researcher-paper-digest",
+      "sales-cold-outreach",
+      "sales-discovery-framework",
+      "sales-follow-up-sequence",
+      "sales-proposal-writer",
+      "security-auth-flow-review",
+      "security-dependency-audit",
+      "security-secrets-scan",
+      "security-threat-modeling",
+      "seo-internal-linking",
+      "seo-keyword-research",
+      "seo-on-page-optimization",
+      "seo-technical-audit",
+      "social-media-content-calendar",
+      "social-media-engagement-templates",
+      "social-media-platform-post",
+      "social-media-thread",
+      "technical-writer-api-docs",
+      "technical-writer-release-notes",
+      "technical-writer-tutorial",
+      "technical-writer-user-manual"
+    ]);
+    SHIPPED_DOMAIN_SKILL_COUNT = SHIPPED_DOMAIN_SKILL_IDS.length;
     SHIPPED_COMPATIBILITY_ASSET_COUNT = SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
     COMPATIBILITY_ASSET_ROOTS = Object.freeze({
       shipped_template: "templates/specialists",
@@ -7199,12 +7596,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path23, code, message) {
-  return { path: path23, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path24, code, message) {
+  return { path: path24, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path23, code, message) {
+function pushIssue(issues, path24, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path23, code, message));
+  issues.push(issue(path24, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -7215,15 +7612,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path23, depth) => {
+  const walk = (node, path24, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path23, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path24, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path23, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path24, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -7232,7 +7629,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path23, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path24, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -7240,17 +7637,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path23, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path24, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path23, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path24, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path23, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path24, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -7258,26 +7655,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path23, "array_length_unreadable", length.reason);
+          pushIssue(errors, path24, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path23, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path24, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path23}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path24}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path23}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path24}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path23}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path24}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -7285,11 +7682,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path23, "own_keys_threw", keys.reason);
+        pushIssue(errors, path24, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path23, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path24, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -7297,14 +7694,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path23}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path24}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path23}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path24}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path23}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path24}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -7360,38 +7757,38 @@ var init_document_safe = __esm({
 });
 
 // ../src/modules/documents/workflows/document-records.ts
-function readShape(issues, value, path23, allowed) {
+function readShape(issues, value, path24, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path23, "not_an_object", `${path23} must be an object`);
+    pushIssue(issues, path24, "not_an_object", `${path24} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path23, "not_an_object", `${path23} must be an object, not an array`);
+    pushIssue(issues, path24, "not_an_object", `${path24} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path23, "own_keys_threw", `${path23}: ${keys.reason}`);
+    pushIssue(issues, path24, "own_keys_threw", `${path24}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path23}.${key}`, "unexpected_key", `${path23}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path24}.${key}`, "unexpected_key", `${path24}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path23}.${key}`, "missing_field", `${path23}.${key} is required`);
+      pushIssue(issues, `${path24}.${key}`, "missing_field", `${path24}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path23, key, options = {}) {
-  const fieldPath = `${path23}.${key}`;
+function readString(issues, parent, path24, key, options = {}) {
+  const fieldPath = `${path24}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -7426,8 +7823,8 @@ function readString(issues, parent, path23, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path23, key, options = {}) {
-  const fieldPath = `${path23}.${key}`;
+function readArray(issues, parent, path24, key, options = {}) {
+  const fieldPath = `${path24}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -7470,10 +7867,10 @@ function readArray(issues, parent, path23, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path23, key, options = {}) {
-  const items = readArray(issues, parent, path23, key, options);
+function readStringArray(issues, parent, path24, key, options = {}) {
+  const items = readArray(issues, parent, path24, key, options);
   if (items === null) return null;
-  const fieldPath = `${path23}.${key}`;
+  const fieldPath = `${path24}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -7499,10 +7896,10 @@ function readStringArray(issues, parent, path23, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path23, key, options, readItem) {
-  const items = readArray(issues, parent, path23, key, options);
+function readItemArray(issues, parent, path24, key, options, readItem) {
+  const items = readArray(issues, parent, path24, key, options);
   if (items === null) return null;
-  const fieldPath = `${path23}.${key}`;
+  const fieldPath = `${path24}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -7529,13 +7926,13 @@ function readItemArray(issues, parent, path23, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path23) {
+function readProvenance(issues, parent, path24) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path23}.provenance`, "property_read_threw", `${path23}.provenance: property read threw`);
+    pushIssue(issues, `${path24}.provenance`, "property_read_threw", `${path24}.provenance: property read threw`);
     return null;
   }
-  const provenancePath = `${path23}.provenance`;
+  const provenancePath = `${path24}.provenance`;
   if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
@@ -7576,10 +7973,10 @@ function readProvenance(issues, parent, path23) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path23) {
-  if (!readShape(issues, body, path23, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path23, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path23, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path24) {
+  if (!readShape(issues, body, path24, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path24, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path24, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -7590,12 +7987,12 @@ function readPlanBody(issues, body, path23) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path23) {
-  if (!readShape(issues, body, path23, ["requirements"])) return null;
+function readSpecBody(issues, body, path24) {
+  if (!readShape(issues, body, path24, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path23,
+    path24,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -7612,22 +8009,22 @@ function readSpecBody(issues, body, path23) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path23) {
-  if (!readShape(issues, body, path23, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path23, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path23, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path23, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path23, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path24) {
+  if (!readShape(issues, body, path24, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path24, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path24, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path24, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path24, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path23) {
-  if (!readShape(issues, body, path23, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path23, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path24) {
+  if (!readShape(issues, body, path24, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path24, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path23,
+    path24,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -7642,13 +8039,13 @@ function readReviewBody(issues, body, path23) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path23) {
-  if (!readShape(issues, body, path23, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path23, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path24) {
+  if (!readShape(issues, body, path24, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path24, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path23,
+    path24,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -8164,8 +8561,8 @@ function readReceiptFrontmatter(text) {
   }
   let parsed;
   try {
-    const yaml2 = loadYamlApi();
-    parsed = yaml2.load(frontmatter, { schema: yaml2.JSON_SCHEMA });
+    const yaml4 = loadYamlApi();
+    parsed = yaml4.load(frontmatter, { schema: yaml4.JSON_SCHEMA });
   } catch {
     return { ok: false, reason: "frontmatter is not a valid YAML mapping" };
   }
@@ -8193,7 +8590,7 @@ function readReceiptMachineBlock(text) {
       return { ok: false, reason: "receipt exceeds the fenced-block scan bound" };
     }
     const info = (match[1] ?? "").trim().toLowerCase();
-    if (info !== "" && info !== "json" && info !== "jsonc") continue;
+    if (info !== "" && info !== "json" && info !== "jsonc" && info !== RECEIPT_MACHINE_SCHEMA_VERSION) continue;
     let parsed;
     try {
       parsed = JSON.parse(match[2] ?? "");
@@ -8220,6 +8617,10 @@ function firstField(fields, keys) {
     if (typeof value === "string" && value !== "") return value;
   }
   return null;
+}
+function aliasesAgree(fields, keys) {
+  const declared = keys.map((key) => fields[key]).filter((value) => typeof value === "string" && value !== "");
+  return new Set(declared).size <= 1;
 }
 function parseReceiptDocument(input) {
   const errors = [];
@@ -8263,6 +8664,22 @@ function parseReceiptDocument(input) {
     const authorFamily = firstField(fields, ["model_family", "family"]);
     const hostId = firstField(fields, ["host"]);
     const createdAt = firstField(fields, ["generated_at"]);
+    if (!aliasesAgree(fields, ["agent", "specialist"])) {
+      pushIssue(
+        errors,
+        "$.frontmatter.agent",
+        "conflicting_provenance",
+        "frontmatter agent and specialist must agree when both are present"
+      );
+    }
+    if (!aliasesAgree(fields, ["model_family", "family"])) {
+      pushIssue(
+        errors,
+        "$.frontmatter.model_family",
+        "conflicting_provenance",
+        "frontmatter model_family and family must agree when both are present"
+      );
+    }
     if (authorId === null) {
       pushIssue(errors, "$.frontmatter.agent", "missing_provenance", "frontmatter agent/specialist is required");
     }
@@ -8753,11 +9170,11 @@ function exclusionSentinelPath(runDir2) {
   return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir2) {
-  const path23 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path23), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path23)) return;
+  const path24 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path24), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path24)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path23, "wx");
+    const fd = (0, import_node_fs.openSync)(path24, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -8855,9 +9272,9 @@ function appendEvent(runDir2, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path23 = laneFallbackPath(runDir2, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path23), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path23, "a");
+    const path24 = laneFallbackPath(runDir2, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path24), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path24, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -10999,11 +11416,900 @@ var init_canonical_hash = __esm({
   }
 });
 
+// ../src/modules/teams/workflows/station-composer.ts
+var STATIONS, STATION_SET, DISCIPLINE_SIGNALS, FANOUT_RANK, DOC, IMPLIED_RULES, DEFAULTS_ANCHOR, EMPTY_ADVISORY_PANEL, QA_ADVISORY_PANEL, OPS_ADVISORY_PANEL, STATION_POLICY, IMPLIED_RULE_IDS;
+var init_station_composer = __esm({
+  "../src/modules/teams/workflows/station-composer.ts"() {
+    init_kernel();
+    STATIONS = Object.freeze([
+      "init",
+      "ideate",
+      "plan",
+      "build",
+      "qa",
+      "ops",
+      "research",
+      "definition",
+      "learn"
+    ]);
+    STATION_SET = new Set(STATIONS);
+    DISCIPLINE_SIGNALS = Object.freeze([
+      "multi_component",
+      "auth_touched",
+      "backend_present",
+      "user_facing_ui",
+      "public_docs",
+      "search_discoverability"
+    ]);
+    FANOUT_RANK = Object.freeze({
+      lead_only: 0,
+      lead_plus_one: 1,
+      lead_plus_many: 2
+    });
+    DOC = ".guild/wiki/entities/team-composition.md";
+    IMPLIED_RULES = deepFreeze([
+      {
+        id: "multi_component",
+        signal: "multi_component",
+        adds: Object.freeze(["architect"]),
+        reason: "Component boundaries and dependencies need ownership.",
+        doc_ref: `${DOC}#implied-specialist-rules`
+      },
+      {
+        id: "auth_touched",
+        signal: "auth_touched",
+        adds: Object.freeze(["security"]),
+        reason: "Threats and trust boundaries must be explicit.",
+        doc_ref: `${DOC}#implied-specialist-rules`
+      },
+      {
+        id: "backend_present",
+        signal: "backend_present",
+        adds: Object.freeze(["qa"]),
+        reason: "Server-side work needs integration and regression evidence.",
+        doc_ref: `${DOC}#implied-specialist-rules`
+      },
+      {
+        id: "user_facing_ui",
+        signal: "user_facing_ui",
+        // Doc: "frontend and often qa" — both are added; qa dedupes against the
+        // backend_present rule when both fire.
+        adds: Object.freeze(["frontend", "qa"]),
+        reason: "Accessibility, responsive behavior, and interaction state need coverage.",
+        doc_ref: `${DOC}#implied-specialist-rules`
+      },
+      {
+        id: "public_docs",
+        signal: "public_docs",
+        adds: Object.freeze(["technical-writer"]),
+        reason: "Durable docs need task-focused structure and maintenance boundaries.",
+        doc_ref: `${DOC}#implied-specialist-rules`
+      },
+      {
+        id: "search_discoverability",
+        signal: "search_discoverability",
+        adds: Object.freeze(["seo"]),
+        reason: "SEO owns metadata, crawlability, and keyword strategy.",
+        doc_ref: `${DOC}#implied-specialist-rules`
+      }
+    ]);
+    DEFAULTS_ANCHOR = `${DOC}#phase-team-defaults`;
+    EMPTY_ADVISORY_PANEL = Object.freeze({
+      producer: null,
+      challengers: Object.freeze([])
+    });
+    QA_ADVISORY_PANEL = Object.freeze({
+      producer: "qa-test-strategy",
+      challengers: Object.freeze([
+        Object.freeze({ role: "security" }),
+        Object.freeze({ role: "architect", signal: "multi_component" })
+      ])
+    });
+    OPS_ADVISORY_PANEL = Object.freeze({
+      producer: null,
+      challengers: Object.freeze([
+        Object.freeze({ role: "security" }),
+        Object.freeze({ role: "architect", signal: "multi_component" })
+      ])
+    });
+    STATION_POLICY = deepFreeze({
+      init: {
+        station: "init",
+        default_roster: Object.freeze(["researcher", "technical-writer"]),
+        // Doc: "optional architect" — only when component boundaries are in play.
+        conditional_roster: Object.freeze({ architect: "multi_component" }),
+        plan_driven_slots: Object.freeze([]),
+        advisory_memory: true,
+        advisory_panel: EMPTY_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: false,
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      ideate: {
+        station: "ideate",
+        default_roster: Object.freeze(["architect", "researcher"]),
+        conditional_roster: Object.freeze({}),
+        // Doc: "optional product/content/domain specialists" — no signal encodes these
+        // concrete roles; the plan/spec supplies them (G6b).
+        plan_driven_slots: Object.freeze(["product", "content", "domain"]),
+        advisory_memory: true,
+        advisory_panel: EMPTY_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: false,
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      plan: {
+        station: "plan",
+        default_roster: Object.freeze(["architect", "technical-writer", "qa"]),
+        // Doc: "security when needed" → gated on auth/secrets signal.
+        conditional_roster: Object.freeze({ security: "auth_touched" }),
+        plan_driven_slots: Object.freeze([]),
+        advisory_memory: true,
+        advisory_panel: EMPTY_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: false,
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      build: {
+        station: "build",
+        // Doc: "task owners selected by plan, qa, security, architect/tech lead when
+        // boundaries change". Always-present reviewers are the default; architect is
+        // boundary-change (multi_component) gated; task-owner implementers are plan-driven.
+        default_roster: Object.freeze(["qa", "security"]),
+        conditional_roster: Object.freeze({ architect: "multi_component" }),
+        plan_driven_slots: Object.freeze(["task-owner-implementers"]),
+        advisory_memory: true,
+        advisory_panel: EMPTY_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: false,
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      qa: {
+        station: "qa",
+        default_roster: Object.freeze(["qa"]),
+        // Doc: "devops, security when needed" — security gated on auth_touched; devops
+        // "when needed" has no signal (release/deploy context) → plan-driven. Doc also
+        // names "relevant implementers" → plan-driven.
+        conditional_roster: Object.freeze({ security: "auth_touched" }),
+        plan_driven_slots: Object.freeze(["devops", "relevant-implementers"]),
+        advisory_memory: true,
+        advisory_panel: QA_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: false,
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      ops: {
+        station: "ops",
+        default_roster: Object.freeze(["devops", "security", "qa"]),
+        conditional_roster: Object.freeze({}),
+        // Doc: "relevant implementers" → plan-driven.
+        plan_driven_slots: Object.freeze(["relevant-implementers"]),
+        advisory_memory: true,
+        advisory_panel: OPS_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: false,
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      // ── Extended stations (doc §Phase Team Defaults omits these) ──
+      research: {
+        station: "research",
+        default_roster: Object.freeze(["researcher"]),
+        conditional_roster: Object.freeze({ architect: "multi_component" }),
+        plan_driven_slots: Object.freeze([]),
+        advisory_memory: true,
+        advisory_panel: EMPTY_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: true,
+        note: "EXTENDS doc: research station (product-explore / researcher deliverables); doc \xA7Phase Team Defaults omits it \u2014 reconcile in G6b.",
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      definition: {
+        station: "definition",
+        default_roster: Object.freeze(["architect", "technical-writer"]),
+        conditional_roster: Object.freeze({ qa: "backend_present" }),
+        plan_driven_slots: Object.freeze([]),
+        advisory_memory: true,
+        advisory_panel: EMPTY_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: true,
+        note: "EXTENDS doc: definition station (product-define / PRD nucleus); mirrors Planning minus security-by-default \u2014 reconcile in G6b.",
+        doc_ref: DEFAULTS_ANCHOR
+      },
+      learn: {
+        station: "learn",
+        default_roster: Object.freeze(["researcher"]),
+        conditional_roster: Object.freeze({ architect: "multi_component", "technical-writer": "public_docs" }),
+        plan_driven_slots: Object.freeze([]),
+        advisory_memory: true,
+        advisory_panel: EMPTY_ADVISORY_PANEL,
+        default_fanout: "lead_only",
+        extends_doc: true,
+        note: "EXTENDS doc: learn station (learn-* knowledge pipeline; analysis reuses researcher/architect per team-composition.md \xA7No new analysis specialist); doc \xA7Phase Team Defaults omits it \u2014 reconcile in G6b.",
+        doc_ref: DEFAULTS_ANCHOR
+      }
+    });
+    IMPLIED_RULE_IDS = new Set(IMPLIED_RULES.map((r) => r.id));
+  }
+});
+
+// ../src/modules/distribution/workflows/inventory-schema.ts
+var INVENTORY_CATEGORIES, ALLOWED_INVENTORY_KEYS;
+var init_inventory_schema = __esm({
+  "../src/modules/distribution/workflows/inventory-schema.ts"() {
+    init_kernel();
+    INVENTORY_CATEGORIES = Object.freeze([
+      "commands",
+      "skills",
+      "agents",
+      "hooks",
+      "mcp_servers",
+      "scripts",
+      "schemas",
+      "docs"
+    ]);
+    ALLOWED_INVENTORY_KEYS = sealSet([
+      "schema_version",
+      "generated_at",
+      "plugin_version",
+      "manifest",
+      ...INVENTORY_CATEGORIES
+    ], "ALLOWED_INVENTORY_KEYS");
+  }
+});
+
+// ../src/modules/distribution/workflows/parity-contract.ts
+var DISCOVERY_RULES, COVERAGE_ENFORCED_CATEGORIES;
+var init_parity_contract = __esm({
+  "../src/modules/distribution/workflows/parity-contract.ts"() {
+    init_kernel();
+    init_inventory_schema();
+    DISCOVERY_RULES = deepFreeze([
+      {
+        category: "commands",
+        globs: ["commands/*.md"],
+        id_rule: "basename without .md (commands/plan.md \u2192 'plan')",
+        enforced: true
+      },
+      {
+        category: "agents",
+        globs: ["agents/*.md"],
+        id_rule: "basename without .md (agents/architect.md \u2192 'architect')",
+        enforced: true
+      },
+      {
+        category: "skills",
+        globs: ["skills/**/SKILL.md", "skills/**/SKILL.src.md"],
+        id_rule: "the skill's `name:` frontmatter value (e.g. 'guild:review'). SKILL.src.md and its generated SKILL.md share one id (the src is the authored source).",
+        enforced: true,
+        note: "A SKILL.src.md (e.g. using-guild) is the authored source; if both SKILL.src.md and a generated SKILL.md exist they collapse to ONE id \u2014 discovery must dedupe by name, not by file."
+      },
+      {
+        category: "hooks",
+        globs: ["hooks/hooks.json"],
+        id_rule: "one entry per (event, script) binding parsed from hooks.json; id = '<event>:<script-basename>'",
+        enforced: true,
+        note: "Discovery parses hooks.json, it does not glob script files \u2014 the binding (not the script) is the surface."
+      },
+      {
+        category: "mcp_servers",
+        globs: [".mcp.json"],
+        id_rule: "each key under .mcp.json `mcpServers` (e.g. 'guild-memory')",
+        enforced: true,
+        note: "Discovery parses .mcp.json; MCP is NOT inline in plugin.json (verified)."
+      },
+      {
+        category: "scripts",
+        globs: ["scripts/**/*.ts"],
+        id_rule: "repo-relative path under scripts/ without the .ts extension (scripts/build-inventory.ts \u2192 'build-inventory'; scripts/lib/x.ts \u2192 'lib/x')",
+        enforced: true,
+        note: "Exclude __tests__/** and *.test.ts (test files are not shipped surfaces). The L6 fail-fixture adds a non-test script and requires failure."
+      },
+      {
+        category: "schemas",
+        globs: [],
+        id_rule: "the curated result-contract registry (result-contracts.ts RESULT_CONTRACTS); id = wire_schema_version",
+        enforced: false,
+        note: "Schemas are a CURATED registry, not a filesystem glob. Coverage here = the inventory's schemas[] equals result-contracts.ts RESULT_CONTRACTS (checked by L6 against the registry, not a scan)."
+      },
+      {
+        category: "docs",
+        globs: ["docs/**/*.md"],
+        id_rule: "doc slug = repo-relative path without .md (unique across the full docs/ tree)",
+        enforced: false,
+        note: "Full docs/ tree is inventoried (FU-5). Still non-enforced: docs are a coverage/curation surface, not a load-bearing package input, so a missing doc is not an SC-7 fail-fixture."
+      }
+    ]);
+    COVERAGE_ENFORCED_CATEGORIES = Object.freeze(DISCOVERY_RULES.filter(
+      (r) => r.enforced
+    ).map((r) => r.category));
+  }
+});
+
+// ../src/modules/distribution/workflows/handoff-v2.ts
+var ALLOWED_INJECTION_CLEAN_VALUES, ALLOWED_TOP_LEVEL_KEYS;
+var init_handoff_v2 = __esm({
+  "../src/modules/distribution/workflows/handoff-v2.ts"() {
+    init_kernel();
+    ALLOWED_INJECTION_CLEAN_VALUES = sealSet(["clean", "flagged", "unverified"], "ALLOWED_INJECTION_CLEAN_VALUES");
+    ALLOWED_TOP_LEVEL_KEYS = sealSet([
+      "schema_version",
+      "task_id",
+      "tier",
+      "status",
+      "summary",
+      "artifacts",
+      "issues",
+      "escalate_reason",
+      "learnings",
+      "notes",
+      "injection_clean"
+    ], "ALLOWED_TOP_LEVEL_KEYS");
+  }
+});
+
+// ../src/modules/distribution/workflows/review-result.ts
+var init_review_result = __esm({
+  "../src/modules/distribution/workflows/review-result.ts"() {
+  }
+});
+
+// ../src/modules/distribution/workflows/result-contracts-v2.ts
+var init_result_contracts_v2 = __esm({
+  "../src/modules/distribution/workflows/result-contracts-v2.ts"() {
+  }
+});
+
+// ../src/modules/distribution/workflows/result-contracts.ts
+var EXISTING_CONTRACTS, DEFERRED_CONTRACTS, RESULT_CONTRACTS, PHASE1_NORMALIZER_TARGETS;
+var init_result_contracts = __esm({
+  "../src/modules/distribution/workflows/result-contracts.ts"() {
+    init_handoff_v2();
+    init_kernel();
+    init_review_result();
+    init_result_contracts_v2();
+    EXISTING_CONTRACTS = deepFreeze([
+      {
+        wire_schema_version: "guild.handoff.v2",
+        status: "exists",
+        validator_kind: "strict",
+        source_path: "plugin/hooks/lib/handoff-v2.ts",
+        purpose: "Specialist lane result (dispatch envelope)."
+      },
+      {
+        wire_schema_version: "review_result.v1",
+        // NOTE: no `guild.` prefix (correction #1).
+        status: "exists",
+        validator_kind: "lenient",
+        source_path: "plugin/scripts/verify-gate-pass.ts",
+        // correction #2.
+        purpose: "Advisory/adversarial review result (gate-pass binding)."
+      },
+      {
+        wire_schema_version: "guild.phase_result.v1",
+        status: "exists",
+        validator_kind: "strict",
+        source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+        purpose: "Phase close summary and gate predicate."
+      },
+      {
+        wire_schema_version: "guild.permission_receipt.v1",
+        status: "exists",
+        validator_kind: "strict",
+        source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+        purpose: "Requested/selected host mode and gate policy."
+      },
+      {
+        wire_schema_version: "guild.host_event.v1",
+        status: "exists",
+        validator_kind: "strict",
+        source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+        purpose: "Normalized hook/tool/session event."
+      },
+      {
+        wire_schema_version: "guild.qa_result.v1",
+        status: "exists",
+        validator_kind: "strict",
+        source_path: "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+        purpose: "Test matrix execution, gaps, failures, release predicate."
+      }
+    ]);
+    DEFERRED_CONTRACTS = Object.freeze([]);
+    RESULT_CONTRACTS = Object.freeze([
+      ...EXISTING_CONTRACTS,
+      ...DEFERRED_CONTRACTS
+    ]);
+    PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
+  }
+});
+
+// ../src/modules/distribution/workflows/build-inventory.ts
+var path17, PLUGIN_ROOT;
+var init_build_inventory = __esm({
+  "../src/modules/distribution/workflows/build-inventory.ts"() {
+    path17 = __toESM(require("node:path"));
+    init_inventory_schema();
+    init_state();
+    init_parity_contract();
+    init_result_contracts();
+    PLUGIN_ROOT = path17.resolve(__dirname, "../../../..");
+  }
+});
+
+// ../src/modules/distribution/workflows/check-module-ownership.ts
+var init_check_module_ownership = __esm({
+  "../src/modules/distribution/workflows/check-module-ownership.ts"() {
+    init_build_inventory();
+    init_kernel();
+  }
+});
+
+// ../src/modules/distribution/workflows/equivalence-contract.ts
+var EQUIVALENCE_SURFACES, INTENTIONAL_EXCLUSIONS, PROVENANCE_FIELDS, SORTED_MANIFEST_ARRAYS;
+var init_equivalence_contract = __esm({
+  "../src/modules/distribution/workflows/equivalence-contract.ts"() {
+    init_kernel();
+    EQUIVALENCE_SURFACES = Object.freeze([
+      "manifest",
+      "commands",
+      "skills",
+      "agents",
+      "hooks_json",
+      "bootstrap_sh",
+      "mcp_json",
+      "script_refs"
+    ]);
+    INTENTIONAL_EXCLUSIONS = deepFreeze([
+      {
+        path: "hooks_json.SessionStart (using-guild additionalContext injection)",
+        reason: "L5b deliberately changes Claude SessionStart from bootstrap.sh plain-stdout banners to hookSpecificOutput.additionalContext injection \u2014 a chosen format change, NOT zero-delta (spec SC-8).",
+        verified_by: "L5b golden test (NOT this equivalence check)."
+      },
+      {
+        path: "*._rendered_at, *._source_version, generated_at",
+        reason: "Render-provenance fields are build metadata the committed package does not carry; they are normalized OUT before comparison, never compared.",
+        verified_by: "normalizeJson() strips them (PROVENANCE_FIELDS)."
+      },
+      {
+        path: "manifest.skills, manifest.commands, manifest.agents (glob ordering)",
+        reason: "The generated manifest's skill/command/agent path globs derive from the inventory in a canonical order; ordering is not semantically meaningful.",
+        verified_by: "normalizeJson() sorts arrays of path-strings for these manifest fields (see SORTED_MANIFEST_ARRAYS) so order deltas are not failures."
+      }
+    ]);
+    PROVENANCE_FIELDS = sealSet([
+      "_rendered_at",
+      "_source_version",
+      "generated_at"
+    ], "PROVENANCE_FIELDS");
+    SORTED_MANIFEST_ARRAYS = sealSet(["skills", "commands", "agents"], "SORTED_MANIFEST_ARRAYS");
+  }
+});
+
+// ../src/modules/distribution/workflows/module-resources.ts
+var init_module_resources = __esm({
+  "../src/modules/distribution/workflows/module-resources.ts"() {
+    init_build_inventory();
+    init_kernel();
+  }
+});
+
+// ../src/modules/distribution/workflows/per-host-packaging.ts
+var init_per_host_packaging = __esm({
+  "../src/modules/distribution/workflows/per-host-packaging.ts"() {
+  }
+});
+
+// ../src/modules/distribution/workflows/release-distribution-contract.ts
+var OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var init_release_distribution_contract = __esm({
+  "../src/modules/distribution/workflows/release-distribution-contract.ts"() {
+    OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
+    ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
+      Object.freeze({ path: "handoffs/tooling-engineer-MH-08.md", sha256: "6168cd3381edd6a8f4cb234e4cb1c714147c65ea11c92cd9210c6429663fcdb1" }),
+      Object.freeze({ path: "validation/mh-08-r12-done-lead-validation.json", sha256: "23dee57b587426ef56fbbc60e38d0008eb8c972890d1ceb3cbe0ddde3bcebb85" }),
+      Object.freeze({ path: "review/G-lane:MH-08/result-12-r2.json", sha256: "5141b2b45caee0e47ca21dd853db22f8d885161935b19049c2392036710d0bd4" }),
+      Object.freeze({ path: "validation/mh-08-r12-review-r2-lead-validation.json", sha256: "0f8054585bd4aeae1780e49c67cf6e65efe7023aeafceeed6fe336090c0fc27e" })
+    ]);
+  }
+});
+
+// ../src/modules/distribution/workflows/surface-manifest.ts
+var SURFACE_KINDS;
+var init_surface_manifest = __esm({
+  "../src/modules/distribution/workflows/surface-manifest.ts"() {
+    SURFACE_KINDS = Object.freeze(["skill", "command", "agent"]);
+  }
+});
+
+// ../src/modules/distribution/workflows/verify-host-packages.ts
+var init_verify_host_packages = __esm({
+  "../src/modules/distribution/workflows/verify-host-packages.ts"() {
+    init_build_inventory();
+    init_host_runtime();
+  }
+});
+
+// ../src/modules/distribution/workflows/verify-installer.ts
+var BUILD_ONCE_SNIPPET, INSTALLER_HOST_EXPECTATIONS;
+var init_verify_installer = __esm({
+  "../src/modules/distribution/workflows/verify-installer.ts"() {
+    init_kernel();
+    init_build_inventory();
+    BUILD_ONCE_SNIPPET = "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>";
+    INSTALLER_HOST_EXPECTATIONS = deepFreeze([
+      // ── keep/CLI+file ───────────────────────────────────────────────────────────
+      {
+        host: "claude-code-cli",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "would run: claude plugin validate dist/claude-code",
+          "would run: claude plugin marketplace add dist/claude-code",
+          "would run: claude plugin marketplace update guild",
+          "would run: claude plugin install guild@guild",
+          "Guild installed into Claude Code."
+        ]
+      },
+      {
+        host: "codex-cli",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "would run: codex plugin marketplace remove guild || true",
+          "would run: codex plugin marketplace add ",
+          "/dist/codex-marketplace",
+          "would run: codex plugin add guild@guild",
+          "Package bootstrap: AGENTS.md plus .agents/skills/guild.",
+          "Codex App local plugin link:",
+          "codex://plugins/guild?marketplacePath=",
+          "/dist/codex-marketplace/.agents/plugins/marketplace.json",
+          "After installing/enabling Guild in Codex App, try /guild:status.",
+          "If the app slash parser rejects /guild before hooks run"
+        ]
+      },
+      {
+        host: "pi-cli",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "would run: pi install dist/pi",
+          "pi-manifest.json",
+          "guild-run --host pi"
+        ]
+      },
+      {
+        host: "antigravity-cli",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "would run: agy plugin validate dist/antigravity",
+          "would run: agy plugin install dist/antigravity",
+          "plugin.json",
+          "antigravity-manifest.json",
+          "guild-run --host antigravity"
+        ]
+      },
+      {
+        host: "agents-file",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "Universal AGENTS.md package rendered at:",
+          "dist/agents/AGENTS.md",
+          "dist/agents/.agents/skills/guild"
+        ]
+      },
+      // ── new-CLI (installability: target — package tree is the deliverable; ADR §4) ─
+      {
+        host: "cursor",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "cursor (new-CLI)",
+          "would prepare package tree: dist/cursor",
+          "would wire launcher: dist/cursor/bin/guild-run --host cursor",
+          "Guild package prepared for cursor.",
+          "cursor-manifest.json (installability: target).",
+          "dist/cursor/bin/guild-run --host cursor --prompt"
+        ]
+      },
+      {
+        host: "github-copilot",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "github-copilot (new-CLI)",
+          "would prepare package tree: dist/github-copilot",
+          "would wire launcher: dist/github-copilot/bin/guild-run --host github-copilot",
+          "Guild package prepared for github-copilot.",
+          "github-copilot-manifest.json (installability: target).",
+          "dist/github-copilot/bin/guild-run --host github-copilot --prompt"
+        ]
+      },
+      {
+        host: "opencode",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "opencode (new-CLI)",
+          "would prepare package tree: dist/opencode",
+          "would wire launcher: dist/opencode/bin/guild-run --host opencode",
+          "Guild package prepared for opencode.",
+          "opencode-manifest.json (installability: target).",
+          "dist/opencode/bin/guild-run --host opencode --prompt"
+        ]
+      },
+      {
+        host: "rovo-dev",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "rovo-dev (new-CLI)",
+          "would prepare package tree: dist/rovo-dev",
+          "would wire launcher: dist/rovo-dev/bin/guild-run --host rovo-dev",
+          "Guild package prepared for rovo-dev.",
+          "rovo-dev-manifest.json (installability: target).",
+          "dist/rovo-dev/bin/guild-run --host rovo-dev --prompt"
+        ]
+      },
+      // ── new-IDE (adapter_binding: agents-file — REUSE dist/agents; ADR §3.1) ───────
+      {
+        host: "kiro",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "kiro (new-IDE, agents-file binding)",
+          "Guild package for kiro is the universal AGENTS.md package (adapter_binding: agents-file):",
+          "dist/agents/AGENTS.md",
+          "dist/agents/.agents/skills/guild",
+          "Copy it into your kiro project root (marker: .kiro/). kiro reads root AGENTS.md."
+        ]
+      },
+      {
+        host: "qoder",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "qoder (new-IDE, agents-file binding)",
+          "Guild package for qoder is the universal AGENTS.md package (adapter_binding: agents-file):",
+          "dist/agents/AGENTS.md",
+          "dist/agents/.agents/skills/guild",
+          "Copy it into your qoder project root (marker: .qoder/). qoder reads root AGENTS.md."
+        ]
+      },
+      {
+        host: "trae",
+        snippets: [
+          BUILD_ONCE_SNIPPET,
+          "trae (new-IDE, agents-file binding)",
+          "Guild package for trae is the universal AGENTS.md package (adapter_binding: agents-file):",
+          "dist/agents/AGENTS.md",
+          "dist/agents/.agents/skills/guild",
+          "Copy it into your trae project root (marker: .trae/). trae reads root AGENTS.md."
+        ]
+      }
+    ]);
+  }
+});
+
+// ../src/modules/distribution/index.ts
+var init_distribution = __esm({
+  "../src/modules/distribution/index.ts"() {
+    init_build_inventory();
+    init_check_module_ownership();
+    init_equivalence_contract();
+    init_handoff_v2();
+    init_inventory_schema();
+    init_module_resources();
+    init_parity_contract();
+    init_per_host_packaging();
+    init_result_contracts();
+    init_review_result();
+    init_release_distribution_contract();
+    init_surface_manifest();
+    init_verify_host_packages();
+    init_verify_installer();
+  }
+});
+
+// ../src/modules/communication/workflows/comms-format-lint.ts
+var yaml2, HAND_ROLLED_PATTERN_SOURCES, HAND_ROLLED_PATTERNS;
+var init_comms_format_lint = __esm({
+  "../src/modules/communication/workflows/comms-format-lint.ts"() {
+    init_distribution();
+    init_kernel();
+    yaml2 = loadYamlApi();
+    HAND_ROLLED_PATTERN_SOURCES = [
+      // (1) content split on triple-dash delimiter
+      {
+        src: String.raw`\.split\s*\(\s*['` + "`" + String.raw`"']---['` + "`" + String.raw`"']\s*\)`,
+        label: "frontmatter delimiter split (hand-rolled frontmatter splitter)"
+      },
+      // (2) startsWith triple-dash
+      {
+        src: String.raw`\.startsWith\s*\(\s*['` + "`" + String.raw`"']---['` + "`" + String.raw`"']\s*\)`,
+        label: "frontmatter boundary check via startsWith (hand-rolled)"
+      },
+      // (3) regex literal of form /^yamlIdentifier: in source code.
+      //     Catches YAML key-extraction regex literals anchored at line start.
+      //     Excludes known URL scheme identifiers (https/http/ftp/file/ws/wss/data/mailto)
+      //     via a named lookahead — distinguishes /^status:\s*/ (warn) from /^https?:\/\//
+      //     (no warn) by checking the identifier itself, not the chars after the colon
+      //     (which are ambiguous because both :\s* and :\/\/ start with : in source).
+      //
+      //     DIGEST-LITERAL EXCLUSION (second lookahead). `sha256:<hex>` is a
+      //     content-address scheme in exactly the sense `data:` and `mailto:` are
+      //     schemes, so a regex that VALIDATES ONE — /^sha256:[0-9a-f]{64}$/ — is a
+      //     value shape check, not a field extractor. It was flagged in
+      //     scripts/lib/capability/adoption-migrate.ts (and its test), a file that
+      //     reads its YAML through the shared parseFrontmatter; the report was the
+      //     same false-positive class as the '.md' Markdown case, whose lesson was
+      //     recorded above: do NOT force an idiom-dodging rewrite of a correct check.
+      //
+      //     The exclusion is deliberately NOT "any identifier named sha256". It fires
+      //     only when the algorithm name is followed by `:` and a HEX CHARACTER CLASS
+      //     ([0-9a-f], [0-9a-fA-F], [a-f0-9], …) — i.e. the digest-validator idiom. A
+      //     genuine hand-rolled extractor for a frontmatter key that happens to be
+      //     named `sha256` spells the colon differently (/^sha256:\s*(.*)$/), does not
+      //     match the lookahead, and is still flagged. A class with a non-hex letter
+      //     ([A-Za-z]) is not a hex class and does not qualify either.
+      {
+        src: String.raw`/\^(?!(?:https?|ftp|file|wss?|data|mailto)[:/])` + String.raw`(?!(?:sha(?:1|224|256|384|512)|md5|blake2[bs]|blake3):\[[0-9a-fA-F-]{3,}\])` + String.raw`[A-Za-z_][A-Za-z0-9_-]*:`,
+        label: "line-anchored YAML key regex literal (hand-rolled field extractor)"
+      },
+      // (4a) dynamic per-field extractor — quoted-string caret then string concat:
+      //      new RegExp('^' + key + ':\\s*(.*)$', 'm')
+      //      The quoted-caret then close-quote then plus-sign is the discriminator.
+      {
+        src: String.raw`new\s+RegExp\s*\(\s*['` + "`" + String.raw`"']\^['` + "`" + String.raw`"']\s*\+`,
+        label: "dynamic RegExp('^'+key+...) string-concat (hand-rolled YAML field extractor)"
+      },
+      // (4b) dynamic per-field extractor — template-literal caret form:
+      //      new RegExp(`^${key}:\\s*(.*)$`, 'm')
+      //      The backtick-open then caret is the discriminator.
+      {
+        src: String.raw`new\s+RegExp\s*\(\s*` + "`" + String.raw`\^(?!(?:https?|ftp|file|wss?|data|mailto|tel|urn|blob):)[^` + "`" + String.raw`]*:`,
+        label: "dynamic RegExp(`^${key}:...) template-literal (hand-rolled YAML field extractor)"
+      },
+      // (4c) per-field extractor — single quoted string carrying the whole anchored
+      //      key pattern: new RegExp('^status:\\s*(.*)$', 'm'). The discriminator is a
+      //      quoted caret immediately followed by a YAML identifier + colon. Excludes
+      //      known URL scheme identifiers with the same named lookahead as pattern (3).
+      {
+        src: String.raw`new\s+RegExp\s*\(\s*['` + '"' + String.raw`]\^(?!(?:https?|ftp|file|wss?|data|mailto):)[A-Za-z_][A-Za-z0-9_-]*:`,
+        label: "single-string RegExp('^key:...) anchored key (hand-rolled YAML field extractor)"
+      },
+      // (5) matchAll with a YAML-key pattern — catches BOTH anchored (/^key:/) and
+      //     UNANCHORED (/key:/) forms, mirroring inventory reader #19 (knowledge-links-builder
+      //     collectReflectionEdges uses unanchored matchAll(/source_ref[s]?:\s*(.+)/g)).
+      //     URL schemes excluded two ways: (1) a NAMED-scheme negative lookahead
+      //     (?!(?:https?|ftp|file|wss?|data|mailto):) rejects non-slash schemes like
+      //     mailto:/data: (same mechanism as patterns 3/4c); (2) :(?!\\*\/) rejects any
+      //     remaining slash-scheme (scheme://, incl. source-escaped :\\/\\/).
+      {
+        src: String.raw`matchAll\s*\(\s*/\^?(?!(?:https?|ftp|file|wss?|data|mailto):)([A-Za-z_][A-Za-z0-9_\[\]?-]*):(?!\\*\/)`,
+        label: "matchAll with YAML key pattern anchored or unanchored (hand-rolled multi-value extractor)"
+      },
+      // (6) YAML line-scanner: a variable named 'line' calls indexOf or split with
+      //     a colon as the sole argument — the pattern used in frontmatter key:value loops.
+      {
+        src: String.raw`\bline\b.{0,30}\.(?:indexOf|split)\s*\(\s*['` + "`" + String.raw`"']:['` + "`" + String.raw`"']\s*\)`,
+        label: "line.indexOf/split on colon \u2014 YAML line scanner (hand-rolled)"
+      }
+    ];
+    HAND_ROLLED_PATTERNS = HAND_ROLLED_PATTERN_SOURCES.map(({ src, label }) => ({
+      pattern: new RegExp(src),
+      label
+    }));
+  }
+});
+
+// ../src/modules/communication/workflows/no-accidental-write.ts
+var yaml3, SETTINGS_JSON_REQUIRED_KEYS, SETTINGS_JSON_KNOWN_KEYS, WORKSPACE_JSON_REQUIRED_KEYS, PROVENANCE_JSON_REQUIRED_KEYS, TRACE_JSONL_REQUIRED_KEYS, DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS;
+var init_no_accidental_write = __esm({
+  "../src/modules/communication/workflows/no-accidental-write.ts"() {
+    init_kernel();
+    yaml3 = loadYamlApi();
+    SETTINGS_JSON_REQUIRED_KEYS = Object.freeze([
+      "rigor",
+      "auto_approve",
+      "review",
+      "host",
+      "agent_mode",
+      "defaults"
+    ]);
+    SETTINGS_JSON_KNOWN_KEYS = sealSet([
+      "rigor",
+      "auto_approve",
+      "review",
+      "host",
+      "initiative_default",
+      "index",
+      "record_status_runs",
+      "codex_skip_enforcement",
+      "agent_mode",
+      "workspace",
+      "models",
+      "security",
+      "secrets_policy",
+      "mcp",
+      "loops",
+      "loop_cap",
+      "codex_cap",
+      "defaults"
+    ], "SETTINGS_JSON_KNOWN_KEYS");
+    WORKSPACE_JSON_REQUIRED_KEYS = Object.freeze([
+      "schema_version"
+    ]);
+    PROVENANCE_JSON_REQUIRED_KEYS = Object.freeze([
+      "schema_version",
+      "run_id"
+    ]);
+    TRACE_JSONL_REQUIRED_KEYS = Object.freeze([
+      "ts",
+      "event"
+    ]);
+    DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS = Object.freeze([
+      "type",
+      "owner",
+      "created_at",
+      "updated_at",
+      "sensitivity"
+    ]);
+  }
+});
+
+// ../src/modules/communication/resources/scripts/lib/artifact-bus.ts
+var TOPIC_TYPES, BUS_EVENT_KINDS;
+var init_artifact_bus = __esm({
+  "../src/modules/communication/resources/scripts/lib/artifact-bus.ts"() {
+    TOPIC_TYPES = Object.freeze([
+      "handoff",
+      "status",
+      "context",
+      "review",
+      "approval",
+      "heartbeat"
+    ]);
+    BUS_EVENT_KINDS = Object.freeze([
+      "artifact.published",
+      "artifact.streaming",
+      "artifact.closed",
+      "artifact.retracted"
+    ]);
+  }
+});
+
+// ../src/modules/communication/workflows/artifact-bus.ts
+var init_artifact_bus2 = __esm({
+  "../src/modules/communication/workflows/artifact-bus.ts"() {
+    init_artifact_bus();
+  }
+});
+
+// ../src/modules/communication/index.ts
+var init_communication = __esm({
+  "../src/modules/communication/index.ts"() {
+    init_comms_format_lint();
+    init_no_accidental_write();
+    init_artifact_bus2();
+  }
+});
+
+// ../src/modules/teams/workflows/station-signals.ts
+var STATION_SIGNAL_KEYS, SIGNAL_KEY_SET;
+var init_station_signals = __esm({
+  "../src/modules/teams/workflows/station-signals.ts"() {
+    init_communication();
+    init_kernel();
+    init_station_composer();
+    STATION_SIGNAL_KEYS = Object.freeze([
+      "multi_component",
+      "auth_touched",
+      "backend_present",
+      "user_facing_ui",
+      "public_docs",
+      "search_discoverability"
+    ]);
+    SIGNAL_KEY_SET = new Set(STATION_SIGNAL_KEYS);
+  }
+});
+
 // ../src/modules/teams/index.ts
 var init_teams = __esm({
   "../src/modules/teams/index.ts"() {
     init_team_file();
     init_canonical_hash();
+    init_station_composer();
+    init_station_signals();
   }
 });
 
@@ -11468,35 +12774,9 @@ var init_review_pairing = __esm({
 });
 
 // ../src/modules/review/resources/scripts/lib/advisory-record.ts
-function makeAdvisoryRecord(input) {
-  const rec = {
-    schema_version: ADVISORY_RECORD_SCHEMA,
-    id: input.id,
-    run_id: input.run_id ?? null,
-    initiative_id: input.initiative_id ?? null,
-    phase: input.phase,
-    backend: input.backend,
-    question: input.question,
-    // Shallow-copy arrays so the caller's originals are not mutated.
-    advisors: input.advisors.map((a) => ({ ...a })),
-    recommendations: input.recommendations.map((r) => ({ ...r })),
-    synthesis: input.synthesis,
-    unresolved_questions: (input.unresolved_questions ?? []).slice(),
-    confidence: input.confidence,
-    recorded_at: input.recorded_at
-  };
-  if (input.decision_link !== void 0) {
-    rec.decision_link = input.decision_link;
-  }
-  if (input.substrate !== void 0) {
-    rec.substrate = input.substrate;
-  }
-  return rec;
-}
-var ADVISORY_RECORD_SCHEMA, ADVISORY_BACKENDS, ADVISORY_SUBSTRATES, ADVISORY_CONFIDENCE, ADVISORY_PHASES, BACKEND_SET, CONFIDENCE_SET, SUBSTRATE_SET;
+var ADVISORY_BACKENDS, ADVISORY_SUBSTRATES, ADVISORY_CONFIDENCE, ADVISORY_PHASES, BACKEND_SET, CONFIDENCE_SET, SUBSTRATE_SET;
 var init_advisory_record = __esm({
   "../src/modules/review/resources/scripts/lib/advisory-record.ts"() {
-    ADVISORY_RECORD_SCHEMA = "guild.advisory.v1";
     ADVISORY_BACKENDS = Object.freeze([
       "tmux_team",
       "host_subagents",
@@ -11532,28 +12812,6 @@ var init_advisory_record = __esm({
     BACKEND_SET = new Set(ADVISORY_BACKENDS);
     CONFIDENCE_SET = new Set(ADVISORY_CONFIDENCE);
     SUBSTRATE_SET = new Set(ADVISORY_SUBSTRATES);
-    if (require.main === module && /^advisory-record\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-      const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
-      const skeleton = makeAdvisoryRecord({
-        id: `advisory-example-001`,
-        recorded_at: now,
-        phase: "ideation",
-        backend: "single_agent",
-        question: "Which architecture path should this initiative take?",
-        advisors: [
-          { role: "product", model_tier: "cheap" },
-          { role: "architecture", model_tier: "mid" }
-        ],
-        recommendations: [
-          { role: "product", recommendation: "Prefer the simpler layered approach.", confidence: "medium" },
-          { role: "architecture", recommendation: "Event-driven boundary fits better for scale.", confidence: "high" }
-        ],
-        synthesis: "Use event-driven boundaries at service edges; keep internal domain logic layered.",
-        confidence: "high",
-        unresolved_questions: []
-      });
-      process.stdout.write(JSON.stringify(skeleton, null, 2) + "\n");
-    }
   }
 });
 
@@ -11638,7 +12896,7 @@ var init_runstart_preflight = __esm({
 
 // agent-team/teammate-idle.ts
 var fs17 = __toESM(require("fs"));
-var path22 = __toESM(require("path"));
+var path23 = __toESM(require("path"));
 var readline = __toESM(require("readline"));
 
 // lib/guild-root.ts
@@ -11706,7 +12964,7 @@ function formatBindingRejected(hook, auth) {
 
 // emit-learning-checkpoint.ts
 var fs13 = __toESM(require("fs"));
-var path17 = __toESM(require("path"));
+var path18 = __toESM(require("path"));
 
 // ../src/modules/initiatives/workflows/classify-proposal.ts
 function classifyProposal(input) {
@@ -12247,8 +13505,8 @@ function buildYaml(opts) {
 }
 function appendKnowledgeLinksIndex(guildRoot, links) {
   if (links.length === 0) return;
-  const indexDir = path17.join(guildRoot, ".guild", "indexes");
-  const indexPath = path17.join(indexDir, "knowledge-links.json");
+  const indexDir = path18.join(guildRoot, ".guild", "indexes");
+  const indexPath = path18.join(indexDir, "knowledge-links.json");
   let existing = [];
   if (fs13.existsSync(indexPath)) {
     try {
@@ -12294,9 +13552,9 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
 function appendReflections(guildRoot, runId, phase, decisions) {
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return;
-  const reflectionsDir = path17.join(guildRoot, ".guild", "reflections");
+  const reflectionsDir = path18.join(guildRoot, ".guild", "reflections");
   fs13.mkdirSync(reflectionsDir, { recursive: true });
-  const reflPath = path17.join(reflectionsDir, `${runId}.md`);
+  const reflPath = path18.join(reflectionsDir, `${runId}.md`);
   const entry = `
 ## Phase: ${phase} (${runId})
 
@@ -12310,13 +13568,13 @@ function writeCheckpoint(opts) {
   assertNodePrefixes(links);
   const guildRoot = opts.guildRoot ?? process.cwd();
   const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
-  const learningDir = path17.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  const learningDir = path18.join(guildRoot, ".guild", "runs", opts.runId, "learning");
   fs13.mkdirSync(learningDir, { recursive: true });
-  const checkpointFile = path17.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const checkpointFile = path18.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path17.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path18.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
   const observed = opts.observed ?? [];
-  const yaml2 = buildYaml({
+  const yaml4 = buildYaml({
     runId: opts.runId,
     phase: opts.phase,
     evidenceRef: opts.evidenceRef,
@@ -12326,7 +13584,7 @@ function writeCheckpoint(opts) {
     knowledgeLinksBatch: links,
     ...opts.backstop === true ? { backstop: true } : {}
   });
-  fs13.writeFileSync(checkpointFile, yaml2, "utf8");
+  fs13.writeFileSync(checkpointFile, yaml4, "utf8");
   appendReflections(guildRoot, opts.runId, opts.phase, decisions);
   appendKnowledgeLinksIndex(guildRoot, links);
   void reflectionsAbsPath;
@@ -12423,7 +13681,7 @@ if (process.argv[1] !== void 0 && (process.argv[1].endsWith("emit-learning-check
 
 // lib/heartbeat.ts
 var fs14 = __toESM(require("node:fs"));
-var path18 = __toESM(require("node:path"));
+var path19 = __toESM(require("node:path"));
 
 // lib/run-state.ts
 init_run_state();
@@ -12442,10 +13700,10 @@ function isLaneTier(t) {
   return t === "cheap" || t === "mid" || t === "powerful";
 }
 function heartbeatPath(runDir2, specialist) {
-  return path18.join(runDir2, "in-progress", `${specialist}.json`);
+  return path19.join(runDir2, "in-progress", `${specialist}.json`);
 }
 function legacyLogPath(runDir2, specialist) {
-  return path18.join(runDir2, "in-progress", `${specialist}.log`);
+  return path19.join(runDir2, "in-progress", `${specialist}.log`);
 }
 function readHeartbeat(runDir2, specialist) {
   let raw;
@@ -12474,7 +13732,7 @@ function readHeartbeat(runDir2, specialist) {
   return hb;
 }
 function readExplicitHeartbeatTimeoutMs(cwd) {
-  const settingsPath = path18.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path19.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
     raw = fs14.readFileSync(settingsPath, "utf8");
@@ -12548,14 +13806,14 @@ function assessLiveness(runDir2, specialist, timeoutMs, now = Date.now()) {
 init_sealed_collections();
 var SUMMARY_MAX_CHARS = 600;
 var NOTES_MAX_CHARS = 200;
-var ALLOWED_INJECTION_CLEAN_VALUES = sealSet([
+var ALLOWED_INJECTION_CLEAN_VALUES2 = sealSet([
   "clean",
   "flagged",
   "unverified"
 ], "ALLOWED_INJECTION_CLEAN_VALUES");
 var VALID_TIERS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
 var VALID_STATUSES = /* @__PURE__ */ new Set(["done", "blocked", "escalate"]);
-var ALLOWED_TOP_LEVEL_KEYS = sealSet([
+var ALLOWED_TOP_LEVEL_KEYS2 = sealSet([
   "schema_version",
   "task_id",
   "tier",
@@ -12569,14 +13827,14 @@ var ALLOWED_TOP_LEVEL_KEYS = sealSet([
   "injection_clean"
   // HK-08 additive-optional
 ], "ALLOWED_TOP_LEVEL_KEYS");
-function validateHandoffV2(value) {
+function validateHandoffV22(value) {
   const errors = [];
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { valid: false, errors: ["envelope must be a non-null object"] };
   }
   const obj = value;
   for (const k of Object.keys(obj)) {
-    if (!ALLOWED_TOP_LEVEL_KEYS.has(k)) {
+    if (!ALLOWED_TOP_LEVEL_KEYS2.has(k)) {
       errors.push(
         `unknown key "${k}" \u2014 strict guild.handoff.v2 rejects extra/misspelled keys`
       );
@@ -12654,7 +13912,7 @@ function validateHandoffV2(value) {
     }
   }
   if (obj["injection_clean"] !== void 0) {
-    if (!ALLOWED_INJECTION_CLEAN_VALUES.has(obj["injection_clean"])) {
+    if (!ALLOWED_INJECTION_CLEAN_VALUES2.has(obj["injection_clean"])) {
       errors.push(
         `injection_clean must be one of clean|flagged|unverified; got ${JSON.stringify(obj["injection_clean"])}`
       );
@@ -12682,7 +13940,7 @@ function resolveRunIdForTrace(_root, env) {
 
 // lib/bus-emit.ts
 var fs15 = __toESM(require("node:fs"));
-var path19 = __toESM(require("node:path"));
+var path20 = __toESM(require("node:path"));
 var BUS_EVENT_SCHEMA_VERSION = "guild.agent_bus_event.v1";
 function buildBusEvent(input) {
   const rec = {
@@ -12701,11 +13959,11 @@ function buildBusEvent(input) {
 }
 function emitBusEvent(runDir2, input) {
   try {
-    const busDir = path19.join(runDir2, "agent-bus");
+    const busDir = path20.join(runDir2, "agent-bus");
     fs15.mkdirSync(busDir, { recursive: true });
     const record = buildBusEvent(input);
     fs15.appendFileSync(
-      path19.join(busDir, "events.ndjson"),
+      path20.join(busDir, "events.ndjson"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -12721,10 +13979,10 @@ function emitBusEvent(runDir2, input) {
 
 // ../src/modules/dispatch/workflows/task-cell-acceptance.ts
 var fs16 = __toESM(require("fs"));
-var path21 = __toESM(require("path"));
+var path22 = __toESM(require("path"));
 
 // ../src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts
-var path20 = __toESM(require("path"));
+var path21 = __toESM(require("path"));
 var TASK_CELL_STATES = Object.freeze([
   "declared",
   "instantiated",
@@ -12789,23 +14047,24 @@ function taskCellPaths(ids, opts = {}) {
     throw new Error(`attempt must be an integer >= 1, got ${JSON.stringify(ids.attempt)}`);
   }
   const guildDir = opts.guildDir ?? ".guild";
-  const run_dir = path20.join(guildDir, "runs", ids.run_id);
-  const cell_dir = path20.join(run_dir, "task-cells", ids.logical_task_id);
-  const attempt_dir = path20.join(cell_dir, "attempts", String(ids.attempt));
-  const instance_dir = path20.join(attempt_dir, "instances", ids.instance_id);
+  const run_dir = path21.join(guildDir, "runs", ids.run_id);
+  const cell_dir = path21.join(run_dir, "task-cells", ids.logical_task_id);
+  const attempt_dir = path21.join(cell_dir, "attempts", String(ids.attempt));
+  const instance_dir = path21.join(attempt_dir, "instances", ids.instance_id);
   const paths = {
     run_dir,
     cell_dir,
     attempt_dir,
     instance_dir,
-    attempt_path: path20.join(attempt_dir, "attempt.json"),
-    assignment_path: path20.join(instance_dir, "assignment.json"),
-    handoff_path: path20.join(instance_dir, "handoff.json"),
-    heartbeat_path: path20.join(instance_dir, "heartbeat.json"),
-    cancel_channel: path20.join(instance_dir, "cancel"),
-    validation_path: path20.join(instance_dir, "handoff-validation.json"),
-    acceptance_path: path20.join(instance_dir, "handoff-acceptance.json"),
-    terminal_path: path20.join(instance_dir, "terminal.json")
+    instance_path: path21.join(instance_dir, "instance.json"),
+    attempt_path: path21.join(attempt_dir, "attempt.json"),
+    assignment_path: path21.join(instance_dir, "assignment.json"),
+    handoff_path: path21.join(instance_dir, "handoff.json"),
+    heartbeat_path: path21.join(instance_dir, "heartbeat.json"),
+    cancel_channel: path21.join(instance_dir, "cancel"),
+    validation_path: path21.join(instance_dir, "handoff-validation.json"),
+    acceptance_path: path21.join(instance_dir, "handoff-acceptance.json"),
+    terminal_path: path21.join(instance_dir, "terminal.json")
   };
   for (const [key, value] of Object.entries(paths)) {
     if (key === "run_dir") continue;
@@ -12814,8 +14073,8 @@ function taskCellPaths(ids, opts = {}) {
   return paths;
 }
 function assertWithinRunTree(runDir2, p, label = "path") {
-  const rel = path20.relative(path20.resolve(runDir2), path20.resolve(p));
-  if (rel === "" || rel.startsWith("..") || path20.isAbsolute(rel)) {
+  const rel = path21.relative(path21.resolve(runDir2), path21.resolve(p));
+  if (rel === "" || rel.startsWith("..") || path21.isAbsolute(rel)) {
     throw new Error(`${label} escapes the run tree ${runDir2}: ${p}`);
   }
 }
@@ -12826,9 +14085,13 @@ var ACCEPTANCE_AUTHORITIES = Object.freeze([
 ]);
 var HANDOFF_ACCEPTANCE_SCHEMA = "guild.handoff_acceptance.v1";
 
+// ../src/modules/dispatch/workflows/task-cell-artifact-join.ts
+init_communication();
+init_teams();
+
 // ../src/modules/dispatch/workflows/task-cell-acceptance.ts
 function absUnderCwd(cwd, relPath) {
-  return path21.resolve(cwd, relPath);
+  return path22.resolve(cwd, relPath);
 }
 function isTerminationAuthorized(a) {
   return a.termination_authorized_at !== null;
@@ -12856,7 +14119,7 @@ function readAssignmentForInstance(cwd, ids) {
   }
 }
 function findRunAcceptances(cwd, runId) {
-  const cellsRoot = path21.join(cwd, ".guild", "runs", runId, "task-cells");
+  const cellsRoot = path22.join(cwd, ".guild", "runs", runId, "task-cells");
   const out = [];
   let logicalTaskDirs;
   try {
@@ -12865,7 +14128,7 @@ function findRunAcceptances(cwd, runId) {
     return out;
   }
   for (const logical_task_id of logicalTaskDirs) {
-    const attemptsRoot = path21.join(cellsRoot, logical_task_id, "attempts");
+    const attemptsRoot = path22.join(cellsRoot, logical_task_id, "attempts");
     let attemptDirs;
     try {
       attemptDirs = fs16.readdirSync(attemptsRoot);
@@ -12875,7 +14138,7 @@ function findRunAcceptances(cwd, runId) {
     for (const attemptStr of attemptDirs) {
       const attempt = Number.parseInt(attemptStr, 10);
       if (!Number.isInteger(attempt) || attempt < 1) continue;
-      const instancesRoot = path21.join(attemptsRoot, attemptStr, "instances");
+      const instancesRoot = path22.join(attemptsRoot, attemptStr, "instances");
       let instanceDirs;
       try {
         instanceDirs = fs16.readdirSync(instancesRoot);
@@ -12894,17 +14157,32 @@ function findRunAcceptances(cwd, runId) {
 
 // agent-team/teammate-idle.ts
 function deriveRunId(sessionId, guildRoot) {
-  return resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ?? `run-${sessionId}`;
+  const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
+  if (bound) return bound;
+  const legacy = `run-${sessionId}`;
+  if (fs17.existsSync(path23.join(guildRoot, ".guild", "runs", legacy))) {
+    process.stderr.write(
+      `[teammate-idle] WARN: legacy read-only fallback run id used: ${legacy}; start/inherit the lifecycle run id to remove this compatibility read.
+`
+    );
+    return legacy;
+  }
+  const fallback = makeCanonicalRunId((/* @__PURE__ */ new Date()).toISOString(), sessionId);
+  process.stderr.write(
+    `[teammate-idle] WARN: read-only fallback run id used: ${fallback}; no run-record write is authorized without the lifecycle binding envelope.
+`
+  );
+  return fallback;
 }
 function assessReceipts(runDir2, teammate) {
-  const handoffsDir = path22.join(runDir2, "handoffs");
+  const handoffsDir = path23.join(runDir2, "handoffs");
   if (!fs17.existsSync(handoffsDir)) return [];
   const prefix = `${teammate}-`;
   const results = [];
   const files = fs17.readdirSync(handoffsDir).filter((f) => f.startsWith(prefix) && f.endsWith(".md"));
   for (const file of files) {
     const taskId = file.slice(prefix.length, -".md".length);
-    const rPath = path22.join(handoffsDir, file);
+    const rPath = path23.join(handoffsDir, file);
     let envelopeValid = false;
     let envelopeErrors = [];
     let envelopeStatus;
@@ -12912,7 +14190,7 @@ function assessReceipts(runDir2, teammate) {
       const content = fs17.readFileSync(rPath, "utf8");
       const rawEnvelope = extractHandoffEnvelope(content);
       if (rawEnvelope !== null) {
-        const result = validateHandoffV2(rawEnvelope);
+        const result = validateHandoffV22(rawEnvelope);
         envelopeValid = result.valid;
         envelopeErrors = result.errors;
         if (result.valid) {
@@ -12932,12 +14210,12 @@ function assessReceipts(runDir2, teammate) {
   return results;
 }
 function findAssignedTaskIds(cwd, teammate) {
-  const planDir = path22.join(resolveGuildRoot(cwd), ".guild", "plan");
+  const planDir = path23.join(resolveGuildRoot(cwd), ".guild", "plan");
   if (!fs17.existsSync(planDir)) return [];
   const files = fs17.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids = [];
   for (const file of files) {
-    const content = fs17.readFileSync(path22.join(planDir, file), "utf8");
+    const content = fs17.readFileSync(path23.join(planDir, file), "utf8");
     const blocks = content.split(/\n(?=[-*#]|\w)/);
     for (const block of blocks) {
       const isAssigned = new RegExp(`(?:owner|assigned|teammate):\\s*${teammate}\\b`, "i").test(block);
@@ -13067,7 +14345,7 @@ async function main2() {
   const cwd = payload.cwd ?? process.cwd();
   const guildRootForRun = resolveGuildRoot(cwd);
   const runId = deriveRunId(sessionId, guildRootForRun);
-  const runDir2 = path22.join(guildRootForRun, ".guild", "runs", runId);
+  const runDir2 = path23.join(guildRootForRun, ".guild", "runs", runId);
   const receiptAssessments = assessReceipts(runDir2, teammate);
   const validReceiptTaskIds = receiptAssessments.filter((r) => r.envelopeValid).map((r) => r.taskId);
   const invalidReceiptTaskIds = receiptAssessments.filter((r) => !r.envelopeValid).map((r) => r.taskId);
@@ -13108,7 +14386,7 @@ async function main2() {
   process.stdout.write(composeNudge(ctx));
   const writeAuth = authorizeHookWrite(guildRootForRun);
   if (writeAuth.ok === true) {
-    const boundRunDir = path22.join(guildRootForRun, ".guild", "runs", writeAuth.run_id);
+    const boundRunDir = path23.join(guildRootForRun, ".guild", "runs", writeAuth.run_id);
     emitBusEvent(boundRunDir, {
       run_id: writeAuth.run_id,
       event: "idle",

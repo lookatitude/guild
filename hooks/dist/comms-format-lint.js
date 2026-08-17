@@ -3064,11 +3064,10 @@ var require_js_yaml = __commonJS({
 var path5 = __toESM(require("path"));
 
 // ../src/modules/communication/workflows/comms-format-lint.ts
-var fs3 = __toESM(require("fs"));
+var fs2 = __toESM(require("fs"));
 var path4 = __toESM(require("path"));
 
 // ../src/modules/distribution/workflows/build-inventory.ts
-var fs2 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 
 // ../src/modules/kernel/workflows/module-manifest.ts
@@ -3236,101 +3235,6 @@ var ALLOWED_INVENTORY_KEYS = sealSet([
   "manifest",
   ...INVENTORY_CATEGORIES
 ], "ALLOWED_INVENTORY_KEYS");
-function isNonEmptyString(v) {
-  return typeof v === "string" && v.trim() !== "";
-}
-function validateEntryBase(entry, category, index, errors) {
-  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-    errors.push(`${category}[${index}] must be a non-null object`);
-    return {};
-  }
-  const e = entry;
-  if (!isNonEmptyString(e["id"])) {
-    errors.push(`${category}[${index}].id must be a non-empty string`);
-  }
-  const isDeferredSchema = category === "schemas" && e["status"] === "deferred";
-  if (!isNonEmptyString(e["source_path"])) {
-    if (!(isDeferredSchema && e["source_path"] === "")) {
-      errors.push(
-        `${category}[${index}].source_path must be a non-empty string` + (category === "schemas" ? ` (empty allowed only for status:"deferred")` : "")
-      );
-    }
-  } else if (e["source_path"].startsWith("./")) {
-    errors.push(
-      `${category}[${index}].source_path must be bare repo-relative (no "./" prefix): got ${JSON.stringify(e["source_path"])}`
-    );
-  }
-  return { id: typeof e["id"] === "string" ? e["id"] : void 0 };
-}
-function validateCategory(obj, category, errors) {
-  const list = obj[category];
-  if (!Array.isArray(list)) {
-    errors.push(`${category} must be an array (may be empty, but must be present)`);
-    return;
-  }
-  const seen = /* @__PURE__ */ new Set();
-  for (let i = 0; i < list.length; i++) {
-    const { id } = validateEntryBase(list[i], category, i, errors);
-    if (id !== void 0) {
-      if (seen.has(id)) {
-        errors.push(`${category} has duplicate id ${JSON.stringify(id)} (ids must be unique within a category)`);
-      }
-      seen.add(id);
-    }
-    const e = list[i];
-    if (category === "hooks" && !isNonEmptyString(e?.["event"])) {
-      errors.push(`hooks[${i}].event must be a non-empty string`);
-    }
-    if (category === "mcp_servers") {
-      const t = e?.["transport"];
-      if (t !== "stdio" && t !== "http") {
-        errors.push(`mcp_servers[${i}].transport must be "stdio" or "http"; got ${JSON.stringify(t)}`);
-      }
-    }
-    if (category === "schemas") {
-      const s = e?.["status"];
-      if (s !== "exists" && s !== "deferred") {
-        errors.push(`schemas[${i}].status must be "exists" or "deferred"; got ${JSON.stringify(s)}`);
-      }
-    }
-  }
-}
-function validateInventoryV1(value) {
-  const errors = [];
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { valid: false, errors: ["inventory must be a non-null object"] };
-  }
-  const obj = value;
-  for (const k of Object.keys(obj)) {
-    if (!ALLOWED_INVENTORY_KEYS.has(k)) {
-      errors.push(`unknown key "${k}" \u2014 strict guild.inventory.v1 rejects extra/misspelled keys`);
-    }
-  }
-  if (obj["schema_version"] !== "guild.inventory.v1") {
-    errors.push(
-      `schema_version must be "guild.inventory.v1"; got ${JSON.stringify(obj["schema_version"])}`
-    );
-  }
-  if (!isNonEmptyString(obj["generated_at"])) {
-    errors.push("generated_at must be a non-empty ISO 8601 string");
-  }
-  if (!isNonEmptyString(obj["plugin_version"])) {
-    errors.push("plugin_version must be a non-empty string");
-  }
-  const manifest = obj["manifest"];
-  if (typeof manifest !== "object" || manifest === null || Array.isArray(manifest)) {
-    errors.push("manifest must be a non-null object");
-  } else {
-    const m = manifest;
-    if (!isNonEmptyString(m["name"])) errors.push("manifest.name must be a non-empty string");
-    if (!isNonEmptyString(m["version"])) errors.push("manifest.version must be a non-empty string");
-    if (typeof m["description"] !== "string") errors.push("manifest.description must be a string");
-  }
-  for (const category of INVENTORY_CATEGORIES) {
-    validateCategory(obj, category, errors);
-  }
-  return { valid: errors.length === 0, errors };
-}
 
 // ../src/modules/state/workflows/dependency-graph-schema.ts
 var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
@@ -3346,23 +3250,6 @@ var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
     { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
   ]
 });
-
-// ../src/modules/state/workflows/frontmatter.ts
-function readScalarField(content, key) {
-  const prefix = key + ":";
-  for (const ln of content.split("\n")) {
-    const c0 = ln.charCodeAt(0);
-    if (c0 === 32 || c0 === 9) continue;
-    if (!ln.startsWith(prefix)) continue;
-    let v = ln.slice(prefix.length).trim();
-    if (v === "") continue;
-    if (v.length >= 2 && (v[0] === '"' && v[v.length - 1] === '"' || v[0] === "'" && v[v.length - 1] === "'")) {
-      v = v.slice(1, -1);
-    }
-    return v;
-  }
-  return void 0;
-}
 
 // ../src/modules/migrations/workflows/index-migrate.ts
 var import_node_child_process = require("node:child_process");
@@ -3707,46 +3594,6 @@ var DISCOVERY_RULES = deepFreeze([
 var COVERAGE_ENFORCED_CATEGORIES = Object.freeze(DISCOVERY_RULES.filter(
   (r) => r.enforced
 ).map((r) => r.category));
-function inventoryIds(inventory, category) {
-  const list = inventory[category] ?? [];
-  return new Set(list.map((e) => e.id));
-}
-function checkCoverage(discovered, inventory) {
-  const categories = [];
-  const reasons = [];
-  for (const enforced of COVERAGE_ENFORCED_CATEGORIES) {
-    if (discovered[enforced] === void 0) {
-      reasons.push(
-        `coverage: enforced category "${enforced}" was not supplied in the discovery scan (SC-7a requires every enforced category to be scanned \u2014 cannot pass vacuously)`
-      );
-    }
-  }
-  for (const category of INVENTORY_CATEGORIES) {
-    const found = discovered[category];
-    if (found === void 0) continue;
-    const inv = inventoryIds(inventory, category);
-    const missing = [...found].filter((id) => !inv.has(id)).sort();
-    const phantom = [...inv].filter((id) => !found.has(id)).sort();
-    const ok = missing.length === 0 && phantom.length === 0;
-    categories.push({
-      category,
-      missing_from_inventory: missing,
-      phantom_in_inventory: phantom,
-      ok
-    });
-    for (const id of missing) {
-      reasons.push(
-        `coverage: ${category} "${id}" exists in the repo but is MISSING from guild.inventory.v1 (silent drop \u2014 SC-7a)`
-      );
-    }
-    for (const id of phantom) {
-      reasons.push(
-        `coverage: ${category} "${id}" is in guild.inventory.v1 but was NOT discovered in the repo (phantom \u2014 SC-7a)`
-      );
-    }
-  }
-  return { ok: reasons.length === 0, categories, reasons };
-}
 
 // ../src/modules/distribution/workflows/handoff-v2.ts
 var ALLOWED_INJECTION_CLEAN_VALUES = sealSet(["clean", "flagged", "unverified"], "ALLOWED_INJECTION_CLEAN_VALUES");
@@ -3820,351 +3667,6 @@ var PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_sch
 
 // ../src/modules/distribution/workflows/build-inventory.ts
 var PLUGIN_ROOT = path3.resolve(__dirname, "../../../..");
-var UNSTAMPED_GENERATED_AT = "1970-01-01T00:00:00.000Z";
-function toPosix(p) {
-  return p.split(path3.sep).join("/");
-}
-function existsDir(p) {
-  try {
-    return fs2.statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function listMdFiles(dir) {
-  if (!existsDir(dir)) return [];
-  return fs2.readdirSync(dir).filter((f) => f.endsWith(".md")).sort();
-}
-function walkFiles(root, rel, pred, out) {
-  const abs = path3.join(root, rel);
-  if (!existsDir(abs)) return;
-  for (const name of fs2.readdirSync(abs).sort()) {
-    if (name === "node_modules" || name === "__tests__") continue;
-    const childRel = rel ? `${rel}/${name}` : name;
-    const childAbs = path3.join(abs, name);
-    let st;
-    try {
-      st = fs2.statSync(childAbs);
-    } catch {
-      continue;
-    }
-    if (st.isDirectory()) {
-      walkFiles(root, childRel, pred, out);
-    } else if (pred(toPosix(childRel), name)) {
-      out.push(toPosix(childRel));
-    }
-  }
-}
-function readFile(abs) {
-  return fs2.readFileSync(abs, "utf8");
-}
-function frontmatterField(content, field) {
-  return readScalarField(content, field);
-}
-function discoverCommands(root) {
-  const dir = path3.join(root, "commands");
-  return listMdFiles(dir).map((file) => {
-    const id = file.replace(/\.md$/i, "");
-    const description = frontmatterField(readFile(path3.join(dir, file)), "description");
-    const e = { id, source_path: `commands/${file}` };
-    if (description) e.description = description;
-    return e;
-  }).sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverAgents(root) {
-  const dir = path3.join(root, "agents");
-  return listMdFiles(dir).map((file) => {
-    const id = file.replace(/\.md$/i, "");
-    const description = frontmatterField(readFile(path3.join(dir, file)), "description");
-    const e = { id, source_path: `agents/${file}` };
-    if (description) e.description = description;
-    return e;
-  }).sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverSkills(root) {
-  const files = [];
-  walkFiles(root, "skills", (_rel, name) => name === "SKILL.md" || name === "SKILL.src.md", files);
-  const byName = /* @__PURE__ */ new Map();
-  for (const rel of files) {
-    const content = readFile(path3.join(root, rel));
-    const id = frontmatterField(content, "name");
-    if (!id) {
-      throw new Error(`build-inventory: skill at ${rel} has no \`name:\` frontmatter (cannot derive id)`);
-    }
-    const isSrc = rel.endsWith("SKILL.src.md");
-    const segs = rel.split("/");
-    const tier = segs.length >= 3 ? segs[1] : void 0;
-    const description = frontmatterField(content, "description");
-    const entry = { id, source_path: rel };
-    if (tier) entry.tier = tier;
-    if (description) entry.description = description;
-    const prior = byName.get(id);
-    if (!prior) {
-      byName.set(id, { entry, isSrc });
-    } else if (isSrc && !prior.isSrc) {
-      byName.set(id, { entry, isSrc });
-    }
-  }
-  return [...byName.values()].map((v) => v.entry).sort((a, b) => a.id.localeCompare(b.id));
-}
-function hookScriptPath(command) {
-  const m = /\$\{(?:GUILD_PLUGIN_ROOT(?::-\$\{CLAUDE_PLUGIN_ROOT\})?|CLAUDE_PLUGIN_ROOT)\}\/([^\s"']+)/.exec(command);
-  if (m) return m[1];
-  const tokens = command.trim().split(/\s+/);
-  const last = tokens[tokens.length - 1];
-  return last && last.includes("/") ? last.replace(/^\.\//, "") : null;
-}
-function discoverHooks(root) {
-  const file = path3.join(root, "hooks", "hooks.json");
-  if (!fs2.existsSync(file)) return [];
-  const parsed = JSON.parse(readFile(file));
-  const hooksObj = parsed.hooks ?? {};
-  const entries = [];
-  for (const event of Object.keys(hooksObj)) {
-    const blocks = hooksObj[event];
-    if (!Array.isArray(blocks)) continue;
-    for (const block of blocks) {
-      const matcher = block.matcher;
-      const inner = block.hooks ?? [];
-      for (const h of inner) {
-        if (!h.command) continue;
-        const sp = hookScriptPath(h.command);
-        if (!sp) continue;
-        const base = sp.split("/").pop();
-        const e = { id: `${event}:${base}`, source_path: sp, event };
-        if (matcher) e.matcher = matcher;
-        entries.push(e);
-      }
-    }
-  }
-  return entries.sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverMcpServers(root) {
-  const file = path3.join(root, ".mcp.json");
-  if (!fs2.existsSync(file)) return [];
-  const parsed = JSON.parse(readFile(file));
-  const servers = parsed.mcpServers ?? {};
-  const entries = [];
-  for (const id of Object.keys(servers)) {
-    const s = servers[id];
-    const transport = s["type"] === "http" ? "http" : "stdio";
-    const e = { id, source_path: ".mcp.json", transport };
-    if (typeof s["command"] === "string") e.command = s["command"];
-    if (Array.isArray(s["args"])) e.args = s["args"].map(String);
-    if (typeof s["url"] === "string") e.url = s["url"];
-    const cap = s["mcp_capability"];
-    if (cap && typeof cap.read_only === "boolean") e.read_only = cap.read_only;
-    if (cap && typeof cap.description === "string") e.description = cap.description;
-    entries.push(e);
-  }
-  return entries.sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverScripts(root) {
-  const files = [];
-  walkFiles(
-    root,
-    "scripts",
-    (rel, name) => name.endsWith(".ts") && !name.endsWith(".test.ts"),
-    files
-  );
-  return files.map((rel) => {
-    const underScripts = rel.replace(/^scripts\//, "");
-    const id = underScripts.replace(/\.ts$/, "");
-    return { id, source_path: rel, kind: id.startsWith("lib/") ? "lib" : "cli" };
-  }).sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverHookCliBundles(root, boundBasenames) {
-  const distDir = path3.join(root, "hooks", "dist");
-  if (!existsDir(distDir)) return [];
-  const referenced = /* @__PURE__ */ new Set();
-  for (const file of listMdFiles(path3.join(root, "commands"))) {
-    const content = readFile(path3.join(root, "commands", file));
-    for (const m of content.matchAll(/hooks\/dist\/([A-Za-z0-9_.-]+\.js)/g)) {
-      referenced.add(m[1]);
-    }
-  }
-  return [...referenced].filter((basename) => !boundBasenames.has(basename)).filter((basename) => fs2.existsSync(path3.join(distDir, basename))).map(
-    (basename) => ({
-      id: `hooks/dist/${basename.replace(/\.js$/, "")}`,
-      source_path: `hooks/dist/${basename}`,
-      kind: "cli"
-    })
-  ).sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverDocs(root) {
-  const files = [];
-  walkFiles(root, "docs", (_rel, name) => name.endsWith(".md"), files);
-  return files.map((rel) => {
-    const id = rel.replace(/\.md$/i, "");
-    const title = frontmatterField(readFile(path3.join(root, rel)), "title");
-    const e = { id, source_path: rel };
-    if (title) e.title = title;
-    return e;
-  }).sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverSchemas() {
-  return RESULT_CONTRACTS.map(
-    (c) => ({
-      id: c.wire_schema_version,
-      source_path: c.source_path,
-      status: c.status,
-      validator_kind: c.validator_kind
-    })
-  ).sort((a, b) => a.id.localeCompare(b.id));
-}
-function discoverSurfaces(root = PLUGIN_ROOT) {
-  const commands = discoverCommands(root);
-  const skills = discoverSkills(root);
-  const agents = discoverAgents(root);
-  const hooks = discoverHooks(root);
-  const mcp_servers = discoverMcpServers(root);
-  const boundHookBasenames = new Set(hooks.map((h) => h.source_path.split("/").pop()));
-  const scripts = [...discoverScripts(root), ...discoverHookCliBundles(root, boundHookBasenames)].sort(
-    (a, b) => a.id.localeCompare(b.id)
-  );
-  const schemas = discoverSchemas();
-  const docs = discoverDocs(root);
-  const idSet = (list) => new Set(list.map((e) => e.id));
-  const discovered = {
-    commands: idSet(commands),
-    agents: idSet(agents),
-    skills: idSet(skills),
-    hooks: idSet(hooks),
-    mcp_servers: idSet(mcp_servers),
-    scripts: idSet(scripts)
-  };
-  return { commands, skills, agents, hooks, mcp_servers, scripts, schemas, docs, discovered };
-}
-function readManifest(root) {
-  const file = path3.join(root, ".claude-plugin", "plugin.json");
-  const raw = JSON.parse(readFile(file));
-  const manifest = {
-    name: String(raw["name"] ?? ""),
-    version: String(raw["version"] ?? ""),
-    description: String(raw["description"] ?? "")
-  };
-  if (typeof raw["homepage"] === "string") manifest.homepage = raw["homepage"];
-  if (typeof raw["repository"] === "string") manifest.repository = raw["repository"];
-  if (raw["author"] && typeof raw["author"] === "object") {
-    manifest.author = raw["author"];
-  }
-  if (typeof raw["license"] === "string") manifest.license = raw["license"];
-  if (Array.isArray(raw["keywords"])) manifest.keywords = raw["keywords"].map(String);
-  return { manifest, version: manifest.version };
-}
-function buildInventory(root = PLUGIN_ROOT, generatedAt = UNSTAMPED_GENERATED_AT) {
-  const d = discoverSurfaces(root);
-  const { manifest, version } = readManifest(root);
-  const inventory = {
-    schema_version: "guild.inventory.v1",
-    generated_at: generatedAt,
-    plugin_version: version,
-    manifest,
-    commands: d.commands,
-    skills: d.skills,
-    agents: d.agents,
-    hooks: d.hooks,
-    mcp_servers: d.mcp_servers,
-    scripts: d.scripts,
-    schemas: d.schemas,
-    docs: d.docs
-  };
-  const validation = validateInventoryV1(inventory);
-  if (!validation.valid) {
-    throw new Error(
-      "build-inventory: generated inventory FAILED validation:\n  " + validation.errors.join("\n  ")
-    );
-  }
-  const coverage = checkCoverage(d.discovered, inventory);
-  if (!coverage.ok) {
-    throw new Error(
-      "build-inventory: SC-7(a) coverage self-check FAILED (discovery != inventory):\n  " + coverage.reasons.join("\n  ")
-    );
-  }
-  for (const cat of COVERAGE_ENFORCED_CATEGORIES) {
-    if (d.discovered[cat] === void 0) {
-      throw new Error(`build-inventory: enforced category "${cat}" was not scanned (internal error)`);
-    }
-  }
-  return inventory;
-}
-function serializeInventory(inventory) {
-  return JSON.stringify(inventory, null, 2) + "\n";
-}
-function parseArgs(argv) {
-  let out;
-  let root = PLUGIN_ROOT;
-  let generatedAt = process.env["GUILD_INVENTORY_GENERATED_AT"] || UNSTAMPED_GENERATED_AT;
-  let check = false;
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--out" && argv[i + 1] !== void 0) out = argv[++i];
-    else if (a.startsWith("--out=")) out = a.slice("--out=".length);
-    else if (a === "--root" && argv[i + 1] !== void 0) root = path3.resolve(argv[++i]);
-    else if (a.startsWith("--root=")) root = path3.resolve(a.slice("--root=".length));
-    else if (a === "--generated-at" && argv[i + 1] !== void 0) generatedAt = argv[++i];
-    else if (a.startsWith("--generated-at=")) generatedAt = a.slice("--generated-at=".length);
-    else if (a === "--check") check = true;
-    else return { error: `unknown argument: ${a}` };
-  }
-  return { out, root, generatedAt, check };
-}
-function main() {
-  const parsed = parseArgs(process.argv.slice(2));
-  if ("error" in parsed) {
-    process.stderr.write(
-      parsed.error + "\nusage: build-inventory.ts [--out <path>] [--root <pluginRoot>] [--generated-at <iso>] [--check]\n"
-    );
-    return 1;
-  }
-  const outPath = parsed.out ?? path3.join(parsed.root, "guild.inventory.json");
-  let inventory;
-  try {
-    inventory = buildInventory(parsed.root, parsed.generatedAt);
-  } catch (err) {
-    process.stderr.write(String(err instanceof Error ? err.message : err) + "\n");
-    return 2;
-  }
-  const serialized = serializeInventory(inventory);
-  if (parsed.check) {
-    let onDisk = null;
-    try {
-      onDisk = fs2.readFileSync(outPath, "utf8");
-    } catch {
-      onDisk = null;
-    }
-    if (onDisk === null) {
-      process.stderr.write(`build-inventory --check: ${outPath} does not exist (run without --check to generate)
-`);
-      return 2;
-    }
-    if (onDisk !== serialized) {
-      process.stderr.write(
-        `build-inventory --check: ${outPath} is STALE \u2014 regenerate with \`npx tsx scripts/build-inventory.ts\`
-`
-      );
-      return 2;
-    }
-    process.stdout.write(`build-inventory: ${outPath} is up to date.
-`);
-    return 0;
-  }
-  try {
-    fs2.writeFileSync(outPath, serialized);
-  } catch (err) {
-    process.stderr.write(`build-inventory: cannot write ${outPath}: ${String(err)}
-`);
-    return 1;
-  }
-  process.stdout.write(
-    `build-inventory: wrote ${outPath} (${inventory.commands.length} commands, ${inventory.skills.length} skills, ${inventory.agents.length} agents, ${inventory.hooks.length} hooks, ${inventory.mcp_servers.length} mcp, ${inventory.scripts.length} scripts, ${inventory.schemas.length} schemas, ${inventory.docs.length} docs)
-`
-  );
-  return 0;
-}
-if (require.main === module) {
-  process.exit(main());
-}
 
 // ../src/modules/distribution/workflows/equivalence-contract.ts
 var EQUIVALENCE_SURFACES = Object.freeze([
@@ -6296,8 +5798,8 @@ function loadInventoryAllowList() {
     ".guild/initiatives/active/communication-format-standardization/yaml-reader-inventory.json"
   );
   try {
-    if (!fs3.existsSync(inventoryPath)) return /* @__PURE__ */ new Set();
-    const raw = fs3.readFileSync(inventoryPath, "utf8");
+    if (!fs2.existsSync(inventoryPath)) return /* @__PURE__ */ new Set();
+    const raw = fs2.readFileSync(inventoryPath, "utf8");
     const data = JSON.parse(raw);
     const files = /* @__PURE__ */ new Set();
     for (const reader of data.readers ?? []) {
@@ -6646,8 +6148,8 @@ function checkUndeclaredCategory(filePath, content) {
 function readRunStartedAt(runDir) {
   const runYamlPath = path4.join(runDir, "run.yaml");
   try {
-    if (!fs3.existsSync(runYamlPath)) return null;
-    const raw = fs3.readFileSync(runYamlPath, "utf8");
+    if (!fs2.existsSync(runYamlPath)) return null;
+    const raw = fs2.readFileSync(runYamlPath, "utf8");
     const m = raw.match(/^started_at:[ \t]*(.*)$/m);
     if (!m || !m[1] || m[1].trim() === "") return null;
     const d = new Date(m[1].trim());
@@ -6687,8 +6189,8 @@ function lintCommsFormat(opts = {}) {
     if (isBuildArtifactExempt(filePath)) continue;
     let content;
     try {
-      if (!fs3.existsSync(filePath)) continue;
-      content = fs3.readFileSync(filePath, "utf8");
+      if (!fs2.existsSync(filePath)) continue;
+      content = fs2.readFileSync(filePath, "utf8");
     } catch {
       continue;
     }
@@ -6700,19 +6202,19 @@ function lintCommsFormat(opts = {}) {
   }
   if (opts.runsDir) {
     try {
-      if (!fs3.existsSync(opts.runsDir)) return findings;
-      const runDirs = fs3.readdirSync(opts.runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path4.join(opts.runsDir, d.name));
+      if (!fs2.existsSync(opts.runsDir)) return findings;
+      const runDirs = fs2.readdirSync(opts.runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path4.join(opts.runsDir, d.name));
       for (const runDir of runDirs) {
         if (!isRunInScope(runDir)) continue;
         const handoffsDir = path4.join(runDir, "handoffs");
-        if (!fs3.existsSync(handoffsDir)) continue;
-        const receiptFiles = fs3.readdirSync(handoffsDir, { withFileTypes: true }).filter((f) => f.isFile() && f.name.endsWith(".md")).map((f) => path4.join(handoffsDir, f.name));
+        if (!fs2.existsSync(handoffsDir)) continue;
+        const receiptFiles = fs2.readdirSync(handoffsDir, { withFileTypes: true }).filter((f) => f.isFile() && f.name.endsWith(".md")).map((f) => path4.join(handoffsDir, f.name));
         for (const receiptPath of receiptFiles) {
           if (isLegacyExempt(receiptPath)) continue;
           if (inScopePaths.has(receiptPath)) continue;
           let content;
           try {
-            content = fs3.readFileSync(receiptPath, "utf8");
+            content = fs2.readFileSync(receiptPath, "utf8");
           } catch {
             continue;
           }
@@ -6771,7 +6273,7 @@ function printFindings(findings, enforceMode) {
   );
   return false;
 }
-async function main2() {
+async function main() {
   const enforceMode = isEnforceEnabled();
   const raw = await readStdin();
   let payload = {};
@@ -6805,7 +6307,7 @@ async function main2() {
   }
   process.exit(0);
 }
-main2().catch((err) => {
+main().catch((err) => {
   process.stderr.write(
     `[comms-format-lint] WARN: unexpected error \u2014 ${err instanceof Error ? err.message : String(err)}
 `

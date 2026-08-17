@@ -65,6 +65,8 @@ export interface TraceV2Fields {
   model?: string;
   tokens?: TraceTokens;
   payload_ref?: string;
+  /** Exact TaskCell runtime identity injected by the launcher; never inferred from role/task text. */
+  task_cell_instance_id?: string;
   /**
    * #58 — the resolved specialist role attributed to an `Agent` dispatch
    * (tool_call, tool="Agent"). Lets a post-hoc audit distinguish a real `devops`
@@ -187,6 +189,8 @@ export function resolveTraceV2Fields(opts: ResolveTraceOpts): TraceV2Fields {
   const model = envStr(env, "GUILD_MODEL") ?? opts.payloadModel;
   if (typeof model === "string" && model.length > 0) out.model = model;
   if (opts.tokens !== undefined) out.tokens = opts.tokens;
+  const taskCellInstance = envStr(env, "GUILD_TASK_CELL_INSTANCE_ID");
+  if (taskCellInstance !== undefined) out.task_cell_instance_id = taskCellInstance;
   if (typeof opts.payloadRef === "string" && opts.payloadRef.length > 0) {
     out.payload_ref = opts.payloadRef;
   }

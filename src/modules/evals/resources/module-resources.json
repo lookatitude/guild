@@ -44,6 +44,13 @@
       "source_path": "scripts/lib/routing-ab-contract.ts",
       "resource_path": "resources/scripts/lib/routing-ab-contract.ts",
       "sha256": "6eac802a1823685327f2402488c542ff99ff3403fad839ed2e54563699d87f5b"
+    },
+    {
+      "category": "scripts",
+      "id": "task-cell-policy-eval",
+      "source_path": "scripts/task-cell-policy-eval.ts",
+      "resource_path": "resources/scripts/task-cell-policy-eval.ts",
+      "sha256": "b17991d1be017a3e71b64b7503a84e3f364d39048c9c6842112ece33157bded1"
     }
   ]
 }

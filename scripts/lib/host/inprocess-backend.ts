@@ -21,6 +21,7 @@ import {
   dispatchModelParamsForSpecialist,
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
+  specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import { buildPrompt, shellQuote } from "./tmux-backend";
 
@@ -93,13 +94,19 @@ export function composeInProcessDispatch(
     const resolvedTier = spec.tier ?? spec.default_tier;
     const hasScore = typeof spec.score === "number" && Number.isFinite(spec.score);
     return {
-      name: spec.name,
+      name: specialistDispatchKey(spec),
       subagentType: isProjectLocal ? GENERIC_SUBAGENT_TYPE : spec.name,
       model,
       env: {
         GUILD_RUN_ID: req.runId,
         GUILD_SPECIALIST: spec.name,
         GUILD_TASK_ID: spec.taskId ?? spec.name,
+        ...(spec.task_cell_assignment_path
+          ? { GUILD_TASK_ASSIGNMENT: spec.task_cell_assignment_path }
+          : {}),
+        ...(spec.task_cell_instance_id
+          ? { GUILD_TASK_CELL_INSTANCE_ID: spec.task_cell_instance_id }
+          : {}),
         ...(model !== null ? { GUILD_MODEL: model } : {}),
         ...(modelParams !== undefined
           ? { GUILD_MODEL_PARAMS: JSON.stringify(modelParams) }
@@ -130,6 +137,7 @@ export function composeInProcessDispatch(
         spec.host_kind ?? req.orchestratorHostKind ?? "claude",
       ),
       definitionPath: isProjectLocal ? `.guild/agents/${spec.name}.md` : null,
+      ...(spec.definition_ref ? { definition_ref: spec.definition_ref } : {}),
     };
   });
 }

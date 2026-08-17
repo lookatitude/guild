@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // capture-telemetry.ts
-var fs7 = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
+var fs8 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
 var crypto2 = __toESM(require("crypto"));
 
 // lib/guild-root.ts
@@ -104,8 +104,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs8 = opts.fs ?? realBindingFs();
-  const raw = fs8.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs9 = opts.fs ?? realBindingFs();
+  const raw = fs9.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -738,6 +738,32 @@ function redactKeyValueSecrets(input) {
 }
 var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
 var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+var DOT_GUILD_PATH_SHAPE = /^(?:\.{1,2}\/)?\.guild(?:\/[A-Za-z0-9._-]+)+$/;
+var DOT_GUILD_ROOTS = /* @__PURE__ */ new Set([
+  "agents",
+  "artifacts",
+  "context",
+  "evolve",
+  "indexes",
+  "init",
+  "initiatives",
+  "knowledge",
+  "loops",
+  "memory",
+  "plan",
+  "prd",
+  "raw",
+  "reflections",
+  "runs",
+  "skills",
+  "spec",
+  "team",
+  "teams",
+  "wiki",
+  "workflows",
+  "workspace",
+  "workspace-knowledge"
+]);
 var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
 var MAX_PATH_TOKEN_LEN = 512;
 function allWordsWordish(words) {
@@ -761,6 +787,34 @@ function allWordsWordish(words) {
   }
   return true;
 }
+function isSafeDotGuildToken(token) {
+  const normalized = token.replace(/^(?:\.{1,2}\/)?\.guild\//, "");
+  const root = normalized.split("/", 1)[0] ?? "";
+  if (!DOT_GUILD_ROOTS.has(root)) return false;
+  const runNormalized = normalized.replace(
+    /(^|\/)run-\d{8}-\d{6}-/g,
+    "$1run-"
+  );
+  const words = runNormalized.split(/[/._-]+/).filter(Boolean);
+  let opaqueBudget = 1;
+  let numericWords = 0;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    if (/^[a-z][a-z0-9]*$/.test(word)) continue;
+    if (/^\d+$/.test(word)) {
+      numericWords += 1;
+      if (numericWords > 3) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    if (/^[A-Z][A-Z0-9]{0,7}$/.test(word)) {
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
 function isRelativePathToken(candidate, fullInput, matchIndex) {
   if (candidate.includes("+") || candidate.includes("=")) return false;
   let start = matchIndex;
@@ -777,9 +831,11 @@ function isRelativePathToken(candidate, fullInput, matchIndex) {
   }
   const token = fullInput.slice(start, end);
   if (token.length > MAX_PATH_TOKEN_LEN) return false;
-  if (!PATH_SHAPE.test(token)) return false;
+  const isDotGuildPath = DOT_GUILD_PATH_SHAPE.test(token);
+  if (!PATH_SHAPE.test(token) && !isDotGuildPath) return false;
   const slashCount = token.split("/").length - 1;
   if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  if (isDotGuildPath) return isSafeDotGuildToken(token);
   return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
 }
 function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
@@ -948,9 +1004,612 @@ function resolveRunDir(cwd, runId, explicitRunDir) {
   return path6.join(resolveGuildRoot2(cwd), ".guild", "runs", runId);
 }
 
+// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+var fs6 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
+
+// ../src/modules/telemetry/workflows/guild-trace-events.ts
+var ANALYSIS_EVENT_CLASSES = Object.freeze([
+  "run_started",
+  "run_closed",
+  "run_attachment_resolved",
+  "config_snapshot_written",
+  "prompt_received",
+  "prompt_normalized",
+  "clarifying_question_asked",
+  "implementation_authorized",
+  "agent_dispatched",
+  "agent_prompt_sent",
+  "agent_response_received",
+  "agent_handoff_written",
+  "knowledge_lookup_started",
+  "knowledge_lookup_result",
+  "memory_lookup_started",
+  "memory_lookup_result",
+  "tool_call_started",
+  "tool_call_finished",
+  "tool_call_denied",
+  "tool_call_failed",
+  "loop_entered",
+  "loop_iteration",
+  "loop_exited",
+  "loop_cap_hit",
+  "phase_entered",
+  "phase_concluded",
+  "gate_started",
+  "gate_concluded",
+  "instruction_violation_detected",
+  "user_steering_received",
+  "correction_applied",
+  "repeated_failure_detected",
+  "recommendation_created",
+  "recommendation_routed",
+  "bug_report_prompted"
+]);
+var GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
+  "guild.trace.dispatch.v1",
+  "guild.trace.recall.v1",
+  "guild.trace.recall_decision.v1",
+  "guild.trace.config_resolution.v1",
+  "guild.trace.security_decision.v1",
+  "guild.trace.degradation.v1",
+  "guild.trace.model_inspection.v1",
+  "guild.trace.analysis.v2"
+]);
+function validateBase(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const e = ev;
+  if (typeof e["schema_version"] !== "string" || e["schema_version"] === "") {
+    return { ok: false, reason: "schema_version must be a non-empty string" };
+  }
+  if (!GUILD_TRACE_SCHEMA_VERSIONS.includes(e["schema_version"])) {
+    return { ok: false, reason: `unknown schema_version: ${e["schema_version"]}` };
+  }
+  if (typeof e["ts"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["ts"])) {
+    return { ok: false, reason: "ts must be an ISO-8601 timestamp string" };
+  }
+  if (typeof e["run_id"] !== "string" || e["run_id"] === "") {
+    return { ok: false, reason: "run_id must be a non-empty string" };
+  }
+  if (typeof e["lane_id"] !== "string") {
+    return { ok: false, reason: "lane_id must be a string (empty string for lead session)" };
+  }
+  return { ok: true };
+}
+var DISPATCH_BACKENDS = ["agent", "cmux", "tmux", "remote", "unknown"];
+var RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
+var SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
+var DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
+function validateDispatchEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.dispatch.v1") {
+    return { ok: false, reason: `wrong schema_version for dispatch: ${e["schema_version"]}` };
+  }
+  if (typeof e["specialist"] !== "string" || e["specialist"] === "") {
+    return { ok: false, reason: "specialist must be a non-empty string" };
+  }
+  if (typeof e["phase"] !== "string" || e["phase"] === "") {
+    return { ok: false, reason: "phase must be a non-empty string" };
+  }
+  if (typeof e["task_id"] !== "string" || e["task_id"] === "") {
+    return { ok: false, reason: "task_id must be a non-empty string" };
+  }
+  if (!DISPATCH_BACKENDS.includes(e["backend"])) {
+    return { ok: false, reason: `backend must be one of: ${DISPATCH_BACKENDS.join(", ")}` };
+  }
+  if (typeof e["backend_rung"] !== "number" || e["backend_rung"] < 0 || e["backend_rung"] > 4) {
+    return { ok: false, reason: "backend_rung must be a number 0-4" };
+  }
+  if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"])) {
+    return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
+  }
+  for (const optKey of ["attribution_specialist", "pane_id", "pane_target", "pane_backend"]) {
+    if (e[optKey] === void 0) continue;
+    if (typeof e[optKey] !== "string" || e[optKey] === "") {
+      return { ok: false, reason: `${optKey}, when present, must be a non-empty string` };
+    }
+  }
+  if (e["pane_backend"] !== void 0) {
+    if (e["backend"] !== "unknown") {
+      return {
+        ok: false,
+        reason: `pane_backend is only for a surface the backend enum cannot name; it must not accompany backend "${e["backend"]}"`
+      };
+    }
+    if (e["backend_rung"] < 1) {
+      return {
+        ok: false,
+        reason: "pane_backend marks a CONFIRMED dispatch, so backend_rung must be >= 1"
+      };
+    }
+  }
+  return { ok: true };
+}
+function validateRecallEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall.v1") {
+    return { ok: false, reason: `wrong schema_version for recall: ${e["schema_version"]}` };
+  }
+  if (typeof e["query"] !== "string" || e["query"] === "") {
+    return { ok: false, reason: "query must be a non-empty string" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["had_quarantine"] !== "boolean") {
+    return { ok: false, reason: "had_quarantine must be a boolean" };
+  }
+  if (typeof e["cwd_redacted"] !== "string") {
+    return { ok: false, reason: "cwd_redacted must be a string" };
+  }
+  return { ok: true };
+}
+var LANE_OUTCOMES = ["success", "failure", "unknown"];
+function validateRecallDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["query_hash"] !== "string" || !/^[0-9a-f]{16}$/.test(e["query_hash"])) {
+    return { ok: false, reason: "query_hash must be exactly 16 lowercase hex chars (sha256[:16])" };
+  }
+  if (typeof e["query_preview"] !== "string") {
+    return { ok: false, reason: "query_preview must be a string (may be empty)" };
+  }
+  if (e["query_preview"].length > 60) {
+    return { ok: false, reason: "query_preview must be <= 60 chars (no raw-query leak)" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["top_score"] !== "number" || e["top_score"] < 0 || !isFinite(e["top_score"])) {
+    return { ok: false, reason: "top_score must be a finite number >= 0" };
+  }
+  if (typeof e["threshold"] !== "number" || e["threshold"] < 0 || !isFinite(e["threshold"])) {
+    return { ok: false, reason: "threshold must be a finite number >= 0" };
+  }
+  if (typeof e["read_skip_fired"] !== "boolean") {
+    return { ok: false, reason: "read_skip_fired must be a boolean" };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["scored"] !== "boolean") {
+    return { ok: false, reason: "scored must be a boolean" };
+  }
+  if (!LANE_OUTCOMES.includes(e["lane_outcome"])) {
+    return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
+  }
+  return { ok: true };
+}
+function validateConfigResolutionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.config_resolution.v1") {
+    return { ok: false, reason: `wrong schema_version for config_resolution: ${e["schema_version"]}` };
+  }
+  if (typeof e["rigor"] !== "string" || e["rigor"] === "") {
+    return { ok: false, reason: "rigor must be a non-empty string" };
+  }
+  if (typeof e["agent_mode"] !== "string" || e["agent_mode"] === "") {
+    return { ok: false, reason: "agent_mode must be a non-empty string" };
+  }
+  if (typeof e["layers"] !== "object" || e["layers"] === null) {
+    return { ok: false, reason: "layers must be an object" };
+  }
+  const layers = e["layers"];
+  for (const boolKey of ["workspace", "workspace_local", "project", "project_local", "cli"]) {
+    if (typeof layers[boolKey] !== "boolean") {
+      return { ok: false, reason: `layers.${boolKey} must be a boolean` };
+    }
+  }
+  if (layers["rigor"] !== null && typeof layers["rigor"] !== "string") {
+    return { ok: false, reason: "layers.rigor must be a string or null" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["config_fingerprint"] !== "string" || e["config_fingerprint"] === "") {
+    return { ok: false, reason: "config_fingerprint must be a non-empty string" };
+  }
+  return { ok: true };
+}
+function validateSecurityDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.security_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for security_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["tool_name"] !== "string" || e["tool_name"] === "") {
+    return { ok: false, reason: "tool_name must be a non-empty string" };
+  }
+  if (!SECURITY_OUTCOMES.includes(e["decision"])) {
+    return { ok: false, reason: `decision must be one of: ${SECURITY_OUTCOMES.join(", ")}` };
+  }
+  if (typeof e["bypass_mode"] !== "boolean") {
+    return { ok: false, reason: "bypass_mode must be a boolean" };
+  }
+  if (typeof e["policy_forced"] !== "boolean") {
+    return { ok: false, reason: "policy_forced must be a boolean" };
+  }
+  if (typeof e["autonomy_mode"] !== "string" || e["autonomy_mode"] === "") {
+    return { ok: false, reason: "autonomy_mode must be a non-empty string" };
+  }
+  if (!["env", "file", "none"].includes(e["scope_source"])) {
+    return { ok: false, reason: "scope_source must be 'env', 'file', or 'none'" };
+  }
+  return { ok: true };
+}
+function validateDegradationEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.degradation.v1") {
+    return { ok: false, reason: `wrong schema_version for degradation: ${e["schema_version"]}` };
+  }
+  if (!DEGRADATION_SURFACES.includes(e["surface"])) {
+    return { ok: false, reason: `surface must be one of: ${DEGRADATION_SURFACES.join(", ")}` };
+  }
+  if (typeof e["reason"] !== "string" || e["reason"] === "") {
+    return { ok: false, reason: "reason must be a non-empty string" };
+  }
+  if (typeof e["attempted"] !== "string" || e["attempted"] === "") {
+    return { ok: false, reason: "attempted must be a non-empty string" };
+  }
+  if (typeof e["fallback"] !== "string" || e["fallback"] === "") {
+    return { ok: false, reason: "fallback must be a non-empty string" };
+  }
+  if (!["warn", "error"].includes(e["severity"])) {
+    return { ok: false, reason: "severity must be 'warn' or 'error'" };
+  }
+  return { ok: true };
+}
+function validateModelInspectionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.model_inspection.v1") {
+    return { ok: false, reason: `wrong schema_version for model_inspection: ${e["schema_version"]}` };
+  }
+  for (const key of ["host_family", "host_surface", "identity_trust", "catalog_state", "actual_model", "independence"]) {
+    if (typeof e[key] !== "string" || e[key] === "") {
+      return { ok: false, reason: `${key} must be a non-empty string` };
+    }
+  }
+  if (e["selection_model"] !== null && (typeof e["selection_model"] !== "string" || e["selection_model"] === "")) {
+    return { ok: false, reason: "selection_model must be a non-empty string or null" };
+  }
+  if (typeof e["unknowns_count"] !== "number" || e["unknowns_count"] < 0 || !Number.isInteger(e["unknowns_count"])) {
+    return { ok: false, reason: "unknowns_count must be a non-negative integer" };
+  }
+  return { ok: true };
+}
+function validateAnalysisTraceEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.analysis.v2") {
+    return { ok: false, reason: `wrong schema_version for analysis trace: ${e["schema_version"]}` };
+  }
+  if (!ANALYSIS_EVENT_CLASSES.includes(e["event_class"])) {
+    return { ok: false, reason: `unknown analysis event_class: ${e["event_class"]}` };
+  }
+  if (!["lead", "agent", "user", "tool", "system"].includes(e["actor_type"])) {
+    return { ok: false, reason: "actor_type must be lead|agent|user|tool|system" };
+  }
+  if (typeof e["actor_id"] !== "string" || e["actor_id"] === "") {
+    return { ok: false, reason: "actor_id must be a non-empty string" };
+  }
+  if (!["ok", "error", "denied", "incomplete", "unknown"].includes(e["status"])) {
+    return { ok: false, reason: "status must be ok|error|denied|incomplete|unknown" };
+  }
+  const allowedKeys = /* @__PURE__ */ new Set([
+    "schema_version",
+    "ts",
+    "run_id",
+    "lane_id",
+    "event_class",
+    "actor_type",
+    "actor_id",
+    "status",
+    "span_id",
+    "parent_span_id",
+    "phase",
+    "task_id",
+    "initiative_id",
+    "run_scope",
+    "prompt_hash",
+    "payload_ref",
+    "redaction",
+    "duration_ms",
+    "tokens",
+    "config_snapshot_ref",
+    "signature"
+  ]);
+  for (const key of Object.keys(e)) {
+    if (!allowedKeys.has(key)) return { ok: false, reason: `unknown analysis field: ${key}` };
+  }
+  if (e["run_scope"] !== void 0 && !["initiative", "independent"].includes(e["run_scope"])) {
+    return { ok: false, reason: "run_scope must be initiative|independent when present" };
+  }
+  if (e["duration_ms"] !== void 0 && (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0)) {
+    return { ok: false, reason: "duration_ms must be a non-negative number when present" };
+  }
+  for (const key of ["span_id", "parent_span_id", "phase", "task_id", "initiative_id", "prompt_hash", "payload_ref", "config_snapshot_ref", "signature"]) {
+    if (e[key] !== void 0 && (typeof e[key] !== "string" || e[key] === "")) {
+      return { ok: false, reason: `${key} must be a non-empty string when present` };
+    }
+  }
+  if (e["redaction"] !== void 0 && !["none", "redacted", "omitted"].includes(e["redaction"])) {
+    return { ok: false, reason: "redaction must be none|redacted|omitted when present" };
+  }
+  if (e["tokens"] !== void 0) {
+    if (typeof e["tokens"] !== "object" || e["tokens"] === null || Array.isArray(e["tokens"])) {
+      return { ok: false, reason: "tokens must be an object when present" };
+    }
+    for (const [key, value] of Object.entries(e["tokens"])) {
+      if (!["input", "output", "cached", "cost_usd"].includes(key) || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return { ok: false, reason: `tokens.${key} must be a non-negative finite number` };
+      }
+    }
+  }
+  const eventClass = e["event_class"];
+  if (eventClass === "run_started" && e["run_scope"] === void 0) {
+    return { ok: false, reason: "run_started requires run_scope" };
+  }
+  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
+  }
+  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0) {
+    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
+  }
+  const promptClasses = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
+  if (promptClasses.includes(eventClass) && (e["prompt_hash"] === void 0 || e["redaction"] === void 0 || e["span_id"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
+  }
+  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) && (e["span_id"] === void 0 || e["prompt_hash"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
+  }
+  if (eventClass.startsWith("tool_call_") && e["span_id"] === void 0) {
+    return { ok: false, reason: `${eventClass} requires span_id` };
+  }
+  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === void 0) {
+    return { ok: false, reason: `${eventClass} requires duration_ms` };
+  }
+  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) && (e["task_id"] === void 0 || e["span_id"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
+  }
+  if (eventClass === "agent_handoff_written" && e["payload_ref"] === void 0) {
+    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
+  }
+  if (eventClass === "agent_response_received" && e["span_id"] === void 0) {
+    return { ok: false, reason: "agent_response_received requires span_id" };
+  }
+  if (eventClass.startsWith("loop_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  if (eventClass.startsWith("phase_") && (e["span_id"] === void 0 || e["phase"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and phase` };
+  }
+  if (eventClass.startsWith("gate_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  const evidenceClasses = [
+    "instruction_violation_detected",
+    "user_steering_received",
+    "correction_applied",
+    "repeated_failure_detected",
+    "recommendation_created",
+    "recommendation_routed",
+    "bug_report_prompted"
+  ];
+  if (evidenceClasses.includes(eventClass) && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  return { ok: true };
+}
+function validateGuildTraceEvent(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const sv = ev["schema_version"];
+  switch (sv) {
+    case "guild.trace.analysis.v2":
+      return validateAnalysisTraceEvent(ev);
+    case "guild.trace.model_inspection.v1":
+      return validateModelInspectionEvent(ev);
+    case "guild.trace.dispatch.v1":
+      return validateDispatchEvent(ev);
+    case "guild.trace.recall.v1":
+      return validateRecallEvent(ev);
+    case "guild.trace.recall_decision.v1":
+      return validateRecallDecisionEvent(ev);
+    case "guild.trace.config_resolution.v1":
+      return validateConfigResolutionEvent(ev);
+    case "guild.trace.security_decision.v1":
+      return validateSecurityDecisionEvent(ev);
+    case "guild.trace.degradation.v1":
+      return validateDegradationEvent(ev);
+    default:
+      return { ok: false, reason: `unknown schema_version: ${sv}` };
+  }
+}
+function makeAnalysisTraceEvent(fields) {
+  return { schema_version: "guild.trace.analysis.v2", ...fields };
+}
+
+// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+function liveLogPath(runDir) {
+  return path7.join(runDir, "logs", "v1.4-events.jsonl");
+}
+function emitTraceEvent(event, runDir) {
+  if (!runDir) return false;
+  const validationResult = validateGuildTraceEvent(event);
+  if (!validationResult.ok) {
+    const schemaVersion = event["schema_version"];
+    const failResult = validationResult;
+    process.stderr.write(
+      `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}
+`
+    );
+    return false;
+  }
+  try {
+    const live = liveLogPath(runDir);
+    const dir = path7.dirname(live);
+    fs6.mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify(event) + "\n";
+    fs6.appendFileSync(live, line, "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `[guild-trace-emit] WARN: could not write trace event to ${runDir}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
+// ../src/modules/telemetry/workflows/run-analysis.ts
+var REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
+var COMPLETENESS_REQUIREMENTS = Object.freeze(["run identity", "plugin-config-snapshot.json", "trace parseability", "trace validity", ...REQUIRED_COVERAGE]);
+var EVENT_CLASS_CATEGORY = Object.freeze({
+  run_started: null,
+  run_closed: "close",
+  run_attachment_resolved: null,
+  config_snapshot_written: null,
+  prompt_received: "prompt",
+  prompt_normalized: "prompt",
+  clarifying_question_asked: "prompt",
+  implementation_authorized: "gate",
+  agent_dispatched: "agent",
+  agent_prompt_sent: "agent",
+  agent_response_received: "agent",
+  agent_handoff_written: "agent",
+  knowledge_lookup_started: "knowledge",
+  knowledge_lookup_result: "knowledge",
+  memory_lookup_started: "memory",
+  memory_lookup_result: "memory",
+  tool_call_started: "tool",
+  tool_call_finished: "tool",
+  tool_call_denied: "tool",
+  tool_call_failed: "tool",
+  loop_entered: "loop",
+  loop_iteration: "loop",
+  loop_exited: "loop",
+  loop_cap_hit: "loop",
+  phase_entered: "phase",
+  phase_concluded: "phase",
+  gate_started: "gate",
+  gate_concluded: "gate",
+  instruction_violation_detected: "steering",
+  user_steering_received: "steering",
+  correction_applied: "correction",
+  repeated_failure_detected: "correction",
+  recommendation_created: null,
+  recommendation_routed: null,
+  bug_report_prompted: null
+});
+
+// ../src/modules/telemetry/workflows/receipt-journal.ts
+var RECEIPT_DISPOSITIONS = Object.freeze([
+  "succeeded",
+  "refused",
+  "unsupported",
+  "failed",
+  "degraded"
+]);
+var OBSERVATION_STATES = Object.freeze([
+  "checked_clean",
+  "not_applicable",
+  "not_observed",
+  "observation_failed"
+]);
+var RECEIPT_EVENT_NAMES = Object.freeze([
+  "session.start",
+  "prompt.submit",
+  "tool.before",
+  "tool.after",
+  "context.compact",
+  "task.dispatch",
+  "task.collect",
+  "run.resume",
+  "run.stop",
+  "package.render",
+  "package.install",
+  "package.activate",
+  "package.update",
+  "runtime.verify",
+  "receipt.append",
+  "receipt.reconcile",
+  "migration.shadow",
+  "migration.cutover",
+  "migration.rollback"
+]);
+var RECEIPT_OUTCOME_TYPES = Object.freeze([
+  "guild.lifecycle_outcome.v1",
+  "guild.normalized_event_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.capability_outcome.v1",
+  "guild.policy_outcome.v1",
+  "guild.receipt_outcome.v1",
+  "guild.reconciliation_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.version_compatibility_outcome.v1"
+]);
+
+// ../src/modules/telemetry/workflows/debug-bundle.ts
+var DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
+  "capability_snapshot",
+  "normalized_event",
+  "policy_decision",
+  "transport_attempt",
+  "artifact",
+  "conformance"
+]);
+
+// ../src/modules/telemetry/workflows/task-cell-telemetry.ts
+var TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
+  "spawn_started",
+  "spawned",
+  "ready",
+  "assignment_delivered",
+  "assignment_acknowledged",
+  "running",
+  "handoff_submitted",
+  "handoff_validated",
+  "handoff_accepted",
+  "termination_started",
+  "terminated",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "rejected",
+  "orphaned",
+  "reaped"
+]);
+var EVENT_NAMES = new Set(TASK_CELL_LIFECYCLE_EVENTS);
+
 // ../src/modules/lifecycle/workflows/trace-v2.ts
-var fs6 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs7 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
 var TRACE_PAYLOAD_SCHEMA = "guild.trace_payload.v1";
 var SIDECAR_MAX_BYTES = 16 * 1024;
@@ -1002,6 +1661,8 @@ function resolveTraceV2Fields(opts) {
   const model = envStr(env, "GUILD_MODEL") ?? opts.payloadModel;
   if (typeof model === "string" && model.length > 0) out.model = model;
   if (opts.tokens !== void 0) out.tokens = opts.tokens;
+  const taskCellInstance = envStr(env, "GUILD_TASK_CELL_INSTANCE_ID");
+  if (taskCellInstance !== void 0) out.task_cell_instance_id = taskCellInstance;
   if (typeof opts.payloadRef === "string" && opts.payloadRef.length > 0) {
     out.payload_ref = opts.payloadRef;
   }
@@ -1015,7 +1676,7 @@ function pruneUndefined(obj) {
   return out;
 }
 function payloadSidecarPath(runDir, evtId) {
-  return path7.join(runDir, "logs", "payloads", `${evtId}.json`);
+  return path8.join(runDir, "logs", "payloads", `${evtId}.json`);
 }
 function payloadRef(evtId) {
   return `logs/payloads/${evtId}.json`;
@@ -1051,8 +1712,8 @@ function writePayloadSidecar(runDir, evtId, input, redact) {
       serialized = JSON.stringify(record);
     }
     const file = payloadSidecarPath(runDir, evtId);
-    fs6.mkdirSync(path7.dirname(file), { recursive: true });
-    fs6.writeFileSync(file, serialized + "\n", "utf8");
+    fs7.mkdirSync(path8.dirname(file), { recursive: true });
+    fs7.writeFileSync(file, serialized + "\n", "utf8");
     return payloadRef(evtId);
   } catch {
     return void 0;
@@ -1145,7 +1806,7 @@ async function main() {
     if (typeof payload.loop_gate === "string") event.loop_gate = payload.loop_gate;
     if (typeof payload.loop_terminated === "boolean") event.loop_terminated = payload.loop_terminated;
   }
-  const runsDir = path8.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runsDir = path9.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const redact = (s) => applySecretsPolicy(s, secPolicy).value;
   const spanId = genSpanId(runId, eventName, ts, actorId);
   const body = {};
@@ -1190,13 +1851,13 @@ async function main() {
     )
   );
   const eventLine = JSON.stringify(event) + "\n";
-  const logsDir = path8.join(runsDir, "logs");
-  const canonicalFile = path8.join(logsDir, "v1.4-events.jsonl");
-  const legacyFile = path8.join(runsDir, "events.ndjson");
+  const logsDir = path9.join(runsDir, "logs");
+  const canonicalFile = path9.join(logsDir, "v1.4-events.jsonl");
+  const legacyFile = path9.join(runsDir, "events.ndjson");
   if (eventName !== "PostToolUse") {
     try {
-      fs7.mkdirSync(logsDir, { recursive: true });
-      fs7.appendFileSync(canonicalFile, eventLine, "utf8");
+      fs8.mkdirSync(logsDir, { recursive: true });
+      fs8.appendFileSync(canonicalFile, eventLine, "utf8");
     } catch (err) {
       process.stderr.write(
         `[capture-telemetry] ERROR: failed to write to canonical log (${canonicalFile}): ${err instanceof Error ? err.message : String(err)}
@@ -1204,9 +1865,35 @@ async function main() {
       );
     }
   }
+  const semanticClass = eventName === "UserPromptSubmit" ? "prompt_received" : eventName === "SubagentStop" ? "agent_response_received" : eventName === "loop_round_start" ? "loop_entered" : eventName === "loop_round_end" ? "loop_exited" : eventName === "codex_review_round" ? "gate_concluded" : null;
+  if (semanticClass) {
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts,
+        run_id: runId,
+        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        event_class: semanticClass,
+        actor_type: eventName === "UserPromptSubmit" ? "user" : eventName === "SubagentStop" ? "agent" : "system",
+        actor_id: actorId,
+        span_id: spanId,
+        parent_span_id: process.env["GUILD_PARENT_SPAN_ID"] || void 0,
+        phase: process.env["GUILD_PHASE"] || void 0,
+        task_id: process.env["GUILD_TASK_ID"] || void 0,
+        prompt_hash: eventName === "UserPromptSubmit" ? payloadDigest : void 0,
+        payload_ref: payloadRef2,
+        redaction: payloadRef2 ? "redacted" : "omitted",
+        status: ok ? "ok" : "error",
+        duration_ms: ms,
+        tokens,
+        config_snapshot_ref: fs8.existsSync(path9.join(runsDir, "plugin-config-snapshot.json")) ? "plugin-config-snapshot.json" : void 0,
+        signature: eventName.startsWith("loop_") ? `${event.loop_layer ?? "unknown"}:${event.loop_round ?? 0}` : eventName === "codex_review_round" ? `${event.loop_gate ?? "review"}:${event.loop_round ?? 0}` : void 0
+      }),
+      runsDir
+    );
+  }
   try {
-    fs7.mkdirSync(runsDir, { recursive: true });
-    fs7.appendFileSync(legacyFile, eventLine, "utf8");
+    fs8.mkdirSync(runsDir, { recursive: true });
+    fs8.appendFileSync(legacyFile, eventLine, "utf8");
   } catch (err) {
     process.stderr.write(
       `[capture-telemetry] WARN: mirror write to events.ndjson failed: ${err instanceof Error ? err.message : String(err)}

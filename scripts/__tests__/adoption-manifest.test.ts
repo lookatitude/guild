@@ -17,6 +17,7 @@ import {
   MAX_ENTRIES,
   entryDigest,
   resolveHistorical,
+  resolveCurrentDefinitionRef,
   validateAdoptionEntry,
   validateAdoptionManifestV1,
   validateLegacyLocator,
@@ -111,6 +112,32 @@ describe("shape", () => {
     const bad: Record<string, unknown> = { ...chain([]) };
     delete bad.project_id;
     expect(validateAdoptionManifestV1(bad)).toBeNull();
+  });
+});
+
+describe("operative current-ref lookup", () => {
+  it("returns the recorded terminal ref without synthesizing it", () => {
+    const expected = ref("architect");
+    const result = resolveCurrentDefinitionRef(chain([{ from: loc("old-architect"), to: expected }]), {
+      kind: "agent", id: "architect", relative_path: expected.relative_path,
+    });
+    expect(result.status).toBe("resolved");
+    expect(result.ref).toEqual(expected);
+    expect(Object.isFrozen(result.ref)).toBe(true);
+  });
+
+  it("does not return a ref that later became historical", () => {
+    const first = ref("architect", "a");
+    const second = ref("architect-v2", "b");
+    const manifest = chain([
+      { from: loc("old-architect"), to: first },
+      { from: { ...loc("architect", "a"), historical_path: `/plugin/${first.relative_path}` }, to: second },
+    ]);
+    expect(resolveCurrentDefinitionRef(manifest, { kind: "agent", id: "architect", relative_path: first.relative_path }).status).toBe("not_found");
+  });
+
+  it("fails closed on malformed manifest input", () => {
+    expect(resolveCurrentDefinitionRef({ broken: true }, { kind: "agent", id: "architect", relative_path: ".guild/agents/architect.md" }).status).toBe("ambiguous");
   });
 });
 

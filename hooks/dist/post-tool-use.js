@@ -33,8 +33,8 @@ __export(post_tool_use_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(post_tool_use_exports);
-var fs9 = __toESM(require("node:fs"));
-var path11 = __toESM(require("node:path"));
+var fs10 = __toESM(require("node:fs"));
+var path12 = __toESM(require("node:path"));
 
 // lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -307,6 +307,32 @@ function redactKeyValueSecrets(input) {
 }
 var PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
 var PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+var DOT_GUILD_PATH_SHAPE = /^(?:\.{1,2}\/)?\.guild(?:\/[A-Za-z0-9._-]+)+$/;
+var DOT_GUILD_ROOTS = /* @__PURE__ */ new Set([
+  "agents",
+  "artifacts",
+  "context",
+  "evolve",
+  "indexes",
+  "init",
+  "initiatives",
+  "knowledge",
+  "loops",
+  "memory",
+  "plan",
+  "prd",
+  "raw",
+  "reflections",
+  "runs",
+  "skills",
+  "spec",
+  "team",
+  "teams",
+  "wiki",
+  "workflows",
+  "workspace",
+  "workspace-knowledge"
+]);
 var PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
 var MAX_PATH_TOKEN_LEN = 512;
 function allWordsWordish(words) {
@@ -330,6 +356,34 @@ function allWordsWordish(words) {
   }
   return true;
 }
+function isSafeDotGuildToken(token) {
+  const normalized = token.replace(/^(?:\.{1,2}\/)?\.guild\//, "");
+  const root = normalized.split("/", 1)[0] ?? "";
+  if (!DOT_GUILD_ROOTS.has(root)) return false;
+  const runNormalized = normalized.replace(
+    /(^|\/)run-\d{8}-\d{6}-/g,
+    "$1run-"
+  );
+  const words = runNormalized.split(/[/._-]+/).filter(Boolean);
+  let opaqueBudget = 1;
+  let numericWords = 0;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    if (/^[a-z][a-z0-9]*$/.test(word)) continue;
+    if (/^\d+$/.test(word)) {
+      numericWords += 1;
+      if (numericWords > 3) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    if (/^[A-Z][A-Z0-9]{0,7}$/.test(word)) {
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
 function isRelativePathToken(candidate, fullInput, matchIndex) {
   if (candidate.includes("+") || candidate.includes("=")) return false;
   let start = matchIndex;
@@ -346,9 +400,11 @@ function isRelativePathToken(candidate, fullInput, matchIndex) {
   }
   const token = fullInput.slice(start, end);
   if (token.length > MAX_PATH_TOKEN_LEN) return false;
-  if (!PATH_SHAPE.test(token)) return false;
+  const isDotGuildPath = DOT_GUILD_PATH_SHAPE.test(token);
+  if (!PATH_SHAPE.test(token) && !isDotGuildPath) return false;
   const slashCount = token.split("/").length - 1;
   if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  if (isDotGuildPath) return isSafeDotGuildToken(token);
   return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
 }
 function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
@@ -435,6 +491,11 @@ function applySecretsPolicy(value, policy, opts) {
     }
   }
   return { value: out, ok: failures.length === 0, failures };
+}
+function resolveTelemetryField(scrub, policy) {
+  if (scrub.ok) return { value: scrub.value, warn: false };
+  if (policy.fail_mode_telemetry === "closed") return { value: void 0, warn: true };
+  return { value: scrub.value, warn: true };
 }
 
 // ../src/modules/security/workflows/config.ts
@@ -1112,11 +1173,11 @@ function exclusionSentinelPath(runDir2) {
   return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir2) {
-  const path12 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path12), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path12)) return;
+  const path13 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path13), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path13)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path12, "wx");
+    const fd = (0, import_node_fs.openSync)(path13, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -1208,6 +1269,8 @@ function resolveTraceV2Fields(opts) {
   const model = envStr(env, "GUILD_MODEL") ?? opts.payloadModel;
   if (typeof model === "string" && model.length > 0) out.model = model;
   if (opts.tokens !== void 0) out.tokens = opts.tokens;
+  const taskCellInstance = envStr(env, "GUILD_TASK_CELL_INSTANCE_ID");
+  if (taskCellInstance !== void 0) out.task_cell_instance_id = taskCellInstance;
   if (typeof opts.payloadRef === "string" && opts.payloadRef.length > 0) {
     out.payload_ref = opts.payloadRef;
   }
@@ -1249,9 +1312,9 @@ function appendEvent(runDir2, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path12 = laneFallbackPath(runDir2, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path12), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path12, "a");
+    const path13 = laneFallbackPath(runDir2, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path13), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path13, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -1339,8 +1402,8 @@ function sidecarKeyMatches(entry, key) {
   return true;
 }
 function consumeSidecarPre(runDir2, matchOrCallId) {
-  const path12 = sidecarPath(runDir2);
-  if (!(0, import_node_fs3.existsSync)(path12)) return null;
+  const path13 = sidecarPath(runDir2);
+  if (!(0, import_node_fs3.existsSync)(path13)) return null;
   const apply = (text) => {
     const lines = text.split("\n");
     const parsedLines = [];
@@ -1381,15 +1444,15 @@ function consumeSidecarPre(runDir2, matchOrCallId) {
     return { match, rest };
   };
   if (process.platform === "win32") {
-    const text = (0, import_node_fs3.readFileSync)(path12, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path13, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs3.writeFileSync)(path12, rest);
+    (0, import_node_fs3.writeFileSync)(path13, rest);
     return match;
   }
   return withStableLock(runDir2, () => {
-    const text = (0, import_node_fs3.readFileSync)(path12, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path13, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs3.writeFileSync)(path12, rest);
+    (0, import_node_fs3.writeFileSync)(path13, rest);
     return match;
   });
 }
@@ -1445,8 +1508,8 @@ function buildToolCallFromPostOnly(opts) {
   return out;
 }
 function sweepOrphanedSidecarFull(runDir2, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1e3) {
-  const path12 = sidecarPath(runDir2);
-  if (!(0, import_node_fs3.existsSync)(path12)) return { orphans: [], events: [] };
+  const path13 = sidecarPath(runDir2);
+  if (!(0, import_node_fs3.existsSync)(path13)) return { orphans: [], events: [] };
   const apply = (text) => {
     const lines = text.split("\n");
     const orphans2 = [];
@@ -1470,15 +1533,15 @@ function sweepOrphanedSidecarFull(runDir2, nowMs = Date.now(), maxAgeMs = 5 * 60
   };
   let orphans;
   if (process.platform === "win32") {
-    const text = (0, import_node_fs3.readFileSync)(path12, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path13, "utf8");
     const out = apply(text);
-    (0, import_node_fs3.writeFileSync)(path12, out.rest);
+    (0, import_node_fs3.writeFileSync)(path13, out.rest);
     orphans = out.orphans;
   } else {
     orphans = withStableLock(runDir2, () => {
-      const text = (0, import_node_fs3.readFileSync)(path12, "utf8");
+      const text = (0, import_node_fs3.readFileSync)(path13, "utf8");
       const out = apply(text);
-      (0, import_node_fs3.writeFileSync)(path12, out.rest);
+      (0, import_node_fs3.writeFileSync)(path13, out.rest);
       return out.orphans;
     });
   }
@@ -1776,8 +1839,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs10 = opts.fs ?? realBindingFs();
-  const raw = fs10.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs11 = opts.fs ?? realBindingFs();
+  const raw = fs11.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -1919,6 +1982,609 @@ function emitClaudeHookEvent(raw) {
   return { ...parsed, host: "claude" };
 }
 
+// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+var fs9 = __toESM(require("node:fs"));
+var path11 = __toESM(require("node:path"));
+
+// ../src/modules/telemetry/workflows/guild-trace-events.ts
+var ANALYSIS_EVENT_CLASSES = Object.freeze([
+  "run_started",
+  "run_closed",
+  "run_attachment_resolved",
+  "config_snapshot_written",
+  "prompt_received",
+  "prompt_normalized",
+  "clarifying_question_asked",
+  "implementation_authorized",
+  "agent_dispatched",
+  "agent_prompt_sent",
+  "agent_response_received",
+  "agent_handoff_written",
+  "knowledge_lookup_started",
+  "knowledge_lookup_result",
+  "memory_lookup_started",
+  "memory_lookup_result",
+  "tool_call_started",
+  "tool_call_finished",
+  "tool_call_denied",
+  "tool_call_failed",
+  "loop_entered",
+  "loop_iteration",
+  "loop_exited",
+  "loop_cap_hit",
+  "phase_entered",
+  "phase_concluded",
+  "gate_started",
+  "gate_concluded",
+  "instruction_violation_detected",
+  "user_steering_received",
+  "correction_applied",
+  "repeated_failure_detected",
+  "recommendation_created",
+  "recommendation_routed",
+  "bug_report_prompted"
+]);
+var GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
+  "guild.trace.dispatch.v1",
+  "guild.trace.recall.v1",
+  "guild.trace.recall_decision.v1",
+  "guild.trace.config_resolution.v1",
+  "guild.trace.security_decision.v1",
+  "guild.trace.degradation.v1",
+  "guild.trace.model_inspection.v1",
+  "guild.trace.analysis.v2"
+]);
+function validateBase(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const e = ev;
+  if (typeof e["schema_version"] !== "string" || e["schema_version"] === "") {
+    return { ok: false, reason: "schema_version must be a non-empty string" };
+  }
+  if (!GUILD_TRACE_SCHEMA_VERSIONS.includes(e["schema_version"])) {
+    return { ok: false, reason: `unknown schema_version: ${e["schema_version"]}` };
+  }
+  if (typeof e["ts"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["ts"])) {
+    return { ok: false, reason: "ts must be an ISO-8601 timestamp string" };
+  }
+  if (typeof e["run_id"] !== "string" || e["run_id"] === "") {
+    return { ok: false, reason: "run_id must be a non-empty string" };
+  }
+  if (typeof e["lane_id"] !== "string") {
+    return { ok: false, reason: "lane_id must be a string (empty string for lead session)" };
+  }
+  return { ok: true };
+}
+var DISPATCH_BACKENDS = ["agent", "cmux", "tmux", "remote", "unknown"];
+var RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
+var SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
+var DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
+function validateDispatchEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.dispatch.v1") {
+    return { ok: false, reason: `wrong schema_version for dispatch: ${e["schema_version"]}` };
+  }
+  if (typeof e["specialist"] !== "string" || e["specialist"] === "") {
+    return { ok: false, reason: "specialist must be a non-empty string" };
+  }
+  if (typeof e["phase"] !== "string" || e["phase"] === "") {
+    return { ok: false, reason: "phase must be a non-empty string" };
+  }
+  if (typeof e["task_id"] !== "string" || e["task_id"] === "") {
+    return { ok: false, reason: "task_id must be a non-empty string" };
+  }
+  if (!DISPATCH_BACKENDS.includes(e["backend"])) {
+    return { ok: false, reason: `backend must be one of: ${DISPATCH_BACKENDS.join(", ")}` };
+  }
+  if (typeof e["backend_rung"] !== "number" || e["backend_rung"] < 0 || e["backend_rung"] > 4) {
+    return { ok: false, reason: "backend_rung must be a number 0-4" };
+  }
+  if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"])) {
+    return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
+  }
+  for (const optKey of ["attribution_specialist", "pane_id", "pane_target", "pane_backend"]) {
+    if (e[optKey] === void 0) continue;
+    if (typeof e[optKey] !== "string" || e[optKey] === "") {
+      return { ok: false, reason: `${optKey}, when present, must be a non-empty string` };
+    }
+  }
+  if (e["pane_backend"] !== void 0) {
+    if (e["backend"] !== "unknown") {
+      return {
+        ok: false,
+        reason: `pane_backend is only for a surface the backend enum cannot name; it must not accompany backend "${e["backend"]}"`
+      };
+    }
+    if (e["backend_rung"] < 1) {
+      return {
+        ok: false,
+        reason: "pane_backend marks a CONFIRMED dispatch, so backend_rung must be >= 1"
+      };
+    }
+  }
+  return { ok: true };
+}
+function validateRecallEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall.v1") {
+    return { ok: false, reason: `wrong schema_version for recall: ${e["schema_version"]}` };
+  }
+  if (typeof e["query"] !== "string" || e["query"] === "") {
+    return { ok: false, reason: "query must be a non-empty string" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["had_quarantine"] !== "boolean") {
+    return { ok: false, reason: "had_quarantine must be a boolean" };
+  }
+  if (typeof e["cwd_redacted"] !== "string") {
+    return { ok: false, reason: "cwd_redacted must be a string" };
+  }
+  return { ok: true };
+}
+var LANE_OUTCOMES = ["success", "failure", "unknown"];
+function validateRecallDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["query_hash"] !== "string" || !/^[0-9a-f]{16}$/.test(e["query_hash"])) {
+    return { ok: false, reason: "query_hash must be exactly 16 lowercase hex chars (sha256[:16])" };
+  }
+  if (typeof e["query_preview"] !== "string") {
+    return { ok: false, reason: "query_preview must be a string (may be empty)" };
+  }
+  if (e["query_preview"].length > 60) {
+    return { ok: false, reason: "query_preview must be <= 60 chars (no raw-query leak)" };
+  }
+  if (!RECALL_BRANCHES.includes(e["branch"])) {
+    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
+  }
+  if (typeof e["top_score"] !== "number" || e["top_score"] < 0 || !isFinite(e["top_score"])) {
+    return { ok: false, reason: "top_score must be a finite number >= 0" };
+  }
+  if (typeof e["threshold"] !== "number" || e["threshold"] < 0 || !isFinite(e["threshold"])) {
+    return { ok: false, reason: "threshold must be a finite number >= 0" };
+  }
+  if (typeof e["read_skip_fired"] !== "boolean") {
+    return { ok: false, reason: "read_skip_fired must be a boolean" };
+  }
+  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
+    return { ok: false, reason: "chunk_count must be a non-negative number" };
+  }
+  if (typeof e["scored"] !== "boolean") {
+    return { ok: false, reason: "scored must be a boolean" };
+  }
+  if (!LANE_OUTCOMES.includes(e["lane_outcome"])) {
+    return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
+  }
+  return { ok: true };
+}
+function validateConfigResolutionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.config_resolution.v1") {
+    return { ok: false, reason: `wrong schema_version for config_resolution: ${e["schema_version"]}` };
+  }
+  if (typeof e["rigor"] !== "string" || e["rigor"] === "") {
+    return { ok: false, reason: "rigor must be a non-empty string" };
+  }
+  if (typeof e["agent_mode"] !== "string" || e["agent_mode"] === "") {
+    return { ok: false, reason: "agent_mode must be a non-empty string" };
+  }
+  if (typeof e["layers"] !== "object" || e["layers"] === null) {
+    return { ok: false, reason: "layers must be an object" };
+  }
+  const layers = e["layers"];
+  for (const boolKey of ["workspace", "workspace_local", "project", "project_local", "cli"]) {
+    if (typeof layers[boolKey] !== "boolean") {
+      return { ok: false, reason: `layers.${boolKey} must be a boolean` };
+    }
+  }
+  if (layers["rigor"] !== null && typeof layers["rigor"] !== "string") {
+    return { ok: false, reason: "layers.rigor must be a string or null" };
+  }
+  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
+    return { ok: false, reason: "duration_ms must be a non-negative number" };
+  }
+  if (typeof e["config_fingerprint"] !== "string" || e["config_fingerprint"] === "") {
+    return { ok: false, reason: "config_fingerprint must be a non-empty string" };
+  }
+  return { ok: true };
+}
+function validateSecurityDecisionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.security_decision.v1") {
+    return { ok: false, reason: `wrong schema_version for security_decision: ${e["schema_version"]}` };
+  }
+  if (typeof e["tool_name"] !== "string" || e["tool_name"] === "") {
+    return { ok: false, reason: "tool_name must be a non-empty string" };
+  }
+  if (!SECURITY_OUTCOMES.includes(e["decision"])) {
+    return { ok: false, reason: `decision must be one of: ${SECURITY_OUTCOMES.join(", ")}` };
+  }
+  if (typeof e["bypass_mode"] !== "boolean") {
+    return { ok: false, reason: "bypass_mode must be a boolean" };
+  }
+  if (typeof e["policy_forced"] !== "boolean") {
+    return { ok: false, reason: "policy_forced must be a boolean" };
+  }
+  if (typeof e["autonomy_mode"] !== "string" || e["autonomy_mode"] === "") {
+    return { ok: false, reason: "autonomy_mode must be a non-empty string" };
+  }
+  if (!["env", "file", "none"].includes(e["scope_source"])) {
+    return { ok: false, reason: "scope_source must be 'env', 'file', or 'none'" };
+  }
+  return { ok: true };
+}
+function validateDegradationEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.degradation.v1") {
+    return { ok: false, reason: `wrong schema_version for degradation: ${e["schema_version"]}` };
+  }
+  if (!DEGRADATION_SURFACES.includes(e["surface"])) {
+    return { ok: false, reason: `surface must be one of: ${DEGRADATION_SURFACES.join(", ")}` };
+  }
+  if (typeof e["reason"] !== "string" || e["reason"] === "") {
+    return { ok: false, reason: "reason must be a non-empty string" };
+  }
+  if (typeof e["attempted"] !== "string" || e["attempted"] === "") {
+    return { ok: false, reason: "attempted must be a non-empty string" };
+  }
+  if (typeof e["fallback"] !== "string" || e["fallback"] === "") {
+    return { ok: false, reason: "fallback must be a non-empty string" };
+  }
+  if (!["warn", "error"].includes(e["severity"])) {
+    return { ok: false, reason: "severity must be 'warn' or 'error'" };
+  }
+  return { ok: true };
+}
+function validateModelInspectionEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.model_inspection.v1") {
+    return { ok: false, reason: `wrong schema_version for model_inspection: ${e["schema_version"]}` };
+  }
+  for (const key of ["host_family", "host_surface", "identity_trust", "catalog_state", "actual_model", "independence"]) {
+    if (typeof e[key] !== "string" || e[key] === "") {
+      return { ok: false, reason: `${key} must be a non-empty string` };
+    }
+  }
+  if (e["selection_model"] !== null && (typeof e["selection_model"] !== "string" || e["selection_model"] === "")) {
+    return { ok: false, reason: "selection_model must be a non-empty string or null" };
+  }
+  if (typeof e["unknowns_count"] !== "number" || e["unknowns_count"] < 0 || !Number.isInteger(e["unknowns_count"])) {
+    return { ok: false, reason: "unknowns_count must be a non-negative integer" };
+  }
+  return { ok: true };
+}
+function validateAnalysisTraceEvent(ev) {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev;
+  if (e["schema_version"] !== "guild.trace.analysis.v2") {
+    return { ok: false, reason: `wrong schema_version for analysis trace: ${e["schema_version"]}` };
+  }
+  if (!ANALYSIS_EVENT_CLASSES.includes(e["event_class"])) {
+    return { ok: false, reason: `unknown analysis event_class: ${e["event_class"]}` };
+  }
+  if (!["lead", "agent", "user", "tool", "system"].includes(e["actor_type"])) {
+    return { ok: false, reason: "actor_type must be lead|agent|user|tool|system" };
+  }
+  if (typeof e["actor_id"] !== "string" || e["actor_id"] === "") {
+    return { ok: false, reason: "actor_id must be a non-empty string" };
+  }
+  if (!["ok", "error", "denied", "incomplete", "unknown"].includes(e["status"])) {
+    return { ok: false, reason: "status must be ok|error|denied|incomplete|unknown" };
+  }
+  const allowedKeys = /* @__PURE__ */ new Set([
+    "schema_version",
+    "ts",
+    "run_id",
+    "lane_id",
+    "event_class",
+    "actor_type",
+    "actor_id",
+    "status",
+    "span_id",
+    "parent_span_id",
+    "phase",
+    "task_id",
+    "initiative_id",
+    "run_scope",
+    "prompt_hash",
+    "payload_ref",
+    "redaction",
+    "duration_ms",
+    "tokens",
+    "config_snapshot_ref",
+    "signature"
+  ]);
+  for (const key of Object.keys(e)) {
+    if (!allowedKeys.has(key)) return { ok: false, reason: `unknown analysis field: ${key}` };
+  }
+  if (e["run_scope"] !== void 0 && !["initiative", "independent"].includes(e["run_scope"])) {
+    return { ok: false, reason: "run_scope must be initiative|independent when present" };
+  }
+  if (e["duration_ms"] !== void 0 && (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0)) {
+    return { ok: false, reason: "duration_ms must be a non-negative number when present" };
+  }
+  for (const key of ["span_id", "parent_span_id", "phase", "task_id", "initiative_id", "prompt_hash", "payload_ref", "config_snapshot_ref", "signature"]) {
+    if (e[key] !== void 0 && (typeof e[key] !== "string" || e[key] === "")) {
+      return { ok: false, reason: `${key} must be a non-empty string when present` };
+    }
+  }
+  if (e["redaction"] !== void 0 && !["none", "redacted", "omitted"].includes(e["redaction"])) {
+    return { ok: false, reason: "redaction must be none|redacted|omitted when present" };
+  }
+  if (e["tokens"] !== void 0) {
+    if (typeof e["tokens"] !== "object" || e["tokens"] === null || Array.isArray(e["tokens"])) {
+      return { ok: false, reason: "tokens must be an object when present" };
+    }
+    for (const [key, value] of Object.entries(e["tokens"])) {
+      if (!["input", "output", "cached", "cost_usd"].includes(key) || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return { ok: false, reason: `tokens.${key} must be a non-negative finite number` };
+      }
+    }
+  }
+  const eventClass = e["event_class"];
+  if (eventClass === "run_started" && e["run_scope"] === void 0) {
+    return { ok: false, reason: "run_started requires run_scope" };
+  }
+  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
+  }
+  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0) {
+    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
+  }
+  const promptClasses = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
+  if (promptClasses.includes(eventClass) && (e["prompt_hash"] === void 0 || e["redaction"] === void 0 || e["span_id"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
+  }
+  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) && (e["span_id"] === void 0 || e["prompt_hash"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
+  }
+  if (eventClass.startsWith("tool_call_") && e["span_id"] === void 0) {
+    return { ok: false, reason: `${eventClass} requires span_id` };
+  }
+  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === void 0) {
+    return { ok: false, reason: `${eventClass} requires duration_ms` };
+  }
+  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) && (e["task_id"] === void 0 || e["span_id"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
+  }
+  if (eventClass === "agent_handoff_written" && e["payload_ref"] === void 0) {
+    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
+  }
+  if (eventClass === "agent_response_received" && e["span_id"] === void 0) {
+    return { ok: false, reason: "agent_response_received requires span_id" };
+  }
+  if (eventClass.startsWith("loop_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  if (eventClass.startsWith("phase_") && (e["span_id"] === void 0 || e["phase"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and phase` };
+  }
+  if (eventClass.startsWith("gate_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  const evidenceClasses = [
+    "instruction_violation_detected",
+    "user_steering_received",
+    "correction_applied",
+    "repeated_failure_detected",
+    "recommendation_created",
+    "recommendation_routed",
+    "bug_report_prompted"
+  ];
+  if (evidenceClasses.includes(eventClass) && (e["span_id"] === void 0 || e["signature"] === void 0)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  return { ok: true };
+}
+function validateGuildTraceEvent(ev) {
+  if (typeof ev !== "object" || ev === null) {
+    return { ok: false, reason: "event must be a non-null object" };
+  }
+  const sv = ev["schema_version"];
+  switch (sv) {
+    case "guild.trace.analysis.v2":
+      return validateAnalysisTraceEvent(ev);
+    case "guild.trace.model_inspection.v1":
+      return validateModelInspectionEvent(ev);
+    case "guild.trace.dispatch.v1":
+      return validateDispatchEvent(ev);
+    case "guild.trace.recall.v1":
+      return validateRecallEvent(ev);
+    case "guild.trace.recall_decision.v1":
+      return validateRecallDecisionEvent(ev);
+    case "guild.trace.config_resolution.v1":
+      return validateConfigResolutionEvent(ev);
+    case "guild.trace.security_decision.v1":
+      return validateSecurityDecisionEvent(ev);
+    case "guild.trace.degradation.v1":
+      return validateDegradationEvent(ev);
+    default:
+      return { ok: false, reason: `unknown schema_version: ${sv}` };
+  }
+}
+function makeAnalysisTraceEvent(fields) {
+  return { schema_version: "guild.trace.analysis.v2", ...fields };
+}
+
+// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+function liveLogPath2(runDir2) {
+  return path11.join(runDir2, "logs", "v1.4-events.jsonl");
+}
+function emitTraceEvent(event, runDir2) {
+  if (!runDir2) return false;
+  const validationResult = validateGuildTraceEvent(event);
+  if (!validationResult.ok) {
+    const schemaVersion = event["schema_version"];
+    const failResult = validationResult;
+    process.stderr.write(
+      `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}
+`
+    );
+    return false;
+  }
+  try {
+    const live = liveLogPath2(runDir2);
+    const dir = path11.dirname(live);
+    fs9.mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify(event) + "\n";
+    fs9.appendFileSync(live, line, "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `[guild-trace-emit] WARN: could not write trace event to ${runDir2}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+
+// ../src/modules/telemetry/workflows/run-analysis.ts
+var REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
+var COMPLETENESS_REQUIREMENTS = Object.freeze(["run identity", "plugin-config-snapshot.json", "trace parseability", "trace validity", ...REQUIRED_COVERAGE]);
+var EVENT_CLASS_CATEGORY = Object.freeze({
+  run_started: null,
+  run_closed: "close",
+  run_attachment_resolved: null,
+  config_snapshot_written: null,
+  prompt_received: "prompt",
+  prompt_normalized: "prompt",
+  clarifying_question_asked: "prompt",
+  implementation_authorized: "gate",
+  agent_dispatched: "agent",
+  agent_prompt_sent: "agent",
+  agent_response_received: "agent",
+  agent_handoff_written: "agent",
+  knowledge_lookup_started: "knowledge",
+  knowledge_lookup_result: "knowledge",
+  memory_lookup_started: "memory",
+  memory_lookup_result: "memory",
+  tool_call_started: "tool",
+  tool_call_finished: "tool",
+  tool_call_denied: "tool",
+  tool_call_failed: "tool",
+  loop_entered: "loop",
+  loop_iteration: "loop",
+  loop_exited: "loop",
+  loop_cap_hit: "loop",
+  phase_entered: "phase",
+  phase_concluded: "phase",
+  gate_started: "gate",
+  gate_concluded: "gate",
+  instruction_violation_detected: "steering",
+  user_steering_received: "steering",
+  correction_applied: "correction",
+  repeated_failure_detected: "correction",
+  recommendation_created: null,
+  recommendation_routed: null,
+  bug_report_prompted: null
+});
+
+// ../src/modules/telemetry/workflows/receipt-journal.ts
+var RECEIPT_DISPOSITIONS = Object.freeze([
+  "succeeded",
+  "refused",
+  "unsupported",
+  "failed",
+  "degraded"
+]);
+var OBSERVATION_STATES = Object.freeze([
+  "checked_clean",
+  "not_applicable",
+  "not_observed",
+  "observation_failed"
+]);
+var RECEIPT_EVENT_NAMES = Object.freeze([
+  "session.start",
+  "prompt.submit",
+  "tool.before",
+  "tool.after",
+  "context.compact",
+  "task.dispatch",
+  "task.collect",
+  "run.resume",
+  "run.stop",
+  "package.render",
+  "package.install",
+  "package.activate",
+  "package.update",
+  "runtime.verify",
+  "receipt.append",
+  "receipt.reconcile",
+  "migration.shadow",
+  "migration.cutover",
+  "migration.rollback"
+]);
+var RECEIPT_OUTCOME_TYPES = Object.freeze([
+  "guild.lifecycle_outcome.v1",
+  "guild.normalized_event_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.capability_outcome.v1",
+  "guild.policy_outcome.v1",
+  "guild.receipt_outcome.v1",
+  "guild.reconciliation_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.version_compatibility_outcome.v1"
+]);
+
+// ../src/modules/telemetry/workflows/debug-bundle.ts
+var DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
+  "capability_snapshot",
+  "normalized_event",
+  "policy_decision",
+  "transport_attempt",
+  "artifact",
+  "conformance"
+]);
+
+// ../src/modules/telemetry/workflows/task-cell-telemetry.ts
+var TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
+  "spawn_started",
+  "spawned",
+  "ready",
+  "assignment_delivered",
+  "assignment_acknowledged",
+  "running",
+  "handoff_submitted",
+  "handoff_validated",
+  "handoff_accepted",
+  "termination_started",
+  "terminated",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "rejected",
+  "orphaned",
+  "reaped"
+]);
+var EVENT_NAMES = new Set(TASK_CELL_LIFECYCLE_EVENTS);
+
 // post-tool-use.ts
 function isKnownTool(name) {
   if (typeof name !== "string") return false;
@@ -1934,19 +2600,31 @@ function isOk(payload) {
   }
   return "ok";
 }
-function resultExcerpt(payload) {
+function resultExcerpt(payload, policy) {
   const resp = payload.tool_response;
   if (resp === null || resp === void 0) return "";
-  if (typeof resp === "string") return resp;
-  try {
-    return JSON.stringify(resp);
-  } catch {
-    return "";
+  let raw;
+  if (typeof resp === "string") raw = resp;
+  else {
+    try {
+      raw = JSON.stringify(resp);
+    } catch {
+      return "";
+    }
   }
+  const scrub = applySecretsPolicy(raw, policy);
+  const resolved = resolveTelemetryField(scrub, policy);
+  if (resolved.warn) {
+    process.stderr.write(
+      `warn: [post-tool-use] result excerpt scrub degraded (fail_mode_telemetry=${policy.fail_mode_telemetry}).
+`
+    );
+  }
+  return resolved.value ?? "";
 }
 function classifyGuildScrubSurface(absPath, guildRoot) {
-  const rel = path11.relative(guildRoot, absPath);
-  const parts = rel.split(path11.sep);
+  const rel = path12.relative(guildRoot, absPath);
+  const parts = rel.split(path12.sep);
   if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
   if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4) {
     if (parts[3] === "review") return "review";
@@ -1957,19 +2635,19 @@ function classifyGuildScrubSurface(absPath, guildRoot) {
 }
 function runGuildArtifactScrub(payload, guildRoot, runDir2, runId, laneId2) {
   const effectiveRunId = typeof runId === "string" && runId.length > 0 ? runId : "no-active-run";
-  const effectiveRunDir = typeof runDir2 === "string" && runDir2.length > 0 ? runDir2 : path11.join(guildRoot, ".guild", "runs", effectiveRunId);
+  const effectiveRunDir = typeof runDir2 === "string" && runDir2.length > 0 ? runDir2 : path12.join(guildRoot, ".guild", "runs", effectiveRunId);
   const toolName = payload.tool_name;
   if (toolName !== "Write" && toolName !== "Edit") return;
   const ti = payload.tool_input;
   if (!ti || typeof ti !== "object") return;
   const rawFilePath = ti["file_path"];
   if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return;
-  const absPath = path11.isAbsolute(rawFilePath) ? rawFilePath : path11.resolve(guildRoot, rawFilePath);
+  const absPath = path12.isAbsolute(rawFilePath) ? rawFilePath : path12.resolve(guildRoot, rawFilePath);
   const surface = classifyGuildScrubSurface(absPath, guildRoot);
   if (surface === null) return;
   let diskContent;
   try {
-    diskContent = fs9.readFileSync(absPath, "utf8");
+    diskContent = fs10.readFileSync(absPath, "utf8");
   } catch {
     return;
   }
@@ -1982,14 +2660,14 @@ function runGuildArtifactScrub(payload, guildRoot, runDir2, runId, laneId2) {
   if (result.blocked) {
     let quarantineDone = false;
     try {
-      fs9.renameSync(absPath, absPath + ".quarantined");
+      fs10.renameSync(absPath, absPath + ".quarantined");
       quarantineDone = true;
     } catch {
     }
     if (!quarantineDone) {
       let canonicalRemoved = false;
       try {
-        fs9.writeFileSync(
+        fs10.writeFileSync(
           absPath,
           `[SCRUB-BLOCKED: ${surface} file content removed by Guild HK-06 secret scrub \u2014 quarantine rename failed, raw destroyed at canonical path]
 `,
@@ -1998,14 +2676,14 @@ function runGuildArtifactScrub(payload, guildRoot, runDir2, runId, laneId2) {
         canonicalRemoved = true;
       } catch {
         try {
-          fs9.unlinkSync(absPath);
+          fs10.unlinkSync(absPath);
           canonicalRemoved = true;
         } catch {
         }
       }
       if (!canonicalRemoved) {
         process.stderr.write(
-          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical path "${path11.basename(absPath)}" \u2014 quarantine AND canonical-removal (overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.
+          `[CRITICAL] [post-tool-use] HK-06: CANNOT remove raw secret from canonical path "${path12.basename(absPath)}" \u2014 quarantine AND canonical-removal (overwrite+unlink) both failed. Exiting non-zero. Manual remediation required.
 `
         );
         try {
@@ -2015,7 +2693,7 @@ function runGuildArtifactScrub(payload, guildRoot, runDir2, runId, laneId2) {
             event_type: "secret_scrub_blocked",
             decision: "blocked",
             tool: "post-tool-use/hk06-scrub",
-            detail: `CRITICAL: Cannot remove raw ${surface} write from canonical path "${path11.basename(absPath)}" \u2014 quarantine AND canonical-removal both failed. Raw secret may persist. Manual remediation required.`,
+            detail: `CRITICAL: Cannot remove raw ${surface} write from canonical path "${path12.basename(absPath)}" \u2014 quarantine AND canonical-removal both failed. Raw secret may persist. Manual remediation required.`,
             permission_mode: "blocked"
           });
           appendSecurityEvent(effectiveRunDir, evt);
@@ -2024,25 +2702,25 @@ function runGuildArtifactScrub(payload, guildRoot, runDir2, runId, laneId2) {
         process.exit(1);
       }
       process.stderr.write(
-        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path11.basename(absPath)}.
+        `warn: [post-tool-use] HK-06: quarantine rename failed but canonical path overwritten/unlinked for ${path12.basename(absPath)}.
 `
       );
     }
     process.stderr.write(
-      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ${path11.basename(absPath)} \u2014 quarantined/removed. secret_scrub_blocked event emitted.
+      `warn: [post-tool-use] HK-06: ${surface} write BLOCKED by secret scrub at ${path12.basename(absPath)} \u2014 quarantined/removed. secret_scrub_blocked event emitted.
 `
     );
   } else if (result.written) {
     process.stderr.write(
-      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path11.basename(absPath)}.
+      `info: [post-tool-use] HK-06: ${surface} file scrubbed in place: ${path12.basename(absPath)}.
 `
     );
   }
 }
 function readCurrentRunId(guildRoot) {
-  const sentinelPath = path11.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinelPath = path12.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
-    const value = fs9.readFileSync(sentinelPath, "utf8").trim();
+    const value = fs10.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -2077,7 +2755,7 @@ async function main() {
   {
     const earlyRunId = resolveRunId(guildRoot);
     const earlyRunIdSafe = typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId) ? earlyRunId : void 0;
-    const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path11.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
+    const earlyRunDir = earlyRunIdSafe ? process.env["GUILD_RUN_DIR"] ?? path12.join(guildRoot, ".guild", "runs", earlyRunIdSafe) : void 0;
     const earlyLaneId = resolveLaneAttribution();
     try {
       runGuildArtifactScrub(payload, guildRoot, earlyRunDir, earlyRunIdSafe, earlyLaneId);
@@ -2101,7 +2779,7 @@ async function main() {
     );
     return;
   }
-  const runDir2 = process.env["GUILD_RUN_DIR"] ?? path11.join(guildRoot, ".guild", "runs", runId);
+  const runDir2 = process.env["GUILD_RUN_DIR"] ?? path12.join(guildRoot, ".guild", "runs", runId);
   const rawLaneId = process.env["GUILD_LANE_ID"];
   const laneId2 = typeof rawLaneId === "string" && rawLaneId.length > 0 && isSafeLaneId(rawLaneId) ? rawLaneId : void 0;
   if (typeof rawLaneId === "string" && rawLaneId.length > 0 && laneId2 === void 0) {
@@ -2111,6 +2789,7 @@ async function main() {
   }
   const attributionLaneId = resolveLaneAttribution();
   const tsPost = (/* @__PURE__ */ new Date()).toISOString();
+  const secretsPolicy = readSecurityConfig(cwd).secrets_policy;
   try {
     const sweep = sweepOrphanedSidecarFull(runDir2);
     for (const ev of sweep.events) {
@@ -2148,7 +2827,7 @@ async function main() {
         ts_post: tsPost,
         run_id: runId,
         tool: toolName,
-        result_excerpt_redacted: resultExcerpt(payload),
+        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy),
         ...attributionLaneId !== void 0 ? { lane_id: attributionLaneId } : {},
         ...typeof payload.duration_ms === "number" ? { latency_ms_override: payload.duration_ms } : {}
       });
@@ -2157,7 +2836,7 @@ async function main() {
         ts_post: tsPost,
         run_id: runId,
         status: isOk(payload),
-        result_excerpt_redacted: resultExcerpt(payload)
+        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy)
       });
       if (attributionLaneId !== void 0) {
         event.lane_id = attributionLaneId;
@@ -2179,6 +2858,38 @@ async function main() {
       }
     }
     appendEvent(runDir2, event, { traceV2 });
+    const common = {
+      run_id: runId,
+      lane_id: attributionLaneId ?? "",
+      actor_type: "tool",
+      actor_id: toolName,
+      span_id: traceV2.span_id,
+      parent_span_id: traceV2.parent_span_id,
+      phase: process.env["GUILD_PHASE"] || void 0,
+      task_id: process.env["GUILD_TASK_ID"] || void 0,
+      config_snapshot_ref: fs10.existsSync(path12.join(runDir2, "plugin-config-snapshot.json")) ? "plugin-config-snapshot.json" : void 0
+    };
+    const startedMs = Math.max(0, Date.parse(tsPost) - event.latency_ms);
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ...common,
+        ts: new Date(startedMs).toISOString(),
+        event_class: "tool_call_started",
+        status: "ok"
+      }),
+      runDir2
+    );
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ...common,
+        ts: tsPost,
+        event_class: event.status === "err" ? "tool_call_failed" : "tool_call_finished",
+        status: event.status === "err" ? "error" : event.status === "n/a" ? "unknown" : "ok",
+        duration_ms: event.latency_ms,
+        tokens
+      }),
+      runDir2
+    );
   } catch (err) {
     process.stderr.write(
       `warn: [post-tool-use] tool_call emit failed: ${err instanceof Error ? err.message : String(err)}

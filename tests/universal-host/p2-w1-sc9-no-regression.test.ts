@@ -148,6 +148,44 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/dist/pre-compact.js",
   "hooks/dist/gate-outcome-writer.js",
   "hooks/dist/session-reanchor.js",
+  // full-implementation-convergence landing (run-6f94bea1 FIC-51/A7, 2026-08-17):
+  // the A6C-accepted convergence delta's entry-path files, enumerated EXPLICITLY
+  // (named files, never a wildcard) from `git diff --name-status HEAD` + the
+  // untracked porcelain over commands/hooks/.claude-plugin on the settled tree.
+  // Command + manifest surface (both also re-ratified in live-surface-anchor.ts
+  // in this same commit — see its dated 2026-08-17 note for intent/reachability):
+  ".claude-plugin/plugin.json", // exactly one line: commands[] gains ./commands/adopt.md
+  "commands/adopt.md", // NEW /guild:adopt page — closes the filed capability-adopt gap
+  "commands/initiative.md", // D8 close-gate: evidence/evidence_refs existence check prose
+  // Hook sources + their recompiled esbuild bundles (scratch parity 21/21
+  // byte-identical was verified BEFORE the pins were computed):
+  "hooks/agent-team/task-completed.ts",
+  "hooks/agent-team/teammate-idle.ts",
+  "hooks/bootstrap.sh",
+  "hooks/capture-telemetry.ts",
+  "hooks/dist/capture-telemetry.js",
+  "hooks/dist/comms-format-lint.js",
+  "hooks/lib/run-trace.ts",
+  "hooks/lib/compatibility-skill-guard.ts",
+  "hooks/maybe-reflect.ts",
+  "hooks/post-tool-use.ts",
+  "hooks/run-trace-close.ts",
+  // Hook test files carrying the convergence suites' new/updated coverage:
+  "hooks/__tests__/bundle-cli-leak.test.ts",
+  "hooks/__tests__/capture-telemetry-v14.test.ts",
+  "hooks/__tests__/check-skill-coverage.test.ts",
+  "hooks/__tests__/dist-binding-probes.test.ts",
+  "hooks/__tests__/hook-output-budget.test.ts",
+  "hooks/__tests__/post-tool-use-attribution.test.ts",
+  "hooks/__tests__/post-tool-use-scrub.test.ts",
+  "hooks/__tests__/pre-tool-use-compatibility-skill.test.ts",
+  "hooks/__tests__/reanchor.test.ts",
+  "hooks/__tests__/redact-log-path-exemption.test.ts",
+  "hooks/__tests__/run-trace.test.ts",
+  "hooks/__tests__/run-trace-close-active-guard.test.ts",
+  "hooks/__tests__/teammate-idle.test.ts",
+  "hooks/agent-team/__tests__/task-completed.test.ts",
+  "hooks/agent-team/__tests__/teammate-idle.test.ts",
 ]);
 
 function gitLines(args: string[]): string[] {
@@ -181,12 +219,15 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
   });
 
   it("ANTI-VACUITY: the allowlist is TIGHT — a non-migration entry-path change would still fail", () => {
-    // The allowlist names ONLY the host-adapter migration's verified deltas. Prove it did
-    // not get widened to a wildcard: representative entry paths that are NOT part of the
-    // migration must be absent, so the offending-filter above would still flag them.
+    // The allowlist names ONLY verified migration/convergence deltas. Prove it did
+    // not get widened to a wildcard: representative entry paths that are NOT part of
+    // any admitted delta must be absent, so the offending-filter above would still
+    // flag them. (`.claude-plugin/plugin.json` moved into the allowlist with the
+    // FIC-51 convergence landing — its slot here is taken by `marketplace.json`,
+    // which is byte-untouched by that delta and admitted by nothing.)
     for (const notAllowed of [
       "commands/guild-build.md",
-      ".claude-plugin/plugin.json",
+      ".claude-plugin/marketplace.json",
       "hooks/hooks.json",
     ]) {
       expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);

@@ -46,7 +46,7 @@ Write the bundle to
 - `<specialist>` — the `owner` slug from the lane (matches `agents/<name>.md`).
 - `<task-id>` — the lane's `task-id` from `.guild/plan/<slug>.md`.
 
-The bundle is a single markdown file. First section is frontmatter naming the run-id, specialist, task-id, spec path, plan path, and the source paths of every page included (for reproducibility per §9.4). Remaining sections are the three layers in order: Universal, Role-dependent, Task-dependent. `guild:execute-plan` passes this file path as the specialist's primary task brief; it is not merged back into chat before dispatch.
+The bundle is a single markdown file. First section is frontmatter naming the run-id, specialist, task-id, spec path, plan path, source paths, and exactly one `definition_ref: {<compact JSON>}` copied byte-for-byte from the matching team specialist. Never emit an absolute `.guild/agents/*.md` or `.claude/agents/*.md` definition carrier; historical bundles are resolved read-only through the adoption manifest. Remaining sections are the three layers in order: Universal, Role-dependent, Task-dependent. `guild:execute-plan` passes this file path as the specialist's primary task brief; it is not merged back into chat before dispatch.
 
 **Prompt-cache prefix discipline (shared-before-specific, G-19).** Provider prompt
 caches key on identical leading bytes, so the assembly order is also a cost rule:
@@ -83,7 +83,7 @@ Record the final token estimate in the bundle's frontmatter so `guild:review` an
 npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lint-context-bundle.ts --bundle .guild/context/<run-id>/<specialist>-<task-id>.md
 ```
 
-It estimates tokens deterministically (`ceil(chars/4)`, cross-checked against the frontmatter `token_estimate` when present) and prints `{ pass, est_tokens, graph_est_tokens, has_dropped_for_budget, frontmatter_token_estimate, reasons[] }` to stdout — exit `0` pass, `2` fail. It FAILs when the estimate exceeds the 6k hard cap, or when a knowledge-graph section exceeds the 1200-token sub-cap (`## Graph retrieval`) with no `dropped_for_budget:` line recording the drop. On fail: trim per the summarization rules above (graph nodes drop first, per `source_priority`), record a `dropped_for_budget:` line for what was cut, rewrite the bundle, and **re-run the linter until it passes**. A bundle that has not passed the lint MUST NOT be handed to `guild:execute-plan` for dispatch — the model never self-certifies the budget.
+It estimates tokens deterministically (`ceil(chars/4)`, cross-checked against the frontmatter `token_estimate` when present) and validates the single `definition_ref`, while refusing absolute agent-definition carriers. It prints `{ pass, est_tokens, graph_est_tokens, has_dropped_for_budget, frontmatter_token_estimate, definition_ref, reasons[] }` to stdout — exit `0` pass, `2` fail. It FAILs when the estimate exceeds the 6k hard cap, the definition ref is missing/malformed, an absolute definition carrier remains, or a knowledge-graph section exceeds the 1200-token sub-cap (`## Graph retrieval`) with no `dropped_for_budget:` line recording the drop. On fail: correct the ref/carrier or trim per the summarization rules above, then **re-run the linter until it passes**. A bundle that has not passed the lint MUST NOT be handed to `guild:execute-plan` for dispatch — the model never self-certifies the budget or definition identity.
 
 ## Graph retrieval
 

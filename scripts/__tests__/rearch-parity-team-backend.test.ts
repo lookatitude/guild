@@ -14,6 +14,7 @@ import {
   InProcessTeamBackend,
   SerialBackend,
   RemoteTeamBackend,
+  CmuxTeamBackend,
   MockTransport,
   SshRemoteTransport,
   composeInProcessDispatch,
@@ -23,7 +24,9 @@ import {
   shellQuote,
   wrapLoginShell,
   binaryForHostKind,
+  parseCmuxSurfaceId,
   probeTmuxAvailable,
+  terminateCmuxSurface,
   type Specialist,
   type TeamLaunchRequest,
   type TeamBackend,
@@ -54,6 +57,7 @@ describe("team-backend shim — parity after W3 split", () => {
   it("exports InProcessTeamBackend", () => expect(typeof InProcessTeamBackend).toBe("function"));
   it("exports SerialBackend", () => expect(typeof SerialBackend).toBe("function"));
   it("exports RemoteTeamBackend", () => expect(typeof RemoteTeamBackend).toBe("function"));
+  it("exports CmuxTeamBackend", () => expect(typeof CmuxTeamBackend).toBe("function"));
   it("exports MockTransport", () => expect(typeof MockTransport).toBe("function"));
   it("exports SshRemoteTransport", () => expect(typeof SshRemoteTransport).toBe("function"));
   it("exports composeInProcessDispatch", () => expect(typeof composeInProcessDispatch).toBe("function"));
@@ -63,9 +67,12 @@ describe("team-backend shim — parity after W3 split", () => {
   it("exports shellQuote", () => expect(typeof shellQuote).toBe("function"));
   it("exports wrapLoginShell", () => expect(typeof wrapLoginShell).toBe("function"));
   it("exports binaryForHostKind", () => expect(typeof binaryForHostKind).toBe("function"));
+  it("exports parseCmuxSurfaceId", () => expect(typeof parseCmuxSurfaceId).toBe("function"));
   it("exports probeTmuxAvailable", () => expect(typeof probeTmuxAvailable).toBe("function"));
+  it("exports terminateCmuxSurface", () => expect(typeof terminateCmuxSurface).toBe("function"));
   it("exports the exact original runtime shim surface (no helper leaks)", () => {
     expect(Object.keys(teamBackendExports).sort()).toEqual([
+      "CmuxTeamBackend",
       "InProcessTeamBackend",
       "MockTransport",
       "RemoteTeamBackend",
@@ -77,8 +84,10 @@ describe("team-backend shim — parity after W3 split", () => {
       "composeInProcessDispatch",
       "composeTmuxCommands",
       "paneCommand",
+      "parseCmuxSurfaceId",
       "probeTmuxAvailable",
       "shellQuote",
+      "terminateCmuxSurface",
       "wrapLoginShell",
     ]);
   });

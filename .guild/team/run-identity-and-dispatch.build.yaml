@@ -1,0 +1,22 @@
+schema_version: guild.team.v1
+spec: ../../../.guild/initiatives/active/run-identity-and-dispatch/initiative.yaml
+phase: build
+backend: agent-team
+backend_resolution_note: "Run-start snapshot resolved agent_mode=team; tmux 3.7b supplies the visible-pane backend."
+allow_larger: false
+user_approved_agent_team: true
+proposal_ref: .guild/runs/run-20260811-010758-run-identity-and-dispatch/team-plan/build.proposal.v1.yaml
+decision_ref: .guild/runs/run-20260811-010758-run-identity-and-dispatch/team-plan/build.decision.b870f0cf70fe.yaml
+specialists:
+  - name: tooling-engineer
+    tier: powerful
+    score: 4
+    scope: "W4/W5 completion lane. Audit the current dirty worktree rather than assuming prior edits are complete; finish first-class cmux backend selection and frozen run-start capability facts, preserve visible non-focus-stealing surface contracts with live cmux proof explicitly pending when unavailable, implement the deterministic minimum shareable-run validator and real machine-readable CLI, sync module resources, add adversarial positive/negative tests, and leave an exact handoff. Do not commit, publish, edit docs/v2, or alter unrelated user work."
+    depends-on: []
+    default_tier: powerful
+    capability_scope: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+coverage_flags:
+  - "The independent plugin-architect reviewer is approved in proposal v2 but is not a worker; it runs after this implementation lane through the review gate."
+  - "Live cmux proof remains a named external-environment boundary until a cmux session is available."
+  - "Bootstrap degradation: the current tmux transport refuses project definition_ref injection before pane creation, so this lane launches as the approved named tooling-engineer with its complete scope embedded in the prompt; closing that transport declaration/forwarding gap is part of W4 completion."
+  - "Continuation run supersedes run-20260811-000117-run-identity-and-dispatch, which a redundant spawned orchestrator closed while its worker was still active. The continuation kills that orchestrator pane immediately after launcher creation and preserves the failed run as evidence."

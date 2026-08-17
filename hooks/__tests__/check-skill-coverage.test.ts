@@ -203,6 +203,31 @@ describe("check-skill-coverage.sh — runtime template-coverage check", () => {
       expect(stdout.trim()).toBe("");
     });
 
+    it("lets a Codex-enriched exact approval reach the model on the real shell path", () => {
+      seedDriftingRun();
+      const prompt = `
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request.
+# In app browser:
+- Current URL: file:///tmp/report.html
+</in-app-browser-context>
+
+## My request:
+approve
+`;
+      const { exitCode, stdout, stderr } = runScript(prompt, { GUILD_CWD: workRoot });
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(stdout) as {
+        decision?: string;
+        hookSpecificOutput?: { additionalContext?: string };
+      };
+      expect(parsed.decision).toBeUndefined();
+      expect(parsed.hookSpecificOutput?.additionalContext).toContain(
+        "[GUILD LIFECYCLE GATE]",
+      );
+      expect(stderr).not.toContain("[GUILD LIFECYCLE GATE]");
+    });
+
     it("honors the session-wide env override", () => {
       seedDriftingRun();
       const { exitCode, stdout } = runScript("keep going", {

@@ -93,6 +93,7 @@ import {
   specialistProfileFromAgentFrontmatter,
   specialistTypeFromTemplateFrontmatter,
 } from "../core/contracts/specialist-identity";
+import { applyResolverModeAdvanceOnApproval } from "../config-reconcile";
 import { parseFrontmatter } from "../frontmatter";
 import { AUGMENTING_AGENT_IDS } from "../roster";
 
@@ -102,6 +103,12 @@ import {
   readCatalogEntry,
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
+import { readCompatibilityAsset } from "./compatibility-loader";
+import {
+  appendReceipt,
+  makeReceiptInput,
+  type ReceiptAppendOutcome,
+} from "../../../src/modules/telemetry";
 
 /** The catalog envelope key set, for the nested-object snapshot (CODEX #10). */
 const CATALOG_KEYS = [
@@ -791,6 +798,47 @@ export function readAdoptionManifest(projectRoot: string): AdoptionManifestV1 | 
   }
 }
 
+/** Commit a validated manifest tip into the run's independently scanned journal. */
+export function commitAdoptionManifest(
+  projectRoot: string,
+  manifest: AdoptionManifestV1,
+  eventName: "migration.cutover" | "migration.rollback",
+): ReceiptAppendOutcome | null {
+  const commitment = manifestCommitment(manifest);
+  const last = manifest.entries[manifest.entries.length - 1];
+  if (!commitment.ok || commitment.digest === null || last === undefined) return null;
+  const runRoot = path.join(path.resolve(projectRoot), ".guild", "runs", last.run_id, "receipts");
+  const operation = `adoption-manifest:${manifest.entries.length}`;
+  return appendReceipt(
+    { journal: path.join(runRoot, "journal.jsonl"), checkpoint: path.join(runRoot, "checkpoint.json") },
+    makeReceiptInput({
+      run_id: last.run_id,
+      operation_id: operation,
+      correlation_id: operation,
+      event_id: `${eventName}:${manifest.entries.length}:${commitment.digest.slice(0, 12)}`,
+      causation_id: null,
+      scenario_id: "PCL-03",
+      event_name: eventName,
+      outcome_type: "guild.migration_outcome.v1",
+      disposition: "succeeded",
+      observation_state: "checked_clean",
+      input_hash: manifest.entries.length > 1 ? (manifest.entries[manifest.entries.length - 2].prev_digest ?? "empty") : "empty",
+      output_hash: commitment.digest,
+      terminal: true,
+      recorded_at: last.adopted_at,
+      observed_at: last.adopted_at,
+      versions: {
+        host_id: "local",
+        host_version: "unknown",
+        runtime_version: "2.6.0",
+        source_version: manifest.schema_version,
+        contract_version: "guild.observability.v1",
+      },
+      affected_event_range: null,
+    }),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The adoption plan
 // ---------------------------------------------------------------------------
@@ -832,6 +880,14 @@ export type AdoptionApplyOutcome =
       readonly entries_appended: number;
       /** The manifest's external commitment AFTER the append. */
       readonly manifest_digest: string;
+      /**
+       * cap-loc-D04: the resolver-mode auto-advance outcome for a REAL apply.
+       * Absent on `dryRun` (a dry run writes nothing, config included). The
+       * advance runs only after the adoption committed durably, so `reason`
+       * reports (never refuses) — an already-applied migration is not failed
+       * retroactively by its config side-effect.
+       */
+      readonly resolver_advance?: { readonly advanced: boolean; readonly reason: string };
     }
   | { readonly status: "refused"; readonly reason: string };
 
@@ -1315,6 +1371,37 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
     };
   }
 
+  // Every shipped byte read that powers a real migration goes through the sole
+  // compatibility loader, which appends the MH-06 usage receipt before mutation.
+  const compatibilityCatalog = buildCompatibilityCatalog({
+    pluginRoot: pRoot,
+    deprecation: "deprecated",
+    deprecatedBy: "cap-loc-D03",
+  });
+  if (!compatibilityCatalog.census_matches) {
+    return { status: "refused", reason: "compatibility catalog census is incomplete" };
+  }
+  for (const entry of pendingEntries.filter((candidate) => candidate.reason === "migrated")) {
+    const catalogEntry = compatibilityCatalog.entries.find((candidate) =>
+      candidate.id === entry.from.id &&
+      candidate.kind === (entry.kind === "agent" ? "shipped_template" : "shipped_domain_skill")
+    );
+    if (!catalogEntry) return { status: "refused", reason: `no catalog entry for ${entry.kind} ${entry.from.id}` };
+    const loaded = readCompatibilityAsset({
+      pluginRoot: pRoot,
+      projectRoot: projRoot,
+      entry: catalogEntry,
+      mode: "shadow",
+      intent: "mint",
+      synthetic: false,
+      specialistId: entry.kind === "agent" ? entry.to?.id ?? null : null,
+      runId,
+      operationId: `adoption-${entry.kind}-${entry.from.id}`,
+      recordedAt: adoptedAt,
+    });
+    if (loaded.status !== "loaded") return { status: "refused", reason: `compatibility read was not durably instrumented: ${loaded.detail}` };
+  }
+
   // ── Write. Every POLICY check has passed; what remains can still fail on I/O. ──
   //
   // CODEX #3: this loop was unguarded, so a failing `mkdirSync` (e.g. a regular
@@ -1324,6 +1411,7 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
   // "refuses rather than partially applies". Every write is now undone on failure
   // and the whole call reports `refused`.
   const done: PlannedWrite[] = [];
+  const priorManifestBytes = fs.existsSync(manifestAbs) ? fs.readFileSync(manifestAbs) : null;
   try {
     for (const w of writes) {
       // CODEX #1 (CRITICAL): `readRegularFile` returns null for a SYMLINK, so the
@@ -1350,6 +1438,10 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
     }
     fs.mkdirSync(path.dirname(manifestAbs), { recursive: true });
     fs.writeFileSync(manifestAbs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
+    const receipt = pendingEntries.length === 0 ? undefined : commitAdoptionManifest(projRoot, validated, "migration.cutover");
+    if (pendingEntries.length > 0 && (receipt === null || receipt?.durable !== true || receipt.disposition !== "succeeded")) {
+      throw new Error(`manifest commitment was not durable${receipt?.failure ? `: ${receipt.failure.message}` : ""}`);
+    }
   } catch (err) {
     // Undo, newest first. Only files this call CREATED are removed — `preExisting`
     // was captured during planning, so a re-run over an already-adopted tree does
@@ -1362,10 +1454,35 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
         /* best effort: the reported refusal already tells the operator to check the tree */
       }
     }
+    try {
+      if (priorManifestBytes === null) fs.rmSync(manifestAbs, { force: true });
+      else fs.writeFileSync(manifestAbs, priorManifestBytes);
+    } catch {
+      /* the refusal names the failed transaction; the operator must inspect an un-restorable tree */
+    }
     return {
       status: "refused",
       reason: `write failed and was rolled back: ${(err as Error).message}`,
     };
+  }
+
+  // cap-loc-D04 / FIC45-A4-B1: the approved plan is now DURABLY applied — this is
+  // the production approval transition, so the resolver-mode auto-advance fires
+  // here and nowhere else, routed through the contract's single advance path
+  // (`advanceResolverModeOnApproval` behind `applyResolverModeAdvanceOnApproval`).
+  // Gated on entries actually appended: a plan that adopted nothing approved no
+  // proposal, and must not move the project up the ladder. Reported, never thrown:
+  // the adoption above is already committed.
+  let resolverAdvance: { advanced: boolean; reason: string };
+  if (pendingEntries.length === 0) {
+    resolverAdvance = { advanced: false, reason: "no_entries_applied" };
+  } else {
+    try {
+      const adv = applyResolverModeAdvanceOnApproval({ cwd: projRoot, now: adoptedAt });
+      resolverAdvance = { advanced: adv.advanced, reason: adv.reason };
+    } catch (err) {
+      resolverAdvance = { advanced: false, reason: `advance_failed: ${(err as Error).message}` };
+    }
   }
 
   return {
@@ -1376,6 +1493,7 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
     undecided: Object.freeze(undecidedIds()),
     entries_appended: pendingEntries.length,
     manifest_digest: commitment,
+    resolver_advance: resolverAdvance,
   };
 }
 
@@ -1789,10 +1907,20 @@ export function rollbackAdoption(opts: unknown): AdoptionRollbackOutcome {
 
   if (!dryRun) {
     const manifestAbs = path.join(projRoot, ADOPTION_MANIFEST_RELPATH);
+    const priorManifestBytes = fs.readFileSync(manifestAbs);
     try {
       fs.mkdirSync(path.dirname(manifestAbs), { recursive: true });
       fs.writeFileSync(manifestAbs, `${JSON.stringify(validated, null, 2)}\n`, "utf8");
+      const receipt = commitAdoptionManifest(projRoot, validated, "migration.rollback");
+      if (receipt === null || receipt.durable !== true || receipt.disposition !== "succeeded") {
+        fs.writeFileSync(manifestAbs, priorManifestBytes);
+        return {
+          status: "refused",
+          reason: `rollback manifest commitment was not durable${receipt?.failure ? `: ${receipt.failure.message}` : ""}; nothing was removed`,
+        };
+      }
     } catch (err) {
+      try { fs.writeFileSync(manifestAbs, priorManifestBytes); } catch { /* reported below */ }
       return {
         status: "refused",
         reason: `could not write ${ADOPTION_MANIFEST_RELPATH} (${(err as Error).message}); nothing was removed`,

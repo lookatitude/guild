@@ -80,5 +80,7 @@ sub-verb in the table above (`new|status|list|resume|update|archive|restore|clos
 applying the listed default gate, and owns all `.guild/initiatives/**` reads
 and writes. On `close`, the skill runs the deterministic D8 close-gate CLI
 (`scripts/initiative-gate.ts close-check`) and refuses to close on a non-zero
-exit — see `skills/meta/initiative/SKILL.md §close`. Unknown sub-verb ⇒ print
+exit. That verdict also checks every path under `close_gate.evidence` and every
+work-item `evidence_refs` list; a cited artifact that does not exist cannot pass
+close. See `skills/meta/initiative/SKILL.md §close`. Unknown sub-verb ⇒ print
 usage help, invoke no skill, write nothing.

@@ -37,6 +37,7 @@ import { scoreTier } from "../score-tier";
 import { planTeamRouting, type RoutableHost } from "../lib/host-router";
 import { buildCapability, writeHostCapability } from "../write-host-capability";
 import { writeBackScoredTier } from "../lib/write-back-scored-tier";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const LAUNCHER = path.resolve(__dirname, "..", "agent-team-launcher.ts");
 
@@ -172,6 +173,8 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     env["GUILD_DISPATCH_APPROVAL_OVERRIDE"] =
       "tier-threading fixture: no team-plan trail; approval verification is pinned separately";
 
+    const runId = "run-20260812-071100-tier-threading";
+    mintRunBinding({ root: repo, run_id: runId });
     const r = spawnSync(
       "npx",
       [
@@ -181,6 +184,8 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
         teamPath,
         "--cwd",
         repo,
+        "--run-id",
+        runId,
         "--agent-mode=team",
         "--dry-run",
         "--session-name",
@@ -195,10 +200,8 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     // 5. Read the run-state the production onDecision wrote. If the launcher
     //    dropped the scored tier, T1-route would carry "mid" here.
     const runsDir = path.join(repo, ".guild", "runs");
-    const runDirs = fs
-      .readdirSync(runsDir)
-      .filter((d) => fs.existsSync(path.join(runsDir, d, "run-state.json")));
-    expect(runDirs.length).toBe(1);
+    const runDirs = [runId].filter((d) => fs.existsSync(path.join(runsDir, d, "run-state.json")));
+    expect(runDirs).toEqual([runId]);
     const state = JSON.parse(
       fs.readFileSync(path.join(runsDir, runDirs[0], "run-state.json"), "utf8")
     ) as { lanes: Record<string, { host?: { tier?: string; model?: string; selected?: string } }> };

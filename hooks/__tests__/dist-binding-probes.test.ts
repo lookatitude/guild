@@ -39,6 +39,7 @@ const DIST_RUN_TRACE_START = path.resolve(__dirname, "../dist/run-trace-start.js
 const DIST_POST_TOOL_USE = path.resolve(__dirname, "../dist/post-tool-use.js");
 const DIST_TEAMMATE_IDLE = path.resolve(__dirname, "../agent-team/dist/teammate-idle.js");
 const DIST_RUN_TRACE_CLOSE = path.resolve(__dirname, "../dist/run-trace-close.js");
+const DIST_RUN_TRACE = path.resolve(__dirname, "../dist/run-trace.js");
 const SRC_RUN_TRACE_CLOSE = path.resolve(__dirname, "../run-trace-close.ts");
 
 const RUN_ID = "run-dist-probe";
@@ -56,6 +57,20 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+describe("compiled run-trace CLI entrypoint isolation", () => {
+  it("runs its own start command without executing an imported CLI main", () => {
+    expect(fs.existsSync(DIST_RUN_TRACE)).toBe(true);
+    const result = spawnSync(
+      process.execPath,
+      [DIST_RUN_TRACE, "start", "--cwd", root, "--initiative=dist-entrypoint"],
+      { encoding: "utf8", env: hermeticEnv({}) },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/^run-\d{8}-\d{6}-dist-entrypoint\s*$/);
+    expect(`${result.stdout}\n${result.stderr}`).not.toMatch(/build-inventory|unknown argument/i);
+  });
 });
 
 /** Hermetic base env: node's needs, minus every ambient GUILD_* key. */

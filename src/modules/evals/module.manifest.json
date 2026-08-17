@@ -13,7 +13,8 @@
       "lib/define-test-matrix",
       "lib/define-traceability",
       "lib/explore-schema",
-      "lib/routing-ab-contract"
+      "lib/routing-ab-contract",
+      "task-cell-policy-eval"
     ]
   }
 }

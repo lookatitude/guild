@@ -58,6 +58,124 @@ function sectionFor(html: string, dataset: string) {
   return section;
 }
 
+/*
+ * ── RR-2 anti-vacuity harness ────────────────────────────────────────────────
+ *
+ * An anti-vacuity mutation must be derived from THE DOCUMENT UNDER TEST, never
+ * transcribed into this file. A transcribed row rots the moment the spine
+ * legitimately evolves: the `.replace()` silently no-ops and the mutation stops
+ * exercising the rail. The only thing standing between that and a green-but-
+ * blind gate is `expect(mutated).not.toBe(realHtml)` — which is exactly what
+ * went red here (a stale `host-runtime` depends_on row and a stale
+ * `258 scripts</strong>` total), and the tempting "fix" is to re-transcribe the
+ * new literal and re-arm the same trap.
+ *
+ * So every real-document mutation below goes through `documentRow` /
+ * `documentCell`, which read the document's own bytes and THROW when the anchor
+ * does not resolve to exactly one row. Each mutation additionally proves:
+ *   (a) the mutation changed bytes,
+ *   (b) the unmutated document does NOT already carry the discrepancy, and
+ *   (c) the mutated document DOES carry it.
+ * (b)+(c) are a baseline-delta control, which stays valid even while an
+ * unrelated user-gated DRIFT sits in the same dataset (see the note on
+ * `baselineDiscrepancies`).
+ */
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The verbatim header row that anchors each real-document table. */
+const TABLE_HEADER: Record<string, string> = {
+  "dependency edges": "<tr><th>Module</th><th>kind</th><th>depends_on</th></tr>",
+  "reverse dependencies": "<tr><th>Module</th><th>depended on by</th><th>fan-in</th></tr>",
+  "owned inventory":
+    "<tr><th>Module</th><th>commands</th><th>skills</th><th>agents</th><th>hooks</th><th>mcp</th><th>scripts</th><th>prefixes</th></tr>",
+};
+
+/**
+ * Extract `moduleId`'s row VERBATIM from the `dataset` table of `html`.
+ * Throws (never returns a non-match) when the anchor is ambiguous or absent —
+ * a missing anchor must be a loud failure, not a silent no-op mutation.
+ */
+function documentRow(html: string, dataset: string, moduleId: string): string {
+  const header = TABLE_HEADER[dataset];
+  if (!header) throw new Error(`no header anchor registered for dataset ${dataset}`);
+  const headerAt = html.indexOf(header);
+  if (headerAt < 0) throw new Error(`[${dataset}] header row not found in the document`);
+  if (html.indexOf(header, headerAt + 1) >= 0) throw new Error(`[${dataset}] header row is ambiguous`);
+  const tableEnd = html.indexOf("</table>", headerAt);
+  if (tableEnd < 0) throw new Error(`[${dataset}] table is unterminated`);
+
+  const table = html.slice(headerAt, tableEnd);
+  const rows = table.match(new RegExp(`<tr><td>${escapeRegExp(moduleId)}</td>[\\s\\S]*?</tr>`, "g")) ?? [];
+  if (rows.length !== 1) {
+    throw new Error(`[${dataset}] expected exactly one row for ${moduleId}; found ${rows.length}`);
+  }
+  return rows[0];
+}
+
+/** The inner HTML of every `<td>` in a row, in document order. */
+function rowCells(row: string): string[] {
+  return [...row.matchAll(/<td>([\s\S]*?)<\/td>/g)].map((match) => match[1]);
+}
+
+/** The inner HTML of cell `index` of a row (0 = the module-id cell). */
+function documentCell(row: string, index: number): string {
+  const cells = rowCells(row);
+  if (index >= cells.length) throw new Error(`row has ${cells.length} cells; no cell ${index}: ${row}`);
+  return cells[index];
+}
+
+/** Rewrite cell `index` of a row, asserting the row actually changed. */
+function withCell(row: string, index: number, next: string): string {
+  let seen = -1;
+  const mutated = row.replace(/<td>([\s\S]*?)<\/td>/g, (whole, inner: string) => {
+    seen += 1;
+    return seen === index ? `<td>${next}</td>` : whole;
+  });
+  if (seen < index) throw new Error(`row has ${seen + 1} cells; no cell ${index}: ${row}`);
+  if (mutated === row) throw new Error(`cell ${index} rewrite did not change the row: ${row}`);
+  return mutated;
+}
+
+/** Splice a document-derived row back into the document, asserting bytes changed. */
+function withRow(html: string, original: string, mutatedRow: string): string {
+  if (mutatedRow === original) throw new Error("mutated row is byte-identical to the original row");
+  const mutated = html.replace(original, mutatedRow);
+  if (mutated === html) throw new Error("row splice did not change the document");
+  return mutated;
+}
+
+/** The integer a document cell renders, tolerating the `<strong>` emphasis the doc uses. */
+function cellInteger(cell: string): number {
+  const text = cell.replace(/<[^>]+>/g, "").trim();
+  if (!/^\d+$/.test(text)) throw new Error(`cell is not an integer: ${JSON.stringify(cell)}`);
+  return Number(text);
+}
+
+/**
+ * Discrepancies the UNMUTATED document already reports for `dataset`.
+ *
+ * The spine currently carries a user-gated DRIFT (the document says 287 scripts
+ * / dispatch 9 / telemetry 9 where the owned manifests + `guild.inventory.json`
+ * — the authority the checker names — derive 285/8/8). That baseline is user
+ * WIP and is NOT this suite's to reconcile or to pin. So instead of asserting a
+ * blanket `OK` on datasets that carry it, each mutation asserts its own
+ * discrepancy is ABSENT from this baseline and PRESENT after the mutation. That
+ * control cannot be satisfied by a no-op mutation, and it does not go red when
+ * the user lands (or reverts) the WIP.
+ */
+function baselineDiscrepancies(html: string, dataset: string): string {
+  return sectionFor(html, dataset).discrepancies.join("\n");
+}
+
+/** Assert a mutation introduced a NEW discrepancy the untouched document did not have. */
+function expectNewDiscrepancy(original: string, mutated: string, dataset: string, pattern: RegExp): void {
+  expect(baselineDiscrepancies(original, dataset)).not.toMatch(pattern);
+  const section = sectionFor(mutated, dataset);
+  expect(section.status).toBe("DRIFT");
+  expect(section.discrepancies.join("\n")).toMatch(pattern);
+}
+
 describe("check:docs-architecture", () => {
   it("derives the real 31-module architecture spine and exact kind counts", () => {
     const derived = deriveSpineTables(pluginRoot);
@@ -91,6 +209,9 @@ describe("check:docs-architecture", () => {
         ["docs/v2/architecture/README.html", /31 implementation modules/, /documents\.html/, /eight tightly-coupled sibling pairs/],
         ["docs/v2/architecture/modules/documents.html", /guild\.document\.v1/, /Record-only projection/, /plugin\/src\/modules\/documents\/index\.ts/],
         ["docs/v2/conformance-and-rollback.html", /Compatibility window/, /Host adapter/, /Transport/, /Consumer/, /Receipt journal/],
+        ["docs/v2/conformance-and-rollback.html", /Stable-channel scope/, /v2\.5\.0/, /31 scenarios and 5 are implemented/],
+        ["docs/v2/distribution.html", /Stable-channel scope/, /v2\.5\.0/, /31 scenarios and 5 are implemented/],
+        ["docs/v2/observability.html", /Stable-channel scope/, /v2\.5\.0/, /31 scenarios and 5 are implemented/],
         [".guild/wiki/decisions/multi-host-runtime-convergence.md", /status: accepted/, /Implementation shipped through MH-09/, /D8 cumulative rail/],
         ["website/src/content/docs/architecture.mdx", /31 ownership-scoped modules/, /module: 'documents'/, /Release Conformance And Rollback/],
         ["website/src/content/docs/migration-v1-to-v2.mdx", /Compatibility Window And Independent Rollback/, /Adapter rollback/, /Transport rollback/, /Consumer rollback/],
@@ -100,6 +221,9 @@ describe("check:docs-architecture", () => {
         expect(fs.existsSync(absolutePath)).toBe(true);
         const body = fs.readFileSync(absolutePath, "utf8");
         for (const pattern of patterns) expect(body).toMatch(pattern);
+        if (relativePath.startsWith("docs/v2/") && /Stable-channel scope/.test(body)) {
+          expect(body).not.toMatch(/not in a stable release|origin\/main contains none|2\.5\.0-beta\.1/);
+        }
       }
     });
 
@@ -112,15 +236,21 @@ describe("check:docs-architecture", () => {
     });
 
     it("ANTI-VACUITY edges: dropping a dependency reports DRIFT for context", () => {
-      const mutated = realHtml.replace(
-        "<td>config, knowledge, learning, security, state, telemetry</td>",
-        "<td>config, knowledge, learning, security, state</td>",
-      );
+      // Derived from the document: take context's own depends_on list and drop its
+      // last entry, whatever that list currently is.
+      const row = documentRow(realHtml, "dependency edges", "context");
+      const dependsOn = documentCell(row, 2).split(",").map((entry) => entry.trim());
+      expect(dependsOn.length).toBeGreaterThan(1);
+      const dropped = dependsOn[dependsOn.length - 1];
+      const mutated = withRow(realHtml, row, withCell(row, 2, dependsOn.slice(0, -1).join(", ")));
       expect(mutated).not.toBe(realHtml);
 
-      const section = sectionFor(mutated, "dependency edges");
-      expect(section.status).toBe("DRIFT");
-      expect(section.discrepancies.join("\n")).toMatch(/context.*DRIFT|context.*expected/i);
+      expectNewDiscrepancy(
+        realHtml,
+        mutated,
+        "dependency edges",
+        new RegExp(`module context: depends_on DRIFT;.*${escapeRegExp(dropped)}`, "i"),
+      );
     });
 
     it("ANTI-VACUITY edges: a dependency plus none is parsed as real content and reports DRIFT", () => {
@@ -148,52 +278,72 @@ describe("check:docs-architecture", () => {
     });
 
     it("ANTI-VACUITY fan-in: a duplicated dependant reports DRIFT and names the duplicate", () => {
-      const mutated = realHtml.replace(
-        "<td>capability, config, dispatch, distribution, lifecycle, prompting, review, security</td>",
-        "<td>capability, capability, config, dispatch, distribution, lifecycle, prompting, review, security</td>",
-      );
+      // Derived from the document: duplicate host-runtime's own first dependant.
+      const row = documentRow(realHtml, "reverse dependencies", "host-runtime");
+      const dependants = documentCell(row, 1).split(",").map((entry) => entry.trim());
+      expect(dependants.length).toBeGreaterThan(0);
+      const duplicated = dependants[0];
+      const mutated = withRow(realHtml, row, withCell(row, 1, [duplicated, ...dependants].join(", ")));
       expect(mutated).not.toBe(realHtml);
 
-      const section = sectionFor(mutated, "reverse dependencies");
-      expect(section.status).toBe("DRIFT");
-      expect(section.discrepancies.join("\n")).toMatch(/host-runtime.*duplicate.*capability/i);
+      expectNewDiscrepancy(
+        realHtml,
+        mutated,
+        "reverse dependencies",
+        new RegExp(`host-runtime.*duplicate.*${escapeRegExp(duplicated)}`, "i"),
+      );
     });
 
     it("ANTI-VACUITY identifiers: an em dash in a module id reports DRIFT", () => {
-      const mutated = realHtml.replace(
-        "<tr><td>host-runtime</td><td>substrate</td><td>config, lifecycle, state</td></tr>",
-        "<tr><td>host—runtime</td><td>substrate</td><td>config, lifecycle, state</td></tr>",
-      );
+      // F-1 regression guard. This mutation used to transcribe host-runtime's whole
+      // edge row (`config, lifecycle, state`); the module gained `kernel`, the
+      // literal stopped matching, and the mutation silently became a no-op. Derive
+      // the row from the document so the hyphen->em-dash swap always lands.
+      const row = documentRow(realHtml, "dependency edges", "host-runtime");
+      const mutated = withRow(realHtml, row, withCell(row, 0, "host—runtime"));
       expect(mutated).not.toBe(realHtml);
 
       const section = sectionFor(mutated, "dependency edges");
+      expect(baselineDiscrepancies(realHtml, "dependency edges")).toBe("");
       expect(section.status).toBe("DRIFT");
       expect(section.discrepancies.join("\n")).toMatch(/host-runtime.*missing row/i);
       expect(section.discrepancies.join("\n")).toMatch(/host—runtime.*extra row/i);
     });
 
-    it("ANTI-VACUITY fan-in: changing 8 to 9 reports DRIFT for host-runtime", () => {
-      const mutated = realHtml.replace(
-        /(<tr><td>host-runtime<\/td><td>[\s\S]*?<\/td><td>)8(<\/td><\/tr>)/,
-        "$19$2",
-      );
+    it("ANTI-VACUITY fan-in: bumping the rendered fan-in count reports DRIFT for host-runtime", () => {
+      // Was pinned to the literal `8`. Derive the documented count instead, so the
+      // mutation still bites the day host-runtime gains or loses a dependant.
+      const row = documentRow(realHtml, "reverse dependencies", "host-runtime");
+      const documented = cellInteger(documentCell(row, 2));
+      const bogus = documented + 1;
+      const mutated = withRow(realHtml, row, withCell(row, 2, String(bogus)));
       expect(mutated).not.toBe(realHtml);
 
-      const section = sectionFor(mutated, "reverse dependencies");
-      expect(section.status).toBe("DRIFT");
-      expect(section.discrepancies.join("\n")).toMatch(/host-runtime.*9/);
+      expectNewDiscrepancy(
+        realHtml,
+        mutated,
+        "reverse dependencies",
+        new RegExp(`module host-runtime: fan-in DRIFT; expected \\d+; found ${bogus}`),
+      );
     });
 
     it("ANTI-VACUITY owned inventory: changing a count reports DRIFT for config", () => {
-      const mutated = realHtml.replace(
-        "<tr><td>config</td><td>1</td><td></td><td></td><td></td><td></td><td>13</td>",
-        "<tr><td>config</td><td>1</td><td></td><td></td><td></td><td></td><td>12</td>",
-      );
+      // Was pinned to config's whole rendered row including its `13` scripts count —
+      // one new config script and the mutation silently stops mutating. Derive the
+      // documented count and perturb it. Cell 6 is `scripts` (module, commands,
+      // skills, agents, hooks, mcp, scripts, prefixes).
+      const row = documentRow(realHtml, "owned inventory", "config");
+      const documented = cellInteger(documentCell(row, 6));
+      const bogus = documented + 1;
+      const mutated = withRow(realHtml, row, withCell(row, 6, String(bogus)));
       expect(mutated).not.toBe(realHtml);
 
-      const section = sectionFor(mutated, "owned inventory");
-      expect(section.status).toBe("DRIFT");
-      expect(section.discrepancies.join("\n")).toMatch(/config.*scripts.*12/);
+      expectNewDiscrepancy(
+        realHtml,
+        mutated,
+        "owned inventory",
+        new RegExp(`module config: scripts DRIFT; expected \\d+; found ${bogus}`),
+      );
     });
 
     it("ANTI-VACUITY prefixes: residual text outside code reports DRIFT for docs-sync", () => {
@@ -209,17 +359,59 @@ describe("check:docs-architecture", () => {
     });
 
     it("ANTI-VACUITY totals: changing a grand total reports DRIFT for inventory scripts", () => {
-      const mutated = realHtml.replace("258 scripts</strong>", "257 scripts</strong>");
+      // F-2 regression guard. The SOURCE literal was pinned to `258 scripts` while
+      // the document had long since moved on, so the replace no-opped. Read the
+      // documented total out of the document and perturb it to a value that is
+      // neither what the document says nor what the manifests derive.
+      const totalsMatch = realHtml.match(/(\d+) scripts<\/strong>/);
+      expect(totalsMatch).not.toBeNull();
+      const documented = Number(totalsMatch![1]);
+      const expectedScripts = deriveSpineTables(pluginRoot).totals.scripts;
+      const bogus = Math.max(documented, expectedScripts) + 1;
+
+      const mutated = realHtml.replace(`${documented} scripts</strong>`, `${bogus} scripts</strong>`);
       expect(mutated).not.toBe(realHtml);
 
-      // The derived script total tracks the live inventory, so assert against the
-      // derivation rather than pinning a number that every new script would break.
-      const expectedScripts = deriveSpineTables(pluginRoot).totals.scripts;
-      const section = sectionFor(mutated, "grand totals");
-      expect(section.status).toBe("DRIFT");
-      expect(section.discrepancies.join("\n")).toMatch(
-        new RegExp(`scripts.*expected ${expectedScripts}.*found 257`, "i"),
+      expectNewDiscrepancy(
+        realHtml,
+        mutated,
+        "grand totals",
+        new RegExp(`scripts: expected ${expectedScripts}; found ${bogus}`, "i"),
       );
+    });
+
+    // ── RR-2 planted controls: the harness itself must not be able to go vacuous ──
+    //
+    // F-1/F-2's root cause was a mutation built from a stale transcribed literal.
+    // These controls prove the replacement machinery FAILS LOUDLY on exactly that
+    // shape instead of degrading into a no-op that reports a clean document.
+
+    it("PLANTED CONTROL: a stale/absent row anchor throws instead of silently no-opping", () => {
+      expect(() => documentRow(realHtml, "dependency edges", "no-such-module")).toThrow(
+        /expected exactly one row for no-such-module; found 0/i,
+      );
+      // The F-1 shape: a real module whose transcribed row text has gone stale.
+      expect(() => withRow(realHtml, "<tr><td>host-runtime</td><td>substrate</td><td>config, lifecycle, state</td></tr>", "<tr><td>host—runtime</td></tr>")).toThrow(
+        /row splice did not change the document/i,
+      );
+      // The F-2 shape: a mutation whose replacement equals the original.
+      const row = documentRow(realHtml, "dependency edges", "host-runtime");
+      expect(() => withRow(realHtml, row, row)).toThrow(/byte-identical/i);
+      expect(() => withCell(row, 0, documentCell(row, 0))).toThrow(/did not change the row/i);
+    });
+
+    it("PLANTED CONTROL: the rail reports the untouched document clean on every dataset it derives", () => {
+      // Datasets whose baseline is clean must be PROVED clean, so a DRIFT after a
+      // mutation is attributable to the mutation and nothing else.
+      for (const dataset of ["kind counts", "dependency edges", "reverse dependencies"]) {
+        const section = sectionFor(realHtml, dataset);
+        expect({ dataset, status: section.status, discrepancies: section.discrepancies }).toEqual({
+          dataset,
+          status: "OK",
+          discrepancies: [],
+        });
+      }
+      expect(parseSpineDoc(realHtml).structuralErrors).toEqual([]);
     });
 
     it("ANTI-VACUITY structural: deleting a whole expected table is a hard failure", () => {
@@ -408,7 +600,12 @@ describe("check:docs-architecture", () => {
     });
 
     it("ANTI-VACUITY: a kind bullet carrying a second visible count is rejected", () => {
-      const mutated = realHtml.replace("<strong>substrate</strong> (13)", "<strong>substrate</strong> (13) (999)");
+      // Derive the rendered bullet rather than pinning `(13)` — a kind-count change
+      // would otherwise turn this mutation into a no-op.
+      const substrate = deriveSpineTables(pluginRoot).kindCounts.substrate;
+      const bullet = `<strong>substrate</strong> (${substrate})`;
+      expect(realHtml).toContain(bullet);
+      const mutated = realHtml.replace(bullet, `${bullet} (999)`);
       expect(mutated).not.toBe(realHtml);
 
       expect(diffSpine(deriveSpineTables(pluginRoot), parseSpineDoc(mutated)).ok).toBe(false);

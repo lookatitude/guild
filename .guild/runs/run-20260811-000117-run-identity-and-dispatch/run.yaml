@@ -1,0 +1,31 @@
+schema_version: guild.run.v1
+run_id: run-20260811-000117-run-identity-and-dispatch
+command: /guild:build
+arguments: {}
+cwd: /Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence
+target_kind: existing_guild_project
+workspace:
+  is_workspace: false
+  root: /Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence
+project: project
+host:
+  requested: auto
+  resolved: unknown
+model_tier_policy: default (full run)
+started_at: 2026-08-11T00:01:17Z
+ignore_policy: default
+scan_policy: default
+initiative_attachment: run-identity-and-dispatch
+phase: build
+run_class: full
+gates: {}
+status: closed
+phases_log:
+  - phase: build
+    at: 2026-08-11T00:01:17Z
+settings_ref:
+  path: resolved-settings.json
+  schema_version: guild.resolved_settings.v1
+  effective_backend: team
+  review: cross
+  recommended_provider: null

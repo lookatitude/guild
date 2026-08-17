@@ -17,7 +17,7 @@ name: branch-policy
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
     branches: [main]
 
 permissions:
@@ -47,5 +47,30 @@ jobs:
           echo "main is the STABLE release channel — it only receives release/vX.Y.Z branches (cut from next)." >&2
           echo "Retarget this PR to the integration branch instead:" >&2
           echo "  gh pr edit ${{ github.event.pull_request.number }} --base next" >&2
-          echo "Release flow: merge features into next → test the beta channel → cut release/vX.Y.Z from next (bump versions + notes) → PR release/vX.Y.Z into main → release.yml tags + publishes on merge → merge main back into next." >&2
+          echo "Release flow: merge features into next → test beta → cut release/vX.Y.Z → PR into main → publish → advance next to the release point by fast-forward when ancestry allows, otherwise by a release-delta PR. Never merge main back into next." >&2
           exit 1
+
+      - name: Checkout prospective release merge with full history
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install scripts dependencies
+        run: npm --prefix scripts ci --prefer-offline
+
+      - name: Require hash-bound stable-promotion evidence
+        env:
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          CANDIDATE_HEAD: ${{ github.sha }}
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          npm --prefix scripts run check:channel-integrity -- promotion \
+            --release-branch "$RELEASE_BRANCH" \
+            --head "$CANDIDATE_HEAD" \
+            --labels-json "$LABELS_JSON"

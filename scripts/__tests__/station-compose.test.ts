@@ -23,7 +23,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { validateTeamPlanV1 } from "../../src/modules/teams/workflows/station-composer";
+import { casVerify, publish, readBusLog } from "../../src/modules/communication";
+import { STATIONS, validateTeamPlanV1 } from "../../src/modules/teams/workflows/station-composer";
 import {
   STATION_SIGNALS_SCHEMA,
   emptyStationSignalsV1,
@@ -449,13 +450,66 @@ const VALID_RESULT = {
 };
 
 describe("writeTeamPlan / readTeamPlan", () => {
+  test("all lifecycle stations publish and consume the same typed bus contract", () => {
+    const tmp = mkTmp();
+    for (const station of STATIONS) {
+      writeTeamPlan(tmp, "run-all-stations", { ...VALID_PLAN, station });
+      writeTeamResult(tmp, "run-all-stations", {
+        ...VALID_RESULT,
+        station,
+        team_plan_ref: `.guild/runs/run-all-stations/team-plan/${station}.json`,
+        lanes: [{ role: `${station}-lead`, instance_id: `${station}-instance`, handoff_ref: null, acceptance_ref: null }],
+      });
+      expect(readTeamPlan(tmp, "run-all-stations", station)?.station).toBe(station);
+      expect(readTeamResult(tmp, "run-all-stations", station)?.station).toBe(station);
+    }
+    expect(readBusLog(path.join(tmp, ".guild", "runs", "run-all-stations"))).toHaveLength(STATIONS.length * 2);
+  });
+
   test("round-trips a valid plan through the canonical path", () => {
     const tmp = mkTmp();
     const p = writeTeamPlan(tmp, "run-a", VALID_PLAN);
     expect(p).toBe(path.join(tmp, ".guild", "runs", "run-a", "team-plan", "build.json"));
+    const bytes = fs.readFileSync(p);
+    const events = readBusLog(path.join(tmp, ".guild", "runs", "run-a"));
+    const event = events.find((item) => item.topic === "context/station/build/team-plan");
+    expect(event).toMatchObject({ path: ".guild/runs/run-a/team-plan/build.json" });
+    expect(event?.sha256 && casVerify(path.join(tmp, ".guild", "runs", "run-a"), event.sha256, bytes)).toBe(true);
     const back = readTeamPlan(tmp, "run-a", "build");
     expect(back).not.toBeNull();
     expect(back!.station).toBe("build");
+  });
+
+  test("fails closed when a valid-looking plan drifts from its bus/CAS event", () => {
+    const tmp = mkTmp();
+    const p = writeTeamPlan(tmp, "run-a", VALID_PLAN);
+    fs.writeFileSync(p, JSON.stringify({ ...VALID_PLAN, advisory_panel: [] }, null, 2) + "\n");
+    expect(readTeamPlan(tmp, "run-a", "build")).toBeNull();
+  });
+
+  test("fails closed when the canonical plan path is replaced with a symlink", () => {
+    const tmp = mkTmp();
+    const p = writeTeamPlan(tmp, "run-a", VALID_PLAN);
+    const outside = path.join(mkTmp(), "build.json");
+    fs.writeFileSync(outside, fs.readFileSync(p));
+    fs.unlinkSync(p);
+    fs.symlinkSync(outside, p);
+    expect(readTeamPlan(tmp, "run-a", "build")).toBeNull();
+  });
+
+  test("fails closed after the latest matching bus event retracts the plan", () => {
+    const tmp = mkTmp();
+    writeTeamPlan(tmp, "run-a", VALID_PLAN);
+    const runDir = path.join(tmp, ".guild", "runs", "run-a");
+    publish(runDir, {
+      runId: "run-a",
+      topic: "context/station/build/team-plan",
+      event: "artifact.retracted",
+      artifactPath: ".guild/runs/run-a/team-plan/build.json",
+      publisher: { host_id: "test", role: "reviewer" },
+      now: () => "2026-08-10T20:00:00.000Z",
+    });
+    expect(readTeamPlan(tmp, "run-a", "build")).toBeNull();
   });
 
   test("readTeamPlan returns null for a missing artifact", () => {
@@ -547,9 +601,19 @@ describe("writeTeamResult / readTeamResult", () => {
     const tmp = mkTmp();
     const p = writeTeamResult(tmp, "run-b", VALID_RESULT);
     expect(p).toBe(path.join(tmp, ".guild", "runs", "run-b", "team-result", "build.json"));
+    const event = readBusLog(path.join(tmp, ".guild", "runs", "run-b"))
+      .find((item) => item.topic === "handoff/station/build/team-result");
+    expect(event).toMatchObject({ path: ".guild/runs/run-b/team-result/build.json" });
     const back = readTeamResult(tmp, "run-b", "build");
     expect(back).not.toBeNull();
     expect(back!.lanes.map((l) => l.instance_id)).toEqual(["inst-1", "inst-2"]);
+  });
+
+  test("fails closed when a valid result has no authoritative bus event", () => {
+    const tmp = mkTmp();
+    writeTeamResult(tmp, "run-b", VALID_RESULT);
+    fs.unlinkSync(path.join(tmp, ".guild", "runs", "run-b", "bus", "log.jsonl"));
+    expect(readTeamResult(tmp, "run-b", "build")).toBeNull();
   });
 
   test("fail-closed: refuses a result with duplicate instance_ids (D3 freshness)", () => {

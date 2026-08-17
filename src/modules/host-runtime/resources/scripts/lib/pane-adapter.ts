@@ -128,7 +128,7 @@ export interface AdapterOpts {
  * Antigravity / Pi panes too (the Claude adapter gets it via `paneCommand`). docs/v2 §08.
  */
 function taskAssignmentPathFor(spec: PaneSpec): string {
-  return `.guild/runs/${spec.runId}/tasks/${spec.specialist}.json`;
+  return spec.assignmentPath ?? `.guild/runs/${spec.runId}/tasks/${spec.specialist}.json`;
 }
 /** `export GUILD_TASK_ASSIGNMENT=…; ` fragment, or "" when no specialist is set. */
 function taskAssignmentExport(spec: PaneSpec): string {
@@ -139,6 +139,14 @@ function taskAssignmentExport(spec: PaneSpec): string {
 /** The `GUILD_TASK_ASSIGNMENT` entry for an adapter's env map, or {} when no specialist. */
 function taskAssignmentEnv(spec: PaneSpec): Record<string, string> {
   return spec.specialist ? { GUILD_TASK_ASSIGNMENT: taskAssignmentPathFor(spec) } : {};
+}
+function taskCellInstanceExport(spec: PaneSpec): string {
+  return spec.taskCellInstanceId
+    ? `export GUILD_TASK_CELL_INSTANCE_ID=${shellQuote(spec.taskCellInstanceId)}; `
+    : "";
+}
+function taskCellInstanceEnv(spec: PaneSpec): Record<string, string> {
+  return spec.taskCellInstanceId ? { GUILD_TASK_CELL_INSTANCE_ID: spec.taskCellInstanceId } : {};
 }
 
 // ── T6-R2-F5: the selected model reaches the real pane process ───────────────
@@ -1092,7 +1100,7 @@ export class CodexPaneAdapter implements PaneAdapter {
       producerMarkerExport() +
       taskFragment +
       specialistFragment +
-      taskAssignmentExport(spec) +
+      taskAssignmentExport(spec) + taskCellInstanceExport(spec) +
       scopeFragment +
       modelExport(spec) +
       `codex exec ${bypassFragment}${modelArg(spec, "-m")}${shellQuote(spec.prompt)}; ` +
@@ -1116,7 +1124,7 @@ export class CodexPaneAdapter implements PaneAdapter {
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
         : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 
@@ -1175,7 +1183,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       producerMarkerExport() +
-      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment +
       modelExport(spec) +
       `agy ${modelArg(spec, "--model")}${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -1191,7 +1199,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 
@@ -1248,7 +1256,7 @@ export class PiPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       producerMarkerExport() +
-      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment +
       modelExport(spec) +
       `pi ${modelArg(spec, "--model")}-p ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -1264,7 +1272,7 @@ export class PiPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 
@@ -1376,7 +1384,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       producerMarkerExport() +
-      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment +
       modelExport(spec) +
       `${argv}; ` +
       `exec $SHELL`
@@ -1392,7 +1400,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 

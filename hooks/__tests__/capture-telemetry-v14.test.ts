@@ -140,6 +140,15 @@ describe("capture-telemetry.ts — canonical log routing (HK-01/HK-02)", () => {
       expect(ev!["tool"]).toBe("");
     });
 
+    it("writes a redacted analysis-v2 prompt twin without an inline raw prompt", () => {
+      run(readFixture("user-prompt-submit.json"), baseEnv());
+      const lines = readLines(canonicalFile);
+      const ev = lines.find((line) => line["schema_version"] === "guild.trace.analysis.v2");
+      expect(ev?.["event_class"]).toBe("prompt_received");
+      expect(typeof ev?.["prompt_hash"]).toBe("string");
+      expect(ev?.["prompt"]).toBeUndefined();
+    });
+
     it("also mirrors UserPromptSubmit to events.ndjson", () => {
       run(readFixture("user-prompt-submit.json"), baseEnv());
       const lines = readLines(legacyFile);
@@ -266,16 +275,17 @@ describe("capture-telemetry.ts — canonical log routing (HK-01/HK-02)", () => {
       expect(fs.existsSync(legacyFile)).toBe(true);
     });
 
-    it("both files accumulate identically across multiple events", () => {
+    it("keeps the legacy hook mirrors ordered while semantic twins stay canonical-only", () => {
       run(readFixture("subagent-stop.json"), baseEnv());
       run(readFixture("user-prompt-submit.json"), baseEnv());
       const canonical = readLines(canonicalFile);
       const legacy = readLines(legacyFile);
-      expect(canonical.length).toBe(2);
+      expect(canonical.length).toBe(4);
       expect(legacy.length).toBe(2);
+      const hookMirrors = canonical.filter((event) => typeof event["event"] === "string");
       // Events appear in same order in both files
-      expect(canonical[0]!["event"]).toBe(legacy[0]!["event"]);
-      expect(canonical[1]!["event"]).toBe(legacy[1]!["event"]);
+      expect(hookMirrors[0]!["event"]).toBe(legacy[0]!["event"]);
+      expect(hookMirrors[1]!["event"]).toBe(legacy[1]!["event"]);
     });
   });
 });

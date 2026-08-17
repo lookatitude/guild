@@ -1,0 +1,12 @@
+{
+  "schema_version": "guild.run.provenance.v1",
+  "run_id": "run-20260810-052306-pcl01-evidence-gate",
+  "author_host": "codex-local",
+  "reviewer_host": "claude-code",
+  "independence": "strong",
+  "workspace_root": "/Users/miguelp/Projects/guild",
+  "project_root": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence",
+  "base_commit": "e3ce3387f209ff95b177554c4aa14559488725a8",
+  "branch": "codex/full-implementation-convergence",
+  "generated_at": "2026-08-10T05:23:06Z"
+}

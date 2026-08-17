@@ -1200,6 +1200,12 @@ describe("receipt bridge", () => {
     expect(parsed.record!.provenance.source).toBe("imported");
   });
 
+  it("accepts the contract-named guild.handoff.v2 fence used by lane receipts", () => {
+    const namedFence = receipt().replace("```json", "```guild.handoff.v2");
+    expect(parseReceiptDocument(namedFence).status).toBe("parsed");
+    expect(decideFromReceiptDocument(namedFence).gate_signal).toBe("advance");
+  });
+
   it("yields an advance decision for a completed receipt", () => {
     const decision = decideFromReceiptDocument(receipt());
     expect(decision.authority).toBe("canonical_record");

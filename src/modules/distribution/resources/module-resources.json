@@ -43,7 +43,7 @@
       "id": "check-channel-integrity",
       "source_path": "scripts/check-channel-integrity.ts",
       "resource_path": "resources/scripts/check-channel-integrity.ts",
-      "sha256": "0378d766689d0eab6f3dc40ea34253e353ffc3ea10397960c82c96f1b8a6bffe"
+      "sha256": "624a57923660676f5f5fffcb2915fdfe4b8d93d9748a32f7c0457857abbb2100"
     },
     {
       "category": "scripts",
@@ -184,7 +184,7 @@
       "id": "registry-rollup",
       "source_path": "scripts/registry-rollup.ts",
       "resource_path": "resources/scripts/registry-rollup.ts",
-      "sha256": "2663c774fc4d2d43762d23d5d50b2321c2363e2aded53630ea61e8cc6a8e09f2"
+      "sha256": "53186f6b751d17a964246f126f9c409c8d729b47fa895c26d060e101f09d452b"
     },
     {
       "category": "scripts",

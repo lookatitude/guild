@@ -42,11 +42,35 @@ export interface CliResult {
  * documented invocation (`npx tsx scripts/workspace/<script>.ts ...`).
  * No `timeout(1)` binary dependency (macOS has none) — spawnSync's own
  * timeout option guards against hangs.
+ *
+ * FIC-48 — inherited-run-telemetry isolation. When these tests themselves run
+ * inside a dispatched Guild lane, the jest process carries the orchestrator's
+ * run envelope (GUILD_RUN_ID, GUILD_RUN_BINDING_REF, GUILD_TASK_ID, …) and
+ * jest's env scrub does NOT reach spawnSync children. Production telemetry in
+ * the spawned script then legitimately journals into
+ * `<fixture>/.guild/runs/<orchestrator-run-id>/`, and the fixture tree acquires
+ * files this suite never planted — matrix3 reproduced exactly that
+ * (`runs/run-6f94bea1-…/logs/v1.4-events.jsonl` inside the temp workspace).
+ * These fixtures assert on what the SCRIPT does to the tree, not on the
+ * orchestrator's active run, so the child env drops the whole GUILD_* envelope
+ * (+ TMUX). A test that needs a GUILD_ var sets it explicitly via `env`.
  */
-export function runScript(script: string, args: string[]): CliResult {
+export function runScript(
+  script: string,
+  args: string[],
+  env?: Record<string, string>
+): CliResult {
+  const childEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined) continue;
+    if (k.startsWith("GUILD_") || k === "TMUX") continue;
+    childEnv[k] = v;
+  }
+  Object.assign(childEnv, env ?? {});
   const result = spawnSync("npx", ["tsx", script, ...args], {
     encoding: "utf8",
     timeout: 30000,
+    env: childEnv,
   });
   return {
     exitCode: result.status ?? 1,

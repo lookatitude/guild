@@ -23,6 +23,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
+import { hermeticEnv } from "../test-support/hermetic-env";
+
 import {
   REANCHOR_MARKER,
   buildReanchorHeader,
@@ -663,10 +665,15 @@ describe("reanchor — session-reanchor.js end-to-end (real bundle)", () => {
   });
   afterEach(() => cleanup(root));
 
+  // Explicit `env:` is load-bearing: with no option the child inherits the REAL
+  // worker process env — which still carries a dispatching lane's GUILD_* set
+  // (jest-env-setup.ts only scrubs the sandboxed copy) — and GUILD_TASK_ID trips
+  // the lead-only isWorkerInvocation guard into silence (FIC-47).
   function run(bundle: string, payload: object): string {
     return execFileSync("node", [path.join(DIST, bundle)], {
       input: JSON.stringify(payload),
       encoding: "utf8",
+      env: hermeticEnv(),
     });
   }
 
@@ -676,6 +683,21 @@ describe("reanchor — session-reanchor.js end-to-end (real bundle)", () => {
     const parsed = JSON.parse(out);
     expect(parsed.hookSpecificOutput.hookEventName).toBe("SessionStart");
     expect(parsed.hookSpecificOutput.additionalContext).toContain(REANCHOR_MARKER);
+  });
+
+  // Planted control for the hermeticEnv() seam above: an UNSANITIZED child —
+  // one whose env still carries a lane's GUILD_TASK_ID, exactly what a
+  // dispatched session's inherited env looks like — must still trip the
+  // lead-only guard into silence on the very fixture the previous test greens.
+  // Proves the fix is child-env sanitization, not a weakened isWorkerInvocation.
+  it("control: the same fixture with a deliberately unsanitized (lane-marked) child env stays silent", () => {
+    makeRun(root, { agentMode: "team", phase: "build" });
+    const out = execFileSync("node", [path.join(DIST, "session-reanchor.js")], {
+      input: JSON.stringify({ source: "compact", cwd: root }),
+      encoding: "utf8",
+      env: { ...hermeticEnv(), GUILD_TASK_ID: "FIC-47-planted-lane" },
+    });
+    expect(out.trim()).toBe("");
   });
 
   it("is silent on source=startup (not a posture-loss event)", () => {
@@ -697,6 +719,7 @@ describe("reanchor — session-reanchor.js end-to-end (real bundle)", () => {
     const res = spawnSync("node", [path.join(DIST, bundle)], {
       input: stdin,
       encoding: "utf8",
+      env: hermeticEnv(),
     });
     expect(res.status).toBe(0);
     return { out: res.stdout, err: res.stderr };

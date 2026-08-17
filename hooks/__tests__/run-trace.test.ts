@@ -27,6 +27,7 @@ import {
   recordPhase,
   recordStatusLightweight,
   resolvePreflightSnapshot,
+  resolveInstalledPluginIdentity,
   startAndCloseRun,
   startRunOnly,
   writeSkippedFiles,
@@ -120,11 +121,26 @@ describe("run-trace lib (Lane B3)", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("derives plugin identity from the installed package rather than the consuming project", () => {
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-installed-plugin-"));
+    fs.mkdirSync(path.join(pluginRoot, ".codex-plugin"), { recursive: true });
+    fs.mkdirSync(path.join(pluginRoot, "command-src"), { recursive: true });
+    fs.writeFileSync(path.join(pluginRoot, ".codex-plugin", "plugin.json"), JSON.stringify({ version: "9.9.9" }));
+    fs.writeFileSync(path.join(pluginRoot, "command-src", "command-registry.json"), "{}\n");
+    const identity = resolveInstalledPluginIdentity({ GUILD_PLUGIN_ROOT: pluginRoot }, root);
+    expect(identity.version).toBe("9.9.9");
+    expect(identity.ref).toMatch(/^sha256:/);
+    expect(identity.command_surface_version).toMatch(/^sha256:/);
+    fs.rmSync(pluginRoot, { recursive: true, force: true });
+  });
+
   describe("emitRunStarted", () => {
     it("appends one run_started guild.trace_event.v1 line to logs/v1.4-events.jsonl", () => {
       const runId = startedRun(root, "full");
       emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z", binding_ref: refOf(root, runId) });
-      const lines = readJsonl(liveLog(root, runId));
+      const lines = readJsonl(liveLog(root, runId)).filter(
+        (event) => event["schema_version"] === "guild.trace_event.v1",
+      );
       expect(lines).toHaveLength(1);
       expect(lines[0]["schema_version"]).toBe("guild.trace_event.v1");
       expect(lines[0]["event_name"]).toBe("run_started");
@@ -135,8 +151,9 @@ describe("run-trace lib (Lane B3)", () => {
 
     it("REWORK F1: a run id alone writes NOTHING — the loadable open record is never recovered", () => {
       const runId = startedRun(root, "full"); // binding minted + OPEN on disk
+      const before = readJsonl(liveLog(root, runId));
       emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z" }); // no nonce presented
-      expect(readJsonl(liveLog(root, runId))).toHaveLength(0);
+      expect(readJsonl(liveLog(root, runId))).toEqual(before);
     });
 
     it("is idempotent — does not double-emit run_started for one run", () => {

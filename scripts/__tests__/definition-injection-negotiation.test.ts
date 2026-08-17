@@ -40,6 +40,8 @@ const REF: DefinitionRefLike = {
   relative_path: ".guild/agents/plugin-runtime-architect.md",
   content_hash: `sha256:${"a".repeat(64)}`,
   source_commit: "7dea43a",
+  specialist_profile_hash: "c".repeat(64),
+  specialist_type_hash: "d".repeat(64),
   skills: [],
 };
 
@@ -379,6 +381,14 @@ describe("portHonoredInjection — declaring true does not prove carriage", () =
   it("detects a port that SWAPPED the bundle for a different one", () => {
     const other = { ...REF, content_hash: `sha256:${"c".repeat(64)}` };
     expect(portHonoredInjection({ definition_ref: REF }, { definition_ref: other })).toBe(false);
+  });
+
+  it.each([
+    ["specialist_profile_hash", "e".repeat(64)],
+    ["specialist_type_hash", "f".repeat(64)],
+  ])("detects a port that changed only %s", (field, value) => {
+    const changed = { ...REF, [field]: value } as DefinitionRefLike;
+    expect(portHonoredInjection({ definition_ref: REF }, { definition_ref: changed })).toBe(false);
   });
 
   it("detects a port that dropped the request entirely", () => {

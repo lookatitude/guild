@@ -97,16 +97,17 @@ only release PRs (rule 8).
 
      **Mechanized (xhrd-wi-06).** This step is no longer prose-only:
      `.<HIGH_ENTROPY_REDACTED>-integrity.yml` runs
-     `scripts/check-channel-integrity.ts` on every push to `main`/`next`, daily,
-     and on demand. It fails when `next`'s `plugin.json` version trails
-     `main`'s — i.e. when **beta users are running older code than stable**.
+     `scripts/check-channel-integrity.ts` on every push to `main`/`next`, every
+     PR into `next`, daily, and on demand. Stable must be bare SemVer. Diverged
+     `next` must be a newer `MAJOR.MINOR.PATCH-beta.N`; equal bare versions are
+     valid only when both refs resolve to the same commit.
      Run it locally with `npm run check:channel-integrity` (from `scripts/`).
 
-     **It DETECTS, it does not PREVENT.** `release.yml` tags and publishes on
-     the merged-PR event; a `push`-triggered workflow runs concurrently and
-     cannot block that. This gate reports outstanding sync-back debt — it does
-     not stop a new release from being cut while the debt stands. Closing that
-     gap means putting the check on the release path itself (followup).
+     **Stable promotion is preventive.** The required `branch-policy` job runs
+     the checker's `promotion` mode for every release PR into `main`. It requires
+     a hash-bound conformance record under `.guild/artifacts/release/vX.Y.Z/`;
+     an override also requires the exact acceptance label, reason, and known
+     gap. `release.yml` re-runs the same check before tagging as defense in depth.
 
      *Why a gate was needed:* v2.3.2 merged to `main` on 2026-07-25 and the
      sync-back never landed. `next` sat at 2.3.1 for the rest of that day with

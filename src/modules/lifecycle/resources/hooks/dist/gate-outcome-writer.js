@@ -6196,9 +6196,46 @@ var init_settings_reader = __esm({
 });
 
 // ../src/modules/telemetry/workflows/guild-trace-events.ts
-var GUILD_TRACE_SCHEMA_VERSIONS;
+var ANALYSIS_EVENT_CLASSES, GUILD_TRACE_SCHEMA_VERSIONS;
 var init_guild_trace_events = __esm({
   "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
+    ANALYSIS_EVENT_CLASSES = Object.freeze([
+      "run_started",
+      "run_closed",
+      "run_attachment_resolved",
+      "config_snapshot_written",
+      "prompt_received",
+      "prompt_normalized",
+      "clarifying_question_asked",
+      "implementation_authorized",
+      "agent_dispatched",
+      "agent_prompt_sent",
+      "agent_response_received",
+      "agent_handoff_written",
+      "knowledge_lookup_started",
+      "knowledge_lookup_result",
+      "memory_lookup_started",
+      "memory_lookup_result",
+      "tool_call_started",
+      "tool_call_finished",
+      "tool_call_denied",
+      "tool_call_failed",
+      "loop_entered",
+      "loop_iteration",
+      "loop_exited",
+      "loop_cap_hit",
+      "phase_entered",
+      "phase_concluded",
+      "gate_started",
+      "gate_concluded",
+      "instruction_violation_detected",
+      "user_steering_received",
+      "correction_applied",
+      "repeated_failure_detected",
+      "recommendation_created",
+      "recommendation_routed",
+      "bug_report_prompted"
+    ]);
     GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
       "guild.trace.dispatch.v1",
       "guild.trace.recall.v1",
@@ -6206,7 +6243,8 @@ var init_guild_trace_events = __esm({
       "guild.trace.config_resolution.v1",
       "guild.trace.security_decision.v1",
       "guild.trace.degradation.v1",
-      "guild.trace.model_inspection.v1"
+      "guild.trace.model_inspection.v1",
+      "guild.trace.analysis.v2"
     ]);
   }
 });
@@ -6215,6 +6253,54 @@ var init_guild_trace_events = __esm({
 var init_guild_trace_emit = __esm({
   "../src/modules/telemetry/workflows/guild-trace-emit.ts"() {
     init_guild_trace_events();
+  }
+});
+
+// ../src/modules/telemetry/workflows/run-analysis.ts
+var REQUIRED_COVERAGE, COMPLETENESS_REQUIREMENTS, EVENT_CLASS_CATEGORY;
+var init_run_analysis = __esm({
+  "../src/modules/telemetry/workflows/run-analysis.ts"() {
+    init_state();
+    init_guild_trace_events();
+    REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
+    COMPLETENESS_REQUIREMENTS = Object.freeze(["run identity", "plugin-config-snapshot.json", "trace parseability", "trace validity", ...REQUIRED_COVERAGE]);
+    EVENT_CLASS_CATEGORY = Object.freeze({
+      run_started: null,
+      run_closed: "close",
+      run_attachment_resolved: null,
+      config_snapshot_written: null,
+      prompt_received: "prompt",
+      prompt_normalized: "prompt",
+      clarifying_question_asked: "prompt",
+      implementation_authorized: "gate",
+      agent_dispatched: "agent",
+      agent_prompt_sent: "agent",
+      agent_response_received: "agent",
+      agent_handoff_written: "agent",
+      knowledge_lookup_started: "knowledge",
+      knowledge_lookup_result: "knowledge",
+      memory_lookup_started: "memory",
+      memory_lookup_result: "memory",
+      tool_call_started: "tool",
+      tool_call_finished: "tool",
+      tool_call_denied: "tool",
+      tool_call_failed: "tool",
+      loop_entered: "loop",
+      loop_iteration: "loop",
+      loop_exited: "loop",
+      loop_cap_hit: "loop",
+      phase_entered: "phase",
+      phase_concluded: "phase",
+      gate_started: "gate",
+      gate_concluded: "gate",
+      instruction_violation_detected: "steering",
+      user_steering_received: "steering",
+      correction_applied: "correction",
+      repeated_failure_detected: "correction",
+      recommendation_created: null,
+      recommendation_routed: null,
+      bug_report_prompted: null
+    });
   }
 });
 
@@ -6295,14 +6381,44 @@ var init_debug_bundle = __esm({
   }
 });
 
+// ../src/modules/telemetry/workflows/task-cell-telemetry.ts
+var TASK_CELL_LIFECYCLE_EVENTS, EVENT_NAMES;
+var init_task_cell_telemetry = __esm({
+  "../src/modules/telemetry/workflows/task-cell-telemetry.ts"() {
+    init_kernel();
+    TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
+      "spawn_started",
+      "spawned",
+      "ready",
+      "assignment_delivered",
+      "assignment_acknowledged",
+      "running",
+      "handoff_submitted",
+      "handoff_validated",
+      "handoff_accepted",
+      "termination_started",
+      "terminated",
+      "failed",
+      "cancelled",
+      "timed_out",
+      "rejected",
+      "orphaned",
+      "reaped"
+    ]);
+    EVENT_NAMES = new Set(TASK_CELL_LIFECYCLE_EVENTS);
+  }
+});
+
 // ../src/modules/telemetry/index.ts
 var init_telemetry = __esm({
   "../src/modules/telemetry/index.ts"() {
     init_guild_trace_emit();
     init_guild_trace_events();
+    init_run_analysis();
     init_receipt_journal();
     init_receipt_reconcile();
     init_debug_bundle();
+    init_task_cell_telemetry();
   }
 });
 
@@ -6402,6 +6518,7 @@ var init_run_lifecycle = __esm({
     init_state();
     init_run_binding();
     init_security();
+    init_telemetry();
     CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
     GATE_TOKEN = /^[a-z][a-z0-9-]{0,63}$/;
   }

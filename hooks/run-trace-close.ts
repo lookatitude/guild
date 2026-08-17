@@ -92,6 +92,151 @@ import {
  */
 const REOPEN_TOLERANCE_MS = 2000;
 
+// ── Fix C (run-identity-and-dispatch) — active-worker close guard ─────────
+
+/**
+ * Deterministic, file-based liveness check: is any worker of this run still
+ * active? Two legs, both pure reads:
+ *
+ *   1. `run-state.json` carries a lane with status "in_progress" — the
+ *      dispatch-time DAG says a lane is mid-flight.
+ *   2. Any `task-cells/<task>/attempts/<n>/attempt.json` records
+ *      `terminal_state: null` — a spawned teammate instance that has not been
+ *      terminated (the durable liveness record of the agent-team runtime).
+ *
+ * Returns a human-readable reason when active work is found, null otherwise.
+ *
+ * WHY: the launcher-created (redundant) orchestrator's Stop hook closed
+ * run-20260811-000117-run-identity-and-dispatch while its tooling-engineer
+ * worker held a live non-terminal attempt. Closing is DEFERRED, not lost: the
+ * next Stop after the workers terminate closes normally, and a genuinely
+ * abandoned run is finalized by `closeStalePriorOpenRun` when the next run
+ * starts. Fail direction: unreadable/malformed records cannot PROVE liveness,
+ * so they never block the close — only a readable in_progress lane or a
+ * readable non-terminal attempt defers it.
+ *
+ * EXPORTED for the pinning tests (run-trace-close-active-guard.test.ts).
+ */
+export function findActiveWork(runDir: string): string | null {
+  // Leg 1 — run-state lanes.
+  try {
+    const raw = fs.readFileSync(path.join(runDir, "run-state.json"), "utf8");
+    const parsed = JSON.parse(raw) as {
+      schema_version?: string;
+      lanes?: Record<string, { status?: string }>;
+    };
+    if (parsed?.schema_version === "guild.run_state.v1" && parsed.lanes) {
+      for (const [laneId, lane] of Object.entries(parsed.lanes)) {
+        if (lane?.status === "in_progress") {
+          return `run-state lane "${laneId}" is in_progress`;
+        }
+      }
+    }
+  } catch {
+    /* unreadable run-state proves nothing — never blocks the close */
+  }
+
+  // Leg 2 — non-terminal task-cell attempts.
+  const cellsRoot = path.join(runDir, "task-cells");
+  try {
+    for (const cell of fs.readdirSync(cellsRoot, { withFileTypes: true })) {
+      if (!cell.isDirectory()) continue;
+      const attemptsDir = path.join(cellsRoot, cell.name, "attempts");
+      let attempts: fs.Dirent[];
+      try {
+        attempts = fs.readdirSync(attemptsDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const attempt of attempts) {
+        if (!attempt.isDirectory()) continue;
+        try {
+          const record = JSON.parse(
+            fs.readFileSync(path.join(attemptsDir, attempt.name, "attempt.json"), "utf8"),
+          ) as { schema_version?: string; attempt_id?: string; terminal_state?: unknown };
+          if (
+            record?.schema_version === "guild.task_attempt.v1" &&
+            record.terminal_state === null
+          ) {
+            return `task-cell attempt "${record.attempt_id ?? `${cell.name}/${attempt.name}`}" is non-terminal`;
+          }
+        } catch {
+          /* unreadable attempt proves nothing */
+        }
+      }
+    }
+  } catch {
+    /* no task-cells tree — nothing to defer on */
+  }
+
+  return null;
+}
+
+// ── Blocker 2 — premature-close recovery (the upgrade race) ────────────────
+
+/**
+ * Deterministic, atomic recovery for the premature-terminal contradiction the
+ * pre-Fix-C bundle left behind: `provenance.json` records a terminal status
+ * (closed/failed) while `run.yaml` is still OPEN and workers are active.
+ *
+ * Scope is EXACTLY that contradiction class:
+ *   - provenance terminal  AND  run.yaml `status: open`  → rewrite provenance
+ *     atomically (temp+rename) to the non-terminal "resumable" status,
+ *     preserving the stale terminal fields as premature_close_* audit metadata.
+ *   - provenance absent/non-terminal, or run.yaml NOT open → do nothing (a
+ *     genuinely closed run is never blindly reopened).
+ *
+ * Idempotent (a recovered record is non-terminal, so a second pass is a no-op)
+ * and fail-safe (any read/parse failure recovers nothing — an unreadable
+ * record cannot prove the contradiction). Runs BEFORE the active-work refusal
+ * returns, so a Stop during active work leaves consistent durable state
+ * instead of preserving "terminal AND active" forever.
+ *
+ * EXPORTED for the pinning tests (run-trace-close-active-guard.test.ts).
+ */
+export function recoverPrematureClose(runDir: string, activeWork: string): string | null {
+  const provenanceFile = path.join(runDir, "provenance.json");
+  let prov: Record<string, unknown>;
+  try {
+    prov = JSON.parse(fs.readFileSync(provenanceFile, "utf8")) as Record<string, unknown>;
+  } catch {
+    return null; // absent/unreadable — nothing to recover
+  }
+  const status = prov["status"];
+  if (status !== "closed" && status !== "failed") return null; // non-terminal — consistent
+
+  let runYamlOpen = false;
+  try {
+    runYamlOpen = /^status:\s*open\s*$/m.test(
+      fs.readFileSync(path.join(runDir, "run.yaml"), "utf8"),
+    );
+  } catch {
+    return null; // unreadable run.yaml cannot prove the contradiction
+  }
+  if (!runYamlOpen) return null; // run genuinely closed — never blindly reopen
+
+  const recovered = {
+    ...prov,
+    status: "resumable",
+    premature_close_previous_status: status,
+    premature_close_recovered_at: new Date().toISOString(),
+    premature_close_reason: `premature terminal provenance while run.yaml is open and ${activeWork}`,
+  };
+  const tmpPath = `${provenanceFile}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(recovered, null, 2) + "\n", "utf8");
+  try {
+    fs.renameSync(tmpPath, provenanceFile);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* best-effort temp cleanup */
+    }
+    throw err;
+  }
+  return `recovered premature terminal provenance (was "${String(status)}", now "resumable")`;
+}
+
 // ── HK-09 — terminal learning checkpoint resolution ───────────────────────
 
 /**
@@ -158,6 +303,34 @@ async function main(): Promise<void> {
   const runDir = path.join(root, ".guild", "runs", runId);
   // NN#7 guard — only close a run B2's startRun actually opened.
   if (!fs.existsSync(path.join(runDir, "run.yaml"))) process.exit(0);
+
+  // Fix C — active-worker close guard: a Stop from ANY session bound to this
+  // run (including a redundant launcher-created orchestrator) must not close
+  // the run while a lane is in_progress or a teammate's task-cell attempt is
+  // non-terminal. Deferred, never lost — see findActiveWork's header.
+  const activeWork = findActiveWork(runDir);
+  if (activeWork !== null) {
+    // Blocker 2 — BEFORE refusing, reconcile the premature-close upgrade race:
+    // a stale terminal provenance record contradicting this run's open
+    // run.yaml is atomically rewritten to "resumable" so durable state is
+    // consistent-open instead of "terminal AND active" forever.
+    try {
+      const recovered = recoverPrematureClose(runDir, activeWork);
+      if (recovered !== null) {
+        process.stderr.write(`[run-trace-close] ${runId}: ${recovered}.\n`);
+      }
+    } catch (err) {
+      process.stderr.write(
+        `[run-trace-close] WARN: premature-close recovery failed for ${runId}: ` +
+          `${err instanceof Error ? err.message : String(err)} — close still refused.\n`,
+      );
+    }
+    process.stderr.write(
+      `[run-trace-close] refusing to close ${runId}: ${activeWork} — workers are still ` +
+        `active; the close is deferred until they terminate.\n`,
+    );
+    process.exit(0);
+  }
 
   // Already closed? Check whether it's GENUINELY done or whether more tool
   // activity landed after the earlier close (reopen-on-activity, see header).

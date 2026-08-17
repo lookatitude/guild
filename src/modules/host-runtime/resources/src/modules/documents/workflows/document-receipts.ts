@@ -140,7 +140,12 @@ export function readReceiptMachineBlock(
       return { ok: false, reason: "receipt exceeds the fenced-block scan bound" };
     }
     const info = (match[1] ?? "").trim().toLowerCase();
-    if (info !== "" && info !== "json" && info !== "jsonc") continue;
+    if (
+      info !== "" &&
+      info !== "json" &&
+      info !== "jsonc" &&
+      info !== RECEIPT_MACHINE_SCHEMA_VERSION
+    ) continue;
     let parsed: unknown;
     try {
       parsed = JSON.parse(match[2] ?? "");
@@ -170,6 +175,13 @@ function firstField(fields: Record<string, string>, keys: readonly string[]): st
     if (typeof value === "string" && value !== "") return value;
   }
   return null;
+}
+
+function aliasesAgree(fields: Record<string, string>, keys: readonly string[]): boolean {
+  const declared = keys
+    .map((key) => fields[key])
+    .filter((value): value is string => typeof value === "string" && value !== "");
+  return new Set(declared).size <= 1;
 }
 
 /**
@@ -223,6 +235,23 @@ export function parseReceiptDocument(input: unknown): ReceiptParseResult {
     const authorFamily = firstField(fields, ["model_family", "family"]);
     const hostId = firstField(fields, ["host"]);
     const createdAt = firstField(fields, ["generated_at"]);
+
+    if (!aliasesAgree(fields, ["agent", "specialist"])) {
+      pushIssue(
+        errors,
+        "$.frontmatter.agent",
+        "conflicting_provenance",
+        "frontmatter agent and specialist must agree when both are present",
+      );
+    }
+    if (!aliasesAgree(fields, ["model_family", "family"])) {
+      pushIssue(
+        errors,
+        "$.frontmatter.model_family",
+        "conflicting_provenance",
+        "frontmatter model_family and family must agree when both are present",
+      );
+    }
 
     if (authorId === null) {
       pushIssue(errors, "$.frontmatter.agent", "missing_provenance", "frontmatter agent/specialist is required");

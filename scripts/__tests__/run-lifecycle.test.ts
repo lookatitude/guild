@@ -24,7 +24,9 @@ import {
   createRunLifecycle,
   appendPhase,
   appendGateOutcome,
+  assertCanonicalRunId,
   isCanonicalPhase,
+  isCanonicalRunId,
   CANONICAL_PHASES,
   type RunLifecycleEnv,
   type StartRunOpts,
@@ -142,20 +144,44 @@ describe("run-lifecycle — startRun (SC-B §1)", () => {
     expect(mem.files.get(sentinel)).toBe(runId);
   });
 
-  it("generates run-<slug>-<UTC-compact> for an initiative-attached run", () => {
+  it("generates run-<UTC-compact>-<slug> for an initiative-attached run", () => {
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem, { now: "2026-05-29T08:40:21Z" }));
     const runId = lc.startRun(baseStartOpts({ initiative: "learn-knowledge-convergence" }));
-    expect(runId).toBe("run-learn-knowledge-convergence-20260529-084021");
+    expect(runId).toBe("run-20260529-084021-learn-knowledge-convergence");
   });
 
-  it("generates run-<uuidv4> for an unnamed one-off (no initiative)", () => {
+  it("derives a mandatory slug from a one-off brief", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts({
+      initiative: null,
+      arguments: { brief: "Verify release candidate" },
+    }));
+    expect(runId).toBe("run-20260529-084021-verify-release-candidate");
+  });
+
+  it("falls back to the command slug for a one-off without a brief", () => {
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts({ initiative: null }));
-    expect(runId).toMatch(
-      /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    expect(runId).toBe("run-20260529-084021-learn");
+  });
+
+  it("adds a UUID tail only when the canonical second+slug already exists", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    expect(lc.startRun(baseStartOpts({ initiative: null }))).toBe("run-20260529-084021-learn");
+    expect(lc.startRun(baseStartOpts({ initiative: null }))).toMatch(
+      /^run-20260529-084021-learn-[0-9a-f]{8}-[0-9a-f-]{27}$/,
     );
+  });
+
+  it("exports one strict creation-time assertion for the canonical run-id shape", () => {
+    expect(isCanonicalRunId("run-20260529-084021-learn")).toBe(true);
+    expect(isCanonicalRunId("run-learn-20260529-084021")).toBe(false);
+    expect(isCanonicalRunId("run-20260529-256199-learn")).toBe(false);
+    expect(() => assertCanonicalRunId("run-legacy-id")).toThrow(/canonical run id/i);
   });
 
   it("writes run.yaml with schema_version guild.run.v1 + the caller-injected clock", () => {
@@ -184,6 +210,38 @@ describe("run-lifecycle — startRun (SC-B §1)", () => {
     const runId = lc.startRun(baseStartOpts({ initiative: null }));
     const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
     expect(raw).toContain("initiative_attachment: null");
+  });
+
+  it("records an initiative analysis identity and attachment provenance additively", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts({
+      initiative: "alpha",
+      entry_prompt_ref: "logs/payloads/entry.json",
+      attachment_source: "user_selected",
+      attachment_confidence: "high",
+    }));
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    expect(raw).toContain("run_scope: initiative");
+    expect(raw).toContain("independent_run_group: null");
+    expect(raw).toContain("entry_prompt_ref: logs/payloads/entry.json");
+    expect(raw).toContain("source: user_selected");
+    expect(raw).toContain("confidence: high");
+  });
+
+  it("records a discoverable independent run group without minting a fake initiative", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts({
+      initiative: null,
+      independent_run_group: "release-verification",
+      attachment_source: "independent",
+    }));
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    expect(raw).toContain("run_scope: independent");
+    expect(raw).toContain("initiative_attachment: null");
+    expect(raw).toContain("independent_run_group: release-verification");
+    expect(mem.dirs.has(path.join(ROOT, ".guild", "initiatives"))).toBe(false);
   });
 
   // ── NN#5 — the load-bearing invariant ────────────────────────────────────────

@@ -1,0 +1,19 @@
+{
+  "schema_version": "guild.task_attempt.v1",
+  "run_id": "run-20260811-000117-run-identity-and-dispatch",
+  "cell_id": "cell-W4-W5-tooling-completion",
+  "logical_task_id": "W4-W5-tooling-completion",
+  "task_run_id": "W4-W5-tooling-completion.tr1",
+  "attempt": 1,
+  "attempt_id": "W4-W5-tooling-completion.att1",
+  "previous_attempt_id": null,
+  "retry_reason": null,
+  "instance_id": "W4-W5-tooling-completion.a1.i-a819d7ec01d7",
+  "created_at": "2026-08-11T00:57:30.305Z",
+  "terminal_state": null,
+  "terminal_reason": null,
+  "terminated_at": null,
+  "immutable": false,
+  "orphaned": false,
+  "reap_attempts": 0
+}

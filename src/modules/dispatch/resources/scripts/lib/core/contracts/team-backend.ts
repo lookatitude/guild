@@ -13,11 +13,22 @@
 import { spawnSync } from "child_process";
 import type { HostKind } from "../../host-types";
 import type { SpecialistDispatchContract } from "../../../../src/modules/dispatch/workflows/specialist-contract";
+import type { ProjectDefinitionRefV1 } from "./project-definition-ref";
 export type { HostKind };
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface Specialist extends SpecialistDispatchContract {
+  /**
+   * Unique transport-handle key for this concrete task attempt. `name` remains
+   * the semantic specialist role; backends use this key for pane titles/result
+   * maps so two tasks owned by one role never collapse onto one handle.
+   */
+  dispatch_key?: string;
+  /** Fresh runtime identity bound to this concrete task-attempt launch lane. */
+  task_cell_instance_id?: string;
+  /** Exact immutable guild.task_assignment.v2 pointer for this launch lane. */
+  task_cell_assignment_path?: string;
   backend?: string;
   host_kind?: HostKind;
   tier?: "cheap" | "mid" | "powerful";
@@ -47,6 +58,13 @@ export interface Specialist extends SpecialistDispatchContract {
   definition?: string;
   /** Where the definition lives: plugin-shipped roster or project .guild/agents/. */
   definition_source?: "shipped" | "project";
+  /** Integrity-bound project definition selected from the adoption manifest. */
+  definition_ref?: ProjectDefinitionRefV1;
+}
+
+/** Concrete launch-handle key; legacy one-lane-per-role callers keep `name`. */
+export function specialistDispatchKey(spec: Specialist): string {
+  return spec.dispatch_key ?? spec.name;
 }
 
 /**
@@ -91,6 +109,12 @@ export interface PaneSpec {
   taskId?: string;
   capability_scope?: string[];
   specialist?: string;
+  /** Exact v2 assignment pointer; absent keeps the legacy v1 carrier. */
+  assignmentPath?: string;
+  /** Exact TaskCell runtime identity for trace/usage attribution. */
+  taskCellInstanceId?: string;
+  /** Carried unchanged; a transport must explicitly negotiate before consumption. */
+  definition_ref?: ProjectDefinitionRefV1;
   /**
    * T6-R2-F5: the model this pane must actually run at, when the evidenced M2
    * gate selected one. Absent (the M0/M1 default) ⇒ the adapter emits its
@@ -151,7 +175,7 @@ export interface ParsedTmuxCommand {
 }
 
 // TE-08/ARCH-5: extend union with the serial floor (Rung 4 of the D5 substrate ladder).
-export type TeamBackendKind = "tmux" | "in-process" | "remote" | "serial";
+export type TeamBackendKind = "tmux" | "cmux" | "in-process" | "remote" | "serial";
 
 export interface TeamLaunchRequest {
   slug: string;
@@ -177,6 +201,8 @@ export interface GuildDispatchDescriptor {
    * generic type, not the specialist name).
    */
   definitionPath?: string | null;
+  /** Integrity-bound definition carrier; definitionPath remains compatibility metadata only. */
+  definition_ref?: ProjectDefinitionRefV1 | null;
 }
 
 export interface TeamLaunchResult {

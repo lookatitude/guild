@@ -42,12 +42,17 @@ import {
   buildCompatibilityCatalog,
   requiredAssetIdsForG5,
 } from "./lib/capability/compatibility-catalog";
+import { evaluateG5 } from "./lib/capability/compatibility-usage";
+import { collectCompatibilityUsageWindow, writeFrozenCompatibilityCatalog } from "./lib/capability/compatibility-loader";
+import { advanceMigrationWindow, legacyRemovalEligibility, readMigrationWindow, recordMigrationRelease, startMigrationWindow } from "./lib/capability/migration-window";
 
 const USAGE = `
 capability-adopt — project capability adoption migration (D6)
 
   capability-adopt report   --project-id <id> [--project-root <p>] [--plugin-root <p>] [--json]
-  capability-adopt catalog  [--plugin-root <p>] [--deprecation <state> --deprecated-by <record>] [--json]
+  capability-adopt catalog  [--plugin-root <p>] [--project-root <p>] [--freeze] [--json]
+  capability-adopt g5       --windows <file> --project-local-default <semver> --current-version <semver> [--project-root <p>] [--plugin-root <p>] [--json]
+  capability-adopt window   <start|record|advance|status> --release <semver> --at <rfc3339> [--to <mode>] [--actor <id>] [--conformance-pass]
   capability-adopt adopt    --project-id <id> --decisions <file> --run-id <id> \\
                             --authorized-by <decision-record> --adopted-at <rfc3339> [--dry-run]
   capability-adopt rollback --project-id <id> --run-id <id> --authorized-by <record> \\
@@ -104,8 +109,8 @@ function main(argv: readonly string[]): number {
   const projectRoot = path.resolve(str(args, "project-root") ?? process.cwd());
 
   if (verb === "catalog") {
-    const deprecation = str(args, "deprecation") ?? "active";
-    const deprecatedBy = str(args, "deprecated-by");
+    const deprecation = str(args, "deprecation") ?? "deprecated";
+    const deprecatedBy = str(args, "deprecated-by") ?? "cap-loc-D03";
     const catalog = buildCompatibilityCatalog({
       pluginRoot,
       deprecation,
@@ -128,10 +133,88 @@ function main(argv: readonly string[]): number {
       );
     }
     for (const p of catalog.problems) process.stderr.write(`problem: ${p}\n`);
+    if (args["freeze"] === true && catalog.census_matches) {
+      try { process.stderr.write(`frozen catalog: ${writeFrozenCompatibilityCatalog(projectRoot, catalog)}\n`); }
+      catch (error) { process.stderr.write(`refused: ${(error as Error).message}\n`); return 2; }
+    }
     // A catalog that does not match the shipped census is REPORTED as a failure
     // exit, because every downstream gate that consumes it would otherwise treat
     // a short enumeration as complete.
     return catalog.census_matches ? 0 : 2;
+  }
+
+  if (verb === "g5") {
+    const windowsPath = str(args, "windows");
+    if (windowsPath === null) fail("--windows <file> is required", 1);
+    const projectLocalDefault = str(args, "project-local-default");
+    const currentVersion = str(args, "current-version");
+    if (projectLocalDefault === null || currentVersion === null) {
+      fail("--project-local-default <semver> and --current-version <semver> are required", 1);
+    }
+    let windows: unknown;
+    try { windows = JSON.parse(fs.readFileSync(path.resolve(windowsPath), "utf8"))?.windows; }
+    catch (error) { fail(`could not read windows file: ${(error as Error).message}`, 1); }
+    if (!Array.isArray(windows)) fail("windows file must contain a windows array", 1);
+    const catalog = buildCompatibilityCatalog({ pluginRoot, deprecation: "deprecated", deprecatedBy: "cap-loc-D03" });
+    const required = requiredAssetIdsForG5(catalog, { pluginRoot });
+    if (required.status !== "ok") { process.stderr.write(`refused: ${required.detail}\n`); return 2; }
+    const rollups = [];
+    for (const raw of windows) {
+      const window = raw as Record<string, unknown>;
+      if (typeof window?.start_release !== "string" || typeof window?.end_release !== "string" || !Array.isArray(window?.run_ids) || window.run_ids.some((id) => typeof id !== "string")) {
+        process.stderr.write("refused: each window requires start_release, end_release, and string run_ids[]\n");
+        return 2;
+      }
+      rollups.push(collectCompatibilityUsageWindow({ projectRoot, runIds: window.run_ids as string[], windowStartRelease: window.start_release, windowEndRelease: window.end_release, knownAssetIds: required.ids }));
+    }
+    const telemetry = evaluateG5({ rollups, required_asset_ids: required.ids });
+    const removal = legacyRemovalEligibility({
+      projectLocalDefault,
+      currentVersion,
+      g5Passed: telemetry.passed,
+    });
+    const verdict = {
+      passed: telemetry.passed && removal.passed,
+      blockers: [...telemetry.blockers, ...removal.blockers],
+      telemetry,
+      removal_floor: removal,
+    };
+    process.stdout.write(json ? `${JSON.stringify({ verdict, rollups }, null, 2)}\n` : `${verdict.passed ? "PASS" : "BLOCKED"}: G5 compatibility removal (${verdict.blockers.join("; ") || `${telemetry.removable.length} assets cleared`})\n`);
+    return verdict.passed ? 0 : 2;
+  }
+
+  if (verb === "window") {
+    const action = argv[1] ?? "status";
+    const windowArgs = parseArgs(argv.slice(2));
+    if (action === "status") {
+      const state = readMigrationWindow(projectRoot);
+      process.stdout.write(`${JSON.stringify(state ?? { status: "absent" }, null, 2)}\n`);
+      return state ? 0 : 2;
+    }
+    const release = str(windowArgs, "release");
+    const at = str(windowArgs, "at");
+    const actor = str(windowArgs, "actor") ?? "operator";
+    if (!release || !at) fail("window actions require --release and --at", 1);
+    try {
+      if (action === "start") {
+        const mode = (str(windowArgs, "to") ?? "observe") as never;
+        process.stdout.write(`${JSON.stringify(startMigrationWindow({ projectRoot, mode, release, recordedAt: at, actor }), null, 2)}\n`);
+        return 0;
+      }
+      if (action === "record") {
+        process.stdout.write(`${JSON.stringify(recordMigrationRelease({ projectRoot, release, recordedAt: at }), null, 2)}\n`);
+        return 0;
+      }
+      if (action === "advance") {
+        const to = str(windowArgs, "to");
+        if (!to) fail("window advance requires --to <mode>", 1);
+        const result = advanceMigrationWindow({ projectRoot, to: to as never, release, recordedAt: at, actor, conformancePassed: windowArgs["conformance-pass"] === true });
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        return result.status === "advanced" ? 0 : 2;
+      }
+    } catch (error) { process.stderr.write(`refused: ${(error as Error).message}\n`); return 2; }
+    process.stderr.write(`${USAGE}\n`);
+    return 1;
   }
 
   const projectId = str(args, "project-id");
@@ -202,7 +285,12 @@ function main(argv: readonly string[]): number {
       json
         ? `${JSON.stringify(outcome, null, 2)}\n`
         : `${args["dry-run"] === true ? "[dry-run] " : ""}adopted ${outcome.entries_appended} entr(ies); wrote ${outcome.written.length} file(s); ` +
-            `${outcome.compatibility_only.length} left on the compatibility surface\nmanifest: ${outcome.manifest_path}\ncommitment: ${outcome.manifest_digest}\n`,
+            `${outcome.compatibility_only.length} left on the compatibility surface\nmanifest: ${outcome.manifest_path}\ncommitment: ${outcome.manifest_digest}\n` +
+            // D04: the resolver-mode auto-advance outcome is operator-visible on a
+            // real apply (absent on dry-run, which writes nothing — config included).
+            (outcome.resolver_advance === undefined
+              ? ""
+              : `resolver-mode advance: ${outcome.resolver_advance.advanced ? "advanced" : `skipped (${outcome.resolver_advance.reason})`}\n`),
     );
     return 0;
   }

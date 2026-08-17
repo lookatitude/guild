@@ -1,0 +1,29 @@
+schema_version: guild.run.v1
+run_id: run-20260810-043133-initiative-registry-authority
+command: guild:execute-plan
+arguments:
+  lane: initiative-registry-authority
+cwd: /Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence
+target_kind: existing_guild_project
+workspace:
+  is_workspace: true
+  root: /Users/miguelp/Projects/guild
+project: plugin
+host:
+  requested: codex
+  resolved: codex
+model_tier_policy: deep
+started_at: 2026-08-10T04:31:33Z
+ignore_policy: default
+scan_policy: default
+initiative_attachment: project-capability-localization
+phase: build
+run_class: full
+gates:
+  G-lane-registry-rollup: satisfied
+  G-quality-doc-architecture: satisfied
+status: closed
+phases_log:
+  - phase: build
+    status: closed
+    closed_at: 2026-08-10T05:03:00Z

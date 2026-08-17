@@ -29,6 +29,7 @@
     "./skills/specialists/"
   ],
   "commands": [
+    "./commands/adopt.md",
     "./commands/audit.md",
     "./commands/build.md",
     "./commands/config.md",

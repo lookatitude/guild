@@ -52,3 +52,4 @@ export {
 export { composeInProcessDispatch, InProcessTeamBackend, SerialBackend } from "./host/inprocess-backend";
 export { binaryForHostKind } from "./host/tmux-backend";
 export { MockTransport, SshRemoteTransport, RemoteTeamBackend } from "./host/remote-backend";
+export { CmuxTeamBackend, parseCmuxSurfaceId, terminateCmuxSurface } from "./host/cmux-backend";
