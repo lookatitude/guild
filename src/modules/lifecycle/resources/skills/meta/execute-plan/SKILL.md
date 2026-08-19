@@ -156,18 +156,32 @@ Review/critic work folds into this advisor pass + the existing `guild:review`/`q
 
 Implements the dispatch-side of the v2 security ADR (bound by pointer). This is a **real orchestrator step, not aspirational scoping**: the scope IS published for the lane, the PreToolUse hook (`hooks/lib/security/enforce.ts`) reads it, and an out-of-scope tool call is **blocked**.
 
-**Two delivery channels — env fast-path + file backstop (write BOTH).** The enforce hook resolves the lane's scope by reading the env var first (fast-path) and **falling back to a per-task scope file** when the env is absent. Because Agent-env propagation to the spawned hook is **not guaranteed on the subagent / in-process path**, the orchestrator MUST write the scope file too — it is the **backend-uniform** enforcement mechanism (env alone may not reach the hook there; the file always does). Write both; either one present ⇒ enforcement engages.
+**Environment-only delivery on code-backed transports.** Cmux, tmux, and remote backends inject the resolved scope into the real spawned process environment. They do not publish a pathname fallback: the shared writer documents a same-user ancestor-swap race, and raw writes can follow a planted scope symlink. The direct `Agent()` rungs are **unavailable for every scoped lane** until the host capability contract ships and verifies child-env carriage. The launcher enforces that refusal in code before emitting a production agent/subagent signal.
 
 First, the **env vars**, injected **on the spawned lane agent only** (never the orchestrator process):
 
-- **`GUILD_CAPABILITY_SCOPE`** = `JSON.stringify(lane.capability_scope)` — the string array read from `team.yaml` for this specialist. **If the lane has no `capability_scope` field ⇒ DO NOT set the env var** (additive no-scoping — byte-identical to current behaviour; no breaking change for team.yaml files without the field).
+- **`GUILD_CAPABILITY_SCOPE`** = the resolver's `JSON.stringify(capability_scope)`. An explicit team value wins; when a canonical role omits the field, the source-owned role default is materialized. Only an unknown/project role with no explicit scope retains the legacy unscoped behavior.
 - **`GUILD_AUTONOMY_CONTRACT`** = a JSON string array of tool-permission rules derived from the plan lane's `autonomy-policy` `may act without asking` entries, in Claude Code permission-rule grammar (e.g. `"Bash"`, `"Write"`, `"Read(*)"` — syntax per `hooks/lib/security/enforce.ts`). **Omit when no machine-readable rules can be derived** (absent ⇒ no additional AND-masking).
 
 **Per-backend injection (concrete, code-backed):**
 
-- **Subagent / in-process (`agent`) — model-driven path, this skill spawns via `Agent()`:** **write the scope file, then** set the env vars in the spawn `env` map at call time:
+- **Subagent / in-process (`agent`) — model-driven path:** the launcher refuses this rung when any lane has a resolved scope. The resolver contract below is retained for the future verified child-env capability and for the legacy unscoped unknown/project-role path; it does not authorize a scoped production `Agent()` call. Every `--dry-run`—scoped or unscoped—emits a non-dispatchable preview (`dispatchAllowed:false`, `previewOnly:true`) for inspection only:
 
   ```ts
+  // (-1) CONSUME THE LAUNCHER'S FAIL-CLOSED DECISION BEFORE ANY LANE WORK.
+  //      This applies whether the backend came from an explicit ladder choice
+  //      or the run's frozen snapshot. Missing fields are not legacy permission:
+  //      only the exact production tuple true/false authorizes Agent(). A scoped
+  //      dry-run is inspection data and MUST terminate before task-run writes,
+  //      scope resolution, descriptor consumption, or Agent().
+  if (signal.dispatchAllowed !== true || signal.previewOnly !== false) {
+    throw new Error(
+      `direct dispatch refused: launcher did not authorize Agent() ` +
+        `(dispatchAllowed=${String(signal.dispatchAllowed)}, ` +
+        `previewOnly=${String(signal.previewOnly)})`,
+    );
+  }
+
   // (0) RESOLVE THE LANE'S SPECIALIST — do this FIRST; everything below reads it.
   //     The plan lane carries `owner` (+ task-id, depends-on, scope). `definition`
   //     and `definition_source` live on the TEAM file's `specialists[]`, keyed by
@@ -203,26 +217,31 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
           `path ${JSON.stringify(spec.definition)} — expected "${expected}"`,
       );
   }
-  // (1) FILE BACKSTOP — write before the spawn (backend-uniform; the file path the hook reads).
-  if (lane.capability_scope) {
-    const scopeDir = path.join(runDir, "scope");          // runDir = .guild/runs/<run-id>
-    fs.mkdirSync(scopeDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(scopeDir, `${lane.taskId}.json`),         // hook reads runs/<run-id>/scope/<task-id>.json
-      JSON.stringify({ capability_scope: lane.capability_scope, autonomy_contract: autonomyRules ?? null }),
-    );
+  // (1) APPROVAL-BOUND SCOPE RESOLUTION — run the shipped resolver before the
+  //     spawn. It requires the exact team path + SHA-256 emitted by the
+  //     approve-before-dispatch launcher signal, refuses changed/substituted
+  //     bytes, preserves an explicit approval-bound scope, and returns the exact
+  //     env payload without a race-prone pathname backstop.
+  //     Do not retype the defaults or read lane.capability_scope yourself.
+  const scopeArgs = [
+    "tsx", path.join(pluginRoot, "scripts", "resolve-specialist-capability-scope.ts"),
+    "--team", signal.teamPath, "--team-sha256", signal.teamSha256,
+    "--cwd", repoRoot, "--run-id", runId,
+    "--task-id", lane.taskId, "--role", lane.owner,
+  ];
+  if (autonomyRules?.length) {
+    scopeArgs.push("--autonomy-contract", JSON.stringify(autonomyRules));
   }
-  // (2) ENV — inject on the spawn env. GUILD_RUN_ID + GUILD_TASK_ID are REQUIRED for the hook to
-  //     locate the scope file (it resolves the path from these); GUILD_CAPABILITY_SCOPE is the fast-path.
+  const scopeResolution = JSON.parse(
+    execFileSync("npx", scopeArgs, { encoding: "utf8" }),
+  );
+  // (2) ENV — resolver env includes GUILD_RUN_ID + GUILD_TASK_ID and
+  //     GUILD_CAPABILITY_SCOPE when resolved.
   //     `descriptor` is the lane's entry in `signal.dispatchPlan` on the in-process rung, and
   //     `undefined` on the bare `subagent` rung (the launcher returned no plan) — that is the
   //     value the FORK below branches on.
   const descriptor = signal.dispatchPlan?.find((d) => d.name === lane.owner);
-  const env = { ...(descriptor?.env ?? {}) };             // in-process: descriptor.env; subagent: {}
-  env.GUILD_RUN_ID = runId;
-  env.GUILD_TASK_ID = lane.taskId;                        // ← without this the file backstop is unlocatable
-  if (lane.capability_scope) env.GUILD_CAPABILITY_SCOPE = JSON.stringify(lane.capability_scope);
-  if (autonomyRules?.length)  env.GUILD_AUTONOMY_CONTRACT = JSON.stringify(autonomyRules);
+  const env = { ...(descriptor?.env ?? {}), ...scopeResolution.env };
   // ── FORK — TWO BRANCHES. Take exactly one; they do not share step (3). ─────
   if (descriptor) {
     // ── BRANCH A — IN-PROCESS (`agent`): a descriptor exists. ────────────────
@@ -309,12 +328,12 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
   }
   ```
 
-  **The line-1 producer marker is UNCONDITIONAL on the BARE `subagent` rung — it is what makes a direct `Agent()` dispatch attributable at all.** Every OTHER dispatch class (team/tmux panes, cmux surfaces, in-process descriptors, remote) gets its marker from `composeInProcessDispatch` / `buildPrompt` / `paneCommand` in code. The D5 `subagent` rung is the ONE class with no launcher descriptor — the launcher hands the whole `Agent()` construction back to this skill — so an unmarked lane here is a lane the PreToolUse guards and the run trace cannot tell apart from an arbitrary non-Guild `Agent` call. **On the in-process (`agent`) rung, do NOT construct any of this**: the descriptor already carries both marker halves and the full brief — issue `descriptor.prompt` / `descriptor.subagentType` verbatim (`dispatch.md §"In-process dispatchPlan consumption"`), because rebuilding the prompt drops the teammate identity, scope, context pointer, read-ack gate, and wait instruction `buildPrompt` put there. Stamp both halves (env + prompt line 1) on every lane you construct yourself, at the first attempt and at every retry, resumed-dead re-dispatch, and nudge-replacement spawn. Never invent a value to fill a slot: omit `GUILD_TIER` when no tier resolved and `GUILD_TIER_SCORE` when no real score exists — a fabricated tier is worse than an absent one, because the guard would verify the model against a fiction. Full marker contract, the parse rules the guards apply, and the per-class table: `dispatch.md §"Producer marker (line-1 + env)"`.
+  **The `dispatchAllowed:true` / `previewOnly:false` check is unconditional before either direct branch.** A missing field, a scoped preview, or a frozen direct signal that was not evaluated by the current launcher is a refusal; no task-run write, resolver call, descriptor consumption, or `Agent()` may follow it. **The line-1 producer marker is UNCONDITIONAL on the BARE `subagent` rung — it is what makes a direct `Agent()` dispatch attributable at all.** Every OTHER dispatch class (team/tmux panes, cmux surfaces, in-process descriptors, remote) gets its marker from `composeInProcessDispatch` / `buildPrompt` / `paneCommand` in code. The D5 `subagent` rung is the ONE class with no launcher descriptor — the launcher hands the whole `Agent()` construction back to this skill — so an unmarked lane here is a lane the PreToolUse guards and the run trace cannot tell apart from an arbitrary non-Guild `Agent` call. **On the in-process (`agent`) rung, do NOT construct any of this**: the descriptor already carries both marker halves and the full brief — issue `descriptor.prompt` / `descriptor.subagentType` verbatim (`dispatch.md §"In-process dispatchPlan consumption"`), because rebuilding the prompt drops the teammate identity, scope, context pointer, read-ack gate, and wait instruction `buildPrompt` put there. Stamp both halves (env + prompt line 1) on every lane you construct yourself, at the first attempt and at every retry, resumed-dead re-dispatch, and nudge-replacement spawn. Never invent a value to fill a slot: omit `GUILD_TIER` when no tier resolved and `GUILD_TIER_SCORE` when no real score exists — a fabricated tier is worse than an absent one, because the guard would verify the model against a fiction. Full marker contract, the parse rules the guards apply, and the per-class table: `dispatch.md §"Producer marker (line-1 + env)"`.
 
-  **Absent `capability_scope` ⇒ write no file AND set no `GUILD_CAPABILITY_SCOPE`** (additive no-scoping; byte-identical to current). Still set `GUILD_RUN_ID`/`GUILD_TASK_ID` (they're harmless run-context, not scope) — but with no file and no scope env, the hook's `scope === null` clean fall-through applies. Omit each scope env key / the `autonomy_contract` value whose source field is absent — never set an empty/`"undefined"` value. The scope file is keyed by the lane's **task-id**, matching the hook's read path `.guild/runs/<run-id>/scope/<task-id>.json` (`hooks/pre-tool-use.ts` — it resolves that path from `GUILD_RUN_ID` + `GUILD_TASK_ID`).
-- **Team / tmux (`team`) and remote:** the **launcher** (`scripts/agent-team-launcher.ts`) writes the **same scope file** + does the per-pane env injection (tooling-owned) — this skill does not touch pane env/file. Same path, same JSON shape; one contract across backends.
+  **Absent `capability_scope` is resolved, not interpreted by the model.** Canonical roles receive a source-owned default and therefore make direct Agent dispatch refuse until verified child-env carriage ships. An unknown/project role with no explicit scope retains the legacy clean fall-through. Omit `GUILD_AUTONOMY_CONTRACT` when its source is absent — never set an empty/`"undefined"` value.
+- **Cmux, team/tmux, and remote:** the **launcher/backend** injects `GUILD_CAPABILITY_SCOPE` directly into the spawned process environment. It writes no scope file.
 
-Enforcement engages when **either** the env var **or** the scope file is present — both absent is a clean fall-through; the orchestrator and non-Guild sessions are never affected. Full backend-specific wiring: `dispatch.md §"Capability-scope env injection"` and `dispatch.md §"In-process dispatchPlan consumption"`.
+Enforcement engages from the environment. Absence is a clean fall-through only for the orchestrator, non-Guild sessions, and unknown/project roles with no approved scope; a canonical/scoped direct Agent lane is refused before dispatch. Full backend-specific wiring: `dispatch.md §"Capability-scope env injection"` and `dispatch.md §"In-process dispatchPlan consumption"`.
 
 ## §task§agent lifecycle
 
@@ -341,7 +360,7 @@ The backend is **not** chosen here, and it is **not** chosen at `guild:team-comp
       --lane <specialist>:<task-id>:<pane-id> [--lane <specialist>:<task-id>:<pane-id> ...]
     ```
 
-    Emit per lane in the **committed** batch, NOT per attempt — a surface that was reaped or rolled back must leave no receipt (over-reporting the run's specialists). A non-zero exit means a partial write (a real degradation of the run record, per obligation (b)), never a launch failure. When a lane's surface is reaped (`## Backend + routing`), its receipt is already recorded; do not re-emit; (b) capability-scope enforcement — if the launcher's scope-file backstop cannot be applied to a raw surface, the lead records a **degradation receipt** for the lost enforcement (host-capability loss discipline) instead of silently dropping it; (c) the agent-bus lifecycle events (orchestrator-emitted, as on the model-driven backends — see `## Receipt collection`). A lead that cannot honor these obligations MUST fall back to the tmux launcher rung rather than dispatch unaccountable surfaces. When `snapshot.dispatch.backend` is not `"cmux"` (or, on a legacy snapshot with no `dispatch` block, when `CMUX_WORKSPACE_ID` is absent), this rung does not apply; fall through to tmux visible panes (the existing rung below is unchanged). *Evidence: umbrella `.guild/wiki/decisions/cmux-first-dispatch.md` (merged ADR); initiative `run-identity-and-dispatch` work-item W4 — landed: `selectExecutionSubstrate`'s cmux rung + the frozen `snapshot.dispatch` block are the code half of that ADR, this bullet is its behavioral half.*
+    Emit per lane in the **committed** batch, NOT per attempt — a surface that was reaped or rolled back must leave no receipt (over-reporting the run's specialists). A non-zero exit means a partial write (a real degradation of the run record, per obligation (b)), never a launch failure. When a lane's surface is reaped (`## Backend + routing`), its receipt is already recorded; do not re-emit; (b) capability-scope enforcement — the raw surface command MUST carry the resolver-produced `GUILD_CAPABILITY_SCOPE` in the spawned process environment; if the backend cannot prove that carriage, refuse or fall back to tmux rather than degrading or writing a pathname backstop; (c) the agent-bus lifecycle events (orchestrator-emitted, as on the model-driven backends — see `## Receipt collection`). A lead that cannot honor these obligations MUST fall back to the tmux launcher rung rather than dispatch unaccountable surfaces. When `snapshot.dispatch.backend` is not `"cmux"` (or, on a legacy snapshot with no `dispatch` block, when `CMUX_WORKSPACE_ID` is absent), this rung does not apply; fall through to tmux visible panes (the existing rung below is unchanged). *Evidence: umbrella `.guild/wiki/decisions/cmux-first-dispatch.md` (merged ADR); initiative `run-identity-and-dispatch` work-item W4 — landed: `selectExecutionSubstrate`'s cmux rung + the frozen `snapshot.dispatch` block are the code half of that ADR, this bullet is its behavioral half.*
 - **Dispatch-verification — confirm pickup, never assume it (task-store rung only).** This clause governs the `agent-team` task-store signal path (`TaskCreate` + owner-assignment into tmux panes); the cmux rung above never uses `TaskCreate` — it dispatches by `cmux send` + read-screen monitoring per the ADR, so pickup there is direct by construction. After `TaskCreate` + owner-assignment, the lead **MUST verify pickup within a bounded timeout** (default **60s**; honor a project-configured dispatch-pickup timeout when the config surface provides one — never the 10-minute `heartbeat_timeout_ms`, which governs mid-run liveness, not dispatch). **Pickup means the teammate CLAIMED the task**: the task status set by the owning teammate, or pane read-screen evidence it echoed/acted on the task-id — a status change from any other writer does not count. **On no-pickup, fall back to direct injection** (`tmux send-keys` to the teammate's own pane) carrying the same brief **including the task-id and a claim-first instruction** — the teammate claims the task before working, so a late-arriving task-store delivery of an already-claimed task is an idempotent no-op (no double-work). **Record the fallback** in the run's dispatch trace (which lane, pickup-verification failure, direct injection used). Never assume a `TaskCreate` reaching the task store means it reached the pane. *(Codification note: the 2026-06-14 run applied this fallback ad hoc; this clause makes it mandatory, bounded, and verified. In paired evals the OLD body is sample-ambiguous on this case — one A sample chose the fallback, another kept waiting — which is exactly why the clause pins it.)* *Evidence: reflection `run-2026-06-14T21-06-12-400Z` — `TaskCreate` reached only 2 of 4 teammates and `SendMessage`-by-name failed for the other 2, with no verification step to catch it before the run stalled (that run predates the runs-directory canonicalization — its run-id shape predates the current `run-<yyyymmdd-hhmmss>-<slug>` convention).*
 - **Honor the snapshot-resolved backend; team is primary under tmux (cmux surfaces are checked first, when present — see the cmux-first bullet above).** The backend comes from `snapshot.effective.agent_mode` (resolved at intake via the D5 ladder, ADR D5) — under `team`, when cmux is absent, that is `agent-team` (one **visible pane per specialist**); for no-tmux/no-cmux hosts supporting independent agents, `in-process` dispatch (launcher returns `dispatchPlan: GuildDispatchDescriptor[]`; execute-plan issues one `Agent()` per descriptor — full flow in `dispatch.md §"In-process dispatchPlan consumption"`); `subagent` is the last resort. Whatever the backend, dispatch each lane AS its **named specialist role**, resolved against the team specialist's definition identity. A **shipped** specialist dispatches by name. A **project-local** specialist must carry the same committed `definition_ref` through team, bundle, descriptor, and declaring transport; a non-declaring transport refuses before launch. The host-generic type is only used on the verified in-process carrier. Prompt prose or a bare absolute path is not definition injection, and must not be reported as such. The **§task§agent lifecycle and tiering are orthogonal to the backend choice**.
 - **Self-build uses the dev-team, not the product specialists.** When the target repo IS the Guild plugin itself, `team.yaml` is composed from the hash-bound dev-team definitions under `.guild/agents/`, routed by changed path (full roster + path table in `dispatch.md`; see also `CLAUDE.md §"Dev team"`). Each lane carries the exact committed `definition_ref`; no bare host-native name is substituted. The 15 domain specialist roles build *user* products; they are NOT the self-build team.

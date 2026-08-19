@@ -232,8 +232,8 @@ export class ClaudePaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
-    // D-CAP: pass taskId + capability_scope so paneCommand injects GUILD_TASK_ID
-    // (scope-file locator) and optionally GUILD_CAPABILITY_SCOPE (env fast-path).
+    // D-CAP: pass taskId + capability_scope so paneCommand injects the lane
+    // identity and its environment-only capability scope.
     // G-9 / C2-D1: pass specialist so lane panes export GUILD_SPECIALIST
     // (the PostToolUse heartbeat writer's trigger).
     // T6-R2-F5: `spec.model` (evidenced M2 selection) becomes `claude --model`.
@@ -262,7 +262,7 @@ export class ClaudePaneAdapter implements PaneAdapter {
       ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
-      // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
+      // D-CAP: carry lane identity and the environment-only capability scope.
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
@@ -1020,8 +1020,8 @@ export class CodexPaneAdapter implements PaneAdapter {
     // Self-contained: export the run id, run `codex exec` with the staging
     // prompt, then keep the pane alive so the operator can inspect handoffs.
     // NO CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS — Codex is not on the Claude bus.
-    // D-CAP: export GUILD_TASK_ID (scope-file locator) and optionally
-    // GUILD_CAPABILITY_SCOPE (env fast-path) so D-CAP enforces on Codex panes.
+    // D-CAP: export lane identity and the environment-only capability scope so
+    // D-CAP enforces on Codex panes.
     //
     // ISSUE #94 — CODEX-SIDE PreToolUse ENFORCEMENT IS NOW WIRED, and the pane
     // bypass flag is gated on PROVEN enforcement. This closes the rf-wi-04 (G4)
@@ -1119,7 +1119,7 @@ export class CodexPaneAdapter implements PaneAdapter {
       ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
-      // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
+      // D-CAP: carry lane identity and the environment-only capability scope.
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }

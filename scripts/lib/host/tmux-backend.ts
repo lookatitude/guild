@@ -31,6 +31,7 @@ import {
   dispatchModelParamsForSpecialist,
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
+  resolvedSpecialistCapabilityScope,
   specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
@@ -320,6 +321,7 @@ export function composeTmuxCommands(opts: {
 
   const commandFor = (spec: Specialist | null): string => {
     const hostKind: HostKind = spec?.host_kind ?? orchestratorHostKind;
+    const capabilityScope = spec === null ? undefined : resolvedSpecialistCapabilityScope(spec);
     const prompt = buildPrompt(slug, runId, spec, teamPath, hostKind);
     // T6-R2-F5: an evidenced-M2 selection reaches the pane spawn HERE — both
     // the adapter path and the legacy inline path. `null` on every lane whose
@@ -342,7 +344,7 @@ export function composeTmuxCommands(opts: {
       return paneCommand(
         prompt,
         runId,
-        spec?.capability_scope,
+        capabilityScope,
         spec?.taskId,
         spec?.name,
         undefined, // keep paneCommand's own GUILD_PANE_DEBUG default
@@ -379,7 +381,7 @@ export function composeTmuxCommands(opts: {
         prompt,
         hostKind,
         ...(spec?.taskId ? { taskId: spec.taskId } : {}),
-        ...(spec?.capability_scope ? { capability_scope: spec.capability_scope } : {}),
+        ...(capabilityScope ? { capability_scope: capabilityScope } : {}),
         ...(spec?.name ? { specialist: spec.name } : {}),
         ...(spec?.task_cell_assignment_path ? { assignmentPath: spec.task_cell_assignment_path } : {}),
         ...(spec?.task_cell_instance_id ? { taskCellInstanceId: spec.task_cell_instance_id } : {}),
@@ -395,7 +397,7 @@ export function composeTmuxCommands(opts: {
       // directly in tests) — paneCommand always builds a plain `claude`
       // invocation with no launch flags.
       return paneCommand(
-        prompt, runId, spec?.capability_scope, spec?.taskId, spec?.name,
+        prompt, runId, capabilityScope, spec?.taskId, spec?.name,
         undefined, [], undefined, spec?.task_cell_assignment_path, spec?.task_cell_instance_id,
       );
     }
@@ -407,7 +409,7 @@ export function composeTmuxCommands(opts: {
       prompt,
       hostKind,
       taskId: spec?.taskId,
-      capability_scope: spec?.capability_scope,
+      capability_scope: capabilityScope,
       specialist: spec?.name,
       assignmentPath: spec?.task_cell_assignment_path,
       taskCellInstanceId: spec?.task_cell_instance_id,

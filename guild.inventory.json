@@ -291,7 +291,7 @@
       "id": "guild-audit",
       "source_path": "skills/meta/audit/SKILL.md",
       "tier": "meta",
-      "description": "Security audit of Guild plugin scripts — SHA256 hashes, source, network + filesystem flags. Produces a static report listing every hook script, tooling script, and MCP server with (a) file hash, (b) declared tool access / allowed-tools frontmatter, (c) any network/egress calls (fetch, http, WebFetch, WebSearch), (d) any filesystem writes outside .guild/. Per §15.1 #12, meta-skills are filesystem-restricted; only agents/researcher.md has web access by default. Per §15.2 \"Arbitrary code in installed skills\", the plugin is only as safe as its installed-from source — echo Anthropic's \"only install from trusted sources\" guidance. TRIGGER for \"audit Guild scripts\", \"what does <script>.ts do\", \"show all network calls from hooks\", \"list SHA256 hashes for the plugin scripts\", \"run /guild:audit\". DO NOT TRIGGER for: wiki lint (guild:wiki-lint), reviewing a run (guild:review), a security-specialist audit of the user's own application code (agents/security owns), or rolling back a skill (guild:rollback-skill)."
+      "description": "Security audit of Guild plugin scripts — SHA256 hashes, source, network + filesystem flags. Produces a static report listing every hook script, tooling script, and MCP server with (a) file hash, (b) declared tool access / allowed-tools frontmatter, (c) any network/egress calls (fetch, http, WebFetch, WebSearch), (d) any filesystem writes outside .guild/. Per §15.1 #12, meta-skills are filesystem-restricted; only templates/specialists/researcher.md has web access by default. Per §15.2 \"Arbitrary code in installed skills\", the plugin is only as safe as its installed-from source — echo Anthropic's \"only install from trusted sources\" guidance. TRIGGER for \"audit Guild scripts\", \"what does <script>.ts do\", \"show all network calls from hooks\", \"list SHA256 hashes for the plugin scripts\", \"run /guild:audit\". DO NOT TRIGGER for: wiki lint (guild:wiki-lint), reviewing a run (guild:review), a security-specialist audit of the user's own application code (agents/security owns), or rolling back a skill (guild:rollback-skill)."
     },
     {
       "id": "guild-brainstorm",
@@ -519,7 +519,7 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "tier": "meta",
-      "description": "Match spec domains against the consuming repo's project specialists (`.guild/agents/*.md`, reused never re-created) AND Guild's shipped specialist TYPE templates (minted into `.guild/agents/` via roster-resolve mint); present existing + gaps with A/B/C/D options, propose the FULL justified logical team — task-derived, UNCAPPED, with necessity rationale + excluded roles (`guild.team_proposal.v2`) — then WAIT at the `guild.team_decision.v1` user gate (approve / restructure: add, remove, substitute, edit dependencies) before any dispatch, assign each specialist a `default_tier` from its frontmatter, derive an optional `capability_scope:` (absent ⇒ no scoping), and write the per-phase `.guild/team/<slug>.<phase>.yaml`. TRIGGER on \"propose a team\", \"who should work on this\", \"compose specialists for the spec\", \"compose this phase's team\". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (guild:create-specialist), reviewing completed work (guild:review)."
+      "description": "Match spec domains against the consuming repo's project specialists (`.guild/agents/*.md`, reused never re-created) AND Guild's shipped specialist TYPE templates (minted into `.guild/agents/` via roster-resolve mint); present existing + gaps with A/B/C/D options, propose the FULL justified logical team — task-derived, UNCAPPED, with necessity rationale + excluded roles (`guild.team_proposal.v2`) — then WAIT at the `guild.team_decision.v1` user gate (approve / restructure: add, remove, substitute, edit dependencies) before any dispatch, assign each specialist a `default_tier` from its frontmatter, derive `capability_scope:` (runtime-materialized for canonical roles), and write the per-phase `.guild/team/<slug>.<phase>.yaml`. TRIGGER on \"propose a team\", \"who should work on this\", \"compose specialists for the spec\", \"compose this phase's team\". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (guild:create-specialist), reviewing completed work (guild:review)."
     },
     {
       "id": "guild-verify-done",
@@ -2332,6 +2332,11 @@
     {
       "id": "release-changelog",
       "source_path": "scripts/release-changelog.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "resolve-specialist-capability-scope",
+      "source_path": "scripts/resolve-specialist-capability-scope.ts",
       "kind": "cli"
     },
     {

@@ -22,6 +22,7 @@ import {
   defaultRun,
   dispatchModelForSpecialist,
   dispatchModelParamsForSpecialist,
+  resolvedSpecialistCapabilityScope,
   specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
@@ -161,6 +162,7 @@ export class CmuxTeamBackend implements TeamBackend {
     const prompt = buildPrompt(req.slug, req.runId, lane, req.teamPath, hostKind);
     const model = dispatchModelForSpecialist(lane) ?? undefined;
     const modelParams = dispatchModelParamsForSpecialist(lane);
+    const capabilityScope = resolvedSpecialistCapabilityScope(lane);
     const definitionCarriage = definitionRefCarriage(lane.definition_ref);
     const paneSpec: PaneSpec = {
       name: specialistDispatchKey(lane),
@@ -170,7 +172,7 @@ export class CmuxTeamBackend implements TeamBackend {
       prompt,
       hostKind,
       taskId: lane.taskId,
-      capability_scope: lane.capability_scope,
+      capability_scope: capabilityScope,
       specialist: lane.name,
       assignmentPath: lane.task_cell_assignment_path,
       taskCellInstanceId: lane.task_cell_instance_id,
@@ -184,7 +186,7 @@ export class CmuxTeamBackend implements TeamBackend {
       const hostCommand = paneCommand(
           prompt,
           req.runId,
-          lane.capability_scope,
+          capabilityScope,
           lane.taskId,
           lane.name,
           false,
@@ -262,7 +264,9 @@ export class CmuxTeamBackend implements TeamBackend {
         env: {
           GUILD_RUN_ID: req.runId,
           GUILD_TASK_ID: lane.taskId ?? lane.name,
-          GUILD_CAPABILITY_SCOPE: JSON.stringify(lane.capability_scope ?? []),
+          ...(capabilityScope !== undefined
+            ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(capabilityScope) }
+            : {}),
           ...(carriedDefinition
             ? { GUILD_DEFINITION_REF: carriedDefinition.serialized }
             : {}),

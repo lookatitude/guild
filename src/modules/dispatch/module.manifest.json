@@ -23,6 +23,7 @@
     ],
     "scripts": [
       "agent-team-launcher",
+      "resolve-specialist-capability-scope",
       "task-cell-audit",
       "task-cell-scale-audit",
       "task-cell-team-result",

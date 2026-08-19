@@ -24,10 +24,17 @@ This document explains the trust model and how we handle security.
 
 ### What Guild does NOT do
 
-- No network access is made by default. Only the `researcher` shipping
-  specialist (`agents/researcher.md`) declares `WebFetch` / `WebSearch`
+- No host-native web tool is granted by default outside the `researcher` role.
+  Only the `researcher` shipping
+  specialist template (`templates/specialists/researcher.md`) declares
+  `WebFetch` / `WebSearch`
   in its `tools:` frontmatter. All meta-skills are filesystem-only by
-  policy — any change must be flagged and justified in a PR.
+  policy. A different specialist can receive a network-capable tool only
+  through an explicit, task-scoped operator approval recorded before dispatch;
+  any default-policy change must be flagged and justified in a PR. This claim
+  is deliberately limited to `WebFetch` / `WebSearch`: build roles may receive
+  `Bash`, whose commands remain governed by the approved task autonomy and
+  network policy rather than being classified as network-free by tool name.
 - No credentials are read, stored, or transmitted.
 - No data is sent to telemetry endpoints. `.guild/runs/` and
   `.guild/wiki/` are **project-local** and never leave your machine.

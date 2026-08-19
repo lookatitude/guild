@@ -487,10 +487,72 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * before this bump — exactly 8 failures, whose tree-delta diagnostics named
  * exactly the files enumerated above and NOTHING else (log preserved at the
  * umbrella run `artifacts/FIC-51-LANDING-RATIFICATION-A7/logs/red-before.log`).
+ *
+ * ── 2026-08-19 re-ratification (PCL-FU-09 researcher-only network defaults) ──
+ * `skills` moves 2d3c295c → c69658a9. Exactly three deliberate skill files
+ * change: `audit/SKILL.md` corrects the researcher template path;
+ * `team-compose/SKILL.md` makes researcher the only default native-web role,
+ * binds any exception to a recorded operator decision, and states that the 15
+ * canonical scopes are runtime-materialized rather than fail-open prose; and
+ * `team-compose/gap-handling.md` removes the stale architect/security web-tool
+ * grants from the worked example. Their module-resource mirrors were generated
+ * from these source files and verified byte-identical. Commands and both
+ * manifests are unchanged. ANTI-VACUITY: SC-W2-5, SC-W3-6, and
+ * check-surface-pins were observed RED against the old skills pin and named only
+ * these three files before this bump.
+ *
+ * Re-ratified 2026-08-19 (PCL-FU-09 direct-subagent fail-closed follow-up) —
+ * `skills` moves c69658a9 → d84cd87d. Independent review found the D5 bare
+ * `subagent` rung still interpreted an omitted scope from prose even though the
+ * typed backends materialized canonical defaults. `execute-plan/SKILL.md` and
+ * `execute-plan/dispatch.md` now require the shipped deterministic resolver,
+ * while `team-compose/gap-handling.md` removes the last "absent means no
+ * scoping" claim. Round 3 then required the launcher-emitted, approval-checked
+ * team path + digest and approval-bound capability-scope equality. Round 4
+ * additionally binds participant id to role_ref, refuses duplicate ids,
+ * rejects a symlinked .guild/team root, and makes the direct Agent rung env-only
+ * rather than claiming the shared pathname writer closes its documented
+ * concurrent ancestor-swap race.
+ * `skill-src/skill-registry.json` was re-extracted and all module-resource
+ * mirrors were generated from source. ANTI-VACUITY: check-surface-pins was
+ * observed RED before each re-ratification. The Round-4 check reported exactly
+ * `tree_pin_stale skills/skills` at d84cd87d and computed 9ccfd177.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-09 Round-5 carriage enforcement) — `skills`
+ * moves 9ccfd177 → 5914b654. Independent review proved the direct Agent host
+ * contract does not declare child-env carriage and that launcher-owned scope
+ * files remained vulnerable to same-user pathname races. The deliberate surface
+ * delta is exactly `execute-plan/SKILL.md` + `execute-plan/dispatch.md`: scoped
+ * `agent`/`subagent` production dispatch now refuses until a verified host
+ * capability exists; scoped dry runs are labeled non-dispatchable previews; and
+ * cmux/tmux/remote carry scope only in the spawned process environment, never a
+ * pathname backstop. Registry and module-resource mirrors were regenerated from
+ * those sources. ANTI-VACUITY: check-surface-pins was observed RED against the
+ * Round-4 pin and named only `tree_pin_stale skills/skills`, computing 5914b654.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-09 Round-6 frozen/direct consumer gate) —
+ * `skills` moves 5914b654 → c1040a8a. Independent review found that the legacy
+ * frozen `agent`/`subagent` launcher branch did not apply Round-5's refusal and
+ * that the model-driven skill did not consume the launcher's allow/preview
+ * decision before `Agent()`. The launcher now evaluates explicit and frozen
+ * direct selections identically, and execute-plan requires the exact
+ * `dispatchAllowed:true` / `previewOnly:false` tuple before any lane work.
+ * Registry and module-resource mirrors were regenerated. ANTI-VACUITY:
+ * check-surface-pins was observed RED against the Round-5 pin and named only
+ * `tree_pin_stale skills/skills`, computing c1040a8a.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-09 Round-7 universal preview refusal) —
+ * `skills` moves c1040a8a → 3096e445. Independent review reproduced an
+ * unscoped custom-role `--dry-run` carrying the production authorization tuple.
+ * Execute-plan and dispatch.md now state the invariant across all roles: every
+ * direct preview is `dispatchAllowed:false` / `previewOnly:true`; only an
+ * unscoped production signal can be `true` / `false`. Registry and mirrors were
+ * regenerated. ANTI-VACUITY: check-surface-pins was observed RED against the
+ * Round-6 pin and named only `tree_pin_stale skills/skills`, computing 3096e445.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "b4695c3fad17bb19ccdb0f4768e7938658d122de",
-  skills: "2d3c295c5e6b971487aebfd95c588868530e309e",
+  skills: "3096e445c72b96d81c6e51f4d257e58b95a5f4c4",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

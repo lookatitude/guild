@@ -29,6 +29,7 @@ import {
   defaultRun,
   dispatchModelForSpecialist,
   dispatchModelParamsForSpecialist,
+  resolvedSpecialistCapabilityScope,
   specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import {
@@ -444,7 +445,7 @@ export class RemoteTeamBackend implements TeamBackend {
       prompt,
       hostKind,
       taskId: spec.taskId,
-      capability_scope: spec.capability_scope,
+      capability_scope: resolvedSpecialistCapabilityScope(spec),
       specialist: spec.name,
       assignmentPath: spec.task_cell_assignment_path,
       taskCellInstanceId: spec.task_cell_instance_id,
@@ -471,6 +472,7 @@ export class RemoteTeamBackend implements TeamBackend {
    */
   private commandFor(spec: Specialist, paneSpec: PaneSpec, hooksVerified: boolean): string {
     const hostKind = paneSpec.hostKind;
+    const capabilityScope = resolvedSpecialistCapabilityScope(spec);
     if (hostKind === "claude" && hooksVerified && this.claudeLaunchArgs.length > 0) {
       // Same shape the local tmux path uses (composeTmuxCommands) — call
       // paneCommand directly so the resolved flags reach the argv; the
@@ -478,7 +480,7 @@ export class RemoteTeamBackend implements TeamBackend {
       return paneCommand(
         paneSpec.prompt,
         paneSpec.runId,
-        spec.capability_scope,
+        capabilityScope,
         spec.taskId,
         spec.name,
         undefined,
@@ -493,7 +495,7 @@ export class RemoteTeamBackend implements TeamBackend {
       : paneCommand(
           paneSpec.prompt,
           paneSpec.runId,
-          spec.capability_scope,
+          capabilityScope,
           spec.taskId,
           spec.name,
           undefined,

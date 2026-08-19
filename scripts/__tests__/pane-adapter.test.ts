@@ -163,9 +163,8 @@ describe("ClaudePaneAdapter", () => {
     expect(bad.message).toMatch(/claude/);
   });
 
-  // D-CAP (Wave-3 security): GUILD_TASK_ID locates the scope file written by the launcher.
-  // The hook (pre-tool-use.ts:487-494) reads <runDir>/scope/<taskId>.json when
-  // GUILD_CAPABILITY_SCOPE is absent from env — it needs GUILD_TASK_ID to find the file.
+  // D-CAP (Wave-3 security): GUILD_TASK_ID binds the spawned process to its lane;
+  // GUILD_CAPABILITY_SCOPE is carried independently in that process environment.
   it("D-CAP: command exports GUILD_TASK_ID when taskId is present", () => {
     const c = adapter.command(spec({ taskId: "task-arch-001" }));
     expect(c).toContain("export GUILD_TASK_ID=task-arch-001");
@@ -178,7 +177,7 @@ describe("ClaudePaneAdapter", () => {
     expect(c).not.toContain("GUILD_TASK_ID");
   });
 
-  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (scope-file locatable)", () => {
+  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (lane-attributable)", () => {
     const e = adapter.env(spec({ taskId: "task-arch-001" }));
     expect(e["GUILD_TASK_ID"]).toBe("task-arch-001");
   });
@@ -335,7 +334,7 @@ describe("CodexPaneAdapter", () => {
     expect(c).not.toContain("GUILD_TASK_ID");
   });
 
-  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (scope-file locatable)", () => {
+  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (lane-attributable)", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
     const e = adapter.env(spec({ hostKind: "codex", taskId: "task-sec-001" }));
     expect(e["GUILD_TASK_ID"]).toBe("task-sec-001");
