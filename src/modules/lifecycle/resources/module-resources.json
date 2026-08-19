@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "6d4444b3be727bc1e430d63d849b34e275d5dcc0517e70600db74dde849d52ce"
+      "sha256": "0500067a065370788ab9cf9e255b25f712536334c19226a125db0a97ade78b34"
     },
     {
       "category": "scripts",

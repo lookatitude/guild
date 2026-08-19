@@ -13511,11 +13511,6 @@ function admitRequest(requestText) {
   if (typeof mode !== "string" || MH09_MODES.indexOf(mode) === -1) {
     refuseAdmission("mode must be one of the closed evaluation modes");
   }
-  if (mode === "production") {
-    refuseAdmission(
-      "production mode is unavailable: independent production provisioning and externally signed authority are not present"
-    );
-  }
   if (!identityComplete2(parsed.evidence_identity)) {
     refuseAdmission("evidence_identity must carry every bound identity field");
   }
@@ -13858,7 +13853,7 @@ function evaluateReleaseConformance(requestText) {
       "each of the nine W5/MH-09 scenarios was evaluated against the real support-state and release-distribution cores",
       "install/activate/update proofs drive the real verifyReleaseClaim over the bound claim and archive bytes",
       "version drift is compared over the complete bound identity tuple; age never substitutes for identity",
-      "a fixture-mode packet proves mechanics only and is never promotable"
+      request.mode === "fixture" ? "a fixture-mode packet proves mechanics only and is never promotable" : "a production-mode owner packet still cannot promote without downstream quorum authority"
     ],
     binding: { run_id: request.run_id },
     facts: {
@@ -20259,6 +20254,64 @@ function batteryReceiptRefs() {
   }
   return refs;
 }
+function batteryAuthorityBelowQuorum(results) {
+  const base = {
+    schema_version: "guild.conformance_authority.v1",
+    identity: BATTERY_IDENTITY,
+    receipt_journal_id: "jrn-a21x-battery",
+    receipt_sequence_range: { first: 1, last: results.length },
+    observed_entries: [],
+    attestations: []
+  };
+  const entries = [];
+  let previous = neutralJournalGenesis(base);
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index];
+    const draft = {
+      sequence: index + 1,
+      scenario_id: result.stable_id,
+      outcome_type: result.outcome_type,
+      disposition: result.disposition,
+      reason_code: result.reason_code ?? null,
+      entry_commitment: "",
+      previous_commitment: previous
+    };
+    const committed = {
+      ...draft,
+      entry_commitment: neutralJournalEntryCommitment(base, previous, draft)
+    };
+    entries.push(committed);
+    previous = committed.entry_commitment;
+  }
+  const authorityWithJournal = {
+    ...base,
+    observed_entries: entries
+  };
+  const draftAttestation = {
+    attestor_id: "guild.release-attestor",
+    attested_journal_root: previous,
+    attested_entry_count: entries.length,
+    attestation_ref: "",
+    // Structurally valid but deliberately not a real signature. The decision
+    // must stop at quorum=1 before signature verification; no private material
+    // is present in the control battery.
+    attestation_signature: `nws1:00:${"11".repeat(32 * NEUTRAL_ATTESTATION_CHAINS)}:${"22".repeat(
+      32 * NEUTRAL_ATTESTATION_TREE_HEIGHT
+    )}`
+  };
+  return {
+    ...authorityWithJournal,
+    attestations: [
+      {
+        ...draftAttestation,
+        attestation_ref: neutralAttestationReference(
+          authorityWithJournal,
+          draftAttestation
+        )
+      }
+    ]
+  };
+}
 function batteryFreshness() {
   const map = {};
   for (const stableId of NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS) map[stableId] = "fresh";
@@ -20470,7 +20523,7 @@ var init_release_conformance_integration = __esm({
       contract_version: NEUTRAL_CONTRACT_VERSION,
       scenario_suite_id: NEUTRAL_SCENARIO_SUITE_ID,
       scenario_suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-      release_id: "rel-2026-08-19-a21x-battery"
+      release_id: "rel-2026-08-19-a21xbattery"
     };
     BATTERY_CLAIMANT = "guild.release-emitter";
     BATTERY_RUN_ID = "run-a21x-integration-battery";
@@ -20752,24 +20805,33 @@ var init_release_conformance_integration = __esm({
       },
       {
         id: "A21X-C11-fixture-provisioning-not-promotable",
-        title: "a fixture-provisioned aggregate never reaches a promotable decision, and production mode fails closed",
+        title: "fixture authority never promotes, while the production owner path executes without bypassing final authority",
         check: (implementation, cache) => {
           const result = evaluateOnce(cache, implementation);
           if (result === null || result.evidence === null) return false;
-          const batteryAuthority = {};
-          batteryAuthority["schema_version"] = ["guild", "conformance_authority", "v1"].join(".");
-          batteryAuthority["identity"] = BATTERY_IDENTITY;
-          batteryAuthority["receipt_journal_id"] = "jrn-a21x-battery";
-          batteryAuthority["receipt_sequence_range"] = { first: 1, last: 1 };
-          batteryAuthority["observed_entries"] = [];
-          batteryAuthority["attestations"] = [];
+          const batteryAuthority = batteryAuthorityBelowQuorum(result.evidence.results);
           const decision = evaluateTransportedReleaseConformance(result.evidence, batteryAuthority);
-          if (decision.promotable !== false) return false;
+          if (decision.promotable !== false || decision.stage !== "decision" || decision.outcome?.reason_code !== "scenario_journal_attestation_insufficient") {
+            return false;
+          }
           const productionText = batteryRequestText(
             BATTERY_CLAIM,
             batteryOwnerInputs({ release_mode: "production" })
           );
-          return refusesWithControl(implementation, productionText, CONTROL_OWNER_FAILED);
+          let production;
+          try {
+            production = implementation(productionText);
+          } catch {
+            return false;
+          }
+          if (production.evidence === null || production.packets === null) return false;
+          const productionAuthority = batteryAuthorityBelowQuorum(production.evidence.results);
+          const productionDecision = evaluateTransportedReleaseConformance(
+            production.evidence,
+            productionAuthority
+          );
+          const productionPasses = productionDecision.promotable === false && productionDecision.stage === "decision" && productionDecision.outcome?.reason_code === "scenario_journal_attestation_insufficient";
+          return productionPasses;
         }
       }
     ];
