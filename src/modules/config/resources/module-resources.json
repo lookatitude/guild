@@ -22,7 +22,7 @@
       "id": "lib/config-reconcile",
       "source_path": "scripts/lib/config-reconcile.ts",
       "resource_path": "resources/scripts/lib/config-reconcile.ts",
-      "sha256": "5192001480c8947d2772a0233ff58b1ae12674ed5205db44465591839306cf5f"
+      "sha256": "96fda1d35654439cdefe0d83da82d9fce60acb5ec1fa002e0831640084ef984d"
     },
     {
       "category": "scripts",

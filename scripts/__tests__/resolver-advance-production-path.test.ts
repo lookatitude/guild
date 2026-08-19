@@ -300,6 +300,34 @@ describe("FIC45-A4-B1 — D04 resolver-mode advance fires on the production appr
     );
   });
 
+  it("6c. failure path: a partially created new sidecar is removed during rollback", () => {
+    // No resolver_mode and no sidecar: the advance is eligible, and successful
+    // persistence would create both. Model a filesystem writer that creates a
+    // truncated sidecar before reporting failure.
+    settingsFixture({ policy: "on_approval" });
+    const settingsBefore = readText(SETTINGS);
+    expect(fs.existsSync(path.join(tmp, SIDECAR))).toBe(false);
+    const real = defaultReconcileIO();
+    const failingIo = {
+      ...real,
+      writeFileText: (p: string, text: string) => {
+        if (p.endsWith("settings.provenance.json")) {
+          real.writeFileText(p, text.slice(0, Math.max(1, Math.floor(text.length / 2))));
+          throw new Error("injected partial provenance write failure");
+        }
+        real.writeFileText(p, text);
+      },
+    };
+    const out = applyResolverModeAdvanceOnApproval({ cwd: tmp, now: AT, io: failingIo });
+    expect(out).toMatchObject({
+      advanced: false,
+      changed: false,
+      reason: "write_failed: injected partial provenance write failure",
+    });
+    expect(readText(SETTINGS)).toBe(settingsBefore);
+    expect(fs.existsSync(path.join(tmp, SIDECAR))).toBe(false);
+  });
+
   it("2-cli. the real `capability-adopt adopt` verb advances an eligible project (no seams)", () => {
     settingsFixture({ mode: "observe", modeProvenance: "default" });
     const { capabilityAdoptMain } = require("../capability-adopt") as {

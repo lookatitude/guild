@@ -54,6 +54,7 @@ import {
 export interface ReconcileIO {
   readFileText(p: string): string | null; // null when absent/unreadable
   writeFileText(p: string, text: string): void;
+  removeFile(p: string): void;
   ensureDir(p: string): void;
 }
 
@@ -67,6 +68,13 @@ export function defaultReconcileIO(): ReconcileIO {
       }
     },
     writeFileText: (p, text) => nodeFs.writeFileSync(p, text, "utf8"),
+    removeFile: (p) => {
+      try {
+        nodeFs.unlinkSync(p);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      }
+    },
     ensureDir: (p) => nodeFs.mkdirSync(p, { recursive: true }),
   };
 }
@@ -354,7 +362,13 @@ export function applyResolverModeAdvanceOnApproval(opts: {
       if (io.readFileText(settingsPath) !== prevSettingsText) {
         io.writeFileText(settingsPath, prevSettingsText);
       }
-      if (io.readFileText(provenancePath) !== prevProvenanceText && prevProvenanceText !== null) {
+      if (prevProvenanceText === null) {
+        // The sidecar did not exist before this logical write. A writer can
+        // create bytes and then throw (short write, fsync failure, injected
+        // fault), so rollback must remove that new file even when a subsequent
+        // read cannot parse or read it.
+        io.removeFile(provenancePath);
+      } else if (io.readFileText(provenancePath) !== prevProvenanceText) {
         io.writeFileText(provenancePath, prevProvenanceText);
       }
     } catch (rollbackErr) {
