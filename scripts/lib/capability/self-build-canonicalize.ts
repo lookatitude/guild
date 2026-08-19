@@ -16,7 +16,7 @@ import {
   shadowCompareCapability,
   writeFeatureGateRegistry,
 } from "./strangler-control";
-import { parseFrontmatter } from "../frontmatter";
+import { parseFrontmatter, readScalarField, splitFrontmatter } from "../frontmatter";
 
 export const SELF_BUILD_REFS_SCHEMA = "guild.self_build_definition_refs.v1" as const;
 export const SELF_BUILD_REFS_RELPATH = ".guild/artifacts/capability/self-build-definition-refs.json";
@@ -367,54 +367,71 @@ export function runSelfBuildRollbackDrill(options: SelfBuildRollbackDrillOptions
     return cleaned;
   };
 
-  const shadowComparison = selected.map((row) => {
-    const legacyBytes = readRegular(path.join(root, row.legacy_relative_path));
-    const projectBytes = readRegular(path.join(root, row.local_relative_path));
-    const legacyIdentity = legacyBytes ? frontmatter(legacyBytes) : null;
-    const projectIdentity = projectBytes ? frontmatter(projectBytes) : null;
-    if (!legacyIdentity || !projectIdentity) throw new Error(`unreadable shadow definition for ${row.id}`);
-    const policyValue = (identity: Record<string, unknown>, key: "model" | "version" | "work_class" | "skills") =>
-      key === "skills"
-        ? (Array.isArray(identity.skills) ? [...identity.skills].sort() : [])
-        : identity[key] ?? null;
-    const policyDelta: Record<string, { legacy: unknown; project: unknown }> = {};
-    for (const key of ["model", "version", "work_class", "skills"] as const) {
-      const legacy = policyValue(legacyIdentity, key);
-      const project = policyValue(projectIdentity, key);
-      if (JSON.stringify(legacy) !== JSON.stringify(project)) policyDelta[key] = { legacy, project };
-    }
-    const comparison = shadowCompareCapability(
-      {
-        kind: "agent",
-        capability_id: row.id,
-        project_definition: row.local_relative_path,
-        compatibility_asset: row.legacy_relative_path,
-      },
-      (relativePath) => {
-        const bytes = readRegular(path.join(root, relativePath));
-        const identity = bytes ? frontmatter(bytes) : null;
-        if (!bytes || !identity) throw new Error(`unreadable shadow definition for ${row.id}`);
-        return {
-          // Lifecycle normalization deliberately excludes composition policy. The
-          // D09 merge authorizes different self-build bytes (notably the richer
-          // research-digester profile), so model/work_class/skills are recorded as
-          // an explicit policy_delta below rather than mislabeled as transport or
-          // receipt drift.
-          normalized: { name: identity.name },
-          receipt: { disposition: "resolved", role: row.id },
-        };
-      },
+  let shadowComparison: Array<{
+    id: string;
+    status: string;
+    normalized_equivalent: boolean;
+    receipt_equivalent: boolean;
+    policy_delta: Record<string, { legacy: unknown; project: unknown }>;
+    legacy_content_hash: string;
+    local_content_hash: string;
+  }>;
+  try {
+    shadowComparison = selected.map((row) => {
+      const legacyBytes = readRegular(path.join(root, row.legacy_relative_path));
+      const projectBytes = readRegular(path.join(root, row.local_relative_path));
+      const legacyIdentity = legacyBytes ? frontmatter(legacyBytes) : null;
+      const projectIdentity = projectBytes ? frontmatter(projectBytes) : null;
+      if (!legacyIdentity || !projectIdentity) throw new Error(`unreadable shadow definition for ${row.id}`);
+      const policyValue = (identity: Record<string, unknown>, key: "model" | "version" | "work_class" | "skills") =>
+        key === "skills"
+          ? (Array.isArray(identity.skills) ? [...identity.skills].sort() : [])
+          : identity[key] ?? null;
+      const policyDelta: Record<string, { legacy: unknown; project: unknown }> = {};
+      for (const key of ["model", "version", "work_class", "skills"] as const) {
+        const legacy = policyValue(legacyIdentity, key);
+        const project = policyValue(projectIdentity, key);
+        if (JSON.stringify(legacy) !== JSON.stringify(project)) policyDelta[key] = { legacy, project };
+      }
+      const comparison = shadowCompareCapability(
+        {
+          kind: "agent",
+          capability_id: row.id,
+          project_definition: row.local_relative_path,
+          compatibility_asset: row.legacy_relative_path,
+        },
+        (relativePath) => {
+          const bytes = readRegular(path.join(root, relativePath));
+          const identity = bytes ? frontmatter(bytes) : null;
+          if (!bytes || !identity) throw new Error(`unreadable shadow definition for ${row.id}`);
+          return {
+            // Lifecycle normalization deliberately excludes composition policy. The
+            // D09 merge authorizes different self-build bytes (notably the richer
+            // research-digester profile), so model/work_class/skills are recorded as
+            // an explicit policy_delta below rather than mislabeled as transport or
+            // receipt drift.
+            normalized: { name: identity.name },
+            receipt: { disposition: "resolved", role: row.id },
+          };
+        },
+      );
+      return {
+        id: row.id,
+        status: comparison.status,
+        normalized_equivalent: comparison.status === "match" || comparison.status === "drift" ? comparison.normalized_equivalent : false,
+        receipt_equivalent: comparison.status === "match" || comparison.status === "drift" ? comparison.receipt_equivalent : false,
+        policy_delta: policyDelta,
+        legacy_content_hash: row.legacy_content_hash,
+        local_content_hash: row.local_content_hash,
+      };
+    });
+  } catch (error) {
+    const cleaned = cleanupCreatedLegacy();
+    return refused(
+      `self-build shadow comparison could not read a definition: ${error instanceof Error ? error.message : String(error)}` +
+      `${cleaned ? "" : "; temporary legacy projections require manual cleanup"}`,
     );
-    return {
-      id: row.id,
-      status: comparison.status,
-      normalized_equivalent: comparison.status === "match" || comparison.status === "drift" ? comparison.normalized_equivalent : false,
-      receipt_equivalent: comparison.status === "match" || comparison.status === "drift" ? comparison.receipt_equivalent : false,
-      policy_delta: policyDelta,
-      legacy_content_hash: row.legacy_content_hash,
-      local_content_hash: row.local_content_hash,
-    };
-  });
+  }
   if (shadowComparison.some((row) => row.status !== "match")) {
     const cleaned = cleanupCreatedLegacy();
     return refused(`self-build shadow comparison drifted${cleaned ? "" : "; temporary legacy projections require manual cleanup"}`);
@@ -429,12 +446,18 @@ export function runSelfBuildRollbackDrill(options: SelfBuildRollbackDrillOptions
   for (const row of selected) {
     const resolution = resolveCapability({ mode: "legacy", intent: "dispatch", kind: "agent", capability_id: row.id, project_definition: row.local_relative_path, compatibility_asset: row.legacy_relative_path });
     const legacyBytes = readRegular(path.join(root, row.legacy_relative_path));
-    if (resolution.status !== "resolved" || resolution.source !== "compatibility" || resolution.path !== row.legacy_relative_path || !legacyBytes || hashBytes(legacyBytes) !== row.legacy_content_hash) return refused(`legacy dispatch refused for ${row.id}`);
+    if (resolution.status !== "resolved" || resolution.source !== "compatibility" || resolution.path !== row.legacy_relative_path || !legacyBytes || hashBytes(legacyBytes) !== row.legacy_content_hash) {
+      const cleaned = cleanupCreatedLegacy();
+      return refused(`legacy dispatch refused for ${row.id}${cleaned ? "" : "; temporary legacy projections require manual cleanup"}`);
+    }
     legacyDispatches.push(row.id);
   }
 
   const rolledBackGate = readFeatureGateRegistry(root);
-  if (!rolledBackGate || rolledBackGate.resolver_mode !== "legacy") return refused("resolver rollback did not persist the legacy rung");
+  if (!rolledBackGate || rolledBackGate.resolver_mode !== "legacy") {
+    const cleaned = cleanupCreatedLegacy();
+    return refused(`resolver rollback did not persist the legacy rung${cleaned ? "" : "; temporary legacy projections require manual cleanup"}`);
+  }
   writeFeatureGateRegistry(root, {
     ...rolledBackGate,
     resolver_mode: priorGate.resolver_mode,
@@ -478,14 +501,24 @@ export function runSelfBuildRollbackDrill(options: SelfBuildRollbackDrillOptions
 const hashBytes = (bytes: Buffer) => `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
 
 function frontmatter(bytes: Buffer): Record<string, unknown> | null {
-  const parsed = parseFrontmatter(bytes.toString("utf8"));
-  if (!parsed || typeof parsed.name !== "string") return null;
-  const out: Record<string, unknown> = { name: parsed.name };
+  const content = bytes.toString("utf8");
+  const parsed = parseFrontmatter(content);
+  const rawFrontmatter = splitFrontmatter(content).frontmatter;
+  // Historical agent definitions predate strict YAML frontmatter and may carry
+  // an unquoted description containing a colon. The shared scalar reader is
+  // deliberately tolerant of such sibling fields; use it for identity/policy
+  // scalars while retaining the structured parser for list-valued skills. The
+  // fallback is fence-bounded so body prose cannot masquerade as metadata.
+  const name = typeof parsed?.name === "string"
+    ? parsed.name
+    : rawFrontmatter === null ? undefined : readScalarField(rawFrontmatter, "name");
+  if (!name) return null;
+  const out: Record<string, unknown> = { name };
   for (const key of ["model", "version", "work_class"] as const) {
-    const value = parsed[key];
+    const value = parsed?.[key] ?? (rawFrontmatter === null ? undefined : readScalarField(rawFrontmatter, key));
     if (typeof value === "string" || typeof value === "number") out[key] = String(value);
   }
-  if (Array.isArray(parsed.skills)) {
+  if (Array.isArray(parsed?.skills)) {
     out.skills = parsed.skills.filter((skill): skill is string => typeof skill === "string");
   }
   return out;

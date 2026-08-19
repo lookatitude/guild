@@ -13,7 +13,7 @@ const PLUGIN_MANIFEST_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
   [".codex-plugin", "plugin.json"],
 ];
 
-function readRuntimeVersion(pluginRoot: string): string | null {
+export function readRuntimeVersion(pluginRoot: string): string | null {
   for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
     try {
       const manifest = JSON.parse(fs.readFileSync(path.join(pluginRoot, dir, file), "utf8")) as {

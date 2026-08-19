@@ -1,0 +1,56 @@
+{
+  "schema_version": "guild.self_build_rollback_evidence.v1",
+  "project_id": "plugin",
+  "run_id": "run-20260819-150500-pcl-fu03-rollback-drill-r2",
+  "source_commit": "02fdd3eb62c47ec8a55f986160fedd1fc3131c21",
+  "adoption_manifest_commitment": "9738f98024ce51bb1bd7c89d154af0d3a85822ab7ec733d63509a06e0abe276d",
+  "roles": [
+    "command-builder",
+    "docs-writer",
+    "eval-engineer",
+    "hook-engineer",
+    "plugin-architect",
+    "research-digester",
+    "security-auditor",
+    "skill-author",
+    "specialist-agent-writer",
+    "tooling-engineer"
+  ],
+  "rollback": {
+    "resolver_mode": "legacy",
+    "revision": 9,
+    "recorded_at": "2026-08-19T14:05:00Z",
+    "dispatch_count": 10
+  },
+  "roll_forward": {
+    "resolver_mode": "shadow",
+    "revision": 10,
+    "recorded_at": "2026-08-19T14:06:00Z",
+    "dispatch_count": 10
+  },
+  "shadow_comparison": {
+    "match_count": 10,
+    "normalized_equivalent_count": 10,
+    "receipt_equivalent_count": 10,
+    "authorized_policy_delta": {
+      "research-digester": {
+        "model": {
+          "legacy": "sonnet",
+          "project": "opus"
+        },
+        "work_class": {
+          "legacy": null,
+          "project": "research"
+        }
+      }
+    }
+  },
+  "first_project_run_executes_different_bytes": true,
+  "local_definitions_unchanged": true,
+  "legacy_projections_removed": true,
+  "final_resolver_mode": "shadow",
+  "source_receipt": ".guild/runs/run-20260819-150500-pcl-fu03-rollback-drill-r2/receipts/S05-RD-01-self-build-rollback.json",
+  "source_receipt_sha256": "9a3529cfa9324d45cea14cc9790452342a00b609a929d9553c0d6dc00e09f32e",
+  "feature_gate_sha256": "db586a7efe213981f00030d0a2c8b7d4f47eb43e8decacfd46cf9387e44a0101",
+  "disposition": "passed"
+}

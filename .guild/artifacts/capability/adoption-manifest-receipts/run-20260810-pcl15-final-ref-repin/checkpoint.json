@@ -1,0 +1,9 @@
+{
+  "schema_version": "guild.receipt_checkpoint.v1",
+  "run_id": "run-20260810-pcl15-final-ref-repin",
+  "last_sequence": 1,
+  "last_event_id": "migration.cutover:20:9738f98024ce",
+  "record_count": 1,
+  "updated_at": "2026-08-10T14:30:00Z",
+  "contract_version": "guild.observability.v1"
+}

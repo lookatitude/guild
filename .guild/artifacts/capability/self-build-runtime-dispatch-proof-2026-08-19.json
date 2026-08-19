@@ -1,0 +1,78 @@
+{
+  "schema_version": "guild.self_build_runtime_dispatch_proof.v1",
+  "project_id": "plugin",
+  "run_id": "run-20260819-132449-project-capability-localization",
+  "source_commit": "02fdd3eb62c47ec8a55f986160fedd1fc3131c21",
+  "observed_at": "2026-08-19T13:30:09Z",
+  "runtime": {
+    "plugin_version": "2.7.0-beta.1",
+    "host_id": "claude-code-cli",
+    "host_version": "2.1.235",
+    "substrate": "tmux",
+    "substrate_version": "3.7b"
+  },
+  "approval": {
+    "proposal_hash": "5bbeb0e4a9185b870f2a3b19b23af210c50173b4d39572d6302b2cf8366adf07",
+    "decision_hash": "aeda1735eedf8e5d9a16b94bf423703d939ba72ca1fdd3c4da405e1320298db6",
+    "decision": "approve",
+    "approved_participants": [
+      "tooling-engineer"
+    ],
+    "scheduled_participants": [
+      "tooling-engineer"
+    ]
+  },
+  "manifest": {
+    "path": ".guild/adoption-manifest.json",
+    "entry_count": 20,
+    "commitment": "9738f98024ce51bb1bd7c89d154af0d3a85822ab7ec733d63509a06e0abe276d",
+    "commitment_journal": ".guild/artifacts/capability/adoption-manifest-receipts/run-20260810-pcl15-final-ref-repin/journal.jsonl",
+    "commitment_journal_sha256": "30dfe546b429d5b37dbca357f9aa9377801cb1fa98f456a35b7823979b20d56c",
+    "observation_state": "checked_clean"
+  },
+  "definition_ref": {
+    "schema_version": "guild.project_definition_ref.v1",
+    "id": "tooling-engineer",
+    "relative_path": ".guild/agents/tooling-engineer.md",
+    "content_hash": "sha256:7275cbc08086c1ec2d5df510342bba5674fe8e37016175df5befd3adb067f2ef",
+    "specialist_profile_hash": "621b611addae42be5086295fedf37eae5cd4ca006d9718d6517f29ca53f49910",
+    "specialist_type_hash": "a953b202609e7a09d4e8fe6e1c8ea4e39ef78c477578466c756a658b3ae5f4a3"
+  },
+  "dispatch": {
+    "launcher": "scripts/agent-team-launcher.ts",
+    "launcher_gate": "passed",
+    "launcher_outcome": "session_created_attach_failed_terminal_clear",
+    "session_created": true,
+    "worker_pane_id": "%208",
+    "worker_pane_command_sha256": "ad0efe2b2e7626584b57e932734bd4d4510de44809c54c2c37fa8c7c6bd05b22",
+    "definition_ref_exact_carriage_check": "passed",
+    "prompt_line_1": "GUILD_AGENT_DEFINITION=.guild/agents/tooling-engineer.md",
+    "assignment_instance_id": "tooling-engineer.a1.i-799b3cfaad43",
+    "assignment_delivered": true,
+    "worker_read_observed": true,
+    "capability_scope": [
+      "Read"
+    ],
+    "negative_control": {
+      "out_of_scope_tools": [
+        "Bash",
+        "ToolSearch"
+      ],
+      "result": "denied"
+    },
+    "session_terminated_after_capture": true,
+    "tracked_source_mutation_by_worker": "none_observed"
+  },
+  "local_evidence_digests": {
+    "agent_team_session_json": "c26f8c606c07f4a67f31801295e3cbf32c15fc224fbc341d86294a620299b831",
+    "task_assignment_json": "ac22087044d11b6aecbae23f2ed5d885cd5d1f4fb0c32d713164d797eb5ec2d5",
+    "trace_events_jsonl": "f987a152a310e80617f1ece13f3a5d9444923129fbeb106ea89f9c9cc705464b",
+    "security_events_jsonl": "ae6b0b18d6678aba1600888c018c66eb91b085f7a6898e33bc62bb7be320e27b",
+    "tool_call_pre_jsonl": "e9353f2caf99a2c7c387e0a1f715c7fafc0878433598dc9fbf6fa72bb91cb3ff"
+  },
+  "disposition": "passed",
+  "notes": [
+    "The PTY could not attach because the terminal did not support clear; the tmux session and both panes were already created and inspected.",
+    "The worker scope intentionally permitted Read only. Its Bash and ToolSearch attempts were denied, proving the capability-scope negative control while the launcher-owned exact-carriage check proved the environment reference."
+  ]
+}

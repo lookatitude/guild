@@ -8,7 +8,10 @@ import {
   prepareSelfBuildRollbackBundle,
   runSelfBuildRollbackDrill,
 } from "../lib/capability/self-build-canonicalize";
-import { readAdoptionManifest } from "../lib/capability/adoption-migrate";
+import {
+  adoptionCommitmentJournalRelpath,
+  readAdoptionManifest,
+} from "../lib/capability/adoption-migrate";
 import { manifestCommitment, resolveHistorical } from "../lib/core/contracts/adoption-manifest";
 import { validateFederationDefinitionManifestRefV1 } from "../lib/core/contracts/federation-definition-manifest-ref";
 import { definitionRefForDispatch, readCommittedAdoptionManifest } from "../lib/capability/definition-ref-for-dispatch";
@@ -17,6 +20,7 @@ import {
   readFeatureGateRegistry,
   writeFeatureGateRegistry,
 } from "../lib/capability/strangler-control";
+import * as resolverMode from "../../src/modules/capability/workflows/resolver-mode";
 import { main as selfBuildCanonicalizeMain } from "../self-build-canonicalize";
 
 describe("PCL-15 self-build canonicalization", () => {
@@ -97,7 +101,7 @@ describe("PCL-15 self-build canonicalization", () => {
       expect(existsSync(join(root, ".guild/artifacts/capability/self-build-definition-refs.json"))).toBe(true);
       const manifest = readAdoptionManifest(root)!;
       expect(resolveHistorical(manifest, { kind: "agent", id: "tooling-engineer", project_id: "plugin", layer: "dot-claude-agents", historical_path: manifest.entries[0].from.historical_path }).status).toBe("resolved");
-      expect(readFileSync(join(root, ".guild/runs/run-pcl15/receipts/journal.jsonl"), "utf8")).toContain("migration.cutover");
+      expect(readFileSync(join(root, adoptionCommitmentJournalRelpath("run-pcl15")), "utf8")).toContain("migration.cutover");
       const stdout = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
       try {
         expect(selfBuildCanonicalizeMain(["prepare-rollback", "--project-root", root, "--project-id", "plugin", "--legacy-source-root", root, "--roles", "tooling-engineer"])).toBe(0);
@@ -137,7 +141,7 @@ describe("PCL-15 self-build canonicalization", () => {
     const root = mkdtempSync(join(tmpdir(), "guild-self-build-drill-"));
     const sourceRoot = mkdtempSync(join(tmpdir(), "guild-self-build-legacy-source-"));
     try {
-      const oldBytes = Buffer.from("---\nname: tooling-engineer\nmodel: sonnet\n---\nold\n");
+      const oldBytes = Buffer.from("---\nname: tooling-engineer\ndescription: historical definition with YAML-hostile sibling: still readable\nmodel: sonnet\n---\nold\nwork_class: body-text-must-not-be-metadata\n");
       const newBytes = Buffer.from("---\nname: tooling-engineer\nwork_class: tooling\nmodel: opus\n---\nnew\n");
       const oldPath = join(root, ".claude/agents/tooling-engineer.md");
       const newPath = join(root, ".guild/agents/tooling-engineer.md");
@@ -235,6 +239,53 @@ describe("PCL-15 self-build canonicalization", () => {
       expect(result.status).toBe("refused");
       expect(existsSync(oldPath)).toBe(false);
       expect(readFileSync(newPath).equals(newBytes)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(sourceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("removes restored legacy projections when legacy dispatch resolution is refused", () => {
+    const root = mkdtempSync(join(tmpdir(), "guild-self-build-drill-dispatch-refusal-"));
+    const sourceRoot = mkdtempSync(join(tmpdir(), "guild-self-build-drill-dispatch-refusal-source-"));
+    try {
+      const oldBytes = Buffer.from("---\nname: tooling-engineer\nmodel: sonnet\n---\nold\n");
+      const newBytes = Buffer.from("---\nname: tooling-engineer\nmodel: sonnet\n---\nnew\n");
+      const oldPath = join(root, ".claude/agents/tooling-engineer.md");
+      const newPath = join(root, ".guild/agents/tooling-engineer.md");
+      mkdirSync(join(root, ".claude/agents"), { recursive: true });
+      mkdirSync(join(root, ".guild/agents"), { recursive: true });
+      mkdirSync(join(sourceRoot, ".claude/agents"), { recursive: true });
+      writeFileSync(oldPath, oldBytes);
+      writeFileSync(join(sourceRoot, ".claude/agents/tooling-engineer.md"), oldBytes);
+      writeFileSync(newPath, newBytes);
+      expect(canonicalizeSelfBuildDefinitions({ projectRoot: root, projectId: "plugin", runId: "run-cutover", authorizedBy: "cap-loc-D09", adoptedAt: "2026-08-10T00:00:00Z", roles: ["tooling-engineer"] }).status).toBe("prepared");
+      rmSync(join(root, ".claude"), { recursive: true, force: true });
+      writeFeatureGateRegistry(root, { schema_version: FEATURE_GATE_REGISTRY_SCHEMA, resolver_mode: "project-local", revision: 1, updated_at: "2026-08-10T00:01:00Z", updated_by: "cutover", history: [] });
+      expect(prepareSelfBuildRollbackBundle({ projectRoot: root, projectId: "plugin", legacySourceRoot: sourceRoot, roles: ["tooling-engineer"] }).status).toBe("prepared");
+
+      const actualResolve = resolverMode.resolveCapability;
+      const resolve = jest.spyOn(resolverMode, "resolveCapability").mockImplementation((request) =>
+        request && typeof request === "object" && "mode" in request && request.mode === "legacy"
+          ? {
+              schema_version: resolverMode.RESOLVER_MODE_OUTCOME_SCHEMA,
+              status: "unresolved",
+              mode: "legacy",
+              kind: "agent",
+              capability_id: "tooling-engineer",
+              failure: "invalid_request",
+              detail: "planted legacy dispatch refusal",
+            }
+          : actualResolve(request),
+      );
+      try {
+        const result = runSelfBuildRollbackDrill({ projectRoot: root, projectId: "plugin", runId: "run-s05-dispatch-refused", actor: "quality", rolledBackAt: "2026-08-10T00:02:00Z", rolledForwardAt: "2026-08-10T00:03:00Z", roles: ["tooling-engineer"] });
+        expect(result.status).toBe("refused");
+        expect(existsSync(oldPath)).toBe(false);
+        expect(readFileSync(newPath).equals(newBytes)).toBe(true);
+      } finally {
+        resolve.mockRestore();
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(sourceRoot, { recursive: true, force: true });

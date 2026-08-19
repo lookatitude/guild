@@ -9,7 +9,10 @@ import type { ProjectDefinitionRefV1 } from "../core/contracts/project-definitio
 import { resolveDefinitionArtifact } from "../definition-artifact-resolver";
 import { resolveWorkspaceProjectRoot } from "../workspace-project-root";
 import { scanReceiptJournal } from "../../../src/modules/telemetry";
-import { readAdoptionManifest } from "./adoption-migrate";
+import {
+  adoptionCommitmentJournalRelpath,
+  readAdoptionManifest,
+} from "./adoption-migrate";
 
 export type CommittedManifestResult =
   | { status: "committed"; manifest: AdoptionManifestV1 }
@@ -23,8 +26,16 @@ export function readCommittedAdoptionManifest(projectRoot: string): CommittedMan
   if (!commitment.ok || commitment.digest === null || last === undefined) {
     return { status: "invalid", detail: "adoption manifest has no committable tip" };
   }
-  const journal = path.join(path.resolve(projectRoot), ".guild", "runs", last.run_id, "receipts", "journal.jsonl");
-  const scan = scanReceiptJournal(journal);
+  const root = path.resolve(projectRoot);
+  const canonicalJournal = path.join(root, adoptionCommitmentJournalRelpath(last.run_id));
+  const legacyJournal = path.join(root, ".guild", "runs", last.run_id, "receipts", "journal.jsonl");
+  const canonicalScan = scanReceiptJournal(canonicalJournal);
+  // Backward compatibility for manifests committed before the tracked authority
+  // existed. Once present, the canonical journal is authoritative: corruption
+  // fails closed instead of silently falling back to mutable local run state.
+  const scan = canonicalScan.integrity === "absent"
+    ? scanReceiptJournal(legacyJournal)
+    : canonicalScan;
   if (scan.integrity !== "intact" || scan.observation_state !== "checked_clean" || scan.blocks_clean_close) {
     return { status: "uncommitted", detail: `receipt journal is ${scan.integrity}/${scan.observation_state}` };
   }
