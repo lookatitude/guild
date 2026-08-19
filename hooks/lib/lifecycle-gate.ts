@@ -267,6 +267,46 @@ export function isOverridden(
 }
 
 /**
+ * True only for the complete, standalone approval replies used by Guild's
+ * human decision gates. UserPromptSubmit runs before those replies reach the
+ * model, so blocking one here would discard the operator action that is meant
+ * to advance the gated lifecycle. This is deliberately NOT a substring match:
+ * approval prose remains an ordinary prompt and cannot become an implicit
+ * lifecycle override.
+ *
+ * `approve` is the frozen team-decision verb. `approved` is accepted as the
+ * natural-language acknowledgement shown by host UIs and used by operators.
+ */
+export function isGateDecisionReply(promptText: string | null): boolean {
+  if (typeof promptText !== "string") return false;
+  const normalized = promptText.replace(/\r\n?/g, "\n").trim();
+  const isExactDecision = (value: string): boolean =>
+    /^(?:approve|approved)$/i.test(value.trim());
+  if (isExactDecision(normalized)) return true;
+
+  // Codex Desktop enriches a user's visible request with an app-owned ambient
+  // context envelope before UserPromptSubmit reaches plugin hooks. Preserve
+  // the whole-request guarantee by accepting only that canonical envelope and
+  // then applying the same exact decision matcher to the isolated request.
+  // Arbitrary prose, alternate sources, nested envelopes, or trailing request
+  // text remain ordinary prompts and cannot use this pass-through.
+  const requestMarker = "\n\n## My request:\n";
+  const markerIndex = normalized.lastIndexOf(requestMarker);
+  if (markerIndex < 0) return false;
+
+  const context = normalized.slice(0, markerIndex).trim();
+  const request = normalized.slice(markerIndex + requestMarker.length).trim();
+  if (!isExactDecision(request)) return false;
+
+  const open = '<in-app-browser-context source="ambient-ui-state">';
+  const close = "</in-app-browser-context>";
+  if (!context.startsWith(`${open}\n`) || !context.endsWith(`\n${close}`)) return false;
+  const body = context.slice(open.length + 1, -(close.length + 1));
+  return !body.includes("<in-app-browser-context") &&
+    !body.includes("</in-app-browser-context>");
+}
+
+/**
  * Extract the invoked skill NAME from a rendered `tool_call.command_redacted`.
  *
  * `pre-tool-use.ts renderCommand` produces `"<tool> <JSON tool_input>"` (or
@@ -1015,6 +1055,7 @@ export async function evaluateLifecycleGate(
   const threshold = effectiveThreshold(activity, config.threshold);
   const drifting = activity.total >= threshold && isDriftCurrent(activity.latestTs, env);
   const overridden = isOverridden(env, promptText);
+  const gateDecisionReply = isGateDecisionReply(promptText);
   const render = (): string =>
     renderLifecycleGate(
       ctx.safeRunId,
@@ -1040,6 +1081,16 @@ export async function evaluateLifecycleGate(
         writeGateState(ctx.runDir, { ...decision.nextState, pending_correction: false });
       }
       return silent;
+    }
+
+    // A standalone approval is itself a lifecycle-control action. Let it reach
+    // the pending human gate and deliver the correction to the model on that
+    // SAME accepted prompt; otherwise UserPromptSubmit would discard the very
+    // decision required to resume. This still consumes the crossing and keeps
+    // the fire-once contract. Non-exact approval prose is not exempt.
+    if (gateDecisionReply && ((drifting && decision.shouldFire) || pending)) {
+      writeGateState(ctx.runDir, { ...decision.nextState, pending_correction: false });
+      return { block: null, context: render() };
     }
 
     if (drifting && decision.shouldFire) {

@@ -29,14 +29,14 @@
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",
       "resource_path": "resources/scripts/lib/roster.ts",
-      "sha256": "10e3aa2476608ab9dfb001b39bd96c8182997dc749698c06e0a1cc3df48e26fd"
+      "sha256": "5f4aaafa671f3fb68d7ce27b1ce92b546b926625a1f96cb32761be6b335fbfd5"
     },
     {
       "category": "scripts",
       "id": "roster-resolve",
       "source_path": "scripts/roster-resolve.ts",
       "resource_path": "resources/scripts/roster-resolve.ts",
-      "sha256": "c49b2b778bcd95fc26ab370d9544e0f88611f6469890aade85ace567467f9fd1"
+      "sha256": "8ab672bdcb490bbd25fff2abacfdff1198fe8eccac6d8f632a75959c3ba3fe16"
     },
     {
       "category": "skills",

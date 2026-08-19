@@ -593,6 +593,64 @@ export function startRunOnly(
   }
 }
 
+function hashFile(file: string): string | null {
+  try {
+    return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve immutable identity from the installed Guild package, never the consumer repo. */
+export function resolveInstalledPluginIdentity(
+  env: Record<string, string | undefined> = process.env,
+  fallbackRoot = path.resolve(__dirname, "../.."),
+): { version: string; ref: string; command_surface_version: string } {
+  const pluginRoot = env["GUILD_PLUGIN_ROOT"] ?? env["PLUGIN_ROOT"] ??
+    env["CLAUDE_PLUGIN_ROOT"] ?? env["CODEX_PLUGIN_ROOT"] ?? fallbackRoot;
+  const manifestCandidates = [
+    ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json", "antigravity-manifest.json",
+    "cursor-manifest.json", "github-copilot-manifest.json", "opencode-manifest.json", "pi-manifest.json", "rovo-dev-manifest.json",
+  ];
+  let version: string | null = null;
+  let identityFile: string | null = null;
+  for (const rel of manifestCandidates) {
+    const candidate = path.join(pluginRoot, rel);
+    try {
+      const parsed = JSON.parse(fs.readFileSync(candidate, "utf8")) as Record<string, unknown>;
+      if (typeof parsed["version"] === "string" && parsed["version"] !== "") {
+        version = parsed["version"];
+        identityFile = candidate;
+        break;
+      }
+    } catch { /* try the next host manifest */ }
+  }
+  if (version === null) {
+    try {
+      const agents = fs.readFileSync(path.join(pluginRoot, "AGENTS.md"), "utf8");
+      version = /source_version:\s*([0-9A-Za-z.+-]+)/.exec(agents)?.[1] ?? null;
+      if (version) identityFile = path.join(pluginRoot, "AGENTS.md");
+    } catch { /* version remains unknown */ }
+  }
+  const refHash = identityFile ? hashFile(identityFile) : hashFile(path.join(pluginRoot, "scripts", "run-analysis.ts"));
+  const commandRegistry = hashFile(path.join(pluginRoot, "command-src", "command-registry.json"));
+  const claudeCommands = (() => {
+    const dir = path.join(pluginRoot, "commands");
+    try {
+      const material = fs.readdirSync(dir).filter((name) => name.endsWith(".md")).sort()
+        .map((name) => `${name}\0${fs.readFileSync(path.join(dir, name), "utf8")}`).join("\0");
+      return material ? crypto.createHash("sha256").update(material).digest("hex") : null;
+    } catch { return null; }
+  })();
+  return {
+    version: version ?? "unknown",
+    ref: refHash ? `sha256:${refHash}` : "unknown",
+    command_surface_version: commandRegistry
+      ? `sha256:${commandRegistry}`
+      : claudeCommands ? `sha256:${claudeCommands}` : "not-applicable",
+  };
+}
+
 /**
  * Assemble the B2 StartRunOpts from the B3 StartAndCloseOpts. Single place that
  * derives the run-class-dependent policy labels + threads the initiative scalar.
@@ -638,6 +696,7 @@ function buildStartRunOpts(
     initiative: opts.initiative ?? null, // NN#5: scalar record ONLY, never a dir
     phase,
     run_class: runClass,
+    plugin_identity: resolveInstalledPluginIdentity(),
     // U6: thread the resolved-settings snapshot straight through. Undefined
     // when the caller passed none (back-compat: startRun skips the write).
     snapshot: opts.snapshot,

@@ -1,0 +1,973 @@
+/**
+ * src/modules/host-runtime/workflows/host-capabilities-schema.ts
+ *
+ * L0 FOUNDATION — `guild.host_capabilities.v1` capability-matrix row: the TS type
+ * mirroring the ADR §Capability Matrix YAML, plus the two authored rows for
+ * Phase 1 wrapper/package runtime rows.
+ *
+ * Contract authority (SoT):
+ *   ADR: universal-host-plugin-architecture (workspace wiki) §Capability Matrix
+ *   ADR: guild-inventory-and-parity-contracts (workspace wiki) (this lane's ADR)
+ *
+ * WHY: "Routing uses these booleans, not assumptions" (ADR). Every host advertises
+ * a normalized capability row; routing/degradation read the row, never the host
+ * NAME. A capability the host cannot advertise must degrade through an explicit
+ * chain and record the loss (minimum-loss rule: native > wrapped > bridged >
+ * emulated > degraded).
+ *
+ * CONTRACT: pure types + a `validateHostCapabilitiesV1()` validator + two frozen
+ * row constants. No I/O, no clock, never throws. (Probed runtime rows land at
+ * `.guild/hosts/<host-id>/capability.json` — a later phase; these static rows are
+ * the Phase-1 design-time truth for generated package wrapper launches.)
+ *
+ * SCOPE NOTE (Phase 1): the CLAUDE row is verbatim from the ADR (authoritative).
+ * The CODEX row is authored from verified plugin facts (per-host-packaging.ts
+ * render-or-degrade behavior) plus Codex-CLI knowledge. Values NOT verified on a
+ * live Codex box are marked `// INFERRED` — L2 (codex render) / L3 (codex wrapper)
+ * confirm them against the real host before relying on the permission/launch rows.
+ *
+ * Owned by plugin-architect (L0); consumed by L2 (render), L3 (wrapper), L6 (tests).
+ */
+
+// ---------------------------------------------------------------------------
+// Row type (mirrors the ADR §Capability Matrix YAML)
+// ---------------------------------------------------------------------------
+
+export interface PackageCaps {
+  /**
+   * Machine-readable install state — routing consumes THIS boolean, not comments.
+   * `true` only when an install is actually proven for the host; a host whose
+   * renderer exists but is unproven is `false` until its install acceptance
+   * criterion passes (see `installability`).
+   */
+  installable: boolean;
+  /**
+   * Why `installable` holds its value:
+   *   - "verified": a real install path is proven (e.g. Claude today).
+   *   - "target":   a renderer exists but install is NOT yet proven; flips to
+   *                 "verified" (and `installable` to true) when its AC passes
+   *                 (Codex → SC-3). Routing may render a "target" package but must
+   *                 not present it as installable.
+   */
+  installability: "verified" | "target";
+  /** Host-native package format id (e.g. "claude-plugin", "codex-plugin"). */
+  manifest_format: string;
+  /**
+   * plugin-update-lifecycle AC-7 (multi-host honesty): how an install of this
+   * host detects and applies updates. A host without an apply path carries
+   * apply:"none" and DEGRADES TO NOTIFY — the loss is this recorded row, and
+   * no host is ever claimed auto-updatable without a real mechanism.
+   */
+  update: UpdateCaps;
+}
+
+export interface UpdateCaps {
+  /**
+   * Staleness-detection source: "marketplace_clone" (the host's own plugin
+   * clone names the channel/SHA — Claude), "receipt" (guild.install_receipt.v1
+   * written by install.sh — wrapper + file surfaces), or "none" (refused
+   * app/connector surfaces; nothing installable to check).
+   */
+  check: "marketplace_clone" | "receipt" | "none";
+  /**
+   * The apply path: "marketplace_cli" (headless host plugin manager),
+   * "self_update" (Guild-owned `guild-run update` re-render + staged swap),
+   * "reinstall_command" (`install.sh --update`; notify + one command, no
+   * daemon), or "none" (degrade to notify-only prose per AC-7).
+   */
+  apply: "marketplace_cli" | "self_update" | "reinstall_command" | "none";
+  /** The exact one-command apply string surfaced in signals (AC-3); null iff apply is "none". */
+  command: string | null;
+  /**
+   * True only where an IMPLEMENTED automatic apply exists TODAY (something
+   * actually acts on defaults.update.mode=auto — currently the Claude
+   * SessionStart hook's staged marketplace update). A mechanism that exists
+   * but is only operator-invoked (guild-run update) is NOT auto_capable —
+   * two-field honesty: capability rows never claim beyond implemented
+   * behavior. Flips per host when its auto path ships.
+   */
+  auto_capable: boolean;
+}
+
+/** Canonical apply commands (AC-3: signals must name the EXACT command). */
+export const UPDATE_COMMANDS = {
+  marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+  self_update: "guild-run update",
+  reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update",
+} as const;
+
+export interface BootstrapCaps {
+  /**
+   * How startup context is injected. Claude: "hookSpecificOutput.additionalContext".
+   * Codex: "instruction_file" (AGENTS.md / wrapper-injected) remains the
+   * BOOTSTRAP channel; since wi-04, SessionStart hook stdout additionally
+   * reaches session context (live-verified), but the bootstrap payload still
+   * rides the instruction file.
+   */
+  context_injection: string;
+  /** Host autoloads skill files natively. */
+  skill_autoload: boolean;
+  /** Host transforms the prompt/first message for bootstrap. */
+  prompt_transform: boolean;
+  /** Bootstrap can be injected via the generated wrapper. */
+  wrapper_injection: boolean;
+}
+
+export interface CommandsCaps {
+  /** Native slash-command surface. */
+  slash_commands: boolean;
+  /**
+   * Command file format the host consumes natively:
+   *   "markdown" (Claude .md), "toml" (the format the sunset Gemini host used),
+   *   "none" (Codex → workflow descriptors).
+   */
+  command_files: "markdown" | "toml" | "none";
+}
+
+export interface SkillsCaps {
+  native_skills: boolean;
+  /** Directory the host loads skills from, or null if unsupported. */
+  skill_dir: string | null;
+}
+
+export interface AgentsCaps {
+  native_agents: boolean;
+  /** Agent definition format ("claude-md"), or null if unsupported. */
+  agent_format: string | null;
+}
+
+/**
+ * One boolean per normalized Guild hook event. The field set covers EVERY event
+ * the live Claude hook package (hooks/hooks.json) binds — not just the five the
+ * parent-ADR YAML sampled — so L5/L6 never have to guess how an event is
+ * advertised or degraded. A host that lacks an event sets it false; degradation
+ * routes through the HookEmitter (parent ADR Surface 3).
+ */
+/**
+ * cap-loc-D11 / gap-audit D8 — can this host receive a PINNED DEFINITION BUNDLE
+ * with a dispatch?
+ *
+ * A SEPARATE top-level group, deliberately not fields on `agents`/`skills`. Those
+ * describe STATIC INSTALL-TIME registration — what the host loads from disk at
+ * startup (`skill_dir`, `agent_format`). Injection is a PER-DISPATCH RUNTIME
+ * property. Merging them would make `agents.native_agents: false` ambiguous
+ * between "no agent files" and "no runtime injection".
+ *
+ * TWO-FIELD HONESTY, the `installable`/`installability` pattern from PackageCaps:
+ * a boolean routing consumes, plus an enum saying WHY it holds that value. The
+ * invariant `*_support !== "verified" ⇒ boolean false` is enforced by
+ * `validateHostCapabilitiesV1`, so a row cannot assert a capability that was
+ * never probed.
+ */
+export interface InjectionCaps {
+  /** Can this host receive a `guild.project_definition_ref.v1` with a spawn? */
+  definition_injection: boolean;
+  definition_injection_support: InjectionSupport;
+  /** Can this host receive a pinned SKILL BUNDLE with a spawn? */
+  skill_bundle_injection: boolean;
+  skill_bundle_injection_support: InjectionSupport;
+  /** Runtime registration, vs. startup-only from `skill_dir`/`agent_format`. */
+  dynamic_registration: boolean;
+  dynamic_registration_support: InjectionSupport;
+  /**
+   * How a definition reaches the lane when injection is unsupported.
+   * `prompt_text` is TODAY's behaviour and is explicitly DEGRADED: unhashed,
+   * unverifiable, not carried by the transport. `none` means the host has no
+   * dispatch surface at all, so there is nothing to degrade to.
+   */
+  fallback: "prompt_text" | "none";
+  /**
+   * PER-CAPABILITY probe-receipt citations (codex round 1 CRITICAL-1, round 2 HIGH-4).
+   *
+   * Round 1: `"verified"` was an unchecked self-assertion — a row could claim a
+   * capability nobody probed and pass, the exact failure the two-field scheme
+   * exists to prevent. So a `"verified"` support must CITE its evidence.
+   *
+   * Round 2: a SINGLE shared citation was still wrong — three independent
+   * capabilities cannot be bound to one receipt, and nothing stopped `"x"`. Each
+   * capability now carries its OWN citation, and the path must match the receipt
+   * grammar `evidence/host-smoke/<host-id>/<box-id>.json`.
+   *
+   * Each field is non-null IFF its own support is `"verified"`.
+   *
+   * A pure validator cannot read the file, so this does not make a false citation
+   * impossible — it makes one FALSIFIABLE and correctly ATTRIBUTED.
+   *
+   * WHAT THIS CONTRACT CANNOT CHECK, stated rather than implied (codex round 3,
+   * HIGH-5). Nothing here proves the cited receipt actually probed the capability
+   * citing it: the same path may legitimately populate all three fields, because
+   * one smoke run can genuinely probe several capabilities. Only a reader with I/O
+   * can bind a citation to a RESULT inside the receipt. The conformance pass
+   * therefore owes three checks this file cannot do:
+   *
+   *   1. the cited path EXISTS under the evidence tree;
+   *   2. the receipt's `host_id` matches the row citing it (host binding);
+   *   3. the receipt contains a PASSING concern for THAT capability
+   *      (capability-to-result binding) — not merely that the file exists.
+   *
+   * Check 3 is the one that makes a citation mean something. Requiring DISTINCT
+   * paths would be the wrong fix: it would forbid a legitimate multi-capability
+   * probe while still not proving any single claim.
+   */
+  definition_injection_verified_by: string | null;
+  skill_bundle_injection_verified_by: string | null;
+  dynamic_registration_verified_by: string | null;
+}
+
+/**
+ * The probe-receipt path grammar: `evidence/host-smoke/<host-id>/<box-id>.json`.
+ * Segments are restricted so a citation cannot traverse or name something outside
+ * the evidence tree.
+ */
+export const PROBE_RECEIPT_PATH_RE =
+  /^evidence\/host-smoke\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\.json$/;
+
+/**
+ * Why an injection boolean holds its value.
+ *   "verified" — proven on a live host of this kind (a probe receipt exists)
+ *   "target"   — a dispatch surface exists but injection is unproven; routing MUST
+ *                NOT present it as supported
+ *   "absent"   — no mechanism at all (typically: no dispatch surface)
+ */
+export const INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"] as const);
+const INJECTION_SUPPORT_SET: ReadonlySet<string> = new Set<string>(INJECTION_SUPPORT);
+export type InjectionSupport = (typeof INJECTION_SUPPORT)[number];
+
+export interface HooksCaps {
+  session_start: boolean;
+  user_prompt_submit: boolean;
+  pre_tool_use: boolean;
+  post_tool_use: boolean;
+  stop: boolean;
+  pre_compact: boolean;
+  subagent_stop: boolean;
+  task_created: boolean;
+  task_completed: boolean;
+  teammate_idle: boolean;
+}
+
+export interface PermissionsCaps {
+  deny: boolean;
+  ask: boolean;
+  /** Layer at which ask-gating fires (e.g. "pre_tool_use"), or null. */
+  ask_mode: string | null;
+  accept_edits_without_prompt: boolean;
+  auto_approve_tools: boolean;
+  bypass_prompts: boolean;
+  bypass_sandbox: boolean;
+  permission_prompt_layer: boolean;
+  /**
+   * Host launch-flag recipes per Guild permission mode. Each maps a mode to the
+   * argv the wrapper appends. A mode the host cannot express is omitted (its
+   * absence is the degradation signal — AC20: record a lower-autonomy fallback,
+   * never falsely claim a mode the host lacks).
+   */
+  launch_modes: Partial<Record<PermissionMode, string[]>>;
+}
+
+export type PermissionMode =
+  | "read_only"
+  | "ask"
+  | "accept_edits"
+  | "auto"
+  | "bypass_all";
+
+export interface DispatchCaps {
+  tmux_processes: boolean;
+  plain_processes: boolean;
+  independent_agents: boolean;
+  subagents: boolean;
+  inline: boolean;
+}
+
+export interface InteractionCaps {
+  native_questions: boolean;
+  terminal_prompt: boolean;
+  file_bus_questions: boolean;
+}
+
+export interface SessionsCaps {
+  continue: boolean;
+  resume_by_id: boolean;
+  fork: boolean;
+}
+
+export interface StructuredOutputCaps {
+  native_json: boolean;
+  schema_validation: boolean;
+  repair_prompt: boolean;
+}
+
+export interface ArtifactsCaps {
+  direct_filesystem: boolean;
+  file_bus: boolean;
+  app_upload: boolean;
+}
+
+/** Per-tool substrate: how strong the host's path to each tool capability is. */
+export type ToolStrength = "native" | "bridge" | "emulated" | "none";
+
+export interface ToolsCaps {
+  read: ToolStrength;
+  search: ToolStrength;
+  shell: ToolStrength;
+  edit: ToolStrength;
+  write: ToolStrength;
+  browser: ToolStrength;
+  web: ToolStrength;
+  mcp: ToolStrength;
+}
+
+export interface McpCaps {
+  stdio: boolean;
+  http: boolean;
+}
+
+/** Model tier → host-native model id (null when the host has no model at that tier). */
+export interface ModelTierEntry {
+  model: string | null;
+}
+
+export interface ModelsCaps {
+  cheap: ModelTierEntry;
+  mid: ModelTierEntry;
+  powerful: ModelTierEntry;
+}
+
+export interface GuildHostCapabilitiesV1 {
+  schema_version: "guild.host_capabilities.v1";
+  /** Concrete host id (e.g. "claude", "codex"). */
+  host_kind: string;
+  /** Host family for independence checks (e.g. "claude", "codex"). Same-family review is weak. */
+  family: string;
+  /** Surface kind (e.g. "cli", "app", "desktop"). */
+  surface_kind: string;
+  package: PackageCaps;
+  bootstrap: BootstrapCaps;
+  commands: CommandsCaps;
+  skills: SkillsCaps;
+  agents: AgentsCaps;
+  /** cap-loc-D11 — per-dispatch definition/skill-bundle injection facts. */
+  injection: InjectionCaps;
+  hooks: HooksCaps;
+  permissions: PermissionsCaps;
+  dispatch: DispatchCaps;
+  interaction: InteractionCaps;
+  sessions: SessionsCaps;
+  structured_output: StructuredOutputCaps;
+  artifacts: ArtifactsCaps;
+  tools: ToolsCaps;
+  mcp: McpCaps;
+  models: ModelsCaps;
+}
+
+// ---------------------------------------------------------------------------
+// CLAUDE row — verbatim from the ADR §Capability Matrix (authoritative)
+// ---------------------------------------------------------------------------
+
+export const CLAUDE_CAPABILITIES: GuildHostCapabilitiesV1 = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "claude",
+  family: "claude",
+  surface_kind: "cli",
+  package: {
+    installable: true,
+    installability: "verified",
+    manifest_format: "claude-plugin",
+    update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true },
+  },
+  bootstrap: {
+    context_injection: "hookSpecificOutput.additionalContext",
+    skill_autoload: true,
+    prompt_transform: false,
+    wrapper_injection: true,
+  },
+  commands: { slash_commands: true, command_files: "markdown" },
+  skills: { native_skills: true, skill_dir: ".claude/skills" },
+  agents: { native_agents: true, agent_format: "claude-md" },
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "target",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null,
+  },
+  hooks: {
+    // All ten events are bound in the live hooks/hooks.json (verified).
+    session_start: true,
+    user_prompt_submit: true,
+    pre_tool_use: true,
+    post_tool_use: true,
+    stop: true,
+    pre_compact: true,
+    subagent_stop: true,
+    task_created: true,
+    task_completed: true,
+    teammate_idle: true,
+  },
+  permissions: {
+    deny: true,
+    ask: true,
+    ask_mode: "pre_tool_use",
+    accept_edits_without_prompt: true,
+    auto_approve_tools: true,
+    bypass_prompts: true,
+    bypass_sandbox: false,
+    permission_prompt_layer: true,
+    launch_modes: {
+      read_only: ["--tools", "Read,Grep,Glob"],
+      ask: ["--permission-mode", "default"],
+      accept_edits: ["--permission-mode", "acceptEdits"],
+      auto: ["--permission-mode", "auto"],
+      bypass_all: ["--permission-mode", "bypassPermissions"],
+    },
+  },
+  dispatch: {
+    tmux_processes: true,
+    plain_processes: true,
+    independent_agents: true,
+    subagents: true,
+    inline: true,
+  },
+  interaction: {
+    native_questions: true,
+    terminal_prompt: true,
+    file_bus_questions: true,
+  },
+  sessions: { continue: true, resume_by_id: true, fork: true },
+  structured_output: {
+    native_json: true,
+    schema_validation: true,
+    repair_prompt: true,
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "bridge",
+    web: "native",
+    mcp: "native",
+  },
+  mcp: { stdio: true, http: false },
+  models: {
+    cheap: { model: "haiku" },
+    mid: { model: "sonnet" },
+    powerful: { model: "opus" },
+  },
+};
+
+// ---------------------------------------------------------------------------
+// CODEX row — authored from verified plugin facts + Codex-CLI knowledge.
+// Values not verified on a live Codex box are marked `// INFERRED` — L2/L3 confirm.
+// ---------------------------------------------------------------------------
+
+export const CODEX_CAPABILITIES: GuildHostCapabilitiesV1 = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "codex",
+  family: "codex",
+  surface_kind: "cli",
+  // installable:false is the honest MACHINE state — the Codex renderer exists but
+  // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+  // as installable until proven. installability:"target" records that the renderer
+  // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "codex-plugin",
+    // NOT self_update (operator decision, initiative cross-host-release-
+    // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
+    // list` tracks the registered marketplace source, so a Guild-side staged
+    // swap of the cache mutates manager state behind Codex's back and the next
+    // `codex plugin add` reinstalls the old payload. A minted receipt also
+    // cannot know a native install's channel, so a self-update could silently
+    // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
+    // populations: receipted installs re-render properly; host-native installs
+    // are detected and told the precise codex command for their registered
+    // source type (git → marketplace upgrade + plugin add; local → reinstall).
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false },
+  },
+  bootstrap: {
+    // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+    // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+    context_injection: "instruction_file",
+    skill_autoload: false, // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+    prompt_transform: false, // INFERRED
+    wrapper_injection: true, // The generated guild-run wrapper injects bootstrap.
+  },
+  commands: {
+    // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+    slash_commands: false,
+    command_files: "none",
+  },
+  skills: { native_skills: false, skill_dir: null }, // Verified (per-host-packaging).
+  agents: { native_agents: false, agent_format: null }, // Verified (per-host-packaging flags agents unsupported).
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null,
+  },
+  hooks: {
+    // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+    // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+    // Claude-shaped hooks manifest and fires both events the generated
+    // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+    // bridge since the package existed, and SessionStart now carries the
+    // update-check signal, LIVE-VERIFIED in a real codex session (the model
+    // quoted the injected line verbatim). Remaining events stay false until
+    // individually verified.
+    session_start: true,
+    user_prompt_submit: true,
+    // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0, isolated CODEX_HOME).
+    // A PreToolUse hook emitting the Claude-shaped
+    // {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}
+    // BLOCKS the tool call:
+    //     hook: PreToolUse Blocked
+    //     ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: …
+    // and the model stops. CONTROL (same config, non-matching command) reached
+    // `hook: PreToolUse Completed` and executed — so the deny, not the sandbox,
+    // is causal. This retires the old INFERRED `false` (never verified).
+    //
+    // CAVEAT THAT DOES NOT BELONG IN THIS BOOLEAN, but governs how it may be
+    // consumed: codex gates hooks behind PERSISTED HOOK TRUST. With the same
+    // hooks.json but no trust, the hook SILENTLY never runs (no warning, tool
+    // executes). So "codex supports PreToolUse deny" (this row) must never be
+    // read as "enforcement is live on this box" — that needs a probe of actual
+    // execution (probeCodexPreToolUseEnforcement, scripts/lib/pane-adapter.ts),
+    // which is what the codex-pane bypass flag is gated on.
+    pre_tool_use: true,
+    post_tool_use: false,
+    stop: false,
+    pre_compact: false,
+    subagent_stop: false,
+    task_created: false,
+    task_completed: false,
+    teammate_idle: false,
+  },
+  permissions: {
+    // `deny` CONFIRMED ON-BOX (issue #94) — see hooks.pre_tool_use above: a
+    // PreToolUse hook decision of "deny" is honoured and blocks the call.
+    deny: true,
+    ask: true, // Codex prompts for approval by default.
+    // STILL NULL, DELIBERATELY. Codex has a PreToolUse DENY layer but no
+    // PreToolUse ASK primitive (`permissionDecision:"ask"` is not an accepted
+    // codex decision). Guild's own enforcement already handles this: the
+    // manifest written by write-host-capability.ts carries
+    // `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
+    // hooks/pre-tool-use.ts's HK-07 gate degrades ask -> file-bus
+    // approval_request + `deny`. VERIFIED end-to-end for codex in issue #94.
+    // Flipping this to "pre_tool_use" would re-enable an ask codex rejects.
+    ask_mode: null,
+    accept_edits_without_prompt: false, // INFERRED
+    auto_approve_tools: false, // INFERRED
+    bypass_prompts: true, // Codex YOLO / --dangerously-bypass exists (AC19).
+    bypass_sandbox: true, // INFERRED — YOLO bypasses the sandbox.
+    permission_prompt_layer: false, // INFERRED
+    launch_modes: {
+      // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+      // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+      // than guessed, so their absence reads as "degrade/record", not "supported".
+      // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0): the flag exists and
+      // takes effect. Note what it does NOT do — a PreToolUse hook deny still
+      // blocked the tool call under this flag, so the bypass suppresses codex's
+      // own approval/sandbox layer and leaves Guild's gate intact.
+      bypass_all: ["--dangerously-bypass-approvals-and-sandbox"],
+    },
+  },
+  dispatch: {
+    tmux_processes: true, // Codex is a CLI process — tmux panes work.
+    plain_processes: true,
+    independent_agents: false, // INFERRED — no native agent-team primitive.
+    subagents: false, // INFERRED
+    inline: true,
+  },
+  interaction: {
+    native_questions: false, // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+    terminal_prompt: true,
+    file_bus_questions: true, // Guild file-bus approval works on any FS host.
+  },
+  sessions: {
+    continue: true, // INFERRED — Codex has session continuation.
+    resume_by_id: true, // INFERRED
+    fork: false, // INFERRED
+  },
+  structured_output: {
+    native_json: false, // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+    schema_validation: false, // Guild-side validation (validateHandoffV2) instead.
+    repair_prompt: true, // Bounded repair prompt is the fallback (ADR §Result contracts).
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none", // INFERRED — no native browser; record fallback (AC29).
+    web: "emulated", // INFERRED
+    mcp: "native", // Codex supports stdio MCP.
+  },
+  mcp: { stdio: true, http: false }, // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+  models: {
+    // Codex model ids are host-specific and not pinned in this repo yet; null =
+    // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null },
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Shared no-hooks constant (consumed by AGENTS_FILE_CAPABILITIES below — the
+// hand-authored PI_CAPABILITIES/ANTIGRAVITY_CAPABILITIES rows that used to
+// share this section, plus their TARGET_CLI_COMMON base, were retired: no live
+// consumer indexed them once guild-run-wrapper.ts/permission-policy.ts moved to
+// host-registry.ts's registry-derived DERIVED_HOST_CAPABILITY_ROWS)
+// ---------------------------------------------------------------------------
+
+const NO_HOOKS: HooksCaps = {
+  session_start: false,
+  user_prompt_submit: false,
+  pre_tool_use: false,
+  post_tool_use: false,
+  stop: false,
+  pre_compact: false,
+  subagent_stop: false,
+  task_created: false,
+  task_completed: false,
+  teammate_idle: false,
+};
+
+export const AGENTS_FILE_CAPABILITIES: GuildHostCapabilitiesV1 = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "agents-file",
+  family: "agents",
+  surface_kind: "file",
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "agents-file",
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false },
+  },
+  bootstrap: {
+    context_injection: "instruction_file",
+    skill_autoload: false,
+    prompt_transform: false,
+    wrapper_injection: true,
+  },
+  commands: { slash_commands: false, command_files: "none" },
+  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+  agents: { native_agents: false, agent_format: null },
+  injection: {
+    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+    definition_injection: false,
+    definition_injection_support: "absent",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "absent",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "none",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null,
+  },
+  hooks: NO_HOOKS,
+  permissions: {
+    deny: false,
+    ask: true,
+    ask_mode: null,
+    accept_edits_without_prompt: false,
+    auto_approve_tools: false,
+    bypass_prompts: false,
+    bypass_sandbox: false,
+    permission_prompt_layer: false,
+    launch_modes: {},
+  },
+  dispatch: {
+    tmux_processes: false,
+    plain_processes: false,
+    independent_agents: false,
+    subagents: false,
+    inline: false,
+  },
+  interaction: {
+    native_questions: false,
+    terminal_prompt: false,
+    file_bus_questions: true,
+  },
+  sessions: { continue: false, resume_by_id: false, fork: false },
+  structured_output: {
+    native_json: false,
+    schema_validation: false,
+    repair_prompt: true,
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none",
+    web: "emulated",
+    mcp: "none",
+  },
+  mcp: { stdio: false, http: false },
+  models: {
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null },
+  },
+};
+
+// The Phase-1 convenience registry that used to live here (`HOST_CAPABILITY_ROWS`,
+// keyed by host_kind: claude/codex/agents-file/pi/antigravity/antigravity-2) has
+// been RETIRED (G4b host-reachability fix): it never carried the 4 wrapped-CLI
+// hosts (cursor/github-copilot/opencode/rovo-dev) added to the registry, and its
+// hand-authored pi/antigravity rows had drifted from the registry's own
+// on-host-VERIFIED overrides — the "two diverged capability truths" audit
+// finding. `host-registry.ts`'s `DERIVED_HOST_CAPABILITY_ROWS` is
+// registry-derived, covers all 16 registry ids + the same legacy aliases, and
+// is what guild-run-wrapper.ts and permission-policy.ts consume today. This
+// file's `CLAUDE_CAPABILITIES`/`CODEX_CAPABILITIES`/`AGENTS_FILE_CAPABILITIES`
+// constants remain — they're the frozen feedstock host-registry-schema.ts
+// builds its own rows from.
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+const TOOL_STRENGTHS = new Set<string>(["native", "bridge", "emulated", "none"]);
+
+/** The ten hook events every capability row must advertise (matches HooksCaps). */
+export const REQUIRED_HOOK_EVENTS = Object.freeze([
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+  "post_tool_use",
+  "stop",
+  "pre_compact",
+  "subagent_stop",
+  "task_created",
+  "task_completed",
+  "teammate_idle",
+] as const);
+
+/**
+ * Validator for a `guild.host_capabilities.v1` row. Checks the discriminator,
+ * the identity strings, and the presence + types of the required capability
+ * blocks. Deep per-boolean validation is intentionally light — the row is large
+ * and additive; the load-bearing invariants are: discriminator correct, identity
+ * present, every top-level block present and an object, tool strengths in range.
+ * Never throws.
+ */
+export function validateHostCapabilitiesV1(value: unknown): ValidationResult {
+  const errors: string[] = [];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { valid: false, errors: ["capability row must be a non-null object"] };
+  }
+  const o = value as Record<string, unknown>;
+
+  if (o["schema_version"] !== "guild.host_capabilities.v1") {
+    errors.push(
+      `schema_version must be "guild.host_capabilities.v1"; got ${JSON.stringify(o["schema_version"])}`
+    );
+  }
+  for (const k of ["host_kind", "family", "surface_kind"]) {
+    if (typeof o[k] !== "string" || (o[k] as string).trim() === "") {
+      errors.push(`${k} must be a non-empty string`);
+    }
+  }
+  const requiredBlocks = [
+    "package",
+    "bootstrap",
+    "commands",
+    "skills",
+    "agents",
+    "hooks",
+    "permissions",
+    "dispatch",
+    "interaction",
+    "sessions",
+    "structured_output",
+    "artifacts",
+    "tools",
+    "mcp",
+    "models",
+  ];
+  for (const b of requiredBlocks) {
+    const block = o[b];
+    if (typeof block !== "object" || block === null || Array.isArray(block)) {
+      errors.push(`${b} must be a present object`);
+    }
+  }
+
+  // tools strengths must be in range (the one enum-y block routing depends on hard)
+  const tools = o["tools"];
+  if (typeof tools === "object" && tools !== null && !Array.isArray(tools)) {
+    for (const [tk, tv] of Object.entries(tools as Record<string, unknown>)) {
+      if (typeof tv !== "string" || !TOOL_STRENGTHS.has(tv)) {
+        errors.push(`tools.${tk} must be one of native|bridge|emulated|none; got ${JSON.stringify(tv)}`);
+      }
+    }
+  }
+
+  // injection (cap-loc-D11): the group is REQUIRED, and the TWO-FIELD HONESTY rule
+  // is enforced here rather than documented. `*_support !== "verified"` MUST carry
+  // its boolean at false — that is what stops a row asserting a capability nobody
+  // probed, which is the exact failure mode gap-audit E3 records for the Codex rows.
+  {
+    const inj = (value as Record<string, unknown>)["injection"];
+    if (typeof inj !== "object" || inj === null || Array.isArray(inj)) {
+      errors.push("injection must be an object");
+    } else {
+      const i = inj as Record<string, unknown>;
+      const pairs: ReadonlyArray<readonly [string, string]> = [
+        ["definition_injection", "definition_injection_support"],
+        ["skill_bundle_injection", "skill_bundle_injection_support"],
+        ["dynamic_registration", "dynamic_registration_support"],
+      ];
+      for (const [boolKey, supportKey] of pairs) {
+        const b = i[boolKey];
+        const sup = i[supportKey];
+        if (typeof b !== "boolean") {
+          errors.push(`injection.${boolKey} must be boolean; got ${JSON.stringify(b)}`);
+        }
+        if (typeof sup !== "string" || !INJECTION_SUPPORT_SET.has(sup)) {
+          errors.push(
+            `injection.${supportKey} must be one of verified|target|absent; got ${JSON.stringify(sup)}`
+          );
+        }
+        // THE HONESTY INVARIANT — a BICONDITIONAL (codex round 4, HIGH-6).
+        //
+        // `boolean true ⇒ support verified` alone left the other direction open:
+        // `verified` + `false` passed, which asserts "a probe proved this" while
+        // routing reads the capability as unavailable. That is incoherent, and it
+        // would silently waste real evidence.
+        //
+        // `verified` means "verified PRESENT". A probe that ran and found the
+        // capability MISSING is `absent` (the enum already carries that meaning);
+        // a mechanism that exists but was never probed is `target`.
+        if (b === true && sup !== "verified") {
+          errors.push(
+            `injection.${boolKey} is true but ${supportKey} is ${JSON.stringify(sup)} — ` +
+              `only a "verified" support value may carry a true capability`
+          );
+        }
+        if (sup === "verified" && b !== true) {
+          errors.push(
+            `injection.${supportKey} is "verified" but ${boolKey} is ${JSON.stringify(b)} — ` +
+              `"verified" means a probe proved the capability PRESENT; use "absent" for a ` +
+              `probe that found it missing, or "target" for an unprobed mechanism`
+          );
+        }
+      }
+      // CRITICAL-1 + HIGH-4: each capability cites its OWN probe receipt, and the
+      // citation must match the receipt path grammar. One shared string could not
+      // attribute three independent claims, and an unconstrained string accepted "x".
+      for (const [boolKey, supportKey] of pairs) {
+        const citeKey = `${boolKey}_verified_by`;
+        const cite = i[citeKey];
+        if (i[supportKey] === "verified") {
+          if (typeof cite !== "string" || !PROBE_RECEIPT_PATH_RE.test(cite)) {
+            errors.push(
+              `injection.${supportKey} is "verified" but ${citeKey} is ${JSON.stringify(cite)} — ` +
+                "a verified capability must cite its own probe receipt at " +
+                "evidence/host-smoke/<host-id>/<box-id>.json"
+            );
+          }
+        } else if (cite !== null) {
+          errors.push(
+            `injection.${citeKey} must be null when ${supportKey} is not "verified"; ` +
+              `got ${JSON.stringify(cite)}`
+          );
+        }
+      }
+
+      const fb = i["fallback"];
+      if (fb !== "prompt_text" && fb !== "none") {
+        errors.push(`injection.fallback must be prompt_text|none; got ${JSON.stringify(fb)}`);
+      }
+    }
+  }
+
+  // hooks: EVERY one of the ten events must be present and boolean. A probed row
+  // that omits an event (e.g. pre_compact) would otherwise pass and reintroduce
+  // the "downstream lane guesses hook support" gap.
+  const hooks = o["hooks"];
+  if (typeof hooks === "object" && hooks !== null && !Array.isArray(hooks)) {
+    const h = hooks as Record<string, unknown>;
+    for (const ev of REQUIRED_HOOK_EVENTS) {
+      if (typeof h[ev] !== "boolean") {
+        errors.push(`hooks.${ev} must be present and boolean (probed rows must advertise every event); got ${JSON.stringify(h[ev])}`);
+      }
+    }
+  }
+
+  // package.installability is a machine-readable routing signal — validate its enum.
+  const pkg = o["package"];
+  if (typeof pkg === "object" && pkg !== null && !Array.isArray(pkg)) {
+    const inst = (pkg as Record<string, unknown>)["installability"];
+    if (inst !== "verified" && inst !== "target") {
+      errors.push(`package.installability must be "verified" or "target"; got ${JSON.stringify(inst)}`);
+    }
+    if (typeof (pkg as Record<string, unknown>)["installable"] !== "boolean") {
+      errors.push("package.installable must be a boolean");
+    }
+    // AC-7: the update capability row is REQUIRED and internally coherent —
+    // a row that validates without it would be a claimed-but-absent capability.
+    const upd = (pkg as Record<string, unknown>)["update"];
+    if (typeof upd !== "object" || upd === null || Array.isArray(upd)) {
+      errors.push("package.update is required (AC-7 update capability row)");
+    } else {
+      const u = upd as Record<string, unknown>;
+      if (u["check"] !== "marketplace_clone" && u["check"] !== "receipt" && u["check"] !== "none") {
+        errors.push(`package.update.check must be "marketplace_clone" | "receipt" | "none"; got ${JSON.stringify(u["check"])}`);
+      }
+      const apply = u["apply"];
+      if (apply !== "marketplace_cli" && apply !== "self_update" && apply !== "reinstall_command" && apply !== "none") {
+        errors.push(`package.update.apply must be "marketplace_cli" | "self_update" | "reinstall_command" | "none"; got ${JSON.stringify(apply)}`);
+      }
+      if (apply === "none") {
+        if (u["command"] !== null) errors.push("package.update.command must be null when apply is \"none\"");
+        if (u["auto_capable"] !== false) errors.push("package.update.auto_capable must be false when apply is \"none\"");
+        if (u["check"] !== "none") errors.push("package.update.check must be \"none\" when apply is \"none\"");
+      } else if (typeof u["command"] !== "string" || (u["command"] as string).length === 0) {
+        errors.push("package.update.command must be a non-empty string when an apply path exists");
+      }
+      if (typeof u["auto_capable"] !== "boolean") {
+        errors.push("package.update.auto_capable must be a boolean");
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/** Type guard — narrows to GuildHostCapabilitiesV1 after passing validation. */
+export function isHostCapabilitiesV1(value: unknown): value is GuildHostCapabilitiesV1 {
+  return validateHostCapabilitiesV1(value).valid;
+}

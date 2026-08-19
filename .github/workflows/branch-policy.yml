@@ -17,7 +17,7 @@ name: branch-policy
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
     branches: [main]
 
 permissions:
@@ -25,8 +25,26 @@ permissions:
 
 jobs:
   branch-policy:
+    # FIC-93/B3: `branch-policy` is the ONLY status context live GitHub branch
+    # protection requires, so publication is policy-bound to THIS job. Binding:
+    # it needs promotion-evidence, and `if: always()` forces it to RUN (never
+    # skip — GitHub treats a skipped required check as satisfied) so the guard
+    # step below can FAIL the required context whenever the promotion gate did
+    # not succeed. No GitHub setting changes; the dependency is workflow-local.
+    needs: promotion-evidence
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      - name: Require the hash-bound promotion-evidence job to have succeeded
+        env:
+          PROMOTION_RESULT: ${{ needs.promotion-evidence.result }}
+        run: |
+          set -euo pipefail
+          if [ "$PROMOTION_RESULT" != "success" ]; then
+            echo "::error::promotion-evidence concluded '$PROMOTION_RESULT' — the required branch-policy context fails: a release PR may not publish without the hash-bound stable-promotion gate." >&2
+            exit 1
+          fi
+          echo "OK: promotion-evidence succeeded."
       - name: PRs into main must come from a same-repo release/v* branch
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -47,5 +65,42 @@ jobs:
           echo "main is the STABLE release channel — it only receives release/vX.Y.Z branches (cut from next)." >&2
           echo "Retarget this PR to the integration branch instead:" >&2
           echo "  gh pr edit ${{ github.event.pull_request.number }} --base next" >&2
-          echo "Release flow: merge features into next → test the beta channel → cut release/vX.Y.Z from next (bump versions + notes) → PR release/vX.Y.Z into main → release.yml tags + publishes on merge → merge main back into next." >&2
+          echo "Release flow: merge features into next → test beta → cut release/vX.Y.Z → PR into main → publish → advance next to the release point by fast-forward when ancestry allows, otherwise by a release-delta PR. Never merge main back into next." >&2
           exit 1
+
+  # FIC-91 / REL-P0 (FIC-74 §0/B1): the hash-bound stable-promotion gate. A
+  # release PR may not publish without verifiable conformance evidence: the
+  # promotion mode validates the guild.release_promotion.v1 record, the EXACT
+  # bytes of its guild.release_conformance.v1 evidence (SHA-256-bound), re-runs
+  # the production conformance evaluator over the transported inputs, binds the
+  # evidence source commit, requires its ancestry, and enforces the exact
+  # allowed diff. It runs against GitHub's prospective merge commit (the
+  # default pull_request checkout) with full history for ancestry + diff.
+  promotion-evidence:
+    name: Require hash-bound stable-promotion evidence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout prospective merge with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      # npm ci ONLY — a lockfile that cannot reproduce exactly must fail this
+      # release gate, never silently degrade to npm install.
+      - name: Install script dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline
+      # The allowed diff admits generated marketplace.json ONLY because its
+      # bytes derive from plugin.json — so this required job must itself
+      # execute the byte-level invariant, before the promotion gate runs.
+      - name: Enforce the generated-manifest invariant (check:claude-install)
+        working-directory: scripts
+        run: npm run check:claude-install -- --root ..
+      - name: Require hash-bound stable-promotion evidence
+        working-directory: scripts
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: npx tsx check-channel-integrity.ts promotion --release-branch "$HEAD_REF" --head HEAD --root ..

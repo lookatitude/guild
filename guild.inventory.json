@@ -1,10 +1,10 @@
 {
   "schema_version": "guild.inventory.v1",
   "generated_at": "1970-01-01T00:00:00.000Z",
-  "plugin_version": "2.6.0",
+  "plugin_version": "2.7.0-beta.1",
   "manifest": {
     "name": "guild",
-    "version": "2.6.0",
+    "version": "2.7.0-beta.1",
     "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
@@ -26,6 +26,11 @@
     ]
   },
   "commands": [
+    {
+      "id": "adopt",
+      "source_path": "commands/adopt.md",
+      "description": "Project capability localization — report shipped role/skill dependencies, freeze the deprecated compatibility catalog, apply or roll back an approved adoption manifest, operate the D03 migration window, and evaluate the journal-derived G5 removal gate. This is distinct from /guild:migrate, which remains the v1-to-v2 layout converter."
+    },
     {
       "id": "audit",
       "source_path": "commands/audit.md",
@@ -975,6 +980,11 @@
   ],
   "scripts": [
     {
+      "id": "advisory-record-example",
+      "source_path": "scripts/advisory-record-example.ts",
+      "kind": "cli"
+    },
+    {
       "id": "agent-team-launcher",
       "source_path": "scripts/agent-team-launcher.ts",
       "kind": "cli"
@@ -1105,6 +1115,11 @@
       "kind": "cli"
     },
     {
+      "id": "definition-ref-for-dispatch",
+      "source_path": "scripts/definition-ref-for-dispatch.ts",
+      "kind": "cli"
+    },
+    {
       "id": "description-optimizer",
       "source_path": "scripts/description-optimizer.ts",
       "kind": "cli"
@@ -1192,6 +1207,11 @@
     {
       "id": "emit-loop-event",
       "source_path": "scripts/emit-loop-event.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "emit-release-conformance",
+      "source_path": "scripts/emit-release-conformance.ts",
       "kind": "cli"
     },
     {
@@ -1530,6 +1550,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/compatibility-loader",
+      "source_path": "scripts/lib/capability/compatibility-loader.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/compatibility-usage",
       "source_path": "scripts/lib/capability/compatibility-usage.ts",
       "kind": "lib"
@@ -1537,6 +1562,16 @@
     {
       "id": "lib/capability/context-manager-contract",
       "source_path": "scripts/lib/capability/context-manager-contract.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/definition-ref-for-dispatch",
+      "source_path": "scripts/lib/capability/definition-ref-for-dispatch.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/migration-window",
+      "source_path": "scripts/lib/capability/migration-window.ts",
       "kind": "lib"
     },
     {
@@ -1560,6 +1595,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/self-build-canonicalize",
+      "source_path": "scripts/lib/capability/self-build-canonicalize.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/strangler-control",
+      "source_path": "scripts/lib/capability/strangler-control.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/tiebreak",
       "source_path": "scripts/lib/capability/tiebreak.ts",
       "kind": "lib"
@@ -1567,6 +1612,11 @@
     {
       "id": "lib/capability/tier-defaults",
       "source_path": "scripts/lib/capability/tier-defaults.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/workspace-role-localize",
+      "source_path": "scripts/lib/capability/workspace-role-localize.ts",
       "kind": "lib"
     },
     {
@@ -1630,6 +1680,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/core/contracts/context-bundle-definition-ref",
+      "source_path": "scripts/lib/core/contracts/context-bundle-definition-ref.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/core/contracts/federation-definition-manifest-ref",
+      "source_path": "scripts/lib/core/contracts/federation-definition-manifest-ref.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/core/contracts/project-capability-profile",
       "source_path": "scripts/lib/core/contracts/project-capability-profile.ts",
       "kind": "lib"
@@ -1672,6 +1732,11 @@
     {
       "id": "lib/define-traceability",
       "source_path": "scripts/lib/define-traceability.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/definition-artifact-resolver",
+      "source_path": "scripts/lib/definition-artifact-resolver.ts",
       "kind": "lib"
     },
     {
@@ -1852,6 +1917,11 @@
     {
       "id": "lib/host-types",
       "source_path": "scripts/lib/host-types.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/host/cmux-backend",
+      "source_path": "scripts/lib/host/cmux-backend.ts",
       "kind": "lib"
     },
     {
@@ -2095,6 +2165,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/run-record-validate",
+      "source_path": "scripts/lib/run-record-validate.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/run-sinks",
       "source_path": "scripts/lib/run-sinks.ts",
       "kind": "lib"
@@ -2175,6 +2250,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/task-cell-launch-plan",
+      "source_path": "scripts/lib/task-cell-launch-plan.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/team-backend",
       "source_path": "scripts/lib/team-backend.ts",
       "kind": "lib"
@@ -2197,6 +2277,11 @@
     {
       "id": "lib/wiki-recall",
       "source_path": "scripts/lib/wiki-recall.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/workspace-project-root",
+      "source_path": "scripts/lib/workspace-project-root.ts",
       "kind": "lib"
     },
     {
@@ -2270,13 +2355,28 @@
       "kind": "cli"
     },
     {
+      "id": "run-analysis",
+      "source_path": "scripts/run-analysis.ts",
+      "kind": "cli"
+    },
+    {
       "id": "score-tier",
       "source_path": "scripts/score-tier.ts",
       "kind": "cli"
     },
     {
+      "id": "self-build-canonicalize",
+      "source_path": "scripts/self-build-canonicalize.ts",
+      "kind": "cli"
+    },
+    {
       "id": "shadow-mode",
       "source_path": "scripts/shadow-mode.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "sign-release-attestation",
+      "source_path": "scripts/sign-release-attestation.ts",
       "kind": "cli"
     },
     {
@@ -2305,6 +2405,36 @@
       "kind": "cli"
     },
     {
+      "id": "task-cell-audit",
+      "source_path": "scripts/task-cell-audit.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "task-cell-host-conformance",
+      "source_path": "scripts/task-cell-host-conformance.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "task-cell-policy-eval",
+      "source_path": "scripts/task-cell-policy-eval.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "task-cell-scale-audit",
+      "source_path": "scripts/task-cell-scale-audit.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "task-cell-team-result",
+      "source_path": "scripts/task-cell-team-result.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "task-cell-telemetry",
+      "source_path": "scripts/task-cell-telemetry.ts",
+      "kind": "cli"
+    },
+    {
       "id": "team-decide",
       "source_path": "scripts/team-decide.ts",
       "kind": "cli"
@@ -2322,6 +2452,11 @@
     {
       "id": "v1.4-log-validator",
       "source_path": "scripts/v1.4-log-validator.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "validate-run-record",
+      "source_path": "scripts/validate-run-record.ts",
       "kind": "cli"
     },
     {
@@ -2352,6 +2487,11 @@
     {
       "id": "wiki-lint-checks",
       "source_path": "scripts/wiki-lint-checks.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "workspace-role-localize",
+      "source_path": "scripts/workspace-role-localize.ts",
       "kind": "cli"
     },
     {

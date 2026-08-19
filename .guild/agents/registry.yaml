@@ -1,2 +1,46 @@
 # schema_version: guild.agents_registry.v1
-agents: []
+# generated_by: guild.roster_resolve.v1
+# DERIVED INDEX of .guild/agents/*.md — the .md files are the source of truth (D4).
+# Regenerate with: roster-resolve.ts --cwd <root> --write-registry. Do not hand-edit.
+agents:
+  - id: command-builder
+    file: .guild/agents/command-builder.md
+    model: sonnet
+    default_tier: mid
+  - id: docs-writer
+    file: .guild/agents/docs-writer.md
+    model: opus
+    default_tier: powerful
+  - id: eval-engineer
+    file: .guild/agents/eval-engineer.md
+    model: opus
+    default_tier: powerful
+  - id: hook-engineer
+    file: .guild/agents/hook-engineer.md
+    model: sonnet
+    default_tier: mid
+  - id: plugin-architect
+    file: .guild/agents/plugin-architect.md
+    model: opus
+    default_tier: powerful
+  - id: research-digester
+    file: .guild/agents/research-digester.md
+    model: opus
+    default_tier: powerful
+    work_class: research
+  - id: security-auditor
+    file: .guild/agents/security-auditor.md
+    model: sonnet
+    default_tier: mid
+  - id: skill-author
+    file: .guild/agents/skill-author.md
+    model: opus
+    default_tier: powerful
+  - id: specialist-agent-writer
+    file: .guild/agents/specialist-agent-writer.md
+    model: opus
+    default_tier: powerful
+  - id: tooling-engineer
+    file: .guild/agents/tooling-engineer.md
+    model: sonnet
+    default_tier: mid

@@ -1,0 +1,463 @@
+{
+  "schema_version": "guild.conformance_scenarios.v1",
+  "media_type": "application/json",
+  "contract_id": "multi-host-runtime-convergence",
+  "contract_version": "1.0.0",
+  "initiative_id": "multi-host-runtime-convergence",
+  "status": "baseline",
+  "scope": {
+    "includes": [
+      "lifecycle and normalized-event equivalence",
+      "support-state transitions",
+      "unsupported and refusal outcomes",
+      "receipt ordering, durability, observation loss, and reconciliation",
+      "module boundaries",
+      "strangler migration, rollback, and version drift"
+    ],
+    "excludes": [
+      "test, fixture, harness, and production implementation",
+      "HTML-native document-contract implementation owned by MH-05",
+      "live-host support claims without release-bound evidence"
+    ]
+  },
+  "normative_rules": {
+    "scenario_identity": "stable_id values are immutable within this schema major version; changed semantics require a new stable_id or schema major version",
+    "equivalence": "equivalent normalized inputs must produce the same expected_typed_outcome type, disposition, semantic state or decision, and receipt assertions; host-native metadata may differ only where an assertion explicitly permits it",
+    "missing_evidence": "absence of required evidence is never success and resolves to not_observed or observation_failed",
+    "support_claim": "a host is conformant only for the exact source, package, runtime, adapter, host, platform, contract, and scenario-suite versions named by its evidence bundle",
+    "reader_policy": "readers reject unknown schema major versions and may ignore unknown additive fields within a supported major version"
+  },
+  "closed_vocabularies": {
+    "categories": [
+      "lifecycle",
+      "normalized_event",
+      "support_state",
+      "unsupported_refusal",
+      "receipt_integrity",
+      "module_boundary",
+      "strangler_migration",
+      "version_drift"
+    ],
+    "dispositions": [
+      "succeeded",
+      "refused",
+      "unsupported",
+      "failed",
+      "degraded"
+    ],
+    "observation_states": [
+      "checked_clean",
+      "not_applicable",
+      "not_observed",
+      "observation_failed"
+    ],
+    "support_states": [
+      "recognized",
+      "rendered",
+      "installed",
+      "activated",
+      "updated",
+      "conformant"
+    ],
+    "event_names": [
+      "session.start",
+      "prompt.submit",
+      "tool.before",
+      "tool.after",
+      "context.compact",
+      "task.dispatch",
+      "task.collect",
+      "run.resume",
+      "run.stop",
+      "package.render",
+      "package.install",
+      "package.activate",
+      "package.update",
+      "runtime.verify",
+      "receipt.append",
+      "receipt.reconcile",
+      "migration.shadow",
+      "migration.cutover",
+      "migration.rollback"
+    ],
+    "outcome_types": [
+      "guild.lifecycle_outcome.v1",
+      "guild.normalized_event_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.capability_outcome.v1",
+      "guild.policy_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.reconciliation_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.version_compatibility_outcome.v1"
+    ]
+  },
+  "implementation_wave_owners": {
+    "W1/MH-02": "neutral lifecycle, policy, and typed result core",
+    "W1/MH-06": "ordered durable receipt and observability spine",
+    "W2/MH-03": "host discovery, normalized-event binding, and integration adapters",
+    "W4/MH-07": "stable module public APIs and dependency-boundary enforcement",
+    "W4/MH-08": "side-by-side conformance, feature-gated cutover, and rollback",
+    "W5/MH-09": "release-bound distribution evidence and pinned consumer contracts"
+  },
+  "evidence_profiles": {
+    "E-LIFECYCLE": {
+      "required_kinds": ["capability_snapshot", "normalized_event_log", "typed_outcome", "receipt_journal"],
+      "required_bindings": ["run_id", "operation_id", "scenario_id", "host_id", "host_version", "runtime_version", "contract_version"]
+    },
+    "E-SUPPORT": {
+      "required_kinds": ["operation_receipt", "artifact_hash", "typed_outcome"],
+      "required_bindings": ["scenario_id", "source_commit", "package_hash", "runtime_version", "host_id", "host_version", "platform"]
+    },
+    "E-REFUSAL": {
+      "required_kinds": ["capability_snapshot", "typed_outcome", "receipt_journal"],
+      "required_bindings": ["scenario_id", "operation_id", "reason_code", "host_id", "runtime_version"]
+    },
+    "E-RECEIPT": {
+      "required_kinds": ["receipt_journal", "typed_outcome"],
+      "required_bindings": ["scenario_id", "run_id", "operation_id", "correlation_id", "sequence", "source_version", "runtime_version"]
+    },
+    "E-BOUNDARY": {
+      "required_kinds": ["dependency_graph", "boundary_verdict"],
+      "required_bindings": ["scenario_id", "source_commit", "module_manifest_version"]
+    },
+    "E-MIGRATION": {
+      "required_kinds": ["legacy_outcome", "candidate_outcome", "comparison_verdict", "receipt_journal"],
+      "required_bindings": ["scenario_id", "operation_id", "feature_gate", "legacy_version", "candidate_version", "runtime_version"]
+    },
+    "E-VERSION": {
+      "required_kinds": ["compatibility_verdict", "release_manifest", "artifact_hash"],
+      "required_bindings": ["scenario_id", "source_commit", "package_hash", "runtime_version", "adapter_version", "host_version", "contract_version", "scenario_suite_version", "platform"]
+    }
+  },
+  "scenario_field_contract": {
+    "required": [
+      "stable_id",
+      "category",
+      "title",
+      "preconditions",
+      "action_event",
+      "expected_typed_outcome",
+      "evidence_requirements",
+      "implementation_wave_owner"
+    ],
+    "preconditions": "non-empty array of independently establishable facts",
+    "action_event": "object with one closed-vocabulary event name and deterministic input",
+    "expected_typed_outcome": "object with a closed-vocabulary type, one terminal disposition, and machine-checkable assertions",
+    "evidence_requirements": "non-empty array referencing a declared evidence profile and scenario-specific assertions",
+    "implementation_wave_owner": "object naming exactly one declared wave/work-item owner"
+  },
+  "scenarios": [
+    {
+      "stable_id": "MHRC-LIF-001",
+      "category": "lifecycle",
+      "title": "Equivalent phase entry produces equivalent lifecycle state",
+      "preconditions": ["two hosts expose the required phase-entry capability", "both runs use byte-identical immutable capability snapshots", "both runs start in the same lifecycle state"],
+      "action_event": {"name": "prompt.submit", "input": {"semantic_intent": "enter_phase", "phase_matrix": ["init", "ideate", "plan", "build", "qa", "ops"]}},
+      "expected_typed_outcome": {"type": "guild.lifecycle_outcome.v1", "disposition": "succeeded", "assertions": ["host pairs reach the same semantic phase state", "host pairs emit the same lifecycle decision code", "host-native fields are excluded from equivalence comparison"]},
+      "evidence_requirements": [{"profile": "E-LIFECYCLE", "assertions": ["one event/outcome pair per host and phase", "capability snapshot hash is constant within each run"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-02", "key": "W1/MH-02"}
+    },
+    {
+      "stable_id": "MHRC-LIF-002",
+      "category": "lifecycle",
+      "title": "Equivalent gate violation produces equivalent refusal",
+      "preconditions": ["two hosts support the normalized pre-tool event", "the same policy and lifecycle state apply", "the proposed operation violates the same gate"],
+      "action_event": {"name": "tool.before", "input": {"operation_class": "mutating", "gate_condition": "unsatisfied"}},
+      "expected_typed_outcome": {"type": "guild.lifecycle_outcome.v1", "disposition": "refused", "assertions": ["both hosts preserve the prior state", "both hosts return the same refusal reason code", "no tool side effect occurs"]},
+      "evidence_requirements": [{"profile": "E-LIFECYCLE", "assertions": ["pre-state and post-state hashes match", "refusal receipt precedes any terminal run receipt"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-02", "key": "W1/MH-02"}
+    },
+    {
+      "stable_id": "MHRC-LIF-003",
+      "category": "lifecycle",
+      "title": "Compaction and resume preserve lifecycle identity",
+      "preconditions": ["an open run has durable state and receipts", "the host supports compact or resume observation", "no capability snapshot mutation is permitted"],
+      "action_event": {"name": "context.compact", "input": {"then": "run.resume"}},
+      "expected_typed_outcome": {"type": "guild.lifecycle_outcome.v1", "disposition": "succeeded", "assertions": ["run_id and capability snapshot hash are unchanged", "resume continues from the last durable lifecycle state", "already-applied transitions are not repeated"]},
+      "evidence_requirements": [{"profile": "E-LIFECYCLE", "assertions": ["pre-compact checkpoint links to post-resume event", "receipt sequences remain monotonic"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-02", "key": "W1/MH-02"}
+    },
+    {
+      "stable_id": "MHRC-LIF-004",
+      "category": "lifecycle",
+      "title": "Run close requires equivalent terminal evidence",
+      "preconditions": ["two runs have equivalent normalized histories", "all required gates have typed outcomes", "receipt reconciliation is complete"],
+      "action_event": {"name": "run.stop", "input": {"requested_terminal_state": "completed"}},
+      "expected_typed_outcome": {"type": "guild.lifecycle_outcome.v1", "disposition": "succeeded", "assertions": ["both hosts reach the same terminal state", "completion is refused if any required observation is missing or failed", "terminal receipt is last in logical order"]},
+      "evidence_requirements": [{"profile": "E-LIFECYCLE", "assertions": ["gate-outcome set is complete", "reconciliation checkpoint covers the terminal sequence"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-02", "key": "W1/MH-02"}
+    },
+    {
+      "stable_id": "MHRC-EVT-001",
+      "category": "normalized_event",
+      "title": "Host-native events normalize to the same semantic event",
+      "preconditions": ["two adapter bindings declare the same semantic event coverage", "native payloads represent the same operator action", "adapter versions are recorded"],
+      "action_event": {"name": "prompt.submit", "input": {"native_event_matrix": "host-specific equivalent payloads"}},
+      "expected_typed_outcome": {"type": "guild.normalized_event_outcome.v1", "disposition": "succeeded", "assertions": ["normalized event name and semantic payload are equal", "host-native provenance remains attributable", "normalization does not add lifecycle policy"]},
+      "evidence_requirements": [{"profile": "E-LIFECYCLE", "assertions": ["native-input hash and normalized-output hash recorded per host", "semantic comparison excludes declared provenance fields only"]}],
+      "implementation_wave_owner": {"wave_id": "W2", "work_item_id": "MH-03", "key": "W2/MH-03"}
+    },
+    {
+      "stable_id": "MHRC-EVT-002",
+      "category": "normalized_event",
+      "title": "Unknown native event is explicit and non-mutating",
+      "preconditions": ["the adapter receives an unregistered native event", "the immutable capability snapshot does not declare a mapping"],
+      "action_event": {"name": "tool.after", "input": {"native_event": "unmapped"}},
+      "expected_typed_outcome": {"type": "guild.normalized_event_outcome.v1", "disposition": "unsupported", "assertions": ["reason code identifies unmapped_event", "lifecycle state is unchanged", "unsupported observation is durably recorded"]},
+      "evidence_requirements": [{"profile": "E-REFUSAL", "assertions": ["native event provenance is retained", "no synthesized success event exists"]}],
+      "implementation_wave_owner": {"wave_id": "W2", "work_item_id": "MH-03", "key": "W2/MH-03"}
+    },
+    {
+      "stable_id": "MHRC-SUP-001",
+      "category": "support_state",
+      "title": "Recognition does not imply rendering",
+      "preconditions": ["the host id is present in the registry", "no package artifact exists for the requested source commit"],
+      "action_event": {"name": "package.render", "input": {"mode": "status_only"}},
+      "expected_typed_outcome": {"type": "guild.support_transition_outcome.v1", "disposition": "succeeded", "assertions": ["recognized is true", "rendered is false", "installed, activated, updated, and conformant remain unproven"]},
+      "evidence_requirements": [{"profile": "E-SUPPORT", "assertions": ["registry identity is recorded", "absence of a package hash cannot promote rendered"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-SUP-002",
+      "category": "support_state",
+      "title": "Successful rendering does not imply installation",
+      "preconditions": ["the host is recognized", "a deterministic package render is requested", "no host manager or destination mutation occurs"],
+      "action_event": {"name": "package.render", "input": {"mode": "build_package"}},
+      "expected_typed_outcome": {"type": "guild.support_transition_outcome.v1", "disposition": "succeeded", "assertions": ["rendered becomes proven by manifest and hash", "installed remains unproven", "prepared local trees are not labeled installed"]},
+      "evidence_requirements": [{"profile": "E-SUPPORT", "assertions": ["source commit and reproducible package hash are present", "no install receipt is emitted"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-SUP-003",
+      "category": "support_state",
+      "title": "Installation requires an actual manager or destination",
+      "preconditions": ["a rendered package hash exists", "the target manager or absolute destination is identified", "the operation can verify post-write bytes"],
+      "action_event": {"name": "package.install", "input": {"target": "host_supported_destination"}},
+      "expected_typed_outcome": {"type": "guild.support_transition_outcome.v1", "disposition": "succeeded", "assertions": ["installed is proven for the exact destination and package hash", "activated remains unproven until runtime discovery", "install instructions alone cannot satisfy the outcome"]},
+      "evidence_requirements": [{"profile": "E-SUPPORT", "assertions": ["operation receipt names manager or destination", "post-install bytes match the rendered package hash"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-SUP-004",
+      "category": "support_state",
+      "title": "Activation requires runtime discovery and version equality",
+      "preconditions": ["an installed package is proven", "the host runtime can be queried", "expected entry surfaces are versioned"],
+      "action_event": {"name": "package.activate", "input": {"probe": "runtime_discovery"}},
+      "expected_typed_outcome": {"type": "guild.support_transition_outcome.v1", "disposition": "succeeded", "assertions": ["activated is proven only when the host loads the expected package version", "entry surfaces match the activation contract", "conformant remains unproven"]},
+      "evidence_requirements": [{"profile": "E-SUPPORT", "assertions": ["runtime version assertion and discovery output are captured", "active package hash matches installation evidence"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-SUP-005",
+      "category": "support_state",
+      "title": "Update proves before and after active versions",
+      "preconditions": ["an activated installation exists", "the requested target version differs", "the same manager or destination is addressable"],
+      "action_event": {"name": "package.update", "input": {"target_version": "next_release"}},
+      "expected_typed_outcome": {"type": "guild.support_transition_outcome.v1", "disposition": "succeeded", "assertions": ["updated is proven by before and after active versions", "destination identity is unchanged or an explicit migration is recorded", "render-only refresh cannot satisfy updated"]},
+      "evidence_requirements": [{"profile": "E-SUPPORT", "assertions": ["before and after runtime probes are present", "target package hash and destination are bound"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-SUP-006",
+      "category": "support_state",
+      "title": "Conformance is exact-version lifecycle proof",
+      "preconditions": ["the runtime is activated", "the complete required scenario set ran", "all evidence bindings match the active bytes"],
+      "action_event": {"name": "runtime.verify", "input": {"suite": "guild.conformance_scenarios.v1"}},
+      "expected_typed_outcome": {"type": "guild.support_transition_outcome.v1", "disposition": "succeeded", "assertions": ["conformant is proven only for the exact evidence-bound version tuple", "constructed adapter smoke cannot satisfy lifecycle conformance", "any required failed or unobserved scenario prevents promotion"]},
+      "evidence_requirements": [{"profile": "E-VERSION", "assertions": ["scenario verdict manifest is complete", "every evidence hash resolves and matches"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-UNS-001",
+      "category": "unsupported_refusal",
+      "title": "Unsupported capability returns a typed outcome",
+      "preconditions": ["the immutable capability snapshot marks the operation unsupported", "the caller requests that operation"],
+      "action_event": {"name": "task.dispatch", "input": {"required_capability": "absent"}},
+      "expected_typed_outcome": {"type": "guild.capability_outcome.v1", "disposition": "unsupported", "assertions": ["reason code and capability id are present", "no fallback is implied", "no side effect occurs"]},
+      "evidence_requirements": [{"profile": "E-REFUSAL", "assertions": ["snapshot hash proves capability absence", "unsupported receipt is durable"]}],
+      "implementation_wave_owner": {"wave_id": "W2", "work_item_id": "MH-03", "key": "W2/MH-03"}
+    },
+    {
+      "stable_id": "MHRC-UNS-002",
+      "category": "unsupported_refusal",
+      "title": "Policy refusal is distinct from unsupported capability",
+      "preconditions": ["the capability exists", "policy denies the requested operation", "the caller has not supplied required approval"],
+      "action_event": {"name": "tool.before", "input": {"policy_decision": "deny"}},
+      "expected_typed_outcome": {"type": "guild.policy_outcome.v1", "disposition": "refused", "assertions": ["reason code identifies policy denial", "capability remains supported", "no operation side effect occurs"]},
+      "evidence_requirements": [{"profile": "E-REFUSAL", "assertions": ["policy version and decision inputs are bound", "receipt distinguishes refused from unsupported"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-02", "key": "W1/MH-02"}
+    },
+    {
+      "stable_id": "MHRC-UNS-003",
+      "category": "unsupported_refusal",
+      "title": "Authentication failure is explicit and non-degrading by default",
+      "preconditions": ["the capability exists", "host authentication is unavailable or invalid", "no approved fallback host is selected"],
+      "action_event": {"name": "task.dispatch", "input": {"auth_state": "invalid"}},
+      "expected_typed_outcome": {"type": "guild.capability_outcome.v1", "disposition": "failed", "assertions": ["reason code identifies authentication failure", "the outcome is not reported as unsupported", "silent fallback is prohibited"]},
+      "evidence_requirements": [{"profile": "E-REFUSAL", "assertions": ["sensitive credentials are redacted", "failure receipt records selected host and no side effect"]}],
+      "implementation_wave_owner": {"wave_id": "W2", "work_item_id": "MH-03", "key": "W2/MH-03"}
+    },
+    {
+      "stable_id": "MHRC-RCT-001",
+      "category": "receipt_integrity",
+      "title": "Receipt journal preserves total logical order",
+      "preconditions": ["one run emits multiple operations", "each operation has stable operation and correlation ids", "the journal starts from a known checkpoint"],
+      "action_event": {"name": "receipt.append", "input": {"pattern": "sequential_and_concurrent_operations"}},
+      "expected_typed_outcome": {"type": "guild.receipt_outcome.v1", "disposition": "succeeded", "assertions": ["sequence values are unique and strictly increasing", "causal links preserve per-operation order", "terminal receipts cannot precede their causes"]},
+      "evidence_requirements": [{"profile": "E-RECEIPT", "assertions": ["journal scan has no duplicate or regressing sequence", "all correlation ids resolve to one operation lineage"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-06", "key": "W1/MH-06"}
+    },
+    {
+      "stable_id": "MHRC-RCT-002",
+      "category": "receipt_integrity",
+      "title": "Interrupted append never produces a valid partial receipt",
+      "preconditions": ["a prior valid journal checkpoint exists", "receipt persistence is interrupted before atomic replacement"],
+      "action_event": {"name": "receipt.append", "input": {"fault": "interrupted_write"}},
+      "expected_typed_outcome": {"type": "guild.receipt_outcome.v1", "disposition": "failed", "assertions": ["readers see the prior valid journal or no new record", "a truncated record is never accepted", "the operation cannot report success without durable evidence"]},
+      "evidence_requirements": [{"profile": "E-RECEIPT", "assertions": ["post-fault parser result is valid prior state or explicit failure", "operation outcome and journal checkpoint agree"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-06", "key": "W1/MH-06"}
+    },
+    {
+      "stable_id": "MHRC-RCT-003",
+      "category": "receipt_integrity",
+      "title": "Observation loss is explicit",
+      "preconditions": ["a required event source becomes unavailable", "the lifecycle decision depends on that observation"],
+      "action_event": {"name": "receipt.append", "input": {"observation_state": "observation_failed"}},
+      "expected_typed_outcome": {"type": "guild.receipt_outcome.v1", "disposition": "failed", "assertions": ["observation_state is observation_failed", "missing receipt is not interpreted as checked_clean", "dependent completion is blocked"]},
+      "evidence_requirements": [{"profile": "E-RECEIPT", "assertions": ["failure signal is independently durable or operation fails closed", "affected event range is identified"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-06", "key": "W1/MH-06"}
+    },
+    {
+      "stable_id": "MHRC-RCT-004",
+      "category": "receipt_integrity",
+      "title": "Reconciliation detects and classifies sequence gaps",
+      "preconditions": ["the journal and producer checkpoint disagree", "the expected sequence range is known", "operation identities are stable"],
+      "action_event": {"name": "receipt.reconcile", "input": {"condition": "sequence_gap"}},
+      "expected_typed_outcome": {"type": "guild.reconciliation_outcome.v1", "disposition": "degraded", "assertions": ["every gap is reported with bounds", "recovered entries preserve original identity and order", "unrecoverable gaps remain not_observed and block clean close"]},
+      "evidence_requirements": [{"profile": "E-RECEIPT", "assertions": ["before and after checkpoints are bound", "reconciliation verdict enumerates recovered and unresolved sequences"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-06", "key": "W1/MH-06"}
+    },
+    {
+      "stable_id": "MHRC-RCT-005",
+      "category": "receipt_integrity",
+      "title": "Duplicate delivery is idempotent",
+      "preconditions": ["the same operation receipt is delivered more than once", "operation id and payload hash are identical"],
+      "action_event": {"name": "receipt.reconcile", "input": {"condition": "duplicate_delivery"}},
+      "expected_typed_outcome": {"type": "guild.reconciliation_outcome.v1", "disposition": "succeeded", "assertions": ["one logical receipt remains authoritative", "duplicate delivery does not reapply lifecycle effects", "payload mismatch under one operation id fails reconciliation"]},
+      "evidence_requirements": [{"profile": "E-RECEIPT", "assertions": ["deduplication decision cites operation id and payload hash", "state transition count remains one"]}],
+      "implementation_wave_owner": {"wave_id": "W1", "work_item_id": "MH-06", "key": "W1/MH-06"}
+    },
+    {
+      "stable_id": "MHRC-MOD-001",
+      "category": "module_boundary",
+      "title": "Host-neutral core imports no concrete host or transport implementation",
+      "preconditions": ["the complete top-level dependency graph is available", "core public modules are classified", "host adapters, hooks, wrappers, launchers, and transports are classified"],
+      "action_event": {"name": "runtime.verify", "input": {"boundary": "core_to_concrete"}},
+      "expected_typed_outcome": {"type": "guild.boundary_outcome.v1", "disposition": "succeeded", "assertions": ["no core-to-concrete dependency edge exists", "dynamic and re-export edges are included", "unclassified destinations fail the verdict"]},
+      "evidence_requirements": [{"profile": "E-BOUNDARY", "assertions": ["full graph node and edge counts are recorded", "forbidden-edge set is empty"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-07", "key": "W4/MH-07"}
+    },
+    {
+      "stable_id": "MHRC-MOD-002",
+      "category": "module_boundary",
+      "title": "Host adapters do not own lifecycle policy",
+      "preconditions": ["adapter and lifecycle modules are classified", "normalized-event and capability ports are declared"],
+      "action_event": {"name": "runtime.verify", "input": {"boundary": "adapter_policy_ownership"}},
+      "expected_typed_outcome": {"type": "guild.boundary_outcome.v1", "disposition": "succeeded", "assertions": ["adapters depend on public lifecycle ports only", "adapter modules contain no lifecycle decision ownership", "native event binding remains adapter-owned"]},
+      "evidence_requirements": [{"profile": "E-BOUNDARY", "assertions": ["ownership manifest names each adapter export", "forbidden policy-owner set is empty"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-07", "key": "W4/MH-07"}
+    },
+    {
+      "stable_id": "MHRC-MOD-003",
+      "category": "module_boundary",
+      "title": "Execution transports do not decide lifecycle policy",
+      "preconditions": ["pane, tmux, remote, wrapper, and launcher transports are classified", "transport ports are declared"],
+      "action_event": {"name": "runtime.verify", "input": {"boundary": "transport_policy_ownership"}},
+      "expected_typed_outcome": {"type": "guild.boundary_outcome.v1", "disposition": "succeeded", "assertions": ["transports implement execution ports only", "host branching is absent from core and generic launchers", "transport errors return typed outcomes"]},
+      "evidence_requirements": [{"profile": "E-BOUNDARY", "assertions": ["all transport entry points resolve through public ports", "forbidden lifecycle-decision edges are empty"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-07", "key": "W4/MH-07"}
+    },
+    {
+      "stable_id": "MHRC-MOD-004",
+      "category": "module_boundary",
+      "title": "Services and consumers use public contracts only",
+      "preconditions": ["artifact, document, knowledge, benchmark, and website consumers are classified", "public contract bundle exports are declared"],
+      "action_event": {"name": "runtime.verify", "input": {"boundary": "consumer_to_internal"}},
+      "expected_typed_outcome": {"type": "guild.boundary_outcome.v1", "disposition": "succeeded", "assertions": ["services import no host internals", "external consumers import no plugin source", "consumer contract versions are explicit"]},
+      "evidence_requirements": [{"profile": "E-BOUNDARY", "assertions": ["dependency graph includes cross-package contract edges", "forbidden internal-import set is empty"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-07", "key": "W4/MH-07"}
+    },
+    {
+      "stable_id": "MHRC-STR-001",
+      "category": "strangler_migration",
+      "title": "Shadow paths produce semantically equivalent outcomes",
+      "preconditions": ["legacy and candidate paths are enabled side by side", "both receive one normalized input and immutable snapshot", "only one path may commit side effects"],
+      "action_event": {"name": "migration.shadow", "input": {"comparison": "legacy_vs_candidate"}},
+      "expected_typed_outcome": {"type": "guild.migration_outcome.v1", "disposition": "succeeded", "assertions": ["typed outcomes and receipt semantics are equivalent", "allowed provenance differences are declared", "candidate shadow path commits no duplicate side effect"]},
+      "evidence_requirements": [{"profile": "E-MIGRATION", "assertions": ["comparison verdict lists every compared field", "side-effect authority is recorded"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-08", "key": "W4/MH-08"}
+    },
+    {
+      "stable_id": "MHRC-STR-002",
+      "category": "strangler_migration",
+      "title": "Cutover is capability- and host-scoped",
+      "preconditions": ["shadow equivalence passed for one capability and host version", "the feature gate defaults to legacy outside that scope", "rollback target remains installed"],
+      "action_event": {"name": "migration.cutover", "input": {"scope": "one_capability_one_host_version"}},
+      "expected_typed_outcome": {"type": "guild.migration_outcome.v1", "disposition": "succeeded", "assertions": ["only the declared scope selects the candidate path", "unscoped hosts and capabilities remain legacy", "cutover receipt binds feature gate and version tuple"]},
+      "evidence_requirements": [{"profile": "E-MIGRATION", "assertions": ["selection matrix covers in-scope and out-of-scope cases", "one authoritative side-effect path exists per case"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-08", "key": "W4/MH-08"}
+    },
+    {
+      "stable_id": "MHRC-STR-003",
+      "category": "strangler_migration",
+      "title": "Rollback restores legacy selection without deleting evidence",
+      "preconditions": ["a scoped candidate cutover is active", "legacy shim remains available", "candidate receipts already exist"],
+      "action_event": {"name": "migration.rollback", "input": {"target": "legacy_path"}},
+      "expected_typed_outcome": {"type": "guild.migration_outcome.v1", "disposition": "succeeded", "assertions": ["new operations select the legacy path", "prior candidate receipts remain immutable and readable", "rollback receipt records cause, scope, and version tuple"]},
+      "evidence_requirements": [{"profile": "E-MIGRATION", "assertions": ["pre- and post-rollback selection proofs exist", "journal retains candidate, rollback, and subsequent legacy sequences"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-08", "key": "W4/MH-08"}
+    },
+    {
+      "stable_id": "MHRC-STR-004",
+      "category": "strangler_migration",
+      "title": "Shadow divergence blocks cutover",
+      "preconditions": ["legacy and candidate paths emit non-equivalent typed outcomes or receipts", "the difference is not an allowed provenance field"],
+      "action_event": {"name": "migration.shadow", "input": {"comparison": "semantic_divergence"}},
+      "expected_typed_outcome": {"type": "guild.migration_outcome.v1", "disposition": "refused", "assertions": ["feature gate remains legacy", "divergent fields are enumerated", "no candidate support promotion occurs"]},
+      "evidence_requirements": [{"profile": "E-MIGRATION", "assertions": ["comparison verdict is failed with field-level differences", "selection receipt confirms legacy authority"]}],
+      "implementation_wave_owner": {"wave_id": "W4", "work_item_id": "MH-08", "key": "W4/MH-08"}
+    },
+    {
+      "stable_id": "MHRC-VER-001",
+      "category": "version_drift",
+      "title": "Evidence version drift invalidates conformance",
+      "preconditions": ["a prior conformance verdict exists", "one or more bound versions or artifact hashes changed", "the required scenario set has not rerun"],
+      "action_event": {"name": "runtime.verify", "input": {"condition": "version_tuple_changed"}},
+      "expected_typed_outcome": {"type": "guild.version_compatibility_outcome.v1", "disposition": "refused", "assertions": ["conformant becomes unproven for the changed tuple", "the prior verdict remains historical evidence only", "age alone cannot restore validity"]},
+      "evidence_requirements": [{"profile": "E-VERSION", "assertions": ["old and current version tuples are compared field by field", "invalidating differences are listed"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-VER-002",
+      "category": "version_drift",
+      "title": "Pinned consumer rejects incompatible contract major",
+      "preconditions": ["a consumer declares its supported contract major", "the producer bundle uses a different major", "no reviewed migration adapter is available"],
+      "action_event": {"name": "runtime.verify", "input": {"condition": "contract_major_mismatch"}},
+      "expected_typed_outcome": {"type": "guild.version_compatibility_outcome.v1", "disposition": "unsupported", "assertions": ["consumer does not parse or silently downgrade the bundle", "reason code identifies contract_major_mismatch", "no support claim is promoted"]},
+      "evidence_requirements": [{"profile": "E-VERSION", "assertions": ["consumer pin and producer schema version are recorded", "refusal is linked to the exact bundle hash"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    },
+    {
+      "stable_id": "MHRC-VER-003",
+      "category": "version_drift",
+      "title": "Package and active runtime version mismatch blocks verification",
+      "preconditions": ["release evidence names a package hash and runtime version", "runtime discovery reports different active bytes or version"],
+      "action_event": {"name": "runtime.verify", "input": {"condition": "package_runtime_mismatch"}},
+      "expected_typed_outcome": {"type": "guild.version_compatibility_outcome.v1", "disposition": "failed", "assertions": ["activated and conformant are not promoted for the requested release", "mismatch identifies expected and observed values", "re-rendering alone cannot repair active runtime proof"]},
+      "evidence_requirements": [{"profile": "E-VERSION", "assertions": ["release manifest, installed destination, and runtime discovery hashes are compared", "failure receipt binds the active destination"]}],
+      "implementation_wave_owner": {"wave_id": "W5", "work_item_id": "MH-09", "key": "W5/MH-09"}
+    }
+  ]
+}

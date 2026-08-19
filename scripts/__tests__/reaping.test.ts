@@ -853,6 +853,78 @@ describe("reapDeadMembers — A2b force-reap dead tmux panes", () => {
     expect(calls.some((c) => c.args[0] === "list-panes" && c.args.includes("-a"))).toBe(true);
     expect(calls.some((c) => c.args.includes("#{pane_id}"))).toBe(true);
   });
+
+  it("uses the cmux workspace surface registry for cmux manifests", () => {
+    const fs = makeFs({
+      [SESSION_PATH]: JSON.stringify({
+        run_id: "run-001",
+        backend: "cmux",
+        session_name: "workspace:7",
+        teammate_panes: [
+          { specialist: "backend", task_id: "T1", pane_id: "surface:1", host_kind: "claude", adapter_version: "1" },
+          { specialist: "qa", task_id: "T2", pane_id: "surface:2", host_kind: "claude", adapter_version: "1" },
+        ],
+      }),
+    });
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const run: RunFn = (cmd, args) => {
+      calls.push({ cmd, args });
+      return { status: 0, stdout: '{"surfaces":[{"id":"surface:1"}]}', stderr: "" };
+    };
+    const result = reapDeadMembers(SESSION_PATH, { run, fsMod: fs });
+    expect(result.live).toEqual(["backend"]);
+    expect(result.reaped).toEqual(["qa"]);
+    expect(calls).toContainEqual({
+      cmd: "cmux",
+      args: ["list-pane-surfaces", "--workspace", "workspace:7", "--json"],
+    });
+  });
+
+  it("reaps only the dead cmux task surface when one specialist owns multiple tasks", () => {
+    const fs = makeFs({
+      [SESSION_PATH]: JSON.stringify({
+        run_id: "run-001",
+        backend: "cmux",
+        session_name: "workspace:7",
+        teammate_panes: [
+          {
+            specialist: "backend",
+            task_id: "T1",
+            dispatch_key: "backend--T1--a1",
+            pane_id: "surface:1",
+            host_kind: "claude",
+            adapter_version: "1",
+          },
+          {
+            specialist: "backend",
+            task_id: "T2",
+            dispatch_key: "backend--T2--a1",
+            pane_id: "surface:2",
+            host_kind: "claude",
+            adapter_version: "1",
+          },
+        ],
+      }),
+    });
+    const run: RunFn = () => ({
+      status: 0,
+      stdout: '{"surfaces":[{"id":"surface:2"}]}',
+      stderr: "",
+    });
+
+    const result = reapDeadMembers(SESSION_PATH, { run, fsMod: fs });
+
+    expect(result.reaped).toEqual(["backend"]);
+    expect(result.live).toEqual(["backend"]);
+    const written = JSON.parse(fs.store.get(SESSION_PATH) as string) as SessionManifest;
+    expect(written.teammate_panes).toEqual([
+      expect.objectContaining({
+        task_id: "T2",
+        dispatch_key: "backend--T2--a1",
+        pane_id: "surface:2",
+      }),
+    ]);
+  });
 });
 
 // ── sessionJsonPath + listRunnableRunIds ──────────────────────────────────────

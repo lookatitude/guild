@@ -8,7 +8,7 @@
       "id": "initiative",
       "source_path": "commands/initiative.md",
       "resource_path": "resources/commands/initiative.md",
-      "sha256": "4f7b655a7d74c5360fdb911745f87c76630f19ec16a3ee0c6c7d5da707444ece"
+      "sha256": "1620643a3a8b74203529771d8be4a3200c5e1d05280d54844e4696a23b280f94"
     },
     {
       "category": "scripts",
@@ -29,7 +29,7 @@
       "id": "initiative-gate",
       "source_path": "scripts/initiative-gate.ts",
       "resource_path": "resources/scripts/initiative-gate.ts",
-      "sha256": "d2924ce7380080f6529e6c6a4c21ac718c3c2c1922a78220248dec497ff184b0"
+      "sha256": "c752a955383b92abcc5fbce95f572bb392329efa59bd83f6e494289d0b6cc708"
     },
     {
       "category": "scripts",
@@ -71,7 +71,7 @@
       "id": "guild-initiative",
       "source_path": "skills/meta/initiative/SKILL.md",
       "resource_path": "resources/skills/meta/initiative/SKILL.md",
-      "sha256": "c26ee2174717713ea3a371f65dd8cebc8cd900d672ec182a3e4788508eb93a34"
+      "sha256": "36fd56378cecd7061107cf0ea7018b283a197e99a79139e298532d900422ab3b"
     },
     {
       "category": "skills",

@@ -35,6 +35,7 @@ import {
   dispatchViolations,
   resolveDispatchAttribution,
 } from "../../hooks/lib/dispatch-attribution";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const LAUNCHER = path.resolve(__dirname, "..", "agent-team-launcher.ts");
 
@@ -242,6 +243,8 @@ describe("G3 — end-to-end: team.yaml tier + score reach the dispatch env", () 
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined && k !== "TMUX") env[k] = v;
     }
+    const runId = "run-20260812-071100-g3-tier-marker";
+    mintRunBinding({ root: tmpDir, run_id: runId });
     const result = spawnSync(
       "npx",
       [
@@ -253,7 +256,7 @@ describe("G3 — end-to-end: team.yaml tier + score reach the dispatch env", () 
         tmpDir,
         "--agent-mode=agent",
         "--run-id",
-        "run-g3-e2e",
+        runId,
         "--dry-run",
       ],
       { encoding: "utf8", env, timeout: 120_000 },

@@ -11,6 +11,7 @@ import { execFileSync, spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const REPO = path.resolve(__dirname, "../..");
 const SCRIPTS = path.join(REPO, "scripts");
@@ -103,15 +104,41 @@ function historicalProjection(receipt: LaunchReceipt): LaunchReceipt {
   const projected = structuredClone(receipt);
   for (const descriptor of projected.dispatchPlan) {
     const env = descriptor.env;
+    let role = typeof descriptor.name === "string" ? descriptor.name : null;
+    let taskId: string | null = null;
+    let runId: string | null = null;
     if (env && typeof env === "object" && !Array.isArray(env)) {
-      delete (env as Record<string, unknown>).GUILD_DISPATCH_PRODUCER;
-    }
-    if (typeof descriptor.prompt === "string" && typeof descriptor.name === "string") {
-      const marker =
-        `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=${descriptor.name}\n`;
-      if (descriptor.prompt.startsWith(marker)) {
-        descriptor.prompt = descriptor.prompt.slice(marker.length);
+      const record = env as Record<string, unknown>;
+      role = typeof record.GUILD_SPECIALIST === "string" ? record.GUILD_SPECIALIST : role;
+      taskId = typeof record.GUILD_TASK_ID === "string" ? record.GUILD_TASK_ID : null;
+      runId = typeof record.GUILD_RUN_ID === "string" ? record.GUILD_RUN_ID : null;
+      const taskCellName = role && taskId ? `${role}--${taskId}--a1` : null;
+      if (taskCellName && descriptor.name === taskCellName) {
+        descriptor.name = role;
+        delete record.GUILD_TASK_ASSIGNMENT;
+        delete record.GUILD_TASK_CELL_INSTANCE_ID;
       }
+      delete record.GUILD_DISPATCH_PRODUCER;
+    }
+    if (typeof descriptor.prompt === "string" && role) {
+      let prompt = descriptor.prompt;
+      const marker =
+        `GUILD_DISPATCH_PRODUCER=guild.dispatch.v1 role=${role}\n`;
+      if (prompt.startsWith(marker)) {
+        prompt = prompt.slice(marker.length);
+      }
+      if (runId && taskId) {
+        prompt = prompt
+          .replace(
+            "Read the exact `context_bundle_id` named by your assignment —",
+            `Read your context bundle at \`.guild/context/${runId}/${role}-<task-id>.md\` —`,
+          )
+          .replace(
+            "write your §8.2 handoff receipt to the assignment's exact `channels.handoff_path`",
+            `write your §8.2 handoff receipt to \`.guild/runs/${runId}/handoffs/${role}-<task-id>.md\``,
+          );
+      }
+      descriptor.prompt = prompt;
     }
   }
   return projected;
@@ -119,13 +146,19 @@ function historicalProjection(receipt: LaunchReceipt): LaunchReceipt {
 
 function expectCurrentProducerMarker(receipt: LaunchReceipt): void {
   for (const descriptor of receipt.dispatchPlan) {
+    const env = descriptor.env as Record<string, unknown>;
+    const role = String(env.GUILD_SPECIALIST);
+    const taskId = String(env.GUILD_TASK_ID);
+    expect(descriptor.name).toBe(`${role}--${taskId}--a1`);
     expect(descriptor.env).toMatchObject({
       GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
+      GUILD_TASK_ASSIGNMENT: expect.stringMatching(/\/assignment\.json$/),
+      GUILD_TASK_CELL_INSTANCE_ID: expect.stringMatching(/\.a1\.i-[0-9a-f]+$/),
     });
     expect(descriptor.prompt).toEqual(
       expect.stringMatching(
         new RegExp(
-          `^GUILD_DISPATCH_PRODUCER=guild\\.dispatch\\.v1 role=${String(descriptor.name)}\\n`
+          `^GUILD_DISPATCH_PRODUCER=guild\\.dispatch\\.v1 role=${role}\\n`
         )
       )
     );
@@ -157,6 +190,8 @@ function executeLauncher(
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "mh08-launch-"));
   workRoots.push(cwd);
   const team = writeTeam(cwd, lifecycleVersion);
+  const runId = `run-20260812-010000-mh08-lifecycle-${lifecycleVersion.replace(/\./g, "-")}`;
+  mintRunBinding({ root: cwd, run_id: runId });
   effectCounter.count += 1;
   const run = spawnSync(
     TSX,
@@ -168,7 +203,7 @@ function executeLauncher(
       cwd,
       "--agent-mode=agent",
       "--run-id",
-      `run-mh08-lifecycle-${lifecycleVersion.replace(/\./g, "-")}`,
+      runId,
       "--dry-run",
     ],
     {

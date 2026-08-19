@@ -1256,6 +1256,50 @@ export interface HistoricalQuery {
   content_hash?: string;
 }
 
+export interface CurrentDefinitionQuery {
+  kind: "agent" | "skill";
+  id: string;
+  relative_path: string;
+}
+
+/**
+ * Select an operative terminal `to` reference already recorded by the manifest.
+ * This never synthesizes hashes from live files: callers receive manifest truth
+ * or a typed refusal. A matching `to` that later became a `from` is historical,
+ * not current, and is excluded through the same forward resolver used by replay.
+ */
+export function resolveCurrentDefinitionRef(
+  manifest: unknown,
+  query: CurrentDefinitionQuery
+): AdoptionResolution {
+  const valid = validateAdoptionManifestV1(manifest);
+  if (!valid || query === null || typeof query !== "object") {
+    return { status: "ambiguous", ref: null, trail: [] };
+  }
+  if ((query.kind !== "agent" && query.kind !== "skill") || typeof query.id !== "string" || typeof query.relative_path !== "string") {
+    return { status: "ambiguous", ref: null, trail: [] };
+  }
+  const candidates = valid.entries
+    .filter((entry) => entry.to !== null && entry.to.kind === query.kind && entry.to.id === query.id && entry.to.relative_path === query.relative_path)
+    .map((entry) => ({ sequence: entry.sequence, ref: entry.to as ProjectDefinitionRefV1 }))
+    .filter(({ sequence, ref }) => {
+      return !valid.entries.some((later) =>
+        later.sequence > sequence &&
+        later.kind === ref.kind &&
+        later.from.id === ref.id &&
+        later.from.project_id === ref.project_id &&
+        later.from.home === ref.layer &&
+        (later.from.content_hash === null || later.from.content_hash === ref.content_hash) &&
+        (later.from.historical_path === ref.relative_path || later.from.historical_path.endsWith(`/${ref.relative_path}`))
+      );
+    });
+  if (candidates.length === 0) return { status: "not_found", ref: null, trail: [] };
+  const identities = new Set(candidates.map(({ ref }) => JSON.stringify(ref)));
+  if (identities.size !== 1) return { status: "ambiguous", ref: null, trail: candidates.map((c) => c.sequence) };
+  const selected = candidates[candidates.length - 1];
+  return { status: "resolved", ref: deepFreeze(selected.ref), trail: [selected.sequence] };
+}
+
 /**
  * Resolve a historical identity to its current reference. PURE — no I/O, no clock.
  *

@@ -45,10 +45,10 @@
  * Stdout:  Silent (Claude Code may consume stdout).
  * Stderr:  Human-readable reason if blocking.
  *
- * Run ID derivation: GUILD_RUN_ID env var (set by launcher) →
- * "run-<session_id>" fallback (T3b: the sentinel leg is retired — sentinels
- * are intake-only). Run-record WRITES additionally require a verified run
- * binding (authorizeHookWrite); validation reads do not. See deriveRunId().
+ * Run ID derivation: GUILD_RUN_ID env var (set by launcher) → a warned,
+ * canonical date-first fallback for receipt VALIDATION reads only. Run-record
+ * WRITES additionally require a verified run binding (authorizeHookWrite) and
+ * never use the fallback. See deriveRunId().
  *
  * Manual usage:
  *   echo '{"hook_event_name":"TaskCompleted","task_id":"task-001","session_id":"sess-abc123",
@@ -84,6 +84,7 @@ import { applySecretsPolicy } from "../lib/security/secrets.js";
 import { readSecurityConfig } from "../lib/security/config.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
 import { resolveRunIdForTrace } from "../lib/run-trace.js";
+import { makeCanonicalRunId } from "../../scripts/lib/run-lifecycle.js";
 import { processFanout } from "../../scripts/lib/artifact-bus";
 import {
   evaluateContextCompliance,
@@ -131,18 +132,29 @@ function die(reason: string): never {
 /**
  * Derive run ID for the receipt-VALIDATION legs (reads + the die/ok gate).
  * Honors GUILD_RUN_ID env (the agent-team launcher exports the binding
- * envelope per pane); falls back to "run-<session_id>" only when the env is
- * absent. T3b (session_context §5): the sentinel leg is retired —
- * resolveRunIdForTrace is env-only now, so a moved current-run-id can never
- * redirect this hook. Run-record WRITES (learnings, injection audit, security
- * events) are additionally binding-gated in main() via authorizeHookWrite;
- * this derived id alone never authorizes them.
+ * envelope per pane). When absent, an existing legacy run-<session_id>
+ * directory remains readable for compatibility; otherwise the shared
+ * lifecycle formatter produces a canonical, visibly-warned read-only lookup
+ * id. Run-record WRITES are separately binding-gated in main(); this derived
+ * id alone never authorizes them.
  */
 function deriveRunId(sessionId: string, guildRoot: string): string {
-  return (
-    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
-    `run-${sessionId}`
+  const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
+  if (bound) return bound;
+  const legacy = `run-${sessionId}`;
+  if (fs.existsSync(path.join(guildRoot, ".guild", "runs", legacy))) {
+    process.stderr.write(
+      `[task-completed] WARN: legacy read-only fallback run id used: ${legacy}; ` +
+        "start/inherit the lifecycle run id to remove this compatibility read.\n",
+    );
+    return legacy;
+  }
+  const fallback = makeCanonicalRunId(new Date().toISOString(), sessionId);
+  process.stderr.write(
+    `[task-completed] WARN: read-only fallback run id used: ${fallback}; ` +
+      "no run-record write is authorized without the lifecycle binding envelope.\n",
   );
+  return fallback;
 }
 
 /**

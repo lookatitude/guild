@@ -83,18 +83,13 @@ describe("refsConflict compares every field the contract carries", () => {
     relative_path: ".guild/agents/some-other-role.md",
     content_hash: H("b"),
     source_commit: "0000000",
+    specialist_profile_hash: IDENT("e"),
+    specialist_type_hash: IDENT("f"),
     skills: [{ id: "s1", relative_path: ".guild/skills/s1/SKILL.md", content_hash: H("a") }],
-  };
-  /** Fields the transport deliberately does NOT carry. Each must say why. */
-  const NOT_CARRIED: Record<string, string> = {
-    specialist_profile_hash: "identity binding — the transport carries bytes, never interprets them",
-    specialist_type_hash: "identity binding — same reason",
   };
 
   it("REGISTRATION IS TOTAL — a new contract field must be classified", () => {
-    expect([...Object.keys(COMPARED), ...Object.keys(NOT_CARRIED)].sort()).toEqual(
-      Object.keys(contractRef()).sort()
-    );
+    expect(Object.keys(COMPARED).sort()).toEqual(Object.keys(contractRef()).sort());
   });
 
   // `portHonoredInjection` returns false when the request and pane refs conflict, so

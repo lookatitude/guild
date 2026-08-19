@@ -32,13 +32,20 @@ import {
   type MaterializedField,
   type ReconcileMode,
   type ReconcileResult,
+  advanceResolverModeOnApproval,
   reconcile as reconcileReference,
   defaultIsValidValue,
 } from "./config-reconcile-contract";
 import { CONFIG_SCHEMA, flattenSettings, setDotted } from "./config-schema";
 import { DEFAULTS, HELP } from "../read-guild-config";
 // S5: semantic validity for capability.* (canonical shared entrypoint — R-DIST).
-import { isValidCapabilityValue } from "./shared/config-defaults";
+import {
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+  isValidCapabilityValue,
+  type CapabilityAutoCreatePolicy,
+  type CapabilityResolverMode,
+} from "./shared/config-defaults";
 
 // ---------------------------------------------------------------------------
 // Injectable IO (CI-safe + test-injectable; production uses node fs)
@@ -47,6 +54,7 @@ import { isValidCapabilityValue } from "./shared/config-defaults";
 export interface ReconcileIO {
   readFileText(p: string): string | null; // null when absent/unreadable
   writeFileText(p: string, text: string): void;
+  removeFile(p: string): void;
   ensureDir(p: string): void;
 }
 
@@ -60,6 +68,13 @@ export function defaultReconcileIO(): ReconcileIO {
       }
     },
     writeFileText: (p, text) => nodeFs.writeFileSync(p, text, "utf8"),
+    removeFile: (p) => {
+      try {
+        nodeFs.unlinkSync(p);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      }
+    },
     ensureDir: (p) => nodeFs.mkdirSync(p, { recursive: true }),
   };
 }
@@ -205,6 +220,171 @@ export function reconcileConfig(opts: ReconcileOptions): ReconcileRunResult {
     settings_path: settingsPath,
     changed: settingsChanged || provenanceChanged,
   };
+}
+
+// ---------------------------------------------------------------------------
+// S5 / cap-loc-D04 — the production resolver-mode advance (approval → config write)
+// ---------------------------------------------------------------------------
+
+/** D04's advance target: an approved proposal moves the project to `project-local`. */
+export const RESOLVER_ADVANCE_TARGET: CapabilityResolverMode = "project-local";
+
+export interface ResolverAdvanceRunResult {
+  advanced: boolean;
+  /**
+   * The contract's own reason (`advanced` | `policy_never` | `user_pinned` |
+   * `already_at_target`) or a caller-side refusal this runtime adds:
+   * `settings_absent` (no readable .guild/settings.json — an un-initialized
+   * project is never implicitly config-scaffolded by an adoption),
+   * `policy_malformed` / `target_invalid` (fail closed, never advance on a value
+   * the schema does not recognize), `write_failed: <detail>` (persistence
+   * failed, EVERY write rolled back — disk is byte-identical to before), or
+   * `write_failed_partial: <detail>` (persistence failed AND the rollback also
+   * failed — settings may carry the new mode without reconciled provenance;
+   * reported truthfully with `changed: true`, never as a clean no-op).
+   */
+  reason: string;
+  settings_path: string;
+  /** True iff any config byte on disk differs from before the call. */
+  changed: boolean;
+}
+
+/**
+ * THE production resolver-mode advance path (FIC45-A4-B1).
+ *
+ * `advanceResolverModeOnApproval` in the L0 contract is pure — it decides, it
+ * cannot persist. This runtime wrapper is the single place that binds the
+ * decision to real config bytes: it reads the materialized
+ * `capability.resolver_mode` (+ provenance sidecar, absent record ⇒ `user`,
+ * exactly as `reconcileConfig` materializes it), routes through the contract's
+ * one advance function, and persists the returned field to `.guild/settings.json`
+ * plus `.guild/settings.provenance.json`.
+ *
+ * Called from `applyAdoptionPlan` after an approved plan has durably applied —
+ * the D04 "approved capability proposal" transition — and from nowhere else.
+ * Every refusal is a reported reason, never a throw: an adoption that has
+ * already committed must not be failed retroactively by its config side-effect.
+ */
+export function applyResolverModeAdvanceOnApproval(opts: {
+  cwd: string;
+  /** RFC3339 UTC stamp (caller-supplied — the adoption's own `adoptedAt`). */
+  now: string;
+  target?: string;
+  io?: ReconcileIO;
+}): ResolverAdvanceRunResult {
+  const io = opts.io ?? defaultReconcileIO();
+  const settingsPath = settingsPathFor(opts.cwd);
+  const done = (advanced: boolean, reason: string, changed: boolean): ResolverAdvanceRunResult => ({
+    advanced,
+    reason,
+    settings_path: settingsPath,
+    changed,
+  });
+
+  const target = opts.target ?? RESOLVER_ADVANCE_TARGET;
+  if (!CAPABILITY_RESOLVER_MODES.includes(target as CapabilityResolverMode)) {
+    return done(false, "target_invalid", false);
+  }
+
+  const prevSettingsText = io.readFileText(settingsPath);
+  const existingObj = parseJsonObject(prevSettingsText);
+  if (existingObj === null || prevSettingsText === null) return done(false, "settings_absent", false);
+
+  const provenancePath = provenancePathFor(opts.cwd);
+  const prevProvenanceText = io.readFileText(provenancePath);
+  const sidecar = (parseJsonObject(prevProvenanceText) as ProvenanceMap | null) ?? {};
+  const flatExisting = flattenSettings({ ...existingObj });
+
+  const MODE_KEY = "capability.resolver_mode";
+  const modeValue = flatExisting[MODE_KEY];
+  const modeRec = sidecar[MODE_KEY];
+  const current: MaterializedField | undefined =
+    modeValue === undefined
+      ? undefined
+      : {
+          key: MODE_KEY,
+          value: modeValue,
+          // Same materialization rule as reconcileConfig: a value with no sidecar
+          // record is hand-authored ⇒ `user` ⇒ never clobbered.
+          provenance: modeRec?.provenance ?? "user",
+          last_reconciled_at: modeRec?.last_reconciled_at ?? null,
+        };
+
+  const policyRaw =
+    flatExisting["capability.auto_create_policy"] ??
+    CONFIG_SCHEMA.find((s) => s.key === "capability.auto_create_policy")?.default;
+  if (!CAPABILITY_AUTO_CREATE_POLICIES.includes(policyRaw as CapabilityAutoCreatePolicy)) {
+    // Fail closed: the contract only refuses on the literal "never", so a
+    // malformed policy must be stopped HERE or garbage would authorize an advance.
+    return done(false, "policy_malformed", false);
+  }
+
+  const outcome = advanceResolverModeOnApproval({
+    current,
+    autoCreatePolicy: policyRaw as string,
+    target,
+    now: opts.now,
+  });
+  if (!outcome.advanced || outcome.field === null) {
+    return done(false, outcome.reason, false);
+  }
+
+  // ── Persist, atomically-or-rolled-back (codex A5 G-lane round 1, item 1) ──
+  // The two files are one logical write: `project-local` landing in settings
+  // WITHOUT its `reconciled` sidecar record would later materialize as `user`
+  // (pinned forever). So the second-write failure path must restore the first
+  // write, and a failed restore must be REPORTED as partial — never as a clean
+  // "changed: false" no-op.
+  setDotted(existingObj, MODE_KEY, outcome.field.value);
+  const nextSettingsText = `${JSON.stringify(existingObj, null, 2)}\n`;
+  const nextSidecar: ProvenanceMap = {
+    ...sidecar,
+    [MODE_KEY]: {
+      provenance: outcome.field.provenance,
+      last_reconciled_at: outcome.field.last_reconciled_at,
+    },
+  };
+  const nextProvenanceText = `${JSON.stringify(nextSidecar, null, 2)}\n`;
+
+  try {
+    io.ensureDir(path.dirname(settingsPath));
+    io.writeFileText(settingsPath, nextSettingsText);
+    io.writeFileText(provenancePath, nextProvenanceText);
+    return done(true, outcome.reason, true);
+  } catch (err) {
+    const detail = (err as Error).message;
+    // Roll back ONLY what actually diverged (verified by read, not assumed from
+    // intent) — re-writing an untouched file through a failing writer would turn
+    // a clean rollback into a spurious partial. Then report from the REAL end
+    // state: `changed` is a disk fact here, never an inference.
+    let rollbackFailure: string | null = null;
+    try {
+      if (io.readFileText(settingsPath) !== prevSettingsText) {
+        io.writeFileText(settingsPath, prevSettingsText);
+      }
+      if (prevProvenanceText === null) {
+        // The sidecar did not exist before this logical write. A writer can
+        // create bytes and then throw (short write, fsync failure, injected
+        // fault), so rollback must remove that new file even when a subsequent
+        // read cannot parse or read it.
+        io.removeFile(provenancePath);
+      } else if (io.readFileText(provenancePath) !== prevProvenanceText) {
+        io.writeFileText(provenancePath, prevProvenanceText);
+      }
+    } catch (rollbackErr) {
+      rollbackFailure = (rollbackErr as Error).message;
+    }
+    const settingsRestored = io.readFileText(settingsPath) === prevSettingsText;
+    const provenanceRestored = io.readFileText(provenancePath) === prevProvenanceText;
+    if (settingsRestored && provenanceRestored) {
+      return done(false, `write_failed: ${detail}`, false);
+    }
+    return done(
+      false,
+      `write_failed_partial: ${detail}${rollbackFailure !== null ? `; rollback failed: ${rollbackFailure}` : ""}`,
+      true,
+    );
+  }
 }
 
 /** A compact human-readable summary of a reconcile run (for the CLI). */

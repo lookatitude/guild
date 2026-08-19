@@ -57,6 +57,7 @@ export interface GuildTraceEventBase {
 /** How the dispatch was executed. */
 export type DispatchBackend =
   | "agent"       // in-process Agent tool call
+  | "cmux"        // cmux terminal surface
   | "tmux"        // tmux pane send-keys
   | "remote"      // remote worktree
   | "unknown";    // backend not determinable at emit time
@@ -98,16 +99,11 @@ export interface GuildTraceDispatchV1 extends GuildTraceEventBase {
   /** The tmux session (new-session mode) or window (in-session mode) name. */
   pane_target?: string;
   /**
-   * The CONCRETE pane surface, for a surface `backend` cannot name.
+   * The CONCRETE pane surface, for a legacy or extension surface `backend`
+   * cannot name.
    *
-   * `backend` is a CLOSED enum: adding a value to it would make an event this
-   * version writes fail an OLDER validator reading the same
-   * `guild.trace.dispatch.v1` token — a silent break, not an additive change.
-   * A cmux surface therefore reports `backend: "unknown"` (literally true: the
-   * enum cannot name it) and identifies itself HERE. It deliberately does NOT
-   * borrow `backend: "tmux"`, whose contract is "tmux pane send-keys" — a
-   * consumer filtering `backend === "tmux"` for local panes must not silently
-   * collect cmux surfaces it never asked for.
+   * First-class cmux dispatch reports `backend: "cmux"`; this field remains an
+   * extension seam for surfaces the enum cannot yet name.
    *
    * Absent when `backend` already names the surface exactly.
    */
@@ -314,10 +310,57 @@ export interface GuildTraceModelInspectionV1 extends GuildTraceEventBase {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 8. guild.trace.analysis.v2 — analysis-ready semantic event envelope (RTE P2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Closed analysis vocabulary. These names describe semantic boundaries rather
+ * than host hook names, so Claude, Codex, pane, and future adapters can emit a
+ * common trace without pretending their native event surfaces are identical.
+ */
+export const ANALYSIS_EVENT_CLASSES = Object.freeze([
+  "run_started", "run_closed", "run_attachment_resolved", "config_snapshot_written",
+  "prompt_received", "prompt_normalized", "clarifying_question_asked", "implementation_authorized",
+  "agent_dispatched", "agent_prompt_sent", "agent_response_received", "agent_handoff_written",
+  "knowledge_lookup_started", "knowledge_lookup_result", "memory_lookup_started", "memory_lookup_result",
+  "tool_call_started", "tool_call_finished", "tool_call_denied", "tool_call_failed",
+  "loop_entered", "loop_iteration", "loop_exited", "loop_cap_hit",
+  "phase_entered", "phase_concluded", "gate_started", "gate_concluded",
+  "instruction_violation_detected", "user_steering_received", "correction_applied", "repeated_failure_detected",
+  "recommendation_created", "recommendation_routed", "bug_report_prompted",
+] as const);
+
+export type AnalysisEventClass = (typeof ANALYSIS_EVENT_CLASSES)[number];
+export type AnalysisActorType = "lead" | "agent" | "user" | "tool" | "system";
+export type AnalysisEventStatus = "ok" | "error" | "denied" | "incomplete" | "unknown";
+
+export interface GuildTraceAnalysisV2 extends GuildTraceEventBase {
+  schema_version: "guild.trace.analysis.v2";
+  event_class: AnalysisEventClass;
+  actor_type: AnalysisActorType;
+  actor_id: string;
+  status: AnalysisEventStatus;
+  span_id?: string;
+  parent_span_id?: string;
+  phase?: string;
+  task_id?: string;
+  initiative_id?: string;
+  run_scope?: "initiative" | "independent";
+  prompt_hash?: string;
+  payload_ref?: string;
+  redaction?: "none" | "redacted" | "omitted";
+  duration_ms?: number;
+  tokens?: { input?: number; output?: number; cached?: number; cost_usd?: number };
+  config_snapshot_ref?: string;
+  signature?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Union type
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type GuildTraceEvent =
+  | GuildTraceAnalysisV2
   | GuildTraceModelInspectionV1
   | GuildTraceDispatchV1
   | GuildTraceRecallV1
@@ -335,6 +378,7 @@ export const GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
   "guild.trace.security_decision.v1",
   "guild.trace.degradation.v1",
   "guild.trace.model_inspection.v1",
+  "guild.trace.analysis.v2",
 ] as const);
 
 export type GuildTraceSchemaVersion = (typeof GUILD_TRACE_SCHEMA_VERSIONS)[number];
@@ -370,7 +414,7 @@ function validateBase(ev: unknown): ValidationResult {
   return { ok: true };
 }
 
-const DISPATCH_BACKENDS: DispatchBackend[] = ["agent", "tmux", "remote", "unknown"];
+const DISPATCH_BACKENDS: DispatchBackend[] = ["agent", "cmux", "tmux", "remote", "unknown"];
 const RECALL_BRANCHES: RecallBranch[] = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
 const SECURITY_OUTCOMES: SecurityDecisionOutcome[] = ["allow", "ask", "deny", "audit", "pass-through"];
 const DEGRADATION_SURFACES: DegradationSurface[] = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
@@ -632,6 +676,112 @@ export function validateModelInspectionEvent(ev: unknown): ValidationResult {
   return { ok: true };
 }
 
+/** Validate the analysis-ready semantic event family. */
+export function validateAnalysisTraceEvent(ev: unknown): ValidationResult {
+  const base = validateBase(ev);
+  if (!base.ok) return base;
+  const e = ev as Record<string, unknown>;
+  if (e["schema_version"] !== "guild.trace.analysis.v2") {
+    return { ok: false, reason: `wrong schema_version for analysis trace: ${e["schema_version"]}` };
+  }
+  if (!(ANALYSIS_EVENT_CLASSES as readonly string[]).includes(e["event_class"] as string)) {
+    return { ok: false, reason: `unknown analysis event_class: ${e["event_class"]}` };
+  }
+  if (!["lead", "agent", "user", "tool", "system"].includes(e["actor_type"] as string)) {
+    return { ok: false, reason: "actor_type must be lead|agent|user|tool|system" };
+  }
+  if (typeof e["actor_id"] !== "string" || e["actor_id"] === "") {
+    return { ok: false, reason: "actor_id must be a non-empty string" };
+  }
+  if (!["ok", "error", "denied", "incomplete", "unknown"].includes(e["status"] as string)) {
+    return { ok: false, reason: "status must be ok|error|denied|incomplete|unknown" };
+  }
+  const allowedKeys = new Set([
+    "schema_version", "ts", "run_id", "lane_id", "event_class", "actor_type", "actor_id", "status",
+    "span_id", "parent_span_id", "phase", "task_id", "initiative_id", "run_scope", "prompt_hash",
+    "payload_ref", "redaction", "duration_ms", "tokens", "config_snapshot_ref", "signature",
+  ]);
+  for (const key of Object.keys(e)) {
+    if (!allowedKeys.has(key)) return { ok: false, reason: `unknown analysis field: ${key}` };
+  }
+  if (e["run_scope"] !== undefined && !["initiative", "independent"].includes(e["run_scope"] as string)) {
+    return { ok: false, reason: "run_scope must be initiative|independent when present" };
+  }
+  if (e["duration_ms"] !== undefined && (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0)) {
+    return { ok: false, reason: "duration_ms must be a non-negative number when present" };
+  }
+  for (const key of ["span_id", "parent_span_id", "phase", "task_id", "initiative_id", "prompt_hash", "payload_ref", "config_snapshot_ref", "signature"]) {
+    if (e[key] !== undefined && (typeof e[key] !== "string" || e[key] === "")) {
+      return { ok: false, reason: `${key} must be a non-empty string when present` };
+    }
+  }
+  if (e["redaction"] !== undefined && !["none", "redacted", "omitted"].includes(e["redaction"] as string)) {
+    return { ok: false, reason: "redaction must be none|redacted|omitted when present" };
+  }
+  if (e["tokens"] !== undefined) {
+    if (typeof e["tokens"] !== "object" || e["tokens"] === null || Array.isArray(e["tokens"])) {
+      return { ok: false, reason: "tokens must be an object when present" };
+    }
+    for (const [key, value] of Object.entries(e["tokens"] as Record<string, unknown>)) {
+      if (!["input", "output", "cached", "cost_usd"].includes(key) || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return { ok: false, reason: `tokens.${key} must be a non-negative finite number` };
+      }
+    }
+  }
+  const eventClass = e["event_class"] as AnalysisEventClass;
+  if (eventClass === "run_started" && e["run_scope"] === undefined) {
+    return { ok: false, reason: "run_started requires run_scope" };
+  }
+  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === undefined || e["signature"] === undefined)) {
+    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
+  }
+  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === undefined && e["payload_ref"] === undefined) {
+    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
+  }
+  const promptClasses: AnalysisEventClass[] = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
+  if (promptClasses.includes(eventClass) &&
+      (e["prompt_hash"] === undefined || e["redaction"] === undefined || e["span_id"] === undefined)) {
+    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
+  }
+  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) &&
+      (e["span_id"] === undefined || e["prompt_hash"] === undefined)) {
+    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
+  }
+  if (eventClass.startsWith("tool_call_") && e["span_id"] === undefined) {
+    return { ok: false, reason: `${eventClass} requires span_id` };
+  }
+  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === undefined) {
+    return { ok: false, reason: `${eventClass} requires duration_ms` };
+  }
+  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) &&
+      (e["task_id"] === undefined || e["span_id"] === undefined)) {
+    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
+  }
+  if (eventClass === "agent_handoff_written" && e["payload_ref"] === undefined) {
+    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
+  }
+  if (eventClass === "agent_response_received" && e["span_id"] === undefined) {
+    return { ok: false, reason: "agent_response_received requires span_id" };
+  }
+  if (eventClass.startsWith("loop_") && (e["span_id"] === undefined || e["signature"] === undefined)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  if (eventClass.startsWith("phase_") && (e["span_id"] === undefined || e["phase"] === undefined)) {
+    return { ok: false, reason: `${eventClass} requires span_id and phase` };
+  }
+  if (eventClass.startsWith("gate_") && (e["span_id"] === undefined || e["signature"] === undefined)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  const evidenceClasses: AnalysisEventClass[] = [
+    "instruction_violation_detected", "user_steering_received", "correction_applied", "repeated_failure_detected",
+    "recommendation_created", "recommendation_routed", "bug_report_prompted",
+  ];
+  if (evidenceClasses.includes(eventClass) && (e["span_id"] === undefined || e["signature"] === undefined)) {
+    return { ok: false, reason: `${eventClass} requires span_id and signature` };
+  }
+  return { ok: true };
+}
+
 /** Validate any guild.trace.*.v1 event — dispatches to the appropriate typed validator. */
 export function validateGuildTraceEvent(ev: unknown): ValidationResult {
   if (typeof ev !== "object" || ev === null) {
@@ -639,6 +789,8 @@ export function validateGuildTraceEvent(ev: unknown): ValidationResult {
   }
   const sv = (ev as Record<string, unknown>)["schema_version"];
   switch (sv) {
+    case "guild.trace.analysis.v2":
+      return validateAnalysisTraceEvent(ev);
     case "guild.trace.model_inspection.v1":
       return validateModelInspectionEvent(ev);
     case "guild.trace.dispatch.v1":
@@ -667,6 +819,13 @@ export function makeDispatchEvent(
   fields: Omit<GuildTraceDispatchV1, "schema_version">,
 ): GuildTraceDispatchV1 {
   return { schema_version: "guild.trace.dispatch.v1", ...fields };
+}
+
+/** Build a guild.trace.analysis.v2 semantic event. */
+export function makeAnalysisTraceEvent(
+  fields: Omit<GuildTraceAnalysisV2, "schema_version">,
+): GuildTraceAnalysisV2 {
+  return { schema_version: "guild.trace.analysis.v2", ...fields };
 }
 
 /** Build a guild.trace.recall.v1 event. */

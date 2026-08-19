@@ -150,6 +150,7 @@ describe("D6 run-tree paths", () => {
       ".guild/runs/run-1/task-cells/lt-api/attempts/2/instances/inst-9"
     );
     expect(p.assignment_path).toBe(`${p.instance_dir}/assignment.json`);
+    expect(p.instance_path).toBe(`${p.instance_dir}/instance.json`);
     // The attempt record is ABOVE the instances — one immutable file per attempt.
     expect(p.attempt_path).toBe(".guild/runs/run-1/task-cells/lt-api/attempts/2/attempt.json");
   });

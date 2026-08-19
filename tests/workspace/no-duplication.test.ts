@@ -191,6 +191,38 @@ describe("no-duplication regression (SC-3, release-blocking)", () => {
     expect(workspaceWikiFiles(root)).toEqual([]);
   });
 
+  test("anti-vacuity: the detectors CATCH planted copy-up, sentinel, and stray-run-telemetry conditions", () => {
+    // FIC-48 planted control. runScript now strips the inherited GUILD_* run
+    // envelope so an orchestrator's telemetry can no longer materialize inside
+    // the fixture tree — this proves that isolation did NOT blind the suite:
+    // each forbidden condition, planted deliberately, is still detected by the
+    // exact helper/assertion shape the real tests use.
+    root = makeTempRoot();
+    plantSubGuild(root, "plugin", { wiki: true });
+    const res = runScript(WRITE_MANIFEST, ["--cwd", root]);
+    expect(res.exitCode).toBe(0);
+
+    // (a) a copied-up wiki page (the SC-3 forbidden condition)
+    const wikiDir = path.join(root, ".guild", "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(wikiDir, "copied-page.md"),
+      `# stolen page\n\n${SENTINEL}-PLUGIN\n`,
+      "utf8"
+    );
+    expect(workspaceWikiFiles(root)).toEqual(["copied-page.md"]);
+    expect(sentinelLeaksInWorkspaceGuild(root)).toEqual([path.join("wiki", "copied-page.md")]);
+
+    // (b) stray run telemetry (the matrix3 leak shape). Codex round-1 item 6:
+    // a bare `!== ["workspace.json"]` here is TAUTOLOGICAL (the copy-up page
+    // from (a) already breaks that equality), so this asserts detection of the
+    // EXACT planted telemetry path — it fails iff walkFiles stops seeing it.
+    const telemetryRel = path.join("runs", "run-stray", "logs", "v1.4-events.jsonl");
+    fs.mkdirSync(path.dirname(path.join(root, ".guild", telemetryRel)), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", telemetryRel), "{}\n", "utf8");
+    expect(walkFiles(path.join(root, ".guild"))).toContain(telemetryRel);
+  });
+
   test("a sub-PROJECT (no .guild yet) is registered but its tree is untouched", () => {
     root = makeTempRoot();
     plantSubProject(root, "svc-api"); // .git only

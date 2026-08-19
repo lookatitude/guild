@@ -33,6 +33,10 @@
  */
 
 import * as fs from "node:fs";
+import {
+  validateProjectDefinitionRefV1,
+  type ProjectDefinitionRefV1,
+} from "./lib/core/contracts/project-definition-ref";
 
 // ── Constants (mirror the SKILL.md budget — bound by pointer) ────────────────
 
@@ -50,7 +54,34 @@ export interface BundleLintVerdict {
   has_dropped_for_budget: boolean;
   /** The frontmatter `token_estimate:` value, when present (informational). */
   frontmatter_token_estimate: number | null;
+  definition_ref: ProjectDefinitionRefV1 | null;
   reasons: string[];
+}
+
+function frontmatterBlock(content: string): string | null {
+  const lines = content.split("\n");
+  if (lines[0]?.trim() !== "---") return null;
+  const end = lines.slice(1).findIndex((line) => line.trim() === "---");
+  return end < 0 ? null : lines.slice(1, end + 1).join("\n");
+}
+
+export function readDefinitionRef(content: string): { ref: ProjectDefinitionRefV1 | null; count: number } {
+  const block = frontmatterBlock(content);
+  if (block === null) return { ref: null, count: 0 };
+  const matches = [...block.matchAll(/^\s*definition_ref:\s*(\{.*\})\s*$/gm)];
+  if (matches.length !== 1) return { ref: null, count: matches.length };
+  try {
+    return { ref: validateProjectDefinitionRefV1(JSON.parse(matches[0][1])), count: 1 };
+  } catch {
+    return { ref: null, count: 1 };
+  }
+}
+
+export function absoluteDefinitionCarriers(content: string): string[] {
+  return content.split("\n").filter((line) => {
+    const value = /^\s*(?:definition\s*:\s*|GUILD_AGENT_DEFINITION\s*=\s*)["']?(\/[^"'\s]*)/.exec(line)?.[1];
+    return !!value && /\/(?:\.guild|\.claude)\/agents\/[^/]+\.md$/.test(value);
+  });
 }
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
@@ -124,6 +155,12 @@ export function lintBundle(content: string): BundleLintVerdict {
     0
   );
   const hasDropped = hasDroppedForBudgetLine(content);
+  const definition = readDefinitionRef(content);
+  const absoluteCarriers = absoluteDefinitionCarriers(content);
+
+  if (definition.count !== 1) reasons.push(`bundle must carry exactly one definition_ref frontmatter line; found ${definition.count}`);
+  else if (definition.ref === null) reasons.push("bundle definition_ref is malformed or violates guild.project_definition_ref.v1");
+  if (absoluteCarriers.length > 0) reasons.push("bundle carries an absolute agent-definition locator; use definition_ref instead");
 
   if (estTokens > BUNDLE_TOKEN_CAP) {
     reasons.push(
@@ -153,7 +190,8 @@ export function lintBundle(content: string): BundleLintVerdict {
 
   const pass =
     estTokens <= BUNDLE_TOKEN_CAP &&
-    !(graphEstTokens > GRAPH_SECTION_TOKEN_CAP && !hasDropped);
+    !(graphEstTokens > GRAPH_SECTION_TOKEN_CAP && !hasDropped) &&
+    definition.count === 1 && definition.ref !== null && absoluteCarriers.length === 0;
 
   return {
     pass,
@@ -161,6 +199,7 @@ export function lintBundle(content: string): BundleLintVerdict {
     graph_est_tokens: graphEstTokens,
     has_dropped_for_budget: hasDropped,
     frontmatter_token_estimate: fmEstimate,
+    definition_ref: definition.ref,
     reasons,
   };
 }

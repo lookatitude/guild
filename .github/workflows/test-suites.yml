@@ -12,7 +12,9 @@
 # p2-w1-sc9; scripts lifecycle/registry parity) that must not race a sibling worker's transient
 # filesystem writes across a shared checkout. The other four projects are hermetic and run parallel.
 #
-# Node 20 matches the other workflows (comms-*, doc-sync, dot-guild-policy, rearch-rails).
+# Node 24 matches the runtime selected below. The scripts shard is intentionally serial and
+# now exceeds 20 minutes after the convergence regression matrix was added, so the job keeps
+# a bounded 30-minute ceiling instead of cancelling a healthy suite before Jest can summarize.
 
 name: test suites
 
@@ -33,7 +35,7 @@ jobs:
   jest:
     name: jest (${{ matrix.project }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

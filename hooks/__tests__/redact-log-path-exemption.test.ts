@@ -37,6 +37,16 @@ describe("group 4 — repo-relative path exemption", () => {
     expect(redactHighEntropy(input)).toBe(input);
   });
 
+  it("preserves Guild's hidden repo-relative namespace, including canonical run ids", () => {
+    const input = [
+      ".guild/wiki/decisions/workspace-knowledge-flow.md",
+      ".guild/runs/run-20260812-010000-hook-output/handoffs/security-W4.md",
+      ".guild/initiatives/active/hook-output-hygiene/initiative.yaml",
+      ".guild/artifacts/audits/hook-output-budget.json",
+    ].join("\n");
+    expect(redactHighEntropy(input)).toBe(input);
+  });
+
   it("preserves ./-prefixed relative paths", () => {
     const input = "run ./scripts/docs-hygiene/scan-everything-now.ts first";
     expect(redactHighEntropy(input)).toBe(input);
@@ -74,6 +84,11 @@ describe("group 4 — repo-relative path exemption", () => {
       // to an exemption (opaque budget = 1 per token).
       "cache/ABCDEFGH/IJKLMNOP/QRSTUVWX.bin",
       "cache/12345678/90123456/78901234.bin",
+      ".guild/cache/Zm9vYmFyYmF6cXV4/MTIzNDU2Nzg5MDEy.bin",
+      ".guild/cache/aBcdefGhij/kLmnoPqrst/uVwxyzAbcd/file.txt",
+      ".guild/cache/abcdefghij/klmnopqrst/uvwxyzabcd/file.txt",
+      ".guild/cache/12/34/56/78/90/12/34/56/78/90/secret.bin",
+      ".guild/wiki/aBcdefGhij/kLmnoPqrst/uVwxyzAbcd/file.txt",
     ];
     for (const c of candidates) {
       const out = redactHighEntropy(`payload: ${c}`);

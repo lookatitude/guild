@@ -193,6 +193,26 @@ interface RunOutcome {
   exit: number;
 }
 
+/** A successful repair must replace the invalid initial wire output downstream. */
+export function streamedHostOutput(
+  initial: string,
+  latest: string,
+  normalized: BoundedRepairResult | null,
+): string {
+  return normalized?.ok === true ? latest : initial;
+}
+
+/** Preserve the original task semantics while asking only for wire repair. */
+export function repairRoundPrompt(originalPrompt: string, repairPrompt: string): string {
+  return [
+    "ORIGINAL TASK (still authoritative):",
+    originalPrompt,
+    "",
+    "WIRE REPAIR INSTRUCTIONS:",
+    repairPrompt,
+  ].join("\n");
+}
+
 /**
  * Machine-readable proof that this receipt came through the versioned boundary.
  *
@@ -606,14 +626,22 @@ function main(): number {
   }
 
   let initial: RunOutcome;
+  let latestStructuredStdout = "";
   let normalized: BoundedRepairResult | null = null;
   try {
     initial = spawnHost(plan, plan.args);
+    latestStructuredStdout = initial.stdout;
     if (parsed.contract) {
       normalized = normalizeWithRepair(
         initial.stdout,
         parsed.contract,
-        (repairPrompt) => spawnHost(plan, rebuildArgsWithPrompt(plan, repairPrompt)).stdout,
+        (repairPrompt) => {
+          latestStructuredStdout = spawnHost(
+            plan,
+            rebuildArgsWithPrompt(plan, repairRoundPrompt(plan.prompt, repairPrompt)),
+          ).stdout;
+          return latestStructuredStdout;
+        },
         { maxRounds: parsed.maxRepair }
       );
     }
@@ -657,7 +685,7 @@ function main(): number {
   }
 
   // Stream the host's own output through, then the wrapper record on stderr.
-  process.stdout.write(initial.stdout);
+  process.stdout.write(streamedHostOutput(initial.stdout, latestStructuredStdout, normalized));
   if (initial.stderr) process.stderr.write(initial.stderr);
   process.stderr.write("guild-run: " + JSON.stringify(record) + "\n");
 

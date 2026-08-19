@@ -33,3 +33,4 @@ export {
   type TaskGroupV1,
   type ValidationResult as GoalTaskValidationResult,
 } from "./workflows/goal-task-schema";
+export * from "./workflows/task-cell-policy-eval";

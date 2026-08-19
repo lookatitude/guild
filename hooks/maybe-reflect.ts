@@ -54,8 +54,8 @@
  * GUILD_RUN_BINDING_REF]) verified against the run's minted binding, ONLY.
  * Sentinels are interactive intake, never a writer identity; the old
  * session_id/date fallbacks were unbound identities and are retired. A
- * refused binding skips reflection for the turn (fail closed).
- *   5. fallback: "session-<date>"
+ * refused binding skips reflection for the turn (fail closed). There is no
+ * reflection writer fallback.
  *
  * Working directory resolution (priority order):
  *   1. GUILD_CWD env var
@@ -489,9 +489,9 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Resolve run context — same convention as hooks/capture-telemetry.ts:
-  // `run-<session_id>` by default; GUILD_RUN_ID env var wins when set
-  // (agent-team launcher exports it per pane for convergence).
+  // Resolve the repository root first. The reflection writer identity is
+  // resolved later through authorizeHookWrite; no session/sentinel fallback
+  // can select a write target.
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.

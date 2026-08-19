@@ -48,6 +48,8 @@ import { resolveLaneAttribution } from "./lib/lane-attribution.js";
 // HK-06: durable-surface (wiki/review/handoffs/provenance) PostToolUse scrub-in-place (D-SECRETS).
 import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
 import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
+import { readSecurityConfig, type SecretsPolicy } from "./lib/security/config.js";
+import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
 // G-9 (SC-5): structured heartbeat WRITE side — backend-agnostic liveness.
 import { writeHeartbeatFromEnv } from "./lib/heartbeat-write.js";
 // L5a: host-neutral hook payload + Claude emitter. PostToolUsePayload is now the
@@ -58,6 +60,7 @@ import {
   readHookStdin,
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
+import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/modules/telemetry/index.js";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;
@@ -75,15 +78,27 @@ function isOk(payload: GuildHookEvent): "ok" | "err" {
   return "ok";
 }
 
-function resultExcerpt(payload: GuildHookEvent): string {
+function resultExcerpt(payload: GuildHookEvent, policy: SecretsPolicy): string {
   const resp = payload.tool_response;
   if (resp === null || resp === undefined) return "";
-  if (typeof resp === "string") return resp;
-  try {
-    return JSON.stringify(resp);
-  } catch {
-    return "";
+  let raw: string;
+  if (typeof resp === "string") raw = resp;
+  else {
+    try {
+      raw = JSON.stringify(resp);
+    } catch {
+      return "";
+    }
   }
+  const scrub = applySecretsPolicy(raw, policy);
+  const resolved = resolveTelemetryField(scrub, policy);
+  if (resolved.warn) {
+    process.stderr.write(
+      `warn: [post-tool-use] result excerpt scrub degraded ` +
+        `(fail_mode_telemetry=${policy.fail_mode_telemetry}).\n`,
+    );
+  }
+  return resolved.value ?? "";
 }
 
 // ── HK-06: durable-surface PostToolUse scrub-in-place helpers ────────────────
@@ -387,6 +402,7 @@ export async function main(): Promise<void> {
   // computation below, so it never touches sidecar lookup/matching.
   const attributionLaneId = resolveLaneAttribution();
   const tsPost = new Date().toISOString();
+  const secretsPolicy = readSecurityConfig(cwd).secrets_policy;
 
   // Always run the orphan sweep first — flushes stale Pre entries from
   // crashed earlier dispatches as `status: "err"` events. Architect
@@ -444,7 +460,7 @@ export async function main(): Promise<void> {
         ts_post: tsPost,
         run_id: runId,
         tool: toolName,
-        result_excerpt_redacted: resultExcerpt(payload),
+        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy),
         ...(attributionLaneId !== undefined ? { lane_id: attributionLaneId } : {}),
         ...(typeof payload.duration_ms === "number"
           ? { latency_ms_override: payload.duration_ms }
@@ -455,7 +471,7 @@ export async function main(): Promise<void> {
         ts_post: tsPost,
         run_id: runId,
         status: isOk(payload),
-        result_excerpt_redacted: resultExcerpt(payload),
+        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy),
       });
       // oir-wi-57: buildToolCallFromPair otherwise inherits pre.lane_id (the
       // PRE sidecar's own GUILD_LANE_ID-only resolution, always absent in
@@ -494,6 +510,40 @@ export async function main(): Promise<void> {
       }
     }
     appendEvent(runDir, event, { traceV2 });
+    const common = {
+      run_id: runId,
+      lane_id: attributionLaneId ?? "",
+      actor_type: "tool" as const,
+      actor_id: toolName,
+      span_id: traceV2.span_id,
+      parent_span_id: traceV2.parent_span_id,
+      phase: process.env["GUILD_PHASE"] || undefined,
+      task_id: process.env["GUILD_TASK_ID"] || undefined,
+      config_snapshot_ref: fs.existsSync(path.join(runDir, "plugin-config-snapshot.json"))
+        ? "plugin-config-snapshot.json"
+        : undefined,
+    };
+    const startedMs = Math.max(0, Date.parse(tsPost) - event.latency_ms);
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ...common,
+        ts: new Date(startedMs).toISOString(),
+        event_class: "tool_call_started",
+        status: "ok",
+      }),
+      runDir,
+    );
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ...common,
+        ts: tsPost,
+        event_class: event.status === "err" ? "tool_call_failed" : "tool_call_finished",
+        status: event.status === "err" ? "error" : event.status === "n/a" ? "unknown" : "ok",
+        duration_ms: event.latency_ms,
+        tokens,
+      }),
+      runDir,
+    );
   } catch (err) {
     process.stderr.write(
       `warn: [post-tool-use] tool_call emit failed: ${

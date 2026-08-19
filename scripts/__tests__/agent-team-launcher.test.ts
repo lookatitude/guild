@@ -14,6 +14,7 @@
  *  - Existing tmux session collision → exit 1 (refuse to clobber).
  */
 import { spawnSync } from "child_process";
+import { createHash } from "crypto";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -43,13 +44,17 @@ import {
   findOrphanedAttempts,
   type TaskCellInstanceIds,
 } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
+import { scanReceiptJournal } from "../../src/modules/telemetry";
+import { settleFailedCmuxTaskCells } from "../agent-team-launcher";
 
 const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
+const INHERITED_RUN_ID = "run-20260811-000000-launcher-test";
 
 function runScript(
   args: string[],
-  env: Record<string, string | undefined> = {}
+  env: Record<string, string | undefined> = {},
+  seedLifecycleRun = true,
 ): { exitCode: number; stdout: string; stderr: string } {
   // Scrub TMUX from env unless the test wants it set, so host terminal state
   // does not accidentally trip the nested-tmux guard.
@@ -62,6 +67,42 @@ function runScript(
   // envelope path set these explicitly via the `env` param.
   delete baseEnv.GUILD_RUN_ID;
   delete baseEnv.GUILD_RUN_BINDING_REF;
+  // Cross-family reproducibility (independent-review blocker 4): scrub the
+  // ambient HOST IDENTITY as well. Under a Codex-shaped parent environment
+  // (GUILD_HOST=codex-cli etc.) the launcher resolves a codex orchestrator and
+  // this suite went 7-red while being green under Claude — a review gate must
+  // not change verdict with its parent host. Host-specific cases set these
+  // EXPLICITLY via the `env` param.
+  delete baseEnv.GUILD_HOST;
+  delete baseEnv.GUILD_HOST_ID;
+  delete baseEnv.GUILD_ORCHESTRATOR_HOST;
+  delete baseEnv.CMUX_WORKSPACE_ID;
+  // W1/W2: normal launcher fixtures represent execute-plan after lifecycle
+  // start. Seed the lifecycle-owned sentinel + binding when a dispatch caller
+  // intentionally omits --run-id; the production launcher must inherit this
+  // identity, never mint another one. Tests for the missing-sentinel refusal
+  // opt out with the third parameter.
+  const cwdIndex = args.indexOf("--cwd");
+  const hasExplicitRunId = args.includes("--run-id");
+  const isAdministrative = args.includes("--reap") || args.includes("--dismiss-completed");
+  if (seedLifecycleRun && cwdIndex >= 0 && !hasExplicitRunId && !isAdministrative) {
+    const cwd = args[cwdIndex + 1];
+    const runsRoot = path.join(cwd, ".guild", "runs");
+    fs.mkdirSync(runsRoot, { recursive: true });
+    fs.writeFileSync(path.join(runsRoot, "current-run-id"), `${INHERITED_RUN_ID}\n`, "utf8");
+    launcherTestBindFor(cwd, INHERITED_RUN_ID);
+    // Real (non-preview) launcher fixtures also represent execute-plan after
+    // context assembly. Supply the canonical default owner/task pairs used by
+    // the fixture teams so the test reaches the behavior it was written for.
+    writeRunContexts(cwd, INHERITED_RUN_ID, [
+      ["architect", "architect"],
+      ["backend", "backend"],
+      ["qa", "qa"],
+      ["security", "security"],
+      ["kb-viz-engineer", "kb-viz-engineer"],
+      ["cursor-reviewer", "cursor-reviewer"],
+    ]);
+  }
   // T7R-R1-B1: approve-before-dispatch verification is now MANDATORY on the real
   // launcher path, and these fixtures deliberately carry no proposal/decision
   // trail — they exercise routing, scoping, tiering and teardown, not approval.
@@ -111,6 +152,14 @@ function setupConsumerRepo(
   return { teamPath: dst };
 }
 
+function writeRunContexts(cwd: string, runId: string, lanes: Array<[string, string]>): void {
+  const dir = path.join(cwd, ".guild", "context", runId);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [role, taskId] of lanes) {
+    fs.writeFileSync(path.join(dir, `${role}-${taskId}.md`), `# ${role}/${taskId}\n`);
+  }
+}
+
 function findSessionJson(cwd: string): string | null {
   const runsDir = path.join(cwd, ".guild", "runs");
   if (!fs.existsSync(runsDir)) return null;
@@ -138,6 +187,29 @@ function makeFakeTmuxBin(tmpDir: string, existingWindows: string[]): string {
       'case "$1" in',
       '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
       `  list-windows) printf '${windowList}\\n'; exit 0;;`,
+      "  *) exit 0;;",
+      "esac",
+      "",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+  return binDir;
+}
+
+// Fix B: a fake tmux for REAL (non-dry) launch tests — reports available,
+// reports NO existing session (`has-session` exits 1, so the collision gate
+// passes), and no-ops every spawn/attach subcommand successfully.
+function makeLaunchableTmuxBin(tmpDir: string): string {
+  const binDir = path.join(tmpDir, "fakebin-launchable");
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(binDir, "tmux"),
+    [
+      "#!/bin/sh",
+      'case "$1" in',
+      '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
+      "  has-session) exit 1;;",
+      "  list-windows) exit 0;;",
       "  *) exit 0;;",
       "esac",
       "",
@@ -281,10 +353,7 @@ describe("agent-team-launcher.ts", () => {
       expect(specialists).toContain("qa");
     });
 
-    it("writes guild.task_assignment.v1 for ALL specialists in the pre-routing block", () => {
-      // Locks the cross-host fix: assignments are written for the FULL team in the
-      // pre-routing block (before any dispatch / remote-filtering), so every
-      // specialist — including ones that would route remote — gets its file.
+    it("does not write the retired per-specialist v1 assignment shadow channel", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       runScript([
         "--team",
@@ -298,16 +367,11 @@ describe("agent-team-launcher.ts", () => {
       const sessionJson = findSessionJson(tmpDir)!;
       // .../runs/<id>/agent-team/session.json → .../runs/<id>
       const runDir = path.dirname(path.dirname(sessionJson));
-      const tasksDir = path.join(runDir, "tasks");
-      expect(fs.existsSync(tasksDir)).toBe(true);
-      for (const spec of ["architect", "backend", "qa"]) {
-        const p = path.join(tasksDir, `${spec}.json`);
-        expect(fs.existsSync(p)).toBe(true);
-        const a = JSON.parse(fs.readFileSync(p, "utf8"));
-        expect(a.schema_version).toBe("guild.task_assignment.v1");
-        expect(a.specialist).toBe(spec);
-        expect(typeof a.written_at).toBe("string");
-      }
+      expect(fs.existsSync(path.join(runDir, "tasks"))).toBe(false);
+      // Fix B (run-identity-and-dispatch): a dry run persists NOTHING under
+      // task-cells/ — the records are immutable attempt-1 files whose presence
+      // poisoned the next real launch of the same run id.
+      expect(fs.existsSync(path.join(runDir, "task-cells"))).toBe(false);
     });
 
     it("exports GUILD_TASK_ASSIGNMENT into each pane command", () => {
@@ -322,13 +386,16 @@ describe("agent-team-launcher.ts", () => {
         "--dry-run",
       ]);
       expect(stdout).toMatch(/GUILD_TASK_ASSIGNMENT=/);
-      expect(stdout).toMatch(/tasks\/(architect|backend|qa)\.json/);
+      expect(stdout).toMatch(/GUILD_TASK_CELL_INSTANCE_ID=/);
+      expect(stdout).toMatch(/task-cells\/(architect|backend|qa)\/attempts\/1\/instances\/.+\/assignment\.json/);
     });
 
     it("emits guild.task_assignment.v2 per TASK — a specialist owning 2 tasks → 2 cells, no overwrite (AT1)", () => {
       // task-cell-runtime G3: the authoritative v2 channel replaces the v1
       // representative-first-task collapse. Give `backend` TWO plan lanes so the
       // fan-out MUST write two distinct immutable cells (P0.3 / adversarial test 1).
+      // Fix B: cell emission is now REAL-RUN-ONLY (post-gates), so this pin runs
+      // a real launch against a launchable fake tmux instead of a dry run.
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const planDir = path.join(tmpDir, ".guild", "plan");
       fs.mkdirSync(planDir, { recursive: true });
@@ -349,22 +416,35 @@ describe("agent-team-launcher.ts", () => {
           "",
         ].join("\n"),
       );
-      runScript([
-        "--team",
-        teamPath,
-        "--session-name",
-        "guild-test-v2",
-        "--cwd",
-        tmpDir,
-        "--dry-run",
-      ]);
+      // Real-run cell emission computes strict per-task context hashes — seed
+      // the per-task bundles the plan lanes above resolve to.
+      const ctxDir = path.join(tmpDir, ".guild", "context", INHERITED_RUN_ID);
+      fs.mkdirSync(ctxDir, { recursive: true });
+      for (const bundle of ["backend-T1-backend", "backend-T2-backend", "architect-T0-architect"]) {
+        fs.writeFileSync(path.join(ctxDir, `${bundle}.md`), `# ${bundle}\n`);
+      }
+      runScript(
+        [
+          "--team",
+          teamPath,
+          "--session-name",
+          "guild-test-v2",
+          "--cwd",
+          tmpDir,
+        ],
+        { PATH: `${makeLaunchableTmuxBin(tmpDir)}:${process.env["PATH"] ?? ""}` }
+      );
       const sessionJson = findSessionJson(tmpDir)!;
       const runDir = path.dirname(path.dirname(sessionJson));
       const cellsRoot = path.join(runDir, "task-cells");
       expect(fs.existsSync(cellsRoot)).toBe(true);
 
-      const assignmentPath = (lt: string) =>
-        path.join(cellsRoot, lt, "attempts", "1", "instances", `${lt}.a1.i1`, "assignment.json");
+      const assignmentPath = (lt: string) => {
+        const instances = path.join(cellsRoot, lt, "attempts", "1", "instances");
+        const instanceIds = fs.readdirSync(instances);
+        expect(instanceIds).toHaveLength(1);
+        return path.join(instances, instanceIds[0], "assignment.json");
+      };
 
       // backend owns two logical tasks → two distinct, non-overwritten assignment files.
       for (const lt of ["T1-backend", "T2-backend", "T0-architect"]) {
@@ -372,6 +452,11 @@ describe("agent-team-launcher.ts", () => {
         const a = JSON.parse(fs.readFileSync(assignmentPath(lt), "utf8"));
         expect(a.schema_version).toBe("guild.task_assignment.v2");
         expect(a.logical_task_id).toBe(lt);
+        const instance = JSON.parse(
+          fs.readFileSync(path.join(path.dirname(assignmentPath(lt)), "instance.json"), "utf8"),
+        );
+        expect(instance.schema_version).toBe("guild.agent_instance.v1");
+        expect(instance.substrate).toBe("tmux");
         // The attempt companion sits ABOVE the instances (one immutable file per attempt).
         expect(
           fs.existsSync(path.join(cellsRoot, lt, "attempts", "1", "attempt.json"))
@@ -386,6 +471,31 @@ describe("agent-team-launcher.ts", () => {
       expect(c1.instance_id).not.toBe(c2.instance_id);
       expect(c1.context_bundle_id).not.toBe(c2.context_bundle_id);
       expect(c1.handoff_path).not.toBe(c2.handoff_path);
+      for (const assignment of [c1, c2]) {
+        expect(assignment.context_bundle_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+        expect(assignment.host_capabilities_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+        expect(assignment.specialist_type_hash).toMatch(/^[0-9a-f]{64}$/);
+        expect(assignment.specialist_profile_hash).toMatch(/^[0-9a-f]{64}$/);
+      }
+
+      // PCL-09: these identity hashes came from real shipped-template reads.
+      // Every concrete read must pass through the compatibility loader and
+      // leave a durable, non-synthetic usage receipt for the G5 window.
+      const compatibilityReceipts = scanReceiptJournal(
+        path.join(runDir, "receipts", "journal.jsonl"),
+      ).records.filter(
+        (record) =>
+          record.scenario_id === "PCL-09" &&
+          record.operation_id.startsWith("compatibility-read:task-cell-identity-"),
+      );
+      expect(compatibilityReceipts).toHaveLength(4);
+      expect(compatibilityReceipts.map((record) => record.operation_id).sort()).toEqual([
+        "compatibility-read:task-cell-identity-T0-architect-architect",
+        "compatibility-read:task-cell-identity-T1-backend-backend",
+        "compatibility-read:task-cell-identity-T2-backend-backend",
+        "compatibility-read:task-cell-identity-qa-qa",
+      ]);
+      expect(compatibilityReceipts.every((record) => record.observation_state === "checked_clean")).toBe(true);
     });
 
     it("prints tmux commands to stdout in dry-run mode", () => {
@@ -701,8 +811,10 @@ describe("agent-team-launcher.ts", () => {
     // JSON signal shape execute-plan consumes.
     it("agent-mode=agent: the JSON signal carries a real dispatchPlan (one descriptor per specialist)", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, "run-20260811-010000-agent-shape-test");
+      writeRunContexts(tmpDir, "run-20260811-010000-agent-shape-test", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { exitCode, stdout } = runScript(
-        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-agent-shape-test"]
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-20260811-010000-agent-shape-test"]
       );
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
@@ -716,12 +828,13 @@ describe("agent-team-launcher.ts", () => {
       expect(Array.isArray(signal.dispatchPlan)).toBe(true);
       expect(signal.dispatchPlan).toHaveLength(3); // architect, backend, qa
       const names = signal.dispatchPlan.map((d: { name: string }) => d.name);
-      expect(names).toEqual(["architect", "backend", "qa"]);
+      expect(names).toEqual(["architect--architect--a1", "backend--backend--a1", "qa--qa--a1"]);
       for (const d of signal.dispatchPlan) {
         expect(typeof d.subagentType).toBe("string");
         expect(d.model).toBeNull(); // tiering is orthogonal — resolved at dispatch
-        expect(d.env.GUILD_RUN_ID).toBe("run-agent-shape-test");
-        expect(d.env.GUILD_SPECIALIST).toBe(d.name);
+        expect(d.env.GUILD_RUN_ID).toBe("run-20260811-010000-agent-shape-test");
+        expect(d.name).toBe(`${d.env.GUILD_SPECIALIST}--${d.env.GUILD_TASK_ID}--a1`);
+        expect(d.env.GUILD_TASK_ASSIGNMENT).toMatch(/task-cells\/.+\/assignment\.json$/);
         expect(typeof d.prompt).toBe("string");
         expect(d.prompt.length).toBeGreaterThan(0);
       }
@@ -731,9 +844,10 @@ describe("agent-team-launcher.ts", () => {
     // — same dispatchPlan, annotated notes, per dispatch.md.
     it("agent-mode=agent --dry-run: still returns the full dispatchPlan (declarative, no side effects)", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, "run-20260811-010001-agent-dryrun-test");
       const { exitCode, stdout } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--dry-run",
-         "--run-id", "run-agent-dryrun-test"]
+         "--run-id", "run-20260811-010001-agent-dryrun-test"]
       );
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
@@ -1192,7 +1306,7 @@ describe("agent-team-launcher.ts", () => {
 
     // ── local tmux backend ────────────────────────────────────────────────
     it("tmux: caller --run-id names the ONE run directory (session + tasks + task-cells under it)", () => {
-      const CALLER_ID = "run-g5-tmux-caller";
+      const CALLER_ID = "run-20260811-010010-g5-tmux-caller";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       // T3 F2/F3: the caller (execute-plan) starts the run — which mints its
       // binding — BEFORE threading --run-id to the launcher. Descriptor writers
@@ -1214,27 +1328,46 @@ describe("agent-team-launcher.ts", () => {
           "",
         ].join("\n"),
       );
-      const { exitCode } = runScript([
-        "--team", teamPath,
-        "--session-name", "guild-g5-tmux",
-        "--cwd", tmpDir,
-        "--run-id", CALLER_ID,
-        "--dry-run",
-      ]);
+      const contextDir = path.join(tmpDir, ".guild", "context", CALLER_ID);
+      fs.mkdirSync(contextDir, { recursive: true });
+      const backendContext = "# backend context\ncontract-v1\n";
+      fs.writeFileSync(path.join(contextDir, "backend-T1-backend.md"), backendContext);
+      // Fix B: cells are emitted only on a REAL launch (post-gates) — run one
+      // against a launchable fake tmux; strict hashing needs every lane's bundle.
+      fs.writeFileSync(path.join(contextDir, "architect-T0-architect.md"), "# architect\n");
+      fs.writeFileSync(path.join(contextDir, "qa-qa.md"), "# qa\n");
+      const { exitCode } = runScript(
+        [
+          "--team", teamPath,
+          "--session-name", "guild-g5-tmux",
+          "--cwd", tmpDir,
+          "--run-id", CALLER_ID,
+        ],
+        { PATH: `${makeLaunchableTmuxBin(tmpDir)}:${process.env["PATH"] ?? ""}` }
+      );
       expect(exitCode).toBe(0);
 
       // Exactly ONE run directory, named by the caller's id.
       expect(listRunDirs(tmpDir)).toEqual([CALLER_ID]);
 
       const runDir = path.join(tmpDir, ".guild", "runs", CALLER_ID);
-      // session + assignment (tasks/) + task-cell (task-cells/) all under it.
+      // Session + authoritative task-cells all live under it; the retired v1
+      // per-specialist tasks/ shadow channel must not reappear.
       expect(fs.existsSync(path.join(runDir, "agent-team", "session.json"))).toBe(true);
-      expect(fs.existsSync(path.join(runDir, "tasks", "backend.json"))).toBe(true);
+      expect(fs.existsSync(path.join(runDir, "tasks"))).toBe(false);
       expect(
-        fs.existsSync(
-          path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances", "T1-backend.a1.i1", "assignment.json")
-        )
+        fs.readdirSync(path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances"))
+          .some((instanceId) => fs.existsSync(path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances", instanceId, "assignment.json")))
       ).toBe(true);
+      const backendInstances = path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances");
+      const backendInstance = fs.readdirSync(backendInstances)[0];
+      const backendAssignment = JSON.parse(fs.readFileSync(
+        path.join(backendInstances, backendInstance, "assignment.json"),
+        "utf8",
+      ));
+      expect(backendAssignment.context_bundle_hash).toBe(
+        `sha256:${createHash("sha256").update(backendContext).digest("hex")}`,
+      );
 
       // The session.json findable by the generic scanner resolves to the same id.
       const sessionJson = findSessionJson(tmpDir)!;
@@ -1243,8 +1376,10 @@ describe("agent-team-launcher.ts", () => {
 
     // ── in-process backend ────────────────────────────────────────────────
     it("in-process (--agent-mode=agent): caller --run-id threads into every dispatchPlan descriptor's GUILD_RUN_ID", () => {
-      const CALLER_ID = "run-g5-agent-caller";
+      const CALLER_ID = "run-20260811-010011-g5-agent-caller";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, CALLER_ID);
+      writeRunContexts(tmpDir, CALLER_ID, [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { exitCode, stdout } = runScript([
         "--team", teamPath,
         "--cwd", tmpDir,
@@ -1258,12 +1393,19 @@ describe("agent-team-launcher.ts", () => {
       // Every descriptor converges on the caller's run id — never a minted one.
       for (const d of signal.dispatchPlan) {
         expect(d.env.GUILD_RUN_ID).toBe(CALLER_ID);
+        expect(d.env.GUILD_TASK_CELL_INSTANCE_ID).toMatch(/\.a1\.i-/);
       }
+      const cells = path.join(tmpDir, ".guild", "runs", CALLER_ID, "task-cells");
+      const firstTask = fs.readdirSync(cells)[0];
+      const instances = path.join(cells, firstTask, "attempts", "1", "instances");
+      const firstInstance = fs.readdirSync(instances)[0];
+      const instance = JSON.parse(fs.readFileSync(path.join(instances, firstInstance, "instance.json"), "utf8"));
+      expect(instance.substrate).toBe("in-process");
     });
 
     // ── remote backend (cross-host) ───────────────────────────────────────
     it("remote (cross-host): caller --run-id names the ONE run directory for both local + remote-routed lanes", () => {
-      const CALLER_ID = "run-g5-remote-caller";
+      const CALLER_ID = "run-20260811-010012-g5-remote-caller";
       // Mixed-host fixture: architect stays local (claude), security routes remote.
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
       launcherTestBindFor(tmpDir, CALLER_ID); // T3 F2/F3 — caller-started run mints first
@@ -1291,14 +1433,24 @@ describe("agent-team-launcher.ts", () => {
       expect(listRunDirs(tmpDir)).toEqual([CALLER_ID]);
 
       const runDir = path.join(tmpDir, ".guild", "runs", CALLER_ID);
-      // Pre-routing assignments for BOTH the local and the remote-routed lane
-      // land under the same run id.
-      expect(fs.existsSync(path.join(runDir, "tasks", "architect.json"))).toBe(true);
-      expect(fs.existsSync(path.join(runDir, "tasks", "security.json"))).toBe(true);
+      // Fix B: a dry run persists NO task-cell records (immutable attempt-1
+      // files would poison the next real launch) and no v1 shadow channel.
+      expect(fs.existsSync(path.join(runDir, "task-cells"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "tasks"))).toBe(false);
+      // Identity is still provable from the PLANNED commands: both the local
+      // (architect) and remote-routed (security) lanes carry canonical
+      // assignment paths under the caller's ONE run id. Real-path cell content
+      // (substrate/host_id per lane) is pinned by the real-launch AT1 test.
+      expect(stdout).toContain(
+        `.guild/runs/${CALLER_ID}/task-cells/architect/attempts/1/instances/`
+      );
+      expect(stdout).toContain(
+        `.guild/runs/${CALLER_ID}/task-cells/security/attempts/1/instances/`
+      );
     });
 
-    // ── no caller id → mint (preserve the fallback) ───────────────────────
-    it("no --run-id supplied → tmux path mints a fresh run-<...> id (fallback preserved)", () => {
+    // ── no caller id → inherit lifecycle sentinel, never mint ────────────
+    it("no --run-id supplied → inherits current-run-id without minting", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const { exitCode } = runScript([
         "--team", teamPath,
@@ -1307,9 +1459,35 @@ describe("agent-team-launcher.ts", () => {
         "--dry-run",
       ]);
       expect(exitCode).toBe(0);
-      const dirs = listRunDirs(tmpDir);
-      expect(dirs).toHaveLength(1);
-      expect(dirs[0]).toMatch(/^run-/);
+      expect(listRunDirs(tmpDir)).toEqual([INHERITED_RUN_ID]);
+      const manifest = JSON.parse(fs.readFileSync(findSessionJson(tmpDir)!, "utf8"));
+      expect(manifest.run_id).toBe(INHERITED_RUN_ID);
+    });
+
+    it("refuses dispatch when neither --run-id nor the lifecycle sentinel exists", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stderr } = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--dry-run",
+      ], {}, false);
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/lifecycle run id|required|current-run-id/i);
+      expect(listRunDirs(tmpDir)).toEqual([]);
+    });
+
+    it("rejects a non-canonical caller run id before creating dispatch state", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, "run-legacy-caller");
+      const { exitCode, stderr } = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--run-id", "run-legacy-caller",
+        "--dry-run",
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/canonical run id/i);
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "run-legacy-caller", "agent-team"))).toBe(false);
     });
   });
 
@@ -1398,6 +1576,8 @@ describe("agent-team-launcher.ts", () => {
         hostId: "claude-code-cli",
         adapterId: "claude-code-cli@1",
         hostCapabilitiesHash: "sha256:caps",
+        substrate: "tmux",
+        modelTier: "mid",
         objective: `implement ${logicalTaskId}`,
         nonGoals: [],
         scopePaths: [],
@@ -1499,6 +1679,7 @@ describe("agent-team-launcher.ts", () => {
         specialistProfileId: workerRole, specialistProfileHash: "sha256:profile",
         contextBundleId: `.guild/context/${runId}/${logicalTaskId}.md`, contextBundleHash: "sha256:ctx",
         hostId: "claude-code-cli", adapterId: "claude-code-cli@1", hostCapabilitiesHash: "sha256:caps",
+        substrate: "tmux", modelTier: "mid",
         objective: `implement ${logicalTaskId}`, nonGoals: [], scopePaths: [],
         outputSchema: "guild.handoff_receipt.v1", acceptanceTests: [], dependencies: [],
         projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
@@ -1510,6 +1691,41 @@ describe("agent-team-launcher.ts", () => {
     function seedCellOnly(cwd: string, runId: string, logicalTaskId: string, workerRole: string): void {
       writeTaskCell(cwd, buildTaskCell(makeDisp(runId, logicalTaskId, workerRole)), launcherTestBindFor(cwd, runId));
     }
+
+    it("W4: cmux launch failure seals confirmed rollbacks failed and parks only survivors orphaned", () => {
+      const runId = "run-20260812-000000-cmux-failure";
+      seedCellOnly(tmpDir, runId, "T1", "backend");
+      seedCellOnly(tmpDir, runId, "T2", "backend");
+      const lanes = [
+        {
+          name: "backend", scope: "T1", dependsOn: [], taskId: "T1",
+          dispatch_key: "backend--T1--a1", task_cell_instance_id: "T1.a1.i1",
+          task_cell_assignment_path: ".guild/runs/run/task-cells/T1/assignment.json",
+        },
+        {
+          name: "backend", scope: "T2", dependsOn: [], taskId: "T2",
+          dispatch_key: "backend--T2--a1", task_cell_instance_id: "T2.a1.i1",
+          task_cell_assignment_path: ".guild/runs/run/task-cells/T2/assignment.json",
+        },
+      ];
+
+      const settled = settleFailedCmuxTaskCells({
+        cwd: tmpDir,
+        runId,
+        lanes,
+        unconfirmedPaneIds: { "backend--T2--a1": "surface:2" },
+        reason: "cmux send failed",
+        now: SEED_NOW,
+      });
+
+      expect(settled).toEqual({ failed: 1, orphaned: 1, errors: [] });
+      expect(readAttemptForInstance(tmpDir, {
+        run_id: runId, logical_task_id: "T1", attempt: 1, instance_id: "T1.a1.i1",
+      })?.terminal_state).toBe("failed");
+      expect(readAttemptForInstance(tmpDir, {
+        run_id: runId, logical_task_id: "T2", attempt: 1, instance_id: "T2.a1.i1",
+      })).toMatchObject({ terminal_state: null, orphaned: true });
+    });
     function writeSessionJsonRealPane(cwd: string, runId: string, specialist: string, paneId: string): void {
       const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
       fs.mkdirSync(dir, { recursive: true });
@@ -2820,9 +3036,11 @@ describe("agent-team-launcher.ts", () => {
 
     it("agent rung: in-process dispatch resolves and executes through transportFor", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, "run-20260811-010020-bf2-agent");
+      writeRunContexts(tmpDir, "run-20260811-010020-bf2-agent", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { file, env } = probeEnv(tmpDir);
       const { exitCode, stdout } = runScript(
-        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-bf2-agent"],
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-20260811-010020-bf2-agent"],
         env
       );
 
@@ -2835,7 +3053,7 @@ describe("agent-team-launcher.ts", () => {
       expect(signal.ok).toBe(true);
       expect(Array.isArray(signal.dispatchPlan)).toBe(true);
       expect(signal.dispatchPlan.length).toBeGreaterThanOrEqual(1);
-      expect(signal.dispatchPlan[0].env.GUILD_RUN_ID).toBe("run-bf2-agent");
+      expect(signal.dispatchPlan[0].env.GUILD_RUN_ID).toBe("run-20260811-010020-bf2-agent");
       expect(signal).toHaveProperty("orchestratorPaneId");
       expect(signal).toHaveProperty("teammatePaneIds");
       expect(signal).toHaveProperty("notes");
@@ -2885,7 +3103,8 @@ describe("agent-team-launcher.ts", () => {
       // T3b: mint the run binding so the launcher's binding-verified descriptor
       // writers (guild.task_assignment.v1/v2) resolve the run's minted record on
       // the REAL tmux dispatch path instead of failing closed (session_context §5).
-      launcherTestBindFor(tmpDir, "run-bf2-tmux");
+      launcherTestBindFor(tmpDir, "run-20260811-010021-bf2-tmux");
+      writeRunContexts(tmpDir, "run-20260811-010021-bf2-tmux", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { file, env } = probeEnv(tmpDir);
       const { exitCode, stdout } = runScript(
         [
@@ -2894,7 +3113,7 @@ describe("agent-team-launcher.ts", () => {
           "--cwd",
           tmpDir,
           "--run-id",
-          "run-bf2-tmux",
+          "run-20260811-010021-bf2-tmux",
           // T7 approve-before-dispatch is MANDATORY on a real dispatch; this test
           // focuses on the MH-04 transport wiring, so it uses the audited override
           // (gate enforcement itself is pinned in t7-h1-dispatch-approval.test.ts).
@@ -2916,7 +3135,7 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         ".guild",
         "runs",
-        "run-bf2-tmux",
+        "run-20260811-010021-bf2-tmux",
         "agent-team",
         "session.json"
       );
@@ -2924,6 +3143,21 @@ describe("agent-team-launcher.ts", () => {
       const parsed = JSON.parse(fs.readFileSync(manifest, "utf8"));
       expect(parsed.mode).toBe("in-session");
       expect(parsed.window_name).toBe("guild-test-slug");
+
+      const lifecycleFile = path.join(
+        tmpDir,
+        ".guild",
+        "runs",
+        "run-20260811-010021-bf2-tmux",
+        "task-cell-telemetry",
+        "events.jsonl",
+      );
+      expect(fs.existsSync(lifecycleFile)).toBe(true);
+      const lifecycle = fs.readFileSync(lifecycleFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      expect(new Set(lifecycle.map((event) => event.event_name))).toEqual(
+        new Set(["spawn_started", "spawned", "ready", "assignment_delivered"]),
+      );
+      expect(new Set(lifecycle.map((event) => event.instance_id)).size).toBe(3);
 
       const events = readProbe(file);
       assertResolvedThroughRuntime(events, "tmux");

@@ -112,3 +112,11 @@ export {
   type HostNativeEventBinding,
   type NormalizedHostEvent,
 } from "./workflows/host-event-normalizer";
+
+// A21-3 — the MH-03 owner evaluator. Exported here for the same reason as the
+// boundary above: the conformance assembler is a cross-module consumer and the
+// module-boundary checker requires it to reach this owner through the module's
+// public entrypoint rather than into `workflows/`. The evaluator adds no new
+// module dependency — it consumes the MH-03 boundary files beside it plus the
+// already-declared `lifecycle` public contract.
+export * from "./workflows/host-adapter-conformance-evaluator";

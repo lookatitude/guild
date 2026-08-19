@@ -37,6 +37,8 @@ import { composeInProcessDispatch } from "../lib/host/inprocess-backend";
 import { GENERIC_SUBAGENT_TYPE } from "../lib/core/contracts/team-backend";
 import type { Specialist, TeamLaunchRequest } from "../lib/core/contracts/team-backend";
 import { buildPrompt } from "../lib/host/tmux-backend";
+import { mintRunBinding } from "../lib/run-binding";
+import { parseYaml } from "../agent-team-launcher";
 
 const LAUNCHER = path.resolve(__dirname, "../agent-team-launcher.ts");
 const EVOLVE_LOOP = path.resolve(__dirname, "../evolve-loop.ts");
@@ -752,8 +754,21 @@ describe("composeInProcessDispatch — project-local specialists", () => {
 });
 
 describe("agent-team-launcher parseYaml — no generic `source:` alias", () => {
+  it("parses and sanitizes a single-line definition_ref", () => {
+    const ref = {
+      schema_version: "guild.project_definition_ref.v1",
+      project_id: "plugin", layer: "project-guild", kind: "agent", id: "architect",
+      relative_path: ".guild/agents/architect.md", content_hash: `sha256:${"a".repeat(64)}`,
+      source_commit: null, specialist_profile_hash: "b".repeat(64), specialist_type_hash: "c".repeat(64), skills: [],
+    };
+    const team = parseYaml(["backend: in-process", "specialists:", "  - name: architect", "    definition: .guild/agents/architect.md", `    definition_ref: ${JSON.stringify(ref)}`].join("\n"));
+    expect(team.specialists[0].definition_ref).toEqual(ref);
+  });
+
   it("a per-specialist `source:` key never sets definition_source", () => {
     const tmpDir = mkTmp("guild-launcher-src-");
+    const runId = "run-20260811-010101-roster-source-alias";
+    mintRunBinding({ root: tmpDir, run_id: runId });
     const teamDir = path.join(tmpDir, ".guild", "team");
     fs.mkdirSync(teamDir, { recursive: true });
     const teamPath = path.join(teamDir, "test-slug.yaml");
@@ -783,7 +798,17 @@ describe("agent-team-launcher parseYaml — no generic `source:` alias", () => {
       "roster dispatch fixture: no team-plan trail; approval verification is pinned separately";
     const result = spawnSync(
       "npx",
-      ["tsx", LAUNCHER, "--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+      [
+        "tsx",
+        LAUNCHER,
+        "--team",
+        teamPath,
+        "--cwd",
+        tmpDir,
+        "--run-id",
+        runId,
+        "--dry-run",
+      ],
       { encoding: "utf8", env, timeout: 120_000 }
     );
     expect(result.status).toBe(0);
@@ -812,8 +837,8 @@ describe("buildPrompt — definition-adoption instruction", () => {
   });
 });
 
-describe("agent-team-launcher CLI — definition threading (dry-run)", () => {
-  it("team.yaml definition fields reach the pane prompt", () => {
+describe("agent-team-launcher CLI — committed definition gate", () => {
+  it("refuses a project definition with no committed manifest before pane creation", () => {
     const tmpDir = mkTmp("guild-launcher-def-");
     const teamDir = path.join(tmpDir, ".guild", "team");
     fs.mkdirSync(teamDir, { recursive: true });
@@ -834,16 +859,9 @@ describe("agent-team-launcher CLI — definition threading (dry-run)", () => {
       ["tsx", LAUNCHER, "--team", teamPath, "--cwd", tmpDir, "--dry-run"],
       { encoding: "utf8", env, timeout: 120_000 }
     );
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain(
-      "Your role definition is at `.guild/agents/kb-viz-engineer.md`"
-    );
-    // The shipped lane must NOT carry the adoption instruction.
-    const architectPane = result.stdout
-      .split("\n")
-      .filter((l) => l.includes("You are the `architect` teammate"));
-    expect(architectPane.length).toBeGreaterThan(0);
-    expect(architectPane[0]).not.toContain("Your role definition");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/REFUSED \(project definition\).*no valid adoption manifest/s);
+    expect(result.stdout).not.toContain("Your role definition");
   });
 });
 

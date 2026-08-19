@@ -8,7 +8,7 @@
       "id": "SessionStart:bootstrap.sh",
       "source_path": "hooks/bootstrap.sh",
       "resource_path": "resources/hooks/bootstrap.sh",
-      "sha256": "bd0acffad2397e09ea193d36e3e0429225b6e952a125ae482f59c1abb262c884"
+      "sha256": "ee1c45afc763dd8ae6ac65755896707f7b0c74f5183f7be7e81f6c6cc4ed3de4"
     },
     {
       "category": "hooks",
@@ -22,7 +22,7 @@
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "c9d8d7d698ca55fd2fd06f6a7a1f7e73214914c5481710b66444a6fd7e404967"
+      "sha256": "c5c5a569da14f6d670aaf7bc336e76720cb68193f06fa102b38072dd56d0b345"
     },
     {
       "category": "hooks",
@@ -57,7 +57,7 @@
       "id": "lib/path-containment-registry",
       "source_path": "scripts/lib/path-containment-registry.ts",
       "resource_path": "resources/scripts/lib/path-containment-registry.ts",
-      "sha256": "976449640031a068e2aa9c7e9e08bee62a1df9a8a260bb74c5c9df2b32c275d3"
+      "sha256": "59091284ab84112d6540bd593208683d7e29e108085a4100433a608cb2b7c88d"
     },
     {
       "category": "scripts",

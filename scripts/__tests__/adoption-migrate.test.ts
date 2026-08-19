@@ -821,6 +821,33 @@ describe("D6 — the capability-adopt command, end to end", () => {
       (process.stdout as unknown as { write: typeof write }).write = write;
     }
   });
+
+  it("g5 cannot report removal-ready inside v2 even when invoked through the real command", () => {
+    const { capabilityAdoptMain } = require("../capability-adopt") as {
+      capabilityAdoptMain: (argv: readonly string[]) => number;
+    };
+    const windows = path.join(tmp, "g5-windows.json");
+    fs.writeFileSync(windows, JSON.stringify({ windows: [] }));
+    const out: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+      out.push(s);
+      return true;
+    };
+    try {
+      expect(capabilityAdoptMain([
+        "g5",
+        "--windows", windows,
+        "--project-root", tmp,
+        "--plugin-root", PLUGIN_ROOT,
+        "--project-local-default", "2.7.0",
+        "--current-version", "2.9.0",
+      ])).toBe(2);
+      expect(out.join("")).toContain("legacy compatibility is never removed within v2");
+    } finally {
+      (process.stdout as unknown as { write: typeof write }).write = write;
+    }
+  });
 });
 
 describe("D6 — codex round 3 regressions (rollback mutation phase)", () => {

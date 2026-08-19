@@ -25,7 +25,27 @@
 import * as fs from "fs";
 import * as path from "path";
 import { createHash } from "crypto";
-import * as yaml from "js-yaml";
+
+// JSON is a strict subset of YAML. New bus metadata is therefore emitted as
+// deterministic JSON bytes under the existing `.yaml` filenames, eliminating
+// a load-time runtime dependency for installed/source-projected consumers.
+// Legacy non-JSON YAML remains readable when js-yaml is present.
+function encodeYamlCompatible(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function decodeYamlCompatible(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch (jsonError) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      return (require("js-yaml") as { load(value: string): unknown }).load(raw);
+    } catch {
+      throw jsonError;
+    }
+  }
+}
 
 // ── Schema constants ───────────────────────────────────────────────────────
 
@@ -333,7 +353,7 @@ export function casPut(
   // by the bus entries citing the sha (`refCount()`), not by mutating this file.
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const tmp = `${out}.tmp-${process.pid}-${sha256(out + record.created_at).slice(0, 8)}`;
-  fs.writeFileSync(tmp, yaml.dump(record));
+  fs.writeFileSync(tmp, encodeYamlCompatible(record));
   try {
     fs.linkSync(tmp, out); // atomic; EEXIST ⇒ another publisher already indexed it
   } catch (e) {
@@ -364,7 +384,7 @@ export function refCount(runDir: string, sha256Hex: string): number {
 
 export function casGet(runDir: string, sha256Hex: string): CasMetaV1 | null {
   try {
-    return validateCasMetaV1(yaml.load(fs.readFileSync(casMetaPath(runDir, sha256Hex), "utf8")));
+    return validateCasMetaV1(decodeYamlCompatible(fs.readFileSync(casMetaPath(runDir, sha256Hex), "utf8")));
   } catch {
     return null;
   }
@@ -493,7 +513,7 @@ export function registerSubscriber(
     created_at: sub.now(),
   };
   if (!validateBusSubscriberV1(record)) return null;
-  atomicWrite(subscriberPath(runDir, record.subscriber_id), yaml.dump(record));
+  atomicWrite(subscriberPath(runDir, record.subscriber_id), encodeYamlCompatible(record));
   return record;
 }
 
@@ -509,7 +529,7 @@ export function readSubscribers(runDir: string): BusSubscriberV1[] {
   for (const name of entries) {
     if (!name.endsWith(".yaml")) continue;
     try {
-      const sub = validateBusSubscriberV1(yaml.load(fs.readFileSync(path.join(dir, name), "utf8")));
+      const sub = validateBusSubscriberV1(decodeYamlCompatible(fs.readFileSync(path.join(dir, name), "utf8")));
       if (sub) out.push(sub);
     } catch {
       /* skip malformed */

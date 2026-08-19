@@ -32,12 +32,37 @@
 import * as fs from "fs";
 import * as path from "path";
 
-// Workspace root: 4 levels up from this test file
-const WORKSPACE_ROOT = path.resolve(__dirname, "../../..");
+function findWorkspaceRoot(start: string): string {
+  let current = path.resolve(start);
+  while (true) {
+    const hasWorkspaceShape = [".gitignore", "plugin/.gitignore", "benchmark/.gitignore", "website/.gitignore"]
+      .every((relative) => fs.existsSync(path.join(current, relative)));
+    if (hasWorkspaceShape) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return path.resolve(__dirname, "../../..");
+    current = parent;
+  }
+}
+
+function findPluginRoot(start: string): string {
+  let current = path.resolve(start);
+  while (true) {
+    if (fs.existsSync(path.join(current, ".git")) && fs.existsSync(path.join(current, ".gitignore"))) {
+      return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return path.resolve(__dirname, "../..");
+    current = parent;
+  }
+}
+
+// Support both the normal plugin checkout and plugin/.worktrees/<name>.
+const WORKSPACE_ROOT = findWorkspaceRoot(__dirname);
+const PLUGIN_ROOT = findPluginRoot(__dirname);
 
 const REPOS = {
   umbrella: WORKSPACE_ROOT,
-  plugin: path.join(WORKSPACE_ROOT, "plugin"),
+  plugin: PLUGIN_ROOT,
   benchmark: path.join(WORKSPACE_ROOT, "benchmark"),
   website: path.join(WORKSPACE_ROOT, "website"),
 };
@@ -58,6 +83,7 @@ const GUILD_POLICY_LINE = /^!?\/?\.guild(\/|$)/;
 const REQUIRED_SENTINELS = [
   ".guild", // block start
   ".guild/*", // HIGH default-deny (Decision J remediation)
+  "!.guild/adoption-manifest.json", // replay-safe capability localization authority
   "!.guild/wiki/**", // middle of the re-include list
   "!.guild/runs/*/run-state.json", // end of the runs share-set
   ".guild/runs/current-run-id", // last line of the canonical block

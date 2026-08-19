@@ -5,7 +5,7 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns team composition, specialist creation, worktree support, and team-file parsing.",
-  "depends_on": ["capability", "dispatch", "kernel", "lifecycle", "specialists", "state"],
+  "depends_on": ["capability", "communication", "dispatch", "kernel", "lifecycle", "specialists", "state"],
   "owns": {
     "skills": [
       "guild-create-specialist",

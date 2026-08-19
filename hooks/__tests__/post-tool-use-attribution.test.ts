@@ -24,12 +24,12 @@ function setup(): { tmp: string; runDir: string } {
   return { tmp, runDir };
 }
 
-function spawnAgentDispatch(tmp: string, toolInput: unknown): number {
+function spawnAgentDispatch(tmp: string, toolInput: unknown, toolResponse: unknown = { success: true }): number {
   const payload = {
     hook_event_name: "PostToolUse",
     tool_name: "Agent",
     tool_input: toolInput,
-    tool_response: { success: true },
+    tool_response: toolResponse,
     cwd: tmp,
   };
   const result = spawnSync("npx", ["tsx", SCRIPT], {
@@ -51,6 +51,14 @@ function toolCallEvents(runDir: string): Array<Record<string, unknown>> {
     .filter(Boolean)
     .map((l) => JSON.parse(l) as Record<string, unknown>)
     .filter((e) => e.event === "tool_call");
+}
+
+function analysisEvents(runDir: string): Array<Record<string, unknown>> {
+  const file = path.join(runDir, "logs", "v1.4-events.jsonl");
+  if (!fs.existsSync(file)) return [];
+  return fs.readFileSync(file, "utf8").trim().split("\n").filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((event) => event.schema_version === "guild.trace.analysis.v2");
 }
 
 describe("post-tool-use.ts — #58 attribution_specialist on the Agent dispatch event", () => {
@@ -79,6 +87,10 @@ describe("post-tool-use.ts — #58 attribution_specialist on the Agent dispatch 
     expect(calls.length).toBe(1);
     expect(calls[0].tool).toBe("Agent");
     expect(calls[0].attribution_specialist).toBe("devops");
+    expect(analysisEvents(runDir).map((event) => event.event_class)).toEqual([
+      "tool_call_started",
+      "tool_call_finished",
+    ]);
   });
 
   it("omits attribution_specialist for a generic call that merely NAMES an agents file", () => {
@@ -104,5 +116,13 @@ describe("post-tool-use.ts — #58 attribution_specialist on the Agent dispatch 
     expect(calls.length).toBe(1);
     expect(calls[0].tool).toBe("Agent");
     expect("attribution_specialist" in calls[0]).toBe(false);
+  });
+
+  it("redacts secrets before writing the result excerpt into telemetry", () => {
+    const secret = "sk-ant-abcdefghijklmnopqrstuvwxyz0123456789";
+    expect(spawnAgentDispatch(tmp, { prompt: "test" }, { success: true, token: secret })).toBe(0);
+    const excerpt = String(toolCallEvents(runDir)[0]?.result_excerpt_redacted ?? "");
+    expect(excerpt).not.toContain(secret);
+    expect(excerpt).toContain("[REDACTED");
   });
 });

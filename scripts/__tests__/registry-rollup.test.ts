@@ -73,6 +73,237 @@ describe("buildInitiativesRegistry (item 15)", () => {
     expect(reg.initiatives[0].status).toBe("in_progress");
     fs.rmSync(g, { recursive: true, force: true });
   });
+
+  test("validated manifest authority overrides stale cached status axes while curated extras survive", () => {
+    const g = mkGuild();
+    manifest(g, "active", "live",
+      v1("live", "definition_status: complete\nexecution_status: active\nrelease_status: not_released\ndocumentation_status: update_required"));
+
+    const cached = path.join(g, "indexes", "initiatives-registry.yaml");
+    fs.mkdirSync(path.dirname(cached), { recursive: true });
+    fs.writeFileSync(cached, [
+      "schema_version: guild.initiatives_registry.v1",
+      "initiatives:",
+      "  - id: live",
+      "    status: proposed",
+      "    definition_status: incomplete",
+      "    execution_status: not_started",
+      "    release_status: released",
+      "    documentation_status: no_update_required",
+      "    title: stale cached title",
+      "    path: .guild/initiatives/archived/live/",
+      "    notes: preserve this operator note",
+      "    custom_operator_field: preserve-me",
+      "",
+    ].join("\n"), "utf8");
+
+    const entry = buildInitiativesRegistry(g).initiatives.find((e) => e.id === "live")!;
+    expect(entry).toMatchObject({
+      status: "in_progress",
+      definition_status: "complete",
+      execution_status: "active",
+      release_status: "not_released",
+      documentation_status: "update_required",
+      title: "live",
+      path: ".guild/initiatives/active/live/",
+      notes: "preserve this operator note",
+      custom_operator_field: "preserve-me",
+    });
+
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("cached run linkage survives when retained runs are absent from the live runs directory", () => {
+    const g = mkGuild();
+    manifest(g, "active", "live",
+      v1("live", "definition_status: complete\nexecution_status: active\nrelease_status: not_released\ndocumentation_status: update_required"));
+    const cached = path.join(g, "indexes", "initiatives-registry.yaml");
+    fs.mkdirSync(path.dirname(cached), { recursive: true });
+    fs.writeFileSync(cached, [
+      "schema_version: guild.initiatives_registry.v1",
+      "initiatives:",
+      "  - id: live",
+      "    status: in_progress",
+      "    run_ids: [run-retained-1]",
+      "    last_run_id: run-retained-1",
+      "",
+    ].join("\n"), "utf8");
+
+    const entry = buildInitiativesRegistry(g).initiatives.find((e) => e.id === "live")!;
+    expect(entry.run_ids).toEqual(["run-retained-1"]);
+    expect(entry.last_run_id).toBe("run-retained-1");
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("invalid manifest cannot replace cached status axes with synthesized or off-enum values", () => {
+    const g = mkGuild();
+    manifest(g, "active", "live", "id: live\ntitle: invalid-new-title\nexecution_status: in-progress\n");
+    const cached = path.join(g, "indexes", "initiatives-registry.yaml");
+    fs.mkdirSync(path.dirname(cached), { recursive: true });
+    fs.writeFileSync(cached, [
+      "schema_version: guild.initiatives_registry.v1",
+      "initiatives:",
+      "  - id: live",
+      "    title: trusted cached title",
+      "    status: in_progress",
+      "    definition_status: complete",
+      "    execution_status: active",
+      "    release_status: not_released",
+      "    documentation_status: update_required",
+      "",
+    ].join("\n"), "utf8");
+
+    const entry = buildInitiativesRegistry(g).initiatives.find((e) => e.id === "live")!;
+    expect(entry).toMatchObject({
+      title: "trusted cached title",
+      status: "in_progress",
+      definition_status: "complete",
+      execution_status: "active",
+      release_status: "not_released",
+      documentation_status: "update_required",
+      path: ".guild/initiatives/active/live/",
+    });
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("active entries preserve curated final_status while archived location forces closure", () => {
+    const g = mkGuild();
+    manifest(g, "active", "cancelled",
+      v1("cancelled", "definition_status: complete\nexecution_status: active\nrelease_status: not_released\ndocumentation_status: update_required"));
+    manifest(g, "archived", "moved",
+      v1("moved", "definition_status: complete\nexecution_status: done\nrelease_status: released\ndocumentation_status: updated"));
+    const cached = path.join(g, "indexes", "initiatives-registry.yaml");
+    fs.mkdirSync(path.dirname(cached), { recursive: true });
+    fs.writeFileSync(cached, [
+      "schema_version: guild.initiatives_registry.v1",
+      "initiatives:",
+      "  - id: cancelled",
+      "    status: cancelled",
+      "    final_status: cancelled",
+      "  - id: moved",
+      "    status: in_progress",
+      "    final_status: open",
+      "    path: .guild/initiatives/active/moved/",
+      "",
+    ].join("\n"), "utf8");
+
+    const entries = buildInitiativesRegistry(g).initiatives;
+    expect(entries.find((e) => e.id === "cancelled")).toMatchObject({
+      status: "cancelled",
+      final_status: "cancelled",
+    });
+    expect(entries.find((e) => e.id === "moved")).toMatchObject({
+      status: "closed",
+      final_status: "closed",
+      path: ".guild/initiatives/archived/moved/",
+    });
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("archived filesystem location closes cached live status even when the manifest is invalid", () => {
+    const g = mkGuild();
+    manifest(g, "archived", "broken", "id: broken\ntitle: broken\nexecution_status: in-progress\n");
+    const cached = path.join(g, "indexes", "initiatives-registry.yaml");
+    fs.mkdirSync(path.dirname(cached), { recursive: true });
+    fs.writeFileSync(cached, [
+      "schema_version: guild.initiatives_registry.v1",
+      "initiatives:",
+      "  - id: broken",
+      "    status: in_progress",
+      "    final_status: open",
+      "    path: .guild/initiatives/active/broken/",
+      "",
+    ].join("\n"), "utf8");
+
+    expect(buildInitiativesRegistry(g).initiatives.find((e) => e.id === "broken")).toMatchObject({
+      status: "closed",
+      final_status: "closed",
+      path: ".guild/initiatives/archived/broken/",
+    });
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("archived cancelled disposition is terminal and rollup is idempotent", () => {
+    const g = mkGuild();
+    manifest(g, "archived", "cancelled", [
+      v1("cancelled", "definition_status: complete\nexecution_status: active\nrelease_status: not_released\ndocumentation_status: update_required"),
+      "status: cancelled\n",
+    ].join(""));
+
+    const first = buildInitiativesRegistry(g);
+    expect(first.initiatives.find((e) => e.id === "cancelled")).toMatchObject({
+      status: "cancelled",
+      final_status: "cancelled",
+      path: ".guild/initiatives/archived/cancelled/",
+    });
+    writeInitiativesRegistry(g, first);
+    expect(buildInitiativesRegistry(g)).toEqual(first);
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("run linkage includes both live and retention-archived provenance", () => {
+    const g = mkGuild();
+    manifest(g, "active", "live",
+      v1("live", "definition_status: complete\nexecution_status: active\nrelease_status: not_released\ndocumentation_status: update_required"));
+    prov(g, "run-current", "live", "2026-08-10T00:00:00Z");
+    const retained = path.join(g, "runs", "_archive", "run-retained", "provenance.json");
+    fs.mkdirSync(path.dirname(retained), { recursive: true });
+    fs.writeFileSync(retained, JSON.stringify({
+      schema_version: "guild.provenance.v1",
+      run_id: "run-retained",
+      initiative: "live",
+      closed_at: "2026-08-01T00:00:00Z",
+    }), "utf8");
+
+    const entry = buildInitiativesRegistry(g).initiatives.find((e) => e.id === "live")!;
+    expect(entry.run_ids).toEqual(["run-current", "run-retained"]);
+    expect(entry.last_run_id).toBe("run-current");
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("cancellation is preserved from either cached status field", () => {
+    const g = mkGuild();
+    manifest(g, "active", "status-only",
+      v1("status-only", "definition_status: complete\nexecution_status: active\nrelease_status: not_released\ndocumentation_status: update_required"));
+    manifest(g, "archived", "final-only", "id: final-only\ntitle: invalid\nexecution_status: in-progress\n");
+    const cached = path.join(g, "indexes", "initiatives-registry.yaml");
+    fs.mkdirSync(path.dirname(cached), { recursive: true });
+    fs.writeFileSync(cached, [
+      "schema_version: guild.initiatives_registry.v1",
+      "initiatives:",
+      "  - id: status-only",
+      "    status: cancelled",
+      "  - id: final-only",
+      "    status: in_progress",
+      "    final_status: cancelled",
+      "",
+    ].join("\n"), "utf8");
+
+    const entries = buildInitiativesRegistry(g).initiatives;
+    expect(entries.find((e) => e.id === "status-only")).toMatchObject({ status: "cancelled", final_status: "cancelled" });
+    expect(entries.find((e) => e.id === "final-only")).toMatchObject({ status: "cancelled", final_status: "cancelled" });
+    fs.rmSync(g, { recursive: true, force: true });
+  });
+
+  test("duplicate run ids across live and retention trees collapse to one linkage", () => {
+    const g = mkGuild();
+    manifest(g, "active", "live",
+      v1("live", "definition_status: complete\nexecution_status: active\nrelease_status: not_released\ndocumentation_status: update_required"));
+    prov(g, "run-moving", "live", "2026-08-10T00:00:00Z");
+    const retained = path.join(g, "runs", "_archive", "run-moving", "provenance.json");
+    fs.mkdirSync(path.dirname(retained), { recursive: true });
+    fs.writeFileSync(retained, JSON.stringify({
+      schema_version: "guild.provenance.v1",
+      run_id: "run-moving",
+      initiative: "live",
+      closed_at: "2026-08-09T00:00:00Z",
+    }), "utf8");
+
+    const entry = buildInitiativesRegistry(g).initiatives.find((e) => e.id === "live")!;
+    expect(entry.run_ids).toEqual(["run-moving"]);
+    expect(entry.last_run_id).toBe("run-moving");
+    fs.rmSync(g, { recursive: true, force: true });
+  });
 });
 
 describe("d8CloseGate (item 16) — three legs never collapsed", () => {

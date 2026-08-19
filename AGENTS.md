@@ -79,14 +79,16 @@ never user-typed. This is the one-place wiring reference — each command's
 | `/guild:ops` | `guild:guild-operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
 | `/guild:learn` | the `learn-*` family — `guild:learn-map` / `learn-graph` / `learn-onboard` / `learn-diff` / `learn-explain` | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
 
-## Dev team (`.claude/agents/`)
+## Dev team (`.guild/agents/`)
 
 The plugin is built by 10 dev-team agents, each owning a scoped slice. **These — not the
-product specialists — are the team for any self-build work.** Dispatch each via the Agent
-tool with `subagent_type: <agent-name>` (never `general-purpose`); agents never commit
-themselves. They live in `.claude/agents/`.
+product specialists — are the team for any self-build work.** They are project-local,
+hash-bound definitions under `.guild/agents/`, not host-registered agent names. Compose
+the exact `guild.project_definition_ref.v1` from the committed adoption manifest and
+dispatch only through a transport that declares definition injection; a transport that
+cannot carry the ref refuses before launch. Agents never commit themselves.
 
-| Changed path / concern | Dev-team agent (`subagent_type`) |
+| Changed path / concern | Dev-team definition |
 |---|---|
 | `scripts/`, `src/modules/**` (module SoT + sync scripts + drift gates), `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
 | `hooks/` (hooks.json + hook scripts) | `hook-engineer` |
@@ -181,15 +183,17 @@ PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
 `.guild/wiki/standards/release-discipline.md`.
 
 **The channel must be legible from the manifest** (gap-audit B5, decision
-cap-loc-D12). `next` carries a **prerelease identifier** on the *next* target
-version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.5.0-beta.1`), bumped when beta
-picks up a materially new surface; `main` carries the bare release triple.
+cap-loc-D12). `main` carries the bare release triple. `next` may share that bare
+version only at the exact quiescent sync-back point where both refs resolve to
+the same commit. Once `next` diverges, it carries a **prerelease identifier** on
+the next target version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.7.0-beta.1`).
 Without this, `next` and `main` can report the same `"version"` while dozens of
 commits apart, and a user cannot determine which runtime they have from the
 version alone — which is exactly what happened at `2.4.0`. Under SemVer §11 a
 prerelease sorts *below* the same triple, so `2.5.0-beta.1` is correctly ahead
 of `2.4.0` and behind an eventual `2.5.0`; `check:channel-integrity` enforces
-the ordering. The release cut's version-bump commit drops the identifier.
+the shape, ordering, and same-commit exception. The release cut's version-bump
+commit drops the identifier.
 
 Day-to-day workflow (features, fixes, docs — everything non-release):
 1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.

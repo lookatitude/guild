@@ -44,6 +44,7 @@ import {
   git,
   manifestStrippedHash,
   stripVersions,
+  withLiveSurfaceLock,
   worktreeTreeHash,
 } from "./live-surface-anchor";
 
@@ -125,35 +126,44 @@ describe("SC-W3-6 — the ratified anchor is real (guard not vacuous)", () => {
   it("anti-vacuity: worktreeTreeHash DETECTS a perturbation (it is not a constant)", () => {
     // If the hash were constant, every zero-delta assertion below would be vacuous.
     // Perturb a REAL frozen file, confirm the hash MOVES, restore, confirm it returns.
-    const victim = path.join(PLUGIN_ROOT, "commands", "guild.md");
-    const original = fs.readFileSync(victim);
-    const before = worktreeTreeHash("commands");
-    try {
-      fs.appendFileSync(victim, "\n<!-- anti-vacuity probe -->\n");
-      expect(worktreeTreeHash("commands")).not.toBe(before);
-    } finally {
-      fs.writeFileSync(victim, original);
-    }
-    expect(worktreeTreeHash("commands")).toBe(before);
+    // FIC-48: this suite's perturbation victim TREE is `skills/` — SC-W2-5's is
+    // `commands/` — so the two suites' parallel workers never perturb-and-hash the
+    // SAME tree (the matrix3 race: the sibling's restore-time hash captured this
+    // test's probe). The window additionally holds the cross-worker lock so no
+    // strict reader can hash mid-perturbation.
+    withLiveSurfaceLock(() => {
+      const victim = path.join(PLUGIN_ROOT, "skills", "meta", "review", "SKILL.md");
+      const original = fs.readFileSync(victim);
+      const before = worktreeTreeHash("skills");
+      try {
+        fs.appendFileSync(victim, "\n<!-- anti-vacuity probe -->\n");
+        expect(worktreeTreeHash("skills")).not.toBe(before);
+      } finally {
+        fs.writeFileSync(victim, original);
+      }
+      expect(worktreeTreeHash("skills")).toBe(before);
+    });
   });
 
   it("anti-vacuity: the anchor reads the WORKTREE, not HEAD (an uncommitted edit is caught)", () => {
     // Hashing HEAD:<path> would make the guard blind to exactly what it exists to catch.
-    const victim = path.join(PLUGIN_ROOT, "skills", "meta", "brainstorm", "SKILL.md");
-    const original = fs.readFileSync(victim);
-    try {
-      fs.appendFileSync(victim, "\n<!-- worktree probe -->\n");
-      // HEAD is unchanged by an uncommitted edit; the worktree hash must diverge from it.
-      expect(worktreeTreeHash("skills")).not.toBe(git(["rev-parse", "HEAD:skills"]));
-    } finally {
-      fs.writeFileSync(victim, original);
-    }
+    withLiveSurfaceLock(() => {
+      const victim = path.join(PLUGIN_ROOT, "skills", "meta", "brainstorm", "SKILL.md");
+      const original = fs.readFileSync(victim);
+      try {
+        fs.appendFileSync(victim, "\n<!-- worktree probe -->\n");
+        // HEAD is unchanged by an uncommitted edit; the worktree hash must diverge from it.
+        expect(worktreeTreeHash("skills")).not.toBe(git(["rev-parse", "HEAD:skills"]));
+      } finally {
+        fs.writeFileSync(victim, original);
+      }
+    });
   });
 });
 
 describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** frozen (STRICT)", () => {
   it("commands/** is byte-identical to the ratified tree", () => {
-    const actual = worktreeTreeHash("commands");
+    const actual = withLiveSurfaceLock(() => worktreeTreeHash("commands"));
     if (actual !== RATIFIED_TREES["commands"]) {
       throw new Error(
         `SC-W3-6(A): commands/ changed vs the ratified tree ${RATIFIED_TREES["commands"]}:\n  ` +
@@ -181,7 +191,7 @@ describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** frozen (STRI
   it("the .claude-plugin/** FILE SET is exactly the ratified manifests (no new file slips in)", () => {
     // The manifests are anchored PER-FILE (they need the version tolerance), so without
     // this a NEW file under .claude-plugin/ would be anchored by nothing at all.
-    expect(claudePluginFileSet()).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
+    expect(withLiveSurfaceLock(() => claudePluginFileSet())).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
   });
 
   it("anti-vacuity: an UNTRACKED new .claude-plugin/ file is CAUGHT (regression)", () => {
@@ -189,17 +199,19 @@ describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** frozen (STRI
     // invisible to the file-set assertion — anchored by nothing until someone staged it.
     // That is exactly the drift this guard exists to catch, and the commands/skills path
     // (git add -A) already catches untracked additions, so the two must not disagree.
-    const probe = path.join(PLUGIN_ROOT, ".claude-plugin", "__untracked_probe.json");
-    try {
-      fs.writeFileSync(probe, "{}\n");
-      const withProbe = claudePluginFileSet();
-      expect(withProbe).toContain(".claude-plugin/__untracked_probe.json");
-      // …and the real assertion above would therefore FAIL, which is the point.
-      expect(withProbe).not.toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
-    } finally {
-      fs.rmSync(probe, { force: true });
-    }
-    expect(claudePluginFileSet()).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]); // restored
+    withLiveSurfaceLock(() => {
+      const probe = path.join(PLUGIN_ROOT, ".claude-plugin", "__untracked_probe.json");
+      try {
+        fs.writeFileSync(probe, "{}\n");
+        const withProbe = claudePluginFileSet();
+        expect(withProbe).toContain(".claude-plugin/__untracked_probe.json");
+        // …and the real assertion above would therefore FAIL, which is the point.
+        expect(withProbe).not.toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]);
+      } finally {
+        fs.rmSync(probe, { force: true });
+      }
+      expect(claudePluginFileSet()).toEqual([...RATIFIED_CLAUDE_PLUGIN_FILES]); // restored
+    });
   });
 
   it("anti-vacuity (REAL): the SAME classifier FLAGS a synthetic .claude-plugin/** + commands/** mutation", () => {
@@ -236,7 +248,7 @@ describe("SC-W3-6 (A) — DECISIVE: .claude-plugin/** + commands/** frozen (STRI
 
 describe("SC-W3-6 (B) — live skills/**: frozen as-ratified", () => {
   it("skills/** is byte-identical to the ratified tree", () => {
-    const actual = worktreeTreeHash("skills");
+    const actual = withLiveSurfaceLock(() => worktreeTreeHash("skills"));
     if (actual !== RATIFIED_TREES["skills"]) {
       throw new Error(
         `SC-W3-6(B): skills/ changed vs the ratified tree ${RATIFIED_TREES["skills"]}:\n  ` +

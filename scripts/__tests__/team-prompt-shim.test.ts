@@ -10,9 +10,10 @@ describe("team prompt module compatibility", () => {
     expect(tmuxBackendBuildPrompt).toBe(moduleBuildPrompt);
   });
 
-  test("preserves orchestrator and teammate prompt wording", () => {
+  test("uses the canonical Team Lead and teammate prompt wording", () => {
     const orchestrator = teamBackendBuildPrompt("demo", "run-001", null, ".guild/team/demo.build.yaml");
-    expect(orchestrator).toContain("You are the Guild orchestrator for team `demo`, run-id `run-001`.");
+    expect(orchestrator).toContain("You are the Team Lead for team `demo`, run-id `run-001`.");
+    expect(orchestrator).not.toContain("Guild orchestrator");
     expect(orchestrator).toContain("the team at `.guild/team/demo.build.yaml`");
     expect(orchestrator).toContain("guild:review → guild:verify-done → guild:reflect");
     expect(orchestrator).toContain("guild:context-assemble");
@@ -23,9 +24,10 @@ describe("team prompt module compatibility", () => {
       dependsOn: [],
     });
     expect(teammate).toContain("You are the `backend` teammate for run-id `run-001`.");
-    expect(teammate).toContain("Read your context bundle at `.guild/context/run-001/backend-<task-id>.md` —");
+    expect(teammate).toContain("Read the exact `context_bundle_id` named by your assignment —");
     expect(teammate).toContain("auto-memory (§9.1)");
     expect(teammate).toContain("§8.2 handoff receipt");
+    expect(teammate).toContain("assignment's exact `channels.handoff_path`");
     // task-cell-runtime D5: the read-ack gate — read + validate the assignment and
     // acknowledge it BEFORE working; `running` is reachable only after the ack.
     expect(teammate).toContain("$GUILD_TASK_ASSIGNMENT");

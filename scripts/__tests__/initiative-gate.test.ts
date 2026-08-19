@@ -19,6 +19,7 @@ import {
   loadInitiativeManifest,
   buildD8Input,
   parseGateArgs,
+  checkInitiativeEvidenceRefs,
   runCloseCheck,
   runDocsWorkitems,
 } from "../initiative-gate";
@@ -35,6 +36,12 @@ function writeManifest(root: string, bucket: "active" | "archived", id: string, 
   const dir = path.join(root, ".guild", "initiatives", bucket, id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "initiative.yaml"), yaml, "utf8");
+}
+
+function writeWorkItem(root: string, bucket: "active" | "archived", id: string, name: string, yaml: string): void {
+  const dir = path.join(root, ".guild", "initiatives", bucket, id, "work-items");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, name), yaml, "utf8");
 }
 
 const PASSING_YAML = `initiative:
@@ -187,6 +194,192 @@ describe("runCloseCheck — fixture: fully-resolved initiative PASSES", () => {
       expect(out.result.blockers).toEqual([]);
       expect(out.result.legs).toEqual({ exec: true, release: true, docs: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D8 evidence existence — the fourth, file-bound close condition
+// ---------------------------------------------------------------------------
+
+describe("checkInitiativeEvidenceRefs", () => {
+  test("checks close_gate.evidence and every work-item evidence_refs entry", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(path.join(root, "evidence"), { recursive: true });
+    fs.writeFileSync(path.join(root, "evidence", "close.md"), "close", "utf8");
+    fs.writeFileSync(path.join(root, "evidence", "lane.md"), "lane", "utf8");
+    writeManifest(root, "active", "fixture-evidence", `initiative:\n  id: fixture-evidence\n  title: x\n  execution_status: done\n  release_status: released\n  documentation_status: updated\n  close_gate:\n    evidence:\n      - evidence/close.md#review\n`);
+    writeWorkItem(root, "active", "fixture-evidence", "W1.yaml", `id: W1\ninitiative_id: fixture-evidence\ntitle: x\ntype: validation\nstatus: done\nevidence_refs:\n  - evidence/lane.md\n`);
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: { evidence: ["evidence/close.md#review"] },
+    });
+    expect(checked.valid).toBe(true);
+    expect(checked.checked.map((x) => x.ref)).toEqual(["evidence/close.md#review", "evidence/lane.md"]);
+    expect(checked.missing).toEqual([]);
+    expect(checked.invalid).toEqual([]);
+  });
+
+  test("a missing close-gate ref blocks an otherwise green D8 close", () => {
+    const root = makeRoot();
+    writeManifest(root, "active", "fixture-passing", PASSING_YAML.replace(
+      "  documentation_status: updated\n",
+      "  documentation_status: updated\n  close_gate:\n    evidence: [evidence/never-existed.md]\n",
+    ));
+    const out = runCloseCheck(root, "fixture-passing", true);
+    expect("error" in out).toBe(false);
+    if (!("error" in out)) {
+      expect(out.result.canClose).toBe(true);
+      expect(out.evidence.valid).toBe(false);
+      expect(out.evidence.missing.map((x) => x.ref)).toEqual(["evidence/never-existed.md"]);
+      expect(out.pass).toBe(false);
+    }
+  });
+
+  test("a missing work-item evidence ref blocks close", () => {
+    const root = makeRoot();
+    writeManifest(root, "active", "fixture-passing", PASSING_YAML);
+    writeWorkItem(root, "active", "fixture-passing", "W1.yaml", `id: W1\ninitiative_id: fixture-passing\ntitle: x\ntype: validation\nstatus: done\nevidence_refs:\n  - evidence/missing-lane.md\n`);
+    const out = runCloseCheck(root, "fixture-passing", true);
+    expect("error" in out).toBe(false);
+    if (!("error" in out)) {
+      expect(out.evidence.valid).toBe(false);
+      expect(out.evidence.missing[0]).toMatchObject({ ref: "evidence/missing-lane.md", source: "work-items/W1.yaml" });
+      expect(out.pass).toBe(false);
+    }
+  });
+
+  test("absolute, traversal, non-string, and prose refs fail closed", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: { evidence: ["/tmp/outside", "../outside", 42, "audit gap only"] },
+    });
+    expect(checked.valid).toBe(false);
+    expect(checked.invalid).toHaveLength(4);
+  });
+
+  test("legacy receipt and deliverable labels preserve their single contained path", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(path.join(root, "evidence"), { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.writeFileSync(path.join(root, "evidence", "receipt.md"), "receipt", "utf8");
+    fs.writeFileSync(path.join(root, "evidence", "deliverable.md"), "deliverable", "utf8");
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: {
+        evidence: [
+          "receipt: evidence/receipt.md",
+          "DELIVERABLE: evidence/deliverable.md (branch feature/legacy-record)",
+        ],
+      },
+    });
+
+    expect(checked.valid).toBe(true);
+    expect(checked.checked.map((entry) => entry.ref)).toEqual([
+      "receipt: evidence/receipt.md",
+      "DELIVERABLE: evidence/deliverable.md (branch feature/legacy-record)",
+    ]);
+  });
+
+  test("an unknown label or free-form suffix cannot launder prose into evidence", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(path.join(root, "evidence"), { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.writeFileSync(path.join(root, "evidence", "real.md"), "real", "utf8");
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: {
+        evidence: [
+          "HEADLINE: evidence/real.md",
+          "receipt: evidence/real.md because it looked plausible",
+        ],
+      },
+    });
+
+    expect(checked.valid).toBe(false);
+    expect(checked.checked).toEqual([]);
+    expect(checked.invalid).toHaveLength(2);
+  });
+
+  test("a contained symlink to an outside file fails closed", () => {
+    const root = makeRoot();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-initiative-evidence-outside-"));
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(path.join(root, "evidence"), { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.writeFileSync(path.join(outside, "outside.md"), "outside", "utf8");
+    fs.symlinkSync(path.join(outside, "outside.md"), path.join(root, "evidence", "linked.md"));
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: { evidence: ["evidence/linked.md"] },
+    });
+
+    expect(checked.valid).toBe(false);
+    expect(checked.checked).toEqual([]);
+    expect(checked.missing).toEqual([]);
+    expect(checked.invalid).toEqual([
+      expect.objectContaining({
+        ref: "evidence/linked.md",
+        reason: "evidence ref resolves outside repository root",
+      }),
+    ]);
+  });
+
+  test("a directory cannot satisfy a file evidence ref", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(path.join(root, "evidence", "directory"), { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: { evidence: ["evidence/directory"] },
+    });
+
+    expect(checked.valid).toBe(false);
+    expect(checked.invalid).toEqual([
+      expect.objectContaining({
+        ref: "evidence/directory",
+        reason: "evidence ref must resolve to a regular file",
+      }),
+    ]);
+  });
+
+  test("noncanonical work-item YAML extensions fail closed instead of being skipped", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    const workItemsDir = path.join(initiativeDir, "work-items");
+    fs.mkdirSync(workItemsDir, { recursive: true });
+    fs.writeFileSync(path.join(workItemsDir, "W1.yml"), "id: W1\nevidence_refs: []\n", "utf8");
+    fs.writeFileSync(path.join(workItemsDir, "W2.YAML"), "id: W2\nevidence_refs: []\n", "utf8");
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {});
+
+    expect(checked.valid).toBe(false);
+    expect(checked.invalid).toEqual([
+      expect.objectContaining({ ref: "W1.yml", reason: "work-item files must use the canonical .yaml extension" }),
+      expect.objectContaining({ ref: "W2.YAML", reason: "work-item files must use the canonical .yaml extension" }),
+    ]);
+  });
+
+  test("a symlink named as a canonical work item fails closed instead of being skipped", () => {
+    const root = makeRoot();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-initiative-work-item-outside-"));
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    const workItemsDir = path.join(initiativeDir, "work-items");
+    fs.mkdirSync(workItemsDir, { recursive: true });
+    fs.writeFileSync(path.join(outside, "outside.yaml"), "id: outside\nevidence_refs: []\n", "utf8");
+    fs.symlinkSync(path.join(outside, "outside.yaml"), path.join(workItemsDir, "W1.yaml"));
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {});
+
+    expect(checked.valid).toBe(false);
+    expect(checked.invalid).toEqual([
+      expect.objectContaining({ ref: "W1.yaml", reason: "work-item YAML entries must be regular files" }),
+    ]);
   });
 });
 

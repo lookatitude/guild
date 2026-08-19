@@ -46,6 +46,7 @@ import { buildAdapters } from "../lib/pane-adapter";
 import { createAgentsFileAdapter } from "../lib/host-adapters/agents-file";
 import { DERIVED_HOST_CAPABILITY_ROWS } from "../lib/host-registry";
 import type { HostKind } from "../lib/host-types";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 // "agents-file" WAS this file's one documented dispatch_selectable:true exception,
 // carved out rather than flipped because the row is the ABSTRACT universal package
@@ -189,6 +190,8 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
       fs.mkdirSync(teamDir, { recursive: true });
       const teamPath = path.join(teamDir, "test-slug.yaml");
       fs.copyFileSync(FIXTURE, teamPath);
+      const runId = "run-20260812-071100-g4b-host-reachability";
+      mintRunBinding({ root: tmpDir, run_id: runId });
 
       const env: Record<string, string> = {};
       for (const [k, v] of Object.entries(process.env)) {
@@ -202,7 +205,7 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
 
       const result = spawnSync(
         "npx",
-        ["tsx", SCRIPT, "--team", teamPath, "--session-name", "guild-g4b-contract", "--cwd", tmpDir, "--dry-run"],
+        ["tsx", SCRIPT, "--team", teamPath, "--session-name", "guild-g4b-contract", "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
         { encoding: "utf8", env, timeout: 120_000 }
       );
 
@@ -212,7 +215,6 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
       expect(stdout).toMatch(/cursor-agent -p/);
 
       const runsDir = path.join(tmpDir, ".guild", "runs");
-      const runId = fs.readdirSync(runsDir)[0];
       const manifestPath = path.join(runsDir, runId, "agent-team", "session.json");
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
       const hostKinds = manifest.teammate_panes.map((p: { host_kind: string }) => p.host_kind);

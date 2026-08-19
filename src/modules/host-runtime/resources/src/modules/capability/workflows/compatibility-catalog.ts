@@ -74,7 +74,74 @@ export const COMPATIBILITY_CATALOG_SCHEMA = "guild.compatibility_catalog.v1" as 
  * required set is a removal gate that passes over assets nobody instrumented.
  */
 export const SHIPPED_TEMPLATE_COUNT = 15;
-export const SHIPPED_DOMAIN_SKILL_COUNT = 58;
+
+/**
+ * Frozen identity census for the v2 compatibility surface. Runtime directory
+ * enumeration alone cannot distinguish a universal skill from a shipped domain
+ * skill whose file has disappeared, so security-sensitive consumers match the
+ * invocation against this closed set before trusting the live catalog.
+ */
+export const SHIPPED_DOMAIN_SKILL_IDS = Object.freeze([
+  "architect-adr-writer",
+  "architect-systems-design",
+  "architect-tradeoff-matrix",
+  "backend-api-contract",
+  "backend-data-layer",
+  "backend-migration-writer",
+  "backend-service-integration",
+  "copywriter-email-sequences",
+  "copywriter-long-form",
+  "copywriter-product-microcopy",
+  "copywriter-voice-guide",
+  "devops-ci-cd-pipeline",
+  "devops-incident-runbook",
+  "devops-infrastructure-as-code",
+  "devops-observability-setup",
+  "doc-writer-doc-site",
+  "doc-writer-onboarding-doc",
+  "doc-writer-product-guide",
+  "doc-writer-readme",
+  "frontend-a11y",
+  "frontend-bundler-config",
+  "frontend-react",
+  "frontend-state-management",
+  "marketing-ab-copy-variants",
+  "marketing-campaign-brief",
+  "marketing-launch-plan",
+  "marketing-positioning",
+  "mobile-android-kotlin",
+  "mobile-ios-swift",
+  "mobile-performance-tuning",
+  "mobile-react-native",
+  "qa-flaky-test-hunter",
+  "qa-property-based-tests",
+  "qa-snapshot-tests",
+  "qa-test-strategy",
+  "researcher-comparison-table",
+  "researcher-deep-dive",
+  "researcher-paper-digest",
+  "sales-cold-outreach",
+  "sales-discovery-framework",
+  "sales-follow-up-sequence",
+  "sales-proposal-writer",
+  "security-auth-flow-review",
+  "security-dependency-audit",
+  "security-secrets-scan",
+  "security-threat-modeling",
+  "seo-internal-linking",
+  "seo-keyword-research",
+  "seo-on-page-optimization",
+  "seo-technical-audit",
+  "social-media-content-calendar",
+  "social-media-engagement-templates",
+  "social-media-platform-post",
+  "social-media-thread",
+  "technical-writer-api-docs",
+  "technical-writer-release-notes",
+  "technical-writer-tutorial",
+  "technical-writer-user-manual",
+] as const);
+export const SHIPPED_DOMAIN_SKILL_COUNT = SHIPPED_DOMAIN_SKILL_IDS.length;
 export const SHIPPED_COMPATIBILITY_ASSET_COUNT =
   SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
 
@@ -375,7 +442,19 @@ export function buildCompatibilityCatalog(opts: unknown): CompatibilityCatalog {
   );
 
   const templateCount = entries.filter((e) => e.kind === "shipped_template").length;
-  const skillCount = entries.filter((e) => e.kind === "shipped_domain_skill").length;
+  const skillIds = entries
+    .filter((e) => e.kind === "shipped_domain_skill")
+    .map((e) => e.id);
+  const skillCount = skillIds.length;
+  const frozenSkillIds: ReadonlySet<string> = new Set(SHIPPED_DOMAIN_SKILL_IDS);
+  const missingSkillIds = SHIPPED_DOMAIN_SKILL_IDS.filter((id) => !skillIds.includes(id));
+  const unexpectedSkillIds = skillIds.filter((id) => !frozenSkillIds.has(id));
+  if (missingSkillIds.length > 0) {
+    problems.push(`shipped_domain_skill census missing frozen id(s): ${missingSkillIds.join(", ")}`);
+  }
+  if (unexpectedSkillIds.length > 0) {
+    problems.push(`shipped_domain_skill census has unexpected id(s): ${unexpectedSkillIds.join(", ")}`);
+  }
 
   return Object.freeze({
     schema_version: COMPATIBILITY_CATALOG_SCHEMA,

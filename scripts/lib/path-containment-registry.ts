@@ -165,6 +165,46 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     status: "adopted",
     note: "THE TWELFTH HOME, from feature/cap-loc-resolver, and likewise unreachable from this registry's base until the integration merged both. Adopting it CLOSES A HOLE rather than merely deduplicating: its climb probed with `existsSync`, which follows symlinks, so a DANGLING symlink read as absent and the climb proved containment of the in-root PARENT instead — the exact defect the learn lane had already found and fixed in its own copy, still live here. Two lanes, one shape, one fixed and one not: the case for a single primitive, made concrete.",
   }),
+  Object.freeze({
+    path: "scripts/lib/capability/compatibility-loader.ts",
+    status: "adopted",
+    note: "PCL-09 catalog and usage-payload writes now use the shared bounded writer; compatibility reads use the same primitive with physical-file policy.",
+  }),
+  Object.freeze({
+    path: "scripts/lib/capability/migration-window.ts",
+    status: "adopted",
+    note: "PCL-10 migration-window state previously repeated a realpath-prefix write check; it now uses the shared bounded writer.",
+  }),
+  Object.freeze({
+    path: "scripts/lib/capability/self-build-canonicalize.ts",
+    status: "adopted",
+    note: "PCL-15 adoption-manifest and definition-ref artifacts are project-bounded writes and now use the shared primitive.",
+  }),
+  Object.freeze({
+    path: "scripts/lib/capability/strangler-control.ts",
+    status: "adopted",
+    note: "PCL-08 feature-gate state previously repeated a realpath-prefix write check; it now uses the shared bounded writer.",
+  }),
+  Object.freeze({
+    path: "scripts/lib/workspace-project-root.ts",
+    status: "waived",
+    note: "WAIVER: the private upward walk discovers the nearest workspace manifest and performs no write or containment verdict. The later project-root boundary decision separately delegates to checkContained and fails closed on refusal.",
+  }),
+  Object.freeze({
+    path: "src/modules/dispatch/workflows/task-assignment-v2.ts",
+    status: "adopted",
+    note: "TaskCell assignment, attempt, instance, and acknowledgment reads/writes use the shared physical containment primitive so a symlinked run-tree channel cannot escape the project.",
+  }),
+  Object.freeze({
+    path: "src/modules/telemetry/workflows/task-cell-telemetry.ts",
+    status: "adopted",
+    note: "TaskCell telemetry and usage directories are created only through the shared physical prepareContainedWrite pairing.",
+  }),
+  Object.freeze({
+    path: "src/modules/telemetry/workflows/run-analysis.ts",
+    status: "waived",
+    note: "WAIVER: the analyzer intentionally owns a stricter transactional containment layer: symlink-refusing input walks, O_EXCL temporary files, atomic rename, inode-owned locks, and a validated multi-file recovery journal. Replacing it with the single-file primitive would discard transaction and lock guarantees; adversarial analyzer tests pin escape, symlink, journal, and recovery behavior.",
+  }),
 ]);
 
 /** Repo-relative path of the one file that may hold `status: "home"`. */

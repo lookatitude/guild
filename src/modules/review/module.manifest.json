@@ -18,6 +18,7 @@
       "guild-tdd"
     ],
     "scripts": [
+      "advisory-record-example",
       "flip-report",
       "oq11-gate-check",
       "verify-codex-review-trail",

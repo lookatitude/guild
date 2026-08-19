@@ -8,28 +8,28 @@
       "id": "PreCompact:pre-compact.js",
       "source_path": "hooks/dist/pre-compact.js",
       "resource_path": "resources/hooks/dist/pre-compact.js",
-      "sha256": "1c62aed5d9d07e32c22d5960e2591ec19a38f534fcfb471541f82024055ca138"
+      "sha256": "8269b96986a375d363953079765def967623bf86f5c83f14b3b948b38fd42e90"
     },
     {
       "category": "hooks",
       "id": "SessionStart:session-reanchor.js",
       "source_path": "hooks/dist/session-reanchor.js",
       "resource_path": "resources/hooks/dist/session-reanchor.js",
-      "sha256": "7fae0fb502e44a873bce19011e7ba95fc8da3074f64398851371a074f6f06615"
+      "sha256": "239748f59e5ed3a80f77cf2f0f606492096837b28c2ede7c1cec1532b17d38ec"
     },
     {
       "category": "hooks",
       "id": "Stop:lean-lead-guard.js",
       "source_path": "hooks/dist/lean-lead-guard.js",
       "resource_path": "resources/hooks/dist/lean-lead-guard.js",
-      "sha256": "933af339eb0401bb058d0491882f9b865842106e69ac995087c6438fb06af5e7"
+      "sha256": "997fdb845ead89d691efb75632d7f57ca206651da945a7464ba107b51af3728b"
     },
     {
       "category": "hooks",
       "id": "Stop:lifecycle-gate.js",
       "source_path": "hooks/dist/lifecycle-gate.js",
       "resource_path": "resources/hooks/dist/lifecycle-gate.js",
-      "sha256": "d0e78b296396b69604b608ef66c58e75e7486421a55952414f5967fe876ecccb"
+      "sha256": "cff9be65031b9cdc9b6fc81f8b426a6662c2bbfb405d8ef7cb2fbd9d32b99c47"
     },
     {
       "category": "scripts",
@@ -37,6 +37,13 @@
       "source_path": "scripts/lib/atomic-write.ts",
       "resource_path": "resources/scripts/lib/atomic-write.ts",
       "sha256": "606b2fc6db4c4b7b1117b584210a5cda152d91e001387279917da62383010f19"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/definition-artifact-resolver",
+      "source_path": "scripts/lib/definition-artifact-resolver.ts",
+      "resource_path": "resources/scripts/lib/definition-artifact-resolver.ts",
+      "sha256": "594c2de1bbdf0e5d514a30cdb39448556d981c94f50d6523d0d5fdfb31e60e18"
     },
     {
       "category": "scripts",
@@ -100,6 +107,13 @@
       "source_path": "scripts/lib/sanitized-run-export.ts",
       "resource_path": "resources/scripts/lib/sanitized-run-export.ts",
       "sha256": "bd9271402a2461150ac5442defbbd1c49b04c8703a7c852cb336b7f60846d72e"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/workspace-project-root",
+      "source_path": "scripts/lib/workspace-project-root.ts",
+      "resource_path": "resources/scripts/lib/workspace-project-root.ts",
+      "sha256": "a8199c40f05f62e4eee088ae1643ead25d038a2d44b870f4a01aa2391377bc17"
     }
   ]
 }

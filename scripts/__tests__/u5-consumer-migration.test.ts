@@ -25,6 +25,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const DETECT_SCRIPT = path.resolve(__dirname, "../workspace/detect.ts");
 const NODE_ENV = {
@@ -511,9 +512,11 @@ function setupLauncherRepo(
 
 describe("U5/agent-team-launcher — cross_host malformed-value guard (subprocess, MAJOR fix)", () => {
   let tmpDir: string;
+  const runId = "run-20260812-010000-u5-consumer-migration";
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-u5-atl-"));
+    mintRunBinding({ root: tmpDir, run_id: runId });
   });
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -545,7 +548,7 @@ describe("U5/agent-team-launcher — cross_host malformed-value guard (subproces
       }, null, 2)
     );
     const { exitCode, stderr } = runLauncher(
-      ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+      ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
       { GUILD_CROSS_HOST_ENABLED: undefined }
     );
     // Cross-host must be off → no "route to a REMOTE host" error
@@ -567,7 +570,7 @@ describe("U5/agent-team-launcher — cross_host malformed-value guard (subproces
       `{"defaults":{"cross_host":{"enabled":1,"hosts":{}}}}`
     );
     const { exitCode, stderr } = runLauncher(
-      ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+      ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
       { GUILD_CROSS_HOST_ENABLED: undefined }
     );
     expect(stderr).not.toMatch(/route to a REMOTE host/i);
@@ -598,7 +601,7 @@ describe("U5/agent-team-launcher — cross_host malformed-value guard (subproces
       }, null, 2)
     );
     const { exitCode } = runLauncher(
-      ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+      ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
       { GUILD_CROSS_HOST_ENABLED: undefined }
     );
     // Should not crash trying to iterate a string as hosts map

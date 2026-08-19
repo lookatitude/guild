@@ -116,6 +116,19 @@ function steppingClock(step: number): { now(): number } {
 }
 
 const SPECIALIST: Specialist = { name: "architect", scope: "boundaries", dependsOn: [] };
+const DEFINITION_REF = {
+  schema_version: "guild.project_definition_ref.v1" as const,
+  project_id: "plugin",
+  layer: "project-guild" as const,
+  kind: "agent" as const,
+  id: "architect",
+  relative_path: ".guild/agents/architect.md",
+  content_hash: `sha256:${"a".repeat(64)}`,
+  source_commit: null,
+  specialist_profile_hash: "b".repeat(64),
+  specialist_type_hash: "c".repeat(64),
+  skills: [],
+};
 
 const PANE_SPEC: PaneSpec = {
   name: "architect",
@@ -1232,6 +1245,48 @@ describe("observation delivery never escapes as a thrown host error (BF-3)", () 
 // and executes through `transportFor`) lives in the launcher suite.
 
 describe("TeamDispatchExecutionTransport — run-scoped dispatch through one adapter", () => {
+  it("carries an exact definition ref through the declaring in-process transport", () => {
+    const port = new TeamDispatchExecutionTransport({
+      transport_id: "in-process",
+      backend: new InProcessTeamBackend(),
+      supports_definition_injection: true,
+    });
+    const request = { ...LAUNCH_REQUEST, specialists: [{ ...SPECIALIST, definition: DEFINITION_REF.relative_path, definition_source: "project" as const, definition_ref: DEFINITION_REF }] };
+    const result = port.launch(request);
+    expect(result.status).toBe("succeeded");
+    expect((result.value?.dispatch_plan?.[0] as { definition_ref?: unknown }).definition_ref).toEqual(DEFINITION_REF);
+  });
+
+  it("refuses an injected team before calling an undeclaring backend", () => {
+    let launches = 0;
+    const backend: TeamBackendLike = {
+      kind: "remote",
+      isAvailable: () => true,
+      launch: () => { launches += 1; throw new Error("must not be reached"); },
+    };
+    const port = new TeamDispatchExecutionTransport({ transport_id: "remote", backend });
+    const result = port.launch({ ...LAUNCH_REQUEST, specialists: [{ ...SPECIALIST, definition_ref: DEFINITION_REF }] });
+    expect(result.status).toBe("unsupported");
+    expect(result.reason_code).toBe("capability_absent");
+    expect(launches).toBe(0);
+  });
+
+  it("fails a declaring backend that drops the definition ref", () => {
+    const backend: TeamBackendLike = {
+      kind: "in-process",
+      isAvailable: () => true,
+      launch: () => ({
+        kind: "in-process", ok: true, plannedCommands: [], orchestratorPaneId: null,
+        teammatePaneIds: {}, notes: [], dispatchPlan: [{ name: "architect" }],
+      }),
+    };
+    const port = new TeamDispatchExecutionTransport({ transport_id: "in-process", backend, supports_definition_injection: true });
+    const result = port.launch({ ...LAUNCH_REQUEST, specialists: [{ ...SPECIALIST, definition_ref: DEFINITION_REF }] });
+    expect(result.status).toBe("failed");
+    expect(result.reason_code).toBe("invalid_request");
+    expect(result.detail).toMatch(/dropped or changed/);
+  });
+
   it("launches through the shipped in-process backend and reports the plan", () => {
     const port = new TeamDispatchExecutionTransport({
       transport_id: "in-process",

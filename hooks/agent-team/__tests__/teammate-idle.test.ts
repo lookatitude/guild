@@ -54,6 +54,8 @@ function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, worke
     hostId: "claude-code-cli",
     adapterId: "claude-code-cli@1",
     hostCapabilitiesHash: "sha256:caps",
+    substrate: "tmux",
+    modelTier: "mid",
     objective: `implement ${logicalTaskId}`,
     nonGoals: [],
     scopePaths: [],
@@ -468,6 +470,25 @@ describe("teammate-idle.ts", () => {
         { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" }
       );
       expect(stdout).toMatch(/no heartbeat/i);
+    });
+  });
+
+  describe("RID W3 — read-only fallback identity", () => {
+    it("uses the canonical date-first shape and emits a visible warning", () => {
+      const { exitCode, stdout, stderr } = runScript(
+        {
+          session_id: "Session W3 Idle",
+          cwd: tmpDir,
+          hook_event_name: "TeammateIdle",
+          teammate_name: "backend",
+          team_name: "guild-team",
+        },
+        { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", GUILD_RUN_ID: "" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stderr).toMatch(/WARN.*read-only fallback/i);
+      expect(`${stdout}\n${stderr}`).toMatch(/run-\d{8}-\d{6}-session-w3-idle/);
+      expect(`${stdout}\n${stderr}`).not.toContain("run-Session W3 Idle");
     });
   });
 });

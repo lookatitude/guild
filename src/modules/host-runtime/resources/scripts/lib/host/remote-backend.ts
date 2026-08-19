@@ -29,6 +29,7 @@ import {
   defaultRun,
   dispatchModelForSpecialist,
   dispatchModelParamsForSpecialist,
+  specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import {
   buildPrompt,
@@ -173,6 +174,7 @@ export class MockTransport implements RemoteTransport {
     this.spawns.push({ host, spec, command });
     const handle: RemotePaneHandle = {
       specialist: spec.name,
+      ...(spec.definition_ref ? { definition_ref: spec.definition_ref } : {}),
       hostId: host.hostId,
       hostKind: host.hostKind,
       endpoint: host.endpoint,
@@ -435,7 +437,7 @@ export class RemoteTeamBackend implements TeamBackend {
     const model = dispatchModelForSpecialist(spec) ?? undefined;
     const modelParams = dispatchModelParamsForSpecialist(spec);
     return {
-      name: spec.name,
+      name: specialistDispatchKey(spec),
       scope: spec.scope,
       runId: req.runId,
       slug: req.slug,
@@ -444,6 +446,8 @@ export class RemoteTeamBackend implements TeamBackend {
       taskId: spec.taskId,
       capability_scope: spec.capability_scope,
       specialist: spec.name,
+      assignmentPath: spec.task_cell_assignment_path,
+      taskCellInstanceId: spec.task_cell_instance_id,
       ...(model !== undefined ? { model } : {}),
       ...(modelParams !== undefined ? { modelParams } : {}),
     };
@@ -479,11 +483,25 @@ export class RemoteTeamBackend implements TeamBackend {
         spec.name,
         undefined,
         this.claudeLaunchArgs,
+        undefined,
+        spec.task_cell_assignment_path,
+        spec.task_cell_instance_id,
       );
     }
     return this.resolveAdapter
       ? this.resolveAdapter(hostKind).command(paneSpec)
-      : paneCommand(paneSpec.prompt, paneSpec.runId, spec.capability_scope, spec.taskId, spec.name);
+      : paneCommand(
+          paneSpec.prompt,
+          paneSpec.runId,
+          spec.capability_scope,
+          spec.taskId,
+          spec.name,
+          undefined,
+          [],
+          undefined,
+          spec.task_cell_assignment_path,
+          spec.task_cell_instance_id,
+        );
   }
 
   teardown(): TeardownVerdict {
@@ -688,7 +706,7 @@ export class RemoteTeamBackend implements TeamBackend {
           ],
         };
       }
-      teammatePaneIds[p.spec.name] = handle.remoteId;
+      teammatePaneIds[specialistDispatchKey(p.spec)] = handle.remoteId;
     }
 
     return {

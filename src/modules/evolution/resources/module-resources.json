@@ -22,7 +22,7 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "9b9eb6f8deef68461fed5773e8f2141733fdb3e393716c71b7d117b3e68d4789"
+      "sha256": "5b17ad155bff1269a949884668e15fa80521155956e695d8bb954abf6eaa4903"
     },
     {
       "category": "hooks",
@@ -71,7 +71,7 @@
       "id": "lib/reaping",
       "source_path": "scripts/lib/reaping.ts",
       "resource_path": "resources/scripts/lib/reaping.ts",
-      "sha256": "9bfe5a85c158a45ff7b3a7fad94d0b3cc1767b23865c6c3dc85ba00a808affdf"
+      "sha256": "7d42cef901970dd958c1968a7aedb0e264a64486463c20b1634a51c4c193468c"
     },
     {
       "category": "scripts",

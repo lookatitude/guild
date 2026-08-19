@@ -211,9 +211,10 @@ chat history (audit §Context and artifacts; consolidated under G10).
 ### D8 — Naming: "Team Lead" is the user-facing coordinator name
 
 Standardize the visible coordinator role on **"Team Lead"**. `team-prompt.ts`
-currently renders "Guild orchestrator"; reconcile under G13, or record the
-deliberate three-way distinction (product-level orchestrator / phase lead /
-task-cell lead) if one is chosen.
+renders "Team Lead" for the visible phase coordinator. Internal identifiers may
+still use `orchestrator` where they name the parent control-plane binding rather
+than a user-facing role; product orchestration, phase leadership, and task-cell
+lead binding remain separate identity layers.
 
 ## Consequences
 
