@@ -49,11 +49,21 @@ export function resolveWorkspaceProjectRoot(startRoot: string, projectId: string
       return { status: "invalid_request", detail: `project_id ${projectId} has an invalid path` };
     }
     const root = path.resolve(workspaceRoot, rel);
-    const containment = checkContained(workspaceRoot, root);
-    if (isRefused(containment)) return { status: "invalid_request", detail: `project root escapes workspace [${containment.code}]` };
+    const lexicalContainment = checkContained(workspaceRoot, root);
+    if (isRefused(lexicalContainment)) {
+      return { status: "invalid_request", detail: `project root escapes workspace [${lexicalContainment.code}]` };
+    }
     const stat = fs.lstatSync(root);
     if (stat.isSymbolicLink() || !stat.isDirectory()) return { status: "invalid_request", detail: "project root is not a regular directory" };
-    return { status: "resolved", root: fs.realpathSync(root), workspace_root: workspaceRoot };
+    // Lexical containment is insufficient when an intermediate component is a
+    // symlink. Resolve the complete child path, then prove the resulting real
+    // directory still lives under the already-canonical workspace root.
+    const realRoot = fs.realpathSync(root);
+    const realContainment = checkContained(workspaceRoot, realRoot);
+    if (isRefused(realContainment)) {
+      return { status: "invalid_request", detail: `real project root escapes workspace [${realContainment.code}]` };
+    }
+    return { status: "resolved", root: realRoot, workspace_root: workspaceRoot };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return { status: /ENOENT/.test(detail) ? "capability_absent" : "invalid_request", detail };

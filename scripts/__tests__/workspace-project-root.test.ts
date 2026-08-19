@@ -35,4 +35,19 @@ describe("workspace project-root resolution", () => {
     }));
     expect(resolveWorkspaceProjectRoot(root, "plugin").status).toBe("invalid_request");
   });
+
+  it("fails closed when an intermediate symlink resolves a declared child outside the workspace", () => {
+    const root = fixture();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-workspace-outside-"));
+    fs.mkdirSync(path.join(outside, "escaped"));
+    fs.symlinkSync(outside, path.join(root, "projects"));
+    fs.writeFileSync(path.join(root, ".guild", "workspace.json"), JSON.stringify({
+      schema_version: "guild.workspace.v1",
+      sub_guilds: [{ name: "escaped", path: "projects/escaped" }],
+    }));
+
+    const result = resolveWorkspaceProjectRoot(root, "escaped");
+    expect(result.status).toBe("invalid_request");
+    expect(result).toEqual(expect.objectContaining({ detail: expect.stringMatching(/project root escapes workspace/) }));
+  });
 });
