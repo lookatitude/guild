@@ -60,6 +60,21 @@ describe("workspace duplicate-roster scope contract", () => {
     expect(result.issues.filter((issue) => issue.code === "DUPLICATE_MULTIPLE_HOMES")).toHaveLength(3);
   });
 
+  it("rejects a duplicate shared only by sibling projects", () => {
+    const root = fixture();
+    const manifestPath = path.join(root, ".guild", "workspace.json");
+    fs.writeFileSync(manifestPath, JSON.stringify({
+      schema_version: "guild.workspace.v1",
+      sub_guilds: [{ name: "website", path: "website" }, { name: "benchmark", path: "benchmark" }],
+    }));
+    writeAgent(root, "website", "shared-child-only", "scope: project\ncounterpart: benchmark\n");
+    writeAgent(root, "benchmark", "shared-child-only", "scope: project\ncounterpart: website\n");
+
+    const result = checkWorkspaceRosterScopes(root);
+    expect(result.pass).toBe(false);
+    expect(result.issues.filter((issue) => issue.code === "DUPLICATE_HOME_PAIR_INVALID")).toHaveLength(2);
+  });
+
   it("exposes a fail-closed CLI", () => {
     const root = fixture();
     writeAgent(root, "umbrella", "site-validation-reviewer");

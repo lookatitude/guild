@@ -147,6 +147,7 @@ export interface WorkspaceRosterScopeIssue {
   code:
     | "WORKSPACE_MANIFEST_INVALID"
     | "DUPLICATE_MULTIPLE_HOMES"
+    | "DUPLICATE_HOME_PAIR_INVALID"
     | "DUPLICATE_SCOPE_MISSING"
     | "DUPLICATE_SCOPE_INVALID"
     | "DUPLICATE_COUNTERPART_MISSING"
@@ -377,6 +378,19 @@ export function checkWorkspaceRosterScopes(workspaceRootInput: string): Workspac
           root_id: row.root_id,
           path: row.path,
           message: `${name} exists in ${rows.length} roots; differentiated variants are limited to exactly two homes`,
+        });
+      }
+      continue;
+    }
+    const umbrellaRows = rows.filter((row) => row.root_id === "umbrella");
+    if (umbrellaRows.length !== 1) {
+      for (const row of rows) {
+        issues.push({
+          code: "DUPLICATE_HOME_PAIR_INVALID",
+          name,
+          root_id: row.root_id,
+          path: row.path,
+          message: `${name} duplicates must pair one umbrella definition with one immediate-child definition`,
         });
       }
       continue;
