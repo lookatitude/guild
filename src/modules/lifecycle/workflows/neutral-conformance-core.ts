@@ -84,7 +84,20 @@ export interface NeutralEvidenceProfile {
   readonly required_bindings: readonly string[];
 }
 
-/** Only the profiles the five MH-02 scenarios actually reference. */
+/**
+ * The evidence profiles this core declares.
+ *
+ * `E-LIFECYCLE` and `E-REFUSAL` are the two the five MH-02 scenarios reference.
+ * `E-RECEIPT` and `E-BOUNDARY` are the frozen contract's profiles for the MH-06
+ * receipt-integrity and MH-07 module-boundary scenarios; those owners' scenario
+ * registries name them, so `validateNeutralScenarioRegistry` must be able to
+ * resolve them. Declaring a profile is not claiming its owner's work — the
+ * scenarios themselves still live with their owner and stay absent from
+ * `NEUTRAL_CORE_SCENARIOS`.
+ *
+ * Like the scenario definitions, these are AUTHORED against the frozen contract,
+ * never imported from it.
+ */
 export const NEUTRAL_EVIDENCE_PROFILES: Readonly<Record<string, NeutralEvidenceProfile>> =
   neutralFreeze({
     "E-LIFECYCLE": {
@@ -102,6 +115,63 @@ export const NEUTRAL_EVIDENCE_PROFILES: Readonly<Record<string, NeutralEvidenceP
     "E-REFUSAL": {
       required_kinds: ["capability_snapshot", "typed_outcome", "receipt_journal"],
       required_bindings: ["scenario_id", "operation_id", "reason_code", "host_id", "runtime_version"],
+    },
+    "E-RECEIPT": {
+      required_kinds: ["receipt_journal", "typed_outcome"],
+      required_bindings: [
+        "scenario_id",
+        "run_id",
+        "operation_id",
+        "correlation_id",
+        "sequence",
+        "source_version",
+        "runtime_version",
+      ],
+    },
+    "E-BOUNDARY": {
+      required_kinds: ["dependency_graph", "boundary_verdict"],
+      required_bindings: ["scenario_id", "source_commit", "module_manifest_version"],
+    },
+    "E-MIGRATION": {
+      required_kinds: ["legacy_outcome", "candidate_outcome", "comparison_verdict", "receipt_journal"],
+      required_bindings: [
+        "scenario_id",
+        "operation_id",
+        "feature_gate",
+        "legacy_version",
+        "candidate_version",
+        "runtime_version",
+      ],
+    },
+    // A21-9 / W5/MH-09: the frozen contract's profiles for the release-owner
+    // scenarios. `E-SUPPORT` binds the five support-state proofs
+    // (MHRC-SUP-001..005); `E-VERSION` binds the exact-version lifecycle proof
+    // (MHRC-SUP-006) and the three version-drift scenarios (MHRC-VER-001..003).
+    "E-SUPPORT": {
+      required_kinds: ["operation_receipt", "artifact_hash", "typed_outcome"],
+      required_bindings: [
+        "scenario_id",
+        "source_commit",
+        "package_hash",
+        "runtime_version",
+        "host_id",
+        "host_version",
+        "platform",
+      ],
+    },
+    "E-VERSION": {
+      required_kinds: ["compatibility_verdict", "release_manifest", "artifact_hash"],
+      required_bindings: [
+        "scenario_id",
+        "source_commit",
+        "package_hash",
+        "runtime_version",
+        "adapter_version",
+        "host_version",
+        "contract_version",
+        "scenario_suite_version",
+        "platform",
+      ],
     },
   });
 

@@ -8,6 +8,8 @@ export * as InventorySchema from "./workflows/inventory-schema";
 export * from "./workflows/module-resources";
 export * from "./workflows/parity-contract";
 export * as PerHostPackaging from "./workflows/per-host-packaging";
+export * from "./workflows/release-conformance-evaluator";
+export * from "./workflows/release-conformance-integration";
 export * from "./workflows/result-contracts";
 export * from "./workflows/review-result";
 export * from "./workflows/release-distribution-contract";

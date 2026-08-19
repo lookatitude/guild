@@ -8,7 +8,10 @@
   "depends_on": [
     "host-runtime",
     "kernel",
-    "state"
+    "lifecycle",
+    "migrations",
+    "state",
+    "telemetry"
   ],
   "owns": {
     "scripts": [
@@ -24,6 +27,7 @@
       "check-roster-consistency",
       "codex-guild-prompt-bridge",
       "description-optimizer",
+      "emit-release-conformance",
       "lib/command-registry",
       "lib/equivalence-contract",
       "lib/inventory-schema",
@@ -38,6 +42,7 @@
       "lib/update-check",
       "registry-rollup",
       "release-changelog",
+      "sign-release-attestation",
       "sync-live-resources",
       "sync-module-resources",
       "verify-host-packages",

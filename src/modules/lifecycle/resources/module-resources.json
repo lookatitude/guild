@@ -277,7 +277,7 @@
       "id": "projection:src/modules/capability/workflows/resolver-mode.ts",
       "source_path": "src/modules/capability/workflows/resolver-mode.ts",
       "resource_path": "resources/src/modules/capability/workflows/resolver-mode.ts",
-      "sha256": "46c28999043c5e50a5a1cf0d1d5752cd43a06d052eeb554d93fa896aa5e21ab0",
+      "sha256": "c6e0712d290e96cf6700e7caea57a963a88f19d21fa8d1dcc2fa8145b389efa5",
       "projection_dependency": true
     },
     {
@@ -557,7 +557,7 @@
       "id": "projection:src/modules/distribution/index.ts",
       "source_path": "src/modules/distribution/index.ts",
       "resource_path": "resources/src/modules/distribution/index.ts",
-      "sha256": "1a3d5dbc84286454b49e64b29e51eb2a7e8425a8f538b69277f552711cbf95f7",
+      "sha256": "9d33d0cf5e0426f332a80add577c74ef0c1fd0bc27df23fe2c202b97e59ab2c4",
       "projection_dependency": true
     },
     {
@@ -622,6 +622,22 @@
       "source_path": "src/modules/distribution/workflows/per-host-packaging.ts",
       "resource_path": "resources/src/modules/distribution/workflows/per-host-packaging.ts",
       "sha256": "7aa3f24694ab3376cb8e46e27f77b21631aa92aade72ca7ab396c08c7330408f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-conformance-evaluator.ts",
+      "source_path": "src/modules/distribution/workflows/release-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-conformance-evaluator.ts",
+      "sha256": "85ff7cfcf247da1bb80a59907339218482ca1ab05e71282c639ccad150d44918",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-conformance-integration.ts",
+      "source_path": "src/modules/distribution/workflows/release-conformance-integration.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-conformance-integration.ts",
+      "sha256": "d8aa6dc37e06da01087fb104c1fdcc751b366464e8bece40eb98d628f128cca9",
       "projection_dependency": true
     },
     {
@@ -773,7 +789,7 @@
       "id": "projection:src/modules/host-runtime/index.ts",
       "source_path": "src/modules/host-runtime/index.ts",
       "resource_path": "resources/src/modules/host-runtime/index.ts",
-      "sha256": "5c0890b5b7a4d3d47f0badc5f967495fbca73152f1d11748d39c65f031724681",
+      "sha256": "c9ad4bc0aa946446522a035343e8334d82d457cce5bba51e19abe33ab66c4874",
       "projection_dependency": true
     },
     {
@@ -790,6 +806,14 @@
       "source_path": "src/modules/host-runtime/workflows/host-adapter-boundary.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/host-adapter-boundary.ts",
       "sha256": "6a7eee26d040dad2c9c493513e501e11d227cc8367732f39a72be05edf32ff33",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts",
+      "sha256": "6ede7905aabbd6aa0f4f25a9bcc2a2be40f9f8ea3459abd235f3d3b1bf21f883",
       "projection_dependency": true
     },
     {
@@ -997,7 +1021,7 @@
       "id": "projection:src/modules/lifecycle/index.ts",
       "source_path": "src/modules/lifecycle/index.ts",
       "resource_path": "resources/src/modules/lifecycle/index.ts",
-      "sha256": "8682e2818476b1b6b8385a6af5e30db2d858b6128febeb310649fa119b4f2d3b",
+      "sha256": "661a19fe0f0dd9a2ea5e374d020c870a78a2ba13437858f717aa50bbd36ac252",
       "projection_dependency": true
     },
     {
@@ -1058,10 +1082,26 @@
     },
     {
       "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts",
+      "source_path": "src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts",
+      "sha256": "0e560c904374716a408e2f1a2d26c0273c387b763b9a0e017f14a0051c34becb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/neutral-conformance-assembly.ts",
+      "source_path": "src/modules/lifecycle/workflows/neutral-conformance-assembly.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/neutral-conformance-assembly.ts",
+      "sha256": "2985be7ea60094141aa90752aab43212aa9b22e0549e80da3b60619926cc550e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
       "id": "projection:src/modules/lifecycle/workflows/neutral-conformance-core.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-conformance-core.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-conformance-core.ts",
-      "sha256": "96e0e0278d67375ed4d56cca463411817bd09a9266104ffdffd269f1bb87464c",
+      "sha256": "936151feb7c2a6f36c17600638217655e34192904e7c1eda3029f9e376652e0e",
       "projection_dependency": true
     },
     {
@@ -1069,7 +1109,7 @@
       "id": "projection:src/modules/lifecycle/workflows/neutral-core-boundary.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-core-boundary.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-core-boundary.ts",
-      "sha256": "f5cddd3068222beb66c706bd5f0b40f7e2c5454b602d242b0486fddb117ef0b0",
+      "sha256": "abf988f2013164564e0d1359996ef8f561b94f1a9c193a2f6da8d2d7ee49a4e9",
       "projection_dependency": true
     },
     {
@@ -1093,7 +1133,7 @@
       "id": "projection:src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
       "source_path": "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
-      "sha256": "8a7b578bcf4e884e2289a517a306bf112721e2b059cfa1252cc528ee79dca0fe",
+      "sha256": "4282d90ed121417f040900a5eeb1b2adcf9871fa4b18f07328710782f01cd41d",
       "projection_dependency": true
     },
     {
@@ -1197,7 +1237,15 @@
       "id": "projection:src/modules/migrations/index.ts",
       "source_path": "src/modules/migrations/index.ts",
       "resource_path": "resources/src/modules/migrations/index.ts",
-      "sha256": "1a90f12b9cfdea2aa8dd0f5680b79e42a8f86abf2724ed31c2d368c0325f559e",
+      "sha256": "fa6a5d9d834acbb2c0c3dcaeb23827bd89d9a44a28655d5b2a5d3bfe0bbfbfeb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/migrations/workflows/host-cutover-controller.ts",
+      "source_path": "src/modules/migrations/workflows/host-cutover-controller.ts",
+      "resource_path": "resources/src/modules/migrations/workflows/host-cutover-controller.ts",
+      "sha256": "f93ce199075e6d736336a440b14dba267a4a6f0866190855ed116a9b678d6653",
       "projection_dependency": true
     },
     {
@@ -1485,7 +1533,7 @@
       "id": "projection:src/modules/telemetry/index.ts",
       "source_path": "src/modules/telemetry/index.ts",
       "resource_path": "resources/src/modules/telemetry/index.ts",
-      "sha256": "a9880b6a3db345ba9b9c40f2d11deeafbf4578d63d04d087fd49b3c163836469",
+      "sha256": "55e6ec12f9b3841c1b5f03b0b2f01f39aaf5609d327ef0d5e3ca16106d9a2b5d",
       "projection_dependency": true
     },
     {
@@ -1510,6 +1558,14 @@
       "source_path": "src/modules/telemetry/workflows/guild-trace-events.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/guild-trace-events.ts",
       "sha256": "44357181a969782beead8ba61a5b7b05713c418f8ec8ef3192c72d9d8a117b60",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts",
+      "source_path": "src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts",
+      "sha256": "69f3dd615f288a698f3f956ad05ffbe8d6f59440d19ca46049ec1e66117622f3",
       "projection_dependency": true
     },
     {

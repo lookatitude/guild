@@ -43,7 +43,7 @@
       "id": "check-channel-integrity",
       "source_path": "scripts/check-channel-integrity.ts",
       "resource_path": "resources/scripts/check-channel-integrity.ts",
-      "sha256": "624a57923660676f5f5fffcb2915fdfe4b8d93d9748a32f7c0457857abbb2100"
+      "sha256": "d0022161e022b6499ced9b780a28acb85ebb611023deb827e474b9177a908a94"
     },
     {
       "category": "scripts",
@@ -86,6 +86,13 @@
       "source_path": "scripts/description-optimizer.ts",
       "resource_path": "resources/scripts/description-optimizer.ts",
       "sha256": "4c13c7446d5c45ce50f9c809a7b545860ee1eca0eba1fa30754e480ba467fd53"
+    },
+    {
+      "category": "scripts",
+      "id": "emit-release-conformance",
+      "source_path": "scripts/emit-release-conformance.ts",
+      "resource_path": "resources/scripts/emit-release-conformance.ts",
+      "sha256": "e83be2200b89b2e9af41628750aa0a6444650ca02fbcf74cd35f305e365cc555"
     },
     {
       "category": "scripts",
@@ -192,6 +199,13 @@
       "source_path": "scripts/release-changelog.ts",
       "resource_path": "resources/scripts/release-changelog.ts",
       "sha256": "ef9f4bb21aee390e46b9baaaa2b8cfe84452f5af8489a9d45d072304ea7b8c76"
+    },
+    {
+      "category": "scripts",
+      "id": "sign-release-attestation",
+      "source_path": "scripts/sign-release-attestation.ts",
+      "resource_path": "resources/scripts/sign-release-attestation.ts",
+      "sha256": "5bd665c1b21b7d91086d9e52e2263d1ebcfe4e89a20e6dedeeb4e4b6a49ef0a3"
     },
     {
       "category": "scripts",

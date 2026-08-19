@@ -288,6 +288,19 @@ export const NEUTRAL_REASON_CODES = Object.freeze([
   // ALIAS is any later use of a value that flowed from one.
   "boundary_capability_reach",
   "boundary_capability_alias",
+  // strangler-migration cutover (A21-8 / W4/MH-08): a shadow record whose
+  // candidate outcome diverges from legacy is a typed refusal, never a
+  // selection change — this is the one code that names that refusal.
+  "migration_shadow_divergence",
+  // release/version-drift evidence (A21-9 / W5/MH-09): the three typed
+  // version-drift outcomes the frozen contract requires for MHRC-VER-001..003.
+  // Drift in any bound evidence-identity field invalidates a prior verdict
+  // (refused), a pinned consumer on a different contract major is unsupported
+  // rather than silently downgraded, and an expected package/runtime that
+  // disagrees with independent runtime discovery is a typed failure.
+  "evidence_version_drift",
+  "contract_major_mismatch",
+  "package_runtime_mismatch",
 ] as const);
 export type NeutralReasonCode = (typeof NEUTRAL_REASON_CODES)[number];
 

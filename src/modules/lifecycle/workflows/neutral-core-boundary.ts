@@ -57,6 +57,7 @@ export const NEUTRAL_CORE_MEMBERS = Object.freeze([
   "neutral-gate-policy.ts",
   "neutral-lifecycle-machine.ts",
   "neutral-conformance-core.ts",
+  "neutral-conformance-assembly.ts",
   "neutral-core-boundary.ts",
 ] as const);
 

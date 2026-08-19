@@ -1210,6 +1210,11 @@
       "kind": "cli"
     },
     {
+      "id": "emit-release-conformance",
+      "source_path": "scripts/emit-release-conformance.ts",
+      "kind": "cli"
+    },
+    {
       "id": "evolve-loop",
       "source_path": "scripts/evolve-loop.ts",
       "kind": "cli"
@@ -2367,6 +2372,11 @@
     {
       "id": "shadow-mode",
       "source_path": "scripts/shadow-mode.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "sign-release-attestation",
+      "source_path": "scripts/sign-release-attestation.ts",
       "kind": "cli"
     },
     {

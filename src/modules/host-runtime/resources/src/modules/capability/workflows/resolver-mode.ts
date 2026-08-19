@@ -455,7 +455,15 @@ export function isResolverModeFailure(v: unknown): v is ResolverModeFailure {
 // Compatibility-read classification — the G5 counting rule, in one place
 // ---------------------------------------------------------------------------
 
-const READ_REASON_SET: ReadonlySet<string> = new Set(COMPATIBILITY_READ_REASONS);
+/**
+ * Keep the cross-contract vocabulary read lazy. The config public barrel reaches
+ * host-runtime, which can re-enter capability while compatibility-usage is
+ * still initializing. Materializing a Set here reads that live binding inside
+ * the cycle and throws before either contract can load.
+ */
+function isCompatibilityReadReason(value: string): value is CompatibilityReadReason {
+  return COMPATIBILITY_READ_REASONS.indexOf(value as CompatibilityReadReason) !== -1;
+}
 
 /**
  * The (mode, intent) → S8 reason mapping. PRIVATE and frozen; the exported
@@ -589,7 +597,7 @@ export function classifyCompatibilityRead(request: unknown): CompatibilityReadCl
   // that drifted out of the closed set would produce a payload S8's validator
   // rejects, and a rejected payload is an UNREADABLE record — which blocks G5
   // rather than passing it, but blocks it mysteriously.
-  if (!READ_REASON_SET.has(reason)) {
+  if (!isCompatibilityReadReason(reason)) {
     return {
       status: "refused" as const,
       failure: "invalid_request",
