@@ -1,11 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { ADOPTION_MANIFEST_SCHEMA, type AdoptionManifestV1 } from "../lib/core/contracts/adoption-manifest";
 import { PROJECT_DEFINITION_REF_SCHEMA, type ProjectDefinitionRefV1 } from "../lib/core/contracts/project-definition-ref";
-import { commitAdoptionManifest } from "../lib/capability/adoption-migrate";
+import {
+  adoptionCommitmentJournalRelpath,
+  commitAdoptionManifest,
+} from "../lib/capability/adoption-migrate";
 import { definitionRefForDispatch, readCommittedAdoptionManifest } from "../lib/capability/definition-ref-for-dispatch";
 
 const digest = (bytes: string) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -53,7 +56,7 @@ describe("committed definition ref producer", () => {
     };
     writeFileSync(join(root, ".guild/adoption-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     if (commit) expect(commitAdoptionManifest(root, manifest, "migration.cutover")?.durable).toBe(true);
-    return { root, ref };
+    return { root, ref, manifest };
   }
 
   it("resolves the exact current ref only after a durable external commitment", () => {
@@ -61,7 +64,35 @@ describe("committed definition ref producer", () => {
     try {
       expect(readCommittedAdoptionManifest(f.root).status).toBe("committed");
       expect(definitionRefForDispatch(f.root, { name: "architect", definition: f.ref.relative_path })).toEqual({ status: "resolved", ref: f.ref });
+      const receipt = JSON.parse(readFileSync(join(f.root, adoptionCommitmentJournalRelpath("run-definition-ref")), "utf8").trim());
+      const shipped = JSON.parse(readFileSync(join(__dirname, "../..", ".claude-plugin/plugin.json"), "utf8"));
+      expect(receipt.versions.runtime_version).toBe(shipped.version);
     } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+
+  it("falls back to a legacy run journal only when the tracked authority is absent", () => {
+    const f = fixture();
+    try {
+      const canonical = join(f.root, adoptionCommitmentJournalRelpath("run-definition-ref"));
+      const legacy = join(f.root, ".guild/runs/run-definition-ref/receipts/journal.jsonl");
+      mkdirSync(dirname(legacy), { recursive: true });
+      writeFileSync(legacy, readFileSync(canonical));
+      rmSync(dirname(canonical), { recursive: true, force: true });
+
+      expect(readCommittedAdoptionManifest(f.root).status).toBe("committed");
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  });
+
+  it("refuses to commit provenance when the active runtime version is unavailable", () => {
+    const f = fixture(false);
+    const emptyRuntime = mkdtempSync(join(tmpdir(), "guild-runtime-version-absent-"));
+    try {
+      expect(commitAdoptionManifest(f.root, f.manifest, "migration.cutover", emptyRuntime)).toBeNull();
+      expect(readCommittedAdoptionManifest(f.root).status).toBe("uncommitted");
+    } finally {
+      rmSync(emptyRuntime, { recursive: true, force: true });
+      rmSync(f.root, { recursive: true, force: true });
+    }
   });
 
   it("refuses a valid but uncommitted manifest", () => {

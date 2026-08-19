@@ -103,7 +103,7 @@ import {
   readCatalogEntry,
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
-import { readCompatibilityAsset } from "./compatibility-loader";
+import { readCompatibilityAsset, readRuntimeVersion } from "./compatibility-loader";
 import {
   appendReceipt,
   makeReceiptInput,
@@ -128,6 +128,26 @@ export const ADOPTION_REPORT_SCHEMA = "guild.adoption_report.v1" as const;
 
 /** Where the manifest lives inside a project. One path, so rollback can find it. */
 export const ADOPTION_MANIFEST_RELPATH = ".guild/adoption-manifest.json";
+
+/**
+ * Durable external commitment for the adoption manifest.
+ *
+ * Runtime receipt journals under `.guild/runs/**` are intentionally excluded
+ * from the repository share set. The manifest is tracked project truth, so a
+ * fresh checkout must carry the independently scanned commitment it needs for
+ * dispatch. Keep that authority with the tracked capability artifacts.
+ */
+export const ADOPTION_COMMITMENT_ROOT_RELPATH =
+  ".guild/artifacts/capability/adoption-manifest-receipts";
+
+/** Receipt journals are single-run authorities, so each manifest tip owns one. */
+export function adoptionCommitmentJournalRelpath(runId: string): string {
+  return path.posix.join(ADOPTION_COMMITMENT_ROOT_RELPATH, runId, "journal.jsonl");
+}
+
+export function adoptionCommitmentCheckpointRelpath(runId: string): string {
+  return path.posix.join(ADOPTION_COMMITMENT_ROOT_RELPATH, runId, "checkpoint.json");
+}
 
 /**
  * Per-item operator choice. CLOSED and frozen — a disposition decides whether
@@ -798,19 +818,24 @@ export function readAdoptionManifest(projectRoot: string): AdoptionManifestV1 | 
   }
 }
 
-/** Commit a validated manifest tip into the run's independently scanned journal. */
+/** Commit a validated manifest tip into the tracked, independently scanned journal. */
 export function commitAdoptionManifest(
   projectRoot: string,
   manifest: AdoptionManifestV1,
   eventName: "migration.cutover" | "migration.rollback",
+  runtimeRoot: string = path.resolve(__dirname, "../../.."),
 ): ReceiptAppendOutcome | null {
   const commitment = manifestCommitment(manifest);
   const last = manifest.entries[manifest.entries.length - 1];
   if (!commitment.ok || commitment.digest === null || last === undefined) return null;
-  const runRoot = path.join(path.resolve(projectRoot), ".guild", "runs", last.run_id, "receipts");
+  const runtimeVersion = readRuntimeVersion(runtimeRoot);
+  if (runtimeVersion === null) return null;
   const operation = `adoption-manifest:${manifest.entries.length}`;
   return appendReceipt(
-    { journal: path.join(runRoot, "journal.jsonl"), checkpoint: path.join(runRoot, "checkpoint.json") },
+    {
+      journal: path.join(path.resolve(projectRoot), adoptionCommitmentJournalRelpath(last.run_id)),
+      checkpoint: path.join(path.resolve(projectRoot), adoptionCommitmentCheckpointRelpath(last.run_id)),
+    },
     makeReceiptInput({
       run_id: last.run_id,
       operation_id: operation,
@@ -830,7 +855,7 @@ export function commitAdoptionManifest(
       versions: {
         host_id: "local",
         host_version: "unknown",
-        runtime_version: "2.6.0",
+        runtime_version: runtimeVersion,
         source_version: manifest.schema_version,
         contract_version: "guild.observability.v1",
       },

@@ -43,7 +43,7 @@
       "id": "lib/capability/adoption-migrate",
       "source_path": "scripts/lib/capability/adoption-migrate.ts",
       "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
-      "sha256": "a3cb4c6c4326b6286b4710c1bec22c0c9e5249cc5887c9c6ed9546f0c8e82c39"
+      "sha256": "e508a9facae7834f1010ceb8c6cdc2359b6d4acdf1fa28cb6497879e3235a0fb"
     },
     {
       "category": "scripts",
@@ -71,7 +71,7 @@
       "id": "lib/capability/compatibility-loader",
       "source_path": "scripts/lib/capability/compatibility-loader.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-loader.ts",
-      "sha256": "b5b06be8769c0d533a3c86bbf2a0ff7be96e92aff0c7c00581ed261f4b5b1e95"
+      "sha256": "2654b0ab39fc4b4d14074db4fc5688129ec448535bcf46af72676ae2442b4381"
     },
     {
       "category": "scripts",
@@ -92,7 +92,7 @@
       "id": "lib/capability/definition-ref-for-dispatch",
       "source_path": "scripts/lib/capability/definition-ref-for-dispatch.ts",
       "resource_path": "resources/scripts/lib/capability/definition-ref-for-dispatch.ts",
-      "sha256": "4250e98ad00c3770e76beb7dad6148bcd7344f47198cf83bd03d3f313155626d"
+      "sha256": "5c2bdec0467dee52eaa2b17ded40c7b36836d0b1bbd3292d2b5e3680c953a93a"
     },
     {
       "category": "scripts",
@@ -134,7 +134,7 @@
       "id": "lib/capability/self-build-canonicalize",
       "source_path": "scripts/lib/capability/self-build-canonicalize.ts",
       "resource_path": "resources/scripts/lib/capability/self-build-canonicalize.ts",
-      "sha256": "b074a80feae9ed68229a0dc7844283cdd768bb5ea188aba2c8f65557392e83f2"
+      "sha256": "1aba47d3a4116db18ddb4409cda4aa86c50bb27226ffe684e902fb3ac7ca29be"
     },
     {
       "category": "scripts",
