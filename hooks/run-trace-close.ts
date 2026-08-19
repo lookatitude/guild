@@ -83,6 +83,7 @@ import {
   readHookBindingEnvelope,
   reopenRunBinding,
 } from "../scripts/lib/run-binding.js";
+import { readScalarField } from "../scripts/lib/frontmatter.js";
 
 /**
  * Tolerance window (ms) for the reopen-on-activity check (see header). Newer
@@ -207,9 +208,10 @@ export function recoverPrematureClose(runDir: string, activeWork: string): strin
 
   let runYamlOpen = false;
   try {
-    runYamlOpen = /^status:\s*open\s*$/m.test(
+    runYamlOpen = readScalarField(
       fs.readFileSync(path.join(runDir, "run.yaml"), "utf8"),
-    );
+      "status",
+    ) === "open";
   } catch {
     return null; // unreadable run.yaml cannot prove the contradiction
   }

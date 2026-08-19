@@ -134,7 +134,7 @@
       "id": "lib/capability/self-build-canonicalize",
       "source_path": "scripts/lib/capability/self-build-canonicalize.ts",
       "resource_path": "resources/scripts/lib/capability/self-build-canonicalize.ts",
-      "sha256": "88e803c46290824b75bacc50a9e7e0eb17cdb73d22677c5db00519d60e45e7da"
+      "sha256": "b074a80feae9ed68229a0dc7844283cdd768bb5ea188aba2c8f65557392e83f2"
     },
     {
       "category": "scripts",

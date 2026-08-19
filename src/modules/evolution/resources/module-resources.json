@@ -22,7 +22,7 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "939aa391d74fa43158af32afaa12ebcc6cec00f2de64271d650fbbff2067efa4"
+      "sha256": "5b17ad155bff1269a949884668e15fa80521155956e695d8bb954abf6eaa4903"
     },
     {
       "category": "hooks",

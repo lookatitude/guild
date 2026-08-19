@@ -129,8 +129,8 @@ describe("run-trace lib (Lane B3)", () => {
     fs.writeFileSync(path.join(pluginRoot, "command-src", "command-registry.json"), "{}\n");
     const identity = resolveInstalledPluginIdentity({ GUILD_PLUGIN_ROOT: pluginRoot }, root);
     expect(identity.version).toBe("9.9.9");
-    expect(identity.ref).toMatch(/^sha256:/);
-    expect(identity.command_surface_version).toMatch(/^sha256:/);
+    expect(identity.ref.startsWith("sha256:")).toBe(true);
+    expect(identity.command_surface_version.startsWith("sha256:")).toBe(true);
     fs.rmSync(pluginRoot, { recursive: true, force: true });
   });
 

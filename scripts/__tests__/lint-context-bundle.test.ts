@@ -177,8 +177,10 @@ describe("definition-ref gate", () => {
 
   it("rejects missing, malformed, and absolute definition refs", () => {
     const valid = makeBundle({});
-    expect(lintBundle(valid.replace(/^definition_ref:.*\n/m, "")).pass).toBe(false);
-    expect(lintBundle(valid.replace(/^definition_ref:.*$/m, "definition_ref: {bad}" )).pass).toBe(false);
+    const definitionLine = valid.split("\n").find((entry) => entry.startsWith("definition_ref:"));
+    expect(definitionLine).toBeDefined();
+    expect(lintBundle(valid.replace(`${definitionLine}\n`, "")).pass).toBe(false);
+    expect(lintBundle(valid.replace(definitionLine!, "definition_ref: {bad}" )).pass).toBe(false);
     expect(lintBundle(valid.replace(".guild/agents/tooling-engineer.md", "/tmp/.guild/agents/tooling-engineer.md")).pass).toBe(false);
   });
 

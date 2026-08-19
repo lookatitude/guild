@@ -16,6 +16,7 @@ import {
   shadowCompareCapability,
   writeFeatureGateRegistry,
 } from "./strangler-control";
+import { parseFrontmatter } from "../frontmatter";
 
 export const SELF_BUILD_REFS_SCHEMA = "guild.self_build_definition_refs.v1" as const;
 export const SELF_BUILD_REFS_RELPATH = ".guild/artifacts/capability/self-build-definition-refs.json";
@@ -477,25 +478,17 @@ export function runSelfBuildRollbackDrill(options: SelfBuildRollbackDrillOptions
 const hashBytes = (bytes: Buffer) => `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`;
 
 function frontmatter(bytes: Buffer): Record<string, unknown> | null {
-  const text = bytes.toString("utf8");
-  const match = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(text);
-  if (!match) return null;
-  const out: Record<string, unknown> = {};
-  const lines = match[1].split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const scalar = /^(name|model|version|work_class):\s*["']?([^"']+?)["']?\s*$/.exec(lines[i]);
-    if (scalar) { out[scalar[1]] = scalar[2].trim(); continue; }
-    if (/^skills:\s*$/.test(lines[i])) {
-      const skills: string[] = [];
-      while (i + 1 < lines.length) {
-        const item = /^\s+-\s+(.+?)\s*$/.exec(lines[i + 1]);
-        if (!item) break;
-        skills.push(item[1].replace(/^['"]|['"]$/g, "")); i++;
-      }
-      out.skills = skills;
-    }
+  const parsed = parseFrontmatter(bytes.toString("utf8"));
+  if (!parsed || typeof parsed.name !== "string") return null;
+  const out: Record<string, unknown> = { name: parsed.name };
+  for (const key of ["model", "version", "work_class"] as const) {
+    const value = parsed[key];
+    if (typeof value === "string" || typeof value === "number") out[key] = String(value);
   }
-  return typeof out.name === "string" ? out : null;
+  if (Array.isArray(parsed.skills)) {
+    out.skills = parsed.skills.filter((skill): skill is string => typeof skill === "string");
+  }
+  return out;
 }
 
 function identityForAgent(bytes: Buffer, id: string): { profile: SpecialistProfileV1; refHashes: { profile: string; type: string } } | null {

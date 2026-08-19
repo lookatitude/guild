@@ -8,28 +8,28 @@
       "id": "PostToolUse:comms-format-lint.js",
       "source_path": "hooks/dist/comms-format-lint.js",
       "resource_path": "resources/hooks/dist/comms-format-lint.js",
-      "sha256": "cc20d2bd860e25a90b93fade907b982c998448c458d813720f805ba53206d674"
+      "sha256": "c635abf5052106def07409c13e79763081abce72caa1aaf61e97f326d302ac1d"
     },
     {
       "category": "hooks",
       "id": "TaskCompleted:task-completed.js",
       "source_path": "hooks/agent-team/dist/task-completed.js",
       "resource_path": "resources/hooks/agent-team/dist/task-completed.js",
-      "sha256": "8e745c382dfc1904b023de584477f30fe4f810b53db6d04fc37de6f74fe282b9"
+      "sha256": "815f60a4a1e0aeb7009ec4c10d24089bd993b0fe35cdb3279bf972d0b3208abf"
     },
     {
       "category": "hooks",
       "id": "TaskCreated:task-created.js",
       "source_path": "hooks/agent-team/dist/task-created.js",
       "resource_path": "resources/hooks/agent-team/dist/task-created.js",
-      "sha256": "7bcaf7ec233cc3981a570e64bb2ed4862acd9a1020961ababf78941285a04655"
+      "sha256": "1ad7f2c2641b8913cb95006306e80edbc9f031e66eef577a93ad6b2e590051c9"
     },
     {
       "category": "hooks",
       "id": "TeammateIdle:teammate-idle.js",
       "source_path": "hooks/agent-team/dist/teammate-idle.js",
       "resource_path": "resources/hooks/agent-team/dist/teammate-idle.js",
-      "sha256": "7792306638f02dc3318fa7e5e8e37b1df1eb0978db4549e3df7bf9a8f67752f5"
+      "sha256": "c2b96ff1522fa29a389a016cd7b1404d6f14cea8353f6e4007d696afc5fb9e7f"
     },
     {
       "category": "scripts",
