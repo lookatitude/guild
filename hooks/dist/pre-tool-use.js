@@ -33092,10 +33092,30 @@ init_telemetry();
 init_compatibility_catalog();
 init_compatibility_usage();
 init_path_containment();
+var PLUGIN_MANIFEST_CANDIDATES = [
+  [".claude-plugin", "plugin.json"],
+  [".codex-plugin", "plugin.json"]
+];
+function readRuntimeVersion(pluginRoot) {
+  for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
+    try {
+      const manifest = JSON.parse(fs39.readFileSync(path45.join(pluginRoot, dir, file), "utf8"));
+      if (typeof manifest.version === "string" && manifest.version.length > 0) {
+        return manifest.version;
+      }
+    } catch {
+    }
+  }
+  return null;
+}
 function readCompatibilityAsset(options) {
   const entry = readCatalogEntry(options.entry);
   if (!entry) return { status: "refused", detail: "invalid compatibility catalog entry" };
   const root = fs39.realpathSync(options.pluginRoot);
+  const runtimeVersion = readRuntimeVersion(root);
+  if (runtimeVersion === null) {
+    return { status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" };
+  }
   const target = path45.join(root, entry.path);
   try {
     const contained = checkContained(root, target, { policy: "physical", requireRegularFileLeaf: true });
@@ -33137,7 +33157,7 @@ function readCompatibilityAsset(options) {
         terminal: false,
         recorded_at: options.recordedAt,
         observed_at: options.recordedAt,
-        versions: { host_id: "local", host_version: "unknown", runtime_version: "2.6.0", source_version: "guild.compatibility_catalog.v1", contract_version: "guild.observability.v1" },
+        versions: { host_id: "local", host_version: "unknown", runtime_version: runtimeVersion, source_version: "guild.compatibility_catalog.v1", contract_version: "guild.observability.v1" },
         affected_event_range: null
       })
     );
