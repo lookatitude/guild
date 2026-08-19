@@ -84,36 +84,42 @@ function adapterExecutableIndex(command: string): number | null {
   return null;
 }
 
-function findSurfaceId(value: unknown): string | null {
-  if (typeof value === "string" && /^surface:[A-Za-z0-9_.-]+$/.test(value)) return value;
+function collectSurfaceIds(value: unknown, ids: Set<string>): void {
+  if (typeof value === "string" && /^surface:[A-Za-z0-9_.-]+$/.test(value)) {
+    ids.add(value);
+    return;
+  }
   if (Array.isArray(value)) {
     for (const child of value) {
-      const found = findSurfaceId(child);
-      if (found) return found;
+      collectSurfaceIds(child, ids);
     }
-    return null;
+    return;
   }
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
     for (const key of ["surface_id", "surfaceId", "id", "surface"]) {
-      const found = findSurfaceId(record[key]);
-      if (found) return found;
+      collectSurfaceIds(record[key], ids);
     }
     for (const child of Object.values(record)) {
-      const found = findSurfaceId(child);
-      if (found) return found;
+      collectSurfaceIds(child, ids);
     }
   }
-  return null;
+}
+
+function surfaceIdsFromJson(stdout: string): Set<string> | null {
+  try {
+    const ids = new Set<string>();
+    collectSurfaceIds(JSON.parse(stdout), ids);
+    return ids;
+  } catch {
+    return null;
+  }
 }
 
 export function parseCmuxSurfaceId(stdout: string): string | null {
-  try {
-    const parsed = findSurfaceId(JSON.parse(stdout));
-    if (parsed) return parsed;
-  } catch {
-    // Older cmux builds may print a human line; fall through to its stable id.
-  }
+  const parsed = surfaceIdsFromJson(stdout);
+  if (parsed && parsed.size > 0) return parsed.values().next().value ?? null;
+  // Older cmux builds may print a human line; fall through to its stable id.
   return stdout.match(/\bsurface:[A-Za-z0-9_.-]+\b/)?.[0] ?? null;
 }
 
@@ -379,7 +385,17 @@ export function terminateCmuxSurface(
   if (listed.status !== 0) {
     return { ok: false, confirmed: false, degraded: true, mechanism: "cmux close-surface", error: listed.stderr || "cmux liveness probe unavailable" };
   }
-  const survives = listed.stdout.includes(surfaceId);
+  const liveSurfaceIds = surfaceIdsFromJson(listed.stdout);
+  if (liveSurfaceIds === null) {
+    return {
+      ok: false,
+      confirmed: false,
+      degraded: true,
+      mechanism: "cmux close-surface",
+      error: "cmux liveness probe returned malformed JSON",
+    };
+  }
+  const survives = liveSurfaceIds.has(surfaceId);
   return {
     ok: !survives,
     confirmed: !survives,

@@ -93,6 +93,9 @@ describe("W4 — CmuxTeamBackend", () => {
       if (args[0] === "send" && ++sends === 2) {
         return { status: 1, stdout: "", stderr: "send failed" };
       }
+      if (args[0] === "list-pane-surfaces") {
+        return { status: 0, stdout: '{"surfaces":[]}', stderr: "" };
+      }
       return { status: 0, stdout: "", stderr: "" };
     };
     const result = new CmuxTeamBackend({ workspaceId: "workspace:9", run }).launch({
@@ -323,5 +326,25 @@ describe("W4 — cmux surface identity + confirmed termination", () => {
         ? { status: 0, stdout: "", stderr: "" }
         : { status: 0, stdout: '{"surfaces":[{"id":"surface:9"}]}', stderr: "" };
     expect(terminateCmuxSurface("surface:9", run)).toMatchObject({ ok: false, confirmed: false });
+  });
+
+  it("does not mistake a longer surface id for the closed surface", () => {
+    const run: RunFn = (_cmd, args) =>
+      args[0] === "close-surface"
+        ? { status: 0, stdout: "", stderr: "" }
+        : { status: 0, stdout: '{"surfaces":[{"id":"surface:90"}]}', stderr: "" };
+    expect(terminateCmuxSurface("surface:9", run)).toMatchObject({ ok: true, confirmed: true });
+  });
+
+  it("fails closed when the JSON liveness response is malformed", () => {
+    const run: RunFn = (_cmd, args) =>
+      args[0] === "close-surface"
+        ? { status: 0, stdout: "", stderr: "" }
+        : { status: 0, stdout: "surface:other", stderr: "" };
+    expect(terminateCmuxSurface("surface:9", run)).toMatchObject({
+      ok: false,
+      confirmed: false,
+      degraded: true,
+    });
   });
 });

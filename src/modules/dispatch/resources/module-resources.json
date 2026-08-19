@@ -71,7 +71,7 @@
       "id": "lib/host/cmux-backend",
       "source_path": "scripts/lib/host/cmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/cmux-backend.ts",
-      "sha256": "fc10695568f99fcda8bc944a77946bcf3ffc9aaca95c48a6b9a66832829acd65"
+      "sha256": "43375a2d534d9bb11e9812b45749fc11b4821b71d6a57fbe20ae2b1d0780f692"
     },
     {
       "category": "scripts",
