@@ -29,7 +29,7 @@
       "id": "initiative-gate",
       "source_path": "scripts/initiative-gate.ts",
       "resource_path": "resources/scripts/initiative-gate.ts",
-      "sha256": "9edfa20e8106d9d1002c1d0e2952e9241b2018f53a176fa66200384305b7c4c0"
+      "sha256": "c752a955383b92abcc5fbce95f572bb392329efa59bd83f6e494289d0b6cc708"
     },
     {
       "category": "scripts",

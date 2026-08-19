@@ -260,6 +260,51 @@ describe("checkInitiativeEvidenceRefs", () => {
     expect(checked.invalid).toHaveLength(4);
   });
 
+  test("legacy receipt and deliverable labels preserve their single contained path", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(path.join(root, "evidence"), { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.writeFileSync(path.join(root, "evidence", "receipt.md"), "receipt", "utf8");
+    fs.writeFileSync(path.join(root, "evidence", "deliverable.md"), "deliverable", "utf8");
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: {
+        evidence: [
+          "receipt: evidence/receipt.md",
+          "DELIVERABLE: evidence/deliverable.md (branch feature/legacy-record)",
+        ],
+      },
+    });
+
+    expect(checked.valid).toBe(true);
+    expect(checked.checked.map((entry) => entry.ref)).toEqual([
+      "receipt: evidence/receipt.md",
+      "DELIVERABLE: evidence/deliverable.md (branch feature/legacy-record)",
+    ]);
+  });
+
+  test("an unknown label or free-form suffix cannot launder prose into evidence", () => {
+    const root = makeRoot();
+    const initiativeDir = path.join(root, ".guild", "initiatives", "active", "fixture-evidence");
+    fs.mkdirSync(path.join(root, "evidence"), { recursive: true });
+    fs.mkdirSync(initiativeDir, { recursive: true });
+    fs.writeFileSync(path.join(root, "evidence", "real.md"), "real", "utf8");
+
+    const checked = checkInitiativeEvidenceRefs(root, initiativeDir, {
+      close_gate: {
+        evidence: [
+          "HEADLINE: evidence/real.md",
+          "receipt: evidence/real.md because it looked plausible",
+        ],
+      },
+    });
+
+    expect(checked.valid).toBe(false);
+    expect(checked.checked).toEqual([]);
+    expect(checked.invalid).toHaveLength(2);
+  });
+
   test("a contained symlink to an outside file fails closed", () => {
     const root = makeRoot();
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-initiative-evidence-outside-"));

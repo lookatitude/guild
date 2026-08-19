@@ -225,19 +225,34 @@ function isPathContained(rootPath: string, candidatePath: string): boolean {
   return candidatePath === rootPath || candidatePath.startsWith(rootPath + path.sep);
 }
 
+/**
+ * Older Guild work items emitted two labeled evidence forms before D8 made
+ * evidence_refs path-only. Preserve those records without turning arbitrary
+ * prose into evidence: the label vocabulary and optional trailing annotation
+ * are closed, and the extracted token still passes every normal path,
+ * existence, realpath-containment, and regular-file check below.
+ */
+function evidencePathToken(rawRef: string): string | null {
+  if (/[\u0000-\u001f\u007f]/.test(rawRef)) return null;
+  if (!/\s/.test(rawRef)) return rawRef;
+  const legacy = /^(?:receipt|deliverable):\s+(\S+)(?:\s+\(branch [A-Za-z0-9._/-]+\))?$/i.exec(rawRef);
+  return legacy?.[1] ?? null;
+}
+
 function classifyEvidenceRef(root: string, source: string, rawRef: unknown):
   | { kind: "valid"; record: EvidenceRefRecord }
   | { kind: "invalid"; record: InvalidEvidenceRef } {
   if (typeof rawRef !== "string" || rawRef.length === 0) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a non-empty string" } };
   }
-  if (/\s|[\u0000-\u001f\u007f]/.test(rawRef)) {
+  const normalizedRef = evidencePathToken(rawRef);
+  if (normalizedRef === null) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a path, not prose/control text" } };
   }
 
   // HTML fragments identify a location inside the cited file, not a distinct
   // filesystem object. Existence binds to the bytes before `#`.
-  const fileRef = rawRef.split("#", 1)[0];
+  const fileRef = normalizedRef.split("#", 1)[0];
   if (!fileRef || path.isAbsolute(fileRef)) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be repository-relative" } };
   }
