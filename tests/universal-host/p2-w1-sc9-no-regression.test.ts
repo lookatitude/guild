@@ -186,6 +186,14 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/__tests__/teammate-idle.test.ts",
   "hooks/agent-team/__tests__/task-completed.test.ts",
   "hooks/agent-team/__tests__/teammate-idle.test.ts",
+  // PCL-FU-07 dependency-security remediation (2026-08-19): the two lockfiles
+  // move every audited hook dependency to a non-vulnerable version. Rebuilding
+  // the committed hooks with js-yaml 4.3.1 and esbuild 0.28.2 changes the
+  // detect-guild-version bundle even though its TypeScript source is unchanged;
+  // the hook suites and bundle determinism gate re-prove the generated surface.
+  "hooks/package-lock.json",
+  "hooks/agent-team/package-lock.json",
+  "hooks/dist/detect-guild-version.js",
 ]);
 
 function gitLines(args: string[]): string[] {

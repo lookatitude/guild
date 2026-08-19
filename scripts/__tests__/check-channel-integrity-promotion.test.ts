@@ -822,6 +822,17 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(raw).toMatch(/--release-branch/);
     expect(raw).toMatch(/--head/);
     expect(raw).not.toMatch(/--labels-json|LABELS_JSON/);
+
+    // A pull-request branch is untrusted input. Keep the expression out of the
+    // inline shell program so GitHub passes the exact bytes through env before
+    // the release/vX.Y.Z validator evaluates them.
+    const doc = yaml.load(raw) as any;
+    const steps = Object.values(doc.jobs ?? {}).flatMap((job: any) => job.steps ?? []);
+    const deriveVersion = steps.find((step: any) => step.id === "ver") as any;
+    expect(deriveVersion).toBeDefined();
+    expect(deriveVersion.env?.RELEASE_BRANCH).toBe("${{ github.event.pull_request.head.ref }}");
+    expect(String(deriveVersion.run ?? "")).toContain('BRANCH="$RELEASE_BRANCH"');
+    expect(String(deriveVersion.run ?? "")).not.toContain("${{ github.event.pull_request.head.ref }}");
   });
 
   it("the live-required branch-policy context is transitively BLOCKED on promotion evidence", () => {
