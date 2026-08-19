@@ -816,6 +816,14 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(raw).toMatch(/must come from a same-repo release\/v\* branch/);
   });
 
+  it("release.yml re-runs promotion mode using only CLI-supported arguments", () => {
+    const raw = fs.readFileSync(path.join(workflows, "release.yml"), "utf8");
+    expect(raw).toMatch(/check:channel-integrity -- promotion/);
+    expect(raw).toMatch(/--release-branch/);
+    expect(raw).toMatch(/--head/);
+    expect(raw).not.toMatch(/--labels-json|LABELS_JSON/);
+  });
+
   it("the live-required branch-policy context is transitively BLOCKED on promotion evidence", () => {
     // FIC-92 blocker 3: live GitHub protection requires only the
     // `branch-policy` context, so a merely-present promotion job is not a
