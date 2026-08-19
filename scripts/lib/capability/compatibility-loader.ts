@@ -8,6 +8,27 @@ import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type Compatibility
 import type { CapabilityResolutionIntent } from "../../../src/modules/capability/workflows/resolver-mode";
 import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
 
+const PLUGIN_MANIFEST_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
+  [".claude-plugin", "plugin.json"],
+  [".codex-plugin", "plugin.json"],
+];
+
+function readRuntimeVersion(pluginRoot: string): string | null {
+  for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(pluginRoot, dir, file), "utf8")) as {
+        version?: string;
+      };
+      if (typeof manifest.version === "string" && manifest.version.length > 0) {
+        return manifest.version;
+      }
+    } catch {
+      // A host package only carries its own manifest shape; try the next one.
+    }
+  }
+  return null;
+}
+
 export type CompatibilityLoadResult =
   | { status: "loaded"; bytes: Buffer; payload: unknown; receipt_sequence: number }
   | { status: "refused"; detail: string };
@@ -49,6 +70,10 @@ export function readCompatibilityAsset(options: {
   const entry = readCatalogEntry(options.entry);
   if (!entry) return { status: "refused", detail: "invalid compatibility catalog entry" };
   const root = fs.realpathSync(options.pluginRoot);
+  const runtimeVersion = readRuntimeVersion(root);
+  if (runtimeVersion === null) {
+    return { status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" };
+  }
   const target = path.join(root, entry.path);
   try {
     const contained = checkContained(root, target, { policy: "physical", requireRegularFileLeaf: true });
@@ -89,7 +114,7 @@ export function readCompatibilityAsset(options: {
         terminal: false,
         recorded_at: options.recordedAt,
         observed_at: options.recordedAt,
-        versions: { host_id: "local", host_version: "unknown", runtime_version: "2.6.0", source_version: "guild.compatibility_catalog.v1", contract_version: "guild.observability.v1" },
+        versions: { host_id: "local", host_version: "unknown", runtime_version: runtimeVersion, source_version: "guild.compatibility_catalog.v1", contract_version: "guild.observability.v1" },
         affected_event_range: null,
       }),
     );

@@ -71,7 +71,7 @@
       "id": "lib/capability/compatibility-loader",
       "source_path": "scripts/lib/capability/compatibility-loader.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-loader.ts",
-      "sha256": "92bdff342859cbc3b54fe66cd59f52b0c2aa34eca19df2ddf729c4474acc68e9"
+      "sha256": "b5b06be8769c0d533a3c86bbf2a0ff7be96e92aff0c7c00581ed261f4b5b1e95"
     },
     {
       "category": "scripts",
