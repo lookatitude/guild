@@ -36,18 +36,32 @@ describe("workspace project-root resolution", () => {
     expect(resolveWorkspaceProjectRoot(root, "plugin").status).toBe("invalid_request");
   });
 
-  it("fails closed when an intermediate symlink resolves a declared child outside the workspace", () => {
+  it("rejects a nested child path even when it resolves inside the workspace", () => {
     const root = fixture();
-    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-workspace-outside-"));
-    fs.mkdirSync(path.join(outside, "escaped"));
-    fs.symlinkSync(outside, path.join(root, "projects"));
+    fs.mkdirSync(path.join(root, "projects", "plugin"), { recursive: true });
     fs.writeFileSync(path.join(root, ".guild", "workspace.json"), JSON.stringify({
       schema_version: "guild.workspace.v1",
-      sub_guilds: [{ name: "escaped", path: "projects/escaped" }],
+      sub_guilds: [{ name: "plugin", path: "projects/plugin" }],
+    }));
+
+    const result = resolveWorkspaceProjectRoot(root, "plugin");
+    expect(result).toEqual(expect.objectContaining({
+      status: "invalid_request",
+      detail: expect.stringMatching(/invalid path/),
+    }));
+  });
+
+  it("fails closed when an immediate child is a symlink outside the workspace", () => {
+    const root = fixture();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-workspace-outside-"));
+    fs.symlinkSync(outside, path.join(root, "escaped"));
+    fs.writeFileSync(path.join(root, ".guild", "workspace.json"), JSON.stringify({
+      schema_version: "guild.workspace.v1",
+      sub_guilds: [{ name: "escaped", path: "escaped" }],
     }));
 
     const result = resolveWorkspaceProjectRoot(root, "escaped");
     expect(result.status).toBe("invalid_request");
-    expect(result).toEqual(expect.objectContaining({ detail: expect.stringMatching(/project root escapes workspace/) }));
+    expect(result).toEqual(expect.objectContaining({ detail: expect.stringMatching(/escapes workspace|not a regular directory/) }));
   });
 });

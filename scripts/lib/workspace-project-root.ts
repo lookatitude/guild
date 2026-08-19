@@ -45,7 +45,13 @@ export function resolveWorkspaceProjectRoot(startRoot: string, projectId: string
     });
     if (matches.length !== 1) return { status: "capability_absent", detail: `project_id ${projectId} does not resolve uniquely` };
     const rel = (matches[0] as Record<string, unknown>)["path"];
-    if (typeof rel !== "string" || path.isAbsolute(rel) || rel.split(/[\\/]+/).some((part) => part === ".." || part === "")) {
+    const relParts = typeof rel === "string" ? rel.split(/[\\/]+/) : [];
+    if (
+      typeof rel !== "string" ||
+      path.isAbsolute(rel) ||
+      relParts.length !== 1 ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(relParts[0] ?? "")
+    ) {
       return { status: "invalid_request", detail: `project_id ${projectId} has an invalid path` };
     }
     const root = path.resolve(workspaceRoot, rel);
