@@ -36,11 +36,10 @@
  * PRODUCTION VS FIXTURE AUTHORITY
  *   `mode: "fixture"` proves MECHANICS with test-owned identities and is
  *   explicitly non-promotable (`promotable: false` on every result). `mode:
- *   "production"` requires independent production provisioning, recognized
- *   pinned verification roots, and externally signed authority — none of which
- *   this repository can mint for itself — so production mode FAILS CLOSED here
- *   and stays unavailable until that provisioning genuinely exists outside the
- *   repo. Relabeling a fixture packet as production is a refusal by vocabulary.
+ *   "production"` evaluates genuine production-bound observations, but it
+ *   still issues only an owner packet. Quorum authority and promotion remain
+ *   exclusively downstream in `evaluateNeutralConformanceDecision`.
+ *   Relabeling a fixture packet as production is a refusal by vocabulary.
  *
  * PURITY
  *   No I/O, no clock, no randomness, no environment: two evaluations of the
@@ -273,15 +272,6 @@ function admitRequest(requestText: unknown): Mh09EvaluationRequest {
   }
   if (typeof mode !== "string" || MH09_MODES.indexOf(mode) === -1) {
     refuseAdmission("mode must be one of the closed evaluation modes");
-  }
-  if (mode === "production") {
-    // FAIL CLOSED. Production evaluation requires independent production
-    // provisioning, recognized pinned verification roots, and externally
-    // signed authority — inputs no request (and nothing in this repository)
-    // can mint. Until they exist outside the repo, production mode refuses.
-    refuseAdmission(
-      "production mode is unavailable: independent production provisioning and externally signed authority are not present"
-    );
   }
   if (!identityComplete(parsed.evidence_identity)) {
     refuseAdmission("evidence_identity must carry every bound identity field");
@@ -760,7 +750,9 @@ export function evaluateReleaseConformance(requestText: unknown): Mh09Evaluation
       "each of the nine W5/MH-09 scenarios was evaluated against the real support-state and release-distribution cores",
       "install/activate/update proofs drive the real verifyReleaseClaim over the bound claim and archive bytes",
       "version drift is compared over the complete bound identity tuple; age never substitutes for identity",
-      "a fixture-mode packet proves mechanics only and is never promotable",
+      request.mode === "fixture"
+        ? "a fixture-mode packet proves mechanics only and is never promotable"
+        : "a production-mode owner packet still cannot promote without downstream quorum authority",
     ],
     binding: { run_id: request.run_id },
     facts: {

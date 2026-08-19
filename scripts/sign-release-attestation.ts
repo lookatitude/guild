@@ -12,12 +12,10 @@
  * — refusing everything else.
  *
  * WHAT IT REFUSES, AND WHY EACH REFUSAL IS STRUCTURAL
- *   - PRODUCTION MODE, fail closed: production signing requires independently
- *     provisioned production material whose verification root is pinned in the
- *     core trust table — provisioning that deliberately lives OUTSIDE this
- *     repository (the pinned roots' private seeds were discarded off-repo by
- *     design). Nothing a caller passes here can stand in for that, so
- *     `--mode production` refuses before touching any path.
+ *   - UNRECOGNIZED PRODUCTION AUTHORITY: production signing accepts only the
+ *     dedicated production material schema and only when its re-derived root
+ *     equals the source-pinned root for its attestor id. Provisioning remains
+ *     outside this repository; no caller-supplied root can extend trust.
  *   - SYMLINKS, at the leaf AND at any intermediate parent, for the material,
  *     registry, output, and lock positions: a link is a redirect wearing the
  *     required name, and a signer that follows one signs into (or reads out of)
@@ -62,6 +60,7 @@ import {
   NEUTRAL_ATTESTATION_SCHEME,
   NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN,
   NEUTRAL_ATTESTATION_TREE_HEIGHT,
+  neutralAttestorVerificationKey,
   neutralVerifyAttestationSignature,
 } from "../src/modules/lifecycle/workflows/neutral-conformance-core";
 import { neutralSha256Hex } from "../src/modules/lifecycle/workflows/neutral-runtime-contracts";
@@ -72,8 +71,17 @@ import { neutralSha256Hex } from "../src/modules/lifecycle/workflows/neutral-run
 
 export const SIGNER_MODES = Object.freeze(["production", "fixture"] as const);
 
-/** The fixture signing-material schema this signer accepts in fixture mode. */
-export const SIGNER_MATERIAL_SCHEMA = "guild.mh09_fixture_signing_material.v1";
+/** The legacy test-only signing-material schema accepted in fixture mode. */
+export const SIGNER_FIXTURE_MATERIAL_SCHEMA = "guild.mh09_fixture_signing_material.v1";
+/**
+ * The distinct schema required for externally provisioned production material.
+ * The signer is deliberately generic across the core's distinct journal
+ * attestors: the final decision requires a quorum, so each independently
+ * custodied principal must be able to sign through the same audited algorithm.
+ */
+export const SIGNER_PRODUCTION_MATERIAL_SCHEMA = "guild.journal_attestor_signing_material.v1";
+/** Backwards-compatible fixture-schema export. */
+export const SIGNER_MATERIAL_SCHEMA = SIGNER_FIXTURE_MATERIAL_SCHEMA;
 
 export const SIGNER_OUTPUT_SCHEMA = "guild.release_attestation.v1";
 export const SIGNER_REGISTRY_SCHEMA = "guild.used_one_time_keys.v1";
@@ -280,7 +288,7 @@ interface AdmittedMaterial {
   readonly leaves: readonly (readonly string[])[];
 }
 
-function admitMaterial(materialPath: string): AdmittedMaterial {
+function admitMaterial(materialPath: string, mode: string): AdmittedMaterial {
   let text: string;
   try {
     text = fs.readFileSync(materialPath, "utf8");
@@ -297,8 +305,10 @@ function admitMaterial(materialPath: string): AdmittedMaterial {
     refuse("signing material must be a single JSON object");
   }
   const record = parsed as Record<string, unknown>;
-  if (record.schema_version !== SIGNER_MATERIAL_SCHEMA) {
-    refuse("signing material declares an unrecognized schema");
+  const expectedSchema =
+    mode === "production" ? SIGNER_PRODUCTION_MATERIAL_SCHEMA : SIGNER_FIXTURE_MATERIAL_SCHEMA;
+  if (record.schema_version !== expectedSchema) {
+    refuse(`signing material does not declare the required ${expectedSchema} schema`);
   }
   const attestorId = record.attestor_id;
   if (typeof attestorId !== "string" || attestorId.length === 0) {
@@ -420,6 +430,22 @@ function writeAtomic0600(finalPath: string, text: string): void {
 // The signer
 // ---------------------------------------------------------------------------
 
+/**
+ * Does this public authority exactly match one distinct journal-attestor root
+ * pinned by the production decision core? This is intentionally a two-argument
+ * predicate, not an override channel: callers can query the source-owned trust
+ * decision but cannot add to it. Principal separation is external custody of
+ * each material/registry pair; the audited signing algorithm is shared.
+ */
+export function productionAttestorAuthorityRecognized(
+  attestorId: unknown,
+  verificationRoot: unknown
+): boolean {
+  if (typeof attestorId !== "string" || typeof verificationRoot !== "string") return false;
+  const pinned = neutralAttestorVerificationKey(attestorId);
+  return pinned !== null && pinned === verificationRoot;
+}
+
 export function signReleaseAttestation(options: unknown): SignReleaseAttestationOutput {
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
     refuse("options must be a single plain object");
@@ -440,15 +466,6 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
   const opts = record as unknown as SignReleaseAttestationOptions;
   if (SIGNER_MODES.indexOf(opts.mode as never) === -1) {
     refuse("mode must be one of the closed signing modes");
-  }
-  if (opts.mode === "production") {
-    // FAIL CLOSED. Production signing consumes independently provisioned
-    // production material whose root is pinned in the core trust table; that
-    // provisioning does not exist inside this repository and cannot be
-    // substituted by any caller-supplied path or root.
-    refuse(
-      "production mode is unavailable: independent production key provisioning is not present in this environment"
-    );
   }
   if (!DIGEST_PATTERN.test(opts.digest)) {
     refuse("digest must be a canonical nad1 attestation digest");
@@ -487,10 +504,18 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
 
   // Admit and PROVE the material: the declared root must be re-derivable from
   // the supplied chain starts through the full construction.
-  const material = admitMaterial(materialPath);
+  const material = admitMaterial(materialPath, opts.mode);
   const tree = deriveTree(material.leaves);
   if (tree.root !== material.verification_root) {
     refuse("signing material does not derive its declared verification root");
+  }
+  if (
+    opts.mode === "production" &&
+    !productionAttestorAuthorityRecognized(material.attestor_id, material.verification_root)
+  ) {
+    refuse(
+      "production signing material does not match the source-pinned authority for its attestor"
+    );
   }
 
   // Exclusive lock at exactly `<registry>.lock`. A held lock is an immediate
