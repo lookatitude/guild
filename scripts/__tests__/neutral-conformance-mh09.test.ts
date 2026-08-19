@@ -1008,10 +1008,22 @@ describe("the production MH-09 evaluator", () => {
   });
 
   describe("§authority: production vs fixture mode", () => {
-    it("refuses production mode without independent production provisioning, recognized verification roots, and externally signed authority", () => {
-      expect(() =>
-        Evaluator.invoke("evaluateReleaseConformance", canon(baseRequest({ mode: "production" })))
-      ).toThrow();
+    it("evaluates complete production-mode scenario evidence without accepting caller-supplied authority", () => {
+      const result = Evaluator.invoke<{
+        outcome: { disposition: string };
+        packet: NeutralOwnerConformancePacket;
+        mode: string;
+        promotable: boolean;
+      }>(
+        "evaluateReleaseConformance",
+        canon(baseRequest({ mode: "production", scenario_evidence: allScenarioEvidence() }))
+      );
+      expect(result.outcome.disposition).toBe("succeeded");
+      expect(result.packet.results).toHaveLength(MH09_IDS.length);
+      expect(result.mode).toBe("production");
+      // Owner evaluation is not the release decision. Only the downstream
+      // quorum-attested full-suite decision may promote.
+      expect(result.promotable).toBe(false);
     });
 
     it("refuses production mode when the caller supplies its own trust root instead of the pinned production one", () => {
@@ -1665,6 +1677,20 @@ describe("the production external one-time signer", () => {
   });
 
   describe("§production-mode refusals", () => {
+    it("recognizes each distinct journal-attestor principal exactly at its source-pinned public root", () => {
+      const recognizes = Signer.exported<(attestorId: unknown, verificationRoot: unknown) => boolean>(
+        "productionAttestorAuthorityRecognized"
+      );
+      expect(new Set(NEUTRAL_ATTESTOR_TRUST_ROOT.map((key) => key.attestor_id)).size).toBe(
+        NEUTRAL_ATTESTOR_TRUST_ROOT.length
+      );
+      for (const key of NEUTRAL_ATTESTOR_TRUST_ROOT) {
+        expect(recognizes(key.attestor_id, key.verification_root)).toBe(true);
+      }
+      expect(recognizes("guild.release-attestor", "0".repeat(64))).toBe(false);
+      expect(recognizes("caller.self-notary", NEUTRAL_ATTESTOR_TRUST_ROOT[0].verification_root)).toBe(false);
+    });
+
     it("refuses production mode with absent provisioning, using otherwise-valid fixture material", () => {
       const { materialPath } = writeFixtureMaterial("prod-absent");
       expect(() =>
@@ -1678,17 +1704,24 @@ describe("the production external one-time signer", () => {
       ).toThrow();
     });
 
-    it("refuses production mode when the material path is a non-production (temp/test) root, using otherwise-valid fixture material content", () => {
-      const { materialPath } = writeFixtureMaterial("prod-fixture-root");
+    it("refuses production-schema material whose derived root is not the source-pinned production root", () => {
+      const { material } = writeFixtureMaterial("prod-fixture-root");
+      const productionSchema = Signer.exported<string>("SIGNER_PRODUCTION_MATERIAL_SCHEMA");
+      const materialPath = path.join(tempRoot("signer-prod-fixture-material"), "material.json");
+      const outputPath = path.join(tempRoot("signer-prod-fixture-out"), "out.json");
+      const registryPath = path.join(tempRoot("signer-prod-fixture-reg"), "reg.json");
+      fs.writeFileSync(materialPath, JSON.stringify({ ...material, schema_version: productionSchema }));
       expect(() =>
         Signer.invoke("signReleaseAttestation", {
           material_path: materialPath,
           digest: `nad1:${neutralSha256Hex("mh09-prod-fixture-root")}`,
-          output_path: path.join(tempRoot("signer-prod-fixture-out"), "out.json"),
+          output_path: outputPath,
           mode: "production",
-          used_key_registry_path: path.join(tempRoot("signer-prod-fixture-reg"), "reg.json"),
+          used_key_registry_path: registryPath,
         })
-      ).toThrow();
+      ).toThrow(/pinned|authority/i);
+      expect(fs.existsSync(outputPath)).toBe(false);
+      expect(fs.existsSync(registryPath)).toBe(false);
     });
 
     it("refuses a caller-supplied trust-root substitution in production mode, using otherwise-valid fixture material", () => {

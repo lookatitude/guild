@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "6d4444b3be727bc1e430d63d849b34e275d5dcc0517e70600db74dde849d52ce"
+      "sha256": "0500067a065370788ab9cf9e255b25f712536334c19226a125db0a97ade78b34"
     },
     {
       "category": "scripts",
@@ -629,7 +629,7 @@
       "id": "projection:src/modules/distribution/workflows/release-conformance-evaluator.ts",
       "source_path": "src/modules/distribution/workflows/release-conformance-evaluator.ts",
       "resource_path": "resources/src/modules/distribution/workflows/release-conformance-evaluator.ts",
-      "sha256": "85ff7cfcf247da1bb80a59907339218482ca1ab05e71282c639ccad150d44918",
+      "sha256": "6418ce96eb0db12f3f7b6cd2e404b886f33c09b8edd5219686f68f9a51e1c2c4",
       "projection_dependency": true
     },
     {
@@ -637,7 +637,7 @@
       "id": "projection:src/modules/distribution/workflows/release-conformance-integration.ts",
       "source_path": "src/modules/distribution/workflows/release-conformance-integration.ts",
       "resource_path": "resources/src/modules/distribution/workflows/release-conformance-integration.ts",
-      "sha256": "d8aa6dc37e06da01087fb104c1fdcc751b366464e8bece40eb98d628f128cca9",
+      "sha256": "24b9d6ebdc3feb36437fec34bcfcf7c0ca1d4088eccc3f14c0f2d890a25ccdc2",
       "projection_dependency": true
     },
     {

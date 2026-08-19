@@ -41,9 +41,9 @@
  *   transported full-suite evidence — re-deriving the six owner packets from
  *   source-owned constants and re-assembling through the REAL assembler, so a
  *   claimed verdict or a claimed count is never trusted. The repository holds
- *   no production attestor material, so that decision fails closed here by
- *   construction; a promotable 31/31 remains an operator act with externally
- *   provisioned authority.
+ *   no production attestor material, so the final decision still fails closed
+ *   without external quorum authority; a promotable 31/31 remains an operator
+ *   act even though the production owner-evaluation path itself is executable.
  *
  * THE REQUEST BOUNDARY IS TEXT
  *   Exactly as the assembly spine and MH-09: the request is ONE canonical JSON
@@ -71,6 +71,8 @@ import {
   evaluateNeutralConformanceDecision,
   evaluateNeutralModuleBoundaries,
   freezeNeutralCapabilitySnapshot,
+  NEUTRAL_ATTESTATION_CHAINS,
+  NEUTRAL_ATTESTATION_TREE_HEIGHT,
   NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
   NEUTRAL_CONFORMANCE_OWNER_KEYS,
   NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS,
@@ -84,14 +86,18 @@ import {
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
   neutralCanonicalJson,
+  neutralAttestationReference,
   neutralFreeze,
   neutralInitialLifecycleState,
+  neutralJournalEntryCommitment,
+  neutralJournalGenesis,
   neutralLifecycleEquivalent,
   neutralLifecycleFingerprint,
   neutralOutcome,
 } from "../../lifecycle";
 import type {
   NeutralCapabilitySnapshot,
+  NeutralConformanceAuthority,
   NeutralConformanceEvidence,
   NeutralEvidenceIdentity,
   NeutralGate,
@@ -101,6 +107,7 @@ import type {
   NeutralOwnerConformancePacket,
   NeutralPolicy,
   NeutralReasonCode,
+  NeutralReceiptJournalEntry,
   NeutralScenarioResult,
 } from "../../lifecycle";
 import { evaluateMh03HostAdapterConformance, HOST_ADAPTER_OPERATIONS } from "../../host-runtime";
@@ -1460,7 +1467,7 @@ const BATTERY_IDENTITY: NeutralEvidenceIdentity = {
   contract_version: NEUTRAL_CONTRACT_VERSION,
   scenario_suite_id: NEUTRAL_SCENARIO_SUITE_ID,
   scenario_suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-  release_id: "rel-2026-08-19-a21x-battery",
+  release_id: "rel-2026-08-19-a21xbattery",
 } as unknown as NeutralEvidenceIdentity;
 
 const BATTERY_CLAIMANT = "guild.release-emitter";
@@ -1480,6 +1487,74 @@ function batteryReceiptRefs(): Record<string, string> {
       `guild.receipt_ref.v1:a21x-integration#${sequence}@${batteryCommitment(sequence)}`;
   }
   return refs;
+}
+
+/**
+ * Build a complete, valid journal chain but deliberately provide no
+ * attestations. This makes the final decision reach — and refuse at — the
+ * quorum boundary instead of satisfying this control through an earlier,
+ * unrelated journal-shape failure.
+ */
+function batteryAuthorityBelowQuorum(
+  results: readonly NeutralScenarioResult[]
+): NeutralConformanceAuthority {
+  const base = {
+    schema_version: "guild.conformance_authority.v1",
+    identity: BATTERY_IDENTITY,
+    receipt_journal_id: "jrn-a21x-battery",
+    receipt_sequence_range: { first: 1, last: results.length },
+    observed_entries: [] as NeutralReceiptJournalEntry[],
+    attestations: [],
+  } as unknown as NeutralConformanceAuthority;
+  const entries: NeutralReceiptJournalEntry[] = [];
+  let previous = neutralJournalGenesis(base);
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index];
+    const draft = {
+      sequence: index + 1,
+      scenario_id: result.stable_id,
+      outcome_type: result.outcome_type,
+      disposition: result.disposition,
+      reason_code: result.reason_code ?? null,
+      entry_commitment: "",
+      previous_commitment: previous,
+    } as NeutralReceiptJournalEntry;
+    const committed = {
+      ...draft,
+      entry_commitment: neutralJournalEntryCommitment(base, previous, draft),
+    } as NeutralReceiptJournalEntry;
+    entries.push(committed);
+    previous = committed.entry_commitment;
+  }
+  const authorityWithJournal = {
+    ...base,
+    observed_entries: entries,
+  } as NeutralConformanceAuthority;
+  const draftAttestation = {
+    attestor_id: "guild.release-attestor",
+    attested_journal_root: previous,
+    attested_entry_count: entries.length,
+    attestation_ref: "",
+    // Structurally valid but deliberately not a real signature. The decision
+    // must stop at quorum=1 before signature verification; no private material
+    // is present in the control battery.
+    attestation_signature:
+      `nws1:00:${"11".repeat(32 * NEUTRAL_ATTESTATION_CHAINS)}:${"22".repeat(
+        32 * NEUTRAL_ATTESTATION_TREE_HEIGHT
+      )}`,
+  };
+  return {
+    ...authorityWithJournal,
+    attestations: [
+      {
+        ...draftAttestation,
+        attestation_ref: neutralAttestationReference(
+          authorityWithJournal,
+          draftAttestation
+        ),
+      },
+    ],
+  } as NeutralConformanceAuthority;
 }
 
 function batteryFreshness(): Record<string, string> {
@@ -1910,26 +1985,43 @@ const RELEASE_INTEGRATION_CONTROL_BATTERY: readonly ReleaseIntegrationControlDef
   {
     id: "A21X-C11-fixture-provisioning-not-promotable",
     title:
-      "a fixture-provisioned aggregate never reaches a promotable decision, and production mode fails closed",
+      "fixture authority never promotes, while the production owner path executes without bypassing final authority",
     check: (implementation, cache) => {
       const result = evaluateOnce(cache, implementation);
       if (result === null || result.evidence === null) return false;
-      const batteryAuthority: Record<string, unknown> = {};
-      batteryAuthority["schema_version"] = ["guild", "conformance_authority", "v1"].join(".");
-      batteryAuthority["identity"] = BATTERY_IDENTITY;
-      batteryAuthority["receipt_journal_id"] = "jrn-a21x-battery";
-      batteryAuthority["receipt_sequence_range"] = { first: 1, last: 1 };
-      batteryAuthority["observed_entries"] = [];
-      batteryAuthority["attestations"] = [];
+      const batteryAuthority = batteryAuthorityBelowQuorum(result.evidence.results);
       const decision = evaluateTransportedReleaseConformance(result.evidence, batteryAuthority);
-      if (decision.promotable !== false) return false;
-      // Production provisioning is absent in this repository, so the MH-09
-      // production mode must fail the whole integration closed.
+      if (
+        decision.promotable !== false ||
+        decision.stage !== "decision" ||
+        decision.outcome?.reason_code !== "scenario_journal_attestation_insufficient"
+      ) {
+        return false;
+      }
+      // Production owner evaluation must be executable from genuine raw
+      // evidence. It still cannot promote here: this battery deliberately
+      // supplies no external quorum attestations to the final decision.
       const productionText = batteryRequestText(
         BATTERY_CLAIM,
         batteryOwnerInputs({ release_mode: "production" })
       );
-      return refusesWithControl(implementation, productionText, CONTROL_OWNER_FAILED);
+      let production: ReleaseIntegrationResult;
+      try {
+        production = implementation(productionText);
+      } catch {
+        return false;
+      }
+      if (production.evidence === null || production.packets === null) return false;
+      const productionAuthority = batteryAuthorityBelowQuorum(production.evidence.results);
+      const productionDecision = evaluateTransportedReleaseConformance(
+        production.evidence,
+        productionAuthority
+      );
+      const productionPasses =
+        productionDecision.promotable === false &&
+        productionDecision.stage === "decision" &&
+        productionDecision.outcome?.reason_code === "scenario_journal_attestation_insufficient";
+      return productionPasses;
     },
   },
 ];
