@@ -130,6 +130,57 @@ export interface ConfirmationClaim {
   statePath: string;
 }
 
+/** One launcher-preview's mutable, run-local arbiter replay (never persisted). */
+export interface PreviewConfirmationSession {
+  readonly root: string;
+  readonly runId: string;
+  readonly state: RunLocalConfirmationState;
+}
+
+/**
+ * Load durable decisions once, then allocate every previewed lane against the
+ * same in-memory arbiter. This mirrors the sequential real launcher without
+ * writing prompt claims and prevents distinct lanes from reusing prompt id 0.
+ */
+export function createPreviewConfirmationSession(
+  root: string,
+  runId: string,
+): PreviewConfirmationSession {
+  return {
+    root,
+    runId,
+    state: rehydrateState(runId, loadConfirmationEntries(root, runId)),
+  };
+}
+
+/**
+ * Compute the exact confirmation claim without persisting a new prompt.
+ * Existing decisions are replayed through the canonical arbiter, so preview
+ * mode reports the same prompt id/decision a real dispatch would observe while
+ * leaving the run tree byte-identical.
+ */
+export function previewConfirmation(input: {
+  root: string;
+  runId: string;
+  key: Record<string, unknown>;
+  session?: PreviewConfirmationSession;
+}): ConfirmationClaim {
+  if (input.session && (input.session.root !== input.root || input.session.runId !== input.runId)) {
+    throw new Error("preview confirmation session root/run mismatch");
+  }
+  const key = projectConfirmationKey(input.key);
+  const state = input.session?.state ??
+    rehydrateState(input.runId, loadConfirmationEntries(input.root, input.runId));
+  const claim = claimPrompt(state, key);
+  const existing = decisionFor(state, key);
+  return {
+    prompt_id: claim.prompt_id,
+    already_decided: claim.already_decided,
+    decision: existing ? existing.decision : null,
+    statePath: confirmationStatePath(input.root, input.runId),
+  };
+}
+
 /**
  * Claim the prompt for one EXACT confirmation key, durably.
  *

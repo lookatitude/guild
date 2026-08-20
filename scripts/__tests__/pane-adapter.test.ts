@@ -492,6 +492,55 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
     expect(inline.some((c) => c.includes("TaskCreated"))).toBe(false);
   });
 
+  it("FU08: a scoped Codex tmux preview composes bare without any enforcement or substrate process", () => {
+    const run = jest.fn<ReturnType<RunFn>, Parameters<RunFn>>(() => OK);
+    const codex = new CodexPaneAdapter({
+      run,
+      env: { OPENAI_API_KEY: "sk-test" },
+      fs: AUTH_JSON_ABSENT,
+    });
+    const withLaunchArgs = jest.spyOn(codex, "withLaunchArgs").mockImplementation(() => {
+      run("node", ["planted-enforcement-probe"]);
+      return codex;
+    });
+    const backend = new TmuxTeamBackend({
+      run,
+      resolveAdapter: () => codex,
+    });
+    const result = backend.launch({
+      slug: "fu08-codex-preview",
+      runId: "run-fu08-codex-preview",
+      cwd: "/tmp/fu08-preview-project",
+      specialists: [{
+        name: "security",
+        scope: "audit",
+        dependsOn: [],
+        host_kind: "codex",
+        capability_scope: ["Read"],
+      }, {
+        name: "backend",
+        scope: "implement",
+        dependsOn: [],
+        host_kind: "pi",
+        capability_scope: ["Read"],
+      }],
+      targetName: "guild-fu08-preview",
+      mode: "new-session",
+      dryRun: true,
+      orchestratorHostKind: "codex",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(withLaunchArgs).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(result.plannedCommands.join("\n")).toContain("codex exec");
+    expect(result.plannedCommands.join("\n")).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(result.notes.join(" ")).toMatch(/availability.*collision.*withheld.*real dispatch/i);
+    expect(result.notes.join(" ")).toMatch(/real dispatch may refuse.*before.*writ.*launch/i);
+    expect(result.notes.join(" ")).toMatch(/bypass.*withheld.*preview/i);
+    expect(result.notes.join(" ")).toMatch(/mixed-host adapter preflight withheld/i);
+  });
+
   it("TmuxTeamBackend.preflight() no-ops without a resolver (regression)", () => {
     const backend = new TmuxTeamBackend({ run: runner({}) });
     expect(backend.preflight(SPECIALISTS)).toEqual({ ok: true, failures: [] });

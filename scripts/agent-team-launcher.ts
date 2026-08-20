@@ -28,7 +28,7 @@
  *   --team <path>          (required) Path to .guild/team/<slug>.yaml.
  *   --session-name <name>  (optional, default: guild-<slug>-<timestamp>)
  *   --cwd <path>           (optional, default ".") Consuming repo root.
- *   --dry-run              (optional) Print tmux commands without executing.
+ *   --dry-run              (optional) Print a pure preview; execute and write nothing.
  *
  * Exit codes:
  *   0  Success.
@@ -42,9 +42,9 @@
  *     of the current session (never a nested session) and refuse to clobber an
  *     existing team window of the same name.
  *   - Only auto-runs when team.yaml explicitly declares backend: agent-team.
- *   - All writes stay under <cwd>/.guild/runs/<run-id>/agent-team/.
- *   - --dry-run is always safe: it prints tmux commands + writes session.json
- *     but never invokes tmux.
+ *   - All real-launch writes stay inside the bound run tree.
+ *   - --dry-run is a pure preview: it prints the resolved plan but never invokes
+ *     a substrate or writes session, task, receipt, evidence, or run-tree state.
  */
 
 import { spawnSync } from "child_process";
@@ -173,12 +173,14 @@ import {
   writeTaskCell,
   type ProductionDispatchModelOutcome,
 } from "../src/modules/dispatch/workflows/task-assignment-v2";
+import { createPreviewConfirmationSession } from "../src/modules/dispatch/workflows/confirmation-gate";
 // T8R F3: the PRODUCTION writer for M0 inspection evidence. `persistInspectionReport`
 // previously had no production caller at all — `guild models inspect` is read-only by
 // contract — so the M2 gate's evidence dir was always empty in a real run and the
 // derived resolver inputs were always null. Recording happens HERE, once per run on the
 // real dispatch path, and is inert at the ADR defaults (v2 flags off ⇒ no write).
 import { recordRunInspectionEvidence } from "../src/modules/capability/workflows/inspection-record";
+import { readRoutingFlags } from "../src/modules/capability/workflows/routing-rollout";
 // T6 rework F5: the legacy tier→model label for the shadow comparison comes
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
@@ -200,7 +202,10 @@ import { slugFromTeamPath, phaseFromTeamPath, readActivePhase, resolveDeadLaneKe
 // The gate itself (dispatchGate → preDispatchGate) was correct and unreachable;
 // this is the join. It runs BEFORE the D5 ladder so every rung — tmux team,
 // in-process agent, and the subagent signal execute-plan acts on — is covered.
-import { assertDispatchApproved } from "../src/modules/teams/workflows/dispatch-approval";
+import {
+  assertDispatchApproved,
+  resolveApprovalOverride,
+} from "../src/modules/teams/workflows/dispatch-approval";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
@@ -264,6 +269,14 @@ interface CliArgs {
 
 const VALID_AGENT_MODE_VALUES = new Set(["team", "agent", "subagent", "auto"]);
 
+function requiredOptionValue(argv: string[], index: number, option: string): string {
+  const value = argv[index + 1];
+  if (value === undefined || value.length === 0 || value.startsWith("--")) {
+    throw new Error(`${option} requires a non-flag value`);
+  }
+  return value;
+}
+
 function parseArgs(argv: string[]): CliArgs {
   const out: CliArgs = {
     team: null,
@@ -279,22 +292,25 @@ function parseArgs(argv: string[]): CliArgs {
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--team" && i + 1 < argv.length) out.team = argv[++i];
-    else if (a === "--session-name" && i + 1 < argv.length) out.sessionName = argv[++i];
-    else if (a === "--cwd" && i + 1 < argv.length) out.cwd = argv[++i];
+    if (a === "--team") out.team = requiredOptionValue(argv, i++, a);
+    else if (a === "--session-name") out.sessionName = requiredOptionValue(argv, i++, a);
+    else if (a === "--cwd") out.cwd = requiredOptionValue(argv, i++, a);
     else if (a === "--dry-run") out.dryRun = true;
     else if (a === "--reap") out.reap = true;
     else if (a === "--dismiss-completed") out.dismissCompleted = true;
     else if (a === "--require-approval") out.requireApproval = true;
-    else if (a === "--approval-override" && i + 1 < argv.length) out.approvalOverride = argv[++i];
+    else if (a === "--approval-override") out.approvalOverride = requiredOptionValue(argv, i++, a);
     else if (a.startsWith("--approval-override=")) {
       out.approvalOverride = a.slice("--approval-override=".length);
     }
-    else if (a === "--run-id" && i + 1 < argv.length) out.runId = argv[++i];
+    else if (a === "--run-id") out.runId = requiredOptionValue(argv, i++, a);
     else if (a.startsWith("--agent-mode=")) {
       const v = a.slice("--agent-mode=".length);
       if (VALID_AGENT_MODE_VALUES.has(v)) out.agentMode = v as CliArgs["agentMode"];
     }
+  }
+  if (out.reap && out.dismissCompleted) {
+    throw new Error("--reap and --dismiss-completed are mutually exclusive maintenance modes");
   }
   return out;
 }
@@ -798,10 +814,14 @@ function makeLaneModelPlanner(
   runId: string,
   orchestratorHostKind: string,
   bindingRef: string,
+  preview: boolean,
 ): (
   s: Specialist,
   logicalTaskId: string,
 ) => { outcome: ProductionDispatchModelOutcome; laneTier: "cheap" | "mid" | "powerful" } {
+  const previewConfirmationSession = preview
+    ? createPreviewConfirmationSession(cwd, runId)
+    : undefined;
   let rawSettings: unknown;
   try {
     rawSettings = JSON.parse(
@@ -811,9 +831,11 @@ function makeLaneModelPlanner(
     rawSettings = undefined;
   }
   const settingsObj = isPlainObject(rawSettings) ? (rawSettings as Record<string, unknown>) : {};
+  const { flags: routingFlags } = readRoutingFlags(rawSettings);
   const modelsBlock = isPlainObject(settingsObj["models"])
     ? (settingsObj["models"] as Record<string, unknown>)
     : {};
+  let previewStageEvolutionNoticeEmitted = false;
   // ── T8R F3: record this run's M0 inspection evidence ONCE, before any lane
   // plans a model. This is the production write that was missing: without it
   // `.guild/runs/<id>/inspection/` stays empty in every real run, so
@@ -826,15 +848,17 @@ function makeLaneModelPlanner(
   // THROWS out of the binding-verified writer rather than dispatching on
   // unbound evidence; absence (no session context, no usable report) is
   // reported honestly and never fabricated.
-  const inspection = recordRunInspectionEvidence({
-    root: cwd,
-    binding: { run_id: runId, binding_ref: bindingRef },
-    now: new Date().toISOString(),
-  });
-  if (inspection.recorded) {
-    process.stdout.write(
-      `[agent-team-launcher] M0 inspection evidence recorded for ${runId} → ${inspection.ref}\n`,
-    );
+  if (!preview) {
+    const inspection = recordRunInspectionEvidence({
+      root: cwd,
+      binding: { run_id: runId, binding_ref: bindingRef },
+      now: new Date().toISOString(),
+    });
+    if (inspection.recorded) {
+      process.stdout.write(
+        `[agent-team-launcher] M0 inspection evidence recorded for ${runId} → ${inspection.ref}\n`,
+      );
+    }
   }
   return (s, logicalTaskId) => {
     const hostKind = s.host_kind ?? orchestratorHostKind;
@@ -855,7 +879,30 @@ function makeLaneModelPlanner(
       legacy,
       settings: rawSettings,
       request: { purpose: "implementation" },
+      preview,
+      previewConfirmationSession,
     });
+    // A pure preview cannot persist the M0 inspection + M1 comparison that a
+    // fresh real run creates between lane plans. With both staged legs opted
+    // in, a later real lane can therefore reach M2 (and §6 confirmation) even
+    // while every preview lane honestly remains legacy against the unchanged
+    // tree. Make that unresolved transition operator-visible once; exit 0 is
+    // never presented as proof that the real run is confirmation-ready.
+    if (
+      preview &&
+      !previewStageEvolutionNoticeEmitted &&
+      routingFlags["model_routing.shadow"] === "on" &&
+      routingFlags["model_routing.enabled"] === "on" &&
+      outcome.selection.source === "legacy" &&
+      /M[01] not evidenced/.test(outcome.selection.reason)
+    ) {
+      previewStageEvolutionNoticeEmitted = true;
+      process.stdout.write(
+        `[agent-team-launcher] BLOCKED PREVIEW: this pure preview cannot persist the fresh-run ` +
+          `M0/M1 evidence that real dispatch creates between lanes; a later-lane M2 selection ` +
+          `may therefore require §6 confirmation. Do not treat preview exit 0 as dispatch-ready.\n`,
+      );
+    }
     // The specialist dispatch contract carries the provenance on the real path
     // — this is the object every backend reads the selected model from.
     s.modelProvenance = outcome.provenance;
@@ -878,7 +925,7 @@ function makeLaneModelPlanner(
     // target / purpose / policy / catalog / fallback shape is a DIFFERENT key
     // and therefore no approval at all (the arbiter enforces that, exactly).
     // Inert at M0/M1: legacy selections degrade nothing, so nothing is claimed.
-    if (outcome.confirmation.required && !outcome.confirmation.decided) {
+    if (!preview && outcome.confirmation.required && !outcome.confirmation.decided) {
       throw new Error(
         `confirmation_required: refusing to dispatch ${logicalTaskId} — ${outcome.confirmation.reason}`,
       );
@@ -886,8 +933,14 @@ function makeLaneModelPlanner(
     if (outcome.confirmation.required) {
       process.stdout.write(
         `[agent-team-launcher] §6 confirmation prompt ${outcome.confirmation.prompt_id} for ` +
-          `${logicalTaskId} already decided "${outcome.confirmation.decision}"\n`,
+          `${logicalTaskId} ${preview ? "previewed" : `already decided "${outcome.confirmation.decision}"`}\n`,
       );
+      if (preview && !outcome.confirmation.decided) {
+        process.stdout.write(
+          `[agent-team-launcher] BLOCKED PREVIEW: a real dispatch of ${logicalTaskId} will refuse ` +
+            `until §6 prompt ${outcome.confirmation.prompt_id} receives a user decision.\n`,
+        );
+      }
     }
     return { outcome, laneTier };
   };
@@ -1230,9 +1283,17 @@ function writeLaunchTeamResult(
   teamPath: string,
   lanes: readonly TaskCellLaunchLane[],
 ): string {
+  return writeTeamResult(cwd, runId, buildLaunchTeamResult(runId, teamPath, lanes));
+}
+
+function buildLaunchTeamResult(
+  runId: string,
+  teamPath: string,
+  lanes: readonly TaskCellLaunchLane[],
+): ReturnType<typeof buildStationTaskCellResult> {
   const station = phaseFromTeamPath(teamPath) ?? "build";
   const planRef = path.join(".guild", "runs", runId, "team-plan", `${station}.json`);
-  return writeTeamResult(cwd, runId, buildStationTaskCellResult(station, planRef, lanes));
+  return buildStationTaskCellResult(station, planRef, lanes);
 }
 
 /**
@@ -1702,6 +1763,40 @@ function resolveAgentMode(
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  // FU08: maintenance modes are side-effecting launch-surface operations too.
+  // Their previews deliberately stop before liveness probes, pane termination,
+  // attempt sealing, or session rewrites and report the candidates readable
+  // from disk. A real invocation recomputes every effect from current state.
+  if (args.dryRun && (args.reap || args.dismissCompleted)) {
+    const cwd = path.resolve(args.cwd);
+    if (args.dismissCompleted && !args.runId) {
+      process.stdout.write(
+        "[agent-team-launcher] --dismiss-completed pure preview: --run-id <id> is required; " +
+          "liveness probes, termination, attempt sealing, and session writes were withheld.\n",
+      );
+      return;
+    }
+    const runIds = args.runId ? [args.runId] : listRunnableRunIds(cwd);
+    const operation = args.reap ? "--reap" : "--dismiss-completed";
+    const candidates = runIds.flatMap((runId) => {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(sessionJsonPath(cwd, runId), "utf8")) as {
+          teammate_panes?: unknown[];
+        };
+        return [{ runId, panes: parsed.teammate_panes?.length ?? 0 }];
+      } catch {
+        return [];
+      }
+    });
+    process.stdout.write(
+      `[agent-team-launcher] ${operation} pure preview: ${candidates.length} run session(s), ` +
+        `${candidates.reduce((sum, candidate) => sum + candidate.panes, 0)} pane candidate(s). ` +
+        `Liveness probes, termination, attempt sealing, and session writes were withheld. ` +
+        `A real ${operation} recomputes authorization/liveness before applying effects.\n`,
+    );
+    return;
+  }
 
   // ── P1-3 A2b: --reap path ──────────────────────────────────────────────────
   // When --reap is passed, skip the normal launch flow and force-reap dead
@@ -2177,6 +2272,24 @@ async function main(): Promise<void> {
         s.declared_capability_scope ?? null,
       ]),
     );
+    let previewOverrideReason: string | null = null;
+    if (args.dryRun) {
+      try {
+        previewOverrideReason = resolveApprovalOverride({
+          env: process.env,
+          overrideReason: args.approvalOverride,
+        });
+      } catch (err) {
+        process.stderr.write(
+          `[agent-team-launcher] REFUSED (approve-before-dispatch gate): ${(err as Error).message}\n` +
+            `  NO pane was created and NO dispatch plan was emitted.\n`,
+        );
+        process.exit(1);
+      }
+    }
+    const approvalEnv = args.dryRun
+      ? { ...process.env, GUILD_DISPATCH_APPROVAL_OVERRIDE: undefined }
+      : process.env;
     // T7R-R1-B1: verification is MANDATORY here — including the standalone /
     // no-run-id call, which the gate refuses outright (`no_run_id`) because a
     // dispatch whose approval cannot even be looked up is never approved.
@@ -2192,7 +2305,10 @@ async function main(): Promise<void> {
         scheduledParticipants: scheduled,
         scheduledRoleRefs,
         scheduledCapabilityScopes,
-        overrideReason: args.approvalOverride,
+        env: approvalEnv,
+        // A preview never consumes or records an override. The real dispatch
+        // must re-present it so the durable degradation audit stays truthful.
+        overrideReason: args.dryRun ? null : args.approvalOverride,
         forced: args.requireApproval,
       });
     } catch (err) {
@@ -2232,6 +2348,12 @@ async function main(): Promise<void> {
           `dispatch, NO run-tree write. A real dispatch still requires a persisted ` +
           `guild.team_proposal.v2 + a current approve decision.\n`,
       );
+      if (previewOverrideReason !== null) {
+        process.stderr.write(
+          `[agent-team-launcher] NOTICE (--dry-run preview): approval override validated but withheld. ` +
+            `A real dispatch must re-present the reason; preview created no override audit record.\n`,
+        );
+      }
     } else if (verdict.degradation) {
       // Loud, non-silent, and explicitly a degradation — not a pass.
       process.stderr.write(
@@ -2260,9 +2382,13 @@ async function main(): Promise<void> {
   // BOTH the --agent-mode branch and the legacy fallthrough below.
   const frozenDispatch = readFrozenDispatchResolution(path.resolve(args.cwd), args.runId);
 
-  if (args.agentMode !== null) {
+  // A frozen cmux authority uses the one full cmux implementation even when a
+  // legacy caller omits the now-redundant --agent-mode flag. Keeping a separate
+  // handoff-only branch made dry and real invocations indistinguishable and
+  // skipped the preview's withheld-check/artifact disclosures.
+  if (args.agentMode !== null || frozenDispatch?.backend === "cmux") {
     const { mode: resolvedMode, reason, transport } = resolveAgentMode(
-      args.agentMode,
+      args.agentMode ?? "team",
       args.dryRun,
       frozenDispatch,
     );
@@ -2308,13 +2434,17 @@ async function main(): Promise<void> {
       }
 
       const bindingRef = resolveLaunchBindingRef(cwd, runId);
-      if (bindingRef === null && !args.dryRun) {
+      if (bindingRef === null) {
         throw new Error(`binding_rejected: cmux TaskCell dispatch ${runId} has no minted run binding`);
       }
-      if (!args.dryRun) {
-        const planLaneModel = makeLaneModelPlanner(cwd, runId, orchestratorHostKind, bindingRef);
-        for (const lane of lanes) planLaneModel(lane, lane.taskId);
-      }
+      const planLaneModel = makeLaneModelPlanner(
+        cwd,
+        runId,
+        orchestratorHostKind,
+        bindingRef,
+        args.dryRun,
+      );
+      for (const lane of lanes) planLaneModel(lane, lane.taskId);
       const phaseId = phaseFromTeamPath(args.team) ?? "build";
       const launchRequest = {
         slug,
@@ -2324,6 +2454,10 @@ async function main(): Promise<void> {
         targetName: workspaceId,
         mode: "in-session" as LaunchMode,
         dryRun: true,
+        // A real dispatch first runs the adapter-only preflight while keeping
+        // cmux surfaces closed. An operator dry-run suppresses even that
+        // subprocess and remains a pure preview.
+        preflightOnly: !args.dryRun,
         orchestratorHostKind,
         teamPath: args.team,
       };
@@ -2370,7 +2504,7 @@ async function main(): Promise<void> {
       );
       const launched = args.dryRun
         ? preview
-        : port.launch({ ...launchRequest, dryRun: false });
+        : port.launch({ ...launchRequest, dryRun: false, preflightOnly: false });
       const result = launched.value;
       if (launched.status !== "succeeded" || !result || !result.ok) {
         const detail = launched.detail ?? launched.status;
@@ -2420,10 +2554,8 @@ async function main(): Promise<void> {
           process.stderr.write(`[agent-team-launcher] WARN: recorded ${emitted}/${lanes.length} cmux dispatch receipt(s).\n`);
         }
       }
-      const resultPath = writeLaunchTeamResult(cwd, runId, args.team, lanes);
-      const manifestPath = writeManifest(
-        cwd,
-        buildManifest({
+      const teamResultPreview = buildLaunchTeamResult(runId, args.team, lanes);
+      const manifestPreview = buildManifest({
           runId,
           mode: "in-session",
           sessionName: workspaceId,
@@ -2435,8 +2567,11 @@ async function main(): Promise<void> {
             : { orchestrator: "", teammates: result.teammate_pane_ids },
           orchestratorHostKind,
           backend: "cmux",
-        }),
-      );
+        });
+      const resultPath = args.dryRun
+        ? null
+        : writeTeamResult(cwd, runId, teamResultPreview);
+      const manifestPath = args.dryRun ? null : writeManifest(cwd, manifestPreview);
       const signal = {
         backend: "cmux",
         reason,
@@ -2448,6 +2583,7 @@ async function main(): Promise<void> {
         notes: result.notes,
         teamResult: resultPath,
         manifest: manifestPath,
+        ...(args.dryRun ? { teamResultPreview, manifestPreview } : {}),
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -2478,18 +2614,19 @@ async function main(): Promise<void> {
       const orchestratorHostKind = resolveOrchestratorHostKind(process.env) ?? undefined;
       const ownerMap = readPlanOwnerTaskIds(cwd, slug);
       const launchLanes = expandTaskCellLaunchLanes(runId, team.specialists, ownerMap);
+      const bindingRef = resolveLaunchBindingRef(cwd, runId);
+      if (bindingRef === null) {
+        throw new Error(`binding_rejected: in-process TaskCell dispatch ${runId} has no minted run binding`);
+      }
+      const planLaneModel = makeLaneModelPlanner(
+        cwd,
+        runId,
+        orchestratorHostKind ?? "claude",
+        bindingRef,
+        args.dryRun,
+      );
+      for (const lane of launchLanes) planLaneModel(lane, lane.taskId);
       if (!args.dryRun) {
-        const bindingRef = resolveLaunchBindingRef(cwd, runId);
-        if (bindingRef === null) {
-          throw new Error(`binding_rejected: in-process TaskCell dispatch ${runId} has no minted run binding`);
-        }
-        const planLaneModel = makeLaneModelPlanner(
-          cwd,
-          runId,
-          orchestratorHostKind ?? "claude",
-          bindingRef,
-        );
-        for (const lane of launchLanes) planLaneModel(lane, lane.taskId);
         const phaseId = phaseFromTeamPath(args.team) ?? "build";
         const hostId = hostKindToRegistryId(orchestratorHostKind ?? "claude") || String(orchestratorHostKind ?? "claude");
         const written = emitTaskCellsV2(
@@ -2590,9 +2727,8 @@ async function main(): Promise<void> {
       );
       process.exit(1);
     }
-    // Blocker 1 (W4): the legacy path honors the frozen run-start decision too —
-    // a run frozen to cmux hands dispatch back to the lead instead of launching
-    // tmux panes; a run frozen to agent/subagent is not a tmux launch at all.
+    // Blocker 1 (W4): frozen cmux already took the full implementation above;
+    // a legacy run frozen to agent/subagent is not a tmux launch at all.
     if (frozenDispatch !== null && frozenDispatch.backend !== "tmux") {
       const resolved = resolvedModeFromFrozen(frozenDispatch);
       const directScopedRoles = resolved.mode === "team" ? [] : scopedDirectRoles(team);
@@ -2690,31 +2826,29 @@ async function main(): Promise<void> {
   const routedHostByRole = new Map<string, string>();
   const modelProvenanceByTask = new Map<string, Specialist["modelProvenance"]>();
 
-  // ── W2-A2: pre-routing task_run writes (single-source for capability routing) ─
-  // Write ALL task_runs for ALL specialists BEFORE any routing decision. After
-  // writing, read back capability_requirements from disk and update each
-  // specialist in-place so planTeamRouting reads EXACTLY what was written.
-  // This makes the written task_run file the single source of truth:
-  //   team.yaml → parser → writer → disk → reader → planTeamRouting
-  // Any future drift between writer and router is a compile-time shape error,
-  // not a silent runtime divergence.
+  // ── W2-A2/FU08: production writes; preview plans from identical inputs ────
+  // A real dispatch writes task_runs before routing and reads them back as the
+  // single source of truth. A dry-run keeps the same in-memory input and model/
+  // routing computation but MUST NOT materialize that channel or any evidence.
   {
-    for (const spec of team.specialists) {
-      const taskIds = preRoutingOwnerMap.get(spec.name);
-      const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
-      const cr = spec.capabilityRequirements;
-      for (const taskId of effectiveTaskIds) {
-        writeTaskRun(cwd, runId, taskId, {
-          specialist: spec.name,
-          host: cr ? {
-            capabilityRequirements: {
-              needsPr: cr.needs_pr,
-              needsParallel: cr.needs_parallel,
-              needsNetwork: cr.needs_network,
-              isolation: cr.isolation,
-            },
-          } : undefined,
-        });
+    if (!args.dryRun) {
+      for (const spec of team.specialists) {
+        const taskIds = preRoutingOwnerMap.get(spec.name);
+        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+        const cr = spec.capabilityRequirements;
+        for (const taskId of effectiveTaskIds) {
+          writeTaskRun(cwd, runId, taskId, {
+            specialist: spec.name,
+            host: cr ? {
+              capabilityRequirements: {
+                needsPr: cr.needs_pr,
+                needsParallel: cr.needs_parallel,
+                needsNetwork: cr.needs_network,
+                isolation: cr.isolation,
+              },
+            } : undefined,
+          });
+        }
       }
     }
     // Scope enforcement is carried by the backend's real process environment.
@@ -2722,8 +2856,8 @@ async function main(): Promise<void> {
     // same-user concurrent ancestor swap, and raw writes can follow a planted
     // scope symlink outside the project.
     // ── T3 F3: resolve the run's minted binding ONCE for both descriptor channels ──
-    // (env envelope → the run's own minted record → mint iff this launcher minted
-    // the fresh standalone run-id). null ⇒ the writers fail closed below.
+    // (env envelope → the run's own minted record). null ⇒ dispatch and preview
+    // both fail closed; preview may read the binding but never consumes it.
     launchBindingRef = resolveLaunchBindingRef(cwd, runId);
 
     // Resolve models before routing, but DO NOT persist TaskCell identity yet.
@@ -2733,7 +2867,13 @@ async function main(): Promise<void> {
       throw new Error(`binding_rejected: TaskCell dispatch ${runId} has no minted run binding`);
     }
     {
-      const planLaneModel = makeLaneModelPlanner(cwd, runId, orchestratorHostKind, launchBindingRef);
+      const planLaneModel = makeLaneModelPlanner(
+        cwd,
+        runId,
+        orchestratorHostKind,
+        launchBindingRef,
+        args.dryRun,
+      );
       for (const specialist of team.specialists) {
         const taskIds = preRoutingOwnerMap.get(specialist.name);
         const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [specialist.name];
@@ -2756,22 +2896,24 @@ async function main(): Promise<void> {
       // persist a gated-on v2 selection into run-state per lane NOW, so the
       // selection is consumed, not just logged. M0/M1 (source legacy) writes
       // nothing — byte-identical legacy behavior.
-      for (const [taskId, sel] of v2ModelByTask) {
-        upsertLane(
-          path.join(cwd, ".guild", "runs", runId),
-          { runId, planSlug: slug, programId: null },
-          taskId,
-          {
-            host: {
-              selected: hostKindToRegistryId(orchestratorHostKind) || String(orchestratorHostKind),
-              degraded: false,
-              independence: "weak",
-              tier: sel.tier,
-              model: sel.model,
-              modelParams: { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}) },
+      if (!args.dryRun) {
+        for (const [taskId, sel] of v2ModelByTask) {
+          upsertLane(
+            path.join(cwd, ".guild", "runs", runId),
+            { runId, planSlug: slug, programId: null },
+            taskId,
+            {
+              host: {
+                selected: hostKindToRegistryId(orchestratorHostKind) || String(orchestratorHostKind),
+                degraded: false,
+                independence: "weak",
+                tier: sel.tier,
+                model: sel.model,
+                modelParams: { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}) },
+              },
             },
-          },
-        );
+          );
+        }
       }
     }
 
@@ -2789,12 +2931,14 @@ async function main(): Promise<void> {
       // All task-ids for this specialist share the same specialist-level CR.
       // Use the first one as the representative file.
       const repTaskId = (taskIds && taskIds.length > 0) ? taskIds[0] : spec.name;
-      const fromDisk = readTaskRunCapReqs(cwd, runId, repTaskId);
-      if (fromDisk !== undefined) {
-        spec.capabilityRequirements = fromDisk;
-      } else {
-        // W2-A2(d): observable benign fallback — emit degradation signal.
-        emitReadbackDegradation(cwd, runId, repTaskId, spec.name);
+      if (!args.dryRun) {
+        const fromDisk = readTaskRunCapReqs(cwd, runId, repTaskId);
+        if (fromDisk !== undefined) {
+          spec.capabilityRequirements = fromDisk;
+        } else {
+          // W2-A2(d): observable benign fallback — emit degradation signal.
+          emitReadbackDegradation(cwd, runId, repTaskId, spec.name);
+        }
       }
       // D-CAP: populate spec.taskId with the representative plan task-id so
       // composeTmuxCommands / composeInProcessDispatch / RemoteTeamBackend can inject
@@ -2854,6 +2998,7 @@ async function main(): Promise<void> {
           // path already uses (L~1032). Skip when no plan task-ids are found (plan absent
           // or specialist not in plan) — NO name-key fallback (that's the contract violation).
           onDecision: (d) => {
+            if (args.dryRun) return;
             // d.taskId is the specialist NAME (planTeamRouting sets taskId = s.name).
             // RunStateV1.lanes is TASK-ID keyed. Map name → plan task-id(s) via the
             // block-scoped plan parse (same join the SSH dead-lane path uses, minus the
@@ -2956,10 +3101,12 @@ async function main(): Promise<void> {
             launchBindingRef,
             args.dryRun || args.runId === null,
           );
-          process.stdout.write(
-            `[agent-team-launcher] emitted ${remoteCellsWritten} remote guild.task_assignment.v2 cell(s) → ` +
-              `.guild/runs/${runId}/task-cells/\n`,
-          );
+          if (!args.dryRun) {
+            process.stdout.write(
+              `[agent-team-launcher] emitted ${remoteCellsWritten} remote guild.task_assignment.v2 cell(s) → ` +
+                `.guild/runs/${runId}/task-cells/\n`,
+            );
+          }
 
           const resolveHostTarget = (spec: Specialist): RemoteHostTarget => {
             const r = routes.find((rt) => rt.specialist === spec.name)!;
@@ -2993,7 +3140,9 @@ async function main(): Promise<void> {
                 // bounded retry below; a later successful attempt discards the
                 // failed attempt's envelope, so the orphan must be persisted at
                 // detection time (NDJSON events log + trace), not left on stderr.
-                warn: (msg) => emitRemoteOrphan(cwd, runId, msg),
+                warn: args.dryRun
+                  ? (msg) => process.stderr.write(`[agent-team-launcher] dry-run remote warning: ${msg}\n`)
+                  : (msg) => emitRemoteOrphan(cwd, runId, msg),
               }),
             },
           });
@@ -3047,6 +3196,7 @@ async function main(): Promise<void> {
               {
                 ...retryOpts,
                 onExhausted: (signal) => {
+                  if (args.dryRun) return;
                   // Mark every remote lane dead + write resume.json (resume.enabled honored
                   // inside markLaneDead). One writer for both SSH + prose paths (R-016 bridge).
                   //
@@ -3102,6 +3252,9 @@ async function main(): Promise<void> {
             );
             for (const cmd of remoteResult.planned_commands ?? []) {
               process.stdout.write(`  ${cmd}\n`);
+            }
+            for (const note of remoteResult.notes ?? []) {
+              process.stdout.write(`[agent-team-launcher] NOTE: ${note}\n`);
             }
           } else {
             const lifecycle = reconcileTaskCellLifecycleTelemetry({
@@ -3163,13 +3316,13 @@ async function main(): Promise<void> {
 
           if (team.specialists.length === 0) {
             // All specialists dispatched remotely — no local tmux session needed.
-            const resultPath = writeLaunchTeamResult(cwd, runId, args.team, globalLaunchLanes);
-            process.stdout.write(`[agent-team-launcher] wrote TaskCell team_result → ${resultPath}\n`);
             if (args.dryRun) {
               process.stdout.write(
-                "[agent-team-launcher] dry-run: all specialists remote; no local tmux session.\n"
+                "[agent-team-launcher] dry-run: all specialists remote; no local tmux session and no state written.\n"
               );
             } else {
+              const resultPath = writeLaunchTeamResult(cwd, runId, args.team, globalLaunchLanes);
+              process.stdout.write(`[agent-team-launcher] wrote TaskCell team_result → ${resultPath}\n`);
               process.stdout.write(
                 "[agent-team-launcher] all specialists dispatched remotely.\n"
               );
@@ -3390,12 +3543,13 @@ async function main(): Promise<void> {
   // routing, so the written descriptor is the authoritative capability source.
 
   if (args.dryRun) {
-    const resultPath = writeLaunchTeamResult(cwd, runId, args.team, globalLaunchLanes);
-    process.stdout.write(`[agent-team-launcher] wrote TaskCell team_result → ${resultPath}\n`);
     process.stdout.write(
       "[agent-team-launcher] dry-run — would execute the following tmux commands:\n"
     );
     for (const c of launchResult.planned_commands) process.stdout.write(`  ${c}\n`);
+    for (const note of launchResult.notes ?? []) {
+      process.stdout.write(`[agent-team-launcher] NOTE: ${note}\n`);
+    }
     // new-session mode finishes by attaching the terminal; in-session mode does
     // NOT attach (the select-window above already surfaced the team window).
     if (mode === "new-session") {
@@ -3404,9 +3558,7 @@ async function main(): Promise<void> {
       );
     }
 
-    const manifestPath = writeManifest(
-      cwd,
-      buildManifest({
+    const manifestPreview = buildManifest({
         runId,
         mode,
         sessionName: mode === "in-session" ? "(dry-run: current tmux session)" : targetName,
@@ -3415,10 +3567,11 @@ async function main(): Promise<void> {
         dryRun: true,
         realPaneIds: null,
         orchestratorHostKind,
-      })
-    );
+      });
     process.stdout.write(
-      `[agent-team-launcher] wrote session manifest → ${manifestPath}\n`
+      "[agent-team-launcher] session manifest preview (not written):\n" +
+        JSON.stringify(manifestPreview, null, 2) +
+        "\n[agent-team-launcher] dry-run complete — no state written.\n",
     );
     process.exit(0);
   }

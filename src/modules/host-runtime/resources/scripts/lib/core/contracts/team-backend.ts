@@ -221,6 +221,11 @@ export interface TeamLaunchRequest {
   targetName: string;
   mode: LaunchMode;
   dryRun: boolean;
+  /**
+   * Internal real-dispatch planning pass: run adapter preflights while keeping
+   * the substrate closed. Never set for an operator dry-run.
+   */
+  preflightOnly?: boolean;
   orchestratorHostKind?: HostKind;
   teamPath?: string;
 }

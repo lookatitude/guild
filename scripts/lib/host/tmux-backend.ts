@@ -304,6 +304,8 @@ export function composeTmuxCommands(opts: {
   teamPath?: string;
   /** Issue #54: the project's permission config, feeding paneCommand's host launch-flag resolution. */
   permissionConfig?: RuntimePermissionConfig;
+  /** FU08: compose a pure preview; adapter enforcement probes are forbidden. */
+  preview?: boolean;
 }): ParsedTmuxCommand[] {
   const {
     mode,
@@ -316,6 +318,7 @@ export function composeTmuxCommands(opts: {
     orchestratorHostKind = "claude",
     teamPath,
     permissionConfig = RUNTIME_DEFAULT_CONFIG,
+    preview = false,
   } = opts;
   const cmds: ParsedTmuxCommand[] = [];
 
@@ -370,7 +373,7 @@ export function composeTmuxCommands(opts: {
         withLaunchArgs?: (args: string[], projectCwd?: string) => PaneAdapter;
       };
       const codexAdapter =
-        typeof adapter.withLaunchArgs === "function"
+        !preview && typeof adapter.withLaunchArgs === "function"
           ? adapter.withLaunchArgs(resolveCodexTeamLaunchArgs(permissionConfig), cwd)
           : adapter;
       return codexAdapter.command({
@@ -862,6 +865,7 @@ export class TmuxTeamBackend implements TeamBackend {
       orchestratorHostKind: req.orchestratorHostKind ?? "claude",
       teamPath: req.teamPath,
       permissionConfig,
+      preview: req.dryRun,
     });
     return { mode: req.mode, targetName: req.targetName, commands };
   }
@@ -943,13 +947,36 @@ export class TmuxTeamBackend implements TeamBackend {
     // port can verify exact definition_ref carriage on this substrate.
     const dispatchPlan = dispatchPlanFromTmuxPlan(req.specialists, plan.commands, req.runId);
     if (req.dryRun) {
+      const paneHosts = [
+        req.orchestratorHostKind ?? "claude",
+        ...req.specialists.map((specialist) =>
+          specialist.host_kind ?? req.orchestratorHostKind ?? "claude"),
+      ];
+      const codexBypassWithheld =
+        paneHosts.includes("codex") &&
+        resolveCodexTeamLaunchArgs(readRuntimePermissionConfig(req.cwd)).length > 0;
+      const adapterPreflightWithheld = paneHosts.some((host) => host !== "claude");
+      const uncoveredAdapterPreflightWithheld = paneHosts.some(
+        (host) => host !== "claude" && !(host === "codex" && codexBypassWithheld),
+      );
       return {
         kind: this.kind,
         ok: true,
         plannedCommands,
         orchestratorPaneId: null,
         teammatePaneIds: {},
-        notes: ["dry-run: tmux not invoked"],
+        notes: [
+          "dry-run: tmux not invoked",
+          `tmux availability and ${req.mode === "in-session" ? "window" : "session"} ` +
+            "target-collision probes withheld until real dispatch; real dispatch may refuse " +
+            "before writing attempt records or launching panes",
+          ...(codexBypassWithheld
+            ? ["Codex bypass and enforcement preflight withheld in preview; planned Codex commands are bare"]
+            : []),
+          ...(adapterPreflightWithheld && uncoveredAdapterPreflightWithheld
+            ? ["mixed-host adapter preflight withheld until real dispatch"]
+            : []),
+        ],
         dispatchPlan,
       };
     }

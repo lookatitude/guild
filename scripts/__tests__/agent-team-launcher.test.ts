@@ -2,7 +2,7 @@
  * scripts/__tests__/agent-team-launcher.test.ts
  *
  * Spawns the script via tsx with a temp consumer-repo layout, verifies:
- *  - --dry-run with agent-team yaml → writes session.json + prints tmux commands
+ *  - --dry-run with agent-team yaml → prints a pure preview, writes nothing,
  *    and does NOT invoke tmux (dry-run is always safe).
  *  - --dry-run with subagent yaml → exit 1 with clear error.
  *  - Missing --team arg → exit 1.
@@ -170,6 +170,58 @@ function findSessionJson(cwd: string): string | null {
   return null;
 }
 
+type TreeSnapshot = Record<string, string>;
+
+/**
+ * Content-sensitive tree snapshot used by the FU08 planted write control.
+ * File type, mode, symlink target, and bytes are all bound so a dry-run cannot
+ * hide a mutation by rewriting an existing path or swapping its type.
+ */
+function snapshotTree(root: string): TreeSnapshot {
+  const snapshot: TreeSnapshot = {};
+  const visit = (relative: string): void => {
+    const absolute = relative === "." ? root : path.join(root, relative);
+    const stat = fs.lstatSync(absolute);
+    const mode = (stat.mode & 0o777).toString(8);
+    if (stat.isSymbolicLink()) {
+      snapshot[relative] = `symlink:${mode}:${fs.readlinkSync(absolute)}`;
+      return;
+    }
+    if (stat.isDirectory()) {
+      snapshot[relative] = `directory:${mode}`;
+      for (const entry of fs.readdirSync(absolute).sort()) {
+        visit(relative === "." ? entry : path.join(relative, entry));
+      }
+      return;
+    }
+    if (stat.isFile()) {
+      snapshot[relative] =
+        `file:${mode}:` + createHash("sha256").update(fs.readFileSync(absolute)).digest("hex");
+      return;
+    }
+    snapshot[relative] = `other:${mode}`;
+  };
+  visit(".");
+  return snapshot;
+}
+
+function treeDelta(before: TreeSnapshot, after: TreeSnapshot): string[] {
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((entry) => before[entry] !== after[entry])
+    .sort();
+}
+
+function manifestPreviewFromStdout(stdout: string): Record<string, unknown> {
+  const marker = "[agent-team-launcher] session manifest preview (not written):\n";
+  const start = stdout.indexOf(marker);
+  if (start < 0) throw new Error("session manifest preview marker missing");
+  const jsonStart = start + marker.length;
+  const endMarker = "\n[agent-team-launcher] dry-run complete — no state written.";
+  const end = stdout.indexOf(endMarker, jsonStart);
+  if (end < 0) throw new Error("session manifest preview terminator missing");
+  return JSON.parse(stdout.slice(jsonStart, end)) as Record<string, unknown>;
+}
+
 // Writes a stub `tmux` executable into a temp bin dir and returns that dir so
 // callers can prepend it to PATH. This lets the in-session collision guard be
 // exercised deterministically without spawning real tmux: `-V` reports a
@@ -216,7 +268,60 @@ function makeLaunchableTmuxBin(tmpDir: string): string {
     ].join("\n"),
     { mode: 0o755 }
   );
+  // Real-path persistence tests may route one or more lanes remotely. This
+  // deterministic ssh stub satisfies connect/probe/hook/spawn/teardown without
+  // touching a host; the launcher still exercises its real write path.
+  fs.writeFileSync(
+    path.join(binDir, "ssh"),
+    [
+      "#!/bin/sh",
+      'printf "%s\\n" "PRESENT claude" "PRESENT codex" "PRESENT tmux"',
+      'printf "%s\\n" "GUILD_HOOKS_ENFORCING" "GONE"',
+      "exit 0",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
   return binDir;
+}
+
+function seedPlanContextsForRealLaunch(cwd: string, runId: string): void {
+  const planDir = path.join(cwd, ".guild", "plan");
+  if (!fs.existsSync(planDir)) return;
+  const lanes: Array<[string, string]> = [];
+  for (const file of fs.readdirSync(planDir).filter((entry) => entry.endsWith(".md"))) {
+    let taskId: string | null = null;
+    for (const line of fs.readFileSync(path.join(planDir, file), "utf8").split(/\r?\n/)) {
+      const task = line.match(/^\s*-\s*task-id:\s*(\S+)/);
+      if (task) {
+        taskId = task[1];
+        continue;
+      }
+      const owner = line.match(/^\s*-\s*owner:\s*(\S+)/);
+      if (owner && taskId) {
+        lanes.push([owner[1], taskId]);
+        taskId = null;
+      }
+    }
+  }
+  if (lanes.length > 0) writeRunContexts(cwd, runId, lanes);
+}
+
+function runRealScript(
+  args: string[],
+  env: Record<string, string | undefined> = {},
+): { exitCode: number; stdout: string; stderr: string } {
+  const cwdIndex = args.indexOf("--cwd");
+  if (cwdIndex < 0) throw new Error("runRealScript requires --cwd");
+  const cwd = args[cwdIndex + 1];
+  const runIdIndex = args.indexOf("--run-id");
+  const runId = runIdIndex >= 0 ? args[runIdIndex + 1] : INHERITED_RUN_ID;
+  seedPlanContextsForRealLaunch(cwd, runId);
+  const binDir = makeLaunchableTmuxBin(cwd);
+  return runScript(
+    args.filter((arg) => arg !== "--dry-run"),
+    { ...env, PATH: `${binDir}:${env.PATH ?? process.env["PATH"] ?? ""}` },
+  );
 }
 
 // Fake bin dir with tmux + claude + codex stubs for mixed-host preflight tests.
@@ -316,9 +421,219 @@ describe("agent-team-launcher.ts", () => {
       expect(exitCode).toBe(0);
     });
 
-    it("writes session.json under .guild/runs/<run-id>/agent-team/", () => {
+    it("is a pure preview: the entire consumer tree stays byte-identical even with shadow routing and an approval override", () => {
+      const runId = "run-20260820-120000-fu08-pure-preview";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      runScript([
+      launcherTestBindFor(tmpDir, runId);
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "settings.json"),
+        JSON.stringify({ model_routing: { shadow: "on" } }, null, 2) + "\n",
+        "utf8",
+      );
+      const before = snapshotTree(tmpDir);
+
+      const result = runScript(
+        [
+          "--team",
+          teamPath,
+          "--session-name",
+          "guild-test-fu08",
+          "--cwd",
+          tmpDir,
+          "--run-id",
+          runId,
+          "--approval-override",
+          "FU08 planted control: a preview override must never write an audit record",
+          "--dry-run",
+        ],
+        {},
+        false,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("dry-run");
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      expect(findSessionJson(tmpDir)).toBeNull();
+    });
+
+    it("CONTROL: the whole-tree detector catches a planted write outside the run tree", () => {
+      const before = snapshotTree(tmpDir);
+      fs.writeFileSync(path.join(tmpDir, "planted-unexpected-preview-write"), "mutation\n", "utf8");
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([
+        "planted-unexpected-preview-write",
+      ]);
+    });
+
+    it.each(["--reap", "--dismiss-completed"])(
+      "keeps administrative %s pure and labels withheld liveness/termination effects",
+      (operation) => {
+        const runId = "run-20260820-122000-fu08-maintenance";
+        const sessionDir = path.join(tmpDir, ".guild", "runs", runId, "agent-team");
+        fs.mkdirSync(sessionDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(sessionDir, "session.json"),
+          JSON.stringify({
+            run_id: runId,
+            backend: "tmux",
+            teammate_panes: [{ specialist: "backend", task_id: "T1", pane_id: "%9" }],
+          }, null, 2) + "\n",
+        );
+        const before = snapshotTree(tmpDir);
+        const args = [operation, "--cwd", tmpDir, "--run-id", runId, "--dry-run"];
+        const result = runScript(args, {}, false);
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toMatch(/pure preview/i);
+        expect(result.stdout).toMatch(/liveness|termination/i);
+        expect(result.stdout).toMatch(/withheld/i);
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it.each([
+      ["real", ["--reap", "--dismiss-completed"]],
+      ["dry-run", ["--dismiss-completed", "--reap", "--dry-run"]],
+    ] as const)(
+      "refuses mutually exclusive maintenance modes before any %s effects",
+      (_label, operations) => {
+        const before = snapshotTree(tmpDir);
+        const result = runScript([...operations, "--cwd", tmpDir], {}, false);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toMatch(/--reap.*--dismiss-completed.*mutually exclusive/i);
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it.each(["agent", "subagent"])(
+      "keeps the %s direct-dispatch preview byte-identical",
+      (agentMode) => {
+        const runId = `run-20260820-121000-fu08-${agentMode}`;
+        const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+        launcherTestBindFor(tmpDir, runId);
+        const before = snapshotTree(tmpDir);
+        const result = runScript(
+          [
+            "--team", teamPath,
+            "--cwd", tmpDir,
+            "--run-id", runId,
+            `--agent-mode=${agentMode}`,
+            "--dry-run",
+          ],
+          {},
+          false,
+        );
+        expect(result.exitCode).toBe(0);
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it("keeps the cmux preview byte-identical while returning in-memory result and manifest previews", () => {
+      const runId = "run-20260820-122000-fu08-cmux";
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, runId);
+      const before = snapshotTree(tmpDir);
+      const result = runScript(
+        [
+          "--team", teamPath,
+          "--cwd", tmpDir,
+          "--run-id", runId,
+          "--agent-mode=team",
+          "--dry-run",
+        ],
+        { CMUX_WORKSPACE_ID: "fu08-preview-workspace" },
+        false,
+      );
+      expect(result.exitCode).toBe(0);
+      const signal = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+        teamResult: unknown;
+        manifest: unknown;
+        teamResultPreview?: unknown;
+        manifestPreview?: unknown;
+      };
+      expect(signal.teamResult).toBeNull();
+      expect(signal.manifest).toBeNull();
+      expect(signal.teamResultPreview).toBeDefined();
+      expect(signal.manifestPreview).toBeDefined();
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+    });
+
+    it("keeps a remote-routing preview byte-identical", () => {
+      const runId = "run-20260820-123000-fu08-remote";
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      launcherTestBindFor(tmpDir, runId);
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "settings.json"),
+        JSON.stringify({
+          defaults: {
+            cross_host: {
+              enabled: true,
+              hosts: { "codex-remote": { address: "preview.invalid", user: "ci" } },
+            },
+          },
+          model_routing: { shadow: "on" },
+        }, null, 2) + "\n",
+        "utf8",
+      );
+      const before = snapshotTree(tmpDir);
+      const result = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" },
+        false,
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/dry-run.*remote dispatch/i);
+      expect(result.stdout).toMatch(/hook-install preflight not run/i);
+      expect(result.stdout).toMatch(/planned BARE/i);
+      expect(result.stdout).not.toMatch(/emitted .*remote guild\.task_assignment/i);
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+    });
+
+    it("labels tmux availability and target-collision gates withheld by a pure preview", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const result = runScript([
+        "--team",
+        teamPath,
+        "--session-name",
+        "guild-withheld-gates",
+        "--cwd",
+        tmpDir,
+        "--dry-run",
+      ]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/availability.*collision.*withheld.*real dispatch/i);
+      expect(result.stdout).toMatch(/real dispatch may refuse.*before.*writ.*launch/i);
+    });
+
+    it.each(["--approval-override", "--session-name"])(
+      "refuses a flag-shaped value for %s before authorization or effects",
+      (option) => {
+        const runId = `run-20260820-124000-fu08-${option.slice(2)}`;
+        const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+        launcherTestBindFor(tmpDir, runId);
+        writeRunContexts(tmpDir, runId, [
+          ["architect", "architect"],
+          ["backend", "backend"],
+          ["qa", "qa"],
+        ]);
+        const before = snapshotTree(tmpDir);
+
+        const result = runScript(
+          ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, option, "--dry-run"],
+          { GUILD_DISPATCH_APPROVAL_OVERRIDE: undefined },
+          false,
+        );
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toMatch(new RegExp(`${option}.*requires.*value`, "i"));
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it("does not write session.json and emits the same manifest as an in-memory preview", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { stdout } = runScript([
         "--team",
         teamPath,
         "--session-name",
@@ -327,13 +642,13 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
+      expect(findSessionJson(tmpDir)).toBeNull();
+      expect(manifestPreviewFromStdout(stdout).session_name).toBe("guild-test-001");
     });
 
-    it("session.json contains session_name, env, teammate_panes for all specialists", () => {
+    it("manifest preview contains session_name, env, teammate_panes for all specialists", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      runScript([
+      const { stdout } = runScript([
         "--team",
         teamPath,
         "--session-name",
@@ -342,8 +657,11 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir)!;
-      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as {
+        session_name: string;
+        env: Record<string, string>;
+        teammate_panes: Array<{ specialist: string }>;
+      };
       expect(manifest.session_name).toBe("guild-test-002");
       expect(manifest.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBe("1");
       expect(Array.isArray(manifest.teammate_panes)).toBe(true);
@@ -364,14 +682,15 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir)!;
-      // .../runs/<id>/agent-team/session.json → .../runs/<id>
-      const runDir = path.dirname(path.dirname(sessionJson));
+      const runDir = path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID);
       expect(fs.existsSync(path.join(runDir, "tasks"))).toBe(false);
       // Fix B (run-identity-and-dispatch): a dry run persists NOTHING under
       // task-cells/ — the records are immutable attempt-1 files whose presence
       // poisoned the next real launch of the same run id.
       expect(fs.existsSync(path.join(runDir, "task-cells"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "task-runs"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "team-result"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "agent-team"))).toBe(false);
     });
 
     it("exports GUILD_TASK_ASSIGNMENT into each pane command", () => {
@@ -530,12 +849,17 @@ describe("agent-team-launcher.ts", () => {
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/tmux\s+new-session/);
       expect(stdout).toMatch(/codex exec/);
+      expect(stdout).toMatch(/bypass.*enforcement preflight.*withheld.*preview/is);
+      expect(stdout).toMatch(/planned Codex commands are bare/i);
       expect(stdout).toMatch(/agent-bus/);
       expect(stdout).not.toMatch(/TaskCreated/);
       expect(stdout).not.toMatch(/CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1/);
 
-      const sessionJson = findSessionJson(tmpDir)!;
-      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as {
+        orchestrator_host_kind: string;
+        env: Record<string, string>;
+        teammate_panes: Array<{ host_kind: string }>;
+      };
       expect(manifest.orchestrator_host_kind).toBe("codex");
       expect(manifest.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined();
       const hosts = manifest.teammate_panes.map((p: { host_kind: string }) => p.host_kind);
@@ -635,11 +959,10 @@ describe("agent-team-launcher.ts", () => {
 
     it("records mode=in-session + window_name in the manifest", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"], {
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"], {
         TMUX: "/tmp/tmux-1000/default,12345,0",
       });
-      const sessionJson = findSessionJson(tmpDir)!;
-      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout);
       expect(manifest.mode).toBe("in-session");
       expect(manifest.window_name).toBe("guild-test-slug");
     });
@@ -731,18 +1054,22 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).not.toMatch(/new-session/);
     });
 
-    // Step 2: --agent-mode=auto + $TMUX unset + tmux installed → team new-session
-    it("auto + TMUX unset + tmux available → team new-session (dry-run output)", () => {
+    // Step 2: a pure preview never executes `tmux -V`; it reports the safe floor.
+    it("auto + TMUX unset → probe-free subagent preview floor even when tmux is installed", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const fakeBin = makeFakeTmuxBin(tmpDir, []);
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto",
          "--session-name", "guild-ladder-test-001", "--dry-run"],
         { TMUX: undefined, PATH: `${fakeBin}:${process.env.PATH ?? ""}` }
       );
       expect(exitCode).toBe(0);
-      expect(stdout).toMatch(/new-session/);
-      expect(stdout).not.toMatch(/new-window/);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("subagent");
+      expect(signal.previewOnly).toBe(true);
+      expect(signal.reason).toMatch(/availability probe withheld/i);
+      expect(stderr).toMatch(/did not execute `tmux -V`/);
+      expect(stdout).not.toMatch(/new-session|new-window/);
     });
 
     // Step 3: the host advertises independent agents but cannot prove child env carriage.
@@ -1094,12 +1421,14 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toMatch(/CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1/);
     });
 
-    it("dry-run: session.json records host_kind + adapter_version per pane (CH-5)", () => {
+    it("dry-run: manifest preview records host_kind + adapter_version per pane (CH-5)", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
-      const manifest = JSON.parse(fs.readFileSync(findSessionJson(tmpDir)!, "utf8"));
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      const manifest = manifestPreviewFromStdout(stdout) as {
+        teammate_panes: Array<{ specialist: string; host_kind: string; adapter_version: string }>;
+      };
       const byName: Record<string, { host_kind: string; adapter_version: string }> =
-        Object.fromEntries(manifest.teammate_panes.map((p: { specialist: string }) => [p.specialist, p]));
+        Object.fromEntries(manifest.teammate_panes.map((p) => [p.specialist, p]));
       expect(byName.security.host_kind).toBe("codex");
       expect(byName.architect.host_kind).toBe("claude");
       expect(byName.security.adapter_version).toBe("1");
@@ -1482,7 +1811,7 @@ describe("agent-team-launcher.ts", () => {
     // ── no caller id → inherit lifecycle sentinel, never mint ────────────
     it("no --run-id supplied → inherits current-run-id without minting", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      const { exitCode } = runScript([
+      const { exitCode, stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-g5-mint",
         "--cwd", tmpDir,
@@ -1490,7 +1819,7 @@ describe("agent-team-launcher.ts", () => {
       ]);
       expect(exitCode).toBe(0);
       expect(listRunDirs(tmpDir)).toEqual([INHERITED_RUN_ID]);
-      const manifest = JSON.parse(fs.readFileSync(findSessionJson(tmpDir)!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout);
       expect(manifest.run_id).toBe(INHERITED_RUN_ID);
     });
 
@@ -1947,7 +2276,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2012,7 +2341,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com" } },
       });
 
-      runScript(
+      runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2051,7 +2380,7 @@ describe("agent-team-launcher.ts", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
       writePlanFile(tmpDir, slug);
 
-      const { exitCode } = runScript([
+      const { exitCode } = runRealScript([
         "--team", teamPath, "--cwd", tmpDir, "--dry-run",
       ]);
       expect(exitCode).toBe(0);
@@ -2113,7 +2442,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2156,7 +2485,7 @@ describe("agent-team-launcher.ts", () => {
         "    default_tier: mid",
       ].join("\n"), "utf8");
 
-      const { exitCode } = runScript([
+      const { exitCode } = runRealScript([
         "--team", teamPath, "--cwd", tmpDir, "--dry-run",
       ]);
       expect(exitCode).toBe(0);
@@ -2222,7 +2551,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2270,7 +2599,7 @@ describe("agent-team-launcher.ts", () => {
       writeHostManifest(tmpDir, "claude", "claude");
       writeCrossHostSettingsArch6(tmpDir, { enabled: true, hosts: {} });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2312,7 +2641,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2407,7 +2736,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2499,7 +2828,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-w2a2": { address: "remote.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude-w2a2" }
       );
@@ -2582,7 +2911,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2619,7 +2948,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2651,7 +2980,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com" } },
       });
 
-      runScript(
+      runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2686,19 +3015,17 @@ describe("agent-team-launcher.ts", () => {
   //   3. Absent canonical field → source-owned default in manifest and dispatch.
   // ─────────────────────────────────────────────────────────────
   describe("D-CAP: capability_scope block-list parsing (Wave-3)", () => {
-    it("parses capability_scope block lists from team.yaml into session.json teammate_panes", () => {
+    it("parses capability_scope block lists into manifest-preview teammate_panes", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-001",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
       const arch = manifest.teammate_panes.find(
         (p: { specialist: string }) => p.specialist === "architect"
@@ -2717,15 +3044,13 @@ describe("agent-team-launcher.ts", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-002",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
       // qa has no field in the fixture, so the source-owned canonical default wins.
       const qa = manifest.teammate_panes.find(
@@ -2739,15 +3064,13 @@ describe("agent-team-launcher.ts", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-003",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
       // All 3 specialists must appear in the manifest
       const names = manifest.teammate_panes.map((p: { specialist: string }) => p.specialist);
@@ -2763,15 +3086,13 @@ describe("agent-team-launcher.ts", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "test-slug", "team-generated-shape.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-004",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
       expect(manifest.teammate_panes.length).toBe(3);
       // Every canonical role receives its source-owned runtime default.
@@ -2879,7 +3200,7 @@ describe("agent-team-launcher.ts", () => {
       const runIds = fs
         .readdirSync(runsDir)
         .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
-      // There must be a run (session.json is written in dry-run)
+      // The lifecycle-owned binding directory remains, but preview adds no state.
       expect(runIds.length).toBe(1);
       const scopeDir = path.join(runsDir, runIds[0], "scope");
       expect(stdout).toContain("GUILD_CAPABILITY_SCOPE");

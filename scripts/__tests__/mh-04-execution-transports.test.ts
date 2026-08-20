@@ -885,6 +885,16 @@ describe("selectExecutionSubstrate — the launcher seam (MHRC-MOD-003)", () => 
     expect(dry.calls).toEqual([]);
   });
 
+  it("FU08: auto dry-run executes no availability probe and reports the probe-free floor honestly", () => {
+    const p = probe({ available: true, independent: true });
+    const selection = selectExecutionSubstrate({ requested_mode: "auto", dry_run: true }, p);
+    expect(p.calls).toEqual(["inside"]);
+    expect(selection.dispatch_mode).toBe("subagent");
+    expect(selection.transport_id).toBeNull();
+    expect(selection.reason).toMatch(/preview.*probe.*withheld/i);
+    expect(selection.warning).toMatch(/real dispatch.*may select/i);
+  });
+
   it("stops probing as soon as the ladder resolves", () => {
     const p = probe({ inside: true });
     selectExecutionSubstrate({ requested_mode: "auto", dry_run: false }, p);

@@ -47,6 +47,7 @@ import {
 import {
   claimConfirmation,
   loadConfirmationEntries,
+  previewConfirmation,
   recordConfirmationDecision,
 } from "../../src/modules/dispatch/workflows/confirmation-gate";
 
@@ -468,6 +469,35 @@ describe("T7-M4 - the exact-key confirmation arbiter is wired and never leaks ap
     const second = claim({ ...baseKey });
     expect(second.prompt_id).toBe(first.prompt_id);
     expect(loadConfirmationEntries(root, RUN_ID)).toHaveLength(1);
+  });
+
+  test("FU08 preview computes the next exact-key prompt without creating state", () => {
+    const statePath = path.join(runDirOf(root), "confirmations", "state.json");
+    const preview = previewConfirmation({ root, runId: RUN_ID, key: baseKey });
+    expect(preview.prompt_id).toBe(0);
+    expect(preview.already_decided).toBe(false);
+    expect(preview.decision).toBeNull();
+    expect(fs.existsSync(statePath)).toBe(false);
+    expect(loadConfirmationEntries(root, RUN_ID)).toEqual([]);
+  });
+
+  test("FU08 preview replays an existing decision without mutating its state file", () => {
+    claim(baseKey);
+    recordConfirmationDecision({
+      root,
+      binding: { run_id: RUN_ID, binding_ref: bindingRef },
+      key: baseKey,
+      decision: "approved",
+    });
+    const statePath = path.join(runDirOf(root), "confirmations", "state.json");
+    const before = fs.readFileSync(statePath);
+
+    const preview = previewConfirmation({ root, runId: RUN_ID, key: baseKey });
+
+    expect(preview.prompt_id).toBe(0);
+    expect(preview.already_decided).toBe(true);
+    expect(preview.decision).toBe("approved");
+    expect(fs.readFileSync(statePath).equals(before)).toBe(true);
   });
 
   test.each([

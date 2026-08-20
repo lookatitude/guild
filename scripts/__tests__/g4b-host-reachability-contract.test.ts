@@ -183,7 +183,7 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
   const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
   const FIXTURE = path.resolve(__dirname, "../fixtures/team-wrapped-cli-host.yaml");
 
-  it("dry-run prints a cursor-agent pane command and records host_kind:\"cursor\" in the session manifest", () => {
+  it("dry-run prints a cursor-agent pane command and previews host_kind:\"cursor\" without a manifest write", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "g4b-e2e-"));
     try {
       const teamDir = path.join(tmpDir, ".guild", "team");
@@ -216,7 +216,16 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
 
       const runsDir = path.join(tmpDir, ".guild", "runs");
       const manifestPath = path.join(runsDir, runId, "agent-team", "session.json");
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      expect(fs.existsSync(manifestPath)).toBe(false);
+      const marker = "[agent-team-launcher] session manifest preview (not written):\n";
+      const start = stdout.indexOf(marker);
+      const end = stdout.indexOf(
+        "\n[agent-team-launcher] dry-run complete — no state written.",
+        start + marker.length,
+      );
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      const manifest = JSON.parse(stdout.slice(start + marker.length, end));
       const hostKinds = manifest.teammate_panes.map((p: { host_kind: string }) => p.host_kind);
       expect(hostKinds).toContain("cursor");
     } finally {

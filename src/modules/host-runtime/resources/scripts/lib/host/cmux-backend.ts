@@ -218,8 +218,13 @@ export class CmuxTeamBackend implements TeamBackend {
         throw new Error(`cmux lane ${lane.name} requires a ${hostKind} adapter`);
       }
       const adapter = this.resolveAdapter(hostKind);
-      const preflight = adapter.preflight();
-      if (!preflight.ok) throw new Error(`${hostKind} preflight failed: ${preflight.message}`);
+      // FU08: an OPERATOR preview is pure. A pending real dispatch separately
+      // asks for an adapter-only preflight pass before immutable TaskCells are
+      // written; that pass still keeps every cmux surface closed.
+      if (!req.dryRun || req.preflightOnly === true) {
+        const preflight = adapter.preflight();
+        if (!preflight.ok) throw new Error(`${hostKind} preflight failed: ${preflight.message}`);
+      }
       const adapterEnv = adapter.env(paneSpec);
       const adapterCommand = adapter.command(paneSpec);
       if (
@@ -284,6 +289,17 @@ export class CmuxTeamBackend implements TeamBackend {
     const dispatchPlan: GuildDispatchDescriptor[] = [];
     const opened: Array<{ lane: Specialist; surface: string }> = [];
     const fail = (detail: string): TeamLaunchResult => {
+      if (req.dryRun) {
+        return {
+          kind: this.kind,
+          ok: false,
+          plannedCommands,
+          orchestratorPaneId: null,
+          teammatePaneIds: {},
+          notes: [detail, "dry-run preview failed before any cmux call; no cleanup was invoked"],
+          dispatchPlan,
+        };
+      }
       const survivors: Record<string, string> = {};
       let confirmed = 0;
       for (const { lane, surface } of [...opened].reverse()) {
@@ -357,7 +373,16 @@ export class CmuxTeamBackend implements TeamBackend {
       orchestratorPaneId: null,
       teammatePaneIds,
       notes: req.dryRun
-        ? ["dry-run: cmux not invoked; every planned surface uses --focus false"]
+        ? [
+          "dry-run: cmux not invoked; every planned surface uses --focus false",
+          "cmux availability probe withheld until real dispatch; real dispatch may refuse " +
+            "before writing attempt records or launching surfaces",
+          ...(req.preflightOnly !== true && req.specialists.some(
+              (lane) => (lane.host_kind ?? req.orchestratorHostKind ?? "claude") !== "claude",
+            )
+              ? ["mixed-host adapter preflight withheld until real dispatch"]
+              : []),
+          ]
         : [`${opened.length} visible cmux surface(s) opened without focus stealing`],
       dispatchPlan,
     };
