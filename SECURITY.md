@@ -71,6 +71,10 @@ or ordinary Guild sessions. In production mode it requires an explicit
   OS user, are real directories rather than symlinks, and use mode `0700`;
 - signing material, the used-key registry, output, and both lock positions stay
   strictly beneath that root;
+- signing material is a direct child of the root, and production accepts only
+  `<custody-root>/used-one-time-keys.json` as its registry, preventing callers
+  from partitioning custody or one-time-key history across alternate roots and
+  registries;
 - a custody-wide exclusive lock spans material admission, one-time-key
   reservation, and output publication; and
 - the held root descriptor is revalidated for protection and matched by

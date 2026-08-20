@@ -19,6 +19,9 @@
  *   - UNTRUSTED PRODUCTION CUSTODY: production requires an explicit current-user
  *     custody root at mode 0700. Material, registry, output, and both locks must
  *     remain strictly beneath it through real, current-user 0700 directories.
+ *     Material must be a direct child of that root, and the production registry
+ *     is fixed at `<custody-root>/used-one-time-keys.json`, so callers cannot
+ *     partition either the custody lock or the one-time-key history.
  *     One custody-wide O_EXCL lock is held across admission, reservation, and
  *     publication; the opened root descriptor and the final named root must
  *     retain the admitted protection and device/inode identity.
@@ -34,7 +37,8 @@
  *     a refusal, never an invitation to parse attacker-controlled bytes.
  *   - KEY REUSE: the {attestor_id, verification_root, key_index} tuple is
  *     reserved in the durable used-key registry BEFORE any output exists, under
- *     an exclusive lock at exactly `<registry>.lock`. A reservation survives a
+ *     an exclusive lock at exactly `<registry>.lock`. Production binds that
+ *     registry to the deterministic custody-root path. A reservation survives a
  *     later output failure — a one-time key that MAY have produced a signature
  *     is a consumed key, because "the write failed" is not evidence the
  *     signature never left the process.
@@ -115,6 +119,11 @@ export function lockPathFor(registryPath: string): string {
 /** The production-wide single-user custody lock, fixed beneath the custody root. */
 export function custodyLockPathFor(custodyRoot: string): string {
   return path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+}
+
+/** The one production registry identity for a custody root. */
+export function productionRegistryPathFor(custodyRoot: string): string {
+  return path.join(custodyRoot, "used-one-time-keys.json");
 }
 
 export interface SignReleaseAttestationOptions {
@@ -464,6 +473,24 @@ function releaseProductionCustodyLease(lease: ProductionCustodyLease): void {
   if (revalidationError !== undefined) throw revalidationError;
   if (namedRootCloseFailed || closeFailed || unlinkFailed || rootCloseFailed) {
     refuse("production custody root lock could not be released cleanly");
+  }
+}
+
+function releaseUsedKeyRegistryLock(descriptor: number, registryLockPath: string): void {
+  let closeFailed = false;
+  try {
+    fs.closeSync(descriptor);
+  } catch {
+    closeFailed = true;
+  }
+  let unlinkFailed = false;
+  try {
+    fs.unlinkSync(registryLockPath);
+  } catch (error) {
+    unlinkFailed = (error as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+  if (closeFailed || unlinkFailed) {
+    refuse("used-key registry lock could not be released cleanly");
   }
 }
 
@@ -880,6 +907,12 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
     custodyRoot = path.resolve(opts.custody_root_path as string);
     custodyLeaseLockPath = custodyLockPathFor(custodyRoot);
     verifyProductionCustodyRoot(custodyRoot);
+    if (path.dirname(materialPath) !== custodyRoot) {
+      refuse("production signing material must be a direct child of its canonical custody root");
+    }
+    if (registryPath !== productionRegistryPathFor(custodyRoot)) {
+      refuse("production used-key registry must use the deterministic custody-root registry path");
+    }
     assertProductionPositionsWithinCustodyRoot(custodyRoot, [
       materialPath,
       registryPath,
@@ -1035,12 +1068,7 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
       writeAtomic0600(outputPath, `${hexSafeJson(output)}\n`);
       return Object.freeze(output);
     } finally {
-      fs.closeSync(lockDescriptor);
-      try {
-        fs.unlinkSync(lockPath);
-      } catch {
-        /* the lock is already gone */
-      }
+      releaseUsedKeyRegistryLock(lockDescriptor, lockPath);
     }
   } finally {
     if (custodyLease !== null) releaseProductionCustodyLease(custodyLease);

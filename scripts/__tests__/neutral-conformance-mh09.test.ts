@@ -1345,6 +1345,10 @@ describe("the production external one-time signer", () => {
     return written;
   }
 
+  function productionRegistryPath(custodyRoot: string): string {
+    return path.join(custodyRoot, "used-one-time-keys.json");
+  }
+
   it("accepts an explicit external material file, digest, output path, mode, and durable used-key registry path, and produces a signing output", () => {
     // NOT wrapped in toThrow(): a throw-only stub still fails this (correctly
     // RED, since Signer.mod() genuinely throws while the module is absent), but
@@ -1509,6 +1513,47 @@ describe("the production external one-time signer", () => {
       ).toThrow(/custody_root_path|custody root/i);
     });
 
+    it("production mode binds signing material to the direct canonical custody root", () => {
+      const { material } = writeProductionShapedFixtureMaterial("nested-custody-source");
+      const custodyRoot = tempRoot("signer-nested-custody-root");
+      const nested = path.join(custodyRoot, "nested");
+      fs.mkdirSync(nested, { mode: 0o700 });
+      const materialPath = path.join(nested, "material.json");
+      fs.writeFileSync(
+        materialPath,
+        JSON.stringify({
+          ...material,
+          schema_version: Signer.exported<string>("SIGNER_PRODUCTION_MATERIAL_SCHEMA"),
+        }),
+        { mode: 0o600 },
+      );
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-nested-custody-root")}`,
+          output_path: path.join(custodyRoot, "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(custodyRoot, "used-one-time-keys.json"),
+          custody_root_path: custodyRoot,
+        })
+      ).toThrow(/material.*direct.*custody root|canonical custody root|custody root.*material/i);
+    });
+
+    it("production mode binds every material tree to one deterministic used-key registry", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("alternate-production-registry");
+      const custodyRoot = path.dirname(materialPath);
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-alternate-production-registry")}`,
+          output_path: path.join(custodyRoot, "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(custodyRoot, "alternate-registry.json"),
+          custody_root_path: custodyRoot,
+        })
+      ).toThrow(/registry.*deterministic|registry.*custody root|production registry.*path/i);
+    });
+
     it("production mode refuses a custody root that is not a private current-user directory", () => {
       const { materialPath } = writeProductionShapedFixtureMaterial("insecure-custody-root");
       const custodyRoot = path.dirname(materialPath);
@@ -1519,7 +1564,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-insecure-custody-root")}`,
           output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/custody root.*private|private.*custody root|custody root.*mode/i);
@@ -1535,7 +1580,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-custody-root-escape")}`,
           output_path: outsideOutput,
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/custody root.*contain|beneath.*custody root|outside.*custody root/i);
@@ -1552,34 +1597,29 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-custody-lock-role-collision")}`,
           output_path: custodyLockPath,
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/distinct|custody.*lock|reserved.*position/i);
       expect(fs.existsSync(custodyLockPath)).toBe(false);
     });
 
-    it.each(["registry", "output"] as const)(
-      "production mode refuses a non-private %s directory beneath the custody root",
-      (insecureRole) => {
-        const { materialPath } = writeProductionShapedFixtureMaterial(`insecure-${insecureRole}-directory`);
-        const custodyRoot = path.dirname(materialPath);
-        const registryDir = path.join(custodyRoot, "registry");
-        const outputDir = path.join(custodyRoot, "output");
-        fs.mkdirSync(registryDir, { mode: insecureRole === "registry" ? 0o755 : 0o700 });
-        fs.mkdirSync(outputDir, { mode: insecureRole === "output" ? 0o755 : 0o700 });
-        expect(() =>
-          Signer.invoke("signReleaseAttestation", {
-            material_path: materialPath,
-            digest: `nad1:${neutralSha256Hex(`mh09-insecure-${insecureRole}-directory`)}`,
-            output_path: path.join(outputDir, "out.json"),
-            mode: "production",
-            used_key_registry_path: path.join(registryDir, "reg.json"),
-            custody_root_path: custodyRoot,
-          })
-        ).toThrow(/custody.*directory.*private|private.*custody.*directory|directory.*mode/i);
-      },
-    );
+    it("production mode refuses a non-private output directory beneath the custody root", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("insecure-output-directory");
+      const custodyRoot = path.dirname(materialPath);
+      const outputDir = path.join(custodyRoot, "output");
+      fs.mkdirSync(outputDir, { mode: 0o755 });
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-insecure-output-directory")}`,
+          output_path: path.join(outputDir, "out.json"),
+          mode: "production",
+          used_key_registry_path: productionRegistryPath(custodyRoot),
+          custody_root_path: custodyRoot,
+        })
+      ).toThrow(/custody.*directory.*private|private.*custody.*directory|directory.*mode/i);
+    });
 
     it("production mode refuses when the declared custody root already has an active exclusive signer lock", () => {
       const { materialPath } = writeProductionShapedFixtureMaterial("custody-root-lock");
@@ -1592,7 +1632,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-custody-root-lock")}`,
           output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/custody root.*lock|custody.*signer.*active|exclusive custody/i);
@@ -1622,7 +1662,7 @@ describe("the production external one-time signer", () => {
             digest: `nad1:${neutralSha256Hex("mh09-custody-root-lock-lifetime")}`,
             output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            used_key_registry_path: productionRegistryPath(custodyRoot),
             custody_root_path: custodyRoot,
           })
         ).toThrow(/pinned|authority/i);
@@ -1657,7 +1697,7 @@ describe("the production external one-time signer", () => {
             digest: `nad1:${neutralSha256Hex("mh09-custody-root-mode-drift")}`,
             output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            used_key_registry_path: productionRegistryPath(custodyRoot),
             custody_root_path: custodyRoot,
           })
         ).toThrow(/custody root.*private|custody root.*mode|custody root.*changed/i);
@@ -1707,7 +1747,7 @@ describe("the production external one-time signer", () => {
             digest: `nad1:${neutralSha256Hex("mh09-custody-root-identity-drift")}`,
             output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            used_key_registry_path: productionRegistryPath(custodyRoot),
             custody_root_path: custodyRoot,
           })
         ).toThrow(/custody root.*identity|custody root.*changed|named custody root.*replaced/i);
@@ -1734,7 +1774,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-production-private-mode")}`,
           output_path: path.join(custodyRoot, "private-mode-out.json"),
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "private-mode-reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/private|permission|mode/i);
@@ -1746,7 +1786,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-production-private-schema")}`,
           output_path: path.join(custodyRoot, "private-schema-out.json"),
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "private-schema-reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/schema/i);
@@ -1762,7 +1802,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-production-material-directory")}`,
           output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/regular file/i);
@@ -1827,7 +1867,7 @@ describe("the production external one-time signer", () => {
             digest: "nad1:" + neutralSha256Hex("mh09-post-containment-symlink"),
             output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            used_key_registry_path: productionRegistryPath(custodyRoot),
             custody_root_path: custodyRoot,
           })
         ).toThrow(/symlink|redirect|position/i);
@@ -1860,7 +1900,7 @@ describe("the production external one-time signer", () => {
             digest: "nad1:" + neutralSha256Hex("mh09-post-read-private-mode"),
             output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            used_key_registry_path: productionRegistryPath(custodyRoot),
             custody_root_path: custodyRoot,
           })
         ).toThrow(/private|permission|mode/i);
@@ -1902,7 +1942,7 @@ describe("the production external one-time signer", () => {
             digest: "nad1:" + neutralSha256Hex("mh09-descriptor-close-failure"),
             output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            used_key_registry_path: productionRegistryPath(custodyRoot),
             custody_root_path: custodyRoot,
           })
         ).toThrow(/descriptor|close/i);
@@ -2032,6 +2072,81 @@ describe("the production external one-time signer", () => {
         })
       ).toThrow(/symlink|contain|escap|lock/i);
     });
+
+    it("attempts registry-lock unlink after a close failure and refuses the cleanup defect", () => {
+      const { materialPath } = writeFixtureMaterial("registry-lock-close-failure");
+      const registryPath = path.join(tempRoot("signer-registry-lock-close-reg"), "reg.json");
+      const registryLockPath = lockPathFor(registryPath);
+      const originalOpenSync = fs.openSync;
+      const originalCloseSync = fs.closeSync;
+      const originalUnlinkSync = fs.unlinkSync;
+      let registryLockDescriptor = -1;
+      let injected = false;
+      const openSpy = jest.spyOn(fs, "openSync").mockImplementation(((
+        target: fs.PathLike,
+        flags: fs.OpenMode,
+        mode?: fs.Mode,
+      ) => {
+        const descriptor = originalOpenSync(target, flags, mode);
+        if (path.resolve(String(target)) === registryLockPath) registryLockDescriptor = descriptor;
+        return descriptor;
+      }) as typeof fs.openSync);
+      const closeSpy = jest.spyOn(fs, "closeSync").mockImplementation((descriptor: number) => {
+        if (descriptor === registryLockDescriptor && !injected) {
+          originalCloseSync(descriptor);
+          injected = true;
+          throw Object.assign(new Error("injected registry-lock close failure"), { code: "EIO" });
+        }
+        return originalCloseSync(descriptor);
+      });
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: `nad1:${neutralSha256Hex("mh09-registry-lock-close-failure")}`,
+            output_path: path.join(tempRoot("signer-registry-lock-close-out"), "out.json"),
+            mode: "fixture",
+            used_key_registry_path: registryPath,
+          })
+        ).toThrow(/used-key registry lock.*released cleanly|registry lock.*cleanup/i);
+        expect(fs.existsSync(registryLockPath)).toBe(false);
+      } finally {
+        closeSpy.mockRestore();
+        openSpy.mockRestore();
+        if (fs.existsSync(registryLockPath)) originalUnlinkSync(registryLockPath);
+      }
+      expect(injected).toBe(true);
+    });
+
+    it("refuses a non-ENOENT registry-lock unlink failure", () => {
+      const { materialPath } = writeFixtureMaterial("registry-lock-unlink-failure");
+      const registryPath = path.join(tempRoot("signer-registry-lock-unlink-reg"), "reg.json");
+      const registryLockPath = lockPathFor(registryPath);
+      const originalUnlinkSync = fs.unlinkSync;
+      let injected = false;
+      const unlinkSpy = jest.spyOn(fs, "unlinkSync").mockImplementation((target: fs.PathLike) => {
+        if (path.resolve(String(target)) === registryLockPath && !injected) {
+          injected = true;
+          throw Object.assign(new Error("injected registry-lock unlink failure"), { code: "EIO" });
+        }
+        return originalUnlinkSync(target);
+      });
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: `nad1:${neutralSha256Hex("mh09-registry-lock-unlink-failure")}`,
+            output_path: path.join(tempRoot("signer-registry-lock-unlink-out"), "out.json"),
+            mode: "fixture",
+            used_key_registry_path: registryPath,
+          })
+        ).toThrow(/used-key registry lock.*released cleanly|registry lock.*cleanup/i);
+      } finally {
+        unlinkSpy.mockRestore();
+        if (fs.existsSync(registryLockPath)) originalUnlinkSync(registryLockPath);
+      }
+      expect(injected).toBe(true);
+    });
   });
 
   describe("§atomicity and non-leakage", () => {
@@ -2136,7 +2251,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-prod-absent")}`,
           output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
         })
       ).toThrow(/pinned|authority/i);
@@ -2148,7 +2263,7 @@ describe("the production external one-time signer", () => {
       const custodyRoot = tempRoot("signer-prod-fixture-material");
       const materialPath = path.join(custodyRoot, "material.json");
       const outputPath = path.join(custodyRoot, "out.json");
-      const registryPath = path.join(custodyRoot, "reg.json");
+      const registryPath = productionRegistryPath(custodyRoot);
       fs.writeFileSync(materialPath, JSON.stringify({ ...material, schema_version: productionSchema }), {
         mode: 0o600,
       });
@@ -2175,7 +2290,7 @@ describe("the production external one-time signer", () => {
           digest: `nad1:${neutralSha256Hex("mh09-prod-trust")}`,
           output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          used_key_registry_path: productionRegistryPath(custodyRoot),
           custody_root_path: custodyRoot,
           trust_root_override: { attestor_id: "guild.release-attestor", verification_root: "0".repeat(64) },
         })
