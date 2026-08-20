@@ -61,6 +61,32 @@ enumerating every hook, script, and MCP server with:
 - Any filesystem write outside `.guild/runs/` / `.guild/evolve/`
 - Declared `tools:` / `allowed-tools:` scope
 
+### Release-attestation signing custody
+
+The external `scripts/sign-release-attestation.ts` tool is not invoked by hooks
+or ordinary Guild sessions. In production mode it requires an explicit
+`--custody-root-path` with these enforced properties:
+
+- the custody root and every participating directory are owned by the current
+  OS user, are real directories rather than symlinks, and use mode `0700`;
+- signing material, the used-key registry, output, and both lock positions stay
+  strictly beneath that root;
+- signing material is a direct child of the root, and production accepts only
+  `<custody-root>/used-one-time-keys.json` as its registry, preventing callers
+  from partitioning custody or one-time-key history across alternate roots and
+  registries;
+- a custody-wide exclusive lock spans material admission, one-time-key
+  reservation, and output publication; and
+- the held root descriptor is revalidated for protection and matched by
+  device/inode to the named custody root before the operation returns.
+
+This is a trusted single-user custody boundary, not protection from arbitrary
+concurrent mutation by another process running as the same OS user. The lock
+serializes cooperating signer processes only. A production custodian must use a
+dedicated account or otherwise guarantee that no uncooperative same-user process
+can mutate the custody tree during signing. Private key material remains external
+to the repository and must never be committed.
+
 ## Install only from trusted sources
 
 Echoing Anthropic's standard guidance: **install Guild only from
