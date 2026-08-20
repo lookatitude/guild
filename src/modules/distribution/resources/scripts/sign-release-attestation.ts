@@ -16,10 +16,19 @@
  *     dedicated production material schema and only when its re-derived root
  *     equals the source-pinned root for its attestor id. Provisioning remains
  *     outside this repository; no caller-supplied root can extend trust.
- *   - SYMLINKS, at the leaf AND at any intermediate parent, for the material,
- *     registry, output, and lock positions: a link is a redirect wearing the
- *     required name, and a signer that follows one signs into (or reads out of)
- *     a tree nobody audited.
+ *   - STATICALLY VISIBLE SYMLINKS, at the leaf AND at any intermediate parent,
+ *     for the material, registry, output, and lock positions: a link is a
+ *     redirect wearing the required name, and a signer that follows one signs
+ *     into (or reads out of) a tree nobody audited. The material leaf is also
+ *     descriptor-bound against replacement while it is read. Atomic ancestor-
+ *     directory binding remains a production-custody prerequisite: path-based
+ *     checks cannot prove that a parent was not swapped and redirected back to
+ *     the same opened inode between checks.
+ *   - UNPROTECTED PRODUCTION MATERIAL: production material is opened once with
+ *     O_NOFOLLOW, verified through that descriptor as a private regular file
+ *     owned by the current process user, and read through the same descriptor.
+ *     The path must still name the opened inode after the read; replacement is
+ *     a refusal, never an invitation to parse attacker-controlled bytes.
  *   - KEY REUSE: the {attestor_id, verification_root, key_index} tuple is
  *     reserved in the durable used-key registry BEFORE any output exists, under
  *     an exclusive lock at exactly `<registry>.lock`. A reservation survives a
@@ -288,13 +297,133 @@ interface AdmittedMaterial {
   readonly leaves: readonly (readonly string[])[];
 }
 
-function admitMaterial(materialPath: string, mode: string): AdmittedMaterial {
-  let text: string;
+function verifySigningMaterialProtection(stats: fs.Stats, mode: string): void {
+  if (!stats.isFile()) {
+    refuse("signing material must be a regular file");
+  }
+  if (mode !== "production") return;
+  if (typeof process.getuid !== "function") {
+    refuse("production signing material owner cannot be verified on this platform");
+  }
+  if (stats.uid !== process.getuid()) {
+    refuse("production signing material must be owned by the current process user");
+  }
+  if ((stats.mode & 0o077) !== 0) {
+    refuse("production signing material must use a private file mode with no group or other permissions");
+  }
+}
+
+function readSigningMaterialText(materialPath: string, mode: string): string {
+  const noFollow = fs.constants.O_NOFOLLOW;
+  if (mode === "production" && typeof noFollow !== "number") {
+    refuse("production signing material cannot be opened with O_NOFOLLOW on this platform");
+  }
+
+  let descriptor: number;
   try {
-    text = fs.readFileSync(materialPath, "utf8");
-  } catch {
+    descriptor = fs.openSync(
+      materialPath,
+      fs.constants.O_RDONLY | (typeof noFollow === "number" ? noFollow : 0)
+    );
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ELOOP") {
+      refuse("signing material position is a symlink — refusing a redirected position");
+    }
     refuse("signing material is not readable");
   }
+
+  let text: string | undefined;
+  let operationError: unknown;
+  try {
+    let opened: fs.Stats;
+    try {
+      opened = fs.fstatSync(descriptor);
+    } catch {
+      refuse("signing material descriptor cannot be verified");
+    }
+    verifySigningMaterialProtection(opened, mode);
+
+    try {
+      text = fs.readFileSync(descriptor, "utf8");
+    } catch {
+      refuse("signing material is not readable");
+    }
+
+    let afterRead: fs.Stats;
+    try {
+      afterRead = fs.fstatSync(descriptor);
+    } catch {
+      refuse("signing material descriptor cannot be reverified after reading");
+    }
+    verifySigningMaterialProtection(afterRead, mode);
+
+    // The descriptor fixes the bytes we consumed. Rechecking containment and
+    // reopening the named leaf with O_NOFOLLOW proves that the leaf resolved
+    // through the current parent chain is still a non-link naming the same
+    // inode. It deliberately does not claim atomic ancestor-directory binding;
+    // production custody must provide that boundary before real material is
+    // admitted. A following stat would admit a leaf symlink to the already-
+    // opened inode and is therefore intentionally not used.
+    assertContainedPosition("material", materialPath);
+    let namedDescriptor: number;
+    try {
+      namedDescriptor = fs.openSync(
+        materialPath,
+        fs.constants.O_RDONLY | (typeof noFollow === "number" ? noFollow : 0)
+      );
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ELOOP") {
+        refuse("signing material position became a symlink while it was being read");
+      }
+      refuse("signing material position changed while it was being read");
+    }
+
+    let namedError: unknown;
+    try {
+      let named: fs.Stats;
+      try {
+        named = fs.fstatSync(namedDescriptor);
+      } catch {
+        refuse("signing material position cannot be verified after reading");
+      }
+      verifySigningMaterialProtection(named, mode);
+      if (named.dev !== opened.dev || named.ino !== opened.ino) {
+        refuse("signing material identity changed while it was being read");
+      }
+    } catch (error) {
+      namedError = error;
+    }
+    let namedCloseFailed = false;
+    try {
+      fs.closeSync(namedDescriptor);
+    } catch {
+      namedCloseFailed = true;
+    }
+    if (namedError !== undefined) throw namedError;
+    if (namedCloseFailed) {
+      refuse("signing material verification descriptor could not be closed");
+    }
+  } catch (error) {
+    operationError = error;
+  }
+
+  let closeFailed = false;
+  try {
+    fs.closeSync(descriptor);
+  } catch {
+    closeFailed = true;
+  }
+  if (operationError !== undefined) throw operationError;
+  if (closeFailed) {
+    refuse("signing material descriptor could not be closed");
+  }
+  return text as string;
+}
+
+function admitMaterial(materialPath: string, mode: string): AdmittedMaterial {
+  const text = readSigningMaterialText(materialPath, mode);
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

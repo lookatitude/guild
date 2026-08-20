@@ -1333,6 +1333,18 @@ describe("the production external one-time signer", () => {
     return { tree, material, materialPath };
   }
 
+  function writeProductionShapedFixtureMaterial(label: string) {
+    const written = writeFixtureMaterial(label);
+    const productionSchema = Signer.exported<string>("SIGNER_PRODUCTION_MATERIAL_SCHEMA");
+    fs.writeFileSync(
+      written.materialPath,
+      JSON.stringify({ ...written.material, schema_version: productionSchema }),
+      { mode: 0o600 },
+    );
+    fs.chmodSync(written.materialPath, 0o600);
+    return written;
+  }
+
   it("accepts an explicit external material file, digest, output path, mode, and durable used-key registry path, and produces a signing output", () => {
     // NOT wrapped in toThrow(): a throw-only stub still fails this (correctly
     // RED, since Signer.mod() genuinely throws while the module is absent), but
@@ -1484,6 +1496,191 @@ describe("the production external one-time signer", () => {
   });
 
   describe("§path containment", () => {
+    it("production mode refuses material that is not a private regular file before parsing or authority admission", () => {
+      const { materialPath } = writeFixtureMaterial("production-private-mode");
+      fs.chmodSync(materialPath, 0o644);
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-production-private-mode")}`,
+          output_path: path.join(tempRoot("signer-production-private-mode-out"), "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(tempRoot("signer-production-private-mode-reg"), "reg.json"),
+        })
+      ).toThrow(/private|permission|mode/i);
+
+      fs.chmodSync(materialPath, 0o600);
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-production-private-schema")}`,
+          output_path: path.join(tempRoot("signer-production-private-schema-out"), "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(tempRoot("signer-production-private-schema-reg"), "reg.json"),
+        })
+      ).toThrow(/schema/i);
+    });
+
+    it("production mode refuses a non-regular material position", () => {
+      const materialDirectory = tempRoot("signer-production-material-directory");
+      fs.chmodSync(materialDirectory, 0o700);
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialDirectory,
+          digest: `nad1:${neutralSha256Hex("mh09-production-material-directory")}`,
+          output_path: path.join(tempRoot("signer-production-material-directory-out"), "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(tempRoot("signer-production-material-directory-reg"), "reg.json"),
+        })
+      ).toThrow(/regular file/i);
+    });
+
+    it("refuses when the material path is replaced after its descriptor is opened, and never admits replacement bytes", () => {
+      const { materialPath } = writeFixtureMaterial("descriptor-path-replacement");
+      const originalOpenSync = fs.openSync;
+      let replaced = false;
+      const openSpy = jest.spyOn(fs, "openSync").mockImplementation(((target: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode) => {
+        const descriptor = originalOpenSync(target, flags, mode);
+        if (!replaced && path.resolve(String(target)) === path.resolve(materialPath)) {
+          replaced = true;
+          const displacedPath = `${materialPath}.displaced`;
+          fs.renameSync(materialPath, displacedPath);
+          fs.writeFileSync(materialPath, JSON.stringify({ attacker_controlled: true }), { mode: 0o600 });
+        }
+        return descriptor;
+      }) as typeof fs.openSync);
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: `nad1:${neutralSha256Hex("mh09-descriptor-path-replacement")}`,
+            output_path: path.join(tempRoot("signer-descriptor-path-replacement-out"), "out.json"),
+            mode: "fixture",
+            used_key_registry_path: path.join(tempRoot("signer-descriptor-path-replacement-reg"), "reg.json"),
+          })
+        ).toThrow(/changed|identity|replaced|position/i);
+      } finally {
+        openSpy.mockRestore();
+      }
+      expect(replaced).toBe(true);
+    });
+
+    it("refuses a same-inode symlink planted after containment but before the final identity check", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("post-containment-symlink");
+      const displacedPath = materialPath + ".displaced";
+      const originalOpenSync = fs.openSync;
+      let materialOpenCount = 0;
+      let planted = false;
+      const openSpy = jest.spyOn(fs, "openSync").mockImplementation(((
+        target: fs.PathLike,
+        flags: fs.OpenMode,
+        mode?: fs.Mode,
+      ) => {
+        if (path.resolve(String(target)) === path.resolve(materialPath)) {
+          materialOpenCount += 1;
+          if (materialOpenCount === 2) {
+            fs.renameSync(materialPath, displacedPath);
+            fs.symlinkSync(displacedPath, materialPath);
+            planted = true;
+          }
+        }
+        return originalOpenSync(target, flags, mode);
+      }) as typeof fs.openSync);
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: "nad1:" + neutralSha256Hex("mh09-post-containment-symlink"),
+            output_path: path.join(tempRoot("signer-post-containment-symlink-out"), "out.json"),
+            mode: "production",
+            used_key_registry_path: path.join(tempRoot("signer-post-containment-symlink-reg"), "reg.json"),
+          })
+        ).toThrow(/symlink|redirect|position/i);
+      } finally {
+        openSpy.mockRestore();
+      }
+      expect(planted).toBe(true);
+    });
+
+    it("production mode revalidates private owner/mode metadata after reading", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("post-read-private-mode");
+      const originalReadFileSync = fs.readFileSync;
+      let widened = false;
+      const readSpy = jest.spyOn(fs, "readFileSync").mockImplementation(((
+        target: fs.PathOrFileDescriptor,
+        options?: Parameters<typeof fs.readFileSync>[1],
+      ) => {
+        const value = originalReadFileSync(target, options as never);
+        if (typeof target === "number" && !widened) {
+          fs.chmodSync(materialPath, 0o644);
+          widened = true;
+        }
+        return value;
+      }) as typeof fs.readFileSync);
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: "nad1:" + neutralSha256Hex("mh09-post-read-private-mode"),
+            output_path: path.join(tempRoot("signer-post-read-private-mode-out"), "out.json"),
+            mode: "production",
+            used_key_registry_path: path.join(tempRoot("signer-post-read-private-mode-reg"), "reg.json"),
+          })
+        ).toThrow(/private|permission|mode/i);
+      } finally {
+        readSpy.mockRestore();
+      }
+      expect(widened).toBe(true);
+    });
+
+    it("refuses generically when an otherwise successful sensitive-descriptor close fails", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("descriptor-close-failure");
+      const originalOpenSync = fs.openSync;
+      const originalCloseSync = fs.closeSync;
+      let materialDescriptor = -1;
+      let closeFailed = false;
+      const openSpy = jest.spyOn(fs, "openSync").mockImplementation(((
+        target: fs.PathLike,
+        flags: fs.OpenMode,
+        mode?: fs.Mode,
+      ) => {
+        const descriptor = originalOpenSync(target, flags, mode);
+        if (materialDescriptor < 0 && path.resolve(String(target)) === path.resolve(materialPath)) {
+          materialDescriptor = descriptor;
+        }
+        return descriptor;
+      }) as typeof fs.openSync);
+      const closeSpy = jest.spyOn(fs, "closeSync").mockImplementation((descriptor: number) => {
+        if (descriptor === materialDescriptor && !closeFailed) {
+          closeFailed = true;
+          throw Object.assign(new Error("injected close marker"), { code: "EIO" });
+        }
+        return originalCloseSync(descriptor);
+      });
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: "nad1:" + neutralSha256Hex("mh09-descriptor-close-failure"),
+            output_path: path.join(tempRoot("signer-descriptor-close-failure-out"), "out.json"),
+            mode: "production",
+            used_key_registry_path: path.join(tempRoot("signer-descriptor-close-failure-reg"), "reg.json"),
+          })
+        ).toThrow(/descriptor|close/i);
+      } finally {
+        openSpy.mockRestore();
+        closeSpy.mockRestore();
+        if (materialDescriptor >= 0) {
+          try {
+            originalCloseSync(materialDescriptor);
+          } catch {
+            // The production path may already have closed it after the injected failure.
+          }
+        }
+      }
+      expect(closeFailed).toBe(true);
+    });
+
     it("lstat/refuses a symlinked material path — the real (non-symlink) material at the same content is otherwise valid", () => {
       const { material } = writeFixtureMaterial("symlink-material-real");
       const base = tempRoot("signer-symlink-material");
@@ -1710,7 +1907,9 @@ describe("the production external one-time signer", () => {
       const materialPath = path.join(tempRoot("signer-prod-fixture-material"), "material.json");
       const outputPath = path.join(tempRoot("signer-prod-fixture-out"), "out.json");
       const registryPath = path.join(tempRoot("signer-prod-fixture-reg"), "reg.json");
-      fs.writeFileSync(materialPath, JSON.stringify({ ...material, schema_version: productionSchema }));
+      fs.writeFileSync(materialPath, JSON.stringify({ ...material, schema_version: productionSchema }), {
+        mode: 0o600,
+      });
       expect(() =>
         Signer.invoke("signReleaseAttestation", {
           material_path: materialPath,
