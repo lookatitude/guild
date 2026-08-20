@@ -50,14 +50,14 @@
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
-      "sha256": "1046aa934e4fb2b7b671438c2771f33ad81277aa55f6efd968357a9a5274ede6"
+      "sha256": "6bb6c96dc24686e037ebb22a1021f3cd80bda5190e52d2a9600da4322935170e"
     },
     {
       "category": "skills",
       "id": "guild-team-compose/gap-handling.md",
       "source_path": "skills/meta/team-compose/gap-handling.md",
       "resource_path": "resources/skills/meta/team-compose/gap-handling.md",
-      "sha256": "323bd8ee1214811fd406b6c6cf99b0bf9672370b37f7a10032e9e35fdd6c9081"
+      "sha256": "b2ac2a65c325204d535afea37babac5fc03a8be2d9db98739dc46124969d42ba"
     },
     {
       "category": "skills",

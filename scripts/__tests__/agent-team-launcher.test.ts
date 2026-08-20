@@ -745,11 +745,11 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).not.toMatch(/new-window/);
     });
 
-    // Step 3: --agent-mode=auto + no tmux + GUILD_INDEPENDENT_AGENTS_SUPPORTED=1 → agent signal
-    it("auto + no tmux + independent agents supported → agent JSON signal", () => {
+    // Step 3: the host advertises independent agents but cannot prove child env carriage.
+    it("auto + no tmux + independent agents supported refuses scoped Agent dispatch", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
         {
           TMUX: undefined,
@@ -757,17 +757,16 @@ describe("agent-team-launcher.ts", () => {
           GUILD_INDEPENDENT_AGENTS_SUPPORTED: "1",
         }
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
-      expect(signal.reason).toMatch(/agent|independent/i);
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // Step 4: --agent-mode=auto + no tmux + GUILD_INDEPENDENT_AGENTS_SUPPORTED=0 → subagent signal
-    it("auto + no tmux + no agent support → subagent JSON signal", () => {
+    // Step 4: direct subagent has the same unverified child-env boundary.
+    it("auto + no tmux + no agent support refuses scoped subagent dispatch", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
         {
           TMUX: undefined,
@@ -775,74 +774,108 @@ describe("agent-team-launcher.ts", () => {
           GUILD_INDEPENDENT_AGENTS_SUPPORTED: "0",
         }
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("subagent");
-      expect(signal.reason).toMatch(/subagent|fallback/i);
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // Explicit --agent-mode=subagent → subagent signal regardless of tmux/env
-    it("explicit --agent-mode=subagent emits subagent signal and exits 0", () => {
+    it("explicit --agent-mode=subagent refuses a scoped canonical team", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=subagent"]
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("subagent");
-      expect(signal.slug).toBe("test-slug");
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // Explicit --agent-mode=agent → agent signal regardless of tmux/env
-    it("explicit --agent-mode=agent emits agent signal and exits 0", () => {
-      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+    it("explicit --agent-mode=subagent preserves the approval-bound legacy unscoped custom-role path", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "custom-slug", "team-subagent.yaml");
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/custom-slug.md",
+          "backend: subagent",
+          "specialists:",
+          "  - name: custom-role",
+          "    scope: approved project-specific work",
+          "    depends-on: []",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
       const { exitCode, stdout } = runScript(
-        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent"]
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=subagent"],
       );
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
+      expect(signal.backend).toBe("subagent");
+      expect(signal.dispatchAllowed).toBe(true);
+      expect(signal.previewOnly).toBe(false);
     });
 
-    // D5 rung 3 (in-process) — the launcher must ACTUALLY construct
-    // InProcessTeamBackend and return its dispatchPlan (dispatch.md
-    // §"In-process dispatchPlan consumption" + SKILL.md §"Backend + routing"),
-    // not just emit {backend,reason,slug} and exit. Asserts the full agent-rung
-    // JSON signal shape execute-plan consumes.
-    it("agent-mode=agent: the JSON signal carries a real dispatchPlan (one descriptor per specialist)", () => {
+    it.each(["agent", "subagent"] as const)(
+      "explicit --agent-mode=%s never authorizes an unscoped custom-role dry-run",
+      (backend) => {
+        const { teamPath } = setupConsumerRepo(tmpDir, "custom-slug", "team-subagent.yaml");
+        fs.writeFileSync(
+          teamPath,
+          [
+            "spec: .guild/spec/custom-slug.md",
+            "backend: subagent",
+            "specialists:",
+            "  - name: custom-role",
+            "    scope: approved project-specific work",
+            "    depends-on: []",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        const runId = `run-20260820-010000-custom-${backend}-dryrun`;
+        launcherTestBindFor(tmpDir, runId);
+        writeRunContexts(tmpDir, runId, [["custom-role", "custom-role"]]);
+        const { exitCode, stdout } = runScript([
+          "--team", teamPath,
+          "--cwd", tmpDir,
+          `--agent-mode=${backend}`,
+          "--run-id", runId,
+          "--dry-run",
+        ]);
+        expect(exitCode).toBe(0);
+        const signal = JSON.parse(stdout);
+        expect(signal.backend).toBe(backend);
+        expect(signal.dispatchAllowed).toBe(false);
+        expect(signal.previewOnly).toBe(true);
+      },
+    );
+
+    it("explicit --agent-mode=agent refuses a scoped canonical team", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stdout, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent"]
+      );
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
+    });
+
+    // D5 rung 3 (in-process) resolves through the backend, but a scoped
+    // production launch must refuse before it emits descriptors or TaskCells.
+    it("agent-mode=agent: production emits no dispatchPlan for scoped specialists", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       launcherTestBindFor(tmpDir, "run-20260811-010000-agent-shape-test");
       writeRunContexts(tmpDir, "run-20260811-010000-agent-shape-test", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-20260811-010000-agent-shape-test"]
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
-      expect(signal.slug).toBe("test-slug");
-      expect(signal.ok).toBe(true);
-      // No tmux panes on this rung (mirrors RemoteTeamBackend §CH-4 — the
-      // orchestrator never gets a descriptor either).
-      expect(signal.orchestratorPaneId).toBeNull();
-      expect(signal.teammatePaneIds).toEqual({});
-      expect(Array.isArray(signal.dispatchPlan)).toBe(true);
-      expect(signal.dispatchPlan).toHaveLength(3); // architect, backend, qa
-      const names = signal.dispatchPlan.map((d: { name: string }) => d.name);
-      expect(names).toEqual(["architect--architect--a1", "backend--backend--a1", "qa--qa--a1"]);
-      for (const d of signal.dispatchPlan) {
-        expect(typeof d.subagentType).toBe("string");
-        expect(d.model).toBeNull(); // tiering is orthogonal — resolved at dispatch
-        expect(d.env.GUILD_RUN_ID).toBe("run-20260811-010000-agent-shape-test");
-        expect(d.name).toBe(`${d.env.GUILD_SPECIALIST}--${d.env.GUILD_TASK_ID}--a1`);
-        expect(d.env.GUILD_TASK_ASSIGNMENT).toMatch(/task-cells\/.+\/assignment\.json$/);
-        expect(typeof d.prompt).toBe("string");
-        expect(d.prompt.length).toBeGreaterThan(0);
-      }
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "run-20260811-010000-agent-shape-test", "task-cells"))).toBe(false);
     });
 
-    // dry-run on the agent rung is a semantic no-op (no subprocess to suppress)
-    // — same dispatchPlan, annotated notes, per dispatch.md.
-    it("agent-mode=agent --dry-run: still returns the full dispatchPlan (declarative, no side effects)", () => {
+    // A dry run retains the descriptor for inspection but marks it non-dispatchable.
+    it("agent-mode=agent --dry-run: returns a preview-only dispatchPlan with no side effects", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       launcherTestBindFor(tmpDir, "run-20260811-010001-agent-dryrun-test");
       const { exitCode, stdout } = runScript(
@@ -854,6 +887,8 @@ describe("agent-team-launcher.ts", () => {
       expect(signal.ok).toBe(true);
       expect(signal.dispatchPlan).toHaveLength(3);
       expect(signal.notes.join(" ")).toMatch(/dry-run/i);
+      expect(signal.dispatchAllowed).toBe(false);
+      expect(signal.previewOnly).toBe(true);
     });
 
     // Explicit --agent-mode=team + TMUX set → in-session (dry-run)
@@ -881,30 +916,27 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toMatch(/new-session/);
     });
 
-    // Explicit --agent-mode=team + no TMUX + real run + no tmux → falls back to subagent
-    it("explicit --agent-mode=team + no tmux on real run → subagent fallback signal", () => {
+    it("explicit team + no tmux refuses the scoped direct fallback", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
       const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team"],
         { TMUX: undefined, PATH: `${noTmuxBin}:${process.env.PATH ?? ""}` }
       );
-      expect(exitCode).toBe(0); // fallback, not crash
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("subagent");
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
       expect(stderr).toMatch(/WARN.*agent_mode=team.*tmux/i);
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // --agent-mode with subagent.yaml (non-agent-team yaml) → still emits signal
-    // (agent_mode overrides team.yaml backend check)
-    it("--agent-mode=agent with subagent yaml → agent signal (no backend check error)", () => {
+    it("--agent-mode=agent with scoped subagent yaml refuses before a signal", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "subagent-slug", "team-subagent.yaml");
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent"]
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
     // MH-04 selector reach. Every assertion above is satisfied by BOTH the old
@@ -965,7 +997,8 @@ describe("agent-team-launcher.ts", () => {
         }
       );
 
-      expect(exitCode).toBe(0);
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
 
       // The port-authored selector actually RAN in the launcher process.
       expect(fs.existsSync(recordPath)).toBe(true);
@@ -984,10 +1017,7 @@ describe("agent-team-launcher.ts", () => {
       expect(selection.dispatch_mode).toBe("agent");
       expect(selection.transport_id).toBe("in-process");
 
-      // And the launcher PRINTED the port's decision rather than one of its own.
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe(selection.dispatch_mode);
-      expect(signal.reason).toBe(selection.reason);
+      // Selection still ran, but the scoped direct path refused before signal emission.
     });
   });
 
@@ -1375,7 +1405,7 @@ describe("agent-team-launcher.ts", () => {
     });
 
     // ── in-process backend ────────────────────────────────────────────────
-    it("in-process (--agent-mode=agent): caller --run-id threads into every dispatchPlan descriptor's GUILD_RUN_ID", () => {
+    it("in-process preview (--agent-mode=agent): caller --run-id threads into every dispatchPlan descriptor's GUILD_RUN_ID", () => {
       const CALLER_ID = "run-20260811-010011-g5-agent-caller";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       launcherTestBindFor(tmpDir, CALLER_ID);
@@ -1385,22 +1415,22 @@ describe("agent-team-launcher.ts", () => {
         "--cwd", tmpDir,
         "--agent-mode=agent",
         "--run-id", CALLER_ID,
+        "--dry-run",
       ]);
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
       expect(signal.backend).toBe("agent");
+      expect(signal.dispatchAllowed).toBe(false);
+      expect(signal.previewOnly).toBe(true);
       expect(signal.dispatchPlan.length).toBeGreaterThan(0);
       // Every descriptor converges on the caller's run id — never a minted one.
       for (const d of signal.dispatchPlan) {
         expect(d.env.GUILD_RUN_ID).toBe(CALLER_ID);
         expect(d.env.GUILD_TASK_CELL_INSTANCE_ID).toMatch(/\.a1\.i-/);
       }
-      const cells = path.join(tmpDir, ".guild", "runs", CALLER_ID, "task-cells");
-      const firstTask = fs.readdirSync(cells)[0];
-      const instances = path.join(cells, firstTask, "attempts", "1", "instances");
-      const firstInstance = fs.readdirSync(instances)[0];
-      const instance = JSON.parse(fs.readFileSync(path.join(instances, firstInstance, "instance.json"), "utf8"));
-      expect(instance.substrate).toBe("in-process");
+      // Preview proves the exact identity carrier without mutating immutable
+      // task-cell state that a later real code-backed launch must own.
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", CALLER_ID, "task-cells"))).toBe(false);
     });
 
     // ── remote backend (cross-host) ───────────────────────────────────────
@@ -2653,7 +2683,7 @@ describe("agent-team-launcher.ts", () => {
   // propagation spike. These tests cover the mechanism-INDEPENDENT threading step:
   //   1. Parse block list → Specialist.capability_scope (string[]).
   //   2. Thread onto session.json teammate_panes[*].capability_scope.
-  //   3. Absent field → undefined in manifest (no restrictions, backward-compat).
+  //   3. Absent canonical field → source-owned default in manifest and dispatch.
   // ─────────────────────────────────────────────────────────────
   describe("D-CAP: capability_scope block-list parsing (Wave-3)", () => {
     it("parses capability_scope block lists from team.yaml into session.json teammate_panes", () => {
@@ -2683,7 +2713,7 @@ describe("agent-team-launcher.ts", () => {
       expect(back.capability_scope).toEqual(["Read", "Write", "Edit", "Bash"]);
     });
 
-    it("omits capability_scope from teammate_panes when not specified in team.yaml", () => {
+    it("materializes a canonical capability_scope when not specified in team.yaml", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
@@ -2697,12 +2727,12 @@ describe("agent-team-launcher.ts", () => {
       expect(sessionJson).not.toBeNull();
       const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
 
-      // qa specialist in the fixture has NO capability_scope → field must be absent
+      // qa has no field in the fixture, so the source-owned canonical default wins.
       const qa = manifest.teammate_panes.find(
         (p: { specialist: string }) => p.specialist === "qa"
       );
       expect(qa).toBeDefined();
-      expect(qa.capability_scope).toBeUndefined();
+      expect(qa.capability_scope).toEqual(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]);
     });
 
     it("preserves other specialist fields (tier, depends-on) alongside capability_scope", () => {
@@ -2744,9 +2774,10 @@ describe("agent-team-launcher.ts", () => {
       const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
 
       expect(manifest.teammate_panes.length).toBe(3);
-      // No capability_scope field on any pane when not present in team.yaml
+      // Every canonical role receives its source-owned runtime default.
       for (const pane of manifest.teammate_panes as Array<{ capability_scope?: unknown }>) {
-        expect(pane.capability_scope).toBeUndefined();
+        expect(Array.isArray(pane.capability_scope)).toBe(true);
+        expect((pane.capability_scope as string[]).length).toBeGreaterThan(0);
       }
     });
 
@@ -2767,7 +2798,7 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toContain(JSON.stringify(["Read", "Glob", "Grep"]));
     });
 
-    it("D-CAP inject: dry-run stdout omits GUILD_CAPABILITY_SCOPE for unscoped team", () => {
+    it("D-CAP inject: dry-run stdout materializes GUILD_CAPABILITY_SCOPE for canonical roles in an unscoped team", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "test-slug", "team-generated-shape.yaml"
       );
@@ -2777,20 +2808,19 @@ describe("agent-team-launcher.ts", () => {
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      // team-generated-shape.yaml has no capability_scope on any specialist
-      expect(stdout).not.toContain("GUILD_CAPABILITY_SCOPE");
+      // team-generated-shape.yaml has no explicit scope, but its roles are canonical.
+      expect(stdout).toContain("GUILD_CAPABILITY_SCOPE");
     });
 
-    // D-CAP scope-file writer: the launcher must write <runDir>/scope/<taskId>.json
-    // BEFORE any pane opens (even in dry-run).  This closes the "reader-without-writer"
-    // gap: pre-tool-use.ts:488 reads the file as the env-absent belt-and-suspenders
-    // fallback; absent ⇒ no file (additive no-scoping).
+    // FU09 scope carriage: launcher-owned code backends inject the scope in the
+    // spawned process environment and never write an attacker-swappable pathname
+    // backstop under the project-owned run tree.
 
-    it("D-CAP scope-file: writes scope/<taskId>.json for each scoped specialist", () => {
+    it("D-CAP scope carriage: explicit scopes stay in pane env and create no scope files", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
 
       const runsDir = path.join(tmpDir, ".guild", "runs");
       const runIds = fs
@@ -2798,27 +2828,16 @@ describe("agent-team-launcher.ts", () => {
         .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
       expect(runIds.length).toBe(1);
       const runDir = path.join(runsDir, runIds[0]);
-
-      // architect: capability_scope: ["Read","Glob","Grep"]
-      const archPath = path.join(runDir, "scope", "architect.json");
-      expect(fs.existsSync(archPath)).toBe(true);
-      expect(JSON.parse(fs.readFileSync(archPath, "utf8")).capability_scope).toEqual(
-        ["Read", "Glob", "Grep"],
-      );
-
-      // backend: capability_scope: ["Read","Write","Edit","Bash"]
-      const backPath = path.join(runDir, "scope", "backend.json");
-      expect(fs.existsSync(backPath)).toBe(true);
-      expect(JSON.parse(fs.readFileSync(backPath, "utf8")).capability_scope).toEqual(
-        ["Read", "Write", "Edit", "Bash"],
-      );
+      expect(stdout).toContain(JSON.stringify(["Read", "Glob", "Grep"]));
+      expect(stdout).toContain(JSON.stringify(["Read", "Write", "Edit", "Bash"]));
+      expect(fs.existsSync(path.join(runDir, "scope"))).toBe(false);
     });
 
-    it("D-CAP scope-file: does NOT write scope file for specialist without capability_scope", () => {
+    it("D-CAP scope carriage: canonical default stays in pane env and creates no scope file", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
 
       const runsDir = path.join(tmpDir, ".guild", "runs");
       const runIds = fs
@@ -2826,9 +2845,9 @@ describe("agent-team-launcher.ts", () => {
         .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
       const runDir = path.join(runsDir, runIds[0]);
 
-      // qa specialist has NO capability_scope in the fixture → no scope file
-      const qaPath = path.join(runDir, "scope", "qa.json");
-      expect(fs.existsSync(qaPath)).toBe(false);
+      // qa has no explicit field in the fixture; runtime policy fills it.
+      expect(stdout).toContain(JSON.stringify(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]));
+      expect(fs.existsSync(path.join(runDir, "scope"))).toBe(false);
     });
 
     it("D-CAP GUILD_TASK_ID: dry-run tmux command contains GUILD_TASK_ID for each specialist", () => {
@@ -2845,11 +2864,11 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toContain("GUILD_TASK_ID");
     });
 
-    it("D-CAP scope-file: writes no scope/ dir for an entirely unscoped team", () => {
+    it("D-CAP scope carriage: canonical roles in a legacy team create no scope directory", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "test-slug", "team-agent-team.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-scope-003",
         "--cwd", tmpDir,
@@ -2863,6 +2882,7 @@ describe("agent-team-launcher.ts", () => {
       // There must be a run (session.json is written in dry-run)
       expect(runIds.length).toBe(1);
       const scopeDir = path.join(runsDir, runIds[0], "scope");
+      expect(stdout).toContain("GUILD_CAPABILITY_SCOPE");
       expect(fs.existsSync(scopeDir)).toBe(false);
     });
   });
@@ -3040,7 +3060,7 @@ describe("agent-team-launcher.ts", () => {
       writeRunContexts(tmpDir, "run-20260811-010020-bf2-agent", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { file, env } = probeEnv(tmpDir);
       const { exitCode, stdout } = runScript(
-        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-20260811-010020-bf2-agent"],
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-20260811-010020-bf2-agent", "--dry-run"],
         env
       );
 
@@ -3051,6 +3071,8 @@ describe("agent-team-launcher.ts", () => {
       expect(signal.reason).toBe("explicit agent_mode=agent");
       expect(signal.slug).toBe("test-slug");
       expect(signal.ok).toBe(true);
+      expect(signal.dispatchAllowed).toBe(false);
+      expect(signal.previewOnly).toBe(true);
       expect(Array.isArray(signal.dispatchPlan)).toBe(true);
       expect(signal.dispatchPlan.length).toBeGreaterThanOrEqual(1);
       expect(signal.dispatchPlan[0].env.GUILD_RUN_ID).toBe("run-20260811-010020-bf2-agent");

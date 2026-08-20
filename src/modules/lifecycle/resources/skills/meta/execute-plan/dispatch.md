@@ -10,8 +10,8 @@ Guild supports three execution backends. The choice is **resolved by the `agent_
 |---|---|---|
 | **cmux surfaces (rung 0 of `team`)** | `team` — `auto`/explicit `team` pin **and** `CMUX_WORKSPACE_ID` present in the environment, checked once at dispatch setup (the resolved-settings snapshot carries no cmux field until W4 lands — see `SKILL.md`). One **visible cmux surface per specialist** in the caller's workspace, checked BEFORE tmux. | Full mechanics (surface creation, per-lane watcher, reap, lead-only commits): `SKILL.md §"Backend + routing (summary)"`. |
 | **Agent teams (tmux panes)** | `team` — `auto` + tmux available (the common case on a dev machine) **or** an explicit `team` pin, **and `CMUX_WORKSPACE_ID` absent**. One **visible pane per specialist**. | Experimental; requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; one team per session; no nested teams; higher token cost. **PRIMARY under tmux when cmux is absent.** |
-| **In-process / Independent agents** | `agent` — D5 rung 3: host supports independent agents, no tmux, no cmux. `InProcessTeamBackend.launch()` returns `ok:true` with `dispatchPlan: GuildDispatchDescriptor[]` (one descriptor per specialist: `name / subagentType / model=null / env / prompt`); `orchestratorPaneId: null`, `teammatePaneIds: {}`. `guild:execute-plan` issues one `Agent()` call per descriptor in `result.dispatchPlan`, applying tier + model at dispatch (`model: null` from backend — tiering is orthogonal; execute-plan scores and resolves). (ADR §RE-4 / VC-RE-4.) | No tmux; fully implemented (VC-RE-4). Declarative plan from launcher → `Agent()` calls in execute-plan. Not a fallback stub. |
-| **Subagents via Agent tool** | `subagent` — the **fallback**: no tmux + no cmux + no independent-agent support (CI, fresh installs), or an explicit `subagent` pin. | Lower cost, simplest cleanup; runs in the background, only the final artifact returns. The documented last resort. |
+| **In-process / Independent agents** | `agent` — D5 rung 3. | **Fail-closed for scoped lanes:** the host contract does not yet prove child-env carriage, so the launcher refuses instead of emitting a production dispatch plan. Unscoped unknown/project roles retain the legacy path; scoped dry runs are explicitly non-dispatchable previews. |
+| **Subagents via Agent tool** | `subagent` — D5 fallback. | **Fail-closed for scoped lanes** for the same reason. Shipping a verified child-env-carriage capability is a follow-up prerequisite to re-enable this rung for canonical roles. |
 
 **Refuse-don't-fallback is ENFORCED at runtime (#56).** The rule below is no longer prose the orchestrator self-enforces. A **PreToolUse backend-degradation detector** (`hooks/pre-tool-use.ts` → `evaluateBackendDegradation`, `hooks/lib/backend-degradation.ts`) inspects every Guild specialist-lane dispatch issued through the in-session `Agent` tool and compares it against the run's resolved-settings snapshot. It mirrors the two authorities that between them decide the team substrate: the cmux rung is the **skill-driven** path above (`CMUX_WORKSPACE_ID`, checked first — it bypasses the launcher entirely), and the tmux rungs come from `scripts/agent-team-launcher.ts resolveBackend`, which has no cmux handling and resolves `auto` via `$TMUX` **before** the `tmux -V` probe while gating an explicit `team` pin on the probe alone.
 
@@ -39,13 +39,28 @@ Two hard constraints:
 
 ### In-process dispatchPlan consumption
 
-When the snapshot-resolved backend is `in-process` (D5 `agent` rung — §RE-4 / VC-RE-4 of the runtime and execution model ADR), invoke the launcher the same way as the team backend (`## Agent-team launcher` below) but with `--agent-mode=agent` (or `--agent-mode=auto` when the ladder itself should decide) instead of relying on `team.yaml`'s `backend:` key — pass `--run-id <the run's own run-id>` so the descriptors' `GUILD_RUN_ID` matches the run directory `guild:execute-plan` already created (Input 4), or omit it only for a standalone `--dry-run` preview:
+When the snapshot-resolved backend is `in-process` (D5 `agent` rung), invoke
+the launcher with the run id as usual. For every canonical role and every
+explicit scope, it exits non-zero with
+`REFUSED (capability-scope carriage)` before emitting a plan or writing a
+TaskCell. The host contract does not yet prove child-env carriage, so do not
+reconstruct the plan or issue `Agent()` yourself:
 
 ```
 npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
 ```
 
-The process prints exactly one JSON line to stdout and exits 0:
+Only an unscoped unknown/project role can reach the legacy declarative path
+below in production; that path makes no capability-scope claim. Every
+`--dry-run`, including an unscoped custom/project role, may return the same
+descriptor shape solely for inspection, always with `dispatchAllowed:false`
+and `previewOnly:true`. The shape is retained as the future re-enable seam:
+
+The consumer must require the exact tuple `dispatchAllowed:true` and
+`previewOnly:false` before any task-run write, scope resolution, descriptor
+consumption, or `Agent()` call. Missing fields fail closed. This check applies
+equally to an explicit ladder result and to a direct backend read from the
+run's frozen dispatch snapshot; a preview is never executable.
 
 ```json
 {
@@ -53,6 +68,8 @@ The process prints exactly one JSON line to stdout and exits 0:
   "reason": "<D5 ladder reason string>",
   "slug": "<team slug>",
   "ok": true,
+  "dispatchAllowed": true,
+  "previewOnly": false,
   "dispatchPlan": [ { "name": "...", "subagentType": "...", "model": null, "env": { "GUILD_RUN_ID": "...", "GUILD_SPECIALIST": "...", "GUILD_TASK_ID": "..." }, "prompt": "...", "definitionPath": null } ],
   "orchestratorPaneId": null,
   "teammatePaneIds": {},
@@ -60,16 +77,19 @@ The process prints exactly one JSON line to stdout and exits 0:
 }
 ```
 
-The launcher (`InProcessTeamBackend.launch()`, constructed by the launcher's D5 ladder — it is NOT a stub the launcher merely signals about) returns this `ok:true` + declarative `dispatchPlan: GuildDispatchDescriptor[]` shape — one descriptor per specialist. A `TeamBackend` is a plain TypeScript class; it **cannot** call the Agent tool. `guild:execute-plan` reads `signal.dispatchPlan` from the parsed stdout and issues the Agent tool calls itself:
+For that unscoped legacy case only, the launcher returns this declarative
+`dispatchPlan` shape. A scoped plan is a refusal, not a descriptor:
 
 1. **For each descriptor in `signal.dispatchPlan`** (in DAG order per `## Parallelism rules`):
    - Resolve tier + model via tier resolution (`model: null` from backend — tiering is orthogonal to backend choice; execute-plan scores and resolves).
-   - Inject capability-scope env vars (`GUILD_CAPABILITY_SCOPE` / `GUILD_AUTONOMY_CONTRACT`) onto the descriptor's `env` map. The descriptor already carries `GUILD_RUN_ID` from the launcher; execute-plan layers the capability-scope vars on top at dispatch (same injection path as subagent — `env` param on `Agent()`).
-   - Issue: `Agent({ subagent_type: descriptor.subagentType, model: <resolved>, prompt: descriptor.prompt, env: { ...descriptor.env, GUILD_CAPABILITY_SCOPE: "...", GUILD_AUTONOMY_CONTRACT: "..." } })`. Omit capability-scope keys whose source field is absent.
+   - Do not add a scope to this path. Any resolved scope would have made the launcher refuse.
+   - Issue the legacy unscoped descriptor only for an approved unknown/project role.
 2. **No tmux** — `orchestratorPaneId: null`, `teammatePaneIds: {}`. The orchestrator stays in-process and never gets a descriptor (only specialists do, mirroring `RemoteTeamBackend §CH-4`).
 3. **Named specialist role, resolved by definition source.** For a shipped specialist, `descriptor.subagentType` is the lane's `owner_role` (bare name from `team.yaml`). For a project-local specialist (`definition_source: project`), the launcher sets `subagentType` to the host-generic type and `descriptor.definitionPath` to `.guild/agents/<name>.md` — issue the `Agent()` call as-is; the prompt already carries the definition-adoption instruction. Same invariant as all other backends (see the hard constraint above).
 
-`dryRun: true` on `InProcessTeamBackend` is semantically a no-op (no subprocess is suppressed — the plan is purely declarative); the launcher annotates a note and returns the same `dispatchPlan` so execute-plan can display the planned `Agent()` call strings.
+Re-enabling scoped `Agent()` dispatch requires a closed host capability plus
+activated-host evidence that the child hook observes the exact env. An ambient
+flag or prose assertion is not sufficient.
 
 ## Producer marker (line-1 + env)
 
@@ -105,7 +125,7 @@ The producer-marker line is parsed **whole or not at all**: a malformed token, a
 |---|---|
 | **Team / tmux panes**, **cmux surfaces**, **remote** | `paneCommand` / `buildPrompt` (launcher-side, in code) |
 | **In-process** (`result.dispatchPlan`) | `composeInProcessDispatch` + `buildPrompt` — already on `descriptor.env` and `descriptor.prompt`. Issue the descriptor **as-is** (layer only the resolved `model` and the scope/run env keys); do **not** rebuild the prompt or the `subagentType` — a reconstructed prompt drops the teammate identity, lane scope, context-bundle pointer, read-ack gate, and wait instruction `buildPrompt` emitted |
-| **Subagent** (direct `Agent()`, the D5 fallback rung) | **`guild:execute-plan` itself** — this is the ONE class with no launcher descriptor (`agent-team-launcher.ts` returns a bare `{backend, reason, slug}` signal for `resolvedMode !== "team"` and hands the whole `Agent()` construction back to the skill), so the skill IS the producer here. Construct both halves — plus the project-class adoption instruction — per `SKILL.md §"Capability-scope env injection"` steps (0)/(2b)/(2c)/(2d). This construction applies **only** to this rung. |
+| **Subagent** (direct `Agent()`, the D5 fallback rung) | **Current scoped lanes are refused by `agent-team-launcher.ts` before this class can dispatch.** For the legacy unscoped unknown/project-role case only, `guild:execute-plan` is the producer and stamps both marker halves plus the project-class adoption instruction. Re-enabling a scoped direct call requires the verified child-env-carriage capability first. |
 
 **Identity consistency is checked, not assumed.** Every role-bearing carrier present on one dispatch — `GUILD_SPECIALIST`, the `GUILD_AGENT_DEFINITION` path's role, and the line-1 `role=` — must name the **same** role; disagreement is read as orchestrator drift (the lane would adopt the wrong persona) and fails the dispatch-integrity guard. Derive all three from the single `owner_role` value, never from three separate lookups.
 
@@ -121,7 +141,7 @@ The lane's resolved tier (`guild:execute-plan §"Tier resolution"`; ADR §2) map
 | `mid` | `sonnet` | draft, reason, plan, extract relationships |
 | `powerful` | `opus` | architecture, security review, advisor pass |
 
-**Wiring.** For the subagent backend, pass the resolved model on the Agent tool: `Agent({ subagent_type: <definition-source-resolved>, model: <resolved-model>, ... })` — `<definition-source-resolved>` is the shipped specialist's bare name, or the host-generic type for a **project** specialist (the hard constraint above; never a bare project name). For agent-team teammates, the resolved model is set on the spawned teammate definition. The `model` param is the **only** tiering lever — tiering does not change `subagent_type` (the named agent is unchanged) and is orthogonal to the backend D5 selected. A `null` host slot in `models.tiers` means "this host has no model for this tier — fall through to the selected host's mapping" (the Codex seam is config + an adapter later; it is `null` now).
+**Wiring.** On the legacy unscoped subagent case, pass the resolved model on the Agent tool: `Agent({ subagent_type: <definition-source-resolved>, model: <resolved-model>, ... })`; a scoped lane never reaches that call until verified child-env carriage exists. `<definition-source-resolved>` is the shipped specialist's bare name, or the host-generic type for a **project** specialist (the hard constraint above; never a bare project name). For agent-team teammates, the resolved model is set on the spawned teammate definition. The `model` param is the **only** tiering lever — tiering does not change `subagent_type` (the named agent is unchanged) and is orthogonal to the backend D5 selected. A `null` host slot in `models.tiers` means "this host has no model for this tier — fall through to the selected host's mapping" (the Codex seam is config + an adapter later; it is `null` now).
 
 **Precedence at dispatch** (normative, ADR §2/§10): `--model-tier=` (pins every lane in the run) > per-lane plan `tier:` pin > `settings.json` `models.tiers`/`models.thresholds` > built-in default. Scoring is deterministic, so a dispatch trace is reproducible; the score + resolved tier + model are printed and recorded in the run record.
 
@@ -386,13 +406,14 @@ Inject **before spawning** each lane's ephemeral agent, once per lane per run. T
 
 ### `GUILD_CAPABILITY_SCOPE`
 
-Source: the lane specialist's `capability_scope:` field in `team.yaml`.
+Source: `scripts/resolve-specialist-capability-scope.ts`, which requires the exact team path + SHA-256 emitted by the approve-before-dispatch launcher signal, refuses changed/substituted bytes, preserves an explicit approval-bound value, and otherwise materializes the source-owned canonical role default.
 
 ```
-env["GUILD_CAPABILITY_SCOPE"] = JSON.stringify(team.specialists[lane.owner].capability_scope)
+env["GUILD_CAPABILITY_SCOPE"] = scopeResolution.env.GUILD_CAPABILITY_SCOPE
 ```
 
-- **Field absent** (no `capability_scope:` key in the specialist block) → **do not set** the env var. Enforcement does not engage; the hook falls through cleanly. No breaking change for existing `team.yaml` files.
+- **Field absent on a canonical role** → the resolver materializes the role default and returns the env value. That makes the current direct `subagent` fallback refuse before `Agent()`; it may not reinterpret the omission as unscoped or write a race-prone pathname backstop.
+- **Field absent on an unknown/project role** → do not set the env var. This preserves the legacy additive behavior until the approved team record supplies an explicit scope.
 - **Field present, empty array** → set `GUILD_CAPABILITY_SCOPE=[]`. Enforcement engages with an empty allow-set — every tool call is out-of-scope (fail-closed). Only do this intentionally for a fully sandboxed read-only role; the default tables in `team-compose/SKILL.md §"Capability scope defaults"` are safe starting points.
 - **Value is a JSON string array** of Claude Code permission-rule strings (e.g. `["Read","Write","Edit","Bash"]`). Rule syntax reference: `hooks/lib/security/enforce.ts` (bound by pointer — not re-spelled here).
 
@@ -412,10 +433,10 @@ The plan's `autonomy-policy` is natural language ("may act without asking: …";
 
 | Backend | Injection method |
 |---|---|
-| **subagent** (Agent tool) | Pass via the Agent tool's `env` parameter: `Agent({ subagent_type: <name>, env: { GUILD_CAPABILITY_SCOPE: "...", GUILD_AUTONOMY_CONTRACT: "..." }, ... })`. Omit keys whose source field is absent. |
+| **subagent** (Agent tool) | Refused in code for any scoped lane until a verified child-env-carriage capability exists. The resolver remains the future approval-bound env producer; its output is not permission to bypass the launcher refusal. |
 | **cmux surface** (rung 0 of `team`) | Same as agent-team: set vars in the surface's environment (or its native env-injection call) before attaching Claude Code, before the task brief. |
 | **agent-team** (tmux panes) | Export vars in the pane environment before attaching Claude Code: `tmux send-keys -t <pane> 'export GUILD_CAPABILITY_SCOPE='"'"'[...]'"'"'' Enter` — the launcher script (`scripts/agent-team-launcher.ts`) is responsible for this injection. |
-| **in-process / independent agents** | Same `env` param path as subagent: execute-plan passes `GUILD_CAPABILITY_SCOPE` / `GUILD_AUTONOMY_CONTRACT` (when their source fields are present) on each `Agent()` call issued from `result.dispatchPlan`. The descriptor already carries `GUILD_RUN_ID` from the launcher; execute-plan layers the capability-scope vars on top at dispatch. Omit keys whose source field is absent. |
+| **in-process / independent agents** | Refused in code for any scoped lane until a verified child-env-carriage capability exists. No model-issued `Agent()` call may substitute for that missing capability. |
 
 ### Trace + audit
 

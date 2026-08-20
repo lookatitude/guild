@@ -34,15 +34,13 @@ specialists:
     scope: "System boundaries, component split, tradeoff matrix for the pricing service."
     depends-on: []
     implied-by: "multi-component"  # or omit if user-requested
-    # capability_scope is OPTIONAL — absent ⇒ no scoping (additive; current behaviour unchanged)
+    # Explicit override; canonical role defaults are runtime-materialized when absent.
     capability_scope:
       - "Read"
       - "Write"
       - "Edit"
       - "Glob"
       - "Grep"
-      - "WebSearch"
-      - "WebFetch"
   - name: backend
     scope: "REST contract + data layer for /pricing endpoints."
     depends-on: [architect]
@@ -72,8 +70,6 @@ specialists:
       - "Read"
       - "Glob"
       - "Grep"
-      - "WebSearch"
-      - "WebFetch"
 gaps_resolved:
   - proposed_role: data-scientist
     resolution: "B"  # A / B / C / D
@@ -87,7 +83,7 @@ Per-specialist fields:
 - `scope` — one-sentence bounded responsibility for *this* task. No copy-paste of the specialist's full remit.
 - `depends-on` — list of other specialist slugs whose handoff this specialist waits on.
 - `implied-by` (optional) — records which hard rule triggered the inclusion (`multi-component`, `auth-touched`, `backend-present`) so the user can audit.
-- `capability_scope` (optional) — list of Claude Code tool-permission rules (e.g. `"Read"`, `"Bash"`, `"Write"`) serialised as `GUILD_CAPABILITY_SCOPE` by `guild:execute-plan` at dispatch so the PreToolUse hook can enforce tool-level isolation. **Absent ⇒ no scoping** (additive: current behaviour unchanged). See `SKILL.md §"Capability scope defaults"` for the role→scope defaults table and rule syntax reference (`hooks/lib/security/enforce.ts`).
+- `capability_scope` (optional) — list of Claude Code tool-permission rules (e.g. `"Read"`, `"Bash"`, `"Write"`) serialised as `GUILD_CAPABILITY_SCOPE` by `guild:execute-plan` at dispatch so the PreToolUse hook can enforce tool-level isolation. An explicit value wins; **absent on a canonical role ⇒ the source-owned role default is materialized at dispatch**. Only an unknown/project role without an explicit value retains the legacy unscoped behavior. See `SKILL.md §"Capability scope defaults"` for the role→scope defaults table and rule syntax reference (`hooks/lib/security/enforce.ts`).
 
 - `phase` (top-level) — the phase this team was composed for; matches the `<phase>` segment of the filename. Self-description/audit so a per-phase file is identifiable without parsing its name.
 

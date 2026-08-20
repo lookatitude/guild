@@ -225,7 +225,7 @@
       "id": "lib/pane-adapter",
       "source_path": "scripts/lib/pane-adapter.ts",
       "resource_path": "resources/scripts/lib/pane-adapter.ts",
-      "sha256": "d8a9bae76984f4216a674cbb3c2a79e987420183636d8e977ab91baa185dc935"
+      "sha256": "a1448e9610af067add37fbef1452c72869c4449251a496c86882dedd3fba095c"
     },
     {
       "category": "scripts",
@@ -276,7 +276,7 @@
       "id": "projection:scripts/lib/core/contracts/team-backend.ts",
       "source_path": "scripts/lib/core/contracts/team-backend.ts",
       "resource_path": "resources/scripts/lib/core/contracts/team-backend.ts",
-      "sha256": "3a0cc9bb66666c7ac8a128742204e5bd1d528db693c0cf223af5b2fecb200759",
+      "sha256": "86b2da7c288a44ff0da4227c82a690aa7b6829b96f5953a6abff2bf9586567fd",
       "projection_dependency": true
     },
     {
@@ -284,7 +284,7 @@
       "id": "projection:scripts/lib/host/cmux-backend.ts",
       "source_path": "scripts/lib/host/cmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/cmux-backend.ts",
-      "sha256": "43375a2d534d9bb11e9812b45749fc11b4821b71d6a57fbe20ae2b1d0780f692",
+      "sha256": "95ae23b6ade4cb4e5a2d78451bd44f4a373486e313fbf5782224213f450b002b",
       "projection_dependency": true
     },
     {
@@ -292,7 +292,7 @@
       "id": "projection:scripts/lib/host/inprocess-backend.ts",
       "source_path": "scripts/lib/host/inprocess-backend.ts",
       "resource_path": "resources/scripts/lib/host/inprocess-backend.ts",
-      "sha256": "fdf665709c6246c0be6c329d9499b59d6e9032c8f28bdcc89ab3ad17ab788dce",
+      "sha256": "9f3008d830155b33dda568462405c0f13bdc132f34401a7e1fe0a62d7b036cfe",
       "projection_dependency": true
     },
     {
@@ -300,7 +300,7 @@
       "id": "projection:scripts/lib/host/remote-backend.ts",
       "source_path": "scripts/lib/host/remote-backend.ts",
       "resource_path": "resources/scripts/lib/host/remote-backend.ts",
-      "sha256": "316d42e2260694b21a2d2d3c4b9ca7936debaf7c018f36883287ff42f68eacf2",
+      "sha256": "08f49a98262faeef202eb7964aea7bc3f8953f6b091fd5c8faa1ea01b2d12a8f",
       "projection_dependency": true
     },
     {
@@ -308,7 +308,7 @@
       "id": "projection:scripts/lib/host/tmux-backend.ts",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "1d45eaa4e3e426dba33de5d282dc41dc6893f7a2764bcdb6c8e95b367110ac6c",
+      "sha256": "066cd1d752d3c157aa39bd41ad655413dfff722884f6cbb939ab2fdc78c5d36f",
       "projection_dependency": true
     },
     {

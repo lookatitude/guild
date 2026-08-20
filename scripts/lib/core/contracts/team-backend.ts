@@ -19,6 +19,10 @@ export type { HostKind };
 // ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface Specialist extends SpecialistDispatchContract {
+  /** Stable approved-proposal identity; falls back to `name` for legacy teams. */
+  participant_id?: string;
+  /** Raw team-file override before canonical role defaults are materialized. */
+  declared_capability_scope?: string[];
   /**
    * Unique transport-handle key for this concrete task attempt. `name` remains
    * the semantic specialist role; backends use this key for pane titles/result
@@ -60,6 +64,38 @@ export interface Specialist extends SpecialistDispatchContract {
   definition_source?: "shipped" | "project";
   /** Integrity-bound project definition selected from the adoption manifest. */
   definition_ref?: ProjectDefinitionRefV1;
+}
+
+/**
+ * Source-owned capability defaults for the canonical domain roles. These are
+ * runtime policy, not merely team-compose prose: an omitted scope on a known
+ * role is materialized before dispatch, so an old or hand-authored team file
+ * cannot silently recover the host's broader tool surface. An explicit scope
+ * remains authoritative because the approved team decision hash-binds it.
+ */
+export const CANONICAL_ROLE_CAPABILITY_SCOPES: Readonly<Record<string, readonly string[]>> =
+  Object.freeze({
+    architect: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    researcher: Object.freeze(["Read", "Glob", "Grep", "WebSearch", "WebFetch"]),
+    backend: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    frontend: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    mobile: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    devops: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    qa: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    security: Object.freeze(["Read", "Glob", "Grep"]),
+    "doc-writer": Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    copywriter: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    "technical-writer": Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    seo: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    "social-media": Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    marketing: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    sales: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+  });
+
+export function resolvedSpecialistCapabilityScope(spec: Specialist): string[] | undefined {
+  if (spec.capability_scope !== undefined) return [...spec.capability_scope];
+  const canonical = CANONICAL_ROLE_CAPABILITY_SCOPES[spec.name];
+  return canonical === undefined ? undefined : [...canonical];
 }
 
 /** Concrete launch-handle key; legacy one-lane-per-role callers keep `name`. */

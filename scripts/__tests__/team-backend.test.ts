@@ -308,20 +308,42 @@ describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", (
     const plan = composeInProcessDispatch(req({ specialists: scopedSpecialists }));
     const scopedDesc = plan.find((d) => d.name === "architect")!;
     expect(scopedDesc.env.GUILD_CAPABILITY_SCOPE).toBe(JSON.stringify(["Read", "Glob"]));
-    // Other specialists without capability_scope must NOT have the key
-    for (const d of plan.filter((d) => d.name !== "architect")) {
-      expect(d.env.GUILD_CAPABILITY_SCOPE).toBeUndefined();
-    }
+    expect(plan.find((d) => d.name === "backend")!.env.GUILD_CAPABILITY_SCOPE).toBe(
+      JSON.stringify(["Read", "Write", "Edit", "Bash", "Glob", "Grep"])
+    );
+    expect(plan.find((d) => d.name === "qa")!.env.GUILD_CAPABILITY_SCOPE).toBe(
+      JSON.stringify(["Read", "Write", "Edit", "Bash", "Glob", "Grep"])
+    );
   });
 
-  it("D-CAP: composeInProcessDispatch omits GUILD_CAPABILITY_SCOPE when capability_scope is absent", () => {
+  it("D-CAP: materializes canonical role defaults when capability_scope is absent", () => {
     const plan = composeInProcessDispatch(req());
-    for (const d of plan) {
-      expect(d.env.GUILD_CAPABILITY_SCOPE).toBeUndefined();
-    }
+    expect(JSON.parse(plan.find((d) => d.name === "architect")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "Write", "Edit", "Glob", "Grep",
+    ]);
+    expect(JSON.parse(plan.find((d) => d.name === "backend")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "Write", "Edit", "Bash", "Glob", "Grep",
+    ]);
   });
 
-  // D-CAP GUILD_TASK_ID in composeInProcessDispatch (scope-file locator)
+  it("D-CAP: keeps researcher as the sole canonical native-web default and honors an explicit scoped exception", () => {
+    const plan = composeInProcessDispatch(req({
+      specialists: [
+        { name: "researcher", scope: "sources", dependsOn: [] },
+        { name: "seo", scope: "provided exports", dependsOn: [] },
+        { name: "seo", dispatch_key: "seo-approved", scope: "fresh metrics", dependsOn: [], capability_scope: ["Read", "WebSearch"] },
+      ],
+    }));
+    expect(JSON.parse(plan.find((d) => d.name === "researcher")!.env.GUILD_CAPABILITY_SCOPE!)).toContain("WebSearch");
+    expect(JSON.parse(plan.find((d) => d.name === "seo")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "Write", "Edit", "Glob", "Grep",
+    ]);
+    expect(JSON.parse(plan.find((d) => d.name === "seo-approved")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "WebSearch",
+    ]);
+  });
+
+  // D-CAP GUILD_TASK_ID in composeInProcessDispatch (lane identity carrier)
   it("D-CAP: composeInProcessDispatch injects GUILD_TASK_ID for every specialist", () => {
     const specialists = SPECIALISTS.map((s, i) => ({ ...s, taskId: `T${i + 1}-${s.name}` }));
     const plan = composeInProcessDispatch(req({ specialists }));
@@ -575,7 +597,7 @@ describe("pure helpers", () => {
     expect(c).not.toContain("GUILD_CAPABILITY_SCOPE");
   });
 
-  // D-CAP GUILD_TASK_ID injection (scope-file locator for the hook file-fallback)
+  // D-CAP GUILD_TASK_ID injection (lane identity carrier)
   it("D-CAP: paneCommand injects GUILD_TASK_ID when taskId present", () => {
     const c = paneCommand("hello", "run-1", undefined, "T2-backend");
     expect(c).toContain("GUILD_TASK_ID=");

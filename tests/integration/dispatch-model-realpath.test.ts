@@ -51,6 +51,8 @@ import {
 } from "../../src/modules/capability/workflows/catalog-cache";
 import { loadRunBinding, mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import { selfReferentialHash } from "../../src/modules/teams/workflows/canonical-hash";
+import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
+import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
 
 const SESSION_CONTEXT_SCHEMA = "guild.session_context.v1";
 
@@ -98,7 +100,7 @@ function validPolicy(): Record<string, unknown> {
 function runLauncher(
   cwd: string,
   extraArgs: string[] = [],
-  opts: { dryRun?: boolean } = {}
+  opts: { dryRun?: boolean; approvalOverride?: boolean } = {}
 ): { exitCode: number; stdout: string; stderr: string } {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -113,8 +115,12 @@ function runLauncher(
   // approval, and carry no team-plan trail — opt into the ONE audited escape
   // hatch with a stated reason. The gate's own pins live in
   // scripts/__tests__/t7-h1-dispatch-approval.test.ts.
-  env.GUILD_DISPATCH_APPROVAL_OVERRIDE =
-    "dispatch-model realpath fixture: no team-plan trail; approval verification is pinned separately";
+  if (opts.approvalOverride !== false) {
+    env.GUILD_DISPATCH_APPROVAL_OVERRIDE =
+      "dispatch-model realpath fixture: no team-plan trail; approval verification is pinned separately";
+  } else {
+    delete env.GUILD_DISPATCH_APPROVAL_OVERRIDE;
+  }
   const result = spawnSync(
     "npx",
     [
@@ -170,16 +176,86 @@ function seedLifecycleRun(root: string, runId: string): string {
  * (production contract: guild:context-assemble runs before dispatch). Seed the
  * minimal bundles the fixture team's three lanes require.
  */
-function seedContextBundles(root: string, runId: string): void {
+function seedContextBundles(
+  root: string,
+  runId: string,
+  lanes: string[] = ["architect", "backend", "qa"],
+): void {
   const dir = path.join(root, ".guild", "context", runId);
   fs.mkdirSync(dir, { recursive: true });
-  for (const lane of ["architect", "backend", "qa"]) {
+  for (const lane of lanes) {
     fs.writeFileSync(
       path.join(dir, `${lane}-${lane}.md`),
       `# ${lane} context bundle (fixture)\n\nScope: dispatch-model realpath fixture lane.\n`,
       "utf8"
     );
   }
+}
+
+/**
+ * FU09: canonical/scoped roles cannot use direct Agent() until the host proves
+ * child-env carriage. Preserve this suite's in-process model-routing proof on
+ * the one production path that remains intentionally available: a hash-bound,
+ * operator-approved unknown/project role with no resolved capability scope.
+ */
+function writeApprovedUnscopedCustomTeam(root: string, runId: string): void {
+  fs.writeFileSync(
+    path.join(root, ".guild", "team", "test-slug.yaml"),
+    [
+      "spec: .guild/spec/test-slug.md",
+      "backend: agent-team",
+      "specialists:",
+      "  - name: custom-role",
+      "    scope: approved project-specific model-routing proof",
+      "    depends-on: []",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const proposal = composeProposal({
+    run_id: runId,
+    phase: "build",
+    participants: [
+      {
+        participant_id: "custom-role",
+        participation_kind: "worker",
+        role_ref: "custom-role",
+        necessity_rationale: "approved project-specific model-routing proof",
+        owned_obligations: ["ob-custom-role"],
+        depends_on: [],
+        tier: "powerful",
+        purpose: "implementation",
+        capability_scope: null,
+        backend: "agent-team",
+      },
+    ],
+    obligations: [
+      {
+        obligation_id: "ob-custom-role",
+        source: "plan_item",
+        text: "prove direct-host model routing on the retained unscoped seam",
+        disposition: { owners: ["custom-role"] },
+      },
+    ],
+    excluded_roles: [],
+    backend_capacity_evidence: {
+      backend: "agent-team",
+      verified_capacity: 1,
+      method: "integration fixture",
+      as_of: "2026-08-20T00:00:00Z",
+    },
+  });
+  writeProposal(root, proposal);
+  writeDecision(
+    root,
+    recordDecision(proposal, {
+      decision: "approve",
+      decided_by: { kind: "operator", id: "miguel" },
+      decision_channel: "terminal_prompt",
+      decided_at: "2026-08-20T00:00:01Z",
+    }),
+  );
 }
 
 function setupConsumerRepo(tmp: string, settings: Record<string, unknown>): void {
@@ -372,19 +448,30 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
     }
 
     // ── in-process rung: the descriptor guild:execute-plan dispatches from ──
-    // Non-dry (FIC-48): the agent rung plans lane models only on a real run,
-    // and a real emission requires the per-lane context bundles.
-    seedContextBundles(tmp, runId);
-    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"], { dryRun: false });
+    // FU09 refuses canonical/scoped direct Agent() production dispatch. Exercise
+    // the retained hash-bound, approval-verified unscoped custom-role seam so this remains a
+    // real non-dry model-routing proof rather than weakening to a preview.
+    writeApprovedUnscopedCustomTeam(tmp, runId);
+    seedContextBundles(tmp, runId, ["custom-role"]);
+    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"], {
+      dryRun: false,
+      approvalOverride: false,
+    });
     expect([agentRun.stderr, agentRun.exitCode]).toEqual([agentRun.stderr, 0]);
+    expect(agentRun.stdout).toContain("approve-before-dispatch gate PASSED");
+    expect(agentRun.stderr).not.toContain("NOT approval-verified");
     const signalLine = agentRun.stdout
       .split("\n")
       .filter((l) => l.trim().startsWith("{"))
       .pop() as string;
     const signal = JSON.parse(signalLine) as {
+      dispatchAllowed: boolean;
+      previewOnly: boolean;
       dispatchPlan: Array<{ name: string; model: string | null; env: Record<string, string> }>;
     };
-    expect(signal.dispatchPlan).toHaveLength(3);
+    expect(signal.dispatchAllowed).toBe(true);
+    expect(signal.previewOnly).toBe(false);
+    expect(signal.dispatchPlan).toHaveLength(1);
     for (const d of signal.dispatchPlan) {
       // Was `model: null` (auto-scored) before F5 — the selected model now
       // actually rides the Agent() dispatch descriptor.
@@ -412,15 +499,28 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
       expect(line).not.toContain("GUILD_MODEL");
     }
 
-    // Non-dry for the same reason as the enabled-on rung (FIC-48): a dry
-    // preflight skips model planning entirely, which would make this flag-off
-    // control's `model: null` expectation pass VACUOUSLY.
-    seedContextBundles(tmp, runId);
-    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"], { dryRun: false });
+    // Non-dry, hash-bound approval-verified unscoped control for the same reason as the
+    // enabled-on rung: a dry preflight skips model planning and is never
+    // dispatch-authorized, so it would make this expectation vacuous.
+    writeApprovedUnscopedCustomTeam(tmp, runId);
+    seedContextBundles(tmp, runId, ["custom-role"]);
+    const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"], {
+      dryRun: false,
+      approvalOverride: false,
+    });
     expect(agentRun.exitCode).toBe(0);
+    expect(agentRun.stdout).toContain("approve-before-dispatch gate PASSED");
+    expect(agentRun.stderr).not.toContain("NOT approval-verified");
     const signal = JSON.parse(
       agentRun.stdout.split("\n").filter((l) => l.trim().startsWith("{")).pop() as string
-    ) as { dispatchPlan: Array<{ model: string | null; env: Record<string, string> }> };
+    ) as {
+      dispatchAllowed: boolean;
+      previewOnly: boolean;
+      dispatchPlan: Array<{ model: string | null; env: Record<string, string> }>;
+    };
+    expect(signal.dispatchAllowed).toBe(true);
+    expect(signal.previewOnly).toBe(false);
+    expect(signal.dispatchPlan).toHaveLength(1);
     for (const d of signal.dispatchPlan) {
       expect(d.model).toBeNull();
       expect(d.env.GUILD_MODEL).toBeUndefined();

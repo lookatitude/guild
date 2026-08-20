@@ -68,7 +68,10 @@ import {
   type HostKind,
   type RemoteHostTarget,
 } from "./lib/team-backend";
-import { specialistDispatchKey } from "./lib/core/contracts/team-backend";
+import {
+  resolvedSpecialistCapabilityScope,
+  specialistDispatchKey,
+} from "./lib/core/contracts/team-backend";
 import {
   buildStationTaskCellResult,
   expandTaskCellLaunchLanes,
@@ -321,6 +324,7 @@ export function parseYaml(raw: string): TeamYaml {
       }
       specialists.push({
         name: cur.name,
+        participant_id: cur.participant_id,
         scope: cur.scope ?? "",
         dependsOn: cur.dependsOn ?? [],
         backend: cur.backend,
@@ -334,9 +338,17 @@ export function parseYaml(raw: string): TeamYaml {
         // on the dispatch env (audit-only). Undefined until a producer writes it.
         score: cur.score,
         capabilityRequirements: cur.capabilityRequirements, // GAP-A1/ARCH-2 (may be undefined)
-        // D-CAP: thread capability_scope onto the Specialist — undefined when absent
-        // (no restrictions). Populated by applyMapEntry + block-list interceptor above.
-        capability_scope: cur.capability_scope,
+        // FU09: explicit approved scopes win; canonical roles otherwise receive
+        // their source-owned runtime default. Unknown/project roles retain the
+        // legacy optional behavior until their approved team record supplies one.
+        declared_capability_scope:
+          cur.capability_scope === undefined ? undefined : [...cur.capability_scope],
+        capability_scope: resolvedSpecialistCapabilityScope({
+          name: cur.name,
+          scope: cur.scope ?? "",
+          dependsOn: cur.dependsOn ?? [],
+          capability_scope: cur.capability_scope,
+        }),
         // Agent-definition path + source (team-compose writes them; load-bearing
         // for project-local specialists — buildPrompt embeds the adoption
         // instruction and in-process dispatch swaps to the generic subagent type).
@@ -426,6 +438,9 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   const key = m[1];
   const value = m[2].trim();
   if (key === "name") target.name = stripQuotes(value);
+  else if (key === "participant_id" || key === "participant-id") {
+    target.participant_id = stripQuotes(value);
+  }
   else if (key === "scope") target.scope = stripQuotes(value);
   else if (key === "depends-on" || key === "depends_on" || key === "dependsOn") {
     target.dependsOn = parseFlowList(value);
@@ -665,11 +680,9 @@ interface Manifest {
   // under the lenient-reader rule (no schema_version bump). Existing readers
   // ignore them; resume/telemetry read host_kind from here rather than
   // re-inferring the CLI brand.
-  // D-CAP: `capability_scope` is additive + optional (same lenient-reader rule).
-  // Absent ⇒ no tool restrictions. Populated from Specialist.capability_scope
-  // (parsed from team.yaml's `capability_scope:` block list). Used by the
-  // injection half (paneCommand / composeInProcessDispatch) pending the
-  // env-propagation spike (Wave-3 Step 2).
+  // D-CAP/FU09: `capability_scope` remains additive for unknown/project roles,
+  // but canonical role omissions are materialized from source-owned defaults
+  // before this manifest or any dispatch carrier is emitted.
   teammate_panes: Array<{
     specialist: string;
     task_id?: string;
@@ -1626,6 +1639,25 @@ function resolvedModeFromFrozen(frozen: FrozenDispatchResolution): ResolvedMode 
   }
 }
 
+/** Resolved scopes that cannot safely cross the current direct-Agent boundary. */
+function scopedDirectRoles(team: TeamYaml): string[] {
+  return team.specialists
+    .filter((specialist) => specialist.capability_scope !== undefined)
+    .map((specialist) => specialist.name)
+    .sort();
+}
+
+/** Emit the shared fail-closed diagnostic for every direct-Agent selection path. */
+function writeScopedDirectRefusal(backend: "agent" | "subagent", roles: string[]): void {
+  process.stderr.write(
+    `[agent-team-launcher] REFUSED (capability-scope carriage): backend "${backend}" ` +
+      `dispatches through Agent(), but the host capability contract cannot prove that ` +
+      `GUILD_CAPABILITY_SCOPE reaches the child hook. Scoped role(s): ` +
+      `[${roles.join(", ")}]. Use a code-backed cmux/tmux/remote backend, or ` +
+      `ship and verify an explicit child-env-carriage capability before enabling this rung.\n`,
+  );
+}
+
 /**
  * Ask the execution port which substrate this dispatch gets, then report it.
  *
@@ -2077,8 +2109,10 @@ async function main(): Promise<void> {
   }
 
   let team: TeamYaml;
+  let teamRaw: string;
   try {
-    team = parseYaml(fs.readFileSync(args.team, "utf8"));
+    teamRaw = fs.readFileSync(args.team, "utf8");
+    team = parseYaml(teamRaw);
   } catch (err) {
     process.stderr.write(
       `[agent-team-launcher] ERROR: could not parse ${args.team}: ${(err as Error).message}\n`
@@ -2133,7 +2167,16 @@ async function main(): Promise<void> {
       phaseFromTeamPath(args.team) ??
       (gateRunId ? readActivePhase(gateCwd, gateRunId) : null) ??
       "build";
-    const scheduled = team.specialists.map((s) => s.name);
+    const scheduled = team.specialists.map((s) => s.participant_id ?? s.name);
+    const scheduledRoleRefs = Object.fromEntries(
+      team.specialists.map((s) => [s.participant_id ?? s.name, s.name]),
+    );
+    const scheduledCapabilityScopes = Object.fromEntries(
+      team.specialists.map((s) => [
+        s.participant_id ?? s.name,
+        s.declared_capability_scope ?? null,
+      ]),
+    );
     // T7R-R1-B1: verification is MANDATORY here — including the standalone /
     // no-run-id call, which the gate refuses outright (`no_run_id`) because a
     // dispatch whose approval cannot even be looked up is never approved.
@@ -2147,6 +2190,8 @@ async function main(): Promise<void> {
         phase: gatePhase,
         teamPath: args.team,
         scheduledParticipants: scheduled,
+        scheduledRoleRefs,
+        scheduledCapabilityScopes,
         overrideReason: args.approvalOverride,
         forced: args.requireApproval,
       });
@@ -2307,15 +2352,6 @@ async function main(): Promise<void> {
                   }
                 : undefined,
             });
-            if (spec.capability_scope !== undefined) {
-              const scopeDir = path.join(cwd, ".guild", "runs", runId, "scope");
-              fs.mkdirSync(scopeDir, { recursive: true });
-              fs.writeFileSync(
-                path.join(scopeDir, `${taskId}.json`),
-                JSON.stringify({ capability_scope: spec.capability_scope, autonomy_contract: null }),
-                "utf8",
-              );
-            }
           }
         }
       }
@@ -2417,13 +2453,24 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
+    let directScopedRoles: string[] = [];
+    if (resolvedMode !== "team") {
+      directScopedRoles = scopedDirectRoles(team);
+      if (directScopedRoles.length > 0 && !args.dryRun) {
+        writeScopedDirectRefusal(resolvedMode, directScopedRoles);
+        process.exit(1);
+      }
+    }
+
     if (resolvedMode === "agent") {
       // D5 rung 3 (in-process / independent agents, no tmux). dispatch.md
       // §"In-process dispatchPlan consumption" + SKILL.md §"Backend + routing"
       // both document that this rung returns the backend's declarative
       // dispatchPlan. MH-04 BF-2: it no longer constructs the backend — it
       // resolves the in-process transport through HostExecutionRuntime and
-      // launches through the resolved port. The emitted signal is unchanged.
+      // launches through the resolved port. Scoped dry-run descriptors are
+      // explicitly labeled preview-only; production scoped dispatch is refused
+      // above before this backend can write TaskCells.
       const slug = slugFromTeamPath(args.team);
       // W1: the lifecycle id was resolved once above; this rung cannot mint.
       const runId = args.runId;
@@ -2503,6 +2550,10 @@ async function main(): Promise<void> {
         orchestratorPaneId: result.orchestrator_pane_id,
         teammatePaneIds: result.teammate_pane_ids,
         notes: result.notes,
+        dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
+        previewOnly: args.dryRun || directScopedRoles.length > 0,
+        teamPath: path.resolve(args.team),
+        teamSha256: sha256Prefixed(teamRaw),
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -2512,11 +2563,16 @@ async function main(): Promise<void> {
       // subagent: execute-plan constructs the Agent() call itself directly
       // from team.yaml + the plan (SKILL.md §"Capability-scope env injection")
       // — there is no launcher-side descriptor to compute for this rung, so the
-      // signal stays the plain {backend, reason, slug} shape.
+      // signal stays declarative and carries an explicit dispatchAllowed /
+      // previewOnly decision in addition to its approval-bound team identity.
       const signal = {
         backend: resolvedMode,
         reason,
         slug: slugFromTeamPath(args.team),
+        dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
+        previewOnly: args.dryRun || directScopedRoles.length > 0,
+        teamPath: path.resolve(args.team),
+        teamSha256: sha256Prefixed(teamRaw),
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -2539,10 +2595,23 @@ async function main(): Promise<void> {
     // tmux panes; a run frozen to agent/subagent is not a tmux launch at all.
     if (frozenDispatch !== null && frozenDispatch.backend !== "tmux") {
       const resolved = resolvedModeFromFrozen(frozenDispatch);
+      const directScopedRoles = resolved.mode === "team" ? [] : scopedDirectRoles(team);
+      if (resolved.mode !== "team" && directScopedRoles.length > 0 && !args.dryRun) {
+        writeScopedDirectRefusal(resolved.mode, directScopedRoles);
+        process.exit(1);
+      }
       const signal = {
         backend: resolved.transport === "cmux" ? "cmux" : resolved.mode,
         reason: resolved.reason,
         slug: slugFromTeamPath(args.team),
+        ...(resolved.mode === "team"
+          ? {}
+          : {
+              dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
+              previewOnly: args.dryRun || directScopedRoles.length > 0,
+              teamPath: path.resolve(args.team),
+              teamSha256: sha256Prefixed(teamRaw),
+            }),
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -2648,31 +2717,10 @@ async function main(): Promise<void> {
         });
       }
     }
-    // ── D-CAP scope-file writer: write per-task-id scope files BEFORE spawn ──
-    // Closes the "reader-without-writer" gap in the PreToolUse hook file-fallback:
-    // pre-tool-use.ts:488 reads <runDir>/scope/<taskId>.json when GUILD_CAPABILITY_SCOPE
-    // is absent from env (e.g. cross-host SSH or any env where injection is unreliable),
-    // but nothing previously wrote that file. Writing here (inside the pre-routing block,
-    // same task-id resolution as writeTaskRun) guarantees the file is on disk BEFORE any
-    // pane opens via tmux or SSH.  Absent capability_scope → no file (additive,
-    // byte-identical to unscoped behavior — the gate only fires if the file is present).
-    {
-      const runDir = path.join(cwd, ".guild", "runs", runId);
-      for (const spec of team.specialists) {
-        if (spec.capability_scope === undefined) continue;
-        const taskIds = preRoutingOwnerMap.get(spec.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
-        for (const taskId of effectiveTaskIds) {
-          const scopeDir = path.join(runDir, "scope");
-          fs.mkdirSync(scopeDir, { recursive: true });
-          fs.writeFileSync(
-            path.join(scopeDir, `${taskId}.json`),
-            JSON.stringify({ capability_scope: spec.capability_scope, autonomy_contract: null }),
-            "utf8",
-          );
-        }
-      }
-    }
+    // Scope enforcement is carried by the backend's real process environment.
+    // Do not write a pathname fallback: the shared writer cannot close a
+    // same-user concurrent ancestor swap, and raw writes can follow a planted
+    // scope symlink outside the project.
     // ── T3 F3: resolve the run's minted binding ONCE for both descriptor channels ──
     // (env envelope → the run's own minted record → mint iff this launcher minted
     // the fresh standalone run-id). null ⇒ the writers fail closed below.
@@ -2750,7 +2798,7 @@ async function main(): Promise<void> {
       }
       // D-CAP: populate spec.taskId with the representative plan task-id so
       // composeTmuxCommands / composeInProcessDispatch / RemoteTeamBackend can inject
-      // GUILD_TASK_ID into every spawn env (scope-file locator for the hook fallback).
+      // GUILD_TASK_ID into every spawn env as the lane's runtime identity carrier.
       spec.taskId = repTaskId;
     }
   }

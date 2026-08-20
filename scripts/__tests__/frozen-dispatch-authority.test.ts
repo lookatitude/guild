@@ -21,6 +21,10 @@
  *      runs whose snapshot predates the dispatch block).
  *   4. The legacy no---agent-mode path also honors a frozen "cmux" backend
  *      instead of launching tmux panes inside a cmux-frozen run.
+ *   5. Legacy frozen direct modes receive the same capability-scope refusal as
+ *      explicit direct modes; dry-run previews are non-dispatchable.
+ *   6. An approved unknown/project role with no resolved scope retains the
+ *      legacy direct-dispatch compatibility path.
  */
 
 import { spawnSync } from "child_process";
@@ -189,5 +193,96 @@ describe("W4 — frozen snapshot.dispatch is authoritative on the launcher path"
     const signal = JSON.parse(stdout.trim().split("\n").pop() as string);
     expect(signal.backend).toBe("cmux");
     expect(signal.reason).toMatch(/frozen at run start/i);
+  });
+
+  it.each(["agent", "subagent"] as const)(
+    "the legacy no---agent-mode path refuses a frozen scoped %s dispatch",
+    (backend) => {
+      const { teamPath } = seedRepo(tmpDir);
+      writeFrozenDispatch(tmpDir, backend);
+      const { exitCode, stdout, stderr } = runLauncher([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
+      expect(stderr).toContain(`backend "${backend}"`);
+    },
+  );
+
+  it("marks a legacy frozen scoped direct dry-run as preview-only", () => {
+    const { teamPath } = seedRepo(tmpDir);
+    writeFrozenDispatch(tmpDir, "agent");
+    const { exitCode, stdout } = runLauncher([
+      "--team", teamPath,
+      "--cwd", tmpDir,
+      "--dry-run",
+    ]);
+    expect(exitCode).toBe(0);
+    const signal = JSON.parse(stdout.trim().split("\n").pop() as string);
+    expect(signal.backend).toBe("agent");
+    expect(signal.dispatchAllowed).toBe(false);
+    expect(signal.previewOnly).toBe(true);
+    expect(signal.teamPath).toBe(teamPath);
+    expect(signal.teamSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it.each(["agent", "subagent"] as const)(
+    "never authorizes an unscoped custom-role frozen %s dry-run",
+    (backend) => {
+      const { teamPath } = seedRepo(tmpDir);
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/test-slug.md",
+          "backend: agent-team",
+          "specialists:",
+          "  - name: custom-role",
+          "    scope: approved project-specific work",
+          "    depends-on: []",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      writeFrozenDispatch(tmpDir, backend);
+      const { exitCode, stdout } = runLauncher([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--dry-run",
+      ]);
+      expect(exitCode).toBe(0);
+      const signal = JSON.parse(stdout.trim().split("\n").pop() as string);
+      expect(signal.backend).toBe(backend);
+      expect(signal.dispatchAllowed).toBe(false);
+      expect(signal.previewOnly).toBe(true);
+    },
+  );
+
+  it("preserves the frozen direct production path for an approved unscoped custom role", () => {
+    const { teamPath } = seedRepo(tmpDir);
+    fs.writeFileSync(
+      teamPath,
+      [
+        "spec: .guild/spec/test-slug.md",
+        "backend: agent-team",
+        "specialists:",
+        "  - name: custom-role",
+        "    scope: approved project-specific work",
+        "    depends-on: []",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFrozenDispatch(tmpDir, "subagent");
+    const { exitCode, stdout } = runLauncher([
+      "--team", teamPath,
+      "--cwd", tmpDir,
+    ]);
+    expect(exitCode).toBe(0);
+    const signal = JSON.parse(stdout.trim().split("\n").pop() as string);
+    expect(signal.backend).toBe("subagent");
+    expect(signal.dispatchAllowed).toBe(true);
+    expect(signal.previewOnly).toBe(false);
   });
 });
