@@ -16,14 +16,17 @@
  *     dedicated production material schema and only when its re-derived root
  *     equals the source-pinned root for its attestor id. Provisioning remains
  *     outside this repository; no caller-supplied root can extend trust.
+ *   - UNTRUSTED PRODUCTION CUSTODY: production requires an explicit current-user
+ *     custody root at mode 0700. Material, registry, output, and both locks must
+ *     remain strictly beneath it through real, current-user 0700 directories.
+ *     One custody-wide O_EXCL lock is held across admission, reservation, and
+ *     publication; the opened root descriptor and the final named root must
+ *     retain the admitted protection and device/inode identity.
  *   - STATICALLY VISIBLE SYMLINKS, at the leaf AND at any intermediate parent,
  *     for the material, registry, output, and lock positions: a link is a
  *     redirect wearing the required name, and a signer that follows one signs
  *     into (or reads out of) a tree nobody audited. The material leaf is also
- *     descriptor-bound against replacement while it is read. Atomic ancestor-
- *     directory binding remains a production-custody prerequisite: path-based
- *     checks cannot prove that a parent was not swapped and redirected back to
- *     the same opened inode between checks.
+ *     descriptor-bound against replacement while it is read.
  *   - UNPROTECTED PRODUCTION MATERIAL: production material is opened once with
  *     O_NOFOLLOW, verified through that descriptor as a private regular file
  *     owned by the current process user, and read through the same descriptor.
@@ -40,6 +43,14 @@
  *     the full WOTS+/Merkle construction; material that is well-formed but does
  *     not derive its own declared root is refused.
  *
+ * PRODUCTION CUSTODY BOUNDARY
+ *   This tool implements the separately reviewed trusted single-user boundary,
+ *   not an openat-style atomic directory-handle namespace. The custody lock
+ *   coordinates cooperating signer processes. It does not defend against an
+ *   arbitrary concurrent process running as the same OS user that swaps a path
+ *   and restores it between rechecks. External custodians MUST exclude that
+ *   actor by dedicating the account/session and serializing custody-root access.
+ *
  * WHAT THE OUTPUT NEVER CONTAINS
  *   The output and the registry are written atomically (temp + rename) at mode
  *   0600, and neither ever carries raw chain-start material. One subtlety is
@@ -54,7 +65,8 @@
  * CLI
  *   npx tsx sign-release-attestation.ts \
  *     --material-path <p> --digest <d> --output-path <p> \
- *     --mode <fixture|production> --used-key-registry-path <p>
+ *     --mode <fixture|production> --used-key-registry-path <p> \
+ *     [--custody-root-path <p>]  # required when --mode production
  */
 
 import * as fs from "node:fs";
@@ -100,12 +112,18 @@ export function lockPathFor(registryPath: string): string {
   return `${registryPath}.lock`;
 }
 
+/** The production-wide single-user custody lock, fixed beneath the custody root. */
+export function custodyLockPathFor(custodyRoot: string): string {
+  return path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+}
+
 export interface SignReleaseAttestationOptions {
   readonly material_path: string;
   readonly digest: string;
   readonly output_path: string;
   readonly mode: string;
   readonly used_key_registry_path: string;
+  readonly custody_root_path?: string;
 }
 
 export interface SignReleaseAttestationOutput {
@@ -120,6 +138,15 @@ export interface SignReleaseAttestationOutput {
 }
 
 const OPTION_KEYS: readonly string[] = Object.freeze([
+  "material_path",
+  "digest",
+  "output_path",
+  "mode",
+  "used_key_registry_path",
+  "custody_root_path",
+]);
+
+const REQUIRED_OPTION_KEYS: readonly string[] = Object.freeze([
   "material_path",
   "digest",
   "output_path",
@@ -200,6 +227,243 @@ function assertContainedPosition(label: string, target: string): void {
   }
   if (realAncestor !== canonicalExpectation(ancestor)) {
     refuse(`${label} parent chain escapes through a symlink — refusing a redirected position`);
+  }
+}
+
+function assertProductionCustodyRootStats(stats: fs.Stats): void {
+  if (!stats.isDirectory()) {
+    refuse("production custody root must be a directory");
+  }
+  if (typeof process.getuid !== "function" || stats.uid !== process.getuid()) {
+    refuse("production custody root must be owned by the current process user");
+  }
+  if ((stats.mode & 0o077) !== 0 || (stats.mode & 0o700) !== 0o700) {
+    refuse("production custody root must be a private current-user directory with mode 0700");
+  }
+}
+
+function openProductionCustodyRootDescriptor(custodyRoot: string): number {
+  const noFollow = fs.constants.O_NOFOLLOW;
+  const directoryOnly = fs.constants.O_DIRECTORY;
+  if (typeof noFollow !== "number" || typeof directoryOnly !== "number") {
+    refuse("production custody root cannot be opened without following links on this platform");
+  }
+  assertContainedPosition("custody root", custodyRoot);
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(custodyRoot, fs.constants.O_RDONLY | noFollow | directoryOnly);
+  } catch {
+    refuse("production custody root must be an existing readable directory");
+  }
+  return descriptor;
+}
+
+function verifyProductionCustodyRoot(custodyRoot: string): void {
+  const descriptor = openProductionCustodyRootDescriptor(custodyRoot);
+  let operationError: unknown;
+  try {
+    let stats: fs.Stats;
+    try {
+      stats = fs.fstatSync(descriptor);
+    } catch {
+      refuse("production custody root descriptor cannot be verified");
+    }
+    assertProductionCustodyRootStats(stats);
+  } catch (error) {
+    operationError = error;
+  }
+  let closeFailed = false;
+  try {
+    fs.closeSync(descriptor);
+  } catch {
+    closeFailed = true;
+  }
+  if (operationError !== undefined) throw operationError;
+  if (closeFailed) refuse("production custody root descriptor could not be closed");
+}
+
+function assertProductionPositionsWithinCustodyRoot(
+  custodyRoot: string,
+  positions: readonly string[],
+): void {
+  for (const position of positions) {
+    const relative = path.relative(custodyRoot, position);
+    if (
+      relative.length === 0 ||
+      relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative)
+    ) {
+      refuse("production material, registry, output, and lock positions must remain strictly beneath the custody root");
+    }
+  }
+}
+
+function assertPrivateProductionCustodyDirectories(
+  custodyRoot: string,
+  positions: readonly string[],
+): void {
+  const visited = new Set<string>();
+  for (const position of positions) {
+    let directory = path.dirname(position);
+    for (;;) {
+      if (!visited.has(directory)) {
+        visited.add(directory);
+        let stats: fs.Stats;
+        try {
+          stats = fs.lstatSync(directory);
+        } catch {
+          refuse("every production custody path must have an existing private parent directory");
+        }
+        if (stats.isSymbolicLink() || !stats.isDirectory()) {
+          refuse("every production custody path parent must be a real directory, never a redirect");
+        }
+        if (typeof process.getuid !== "function" || stats.uid !== process.getuid()) {
+          refuse("every production custody directory must be owned by the current process user");
+        }
+        if ((stats.mode & 0o077) !== 0 || (stats.mode & 0o700) !== 0o700) {
+          refuse("every production custody directory must be private with mode 0700");
+        }
+        assertContainedPosition("production custody directory", directory);
+      }
+      if (directory === custodyRoot) break;
+      const parent = path.dirname(directory);
+      if (parent === directory) {
+        refuse("production custody path did not terminate at the declared custody root");
+      }
+      directory = parent;
+    }
+  }
+}
+
+function assertProductionCustodyLockAvailable(custodyRoot: string): void {
+  const custodyLockPath = custodyLockPathFor(custodyRoot);
+  try {
+    fs.lstatSync(custodyLockPath);
+    refuse("production custody root lock is held — another custody signer may be active");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
+
+interface ProductionCustodyLease {
+  readonly rootPath: string;
+  readonly rootDescriptor: number;
+  readonly rootDevice: number;
+  readonly rootInode: number;
+  readonly lockPath: string;
+  readonly lockDescriptor: number;
+}
+
+function acquireProductionCustodyLease(custodyRoot: string): ProductionCustodyLease {
+  const custodyLockPath = custodyLockPathFor(custodyRoot);
+  const rootDescriptor = openProductionCustodyRootDescriptor(custodyRoot);
+  let rootStats: fs.Stats;
+  try {
+    rootStats = fs.fstatSync(rootDescriptor);
+    assertProductionCustodyRootStats(rootStats);
+  } catch (error) {
+    try {
+      fs.closeSync(rootDescriptor);
+    } catch {
+      /* the root-admission error remains primary */
+    }
+    throw error;
+  }
+  let lockDescriptor: number;
+  try {
+    lockDescriptor = fs.openSync(custodyLockPath, "wx", 0o600);
+  } catch {
+    try {
+      fs.closeSync(rootDescriptor);
+    } catch {
+      /* lock refusal remains primary */
+    }
+    refuse("production custody root lock is held — another custody signer may be active");
+  }
+  try {
+    fs.writeFileSync(lockDescriptor, `${process.pid}\n`);
+    fs.fchmodSync(lockDescriptor, 0o600);
+    fs.fsyncSync(lockDescriptor);
+  } catch {
+    try {
+      fs.closeSync(lockDescriptor);
+    } catch {
+      /* cleanup continues to the lock leaf */
+    }
+    try {
+      fs.unlinkSync(custodyLockPath);
+    } catch {
+      /* a failed lock acquisition remains a refusal */
+    }
+    try {
+      fs.closeSync(rootDescriptor);
+    } catch {
+      /* a failed lock acquisition remains a refusal */
+    }
+    refuse("production custody root lock could not be made durable");
+  }
+  return {
+    rootPath: custodyRoot,
+    rootDescriptor,
+    rootDevice: rootStats.dev,
+    rootInode: rootStats.ino,
+    lockPath: custodyLockPath,
+    lockDescriptor,
+  };
+}
+
+function releaseProductionCustodyLease(lease: ProductionCustodyLease): void {
+  let revalidationError: unknown;
+  let namedRootDescriptor: number | null = null;
+  try {
+    const heldStats = fs.fstatSync(lease.rootDescriptor);
+    assertProductionCustodyRootStats(heldStats);
+    try {
+      namedRootDescriptor = fs.openSync(
+        lease.rootPath,
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_DIRECTORY,
+      );
+    } catch {
+      refuse("production custody root identity changed while signing");
+    }
+    const namedStats = fs.fstatSync(namedRootDescriptor);
+    assertProductionCustodyRootStats(namedStats);
+    if (namedStats.dev !== lease.rootDevice || namedStats.ino !== lease.rootInode) {
+      refuse("production custody root identity changed while signing");
+    }
+  } catch (error) {
+    revalidationError = error;
+  }
+  let namedRootCloseFailed = false;
+  if (namedRootDescriptor !== null) {
+    try {
+      fs.closeSync(namedRootDescriptor);
+    } catch {
+      namedRootCloseFailed = true;
+    }
+  }
+  let closeFailed = false;
+  try {
+    fs.closeSync(lease.lockDescriptor);
+  } catch {
+    closeFailed = true;
+  }
+  let unlinkFailed = false;
+  try {
+    fs.unlinkSync(lease.lockPath);
+  } catch (error) {
+    unlinkFailed = (error as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+  let rootCloseFailed = false;
+  try {
+    fs.closeSync(lease.rootDescriptor);
+  } catch {
+    rootCloseFailed = true;
+  }
+  if (revalidationError !== undefined) throw revalidationError;
+  if (namedRootCloseFailed || closeFailed || unlinkFailed || rootCloseFailed) {
+    refuse("production custody root lock could not be released cleanly");
   }
 }
 
@@ -587,7 +851,7 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
       );
     }
   }
-  for (const key of OPTION_KEYS) {
+  for (const key of REQUIRED_OPTION_KEYS) {
     if (typeof record[key] !== "string" || (record[key] as string).length === 0) {
       refuse(`option ${key} must be a non-empty string`);
     }
@@ -595,6 +859,12 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
   const opts = record as unknown as SignReleaseAttestationOptions;
   if (SIGNER_MODES.indexOf(opts.mode as never) === -1) {
     refuse("mode must be one of the closed signing modes");
+  }
+  if (
+    opts.mode === "production" &&
+    (typeof opts.custody_root_path !== "string" || opts.custody_root_path.length === 0)
+  ) {
+    refuse("production mode requires a non-empty custody_root_path");
   }
   if (!DIGEST_PATTERN.test(opts.digest)) {
     refuse("digest must be a canonical nad1 attestation digest");
@@ -604,6 +874,28 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
   const outputPath = path.resolve(opts.output_path);
   const materialPath = path.resolve(opts.material_path);
   const lockPath = lockPathFor(registryPath);
+  let custodyRoot: string | null = null;
+  let custodyLeaseLockPath: string | null = null;
+  if (opts.mode === "production") {
+    custodyRoot = path.resolve(opts.custody_root_path as string);
+    custodyLeaseLockPath = custodyLockPathFor(custodyRoot);
+    verifyProductionCustodyRoot(custodyRoot);
+    assertProductionPositionsWithinCustodyRoot(custodyRoot, [
+      materialPath,
+      registryPath,
+      outputPath,
+      lockPath,
+      custodyLeaseLockPath,
+    ]);
+    assertPrivateProductionCustodyDirectories(custodyRoot, [
+      materialPath,
+      registryPath,
+      outputPath,
+      lockPath,
+      custodyLeaseLockPath,
+    ]);
+    assertProductionCustodyLockAvailable(custodyRoot);
+  }
 
   // Every durable role must occupy a distinct resolved path. In particular,
   // publishing an attestation over the used-key registry would erase the
@@ -611,8 +903,9 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
   // material and lock positions distinct also prevents a successful signing
   // operation from corrupting its own inputs or synchronization primitive.
   const durablePositions = [materialPath, registryPath, outputPath, lockPath];
+  if (custodyLeaseLockPath !== null) durablePositions.push(custodyLeaseLockPath);
   if (new Set(durablePositions).size !== durablePositions.length) {
-    refuse("material, used-key registry, output, and lock paths must resolve to distinct positions");
+    refuse("material, used-key registry, output, registry lock, and custody lock paths must resolve to distinct positions");
   }
 
   // Containment before any byte is read or written: leaf symlinks and
@@ -631,121 +924,126 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
     refuse("lock position is a symlink — refusing a redirected lock");
   }
 
-  // Admit and PROVE the material: the declared root must be re-derivable from
-  // the supplied chain starts through the full construction.
-  const material = admitMaterial(materialPath, opts.mode);
-  const tree = deriveTree(material.leaves);
-  if (tree.root !== material.verification_root) {
-    refuse("signing material does not derive its declared verification root");
-  }
-  if (
-    opts.mode === "production" &&
-    !productionAttestorAuthorityRecognized(material.attestor_id, material.verification_root)
-  ) {
-    refuse(
-      "production signing material does not match the source-pinned authority for its attestor"
-    );
-  }
-
-  // Exclusive lock at exactly `<registry>.lock`. A held lock is an immediate
-  // refusal, never a wait: two concurrent signers racing one registry must
-  // resolve to exactly one winner.
-  let lockDescriptor: number;
+  const custodyLease = custodyRoot === null ? null : acquireProductionCustodyLease(custodyRoot);
   try {
-    lockDescriptor = fs.openSync(lockPath, "wx", 0o600);
-  } catch {
-    refuse("used-key registry lock is held — a concurrent signing is in progress, refusing");
-  }
-
-  try {
-    // Read the durable registry under the lock.
-    let registryText: string | null = null;
-    try {
-      registryText = fs.readFileSync(registryPath, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        refuse(`used-key registry is unreadable: ${(error as Error).message}`);
-      }
+    // Admit and PROVE the material: the declared root must be re-derivable from
+    // the supplied chain starts through the full construction.
+    const material = admitMaterial(materialPath, opts.mode);
+    const tree = deriveTree(material.leaves);
+    if (tree.root !== material.verification_root) {
+      refuse("signing material does not derive its declared verification root");
     }
-
-    let usedTokens: string[] = [];
-    if (registryText !== null) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(registryText);
-      } catch (error) {
-        refuse(`used-key registry is unreadable: ${(error as Error).message}`);
-      }
-      if (
-        parsed === null ||
-        typeof parsed !== "object" ||
-        Array.isArray(parsed) ||
-        (parsed as Record<string, unknown>).schema_version !== SIGNER_REGISTRY_SCHEMA ||
-        !Array.isArray((parsed as Record<string, unknown>).used_keys) ||
-        !(parsed as Record<string, unknown[]>).used_keys.every(
-          (token) => typeof token === "string" && token.length > 0
-        )
-      ) {
-        refuse(
-          `used-key registry must be ${SIGNER_REGISTRY_SCHEMA} with a complete non-empty-string used_keys array`
-        );
-      }
-      usedTokens = [...((parsed as { used_keys: string[] }).used_keys)];
-    }
-
-    const token = `${material.attestor_id}|${material.verification_root}|${material.key_index}`;
-    if (usedTokens.indexOf(token) !== -1) {
+    if (
+      opts.mode === "production" &&
+      !productionAttestorAuthorityRecognized(material.attestor_id, material.verification_root)
+    ) {
       refuse(
-        `one-time key ${material.key_index} for this attestor and root is already reserved/consumed — refusing reuse`
+        "production signing material does not match the source-pinned authority for its attestor"
       );
     }
 
-    // RESERVE BEFORE PUBLISHING. The reservation is durable the moment the
-    // registry renames into place; an output failure after this point leaves
-    // the key consumed, which is the safe direction.
-    usedTokens.push(token);
-    writeAtomic0600(
-      registryPath,
-      `${JSON.stringify({ schema_version: SIGNER_REGISTRY_SCHEMA, used_keys: usedTokens }, null, 2)}\n`
-    );
-
-    // Sign, then self-verify against the REAL accepted verifier before
-    // anything is published.
-    const symbols = codeWord(
-      neutralSha256Hex(
-        `${NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN}|M|${tree.root}|${material.key_index}|${opts.digest}`
-      )
-    );
-    if (symbols === null) {
-      refuse("digest does not reduce to a signable code word");
-    }
-    const starts = material.leaves[material.key_index];
-    const revealed = symbols.map((symbol, chain) => walkSteps(starts[chain], chain, symbol));
-    const keyIndexHex = material.key_index.toString(16).padStart(2, "0");
-    const signature = `nws1:${keyIndexHex}:${revealed.join("")}:${authPath(tree, material.key_index).join("")}`;
-    if (!neutralVerifyAttestationSignature(tree.root, opts.digest, signature)) {
-      refuse("produced signature does not verify against the accepted core verifier");
-    }
-
-    const output: SignReleaseAttestationOutput = {
-      schema_version: SIGNER_OUTPUT_SCHEMA,
-      scheme: NEUTRAL_ATTESTATION_SCHEME,
-      attestor_id: material.attestor_id,
-      verification_root: tree.root,
-      key_index: material.key_index,
-      digest: opts.digest,
-      signature,
-      mode: opts.mode,
-    };
-    writeAtomic0600(outputPath, `${hexSafeJson(output)}\n`);
-    return Object.freeze(output);
-  } finally {
-    fs.closeSync(lockDescriptor);
+    // Exclusive lock at exactly `<registry>.lock`. A held lock is an immediate
+    // refusal, never a wait: two concurrent signers racing one registry must
+    // resolve to exactly one winner.
+    let lockDescriptor: number;
     try {
-      fs.unlinkSync(lockPath);
+      lockDescriptor = fs.openSync(lockPath, "wx", 0o600);
     } catch {
-      /* the lock is already gone */
+      refuse("used-key registry lock is held — a concurrent signing is in progress, refusing");
     }
+
+    try {
+      // Read the durable registry under the lock.
+      let registryText: string | null = null;
+      try {
+        registryText = fs.readFileSync(registryPath, "utf8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          refuse(`used-key registry is unreadable: ${(error as Error).message}`);
+        }
+      }
+
+      let usedTokens: string[] = [];
+      if (registryText !== null) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(registryText);
+        } catch (error) {
+          refuse(`used-key registry is unreadable: ${(error as Error).message}`);
+        }
+        if (
+          parsed === null ||
+          typeof parsed !== "object" ||
+          Array.isArray(parsed) ||
+          (parsed as Record<string, unknown>).schema_version !== SIGNER_REGISTRY_SCHEMA ||
+          !Array.isArray((parsed as Record<string, unknown>).used_keys) ||
+          !(parsed as Record<string, unknown[]>).used_keys.every(
+            (token) => typeof token === "string" && token.length > 0
+          )
+        ) {
+          refuse(
+            `used-key registry must be ${SIGNER_REGISTRY_SCHEMA} with a complete non-empty-string used_keys array`
+          );
+        }
+        usedTokens = [...((parsed as { used_keys: string[] }).used_keys)];
+      }
+
+      const token = `${material.attestor_id}|${material.verification_root}|${material.key_index}`;
+      if (usedTokens.indexOf(token) !== -1) {
+        refuse(
+          `one-time key ${material.key_index} for this attestor and root is already reserved/consumed — refusing reuse`
+        );
+      }
+
+      // RESERVE BEFORE PUBLISHING. The reservation is durable the moment the
+      // registry renames into place; an output failure after this point leaves
+      // the key consumed, which is the safe direction.
+      usedTokens.push(token);
+      writeAtomic0600(
+        registryPath,
+        `${JSON.stringify({ schema_version: SIGNER_REGISTRY_SCHEMA, used_keys: usedTokens }, null, 2)}\n`
+      );
+
+      // Sign, then self-verify against the REAL accepted verifier before
+      // anything is published.
+      const symbols = codeWord(
+        neutralSha256Hex(
+          `${NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN}|M|${tree.root}|${material.key_index}|${opts.digest}`
+        )
+      );
+      if (symbols === null) {
+        refuse("digest does not reduce to a signable code word");
+      }
+      const starts = material.leaves[material.key_index];
+      const revealed = symbols.map((symbol, chain) => walkSteps(starts[chain], chain, symbol));
+      const keyIndexHex = material.key_index.toString(16).padStart(2, "0");
+      const signature = `nws1:${keyIndexHex}:${revealed.join("")}:${authPath(tree, material.key_index).join("")}`;
+      if (!neutralVerifyAttestationSignature(tree.root, opts.digest, signature)) {
+        refuse("produced signature does not verify against the accepted core verifier");
+      }
+
+      const output: SignReleaseAttestationOutput = {
+        schema_version: SIGNER_OUTPUT_SCHEMA,
+        scheme: NEUTRAL_ATTESTATION_SCHEME,
+        attestor_id: material.attestor_id,
+        verification_root: tree.root,
+        key_index: material.key_index,
+        digest: opts.digest,
+        signature,
+        mode: opts.mode,
+      };
+      writeAtomic0600(outputPath, `${hexSafeJson(output)}\n`);
+      return Object.freeze(output);
+    } finally {
+      fs.closeSync(lockDescriptor);
+      try {
+        fs.unlinkSync(lockPath);
+      } catch {
+        /* the lock is already gone */
+      }
+    }
+  } finally {
+    if (custodyLease !== null) releaseProductionCustodyLease(custodyLease);
   }
 }
 
@@ -759,11 +1057,13 @@ const CLI_FLAGS: Readonly<Record<string, keyof SignReleaseAttestationOptions>> =
   "--output-path": "output_path",
   "--mode": "mode",
   "--used-key-registry-path": "used_key_registry_path",
+  "--custody-root-path": "custody_root_path",
 });
 
 const USAGE =
   "usage: sign-release-attestation.ts --material-path <p> --digest <nad1:…> " +
-  "--output-path <p> --mode <fixture|production> --used-key-registry-path <p>\n";
+  "--output-path <p> --mode <fixture|production> --used-key-registry-path <p> " +
+  "[--custody-root-path <p>]\n";
 
 export function runSignerCli(argv: readonly string[]): number {
   const options: Record<string, string> = {};

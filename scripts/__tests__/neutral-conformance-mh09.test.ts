@@ -1496,16 +1496,246 @@ describe("the production external one-time signer", () => {
   });
 
   describe("§path containment", () => {
+    it("production mode requires an explicit custody root before it can admit signing material", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("missing-custody-root");
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-missing-custody-root")}`,
+          output_path: path.join(path.dirname(materialPath), "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(path.dirname(materialPath), "reg.json"),
+        })
+      ).toThrow(/custody_root_path|custody root/i);
+    });
+
+    it("production mode refuses a custody root that is not a private current-user directory", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("insecure-custody-root");
+      const custodyRoot = path.dirname(materialPath);
+      fs.chmodSync(custodyRoot, 0o755);
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-insecure-custody-root")}`,
+          output_path: path.join(custodyRoot, "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          custody_root_path: custodyRoot,
+        })
+      ).toThrow(/custody root.*private|private.*custody root|custody root.*mode/i);
+    });
+
+    it("production mode requires material, registry, output, and lock positions to remain strictly beneath the custody root", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("custody-root-escape");
+      const custodyRoot = path.dirname(materialPath);
+      const outsideOutput = path.join(tempRoot("signer-custody-root-outside"), "out.json");
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-custody-root-escape")}`,
+          output_path: outsideOutput,
+          mode: "production",
+          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          custody_root_path: custodyRoot,
+        })
+      ).toThrow(/custody root.*contain|beneath.*custody root|outside.*custody root/i);
+      expect(fs.existsSync(outsideOutput)).toBe(false);
+    });
+
+    it("production mode reserves the custody-root lock as a distinct durable position", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("custody-lock-role-collision");
+      const custodyRoot = path.dirname(materialPath);
+      const custodyLockPath = path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-custody-lock-role-collision")}`,
+          output_path: custodyLockPath,
+          mode: "production",
+          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          custody_root_path: custodyRoot,
+        })
+      ).toThrow(/distinct|custody.*lock|reserved.*position/i);
+      expect(fs.existsSync(custodyLockPath)).toBe(false);
+    });
+
+    it.each(["registry", "output"] as const)(
+      "production mode refuses a non-private %s directory beneath the custody root",
+      (insecureRole) => {
+        const { materialPath } = writeProductionShapedFixtureMaterial(`insecure-${insecureRole}-directory`);
+        const custodyRoot = path.dirname(materialPath);
+        const registryDir = path.join(custodyRoot, "registry");
+        const outputDir = path.join(custodyRoot, "output");
+        fs.mkdirSync(registryDir, { mode: insecureRole === "registry" ? 0o755 : 0o700 });
+        fs.mkdirSync(outputDir, { mode: insecureRole === "output" ? 0o755 : 0o700 });
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: `nad1:${neutralSha256Hex(`mh09-insecure-${insecureRole}-directory`)}`,
+            output_path: path.join(outputDir, "out.json"),
+            mode: "production",
+            used_key_registry_path: path.join(registryDir, "reg.json"),
+            custody_root_path: custodyRoot,
+          })
+        ).toThrow(/custody.*directory.*private|private.*custody.*directory|directory.*mode/i);
+      },
+    );
+
+    it("production mode refuses when the declared custody root already has an active exclusive signer lock", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("custody-root-lock");
+      const custodyRoot = path.dirname(materialPath);
+      const custodyLockPath = path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+      fs.writeFileSync(custodyLockPath, "held\n", { mode: 0o600 });
+      expect(() =>
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-custody-root-lock")}`,
+          output_path: path.join(custodyRoot, "out.json"),
+          mode: "production",
+          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          custody_root_path: custodyRoot,
+        })
+      ).toThrow(/custody root.*lock|custody.*signer.*active|exclusive custody/i);
+      expect(fs.readFileSync(custodyLockPath, "utf8")).toBe("held\n");
+    });
+
+    it("production mode holds the custody-root lock while reading material and removes it after a later refusal", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("custody-root-lock-lifetime");
+      const custodyRoot = path.dirname(materialPath);
+      const custodyLockPath = path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+      const originalReadFileSync = fs.readFileSync;
+      let observedMaterialRead = false;
+      const readSpy = jest.spyOn(fs, "readFileSync").mockImplementation(((
+        target: fs.PathOrFileDescriptor,
+        options?: Parameters<typeof fs.readFileSync>[1],
+      ) => {
+        if (typeof target === "number" && !observedMaterialRead) {
+          observedMaterialRead = true;
+          expect(fs.existsSync(custodyLockPath)).toBe(true);
+        }
+        return originalReadFileSync(target, options as never);
+      }) as typeof fs.readFileSync);
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: `nad1:${neutralSha256Hex("mh09-custody-root-lock-lifetime")}`,
+            output_path: path.join(custodyRoot, "out.json"),
+            mode: "production",
+            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            custody_root_path: custodyRoot,
+          })
+        ).toThrow(/pinned|authority/i);
+      } finally {
+        readSpy.mockRestore();
+      }
+      expect(observedMaterialRead).toBe(true);
+      expect(fs.existsSync(custodyLockPath)).toBe(false);
+    });
+
+    it("production mode revalidates custody-root protection after material admission", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("custody-root-mode-drift");
+      const custodyRoot = path.dirname(materialPath);
+      const custodyLockPath = path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+      const originalReadFileSync = fs.readFileSync;
+      let widened = false;
+      const readSpy = jest.spyOn(fs, "readFileSync").mockImplementation(((
+        target: fs.PathOrFileDescriptor,
+        options?: Parameters<typeof fs.readFileSync>[1],
+      ) => {
+        const value = originalReadFileSync(target, options as never);
+        if (typeof target === "number" && !widened) {
+          fs.chmodSync(custodyRoot, 0o755);
+          widened = true;
+        }
+        return value;
+      }) as typeof fs.readFileSync);
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: `nad1:${neutralSha256Hex("mh09-custody-root-mode-drift")}`,
+            output_path: path.join(custodyRoot, "out.json"),
+            mode: "production",
+            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            custody_root_path: custodyRoot,
+          })
+        ).toThrow(/custody root.*private|custody root.*mode|custody root.*changed/i);
+      } finally {
+        readSpy.mockRestore();
+        fs.chmodSync(custodyRoot, 0o700);
+      }
+      expect(widened).toBe(true);
+      expect(fs.existsSync(custodyLockPath)).toBe(false);
+    });
+
+    it("production mode refuses when the named custody root is replaced after material admission", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("custody-root-identity-drift");
+      const custodyRoot = path.dirname(materialPath);
+      const displacedRoot = `${custodyRoot}.displaced`;
+      const custodyLockPath = path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+      const displacedLockPath = path.join(displacedRoot, ".guild-release-attestation-custody.lock");
+      const originalOpenSync = fs.openSync;
+      const originalCloseSync = fs.closeSync;
+      let materialDescriptor: number | null = null;
+      let replaced = false;
+      const openSpy = jest.spyOn(fs, "openSync").mockImplementation(((
+        target: fs.PathLike,
+        flags: fs.OpenMode,
+        mode?: fs.Mode,
+      ) => {
+        const descriptor = originalOpenSync(target, flags, mode);
+        if (typeof target === "string" && path.resolve(target) === materialPath && materialDescriptor === null) {
+          materialDescriptor = descriptor;
+        }
+        return descriptor;
+      }) as typeof fs.openSync);
+      const closeSpy = jest.spyOn(fs, "closeSync").mockImplementation(((descriptor: number) => {
+        const result = originalCloseSync(descriptor);
+        if (descriptor === materialDescriptor && !replaced) {
+          fs.renameSync(custodyRoot, displacedRoot);
+          fs.mkdirSync(custodyRoot, { mode: 0o700 });
+          fs.renameSync(displacedLockPath, custodyLockPath);
+          replaced = true;
+        }
+        return result;
+      }) as typeof fs.closeSync);
+      try {
+        expect(() =>
+          Signer.invoke("signReleaseAttestation", {
+            material_path: materialPath,
+            digest: `nad1:${neutralSha256Hex("mh09-custody-root-identity-drift")}`,
+            output_path: path.join(custodyRoot, "out.json"),
+            mode: "production",
+            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            custody_root_path: custodyRoot,
+          })
+        ).toThrow(/custody root.*identity|custody root.*changed|named custody root.*replaced/i);
+      } finally {
+        closeSpy.mockRestore();
+        openSpy.mockRestore();
+        if (replaced) {
+          if (fs.existsSync(custodyLockPath)) fs.unlinkSync(custodyLockPath);
+          fs.rmdirSync(custodyRoot);
+          fs.renameSync(displacedRoot, custodyRoot);
+        }
+      }
+      expect(replaced).toBe(true);
+      expect(fs.existsSync(custodyLockPath)).toBe(false);
+    });
+
     it("production mode refuses material that is not a private regular file before parsing or authority admission", () => {
       const { materialPath } = writeFixtureMaterial("production-private-mode");
+      const custodyRoot = path.dirname(materialPath);
       fs.chmodSync(materialPath, 0o644);
       expect(() =>
         Signer.invoke("signReleaseAttestation", {
           material_path: materialPath,
           digest: `nad1:${neutralSha256Hex("mh09-production-private-mode")}`,
-          output_path: path.join(tempRoot("signer-production-private-mode-out"), "out.json"),
+          output_path: path.join(custodyRoot, "private-mode-out.json"),
           mode: "production",
-          used_key_registry_path: path.join(tempRoot("signer-production-private-mode-reg"), "reg.json"),
+          used_key_registry_path: path.join(custodyRoot, "private-mode-reg.json"),
+          custody_root_path: custodyRoot,
         })
       ).toThrow(/private|permission|mode/i);
 
@@ -1514,23 +1744,26 @@ describe("the production external one-time signer", () => {
         Signer.invoke("signReleaseAttestation", {
           material_path: materialPath,
           digest: `nad1:${neutralSha256Hex("mh09-production-private-schema")}`,
-          output_path: path.join(tempRoot("signer-production-private-schema-out"), "out.json"),
+          output_path: path.join(custodyRoot, "private-schema-out.json"),
           mode: "production",
-          used_key_registry_path: path.join(tempRoot("signer-production-private-schema-reg"), "reg.json"),
+          used_key_registry_path: path.join(custodyRoot, "private-schema-reg.json"),
+          custody_root_path: custodyRoot,
         })
       ).toThrow(/schema/i);
     });
 
     it("production mode refuses a non-regular material position", () => {
-      const materialDirectory = tempRoot("signer-production-material-directory");
-      fs.chmodSync(materialDirectory, 0o700);
+      const custodyRoot = tempRoot("signer-production-material-directory");
+      const materialDirectory = path.join(custodyRoot, "material");
+      fs.mkdirSync(materialDirectory, { mode: 0o700 });
       expect(() =>
         Signer.invoke("signReleaseAttestation", {
           material_path: materialDirectory,
           digest: `nad1:${neutralSha256Hex("mh09-production-material-directory")}`,
-          output_path: path.join(tempRoot("signer-production-material-directory-out"), "out.json"),
+          output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(tempRoot("signer-production-material-directory-reg"), "reg.json"),
+          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          custody_root_path: custodyRoot,
         })
       ).toThrow(/regular file/i);
     });
@@ -1567,6 +1800,7 @@ describe("the production external one-time signer", () => {
 
     it("refuses a same-inode symlink planted after containment but before the final identity check", () => {
       const { materialPath } = writeProductionShapedFixtureMaterial("post-containment-symlink");
+      const custodyRoot = path.dirname(materialPath);
       const displacedPath = materialPath + ".displaced";
       const originalOpenSync = fs.openSync;
       let materialOpenCount = 0;
@@ -1591,9 +1825,10 @@ describe("the production external one-time signer", () => {
           Signer.invoke("signReleaseAttestation", {
             material_path: materialPath,
             digest: "nad1:" + neutralSha256Hex("mh09-post-containment-symlink"),
-            output_path: path.join(tempRoot("signer-post-containment-symlink-out"), "out.json"),
+            output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(tempRoot("signer-post-containment-symlink-reg"), "reg.json"),
+            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            custody_root_path: custodyRoot,
           })
         ).toThrow(/symlink|redirect|position/i);
       } finally {
@@ -1604,6 +1839,7 @@ describe("the production external one-time signer", () => {
 
     it("production mode revalidates private owner/mode metadata after reading", () => {
       const { materialPath } = writeProductionShapedFixtureMaterial("post-read-private-mode");
+      const custodyRoot = path.dirname(materialPath);
       const originalReadFileSync = fs.readFileSync;
       let widened = false;
       const readSpy = jest.spyOn(fs, "readFileSync").mockImplementation(((
@@ -1622,9 +1858,10 @@ describe("the production external one-time signer", () => {
           Signer.invoke("signReleaseAttestation", {
             material_path: materialPath,
             digest: "nad1:" + neutralSha256Hex("mh09-post-read-private-mode"),
-            output_path: path.join(tempRoot("signer-post-read-private-mode-out"), "out.json"),
+            output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(tempRoot("signer-post-read-private-mode-reg"), "reg.json"),
+            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            custody_root_path: custodyRoot,
           })
         ).toThrow(/private|permission|mode/i);
       } finally {
@@ -1635,6 +1872,7 @@ describe("the production external one-time signer", () => {
 
     it("refuses generically when an otherwise successful sensitive-descriptor close fails", () => {
       const { materialPath } = writeProductionShapedFixtureMaterial("descriptor-close-failure");
+      const custodyRoot = path.dirname(materialPath);
       const originalOpenSync = fs.openSync;
       const originalCloseSync = fs.closeSync;
       let materialDescriptor = -1;
@@ -1662,9 +1900,10 @@ describe("the production external one-time signer", () => {
           Signer.invoke("signReleaseAttestation", {
             material_path: materialPath,
             digest: "nad1:" + neutralSha256Hex("mh09-descriptor-close-failure"),
-            output_path: path.join(tempRoot("signer-descriptor-close-failure-out"), "out.json"),
+            output_path: path.join(custodyRoot, "out.json"),
             mode: "production",
-            used_key_registry_path: path.join(tempRoot("signer-descriptor-close-failure-reg"), "reg.json"),
+            used_key_registry_path: path.join(custodyRoot, "reg.json"),
+            custody_root_path: custodyRoot,
           })
         ).toThrow(/descriptor|close/i);
       } finally {
@@ -1888,25 +2127,28 @@ describe("the production external one-time signer", () => {
       expect(recognizes("caller.self-notary", NEUTRAL_ATTESTOR_TRUST_ROOT[0].verification_root)).toBe(false);
     });
 
-    it("refuses production mode with absent provisioning, using otherwise-valid fixture material", () => {
-      const { materialPath } = writeFixtureMaterial("prod-absent");
+    it("refuses production mode with absent provisioning, using otherwise-valid production-shaped material", () => {
+      const { materialPath } = writeProductionShapedFixtureMaterial("prod-absent");
+      const custodyRoot = path.dirname(materialPath);
       expect(() =>
         Signer.invoke("signReleaseAttestation", {
           material_path: materialPath,
           digest: `nad1:${neutralSha256Hex("mh09-prod-absent")}`,
-          output_path: path.join(tempRoot("signer-prod-out"), "out.json"),
+          output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(tempRoot("signer-prod-reg"), "reg.json"),
+          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          custody_root_path: custodyRoot,
         })
-      ).toThrow();
+      ).toThrow(/pinned|authority/i);
     });
 
     it("refuses production-schema material whose derived root is not the source-pinned production root", () => {
       const { material } = writeFixtureMaterial("prod-fixture-root");
       const productionSchema = Signer.exported<string>("SIGNER_PRODUCTION_MATERIAL_SCHEMA");
-      const materialPath = path.join(tempRoot("signer-prod-fixture-material"), "material.json");
-      const outputPath = path.join(tempRoot("signer-prod-fixture-out"), "out.json");
-      const registryPath = path.join(tempRoot("signer-prod-fixture-reg"), "reg.json");
+      const custodyRoot = tempRoot("signer-prod-fixture-material");
+      const materialPath = path.join(custodyRoot, "material.json");
+      const outputPath = path.join(custodyRoot, "out.json");
+      const registryPath = path.join(custodyRoot, "reg.json");
       fs.writeFileSync(materialPath, JSON.stringify({ ...material, schema_version: productionSchema }), {
         mode: 0o600,
       });
@@ -1917,6 +2159,7 @@ describe("the production external one-time signer", () => {
           output_path: outputPath,
           mode: "production",
           used_key_registry_path: registryPath,
+          custody_root_path: custodyRoot,
         })
       ).toThrow(/pinned|authority/i);
       expect(fs.existsSync(outputPath)).toBe(false);
@@ -1925,13 +2168,15 @@ describe("the production external one-time signer", () => {
 
     it("refuses a caller-supplied trust-root substitution in production mode, using otherwise-valid fixture material", () => {
       const { materialPath } = writeFixtureMaterial("prod-trust");
+      const custodyRoot = path.dirname(materialPath);
       expect(() =>
         Signer.invoke("signReleaseAttestation", {
           material_path: materialPath,
           digest: `nad1:${neutralSha256Hex("mh09-prod-trust")}`,
-          output_path: path.join(tempRoot("signer-prod-trust-out"), "out.json"),
+          output_path: path.join(custodyRoot, "out.json"),
           mode: "production",
-          used_key_registry_path: path.join(tempRoot("signer-prod-trust-reg"), "reg.json"),
+          used_key_registry_path: path.join(custodyRoot, "reg.json"),
+          custody_root_path: custodyRoot,
           trust_root_override: { attestor_id: "guild.release-attestor", verification_root: "0".repeat(64) },
         })
       ).toThrow();

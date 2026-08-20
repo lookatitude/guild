@@ -205,7 +205,7 @@
       "id": "sign-release-attestation",
       "source_path": "scripts/sign-release-attestation.ts",
       "resource_path": "resources/scripts/sign-release-attestation.ts",
-      "sha256": "e6b9042c2bd95db42647a2a575f3124389ed42294fbb2a03afcadfef865c7ddc"
+      "sha256": "5cb71dc6d3aac4fa635d8333db0437a055e62d982bd1f89c13aaae0d352f2079"
     },
     {
       "category": "scripts",
