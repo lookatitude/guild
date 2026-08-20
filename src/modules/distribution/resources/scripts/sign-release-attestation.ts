@@ -810,39 +810,78 @@ function hexSafeJson(value: unknown): string {
   return `{${parts.join(",")}}`;
 }
 
-/** Write atomically (same-directory temp + rename) and force mode 0600. */
+/**
+ * Write atomically (same-directory temp + rename), force mode 0600, and make
+ * the published directory entry crash-durable before returning. The held
+ * directory descriptor ensures the fsync targets the directory in which the
+ * temp file was staged, even if its pathname is renamed after admission.
+ */
 function writeAtomic0600(finalPath: string, text: string): void {
   const directory = path.dirname(finalPath);
   const tempPath = path.join(directory, `.${path.basename(finalPath)}.${process.pid}.tmp`);
-  let descriptor: number;
+  const directoryFlags =
+    fs.constants.O_RDONLY |
+    (fs.constants.O_DIRECTORY ?? 0) |
+    (fs.constants.O_NOFOLLOW ?? 0);
+  let directoryDescriptor: number | undefined;
   try {
-    descriptor = fs.openSync(tempPath, "wx", 0o600);
+    directoryDescriptor = fs.openSync(directory, directoryFlags);
+    if (!fs.fstatSync(directoryDescriptor).isDirectory()) {
+      refuse(`durable-write parent for ${path.basename(finalPath)} is not a directory`);
+    }
   } catch (error) {
-    refuse(`cannot stage a durable write beside ${path.basename(finalPath)}: ${(error as Error).message}`);
+    if (directoryDescriptor !== undefined) {
+      try {
+        fs.closeSync(directoryDescriptor);
+      } catch {
+        /* the admission refusal below remains authoritative */
+      }
+    }
+    refuse(`cannot bind durable-write parent for ${path.basename(finalPath)}: ${(error as Error).message}`);
   }
+
   try {
-    fs.writeFileSync(descriptor, text);
-    fs.fchmodSync(descriptor, 0o600);
-    fs.fsyncSync(descriptor);
-  } catch (error) {
+    let descriptor: number;
+    try {
+      descriptor = fs.openSync(tempPath, "wx", 0o600);
+    } catch (error) {
+      refuse(`cannot stage a durable write beside ${path.basename(finalPath)}: ${(error as Error).message}`);
+    }
+    try {
+      fs.writeFileSync(descriptor, text);
+      fs.fchmodSync(descriptor, 0o600);
+      fs.fsyncSync(descriptor);
+    } catch (error) {
+      fs.closeSync(descriptor);
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {
+        /* the staged temp is already gone */
+      }
+      refuse(`durable write failed for ${path.basename(finalPath)}: ${(error as Error).message}`);
+    }
     fs.closeSync(descriptor);
     try {
-      fs.unlinkSync(tempPath);
-    } catch {
-      /* the staged temp is already gone */
+      fs.renameSync(tempPath, finalPath);
+    } catch (error) {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {
+        /* the staged temp is already gone */
+      }
+      refuse(`durable publish failed for ${path.basename(finalPath)}: ${(error as Error).message}`);
     }
-    refuse(`durable write failed for ${path.basename(finalPath)}: ${(error as Error).message}`);
-  }
-  fs.closeSync(descriptor);
-  try {
-    fs.renameSync(tempPath, finalPath);
-  } catch (error) {
     try {
-      fs.unlinkSync(tempPath);
-    } catch {
-      /* the staged temp is already gone */
+      fs.fsyncSync(directoryDescriptor);
+    } catch (error) {
+      refuse(`durable directory publish failed for ${path.basename(finalPath)}: ${(error as Error).message}`);
     }
-    refuse(`durable publish failed for ${path.basename(finalPath)}: ${(error as Error).message}`);
+  } finally {
+    try {
+      fs.closeSync(directoryDescriptor);
+    } catch (error) {
+      refuse(`durable-write parent descriptor did not close cleanly for ${path.basename(finalPath)}: ${(error as Error).message}`);
+    }
   }
 }
 

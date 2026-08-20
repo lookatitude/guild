@@ -2150,6 +2150,46 @@ describe("the production external one-time signer", () => {
   });
 
   describe("§atomicity and non-leakage", () => {
+    it("fsyncs each containing directory after publishing an atomic rename", () => {
+      const { materialPath } = writeFixtureMaterial("atomic-directory-fsync");
+      const outDir = tempRoot("signer-atomic-directory-fsync-out");
+      const regDir = tempRoot("signer-atomic-directory-fsync-reg");
+      const descriptorPaths = new Map<number, string>();
+      const syncedDirectories: string[] = [];
+      const originalOpenSync = fs.openSync;
+      const originalFsyncSync = fs.fsyncSync;
+      const openSpy = jest.spyOn(fs, "openSync").mockImplementation((
+        target: fs.PathLike,
+        flags: fs.OpenMode,
+        mode?: fs.Mode
+      ) => {
+        const descriptor = originalOpenSync(target, flags, mode);
+        descriptorPaths.set(descriptor, path.resolve(String(target)));
+        return descriptor;
+      });
+      const fsyncSpy = jest.spyOn(fs, "fsyncSync").mockImplementation((descriptor: number) => {
+        const descriptorPath = descriptorPaths.get(descriptor);
+        if (descriptorPath !== undefined && fs.fstatSync(descriptor).isDirectory()) {
+          syncedDirectories.push(descriptorPath);
+        }
+        originalFsyncSync(descriptor);
+      });
+      try {
+        Signer.invoke("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-signer-atomic-directory-fsync")}`,
+          output_path: path.join(outDir, "out.json"),
+          mode: "fixture",
+          used_key_registry_path: path.join(regDir, "reg.json"),
+        });
+      } finally {
+        fsyncSpy.mockRestore();
+        openSpy.mockRestore();
+      }
+
+      expect(syncedDirectories).toEqual([regDir, outDir]);
+    });
+
     it("writes the used-key registry AND the signature output atomically, each at 0600, with EITHER parent directory containing only its expected final file and no temp/lock debris, with otherwise-valid material", () => {
       const { materialPath } = writeFixtureMaterial("atomic");
       const outDir = tempRoot("signer-atomic-out");
