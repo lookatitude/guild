@@ -1673,6 +1673,68 @@ describe("the production external one-time signer", () => {
       expect(fs.existsSync(custodyLockPath)).toBe(false);
     });
 
+    it("production mode holds the custody-root lock through registry publication, output publication, and registry-lock cleanup", () => {
+      const { material, materialPath } = writeProductionShapedFixtureMaterial("custody-root-lock-full-lifetime");
+      const custodyRoot = path.dirname(materialPath);
+      const custodyLockPath = path.join(custodyRoot, ".guild-release-attestation-custody.lock");
+      const registryPath = productionRegistryPath(custodyRoot);
+      const registryLockPath = lockPathFor(registryPath);
+      const outputPath = path.join(custodyRoot, "out.json");
+      const observed: string[] = [];
+      // The repository intentionally has no production private seeds. This
+      // test-owned dependency spy changes only the in-memory authority lookup
+      // so the REAL production-mode body can traverse its complete success
+      // path; it adds no signer option or production trust override.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const neutralCore = require("../../src/modules/lifecycle/workflows/neutral-conformance-core") as {
+        neutralAttestorVerificationKey: (attestorId: string) => string | null;
+      };
+      const originalAuthorityLookup = neutralCore.neutralAttestorVerificationKey;
+      const authoritySpy = jest
+        .spyOn(neutralCore, "neutralAttestorVerificationKey")
+        .mockImplementation((attestorId: string) =>
+          attestorId === material.attestor_id ? material.verification_root : originalAuthorityLookup(attestorId)
+        );
+      const originalRenameSync = fs.renameSync;
+      const renameSpy = jest.spyOn(fs, "renameSync").mockImplementation((source: fs.PathLike, target: fs.PathLike) => {
+        const result = originalRenameSync(source, target);
+        const resolvedTarget = path.resolve(String(target));
+        if (resolvedTarget === registryPath || resolvedTarget === outputPath) {
+          expect(fs.existsSync(custodyLockPath)).toBe(true);
+          observed.push(resolvedTarget === registryPath ? "registry-published" : "output-published");
+        }
+        return result;
+      });
+      const originalUnlinkSync = fs.unlinkSync;
+      const unlinkSpy = jest.spyOn(fs, "unlinkSync").mockImplementation((target: fs.PathLike) => {
+        const resolvedTarget = path.resolve(String(target));
+        const result = originalUnlinkSync(target);
+        if (resolvedTarget === registryLockPath) {
+          expect(fs.existsSync(custodyLockPath)).toBe(true);
+          observed.push("registry-lock-cleaned");
+        }
+        return result;
+      });
+      try {
+        const output = Signer.invoke<{ mode: string; verification_root: string }>("signReleaseAttestation", {
+          material_path: materialPath,
+          digest: `nad1:${neutralSha256Hex("mh09-custody-root-lock-full-lifetime")}`,
+          output_path: outputPath,
+          mode: "production",
+          used_key_registry_path: registryPath,
+          custody_root_path: custodyRoot,
+        });
+        expect(output.mode).toBe("production");
+        expect(output.verification_root).toBe(material.verification_root);
+      } finally {
+        unlinkSpy.mockRestore();
+        renameSpy.mockRestore();
+        authoritySpy.mockRestore();
+      }
+      expect(observed).toEqual(["registry-published", "output-published", "registry-lock-cleaned"]);
+      expect(fs.existsSync(custodyLockPath)).toBe(false);
+    });
+
     it("production mode revalidates custody-root protection after material admission", () => {
       const { materialPath } = writeProductionShapedFixtureMaterial("custody-root-mode-drift");
       const custodyRoot = path.dirname(materialPath);
@@ -2150,14 +2212,15 @@ describe("the production external one-time signer", () => {
   });
 
   describe("§atomicity and non-leakage", () => {
-    it("fsyncs each containing directory after publishing an atomic rename", () => {
+    it("fsyncs each containing directory only after publishing its atomic rename", () => {
       const { materialPath } = writeFixtureMaterial("atomic-directory-fsync");
       const outDir = tempRoot("signer-atomic-directory-fsync-out");
       const regDir = tempRoot("signer-atomic-directory-fsync-reg");
       const descriptorPaths = new Map<number, string>();
-      const syncedDirectories: string[] = [];
+      const durabilityEvents: string[] = [];
       const originalOpenSync = fs.openSync;
       const originalFsyncSync = fs.fsyncSync;
+      const originalRenameSync = fs.renameSync;
       const openSpy = jest.spyOn(fs, "openSync").mockImplementation((
         target: fs.PathLike,
         flags: fs.OpenMode,
@@ -2170,9 +2233,14 @@ describe("the production external one-time signer", () => {
       const fsyncSpy = jest.spyOn(fs, "fsyncSync").mockImplementation((descriptor: number) => {
         const descriptorPath = descriptorPaths.get(descriptor);
         if (descriptorPath !== undefined && fs.fstatSync(descriptor).isDirectory()) {
-          syncedDirectories.push(descriptorPath);
+          durabilityEvents.push(`fsync:${descriptorPath}`);
         }
         originalFsyncSync(descriptor);
+      });
+      const renameSpy = jest.spyOn(fs, "renameSync").mockImplementation((source: fs.PathLike, target: fs.PathLike) => {
+        const result = originalRenameSync(source, target);
+        durabilityEvents.push(`rename:${path.resolve(String(target))}`);
+        return result;
       });
       try {
         Signer.invoke("signReleaseAttestation", {
@@ -2183,11 +2251,17 @@ describe("the production external one-time signer", () => {
           used_key_registry_path: path.join(regDir, "reg.json"),
         });
       } finally {
+        renameSpy.mockRestore();
         fsyncSpy.mockRestore();
         openSpy.mockRestore();
       }
 
-      expect(syncedDirectories).toEqual([regDir, outDir]);
+      expect(durabilityEvents).toEqual([
+        `rename:${path.join(regDir, "reg.json")}`,
+        `fsync:${regDir}`,
+        `rename:${path.join(outDir, "out.json")}`,
+        `fsync:${outDir}`,
+      ]);
     });
 
     it("writes the used-key registry AND the signature output atomically, each at 0600, with EITHER parent directory containing only its expected final file and no temp/lock debris, with otherwise-valid material", () => {
