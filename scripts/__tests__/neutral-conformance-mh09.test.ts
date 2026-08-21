@@ -2774,3 +2774,361 @@ describe("the control battery distinguishes good from bad", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// §5 — FU04 public root-admission bridge (RED-FIRST)
+// ---------------------------------------------------------------------------
+
+describe("the FU04 public root-admission bridge", () => {
+  const candidateIds = NEUTRAL_ATTESTOR_TRUST_ROOT.map((entry) => entry.attestor_id);
+
+  function candidateManifest(roots: readonly string[]) {
+    return {
+      schema_version: "guild.journal_attestor_root_candidate.v1",
+      rotation_id: "pcl-fu04-production-root-rotation",
+      predecessor_trust_root_digest: Signer.invoke<string>("rootAdmissionPredecessorDigest"),
+      candidates: candidateIds.map((attestor_id, index) => ({
+        attestor_id,
+        verification_root: roots[index],
+      })),
+      external_custody_verified: false,
+      authorizes_rotation: false,
+    };
+  }
+
+  function writeAdmissionMaterial(label: string, attestorId: string, keyIndex = 0) {
+    const tree = ReferenceMh09.buildTree(`fu04-${label}`);
+    const fixture = ReferenceMh09.buildFixtureMaterial(tree, attestorId, keyIndex);
+    const custodyRoot = tempRoot(`fu04-custody-${label}`);
+    fs.chmodSync(custodyRoot, 0o700);
+    const materialPath = path.join(custodyRoot, "material.json");
+    fs.writeFileSync(
+      materialPath,
+      JSON.stringify({
+        ...fixture,
+        schema_version: Signer.exported<string>("SIGNER_PRODUCTION_MATERIAL_SCHEMA"),
+      }),
+      { mode: 0o600 },
+    );
+    fs.chmodSync(materialPath, 0o600);
+    return { tree, custodyRoot, materialPath };
+  }
+
+  it("rejects every fixture-era pinned root and accepts only a complete, distinct replacement set", () => {
+    expect(Signer.exported("ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT")).toEqual([
+      {
+        attestor_id: "guild.release-attestor",
+        verification_root: "2cd0a7a8986e79ec2cb25b5752d5a85a80d10c4d133d6590b91417bf976f3539",
+      },
+      {
+        attestor_id: "guild.host-conformance-witness",
+        verification_root: "584d8e28a2a5c109a2b892b627a3154fef9da46efc45eb79d042611bf09d09ef",
+      },
+      {
+        attestor_id: "guild.distribution-notary",
+        verification_root: "4dd9eb1f20a5194d38c6ac9cf308dac017ceebac0e85bcd7fbfa26fc43945f37",
+      },
+    ]);
+    const oldRoots = NEUTRAL_ATTESTOR_TRUST_ROOT.map((entry) => entry.verification_root);
+    expect(() => Signer.invoke("rootAdmissionManifestDigest", candidateManifest(oldRoots))).toThrow(
+      /retired|predecessor|fixture|replacement/i,
+    );
+
+    const freshRoots = candidateIds.map((id) => ReferenceMh09.buildTree(`fu04-manifest-${id}`).root);
+    for (let index = 0; index < oldRoots.length; index += 1) {
+      const oneRetired = [...freshRoots];
+      oneRetired[index] = oldRoots[index];
+      expect(() => Signer.invoke("rootAdmissionManifestDigest", candidateManifest(oneRetired))).toThrow(
+        /retired|fixture|replacement/i,
+      );
+    }
+    expect(() =>
+      Signer.invoke("rootAdmissionManifestDigest", {
+        ...candidateManifest(freshRoots),
+        candidates: candidateManifest(freshRoots).candidates.slice(0, 2),
+      }),
+    ).toThrow(/exactly|three|replacement/i);
+    expect(() =>
+      Signer.invoke("rootAdmissionManifestDigest", {
+        ...candidateManifest(freshRoots),
+        candidates: [
+          ...candidateManifest(freshRoots).candidates,
+          { attestor_id: "guild.extra", verification_root: "f".repeat(64) },
+        ],
+      }),
+    ).toThrow(/exactly|three|replacement/i);
+    expect(() =>
+      Signer.invoke(
+        "rootAdmissionManifestDigest",
+        candidateManifest([freshRoots[0], freshRoots[0], freshRoots[2]]),
+      ),
+    ).toThrow(/distinct|duplicate/i);
+    expect(() =>
+      Signer.invoke("rootAdmissionManifestDigest", {
+        ...candidateManifest(freshRoots),
+        predecessor_trust_root_digest: `nrt1:${"0".repeat(64)}`,
+      }),
+    ).toThrow(/predecessor|current|stale/i);
+    const digest = Signer.invoke<string>("rootAdmissionManifestDigest", candidateManifest(freshRoots));
+    expect(digest).toMatch(/^nra1:[0-9a-f]{64}$/);
+  });
+
+  it("signs one production-custodied possession proof over the exact manifest without authorizing rotation", () => {
+    const material = writeAdmissionMaterial("single", candidateIds[0], 0);
+    const otherRoots = candidateIds.slice(1).map((id) => ReferenceMh09.buildTree(`fu04-other-${id}`).root);
+    const manifest = candidateManifest([material.tree.root, ...otherRoots]);
+    const outputPath = path.join(material.custodyRoot, "root-possession-proof.json");
+    const proof = Signer.invoke<Record<string, unknown>>("signRootAdmissionProof", {
+      candidate_manifest: manifest,
+      material_path: material.materialPath,
+      output_path: outputPath,
+      used_key_registry_path: path.join(material.custodyRoot, "used-one-time-keys.json"),
+      custody_root_path: material.custodyRoot,
+    });
+
+    expect(proof.schema_version).toBe("guild.journal_attestor_root_possession_proof.v1");
+    expect(proof.manifest_digest).toBe(Signer.invoke("rootAdmissionManifestDigest", manifest));
+    expect(proof.external_custody_verified).toBe(false);
+    expect(proof.authorizes_rotation).toBe(false);
+    expect(
+      neutralVerifyAttestationSignature(proof.verification_root, proof.manifest_digest, proof.signature),
+    ).toBe(true);
+    expect(() =>
+      Signer.invoke("signReleaseAttestation", {
+        material_path: material.materialPath,
+        digest: proof.manifest_digest,
+        output_path: path.join(material.custodyRoot, "release.json"),
+        mode: "production",
+        used_key_registry_path: path.join(material.custodyRoot, "used-one-time-keys.json"),
+        custody_root_path: material.custodyRoot,
+      }),
+    ).toThrow(/digest|nad1/i);
+
+    const writtenBytes = fs.readFileSync(outputPath, "utf8");
+    for (const leaf of (JSON.parse(fs.readFileSync(material.materialPath, "utf8")) as { leaves: Array<{ private_seeds: string[] }> }).leaves) {
+      for (const seed of leaf.private_seeds) expect(writtenBytes).not.toContain(seed);
+    }
+  });
+
+  it("refuses signing material whose root is absent from the candidate manifest before consuming a key", () => {
+    const material = writeAdmissionMaterial("not-a-candidate", candidateIds[0], 0);
+    const manifestRoots = candidateIds.map((id) => ReferenceMh09.buildTree(`fu04-declared-${id}`).root);
+    const registryPath = path.join(material.custodyRoot, "used-one-time-keys.json");
+
+    expect(() =>
+      Signer.invoke("signRootAdmissionProof", {
+        candidate_manifest: candidateManifest(manifestRoots),
+        material_path: material.materialPath,
+        output_path: path.join(material.custodyRoot, "proof.json"),
+        used_key_registry_path: registryPath,
+        custody_root_path: material.custodyRoot,
+      }),
+    ).toThrow(/candidate|manifest|root|authority/i);
+    expect(fs.existsSync(registryPath)).toBe(false);
+  });
+
+  it("closes the proving window after the live source trust roots rotate while preserving historical verification", () => {
+    const materials = candidateIds.map((id, index) => writeAdmissionMaterial(`rotated-live-root-${index}`, id, 0));
+    const manifest = candidateManifest(materials.map((entry) => entry.tree.root));
+    const proofs = materials.map((entry) =>
+      Signer.invoke<Record<string, unknown>>("signRootAdmissionProof", {
+        candidate_manifest: manifest,
+        material_path: entry.materialPath,
+        output_path: path.join(entry.custodyRoot, "proof.json"),
+        used_key_registry_path: path.join(entry.custodyRoot, "used-one-time-keys.json"),
+        custody_root_path: entry.custodyRoot,
+      }),
+    );
+    const registryPath = path.join(materials[0].custodyRoot, "used-one-time-keys.json");
+    const registryBefore = fs.readFileSync(registryPath, "utf8");
+    const rotatedTrustRoot = NEUTRAL_ATTESTOR_TRUST_ROOT.map((entry, index) => ({
+      ...entry,
+      verification_root: index === 0 ? materials[0].tree.root : entry.verification_root,
+    }));
+
+    let rotatedSigner: Record<string, unknown> | undefined;
+    jest.isolateModules(() => {
+      jest.doMock("../../src/modules/lifecycle/workflows/neutral-conformance-core", () => ({
+        ...jest.requireActual("../../src/modules/lifecycle/workflows/neutral-conformance-core"),
+        NEUTRAL_ATTESTOR_TRUST_ROOT: rotatedTrustRoot,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      rotatedSigner = require("../sign-release-attestation") as Record<string, unknown>;
+    });
+    jest.dontMock("../../src/modules/lifecycle/workflows/neutral-conformance-core");
+
+    expect(() =>
+      (rotatedSigner?.signRootAdmissionProof as (options: unknown) => unknown)({
+        candidate_manifest: manifest,
+        material_path: materials[0].materialPath,
+        output_path: path.join(materials[0].custodyRoot, "second-proof.json"),
+        used_key_registry_path: registryPath,
+        custody_root_path: materials[0].custodyRoot,
+      }),
+    ).toThrow(/proving window|live trust|rotat|predecessor/i);
+    expect(fs.readFileSync(registryPath, "utf8")).toBe(registryBefore);
+
+    const historicalBundle = (rotatedSigner?.verifyRootAdmissionBundle as (
+      candidateManifest: unknown,
+      possessionProofs: unknown,
+    ) => Record<string, unknown>)(manifest, proofs);
+    expect(historicalBundle.candidate_root_possession_verified).toBe(true);
+    expect(historicalBundle.external_custody_verified).toBe(false);
+    expect(historicalBundle.authorizes_rotation).toBe(false);
+  });
+
+  it("assembles only three matching production proofs and still refuses to claim custody or authorize rotation", () => {
+    const materials = candidateIds.map((id, index) => writeAdmissionMaterial(`bundle-${index}`, id));
+    const manifest = candidateManifest(materials.map((entry) => entry.tree.root));
+    const proofs = materials.map((entry, index) =>
+      Signer.invoke<Record<string, unknown>>("signRootAdmissionProof", {
+        candidate_manifest: manifest,
+        material_path: entry.materialPath,
+        output_path: path.join(entry.custodyRoot, "proof.json"),
+        used_key_registry_path: path.join(entry.custodyRoot, "used-one-time-keys.json"),
+        custody_root_path: entry.custodyRoot,
+      }),
+    );
+
+    const admission = Signer.invoke<Record<string, unknown>>("verifyRootAdmissionBundle", manifest, proofs);
+    expect(admission.schema_version).toBe("guild.journal_attestor_root_admission.v1");
+    expect(admission.candidate_root_possession_verified).toBe(true);
+    expect(admission.external_custody_verified).toBe(false);
+    expect(admission.authorizes_rotation).toBe(false);
+
+    expect(() => Signer.invoke("verifyRootAdmissionBundle", manifest, proofs.slice(0, 2))).toThrow(
+      /three|complete|proof/i,
+    );
+    expect(() =>
+      Signer.invoke("verifyRootAdmissionBundle", manifest, [proofs[0], proofs[0], proofs[2]]),
+    ).toThrow(/duplicate|distinct|candidate/i);
+    expect(() =>
+      Signer.invoke("verifyRootAdmissionBundle", manifest, [
+        proofs[0],
+        {
+          ...proofs[1],
+          signature: `${String(proofs[1].signature).slice(0, -1)}${String(proofs[1].signature).endsWith("0") ? "1" : "0"}`,
+        },
+        proofs[2],
+      ]),
+    ).toThrow(/signature|proof|verify/i);
+  });
+
+  it("binds every proof to the whole candidate manifest, not just its own root", () => {
+    const materials = candidateIds.map((id, index) => writeAdmissionMaterial(`manifest-bind-${index}`, id));
+    const manifest = candidateManifest(materials.map((entry) => entry.tree.root));
+    const proofs = materials.map((entry) =>
+      Signer.invoke<Record<string, unknown>>("signRootAdmissionProof", {
+        candidate_manifest: manifest,
+        material_path: entry.materialPath,
+        output_path: path.join(entry.custodyRoot, "proof.json"),
+        used_key_registry_path: path.join(entry.custodyRoot, "used-one-time-keys.json"),
+        custody_root_path: entry.custodyRoot,
+      }),
+    );
+    const changedCandidates = manifest.candidates.map((candidate, index) =>
+      index === 1
+        ? { ...candidate, verification_root: ReferenceMh09.buildTree("fu04-bind-changed-other-root").root }
+        : candidate,
+    );
+    const changed = {
+      ...manifest,
+      candidates: changedCandidates,
+    };
+    expect(() => Signer.invoke("verifyRootAdmissionBundle", changed, proofs)).toThrow(
+      /manifest|digest|proof/i,
+    );
+  });
+
+  it("exposes closed prove and verify CLI actions without changing the legacy release-signing invocation", () => {
+    const materials = candidateIds.map((id, index) => writeAdmissionMaterial(`cli-${index}`, id));
+    const manifest = candidateManifest(materials.map((entry) => entry.tree.root));
+    const manifestPath = path.join(tempRoot("fu04-cli-manifest"), "candidate-manifest.json");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    const proofPaths = materials.map((entry) => path.join(entry.custodyRoot, "proof.json"));
+    const stdout = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(
+        Signer.invoke<number>("runSignerCli", [
+          "root-admission-prove",
+          "--candidate-manifest-path",
+          manifestPath,
+          "--material-path",
+          materials[0].materialPath,
+          "--output-path",
+          proofPaths[0],
+          "--used-key-registry-path",
+          path.join(materials[0].custodyRoot, "used-one-time-keys.json"),
+          "--custody-root-path",
+          materials[0].custodyRoot,
+        ]),
+      ).toBe(0);
+      for (let index = 1; index < materials.length; index += 1) {
+        Signer.invoke("signRootAdmissionProof", {
+          candidate_manifest: manifest,
+          material_path: materials[index].materialPath,
+          output_path: proofPaths[index],
+          used_key_registry_path: path.join(materials[index].custodyRoot, "used-one-time-keys.json"),
+          custody_root_path: materials[index].custodyRoot,
+        });
+      }
+      const bundlePath = path.join(tempRoot("fu04-cli-bundle"), "admission.json");
+      expect(
+        Signer.invoke<number>("runSignerCli", [
+          "root-admission-verify",
+          "--candidate-manifest-path",
+          manifestPath,
+          "--proof-a-path",
+          proofPaths[0],
+          "--proof-b-path",
+          proofPaths[1],
+          "--proof-c-path",
+          proofPaths[2],
+          "--output-path",
+          bundlePath,
+        ]),
+      ).toBe(0);
+      const bundle = JSON.parse(fs.readFileSync(bundlePath, "utf8")) as Record<string, unknown>;
+      expect(bundle.candidate_root_possession_verified).toBe(true);
+      expect(bundle.external_custody_verified).toBe(false);
+      expect(bundle.authorizes_rotation).toBe(false);
+    } finally {
+      stderr.mockRestore();
+      stdout.mockRestore();
+    }
+  });
+
+  it("refuses root-admission prove when the proof output aliases the candidate manifest, without consuming a key", () => {
+    const material = writeAdmissionMaterial("prove-manifest-alias", candidateIds[0]);
+    const otherRoots = candidateIds.slice(1).map((id) => ReferenceMh09.buildTree(`fu04-alias-${id}`).root);
+    const manifest = candidateManifest([material.tree.root, ...otherRoots]);
+    const manifestPath = path.join(material.custodyRoot, "candidate-manifest.json");
+    const registryPath = path.join(material.custodyRoot, "used-one-time-keys.json");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
+    const stdout = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(
+        Signer.invoke<number>("runSignerCli", [
+          "root-admission-prove",
+          "--candidate-manifest-path",
+          manifestPath,
+          "--material-path",
+          material.materialPath,
+          "--output-path",
+          manifestPath,
+          "--used-key-registry-path",
+          registryPath,
+          "--custody-root-path",
+          material.custodyRoot,
+        ]),
+      ).toBe(1);
+    } finally {
+      stderr.mockRestore();
+      stdout.mockRestore();
+    }
+    expect(JSON.parse(fs.readFileSync(manifestPath, "utf8"))).toEqual(manifest);
+    expect(fs.existsSync(registryPath)).toBe(false);
+  });
+});

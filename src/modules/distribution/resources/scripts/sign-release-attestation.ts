@@ -12,10 +12,15 @@
  * — refusing everything else.
  *
  * WHAT IT REFUSES, AND WHY EACH REFUSAL IS STRUCTURAL
- *   - UNRECOGNIZED PRODUCTION AUTHORITY: production signing accepts only the
+ *   - UNRECOGNIZED PRODUCTION AUTHORITY: release signing accepts only the
  *     dedicated production material schema and only when its re-derived root
- *     equals the source-pinned root for its attestor id. Provisioning remains
- *     outside this repository; no caller-supplied root can extend trust.
+ *     equals the source-pinned root for its attestor id. The separate FU04
+ *     root-admission action may sign only an `nra1:` possession challenge for a
+ *     complete three-root replacement manifest that excludes every currently
+ *     pinned fixture-era root, and only while the live trust table still equals
+ *     the immutable predecessor snapshot. Its output cannot verify custody or
+ *     authorize a trust-root change; changing the source-pinned table remains a
+ *     reviewed code change and closes this predecessor's proving window.
  *   - UNTRUSTED PRODUCTION CUSTODY: production requires an explicit current-user
  *     custody root at mode 0700. Material, registry, output, and both locks must
  *     remain strictly beneath it through real, current-user 0700 directories.
@@ -71,6 +76,14 @@
  *     --material-path <p> --digest <d> --output-path <p> \
  *     --mode <fixture|production> --used-key-registry-path <p> \
  *     [--custody-root-path <p>]  # required when --mode production
+ *
+ *   npx tsx sign-release-attestation.ts root-admission-prove \
+ *     --candidate-manifest-path <p> --material-path <p> --output-path <p> \
+ *     --used-key-registry-path <p> --custody-root-path <p>
+ *
+ *   npx tsx sign-release-attestation.ts root-admission-verify \
+ *     --candidate-manifest-path <p> --proof-a-path <p> --proof-b-path <p> \
+ *     --proof-c-path <p> --output-path <p>
  */
 
 import * as fs from "node:fs";
@@ -85,10 +98,14 @@ import {
   NEUTRAL_ATTESTATION_SCHEME,
   NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN,
   NEUTRAL_ATTESTATION_TREE_HEIGHT,
+  NEUTRAL_ATTESTOR_TRUST_ROOT,
   neutralAttestorVerificationKey,
   neutralVerifyAttestationSignature,
 } from "../src/modules/lifecycle/workflows/neutral-conformance-core";
-import { neutralSha256Hex } from "../src/modules/lifecycle/workflows/neutral-runtime-contracts";
+import {
+  neutralCanonicalJson,
+  neutralSha256Hex,
+} from "../src/modules/lifecycle/workflows/neutral-runtime-contracts";
 
 // ---------------------------------------------------------------------------
 // Contract surface
@@ -110,6 +127,10 @@ export const SIGNER_MATERIAL_SCHEMA = SIGNER_FIXTURE_MATERIAL_SCHEMA;
 
 export const SIGNER_OUTPUT_SCHEMA = "guild.release_attestation.v1";
 export const SIGNER_REGISTRY_SCHEMA = "guild.used_one_time_keys.v1";
+export const ROOT_ADMISSION_CANDIDATE_SCHEMA = "guild.journal_attestor_root_candidate.v1";
+export const ROOT_ADMISSION_PROOF_SCHEMA = "guild.journal_attestor_root_possession_proof.v1";
+export const ROOT_ADMISSION_BUNDLE_SCHEMA = "guild.journal_attestor_root_admission.v1";
+export const ROOT_ADMISSION_DOMAIN = "guild.journal_attestor_root_admission.v1/possession/1";
 
 /** The deterministic lock-path contract: `<registry>.lock`, never anywhere else. */
 export function lockPathFor(registryPath: string): string {
@@ -146,6 +167,74 @@ export interface SignReleaseAttestationOutput {
   readonly mode: string;
 }
 
+export interface RootAdmissionCandidate {
+  readonly attestor_id: string;
+  readonly verification_root: string;
+}
+
+export interface RootAdmissionCandidateManifest {
+  readonly schema_version: string;
+  readonly rotation_id: string;
+  readonly predecessor_trust_root_digest: string;
+  readonly candidates: readonly RootAdmissionCandidate[];
+  readonly external_custody_verified: false;
+  readonly authorizes_rotation: false;
+}
+
+export interface SignRootAdmissionProofOptions {
+  readonly candidate_manifest: unknown;
+  readonly material_path: string;
+  readonly output_path: string;
+  readonly used_key_registry_path: string;
+  readonly custody_root_path: string;
+}
+
+export interface RootAdmissionProof {
+  readonly schema_version: string;
+  readonly scheme: string;
+  readonly rotation_id: string;
+  readonly manifest_digest: string;
+  readonly attestor_id: string;
+  readonly verification_root: string;
+  readonly key_index: number;
+  readonly signature: string;
+  readonly mode: "production";
+  readonly external_custody_verified: false;
+  readonly authorizes_rotation: false;
+}
+
+export interface RootAdmissionBundle {
+  readonly schema_version: string;
+  readonly candidate_manifest: RootAdmissionCandidateManifest;
+  readonly manifest_digest: string;
+  readonly proofs: readonly RootAdmissionProof[];
+  readonly candidate_root_possession_verified: true;
+  readonly external_custody_verified: false;
+  readonly authorizes_rotation: false;
+}
+
+/**
+ * The fixture-era trust table FU04 is replacing. This snapshot deliberately
+ * does not alias the live decision-core table: after the reviewed source root
+ * rotation, previously issued admission proofs must remain verifiable against
+ * the predecessor they actually named.
+ */
+export const ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT: readonly RootAdmissionCandidate[] =
+  Object.freeze([
+    Object.freeze({
+      attestor_id: "guild.release-attestor",
+      verification_root: "2cd0a7a8986e79ec2cb25b5752d5a85a80d10c4d133d6590b91417bf976f3539",
+    }),
+    Object.freeze({
+      attestor_id: "guild.host-conformance-witness",
+      verification_root: "584d8e28a2a5c109a2b892b627a3154fef9da46efc45eb79d042611bf09d09ef",
+    }),
+    Object.freeze({
+      attestor_id: "guild.distribution-notary",
+      verification_root: "4dd9eb1f20a5194d38c6ac9cf308dac017ceebac0e85bcd7fbfa26fc43945f37",
+    }),
+  ]);
+
 const OPTION_KEYS: readonly string[] = Object.freeze([
   "material_path",
   "digest",
@@ -164,10 +253,123 @@ const REQUIRED_OPTION_KEYS: readonly string[] = Object.freeze([
 ]);
 
 const DIGEST_PATTERN = /^nad1:[0-9a-f]{64}$/;
+const ROOT_ADMISSION_DIGEST_PATTERN = /^nra1:[0-9a-f]{64}$/;
 const HEX64_PATTERN = /^[0-9a-f]{64}$/;
+const ROTATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
 
 function refuse(detail: string): never {
   throw new Error(`sign-release-attestation: ${detail}`);
+}
+
+function closedRecord(value: unknown, label: string, keys: readonly string[]): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    refuse(`${label} must be a single plain object`);
+  }
+  const record = value as Record<string, unknown>;
+  const actual = Object.keys(record).sort();
+  const expected = [...keys].sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    refuse(`${label} must use exactly the closed member vocabulary: ${expected.join(", ")}`);
+  }
+  return record;
+}
+
+export function rootAdmissionPredecessorDigest(): string {
+  return `nrt1:${neutralSha256Hex(
+    `${ROOT_ADMISSION_DOMAIN}|PREDECESSOR|${neutralCanonicalJson(ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT)}`
+  )}`;
+}
+
+export function validateRootAdmissionCandidateManifest(
+  value: unknown
+): RootAdmissionCandidateManifest {
+  const record = closedRecord(value, "root-admission candidate manifest", [
+    "schema_version",
+    "rotation_id",
+    "predecessor_trust_root_digest",
+    "candidates",
+    "external_custody_verified",
+    "authorizes_rotation",
+  ]);
+  if (record.schema_version !== ROOT_ADMISSION_CANDIDATE_SCHEMA) {
+    refuse(`root-admission candidate manifest must declare ${ROOT_ADMISSION_CANDIDATE_SCHEMA}`);
+  }
+  if (typeof record.rotation_id !== "string" || !ROTATION_ID_PATTERN.test(record.rotation_id)) {
+    refuse("root-admission candidate manifest names no admissible rotation_id");
+  }
+  if (record.predecessor_trust_root_digest !== rootAdmissionPredecessorDigest()) {
+    refuse("root-admission candidate manifest is not bound to the current predecessor trust root");
+  }
+  if (record.external_custody_verified !== false || record.authorizes_rotation !== false) {
+    refuse("root-admission candidate manifest cannot claim external custody or authorize rotation");
+  }
+  if (
+    !Array.isArray(record.candidates) ||
+    record.candidates.length !== ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT.length
+  ) {
+    refuse(
+      `root-admission candidate manifest must name exactly ${ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT.length} replacement roots`
+    );
+  }
+
+  const retiredRoots = new Set(
+    ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT.map((entry) => entry.verification_root)
+  );
+  const seenRoots = new Set<string>();
+  const candidates: RootAdmissionCandidate[] = [];
+  for (let index = 0; index < ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT.length; index += 1) {
+    const candidate = closedRecord(record.candidates[index], `root-admission candidate ${index}`, [
+      "attestor_id",
+      "verification_root",
+    ]);
+    const expectedId = ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT[index].attestor_id;
+    if (candidate.attestor_id !== expectedId) {
+      refuse(`root-admission candidate ${index} must replace the source-owned attestor ${expectedId}`);
+    }
+    if (typeof candidate.verification_root !== "string" || !HEX64_PATTERN.test(candidate.verification_root)) {
+      refuse(`root-admission candidate ${expectedId} has no well-formed verification root`);
+    }
+    if (retiredRoots.has(candidate.verification_root)) {
+      refuse(`root-admission candidate ${expectedId} reuses a retired fixture-era root`);
+    }
+    if (seenRoots.has(candidate.verification_root)) {
+      refuse("root-admission candidate roots must be distinct");
+    }
+    seenRoots.add(candidate.verification_root);
+    candidates.push(
+      Object.freeze({
+        attestor_id: expectedId,
+        verification_root: candidate.verification_root,
+      })
+    );
+  }
+
+  return Object.freeze({
+    schema_version: ROOT_ADMISSION_CANDIDATE_SCHEMA,
+    rotation_id: record.rotation_id,
+    predecessor_trust_root_digest: record.predecessor_trust_root_digest as string,
+    candidates: Object.freeze(candidates),
+    external_custody_verified: false,
+    authorizes_rotation: false,
+  });
+}
+
+export function rootAdmissionManifestDigest(value: unknown): string {
+  const manifest = validateRootAdmissionCandidateManifest(value);
+  return `nra1:${neutralSha256Hex(
+    `${ROOT_ADMISSION_DOMAIN}|MANIFEST|${neutralCanonicalJson(manifest)}`
+  )}`;
+}
+
+function assertRootAdmissionProvingWindowOpen(): void {
+  if (
+    neutralCanonicalJson(NEUTRAL_ATTESTOR_TRUST_ROOT) !==
+    neutralCanonicalJson(ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT)
+  ) {
+    refuse(
+      "root-admission proving window is closed because the live source trust roots no longer match the predecessor snapshot"
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -905,7 +1107,27 @@ export function productionAttestorAuthorityRecognized(
   return pinned !== null && pinned === verificationRoot;
 }
 
-export function signReleaseAttestation(options: unknown): SignReleaseAttestationOutput {
+interface ExternalSignatureFields {
+  readonly attestor_id: string;
+  readonly verification_root: string;
+  readonly key_index: number;
+  readonly digest: string;
+  readonly signature: string;
+  readonly mode: string;
+}
+
+interface ExternalSigningContract<TOutput extends object> {
+  readonly digest_pattern: RegExp;
+  readonly digest_refusal: string;
+  readonly authority_recognized: (attestorId: string, verificationRoot: string) => boolean;
+  readonly authority_refusal: string;
+  readonly build_output: (fields: ExternalSignatureFields) => TOutput;
+}
+
+function signExternalAttestation<TOutput extends object>(
+  options: unknown,
+  contract: ExternalSigningContract<TOutput>
+): TOutput {
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
     refuse("options must be a single plain object");
   }
@@ -932,8 +1154,8 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
   ) {
     refuse("production mode requires a non-empty custody_root_path");
   }
-  if (!DIGEST_PATTERN.test(opts.digest)) {
-    refuse("digest must be a canonical nad1 attestation digest");
+  if (!contract.digest_pattern.test(opts.digest)) {
+    refuse(contract.digest_refusal);
   }
 
   const registryPath = path.resolve(opts.used_key_registry_path);
@@ -1007,11 +1229,9 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
     }
     if (
       opts.mode === "production" &&
-      !productionAttestorAuthorityRecognized(material.attestor_id, material.verification_root)
+      !contract.authority_recognized(material.attestor_id, material.verification_root)
     ) {
-      refuse(
-        "production signing material does not match the source-pinned authority for its attestor"
-      );
+      refuse(contract.authority_refusal);
     }
 
     // Exclusive lock at exactly `<registry>.lock`. A held lock is an immediate
@@ -1094,16 +1314,14 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
         refuse("produced signature does not verify against the accepted core verifier");
       }
 
-      const output: SignReleaseAttestationOutput = {
-        schema_version: SIGNER_OUTPUT_SCHEMA,
-        scheme: NEUTRAL_ATTESTATION_SCHEME,
+      const output = contract.build_output({
         attestor_id: material.attestor_id,
         verification_root: tree.root,
         key_index: material.key_index,
         digest: opts.digest,
         signature,
         mode: opts.mode,
-      };
+      });
       writeAtomic0600(outputPath, `${hexSafeJson(output)}\n`);
       return Object.freeze(output);
     } finally {
@@ -1112,6 +1330,187 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
   } finally {
     if (custodyLease !== null) releaseProductionCustodyLease(custodyLease);
   }
+}
+
+export function signReleaseAttestation(options: unknown): SignReleaseAttestationOutput {
+  return signExternalAttestation(options, {
+    digest_pattern: DIGEST_PATTERN,
+    digest_refusal: "digest must be a canonical nad1 attestation digest",
+    authority_recognized: productionAttestorAuthorityRecognized,
+    authority_refusal: "production signing material does not match the source-pinned authority for its attestor",
+    build_output: (fields) => ({
+      schema_version: SIGNER_OUTPUT_SCHEMA,
+      scheme: NEUTRAL_ATTESTATION_SCHEME,
+      attestor_id: fields.attestor_id,
+      verification_root: fields.verification_root,
+      key_index: fields.key_index,
+      digest: fields.digest,
+      signature: fields.signature,
+      mode: fields.mode,
+    }),
+  });
+}
+
+export function signRootAdmissionProof(options: unknown): RootAdmissionProof {
+  assertRootAdmissionProvingWindowOpen();
+  const record = closedRecord(options, "root-admission proof options", [
+    "candidate_manifest",
+    "material_path",
+    "output_path",
+    "used_key_registry_path",
+    "custody_root_path",
+  ]);
+  for (const key of [
+    "material_path",
+    "output_path",
+    "used_key_registry_path",
+    "custody_root_path",
+  ]) {
+    if (typeof record[key] !== "string" || (record[key] as string).length === 0) {
+      refuse(`root-admission proof option ${key} must be a non-empty string`);
+    }
+  }
+  const manifest = validateRootAdmissionCandidateManifest(record.candidate_manifest);
+  const manifestDigest = rootAdmissionManifestDigest(manifest);
+  const candidates = new Map(
+    manifest.candidates.map((candidate) => [candidate.attestor_id, candidate.verification_root])
+  );
+
+  return signExternalAttestation(
+    {
+      material_path: record.material_path,
+      digest: manifestDigest,
+      output_path: record.output_path,
+      mode: "production",
+      used_key_registry_path: record.used_key_registry_path,
+      custody_root_path: record.custody_root_path,
+    },
+    {
+      digest_pattern: ROOT_ADMISSION_DIGEST_PATTERN,
+      digest_refusal: "root-admission digest must be a canonical nra1 manifest digest",
+      authority_recognized: (attestorId, verificationRoot) =>
+        candidates.get(attestorId) === verificationRoot,
+      authority_refusal: "root-admission signing material does not match its candidate manifest root",
+      build_output: (fields): RootAdmissionProof => ({
+        schema_version: ROOT_ADMISSION_PROOF_SCHEMA,
+        scheme: NEUTRAL_ATTESTATION_SCHEME,
+        rotation_id: manifest.rotation_id,
+        manifest_digest: fields.digest,
+        attestor_id: fields.attestor_id,
+        verification_root: fields.verification_root,
+        key_index: fields.key_index,
+        signature: fields.signature,
+        mode: "production",
+        external_custody_verified: false,
+        authorizes_rotation: false,
+      }),
+    }
+  );
+}
+
+function validateRootAdmissionProof(
+  value: unknown,
+  manifest: RootAdmissionCandidateManifest,
+  manifestDigest: string
+): RootAdmissionProof {
+  const proof = closedRecord(value, "root-admission possession proof", [
+    "schema_version",
+    "scheme",
+    "rotation_id",
+    "manifest_digest",
+    "attestor_id",
+    "verification_root",
+    "key_index",
+    "signature",
+    "mode",
+    "external_custody_verified",
+    "authorizes_rotation",
+  ]);
+  if (proof.schema_version !== ROOT_ADMISSION_PROOF_SCHEMA) {
+    refuse(`root-admission possession proof must declare ${ROOT_ADMISSION_PROOF_SCHEMA}`);
+  }
+  if (proof.scheme !== NEUTRAL_ATTESTATION_SCHEME || proof.mode !== "production") {
+    refuse("root-admission possession proof must use the production WOTS/Merkle signing path");
+  }
+  if (proof.rotation_id !== manifest.rotation_id || proof.manifest_digest !== manifestDigest) {
+    refuse("root-admission possession proof is bound to a different candidate manifest");
+  }
+  if (proof.external_custody_verified !== false || proof.authorizes_rotation !== false) {
+    refuse("root-admission possession proof cannot claim custody or authorize rotation");
+  }
+  if (typeof proof.attestor_id !== "string" || typeof proof.verification_root !== "string") {
+    refuse("root-admission possession proof names no candidate authority");
+  }
+  const candidate = manifest.candidates.find((entry) => entry.attestor_id === proof.attestor_id);
+  if (candidate === undefined || candidate.verification_root !== proof.verification_root) {
+    refuse("root-admission possession proof does not match a candidate root");
+  }
+  const leafCount = Math.pow(2, NEUTRAL_ATTESTATION_TREE_HEIGHT);
+  if (
+    typeof proof.key_index !== "number" ||
+    !Number.isInteger(proof.key_index) ||
+    proof.key_index < 0 ||
+    proof.key_index >= leafCount
+  ) {
+    refuse("root-admission possession proof names no admissible key index");
+  }
+  if (typeof proof.signature !== "string") {
+    refuse("root-admission possession proof carries no signature");
+  }
+  const signatureIndex = /^nws1:([0-9a-f]{2}):/.exec(proof.signature);
+  if (signatureIndex === null || parseInt(signatureIndex[1], 16) !== proof.key_index) {
+    refuse("root-admission possession proof key index does not match its signature");
+  }
+  if (!neutralVerifyAttestationSignature(proof.verification_root, manifestDigest, proof.signature)) {
+    refuse("root-admission possession proof signature does not verify");
+  }
+
+  return Object.freeze({
+    schema_version: ROOT_ADMISSION_PROOF_SCHEMA,
+    scheme: NEUTRAL_ATTESTATION_SCHEME,
+    rotation_id: manifest.rotation_id,
+    manifest_digest: manifestDigest,
+    attestor_id: proof.attestor_id,
+    verification_root: proof.verification_root,
+    key_index: proof.key_index,
+    signature: proof.signature,
+    mode: "production",
+    external_custody_verified: false,
+    authorizes_rotation: false,
+  });
+}
+
+export function verifyRootAdmissionBundle(
+  candidateManifest: unknown,
+  possessionProofs: unknown
+): RootAdmissionBundle {
+  const manifest = validateRootAdmissionCandidateManifest(candidateManifest);
+  const manifestDigest = rootAdmissionManifestDigest(manifest);
+  if (!Array.isArray(possessionProofs) || possessionProofs.length !== manifest.candidates.length) {
+    refuse(`root-admission requires one complete set of exactly ${manifest.candidates.length} possession proofs`);
+  }
+  const proofs = possessionProofs.map((proof) =>
+    validateRootAdmissionProof(proof, manifest, manifestDigest)
+  );
+  const ids = proofs.map((proof) => proof.attestor_id);
+  if (new Set(ids).size !== ids.length) {
+    refuse("root-admission possession proofs must come from distinct candidate attestors");
+  }
+  for (const candidate of manifest.candidates) {
+    if (!proofs.some((proof) => proof.attestor_id === candidate.attestor_id)) {
+      refuse(`root-admission is missing the possession proof for ${candidate.attestor_id}`);
+    }
+  }
+
+  return Object.freeze({
+    schema_version: ROOT_ADMISSION_BUNDLE_SCHEMA,
+    candidate_manifest: manifest,
+    manifest_digest: manifestDigest,
+    proofs: Object.freeze(proofs),
+    candidate_root_possession_verified: true,
+    external_custody_verified: false,
+    authorizes_rotation: false,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1130,9 +1529,163 @@ const CLI_FLAGS: Readonly<Record<string, keyof SignReleaseAttestationOptions>> =
 const USAGE =
   "usage: sign-release-attestation.ts --material-path <p> --digest <nad1:…> " +
   "--output-path <p> --mode <fixture|production> --used-key-registry-path <p> " +
-  "[--custody-root-path <p>]\n";
+  "[--custody-root-path <p>]\n" +
+  "       sign-release-attestation.ts root-admission-prove " +
+  "--candidate-manifest-path <p> --material-path <p> --output-path <p> " +
+  "--used-key-registry-path <p> --custody-root-path <p>\n" +
+  "       sign-release-attestation.ts root-admission-verify " +
+  "--candidate-manifest-path <p> --proof-a-path <p> --proof-b-path <p> " +
+  "--proof-c-path <p> --output-path <p>\n";
+
+function parseClosedCliFlags(
+  argv: readonly string[],
+  flags: Readonly<Record<string, string>>,
+  action: string
+): Record<string, string> {
+  if (argv.length === 0 || argv.length % 2 !== 0) {
+    refuse(`${action} requires complete flag/value pairs`);
+  }
+  const parsed: Record<string, string> = {};
+  for (let index = 0; index < argv.length; index += 2) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    const key = flags[flag];
+    if (key === undefined || value === undefined || value.length === 0 || parsed[key] !== undefined) {
+      refuse(`${action} received an unrecognized, duplicate, or incomplete flag ${flag}`);
+    }
+    parsed[key] = value;
+  }
+  for (const required of Object.values(flags)) {
+    if (parsed[required] === undefined) refuse(`${action} requires ${required}`);
+  }
+  return parsed;
+}
+
+function readPublicJsonFile(label: string, filePath: string): unknown {
+  let text: string;
+  try {
+    text = fs.readFileSync(path.resolve(filePath), "utf8");
+  } catch (error) {
+    refuse(`${label} is unreadable: ${(error as Error).message}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    refuse(`${label} is not valid JSON: ${(error as Error).message}`);
+  }
+}
+
+function runRootAdmissionProveCli(argv: readonly string[]): number {
+  const parsed = parseClosedCliFlags(
+    argv,
+    {
+      "--candidate-manifest-path": "candidate_manifest_path",
+      "--material-path": "material_path",
+      "--output-path": "output_path",
+      "--used-key-registry-path": "used_key_registry_path",
+      "--custody-root-path": "custody_root_path",
+    },
+    "root-admission-prove"
+  );
+  const candidateManifestPath = path.resolve(parsed.candidate_manifest_path);
+  const materialPath = path.resolve(parsed.material_path);
+  const outputPath = path.resolve(parsed.output_path);
+  const registryPath = path.resolve(parsed.used_key_registry_path);
+  const custodyRoot = path.resolve(parsed.custody_root_path);
+  const positions = [
+    candidateManifestPath,
+    materialPath,
+    outputPath,
+    registryPath,
+    lockPathFor(registryPath),
+    custodyLockPathFor(custodyRoot),
+  ];
+  if (new Set(positions).size !== positions.length) {
+    refuse(
+      "root-admission candidate manifest, material, proof output, registry, registry lock, and custody lock must use distinct paths"
+    );
+  }
+  assertContainedPosition("root-admission candidate manifest", candidateManifestPath);
+  const proof = signRootAdmissionProof({
+    candidate_manifest: readPublicJsonFile("root-admission candidate manifest", candidateManifestPath),
+    material_path: materialPath,
+    output_path: outputPath,
+    used_key_registry_path: registryPath,
+    custody_root_path: custodyRoot,
+  });
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        schema_version: proof.schema_version,
+        rotation_id: proof.rotation_id,
+        manifest_digest: proof.manifest_digest,
+        attestor_id: proof.attestor_id,
+        verification_root: proof.verification_root,
+        key_index: proof.key_index,
+        external_custody_verified: false,
+        authorizes_rotation: false,
+      },
+      null,
+      2
+    )}\n`
+  );
+  return 0;
+}
+
+function runRootAdmissionVerifyCli(argv: readonly string[]): number {
+  const parsed = parseClosedCliFlags(
+    argv,
+    {
+      "--candidate-manifest-path": "candidate_manifest_path",
+      "--proof-a-path": "proof_a_path",
+      "--proof-b-path": "proof_b_path",
+      "--proof-c-path": "proof_c_path",
+      "--output-path": "output_path",
+    },
+    "root-admission-verify"
+  );
+  const inputPaths = [
+    parsed.candidate_manifest_path,
+    parsed.proof_a_path,
+    parsed.proof_b_path,
+    parsed.proof_c_path,
+  ].map((entry) => path.resolve(entry));
+  const outputPath = path.resolve(parsed.output_path);
+  if (new Set([...inputPaths, outputPath]).size !== inputPaths.length + 1) {
+    refuse("root-admission verification inputs and output must use distinct paths");
+  }
+  for (const inputPath of inputPaths) assertContainedPosition("root-admission input", inputPath);
+  assertContainedPosition("root-admission output", outputPath);
+  const manifest = readPublicJsonFile("root-admission candidate manifest", inputPaths[0]);
+  const proofs = inputPaths.slice(1).map((proofPath, index) =>
+    readPublicJsonFile(`root-admission possession proof ${index + 1}`, proofPath)
+  );
+  const bundle = verifyRootAdmissionBundle(manifest, proofs);
+  writeAtomic0600(outputPath, `${JSON.stringify(bundle, null, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        schema_version: bundle.schema_version,
+        manifest_digest: bundle.manifest_digest,
+        candidate_root_possession_verified: true,
+        external_custody_verified: false,
+        authorizes_rotation: false,
+      },
+      null,
+      2
+    )}\n`
+  );
+  return 0;
+}
 
 export function runSignerCli(argv: readonly string[]): number {
+  try {
+    if (argv[0] === "root-admission-prove") return runRootAdmissionProveCli(argv.slice(1));
+    if (argv[0] === "root-admission-verify") return runRootAdmissionVerifyCli(argv.slice(1));
+  } catch (error) {
+    process.stderr.write(`${(error as Error).message}\n${USAGE}`);
+    return 1;
+  }
   const options: Record<string, string> = {};
   for (let index = 0; index < argv.length; index += 2) {
     const flag = argv[index];
