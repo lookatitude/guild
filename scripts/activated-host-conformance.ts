@@ -15,7 +15,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 import {
   NEUTRAL_CONTRACT_VERSION,
+  NEUTRAL_DISPOSITIONS,
+  NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
   NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
+  NEUTRAL_OUTCOME_TYPES,
   NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS,
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
@@ -34,9 +37,12 @@ import {
   type MigrationRuntimePackageV1,
 } from "./lib/capability/migration-evidence";
 import { readScalarField } from "./lib/frontmatter";
+import { redactShareableFile } from "./lib/shared/scrub-redact";
 
 export const ACTIVATED_HOST_CONFORMANCE_SCHEMA = "guild.activated_host_conformance.v1" as const;
 export const ACTIVATED_HOST_WORKER_SCHEMA = "guild.activated_host_conformance_worker.v1" as const;
+export const ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA = "guild.activated_host_public_evidence.v1" as const;
+export const ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA = "guild.activated_host_public_manifest.v1" as const;
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
@@ -53,6 +59,12 @@ const CONSUMER_REPOSITORIES = Object.freeze({
 const CONSUMER_EXCLUDED_DIRECTORIES = Object.freeze([".git", ".guild", "node_modules", "dist", ".astro", ".next", "coverage"]);
 
 type PlainRecord = Record<string, unknown>;
+
+function isCanonicalUtcInstant(value: unknown): value is string {
+  if (typeof value !== "string" || !UTC_INSTANT.test(value)) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
 
 export interface ActivatedHostVerification {
   readonly ok: boolean;
@@ -174,12 +186,106 @@ export interface CaptureActivatedHostResult {
   readonly verification: ActivatedHostVerification | null;
 }
 
+export interface ActivatedHostPublicPublication {
+  readonly directory: string;
+  readonly evidencePath: string;
+  readonly manifestPath: string;
+  readonly publicEvidenceSha256: string;
+}
+
+const PUBLIC_EVIDENCE_KEYS = Object.freeze([
+  "public_evidence_sha256", "schema_version", "host_id", "source_commit", "release",
+  "host_version", "platform", "runtime_version", "adapter_version", "contract_version",
+  "scenario_suite_id", "scenario_suite_version", "captured_at", "source_capture_commitment",
+  "runtime_package", "host_executable", "host_activation", "consumer_trees", "conformance",
+  "raw_artifacts_included", "external_attestation_verified", "authorizes_promotion",
+]);
+const PUBLIC_MANIFEST_KEYS = Object.freeze([
+  "manifest_sha256", "schema_version", "evidence_file", "evidence_sha256", "file_count",
+  "raw_artifacts_included", "external_attestation_verified", "authorizes_promotion",
+]);
+const PUBLIC_FORBIDDEN_KEYS = new Set([
+  "activated_package_path", "challenge", "device", "inode", "installed", "installed_at",
+  "installedPath", "list_entry", "marketplace", "path", "request_id", "session_id",
+  "socket", "socket_path", "thread_id", "transcript", "worker_result",
+]);
+const PUBLIC_PACKAGE_KEYS = Object.freeze([
+  "host_id", "manifest_path", "manifest_sha256", "producer_sha256", "tree_sha256", "install_surface_sha256",
+]);
+const PUBLIC_HOST_EXECUTABLE_KEYS = Object.freeze(["sha256", "size", "companions"]);
+const PUBLIC_HOST_COMPANION_KEYS = Object.freeze(["name", "sha256", "size"]);
+const PUBLIC_CLAUDE_ACTIVATION_KEYS = Object.freeze(["mechanism", "channel", "ref", "version", "receipt_sha256"]);
+const PUBLIC_CODEX_ACTIVATION_KEYS = Object.freeze(["mechanism", "skill_name", "skill_path", "skill_sha256"]);
+const PUBLIC_CONSUMER_TREE_KEYS = Object.freeze([
+  "schema_version", "name", "repository", "source_commit", "source_tree", "content_tree_sha256", "file_count",
+]);
+const PUBLIC_CONFORMANCE_KEYS = Object.freeze(["suite_id", "suite_version", "required_scenario_ids", "results"]);
+const PUBLIC_RESULT_KEYS = Object.freeze(["stable_id", "disposition", "outcome_type", "reason_code", "evidence_freshness"]);
+const GROUPED_COMMIT = /^[0-9a-f]{8}(?:-[0-9a-f]{8}){4}$/;
+
 function isRecord(value: unknown): value is PlainRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function exactKeys(value: PlainRecord, keys: readonly string[]): boolean {
   return Object.keys(value).sort().join("|") === [...keys].sort().join("|");
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function nonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function validPublicPackage(value: unknown, hostId: MigrationRuntimeHost): boolean {
+  return isRecord(value) && exactKeys(value, PUBLIC_PACKAGE_KEYS) && value.host_id === hostId &&
+    nonEmptyString(value.manifest_path) && !path.isAbsolute(value.manifest_path) && !value.manifest_path.split(/[\\/]/).includes("..") &&
+    [value.manifest_sha256, value.producer_sha256, value.tree_sha256, value.install_surface_sha256]
+      .every((hash) => typeof hash === "string" && SHA256.test(hash));
+}
+
+function validPublicHostExecutable(value: unknown): boolean {
+  return isRecord(value) && exactKeys(value, PUBLIC_HOST_EXECUTABLE_KEYS) &&
+    typeof value.sha256 === "string" && SHA256.test(value.sha256) && nonNegativeInteger(value.size) &&
+    Array.isArray(value.companions) && value.companions.every((entry) => isRecord(entry) && exactKeys(entry, PUBLIC_HOST_COMPANION_KEYS) &&
+      nonEmptyString(entry.name) && typeof entry.sha256 === "string" && SHA256.test(entry.sha256) && nonNegativeInteger(entry.size));
+}
+
+function validPublicActivation(value: unknown, hostId: MigrationRuntimeHost): boolean {
+  if (!isRecord(value)) return false;
+  if (hostId === "claude-code-cli") {
+    return exactKeys(value, PUBLIC_CLAUDE_ACTIVATION_KEYS) && value.mechanism === "host-native-session-start" &&
+      [value.channel, value.ref, value.version].every(nonEmptyString) && typeof value.receipt_sha256 === "string" && SHA256.test(value.receipt_sha256);
+  }
+  return exactKeys(value, PUBLIC_CODEX_ACTIVATION_KEYS) && nonEmptyString(value.mechanism) &&
+    value.skill_name === CODEX_PROBE_SKILL_NAME && value.skill_path === CODEX_PROBE_SKILL_PATH &&
+    typeof value.skill_sha256 === "string" && SHA256.test(value.skill_sha256);
+}
+
+function validPublicConsumerTrees(value: unknown): boolean {
+  if (!isRecord(value) || !exactKeys(value, CONSUMER_NAMES)) return false;
+  return CONSUMER_NAMES.every((name) => {
+    const tree = value[name];
+    return isRecord(tree) && exactKeys(tree, PUBLIC_CONSUMER_TREE_KEYS) &&
+      tree.schema_version === "guild.consumer_tree_identity.v1" && tree.name === name &&
+      tree.repository === CONSUMER_REPOSITORIES[name] && typeof tree.source_commit === "string" && GROUPED_COMMIT.test(tree.source_commit) &&
+      typeof tree.source_tree === "string" && GROUPED_COMMIT.test(tree.source_tree) &&
+      typeof tree.content_tree_sha256 === "string" && SHA256.test(tree.content_tree_sha256) && nonNegativeInteger(tree.file_count);
+  });
+}
+
+function validPublicConformance(value: unknown): boolean {
+  if (!isRecord(value) || !exactKeys(value, PUBLIC_CONFORMANCE_KEYS) ||
+      value.suite_id !== NEUTRAL_SCENARIO_SUITE_ID || value.suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION ||
+      !Array.isArray(value.required_scenario_ids) || canonical(value.required_scenario_ids) !== canonical(NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS) ||
+      !Array.isArray(value.results) || value.results.length !== NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.length) return false;
+  return value.results.every((entry, index) => isRecord(entry) && exactKeys(entry, PUBLIC_RESULT_KEYS) &&
+    entry.stable_id === NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS[index] &&
+    NEUTRAL_DISPOSITIONS.includes(entry.disposition as never) && NEUTRAL_OUTCOME_TYPES.includes(entry.outcome_type as never) &&
+    (entry.disposition === "succeeded" ? entry.reason_code === null : nonEmptyString(entry.reason_code)) &&
+    NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS.includes(entry.evidence_freshness as never));
 }
 
 function sortValue(value: unknown): unknown {
@@ -316,7 +422,7 @@ function validateInstallReceiptActivation(
     receipt.managed_by !== "host-native" ||
     receipt.channel_confidence !== expected.confidence ||
     typeof receipt.installed_at !== "string" ||
-    !UTC_INSTANT.test(receipt.installed_at) ||
+    !isCanonicalUtcInstant(receipt.installed_at) ||
     new Date(receipt.installed_at).toISOString() !== receipt.installed_at ||
     Date.parse(receipt.installed_at) < Date.parse(capturedAt) ||
     Date.parse(receipt.installed_at) > Date.now() + 300_000 ||
@@ -907,6 +1013,245 @@ export function publishActivatedHostEvidence(
   };
 }
 
+function groupedHex(value: string): string {
+  return value.match(/.{1,8}/g)?.join("-") ?? value;
+}
+
+function publicPackageBinding(value: unknown): PlainRecord {
+  if (!isRecord(value)) throw new Error("public projection requires a closed runtime package binding");
+  return Object.freeze({
+    host_id: value.host_id,
+    manifest_path: value.manifest_path,
+    manifest_sha256: value.manifest_sha256,
+    producer_sha256: value.producer_sha256,
+    tree_sha256: value.tree_sha256,
+    install_surface_sha256: value.install_surface_sha256,
+  });
+}
+
+function publicHostExecutable(value: unknown): PlainRecord {
+  if (!isRecord(value) || !Array.isArray(value.companions)) throw new Error("public projection requires a verified host executable binding");
+  return Object.freeze({
+    sha256: value.sha256,
+    size: value.size,
+    companions: value.companions.map((entry) => {
+      if (!isRecord(entry)) throw new Error("public projection host companion is malformed");
+      return Object.freeze({ name: entry.name, sha256: entry.sha256, size: entry.size });
+    }),
+  });
+}
+
+function publicConsumerTrees(value: unknown): PlainRecord {
+  if (!isRecord(value)) throw new Error("public projection requires consumer tree bindings");
+  const out: PlainRecord = {};
+  for (const name of CONSUMER_NAMES) {
+    const tree = value[name];
+    if (!isRecord(tree)) throw new Error(`public projection requires the ${name} consumer tree`);
+    out[name] = Object.freeze({
+      schema_version: tree.schema_version,
+      name: tree.name,
+      repository: tree.repository,
+      source_commit: typeof tree.source_commit === "string" ? groupedHex(tree.source_commit) : tree.source_commit,
+      source_tree: typeof tree.source_tree === "string" ? groupedHex(tree.source_tree) : tree.source_tree,
+      content_tree_sha256: tree.content_tree_sha256,
+      file_count: tree.file_count,
+    });
+  }
+  return Object.freeze(out);
+}
+
+function publicActivation(value: unknown, hostId: MigrationRuntimeHost): PlainRecord {
+  if (!isRecord(value)) throw new Error("public projection requires verified activation evidence");
+  if (hostId === "claude-code-cli") {
+    const receipt = value.receipt;
+    if (!isRecord(receipt)) throw new Error("public Claude activation receipt is malformed");
+    return Object.freeze({
+      mechanism: "host-native-session-start",
+      channel: receipt.channel,
+      ref: receipt.ref,
+      version: receipt.version,
+      receipt_sha256: value.sha256,
+    });
+  }
+  return Object.freeze({
+    mechanism: value.mechanism,
+    skill_name: value.skill_name,
+    skill_path: value.skill_path,
+    skill_sha256: value.skill_sha256,
+  });
+}
+
+function publicConformance(value: unknown): PlainRecord {
+  if (!isRecord(value) || !Array.isArray(value.required_scenario_ids) || !Array.isArray(value.results)) {
+    throw new Error("public projection requires verified conformance results");
+  }
+  return Object.freeze({
+    suite_id: value.suite_id,
+    suite_version: value.suite_version,
+    required_scenario_ids: [...value.required_scenario_ids],
+    results: value.results.map((result) => {
+      if (!isRecord(result)) throw new Error("public projection conformance result is malformed");
+      return Object.freeze({
+        stable_id: result.stable_id,
+        disposition: result.disposition,
+        outcome_type: result.outcome_type,
+        reason_code: result.reason_code,
+        evidence_freshness: result.evidence_freshness,
+      });
+    }),
+  });
+}
+
+/**
+ * Verify raw activated-host evidence, then build a new public identity from an
+ * allow-list of non-operator fields. Raw transcript/worker bytes are never copied.
+ */
+export function projectActivatedHostPublicEvidence(options: VerifyActivatedHostOptions): PlainRecord {
+  const verification = verifyActivatedHostConformanceReceipt(options);
+  if (!verification.ok) throw new Error(`raw activated-host evidence is not verified: [${verification.code}] ${verification.detail}`);
+  const receipt = options.receipt as PlainRecord;
+  const hostId = receipt.host_id as MigrationRuntimeHost;
+  const withoutHash = {
+    schema_version: ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA,
+    host_id: hostId,
+    source_commit: groupedHex(String(receipt.source_commit)),
+    release: receipt.release,
+    host_version: receipt.host_version,
+    platform: receipt.platform,
+    runtime_version: receipt.runtime_version,
+    adapter_version: receipt.adapter_version,
+    contract_version: receipt.contract_version,
+    scenario_suite_id: receipt.scenario_suite_id,
+    scenario_suite_version: receipt.scenario_suite_version,
+    captured_at: receipt.captured_at,
+    source_capture_commitment: groupedHex(String(receipt.capture_id)),
+    runtime_package: publicPackageBinding(receipt.runtime_package),
+    host_executable: publicHostExecutable(receipt.host_executable),
+    host_activation: publicActivation(receipt.host_activation, hostId),
+    consumer_trees: publicConsumerTrees(receipt.consumer_trees),
+    conformance: publicConformance(receipt.evidence),
+    raw_artifacts_included: false,
+    external_attestation_verified: false,
+    authorizes_promotion: false,
+  };
+  return Object.freeze({ public_evidence_sha256: sha256Hex(canonical(withoutHash)), ...withoutHash });
+}
+
+function hasForbiddenPublicKey(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasForbiddenPublicKey);
+  if (!isRecord(value)) return false;
+  return Object.entries(value).some(([key, entry]) => PUBLIC_FORBIDDEN_KEYS.has(key) || hasForbiddenPublicKey(entry));
+}
+
+/** Independently verify the two-file public projection without access to raw evidence. */
+export function verifyActivatedHostPublicEvidence(
+  evidenceBytes: string,
+  manifestBytes: string,
+): ActivatedHostVerification {
+  let evidence: unknown;
+  let manifest: unknown;
+  try {
+    evidence = JSON.parse(evidenceBytes);
+    manifest = JSON.parse(manifestBytes);
+  } catch {
+    return refusal("public_json_invalid", "public evidence or manifest is not JSON");
+  }
+  if (!isRecord(evidence) || !exactKeys(evidence, PUBLIC_EVIDENCE_KEYS)) return refusal("public_evidence_malformed", "public evidence has an invalid or open member shape");
+  if (!isRecord(manifest) || !exactKeys(manifest, PUBLIC_MANIFEST_KEYS)) return refusal("public_manifest_malformed", "public manifest has an invalid or open member shape");
+  if (evidence.schema_version !== ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA || manifest.schema_version !== ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA) return refusal("public_schema_mismatch", "public evidence schema is not recognized");
+  if (!HOSTS.includes(evidence.host_id as MigrationRuntimeHost)) return refusal("public_host_invalid", "public evidence host is unsupported");
+  const hostId = evidence.host_id as MigrationRuntimeHost;
+  if (typeof evidence.source_commit !== "string" || !GROUPED_COMMIT.test(evidence.source_commit) ||
+      ![evidence.release, evidence.host_version, evidence.platform, evidence.runtime_version, evidence.adapter_version, evidence.source_capture_commitment].every(nonEmptyString) ||
+      evidence.contract_version !== NEUTRAL_CONTRACT_VERSION || evidence.scenario_suite_id !== NEUTRAL_SCENARIO_SUITE_ID ||
+      evidence.scenario_suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION || !isCanonicalUtcInstant(evidence.captured_at) ||
+      !validPublicPackage(evidence.runtime_package, hostId) || !validPublicHostExecutable(evidence.host_executable) ||
+      !validPublicActivation(evidence.host_activation, hostId) || !validPublicConsumerTrees(evidence.consumer_trees)) {
+    return refusal("public_evidence_malformed", "public evidence contains an invalid closed binding");
+  }
+  if (hasForbiddenPublicKey(evidence) || hasForbiddenPublicKey(manifest)) return refusal("public_private_field", "public evidence contains an operator-private field");
+  if (evidence.raw_artifacts_included !== false || evidence.external_attestation_verified !== false || evidence.authorizes_promotion !== false ||
+      manifest.raw_artifacts_included !== false || manifest.external_attestation_verified !== false || manifest.authorizes_promotion !== false) {
+    return refusal("public_authority_overclaim", "public evidence cannot include raw artifacts, self-attest, or authorize promotion");
+  }
+  const scan = redactShareableFile(evidenceBytes, "provenance.json");
+  const manifestScan = redactShareableFile(manifestBytes, "provenance.json");
+  if (scan.out !== evidenceBytes || scan.opPaths !== 0 || scan.secrets.length !== 0 || manifestScan.out !== manifestBytes || manifestScan.opPaths !== 0 || manifestScan.secrets.length !== 0) {
+    return refusal("public_not_scrub_clean", "public evidence is not byte-clean under the canonical scrub policy");
+  }
+  const { public_evidence_sha256: evidenceId, ...withoutEvidenceId } = evidence;
+  if (typeof evidenceId !== "string" || !SHA256.test(evidenceId) || evidenceId !== sha256Hex(canonical(withoutEvidenceId))) return refusal("public_evidence_hash_mismatch", "public evidence identity does not match its sanitized fields");
+  const { manifest_sha256: manifestId, ...withoutManifestId } = manifest;
+  if (typeof manifestId !== "string" || !SHA256.test(manifestId) || manifestId !== sha256Hex(canonical(withoutManifestId))) return refusal("public_manifest_hash_mismatch", "public manifest identity does not match its fields");
+  if (manifest.evidence_file !== "activated-host-public-evidence.json" || manifest.file_count !== 1 ||
+      typeof manifest.evidence_sha256 !== "string" || !SHA256.test(manifest.evidence_sha256) || manifest.evidence_sha256 !== sha256Hex(evidenceBytes)) {
+    return refusal("public_manifest_binding_mismatch", "public manifest does not bind the sole evidence file bytes");
+  }
+  if (!validPublicConformance(evidence.conformance)) {
+    return refusal("public_scenario_coverage_incomplete", "public evidence does not retain the canonical 31-scenario result set");
+  }
+  return Object.freeze({ ok: true, code: "verified", detail: "public activated-host evidence is closed, scrub-clean, and hash-bound" });
+}
+
+export function publishActivatedHostPublicEvidence(
+  outDir: string,
+  options: VerifyActivatedHostOptions,
+): ActivatedHostPublicPublication {
+  if (!hasPathEntryNoFollow(outDir)) throw new Error("public evidence output root must already exist as a durable physical directory");
+  const outStats = fs.lstatSync(outDir);
+  if (!outStats.isDirectory() || outStats.isSymbolicLink()) throw new Error("public evidence output root must be a physical directory");
+  const publicEvidence = projectActivatedHostPublicEvidence(options);
+  const publicEvidenceSha256 = String(publicEvidence.public_evidence_sha256);
+  const evidenceBytes = `${JSON.stringify(publicEvidence, null, 2)}\n`;
+  const scan = redactShareableFile(evidenceBytes, "provenance.json");
+  if (scan.out !== evidenceBytes || scan.opPaths !== 0 || scan.secrets.length !== 0) {
+    throw new Error("public activated-host projection is not scrub-clean");
+  }
+  const manifestWithoutHash = {
+    schema_version: ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA,
+    evidence_file: "activated-host-public-evidence.json",
+    evidence_sha256: sha256Hex(evidenceBytes),
+    file_count: 1,
+    raw_artifacts_included: false,
+    external_attestation_verified: false,
+    authorizes_promotion: false,
+  };
+  const manifest = { manifest_sha256: sha256Hex(canonical(manifestWithoutHash)), ...manifestWithoutHash };
+  const manifestBytes = `${JSON.stringify(manifest, null, 2)}\n`;
+  const manifestScan = redactShareableFile(manifestBytes, "provenance.json");
+  if (manifestScan.out !== manifestBytes || manifestScan.opPaths !== 0 || manifestScan.secrets.length !== 0) {
+    throw new Error("public activated-host manifest is not scrub-clean");
+  }
+  const publicVerification = verifyActivatedHostPublicEvidence(evidenceBytes, manifestBytes);
+  if (!publicVerification.ok) throw new Error(`public activated-host verification refused: [${publicVerification.code}] ${publicVerification.detail}`);
+  const physicalOut = fs.realpathSync(outDir);
+  const finalDir = path.join(physicalOut, `public-${publicEvidenceSha256}`);
+  if (hasPathEntryNoFollow(finalDir)) throw new Error(`public evidence already exists: ${publicEvidenceSha256}`);
+  const stagingDir = fs.mkdtempSync(path.join(physicalOut, ".activated-host-public-stage-"));
+  fs.chmodSync(stagingDir, 0o700);
+  let renamed = false;
+  try {
+    const evidencePath = path.join(stagingDir, "activated-host-public-evidence.json");
+    const manifestPath = path.join(stagingDir, "manifest.json");
+    writeExclusive(evidencePath, evidenceBytes, 0o644);
+    writeExclusive(manifestPath, manifestBytes, 0o644);
+    fsyncDirectory(stagingDir);
+    fs.renameSync(stagingDir, finalDir);
+    renamed = true;
+    fsyncDirectory(physicalOut);
+  } catch (error) {
+    fs.rmSync(renamed ? finalDir : stagingDir, { recursive: true, force: true });
+    try { fsyncDirectory(physicalOut); } catch { /* retain original failure */ }
+    throw error;
+  }
+  return Object.freeze({
+    directory: finalDir,
+    evidencePath: path.join(finalDir, "activated-host-public-evidence.json"),
+    manifestPath: path.join(finalDir, "manifest.json"),
+    publicEvidenceSha256,
+  });
+}
+
 function readRegularNoFollow(target: string, label: string): Buffer {
   let descriptor: number | null = null;
   try {
@@ -1146,7 +1491,7 @@ export function captureActivatedHostConformance(
   const failed = (code: string, detail: string, verification: ActivatedHostVerification | null = null): CaptureActivatedHostResult =>
     ({ ok: false, code, detail, receiptPath: null, transcriptPath: null, workerPath: null, verification });
   if (!HOSTS.includes(options.hostId) || options.expectedPackage.host_id !== options.hostId) return failed("host_identity_mismatch", "capture host/package mismatch");
-  if (!SHA256.test(challenge) || !COMMIT.test(options.sourceCommit) || !UTC_INSTANT.test(options.capturedAt)) return failed("capture_identity_invalid", "capture challenge, source commit, or instant is malformed");
+  if (!SHA256.test(challenge) || !COMMIT.test(options.sourceCommit) || !isCanonicalUtcInstant(options.capturedAt)) return failed("capture_identity_invalid", "capture challenge, source commit, or instant is malformed");
   const stageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-host-stage-"));
   let openedHostExecutable: OpenedHostExecutable | null = null;
   try {
@@ -1618,7 +1963,7 @@ export function verifyActivatedHostConformanceReceipt(
   if (typeof receipt.worker_result_sha256 !== "string" || !SHA256.test(receipt.worker_result_sha256)) return refusal("receipt_malformed", "worker result digest is malformed");
   if (typeof receipt.transcript_sha256 !== "string" || !SHA256.test(receipt.transcript_sha256)) return refusal("receipt_malformed", "transcript digest is malformed");
   if (typeof receipt.session_id !== "string" || !SESSION_ID.test(receipt.session_id)) return refusal("receipt_malformed", "host session id is malformed");
-  if (typeof receipt.captured_at !== "string" || !UTC_INSTANT.test(receipt.captured_at) || new Date(receipt.captured_at).toISOString() !== receipt.captured_at) return refusal("receipt_malformed", "captured_at is not a real canonical UTC instant");
+  if (!isCanonicalUtcInstant(receipt.captured_at)) return refusal("receipt_malformed", "captured_at is not a real canonical UTC instant");
   if (receipt.external_attestation_verified !== false || receipt.authorizes_promotion !== false) return refusal("authority_overclaim", "an activated-host capture is public evidence only and cannot self-attest or authorize promotion");
   if (!isRecord(receipt.activated_package_snapshot) || canonical(receipt.activated_package_snapshot) !== canonical(bindingOf(options.expectedPackage))) return refusal("runtime_package_mismatch", "worker self-snapshot does not bind the attested beta package");
   if (!validConsumerTreeSet(receipt.consumer_trees)) return refusal("consumer_identity_invalid", "receipt does not bind the official website and benchmark Git trees");
@@ -1801,6 +2146,28 @@ function runVerifyCli(argv: readonly string[]): number {
   return result.ok ? 0 : 2;
 }
 
+function runPublicProjectCli(argv: readonly string[]): number {
+  assertCliPairs(argv, new Set(["--host", "--boundary", "--package-root", "--receipt", "--transcript", "--worker-result", "--out-dir"]), "public-project");
+  const hostId = cliValue(argv, "--host") as MigrationRuntimeHost;
+  if (!HOSTS.includes(hostId)) throw new Error("--host must be claude-code-cli or codex-cli");
+  const boundary = loadAttestedMigrationBoundary(path.resolve(cliValue(argv, "--boundary"))).boundary;
+  const packageRoot = fs.realpathSync(path.resolve(cliValue(argv, "--package-root")));
+  const receipt = JSON.parse(readRegularNoFollow(path.resolve(cliValue(argv, "--receipt")), "activated-host receipt").toString("utf8"));
+  const transcript = readRegularNoFollow(path.resolve(cliValue(argv, "--transcript")), "activated-host transcript").toString("utf8");
+  const workerResult = readRegularNoFollow(path.resolve(cliValue(argv, "--worker-result")), "activated-host worker result").toString("utf8");
+  const publication = publishActivatedHostPublicEvidence(path.resolve(cliValue(argv, "--out-dir")), {
+    receipt,
+    transcript,
+    workerResult,
+    packageRoot,
+    expectedPackage: boundary.packages[hostId],
+    expectedSourceCommit: boundary.source_commit,
+    expectedRelease: boundary.release,
+  });
+  process.stdout.write(`${JSON.stringify(publication, null, 2)}\n`);
+  return 0;
+}
+
 function runWorkerCli(argv: readonly string[]): number {
   const allowed = new Set([
     "--host", "--challenge", "--source-commit", "--package-hash", "--install-surface-hash", "--runtime-version",
@@ -1868,8 +2235,12 @@ function main(): void {
       process.exitCode = runVerifyCli(argv);
       return;
     }
+    if (subcommand === "public-project") {
+      process.exitCode = runPublicProjectCli(argv);
+      return;
+    }
     process.stderr.write(
-      "usage: activated-host-conformance.ts <capture|verify|worker> --host <claude-code-cli|codex-cli> ...\n",
+      "usage: activated-host-conformance.ts <capture|verify|public-project|worker> --host <claude-code-cli|codex-cli> ...\n",
     );
     process.exitCode = 1;
   } catch (error) {
