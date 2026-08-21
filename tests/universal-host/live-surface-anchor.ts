@@ -558,9 +558,18 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * cutting suite was observed RED against the Round-7 pin and named both the
  * stale execute-plan registry and `tree_pin_stale skills/skills`, computing
  * 28af180d.
+ *
+ * Re-ratified 2026-08-21 (PCL-FU-06 evidence-bound migration windows) —
+ * `commands` moves b4695c3f → 8d443082. `commands/adopt.md` now documents the
+ * attested beta-boundary, package-bound observation, and machine-derived
+ * advance-conformance contracts instead of caller-supplied releases, times,
+ * and booleans. `command-src/command-registry.json` was re-extracted in the
+ * same commit. ANTI-VACUITY: the full cross-cutting suite was observed RED
+ * against the prior pin and named only `commands/adopt.md`, the stale registry,
+ * and `tree_pin_stale commands/commands`, computing 8d443082.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "b4695c3fad17bb19ccdb0f4768e7938658d122de",
+  commands: "8d4430820250df7e5ff004ee262b2744bf48639b",
   skills: "28af180d5c79fcdf52dcfc6c076df5a2c8d5946f",
 });
 
