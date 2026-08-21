@@ -99,7 +99,12 @@ export function readCompatibilityAsset(options: {
   const entry = readCatalogEntry(options.entry);
   if (!entry) return { status: "refused", detail: "invalid compatibility catalog entry" };
   const root = fs.realpathSync(options.pluginRoot);
-  const runtimeIdentity = runtimeReceiptIdentity(root, options.runtimeHost ?? (fs.existsSync(path.join(root, ".claude-plugin/plugin.json")) ? "claude-code-cli" : "codex-cli"));
+  const declaredHost = options.runtimeHost ?? [process.env["GUILD_HOST_ID"], process.env["GUILD_ORCHESTRATOR_HOST"], process.env["GUILD_HOST"]]
+    .find((value) => typeof value === "string" && /^(?:claude|codex)/.test(value.toLowerCase()));
+  const runtimeHost: MigrationRuntimeHost = typeof declaredHost === "string" && declaredHost.toLowerCase().startsWith("codex")
+    ? "codex-cli"
+    : "claude-code-cli";
+  const runtimeIdentity = runtimeReceiptIdentity(root, runtimeHost);
   if (runtimeIdentity === null) {
     return { status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" };
   }
