@@ -2910,6 +2910,23 @@ describe("the FU04 public root-admission bridge", () => {
     }
   });
 
+  it("refuses signing material whose root is absent from the candidate manifest before consuming a key", () => {
+    const material = writeAdmissionMaterial("not-a-candidate", candidateIds[0], 0);
+    const manifestRoots = candidateIds.map((id) => ReferenceMh09.buildTree(`fu04-declared-${id}`).root);
+    const registryPath = path.join(material.custodyRoot, "used-one-time-keys.json");
+
+    expect(() =>
+      Signer.invoke("signRootAdmissionProof", {
+        candidate_manifest: candidateManifest(manifestRoots),
+        material_path: material.materialPath,
+        output_path: path.join(material.custodyRoot, "proof.json"),
+        used_key_registry_path: registryPath,
+        custody_root_path: material.custodyRoot,
+      }),
+    ).toThrow(/candidate|manifest|root|authority/i);
+    expect(fs.existsSync(registryPath)).toBe(false);
+  });
+
   it("closes the proving window after the live source trust roots rotate while preserving historical verification", () => {
     const material = writeAdmissionMaterial("rotated-live-root", candidateIds[0], 0);
     const otherRoots = candidateIds.slice(1).map((id) => ReferenceMh09.buildTree(`fu04-rotated-${id}`).root);
@@ -2985,22 +3002,28 @@ describe("the FU04 public root-admission bridge", () => {
   });
 
   it("binds every proof to the whole candidate manifest, not just its own root", () => {
-    const first = writeAdmissionMaterial("manifest-bind", candidateIds[0]);
-    const remaining = candidateIds.slice(1).map((id) => ReferenceMh09.buildTree(`fu04-bind-${id}`).root);
-    const manifest = candidateManifest([first.tree.root, ...remaining]);
-    const proof = Signer.invoke<Record<string, unknown>>("signRootAdmissionProof", {
-      candidate_manifest: manifest,
-      material_path: first.materialPath,
-      output_path: path.join(first.custodyRoot, "proof.json"),
-      used_key_registry_path: path.join(first.custodyRoot, "used-one-time-keys.json"),
-      custody_root_path: first.custodyRoot,
-    });
+    const materials = candidateIds.map((id, index) => writeAdmissionMaterial(`manifest-bind-${index}`, id));
+    const manifest = candidateManifest(materials.map((entry) => entry.tree.root));
+    const proofs = materials.map((entry) =>
+      Signer.invoke<Record<string, unknown>>("signRootAdmissionProof", {
+        candidate_manifest: manifest,
+        material_path: entry.materialPath,
+        output_path: path.join(entry.custodyRoot, "proof.json"),
+        used_key_registry_path: path.join(entry.custodyRoot, "used-one-time-keys.json"),
+        custody_root_path: entry.custodyRoot,
+      }),
+    );
+    const changedCandidates = manifest.candidates.map((candidate, index) =>
+      index === 1
+        ? { ...candidate, verification_root: ReferenceMh09.buildTree("fu04-bind-changed-other-root").root }
+        : candidate,
+    );
     const changed = {
       ...manifest,
-      rotation_id: "pcl-fu04-production-root-rotation-changed",
+      candidates: changedCandidates,
     };
-    expect(() => Signer.invoke("verifyRootAdmissionBundle", changed, [proof, proof, proof])).toThrow(
-      /manifest|digest|proof|duplicate/i,
+    expect(() => Signer.invoke("verifyRootAdmissionBundle", changed, proofs)).toThrow(
+      /manifest|digest|proof/i,
     );
   });
 
