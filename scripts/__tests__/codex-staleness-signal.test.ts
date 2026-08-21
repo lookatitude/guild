@@ -279,11 +279,38 @@ describe("update-check mints a package-local receipt for host-native installs", 
     expect(r["channel_confidence"]).toBe("assumed-default");
   });
 
+  it("derives beta/next from a canonical beta package version instead of claiming stable/main", () => {
+    fs.writeFileSync(
+      path.join(pkg, ".codex-plugin", "plugin.json"),
+      '{\n  "name": "guild",\n  "version": "2.7.0-beta.4"\n}\n'
+    );
+
+    runHook();
+    const r = JSON.parse(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    expect(r["version"]).toBe("2.7.0-beta.4");
+    expect(r["channel"]).toBe("beta");
+    expect(r["ref"]).toBe("next");
+    expect(r["managed_by"]).toBe("host-native");
+    expect(r["channel_confidence"]).toBe("version-derived");
+  });
+
   it("does NOT clobber an existing receipt on later sessions", () => {
     runHook();
     const first = fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8");
     runHook();
     expect(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")).toBe(first);
+  });
+
+  it("does not follow a dangling receipt symlink", () => {
+    const target = path.join(base, "outside-receipt.json");
+    fs.symlinkSync(target, path.join(pkg, "guild-install-receipt.json"));
+    const out = runHook();
+    expect(out).toContain("2.3.2 → 9.9.9");
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.lstatSync(path.join(pkg, "guild-install-receipt.json")).isSymbolicLink()).toBe(true);
   });
 
   it("fail-open: an unwritable package root still emits the signal, no receipt, no crash", () => {

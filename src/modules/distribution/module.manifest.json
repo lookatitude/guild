@@ -15,6 +15,7 @@
   ],
   "owns": {
     "scripts": [
+      "activated-host-conformance",
       "build-host-packages",
       "build-inventory",
       "build-release-candidate",

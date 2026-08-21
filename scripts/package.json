@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "test": "npx jest --testPathPattern=__tests__ --no-coverage --runInBand",
+    "build:activated-host-conformance": "esbuild activated-host-conformance.ts --bundle --platform=node --target=node18 --format=cjs --alias:js-yaml=./node_modules/js-yaml --outfile=dist/activated-host-conformance.js",
     "build:inventory": "npx tsx build-inventory.ts",
     "check:inventory": "npx tsx build-inventory.ts --check",
     "build:hosts": "npx tsx build-host-packages.ts",
@@ -20,6 +21,8 @@
     "check:host-support-matrix": "npx tsx generate-support-matrix.ts --check",
     "check:channel-integrity": "npx tsx check-channel-integrity.ts",
     "check:stable-promotion": "npx tsx check-channel-integrity.ts promotion",
+    "capture:activated-host": "node dist/activated-host-conformance.js capture",
+    "verify:activated-host": "node dist/activated-host-conformance.js verify",
     "emit:migration-boundary": "npx tsx capability-migration-boundary.ts",
     "emit:release-conformance": "npx tsx emit-release-conformance.ts",
     "sign:release-attestation": "npx tsx sign-release-attestation.ts",
@@ -37,6 +40,7 @@
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.3",
     "tsx": "^4.21.0",
