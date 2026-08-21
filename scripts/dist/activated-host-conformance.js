@@ -25142,8 +25142,10 @@ function validateMigrationBoundary(value) {
 init_frontmatter();
 var readScalarField2 = readScalarField;
 
-// activated-host-conformance.ts
+// lib/shared/scrub-redact.ts
 init_scrub_redact();
+
+// activated-host-conformance.ts
 var ACTIVATED_HOST_CONFORMANCE_SCHEMA = "guild.activated_host_conformance.v1";
 var ACTIVATED_HOST_WORKER_SCHEMA = "guild.activated_host_conformance_worker.v1";
 var ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA = "guild.activated_host_public_evidence.v1";

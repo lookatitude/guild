@@ -37,7 +37,7 @@ import {
   type MigrationRuntimePackageV1,
 } from "./lib/capability/migration-evidence";
 import { readScalarField } from "./lib/frontmatter";
-import { redactShareableFile } from "../src/modules/security/workflows/scrub-redact";
+import { redactShareableFile } from "./lib/shared/scrub-redact";
 
 export const ACTIVATED_HOST_CONFORMANCE_SCHEMA = "guild.activated_host_conformance.v1" as const;
 export const ACTIVATED_HOST_WORKER_SCHEMA = "guild.activated_host_conformance_worker.v1" as const;
