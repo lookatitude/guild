@@ -27,17 +27,49 @@ reversal entries and preserves history.
 The D03 window is machine-enforced:
 
 ```bash
-npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window start --project-root "$(pwd)" --release 2.6.0 --at <rfc3339> --to observe
-npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window record --project-root "$(pwd)" --release 2.6.1 --at <rfc3339>
-npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window advance --project-root "$(pwd)" --release 2.7.0 --at <rfc3339> --to shadow --conformance-pass
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window start --project-root "$(pwd)" --boundary <beta-boundary.json> --project-id <id> --to observe
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window evidence --plugin-root "$GUILD_PLUGIN_ROOT" --project-root "$(pwd)" --boundary <beta-boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode observe --run-ids <real-run-id,...>
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window record --project-root "$(pwd)" --boundary <beta-boundary.json> --observation <observation.json>
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window record --project-root "$(pwd)" --boundary <newer-beta-boundary.json> --observation <observation.json>
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window advance --project-root "$(pwd)" --boundary <newer-beta-boundary.json> --to shadow
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts g5 --project-root "$(pwd)" --windows <release-windows.json> --project-local-default <semver> --current-version <semver>
 ```
 
 The `g5` verdict is the removal verdict, not telemetry alone: it also enforces
 the two-minor rollback floor and refuses legacy removal throughout v2.
 
-Advance requires at least three distinct releases, fourteen days, and passed
-conformance. `g5 --windows <file>` rebuilds its verdict only from hash-bound
+Start accepts only a hash-bound <code>guild.capability_migration_boundary.v1</code>
+emitted by the post-merge <code>next</code> workflow and begins the prospective
+observe clock before any evidence can count. Record pairs that boundary with a
+<code>guild.capability_migration_observation.v1</code> rebuilt from real whole-run
+profiles, intact receipt journals/checkpoints, and non-synthetic PCL-09 payloads.
+The boundary commits to the exact generated Claude and Codex package trees; evidence
+must name one host and hash to that attested package, so a version string alone never
+qualifies. Accepted run material is copied into immutable project evidence storage,
+so normal run retention does not detach a live migration window.
+The boundary must also pass GitHub CLI artifact-attestation verification against
+the exact production workflow, source commit, `next` ref, and GitHub-hosted runner;
+a self-consistent local JSON file is not release provenance. Every admitted boundary
+is retained beside the window and its remote attestation is reverified whenever
+persisted state is read, so structurally valid historical JSON cannot be injected.
+That read is intentionally online and fail-closed: if GitHub or authenticated
+<code>gh</code> verification is unavailable, <code>window status</code> reports
+<code>provenance_unavailable</code> rather than labelling the local bytes damaged;
+restore access and retry without rewriting the window. The beta-only window schema is
+<code>guild.capability_migration_window.v4</code>; pre-beta v1-v3 fixtures are not
+upgraded in place and must be retired before starting this first attested window.
+Caller-supplied release labels, timestamps, and conformance booleans do not count.
+For D03, the machine-derived <code>guild.capability_migration_advance_conformance.v1</code>
+verdict is the conformance leg: it is recomputed from attested boundaries,
+package-bound whole-run observations, and the ordered resolver transition. The
+separate activated-host 31/31 release-conformance authority remains the downstream
+FU04/FU05 stable-promotion gate; requiring it here would create a promotion cycle.
+Evidence produced before entry into the current mode is refused. Advance closes
+the current phase and opens the next; collect and record the new mode's first evidence
+after that switch. Observe and shadow each require at least three distinct verified beta
+boundaries, three distinct whole-run profiles, and fourteen GitHub-observed days.
+The later project-local to strict rung still requires an attested newer boundary and
+the next ordered transition, but does not repeat the observe/shadow soak. `g5 --windows <file>` rebuilds its verdict only from hash-bound
 compatibility payloads referenced by intact MH-06 receipt journals. Missing
 payloads, damaged journals, uninstrumented assets, fewer than two clean release
 windows, or any dependence read block removal.

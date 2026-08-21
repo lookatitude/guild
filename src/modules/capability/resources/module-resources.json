@@ -8,7 +8,7 @@
       "id": "adopt",
       "source_path": "commands/adopt.md",
       "resource_path": "resources/commands/adopt.md",
-      "sha256": "a7c5d1fa928c832708116d6043ca773fd448dc54bc2209d488024d775a3a4156"
+      "sha256": "d77095ca3ccbc0a218ebab23f7d4980a191da11c6380e1a87b16a67c2812d802"
     },
     {
       "category": "commands",
@@ -22,7 +22,14 @@
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
       "resource_path": "resources/scripts/capability-adopt.ts",
-      "sha256": "a8fe0471ab5f3b5089337df2e93975b7eeb9fe489ee9a1e14bb2cedbeb2a4ed2"
+      "sha256": "2ffd0d798c1bb3cff9b6ab14ab27ba7605739161b44a03a0dd50d239a73e091f"
+    },
+    {
+      "category": "scripts",
+      "id": "capability-migration-boundary",
+      "source_path": "scripts/capability-migration-boundary.ts",
+      "resource_path": "resources/scripts/capability-migration-boundary.ts",
+      "sha256": "ff090a69aab8ebbfce4788cc9c13b6aa782fc9cab4cb2a4652b2b15106d4b45b"
     },
     {
       "category": "scripts",
@@ -71,7 +78,7 @@
       "id": "lib/capability/compatibility-loader",
       "source_path": "scripts/lib/capability/compatibility-loader.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-loader.ts",
-      "sha256": "2654b0ab39fc4b4d14074db4fc5688129ec448535bcf46af72676ae2442b4381"
+      "sha256": "3c2d080672121433e69e1f351e7195e78ac74202eeb26c6255ea46f5635f5fad"
     },
     {
       "category": "scripts",
@@ -96,10 +103,17 @@
     },
     {
       "category": "scripts",
+      "id": "lib/capability/migration-evidence",
+      "source_path": "scripts/lib/capability/migration-evidence.ts",
+      "resource_path": "resources/scripts/lib/capability/migration-evidence.ts",
+      "sha256": "97b8f800628ab803e220c3097b8542d57e2fc50393b4192cb53ab976b391b826"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/migration-window",
       "source_path": "scripts/lib/capability/migration-window.ts",
       "resource_path": "resources/scripts/lib/capability/migration-window.ts",
-      "sha256": "10850fed31c4b7434b82f4072774c1f5ef93c3dd9de108ae429be9a18e613f37"
+      "sha256": "55950f366908f5bd76b266fdd64835cb89532ebd45637dc7c51225c0a8ee8227"
     },
     {
       "category": "scripts",

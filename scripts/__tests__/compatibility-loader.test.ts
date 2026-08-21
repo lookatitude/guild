@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readdirSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readdirSync, existsSync, readFileSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildCompatibilityCatalog } from "../lib/capability/compatibility-catalog";
@@ -23,7 +23,7 @@ describe("instrumented compatibility loader", () => {
       const pluginRoot = join(__dirname, "../..");
       const catalog = buildCompatibilityCatalog({ pluginRoot, deprecation: "deprecated", deprecatedBy: "cap-loc-D03" });
       const entry = catalog.entries.find((candidate) => candidate.kind === "shipped_template")!;
-      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "shadow", intent: "mint", synthetic: false, specialistId: entry.id, runId: "run-compat", operationId: "test-read-1", recordedAt: "2026-08-10T00:00:00Z" });
+      const result = readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "shadow", intent: "mint", synthetic: false, specialistId: entry.id, runId: "run-compat", operationId: "test-read-1", recordedAt: "2026-08-10T00:00:00Z" });
       expect(result.status).toBe("loaded");
       const scan = scanReceiptJournal(join(projectRoot, ".guild/runs/run-compat/receipts/journal.jsonl"));
       expect(scan.integrity).toBe("intact");
@@ -47,13 +47,64 @@ describe("instrumented compatibility loader", () => {
     const pluginRoot = mkdtempSync(join(tmpdir(), "guild-compat-version-plugin-"));
     try {
       const entry = buildCompatibilityCatalog({ pluginRoot: join(__dirname, "../..") }).entries[0];
-      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-no-version", operationId: "missing-runtime-version", recordedAt: "2026-08-19T00:00:00Z" });
+      const result = readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-no-version", operationId: "missing-runtime-version", recordedAt: "2026-08-19T00:00:00Z" });
       expect(result).toEqual({
         status: "refused",
         detail: "compatibility runtime version is not available from a shipped plugin manifest",
       });
       expect(scanReceiptJournal(join(projectRoot, ".guild/runs/run-no-version/receipts/journal.jsonl")).integrity).toBe("absent");
     } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(pluginRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["missing", "symlink"] as const)("refuses instead of throwing when the runtime producer is %s", (shape) => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-compat-producer-project-"));
+    const pluginRoot = mkdtempSync(join(tmpdir(), "guild-compat-producer-plugin-"));
+    try {
+      const canonicalRoot = join(__dirname, "../..");
+      const entry = buildCompatibilityCatalog({ pluginRoot: canonicalRoot }).entries[0];
+      mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
+      mkdirSync(join(pluginRoot, "scripts/lib/capability"), { recursive: true });
+      writeFileSync(join(pluginRoot, ".claude-plugin/plugin.json"), JSON.stringify({ version: "2.7.0-beta.2" }));
+      if (shape === "symlink") {
+        symlinkSync(join(canonicalRoot, "scripts/lib/capability/compatibility-loader.ts"), join(pluginRoot, "scripts/lib/capability/compatibility-loader.ts"));
+      }
+      const compatibilityPath = join(pluginRoot, entry.path);
+      mkdirSync(dirname(compatibilityPath), { recursive: true });
+      writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
+
+      expect(() => readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-producer-refusal", operationId: `producer-${shape}`, recordedAt: "2026-08-21T00:00:00Z" })).not.toThrow();
+      expect(readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-producer-refusal", operationId: `producer-${shape}`, recordedAt: "2026-08-21T00:00:00Z" })).toEqual({ status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" });
+      expect(scanReceiptJournal(join(projectRoot, ".guild/runs/run-producer-refusal/receipts/journal.jsonl")).integrity).toBe("absent");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(pluginRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers a generated package's sole manifest over stale cross-host environment", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-compat-host-project-"));
+    const pluginRoot = mkdtempSync(join(tmpdir(), "guild-compat-host-plugin-"));
+    const prior = process.env["GUILD_HOST_ID"];
+    try {
+      const canonicalRoot = join(__dirname, "../..");
+      const entry = buildCompatibilityCatalog({ pluginRoot: canonicalRoot }).entries[0];
+      mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
+      mkdirSync(join(pluginRoot, "scripts/lib/capability"), { recursive: true });
+      writeFileSync(join(pluginRoot, ".claude-plugin/plugin.json"), JSON.stringify({ version: "2.7.0-beta.2" }));
+      writeFileSync(join(pluginRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
+      const compatibilityPath = join(pluginRoot, entry.path);
+      mkdirSync(dirname(compatibilityPath), { recursive: true });
+      writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
+      process.env["GUILD_HOST_ID"] = "codex-cli";
+
+      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-stale-host", operationId: "stale-host", recordedAt: "2026-08-21T00:00:00Z" });
+      expect(result.status).toBe("loaded");
+      expect(scanReceiptJournal(join(projectRoot, ".guild/runs/run-stale-host/receipts/journal.jsonl")).records[0].versions.host_id).toBe("claude-code-cli");
+    } finally {
+      if (prior === undefined) delete process.env["GUILD_HOST_ID"]; else process.env["GUILD_HOST_ID"] = prior;
       rmSync(projectRoot, { recursive: true, force: true });
       rmSync(pluginRoot, { recursive: true, force: true });
     }
@@ -66,7 +117,9 @@ describe("instrumented compatibility loader", () => {
       const canonicalRoot = join(__dirname, "../..");
       const entry = buildCompatibilityCatalog({ pluginRoot: canonicalRoot }).entries[0];
       mkdirSync(join(pluginRoot, ".codex-plugin"), { recursive: true });
+      mkdirSync(join(pluginRoot, "scripts/lib/capability"), { recursive: true });
       writeFileSync(join(pluginRoot, ".codex-plugin", "plugin.json"), JSON.stringify({ version: "9.8.7-beta.6" }));
+      writeFileSync(join(pluginRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
       const compatibilityPath = join(pluginRoot, entry.path);
       mkdirSync(dirname(compatibilityPath), { recursive: true });
       writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
@@ -75,6 +128,7 @@ describe("instrumented compatibility loader", () => {
       expect(result.status).toBe("loaded");
       const scan = scanReceiptJournal(join(projectRoot, ".guild/runs/run-codex-version/receipts/journal.jsonl"));
       expect(scan.records).toHaveLength(1);
+      expect(scan.records[0].versions.host_id).toBe("codex-cli");
       expect(scan.records[0].versions.runtime_version).toBe("9.8.7-beta.6");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
@@ -87,7 +141,7 @@ describe("instrumented compatibility loader", () => {
     try {
       const pluginRoot = join(__dirname, "../..");
       const entry = buildCompatibilityCatalog({ pluginRoot }).entries[0];
-      expect(readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "strict", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-refused", operationId: "test-refusal", recordedAt: "2026-08-10T00:00:00Z" }).status).toBe("refused");
+      expect(readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "strict", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-refused", operationId: "test-refusal", recordedAt: "2026-08-10T00:00:00Z" }).status).toBe("refused");
       expect(scanReceiptJournal(join(projectRoot, ".guild/runs/run-refused/receipts/journal.jsonl")).integrity).toBe("absent");
     } finally { rmSync(projectRoot, { recursive: true, force: true }); }
   });

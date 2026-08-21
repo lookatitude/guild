@@ -1,0 +1,85 @@
+name: capability-migration-boundary
+
+# A `next` merge is distributable immediately, but FU06 counts only an explicit
+# beta-version boundary. Restricting this workflow to the canonical manifest
+# means ordinary next merges do not become releases by accident: the operator
+# advances beta.N deliberately, and this job binds that exact merge/event/tree.
+on:
+  push:
+    branches: [next]
+    paths:
+      - .claude-plugin/plugin.json
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  emit-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the exact next boundary
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Fetch the independently observed next tip
+        run: git fetch --no-tags origin refs/heads/next:refs/remotes/origin/next
+
+      - name: Classify a new beta boundary
+        id: boundary
+        shell: bash
+        run: |
+          current="$(node -p "require('./.claude-plugin/plugin.json').version")"
+          before="$(node -p "require(process.env.GITHUB_EVENT_PATH).before || ''")"
+          previous=""
+          if [[ "$before" =~ ^[0-9a-f]{40}$ ]]; then
+            previous="$(git show "$before:.claude-plugin/plugin.json" 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).version||'')}catch{}})")"
+          fi
+          emit=false
+          if [[ "$current" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.(0|[1-9][0-9]*)$ && "$current" != "$previous" ]]; then
+            emit=true
+          fi
+          echo "emit=$emit" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node 24
+        if: steps.boundary.outputs.emit == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      - name: Install exact script dependencies
+        if: steps.boundary.outputs.emit == 'true'
+        working-directory: scripts
+        run: npm ci --prefer-offline
+
+      - name: Emit the hash-bound beta release boundary
+        if: steps.boundary.outputs.emit == 'true'
+        run: |
+          npm --prefix scripts run build:hosts
+          npm --prefix scripts run emit:migration-boundary -- \
+            --root "$GITHUB_WORKSPACE" \
+            --claude-package-root "$GITHUB_WORKSPACE/dist/claude-code" \
+            --codex-package-root "$GITHUB_WORKSPACE/dist/codex" \
+            --event "$GITHUB_EVENT_PATH" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --out "$RUNNER_TEMP/capability-migration-boundaries"
+
+      - name: Attest the exact boundary with GitHub OIDC provenance
+        if: steps.boundary.outputs.emit == 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/capability-migration-boundaries/*.json
+
+      - name: Upload the boundary as immutable workflow evidence
+        if: steps.boundary.outputs.emit == 'true'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: capability-migration-boundary-${{ github.sha }}
+          path: ${{ runner.temp }}/capability-migration-boundaries/*.json
+          if-no-files-found: error
+          retention-days: 90
