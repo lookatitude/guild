@@ -24,7 +24,7 @@ import {
   type MigrationObservationV1,
 } from "./migration-evidence";
 
-export const MIGRATION_WINDOW_SCHEMA = "guild.capability_migration_window.v3" as const;
+export const MIGRATION_WINDOW_SCHEMA = "guild.capability_migration_window.v4" as const;
 export const MIGRATION_WINDOW_RELPATH = ".guild/artifacts/capability/migration-window.json";
 export const MIGRATION_TRANSITION_SCHEMA = "guild.capability_migration_transition.v1" as const;
 export const MIGRATION_ADVANCE_CONFORMANCE_SCHEMA = "guild.capability_migration_advance_conformance.v1" as const;
@@ -42,6 +42,7 @@ interface CompletedMigrationPhaseV1 {
 
 export interface MigrationWindowV1 {
   readonly schema_version: typeof MIGRATION_WINDOW_SCHEMA;
+  readonly project_id: string;
   readonly mode: CapabilityResolverMode;
   readonly entered_at: string;
   /** Attested beta boundary that opened the current mode. */
@@ -108,7 +109,12 @@ function strictlyNewerBeta(previous: string, next: string): boolean {
 }
 
 function pairEvidence(boundary: MigrationBoundaryV1, observation: MigrationObservationV1, mode: "observe" | "shadow"): boolean {
-  const runtimePackageMatches = Object.values(boundary.packages).some((runtimePackage) => canonical(runtimePackage) === canonical(observation.runtime_package));
+  const runtimePackageMatches = Object.values(boundary.packages).some((runtimePackage) => runtimePackage.host_id === observation.runtime_package.host_id
+    && runtimePackage.manifest_path === observation.runtime_package.manifest_path
+    && runtimePackage.manifest_sha256 === observation.runtime_package.manifest_sha256
+    && runtimePackage.producer_sha256 === observation.runtime_package.producer_sha256
+    && runtimePackage.tree_sha256 === observation.runtime_package.tree_sha256
+    && runtimePackage.install_surface_sha256 === observation.runtime_package.install_surface_sha256);
   return observation.mode === mode
     && observation.boundary_hash === boundary.boundary_hash
     && observation.boundary_release === boundary.release
@@ -158,8 +164,8 @@ function verifyWindowBoundaryProvenance(projectRoot: string, value: MigrationWin
 export function validateMigrationWindow(value: unknown): MigrationWindowV1 | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (!exactKeys(record, ["schema_version", "mode", "entered_at", "entry_boundary", "releases", "observations", "completed_phases", "actor"])) return null;
-  if (record.schema_version !== MIGRATION_WINDOW_SCHEMA || !MODES.has(record.mode as CapabilityResolverMode) || record.mode === "legacy" || !canonicalInstant(record.entered_at) || typeof record.actor !== "string" || !record.actor || !Array.isArray(record.completed_phases)) return null;
+  if (!exactKeys(record, ["schema_version", "project_id", "mode", "entered_at", "entry_boundary", "releases", "observations", "completed_phases", "actor"])) return null;
+  if (record.schema_version !== MIGRATION_WINDOW_SCHEMA || typeof record.project_id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(record.project_id) || !MODES.has(record.mode as CapabilityResolverMode) || record.mode === "legacy" || !canonicalInstant(record.entered_at) || typeof record.actor !== "string" || !record.actor || !Array.isArray(record.completed_phases)) return null;
   const mode = record.mode as CapabilityResolverMode;
   const entryBoundary = validateMigrationBoundary(record.entry_boundary);
   if (!entryBoundary || Date.parse(entryBoundary.merged_at) > Date.parse(record.entered_at)) return null;
@@ -177,7 +183,8 @@ export function validateMigrationWindow(value: unknown): MigrationWindowV1 | nul
   if (mode === "observe" && completed.length > 0) return null;
   if (mode === "shadow" && !completed.some((phase) => phase.mode === "observe")) return null;
   if ((mode === "project-local" || mode === "strict") && !completed.some((phase) => phase.mode === "shadow")) return null;
-  return Object.freeze({ schema_version: MIGRATION_WINDOW_SCHEMA, mode, entered_at: record.entered_at, entry_boundary: entryBoundary, ...series, completed_phases: Object.freeze(completed), actor: record.actor });
+  if ([...completed, series].some((phase) => phase.observations.some((observation) => observation.project_id !== record.project_id))) return null;
+  return Object.freeze({ schema_version: MIGRATION_WINDOW_SCHEMA, project_id: record.project_id, mode, entered_at: record.entered_at, entry_boundary: entryBoundary, ...series, completed_phases: Object.freeze(completed), actor: record.actor });
 }
 
 function transitionHash(value: Omit<MigrationTransitionIntentV1, "intent_hash">): string { return sha256(canonical(value)); }
@@ -195,8 +202,75 @@ function validateTransitionIntent(value: unknown): MigrationTransitionIntentV1 |
   return Object.freeze({ ...candidate, intent_hash: record.intent_hash });
 }
 
+function verifyWindowEvidence(projectRoot: string, value: MigrationWindowV1): void {
+  verifyWindowBoundaryProvenance(projectRoot, value);
+  for (const phase of [...value.completed_phases, value]) {
+    for (const observation of phase.observations) verifyMigrationObservation(projectRoot, observation);
+  }
+}
+
+/** Recompute the only state pair the recorded operation is allowed to install. */
+function verifyTransitionSemantics(projectRoot: string, intent: MigrationTransitionIntentV1): void {
+  let expectedWindow: MigrationWindowV1 | null = null;
+  let expectedGates: CapabilityFeatureGateRegistryV1 | null = null;
+  if (intent.operation === "start") {
+    if (intent.prior_window !== null || (intent.prior_gates !== null && intent.prior_gates.resolver_mode !== "legacy" && intent.prior_gates.resolver_mode !== "observe")) {
+      throw new Error("start transition has an ineligible prior state");
+    }
+    expectedWindow = validateMigrationWindow({
+      schema_version: MIGRATION_WINDOW_SCHEMA,
+      project_id: intent.next_window.project_id,
+      mode: "observe",
+      entered_at: intent.next_window.entered_at,
+      entry_boundary: intent.next_window.entry_boundary,
+      releases: [],
+      observations: [],
+      completed_phases: [],
+      actor: intent.next_window.actor,
+    });
+    const prior = intent.prior_gates;
+    expectedGates = prior?.resolver_mode === "observe"
+      ? prior
+      : prior
+        ? { ...prior, resolver_mode: "observe", revision: prior.revision + 1, updated_at: intent.next_window.entered_at, updated_by: intent.next_window.actor, history: [...prior.history, { from: "legacy", to: "observe", reason: "D03 migration-window start", recorded_at: intent.next_window.entered_at, actor: intent.next_window.actor }] }
+        : { schema_version: FEATURE_GATE_REGISTRY_SCHEMA, resolver_mode: "observe", revision: 0, updated_at: intent.next_window.entered_at, updated_by: intent.next_window.actor, history: [] };
+  } else {
+    const priorWindow = intent.prior_window;
+    const priorGates = intent.prior_gates;
+    if (!priorWindow || !priorGates || priorWindow.mode !== priorGates.resolver_mode) throw new Error("advance transition has no coherent prior state");
+    const verdict = evaluateMigrationAdvance(priorWindow, intent.next_window.mode, intent.next_window.entry_boundary);
+    if (!verdict.passed) throw new Error(`advance transition is not evidence-qualified: ${verdict.blockers.join("; ")}`);
+    const completed = priorWindow.mode === "observe" || priorWindow.mode === "shadow"
+      ? [...priorWindow.completed_phases, { mode: priorWindow.mode, entered_at: priorWindow.entered_at, releases: priorWindow.releases, observations: priorWindow.observations, advanced_with: intent.next_window.entry_boundary }]
+      : priorWindow.completed_phases;
+    expectedWindow = validateMigrationWindow({
+      schema_version: MIGRATION_WINDOW_SCHEMA,
+      project_id: priorWindow.project_id,
+      mode: intent.next_window.mode,
+      entered_at: intent.next_window.entered_at,
+      entry_boundary: intent.next_window.entry_boundary,
+      releases: [],
+      observations: [],
+      completed_phases: completed,
+      actor: intent.next_window.actor,
+    });
+    expectedGates = {
+      ...priorGates,
+      resolver_mode: intent.next_window.mode,
+      revision: priorGates.revision + 1,
+      updated_at: intent.next_window.entered_at,
+      updated_by: intent.next_window.actor,
+      history: [...priorGates.history, { from: priorWindow.mode, to: intent.next_window.mode, reason: "D03 migration-window advance", recorded_at: intent.next_window.entered_at, actor: intent.next_window.actor }],
+    };
+  }
+  if (!expectedWindow || !expectedGates || canonical(expectedWindow) !== canonical(intent.next_window) || canonical(expectedGates) !== canonical(intent.next_gates)) {
+    throw new Error("pending migration transition is not the exact successor of its prior state");
+  }
+  verifyWindowEvidence(projectRoot, intent.next_window);
+}
+
 function transitionPath(projectRoot: string): string { return path.join(fs.realpathSync(projectRoot), MIGRATION_TRANSITION_RELPATH); }
-function writeTransitionIntent(projectRoot: string, operation: "start" | "advance", priorWindow: MigrationWindowV1 | null, priorGates: CapabilityFeatureGateRegistryV1 | null, nextWindow: MigrationWindowV1, nextGates: CapabilityFeatureGateRegistryV1): void {
+function writeTransitionIntent(projectRoot: string, operation: "start" | "advance", priorWindow: MigrationWindowV1 | null, priorGates: CapabilityFeatureGateRegistryV1 | null, nextWindow: MigrationWindowV1, nextGates: CapabilityFeatureGateRegistryV1): MigrationTransitionIntentV1 {
   const target = transitionPath(projectRoot);
   try { fs.lstatSync(target); throw new Error("a migration transition is already pending"); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -205,6 +279,14 @@ function writeTransitionIntent(projectRoot: string, operation: "start" | "advanc
   if (!intent) throw new Error("migration transition intent failed validation");
   const written = writeContainedFile(projectRoot, target, Buffer.from(`${JSON.stringify(intent, null, 2)}\n`), { policy: "physical" });
   if (!written.written) throw new Error(`migration transition intent refused [${written.code}]: ${written.detail}`);
+  return intent;
+}
+
+function applyMigrationTransition(projectRoot: string, intent: MigrationTransitionIntentV1): void {
+  verifyTransitionSemantics(projectRoot, intent);
+  writeMigrationWindow(projectRoot, intent.next_window);
+  writeFeatureGateRegistry(projectRoot, intent.next_gates);
+  fs.unlinkSync(transitionPath(projectRoot));
 }
 
 export function recoverMigrationTransition(projectRoot: string): boolean {
@@ -214,10 +296,10 @@ export function recoverMigrationTransition(projectRoot: string): boolean {
   if (raw === null) return false;
   let parsed: unknown; try { parsed = JSON.parse(raw); } catch { throw new Error("pending migration transition is invalid JSON"); }
   const intent = validateTransitionIntent(parsed); if (!intent) throw new Error("pending migration transition is invalid or tampered");
-  // A crafted self-hashed intent must never mutate either live state file. The
-  // exact boundary artifacts were persisted before the intent was written, so
-  // remote provenance can be re-established before deterministic roll-forward.
-  verifyWindowBoundaryProvenance(projectRoot, intent.next_window);
+  // A crafted self-hashed intent must never mutate either live state file.
+  // Recompute the only allowed successor and re-verify all retained evidence
+  // before deciding whether an interrupted commit can roll forward.
+  verifyTransitionSemantics(projectRoot, intent);
   let currentWindow: MigrationWindowV1 | null = null; let windowExists = false;
   try { const windowRaw = readOptionalStateFile(projectRoot, MIGRATION_WINDOW_RELPATH, "current migration window"); windowExists = windowRaw !== null; currentWindow = windowRaw === null ? null : validateMigrationWindow(JSON.parse(windowRaw)); }
   catch { throw new Error("current migration window is invalid during transition recovery"); }
@@ -227,25 +309,38 @@ export function recoverMigrationTransition(projectRoot: string): boolean {
   const currentGates = readFeatureGateRegistry(projectRoot);
   if (gateExists && !currentGates) throw new Error("current feature-gate registry is invalid during transition recovery");
   const same = (left: unknown, right: unknown): boolean => canonical(left) === canonical(right);
-  if (!same(currentWindow, intent.prior_window) && !same(currentWindow, intent.next_window)) throw new Error("migration window changed outside the pending transition");
-  if (!same(currentGates, intent.prior_gates) && !same(currentGates, intent.next_gates)) throw new Error("feature-gate registry changed outside the pending transition");
+  const windowAtPrior = same(currentWindow, intent.prior_window); const windowAtNext = same(currentWindow, intent.next_window);
+  const gatesAtPrior = same(currentGates, intent.prior_gates); const gatesAtNext = same(currentGates, intent.next_gates);
+  if (!windowAtPrior && !windowAtNext) throw new Error("migration window changed outside the pending transition");
+  if (!gatesAtPrior && !gatesAtNext) throw new Error("feature-gate registry changed outside the pending transition");
+  // An intent alone is not authority. If no target landed, discard it and let
+  // the operator retry; only a partially/fully applied in-process commit may
+  // recover forward from disk.
+  if (windowAtPrior && gatesAtPrior && !windowAtNext && !gatesAtNext) {
+    fs.unlinkSync(transitionPath(projectRoot));
+    return false;
+  }
   writeMigrationWindow(projectRoot, intent.next_window);
   writeFeatureGateRegistry(projectRoot, intent.next_gates);
   fs.unlinkSync(transitionPath(projectRoot));
   return true;
 }
 
+function readMigrationWindowVerified(projectRoot: string): MigrationWindowV1 | null {
+  recoverMigrationTransition(projectRoot);
+  const raw = readOptionalStateFile(projectRoot, MIGRATION_WINDOW_RELPATH, "migration window");
+  if (raw === null) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error("migration window is invalid JSON"); }
+  const value = validateMigrationWindow(parsed);
+  if (!value) throw new Error("migration window is invalid or tampered");
+  verifyWindowEvidence(projectRoot, value);
+  return value;
+}
+
 export function readMigrationWindow(projectRoot: string): MigrationWindowV1 | null {
-  try {
-    recoverMigrationTransition(projectRoot);
-    const raw = readOptionalStateFile(projectRoot, MIGRATION_WINDOW_RELPATH, "migration window");
-    if (raw === null) return null;
-    const value = validateMigrationWindow(JSON.parse(raw));
-    if (!value) return null;
-    verifyWindowBoundaryProvenance(projectRoot, value);
-    for (const phase of [...value.completed_phases, value]) for (const observation of phase.observations) verifyMigrationObservation(projectRoot, observation);
-    return value;
-  } catch { return null; }
+  try { return readMigrationWindowVerified(projectRoot); }
+  catch { return null; }
 }
 
 export function writeMigrationWindow(projectRoot: string, value: MigrationWindowV1): void {
@@ -255,7 +350,7 @@ export function writeMigrationWindow(projectRoot: string, value: MigrationWindow
   if (!written.written) throw new Error(`migration window write refused [${written.code}]: ${written.detail}`);
 }
 
-export function startMigrationWindow(options: { projectRoot: string; mode: CapabilityResolverMode; boundaryPath: string; actor: string }): MigrationWindowV1 {
+export function startMigrationWindow(options: { projectRoot: string; projectId: string; mode: CapabilityResolverMode; boundaryPath: string; actor: string }): MigrationWindowV1 {
   recoverMigrationTransition(options.projectRoot);
   if (options.mode !== "observe") throw new Error("a migration window must enter at observe; later modes require evidence-bound advance");
   const root = fs.realpathSync(options.projectRoot); const windowPath = path.join(root, MIGRATION_WINDOW_RELPATH);
@@ -263,7 +358,7 @@ export function startMigrationWindow(options: { projectRoot: string; mode: Capab
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const attested = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath), options.projectRoot);
   const enteredAt = new Date(Math.max(Date.parse(attested.boundary.merged_at), Date.parse(attested.verified_at))).toISOString();
-  const value = validateMigrationWindow({ schema_version: MIGRATION_WINDOW_SCHEMA, mode: "observe", entered_at: enteredAt, entry_boundary: attested.boundary, releases: [], observations: [], completed_phases: [], actor: options.actor });
+  const value = validateMigrationWindow({ schema_version: MIGRATION_WINDOW_SCHEMA, project_id: options.projectId, mode: "observe", entered_at: enteredAt, entry_boundary: attested.boundary, releases: [], observations: [], completed_phases: [], actor: options.actor });
   if (!value) throw new Error("invalid migration-window start");
   const gatePath = path.join(root, FEATURE_GATE_RELPATH); let gateExists = false;
   try { fs.lstatSync(gatePath); gateExists = true; } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -271,7 +366,7 @@ export function startMigrationWindow(options: { projectRoot: string; mode: Capab
   if (gateExists && !gates) throw new Error("capability feature-gate registry exists but is invalid");
   if (gates && gates.resolver_mode !== "legacy" && gates.resolver_mode !== "observe") throw new Error(`cannot start observe migration from feature-gate mode ${gates.resolver_mode}`);
   const nextGates: CapabilityFeatureGateRegistryV1 = gates?.resolver_mode === "observe" ? gates : gates ? { ...gates, resolver_mode: "observe", revision: gates.revision + 1, updated_at: enteredAt, updated_by: options.actor, history: [...gates.history, { from: "legacy", to: "observe", reason: "D03 migration-window start", recorded_at: enteredAt, actor: options.actor }] } : { schema_version: FEATURE_GATE_REGISTRY_SCHEMA, resolver_mode: "observe", revision: 0, updated_at: enteredAt, updated_by: options.actor, history: [] };
-  writeTransitionIntent(options.projectRoot, "start", null, gates, value, nextGates); recoverMigrationTransition(options.projectRoot); return value;
+  const intent = writeTransitionIntent(options.projectRoot, "start", null, gates, value, nextGates); applyMigrationTransition(options.projectRoot, intent); return value;
 }
 
 function lastKnownBoundary(window: MigrationWindowV1): MigrationBoundaryV1 | null {
@@ -280,9 +375,10 @@ function lastKnownBoundary(window: MigrationWindowV1): MigrationBoundaryV1 | nul
 }
 
 export function recordMigrationRelease(options: { projectRoot: string; boundaryPath: string; observationPath: string }): MigrationWindowV1 {
-  const current = readMigrationWindow(options.projectRoot); if (!current) throw new Error("migration window absent, invalid, or has detached evidence");
+  const current = readMigrationWindowVerified(options.projectRoot); if (!current) throw new Error("migration window is absent");
   if (current.mode !== "observe" && current.mode !== "shadow") throw new Error(`mode ${current.mode} does not collect migration observations`);
   const boundary = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath), options.projectRoot).boundary; const observation = loadMigrationObservation(options.projectRoot, path.resolve(options.observationPath));
+  if (observation.project_id !== current.project_id) throw new Error(`migration observation project ${observation.project_id} does not match window project ${current.project_id}`);
   if (Date.parse(observation.observed_at) < Date.parse(current.entered_at)) throw new Error(`${current.mode} evidence predates entry into the current migration phase`);
   const previous = lastKnownBoundary(current);
   const reusesEntryBoundary = current.releases.length === 0 && current.entry_boundary.boundary_hash === boundary.boundary_hash;
@@ -318,18 +414,22 @@ export function evaluateMigrationAdvance(window: MigrationWindowV1, to: Capabili
 }
 
 export function advanceMigrationWindow(options: { projectRoot: string; to: CapabilityResolverMode; boundaryPath: string; actor: string }) {
-  recoverMigrationTransition(options.projectRoot);
-  const current = readMigrationWindow(options.projectRoot); const gates = readFeatureGateRegistry(options.projectRoot);
+  try { recoverMigrationTransition(options.projectRoot); }
+  catch (error) { return { status: "refused" as const, blockers: [`migration transition recovery failed: ${(error as Error).message}`] }; }
+  let current: MigrationWindowV1 | null;
+  try { current = readMigrationWindowVerified(options.projectRoot); }
+  catch (error) { return { status: "refused" as const, blockers: [`migration-window verification failed: ${(error as Error).message}`] }; }
+  const gates = readFeatureGateRegistry(options.projectRoot);
   if (!current || !gates || current.mode !== gates.resolver_mode) return { status: "refused" as const, blockers: ["migration-window and feature-gate state are absent or disagree"] };
   const attested = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath), options.projectRoot); const boundary = attested.boundary; const verdict = evaluateMigrationAdvance(current, options.to, boundary);
   if (!verdict.passed) return { status: "refused" as const, blockers: verdict.blockers };
   const completed = current.mode === "observe" || current.mode === "shadow" ? [...current.completed_phases, { mode: current.mode, entered_at: current.entered_at, releases: current.releases, observations: current.observations, advanced_with: boundary }] : current.completed_phases;
   const enteredAt = new Date(Math.max(Date.parse(boundary.merged_at), Date.parse(attested.verified_at))).toISOString();
-  const nextWindow = validateMigrationWindow({ schema_version: MIGRATION_WINDOW_SCHEMA, mode: options.to, entered_at: enteredAt, entry_boundary: boundary, releases: [], observations: [], completed_phases: completed, actor: options.actor });
+  const nextWindow = validateMigrationWindow({ schema_version: MIGRATION_WINDOW_SCHEMA, project_id: current.project_id, mode: options.to, entered_at: enteredAt, entry_boundary: boundary, releases: [], observations: [], completed_phases: completed, actor: options.actor });
   if (!nextWindow) return { status: "refused" as const, blockers: ["next migration phase is invalid"] };
   const nextGate: CapabilityFeatureGateRegistryV1 = { ...gates, resolver_mode: options.to, revision: gates.revision + 1, updated_at: enteredAt, updated_by: options.actor, history: [...gates.history, { from: current.mode, to: options.to, reason: "D03 migration-window advance", recorded_at: enteredAt, actor: options.actor }] };
-  writeTransitionIntent(options.projectRoot, "advance", current, gates, nextWindow, nextGate);
-  try { recoverMigrationTransition(options.projectRoot); }
+  const intent = writeTransitionIntent(options.projectRoot, "advance", current, gates, nextWindow, nextGate);
+  try { applyMigrationTransition(options.projectRoot, intent); }
   catch (error) { return { status: "failed" as const, blockers: [`transition intent retained for deterministic recovery: ${(error as Error).message}`] }; }
   return { status: "advanced" as const, from: current.mode, to: options.to, revision: nextGate.revision };
 }

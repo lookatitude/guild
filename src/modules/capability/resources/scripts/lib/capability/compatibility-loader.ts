@@ -7,6 +7,7 @@ import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog,
 import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/modules/capability/workflows/compatibility-usage";
 import type { CapabilityResolutionIntent } from "../../../src/modules/capability/workflows/resolver-mode";
 import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
+import { hashCompatibilityRuntimeProducer, type MigrationRuntimeHost } from "./migration-evidence";
 
 const PLUGIN_MANIFEST_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
   [".claude-plugin", "plugin.json"],
@@ -27,6 +28,33 @@ export function readRuntimeVersion(pluginRoot: string): string | null {
     }
   }
   return null;
+}
+
+interface RuntimeReceiptIdentity {
+  readonly host_id: MigrationRuntimeHost;
+  readonly runtime_version: string;
+  readonly package_tree: string;
+}
+
+/**
+ * Bind production compatibility reads to the exact generated host package.
+ * Authored source trees deliberately carry both manifests, so they remain
+ * identifiable as local/unbound and cannot qualify as migration evidence.
+ */
+function runtimeReceiptIdentity(pluginRoot: string, runtimeHost: MigrationRuntimeHost): RuntimeReceiptIdentity | null {
+  const expectedDirectory = runtimeHost === "claude-code-cli" ? ".claude-plugin" : ".codex-plugin";
+  const manifests = PLUGIN_MANIFEST_CANDIDATES.flatMap(([directory, file]) => {
+    if (directory !== expectedDirectory) return [];
+    const manifestPath = path.join(pluginRoot, directory, file);
+    try {
+      const value = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as { version?: unknown };
+      if (typeof value.version !== "string" || value.version.length === 0) return [];
+      const host_id: MigrationRuntimeHost = directory === ".claude-plugin" ? "claude-code-cli" : "codex-cli";
+      return [{ host_id, runtime_version: value.version }];
+    } catch { return []; }
+  });
+  if (manifests.length === 0) return null;
+  return { ...manifests[0], package_tree: `sha256:${hashCompatibilityRuntimeProducer(pluginRoot, manifests[0].host_id)}` };
 }
 
 export type CompatibilityLoadResult =
@@ -56,6 +84,7 @@ export function writeFrozenCompatibilityCatalog(projectRoot: string, catalog: Co
 /** The sole production loader for shipped templates/domain skills during migration. */
 export function readCompatibilityAsset(options: {
   pluginRoot: string;
+  runtimeHost?: MigrationRuntimeHost;
   projectRoot: string;
   entry: CompatibilityCatalogEntry;
   mode: CapabilityResolverMode;
@@ -70,8 +99,8 @@ export function readCompatibilityAsset(options: {
   const entry = readCatalogEntry(options.entry);
   if (!entry) return { status: "refused", detail: "invalid compatibility catalog entry" };
   const root = fs.realpathSync(options.pluginRoot);
-  const runtimeVersion = readRuntimeVersion(root);
-  if (runtimeVersion === null) {
+  const runtimeIdentity = runtimeReceiptIdentity(root, options.runtimeHost ?? (fs.existsSync(path.join(root, ".claude-plugin/plugin.json")) ? "claude-code-cli" : "codex-cli"));
+  if (runtimeIdentity === null) {
     return { status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" };
   }
   const target = path.join(root, entry.path);
@@ -114,7 +143,7 @@ export function readCompatibilityAsset(options: {
         terminal: false,
         recorded_at: options.recordedAt,
         observed_at: options.recordedAt,
-        versions: { host_id: "local", host_version: "unknown", runtime_version: runtimeVersion, source_version: "guild.compatibility_catalog.v1", contract_version: "guild.observability.v1" },
+        versions: { host_id: runtimeIdentity.host_id, host_version: "unknown", runtime_version: runtimeIdentity.runtime_version, source_version: runtimeIdentity.package_tree, contract_version: "guild.observability.v1" },
         affected_event_range: null,
       }),
     );

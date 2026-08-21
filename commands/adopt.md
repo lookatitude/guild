@@ -27,7 +27,7 @@ reversal entries and preserves history.
 The D03 window is machine-enforced:
 
 ```bash
-npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window start --project-root "$(pwd)" --boundary <beta-boundary.json> --to observe
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window start --project-root "$(pwd)" --boundary <beta-boundary.json> --project-id <id> --to observe
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window evidence --plugin-root "$GUILD_PLUGIN_ROOT" --project-root "$(pwd)" --boundary <beta-boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode observe --run-ids <real-run-id,...>
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window record --project-root "$(pwd)" --boundary <beta-boundary.json> --observation <observation.json>
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window record --project-root "$(pwd)" --boundary <newer-beta-boundary.json> --observation <observation.json>

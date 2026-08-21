@@ -65,7 +65,30 @@ export interface MigrationRuntimePackageV1 {
   readonly host_id: MigrationRuntimeHost;
   readonly manifest_path: ".claude-plugin/plugin.json" | ".codex-plugin/plugin.json";
   readonly manifest_sha256: string;
+  /** Hash of the exact compatibility-loader producer surface. */
+  readonly producer_sha256: string;
   readonly tree_sha256: string;
+  readonly install_surface_sha256: string;
+  /** Attested generated-package files; installed roots may carry harmless extras. */
+  readonly files: readonly MigrationRuntimeFileV1[];
+  /** Files common to the generated package and its supported live install root. */
+  readonly install_files: readonly MigrationRuntimeFileV1[];
+}
+
+export interface MigrationRuntimeBindingV1 {
+  readonly host_id: MigrationRuntimeHost;
+  readonly manifest_path: ".claude-plugin/plugin.json" | ".codex-plugin/plugin.json";
+  readonly manifest_sha256: string;
+  readonly producer_sha256: string;
+  /** Full generated tree named by the attested boundary. */
+  readonly tree_sha256: string;
+  /** Exact file subset verified in the live install root. */
+  readonly install_surface_sha256: string;
+}
+
+export interface MigrationRuntimeFileV1 {
+  readonly path: string;
+  readonly sha256: string;
 }
 
 export interface MigrationEvidenceRefV1 {
@@ -89,7 +112,7 @@ export interface MigrationObservationV1 {
   readonly boundary_merged_at: string;
   /** Earliest whole-run profile instant represented by this observation. */
   readonly observed_at: string;
-  readonly runtime_package: MigrationRuntimePackageV1;
+  readonly runtime_package: MigrationRuntimeBindingV1;
   readonly project_id: string;
   readonly mode: "observe" | "shadow";
   readonly runs: readonly MigrationObservationRunV1[];
@@ -193,10 +216,9 @@ function readRegularFileNoFollow(filePath: string, label: string): Buffer {
   } finally { if (descriptor !== null) fs.closeSync(descriptor); }
 }
 
-/** Deterministic content identity for one generated host package tree. */
-export function hashRuntimePackage(packageRoot: string): string {
+function snapshotRuntimeFiles(packageRoot: string): readonly MigrationRuntimeFileV1[] {
   const root = fs.realpathSync(packageRoot);
-  const entries: Array<{ path: string; sha256: string }> = [];
+  const entries: MigrationRuntimeFileV1[] = [];
   const visit = (directory: string, relative: string): void => {
     for (const name of fs.readdirSync(directory).sort()) {
       const absolute = path.join(directory, name);
@@ -210,24 +232,112 @@ export function hashRuntimePackage(packageRoot: string): string {
   };
   visit(root, "");
   if (entries.length === 0) throw new Error("runtime package tree is empty");
+  entries.sort((left, right) => left.path.localeCompare(right.path));
+  return Object.freeze(entries.map((entry) => Object.freeze(entry)));
+}
+
+/** Deterministic content identity for one generated host package tree. */
+export function hashRuntimePackage(packageRoot: string): string {
+  return sha256(canonical(snapshotRuntimeFiles(packageRoot)));
+}
+
+const COMPATIBILITY_PRODUCER_PATHS = Object.freeze([
+  "scripts/lib/capability/compatibility-loader.ts",
+]);
+
+export function hashCompatibilityRuntimeProducer(packageRoot: string, hostId: MigrationRuntimeHost): string {
+  const root = fs.realpathSync(packageRoot);
+  const manifestPath = hostId === "claude-code-cli" ? ".claude-plugin/plugin.json" : ".codex-plugin/plugin.json";
+  const paths = [manifestPath, ...COMPATIBILITY_PRODUCER_PATHS];
+  const entries = paths.map((relativePath) => Object.freeze({
+    path: relativePath,
+    sha256: sha256(readRegularFileNoFollow(path.join(root, relativePath), `${hostId} compatibility producer ${relativePath}`)),
+  }));
   return sha256(canonical(entries));
 }
 
-function runtimePackageBinding(packageRoot: string, hostId: MigrationRuntimeHost): MigrationRuntimePackageV1 {
+function runtimePackageBinding(packageRoot: string, hostId: MigrationRuntimeHost, expected?: MigrationRuntimePackageV1): MigrationRuntimeBindingV1 {
   const manifestPath = hostId === "claude-code-cli" ? ".claude-plugin/plugin.json" as const : ".codex-plugin/plugin.json" as const;
   const root = fs.realpathSync(packageRoot);
   const manifestBytes = readRegularFileNoFollow(path.join(root, manifestPath), `${hostId} runtime manifest`);
-  return Object.freeze({ host_id: hostId, manifest_path: manifestPath, manifest_sha256: sha256(manifestBytes), tree_sha256: hashRuntimePackage(root) });
+  const files = expected?.install_files ?? snapshotRuntimeFiles(root);
+  const actualFiles = files.map((entry) => Object.freeze({
+    path: entry.path,
+    sha256: sha256(readRegularFileNoFollow(path.join(root, entry.path), `${hostId} attested runtime file ${entry.path}`)),
+  }));
+  if (expected && canonical(actualFiles) !== canonical(expected.install_files)) throw new Error(`runtime package files do not match the attested ${hostId} beta package`);
+  return Object.freeze({
+    host_id: hostId,
+    manifest_path: manifestPath,
+    manifest_sha256: sha256(manifestBytes),
+    producer_sha256: hashCompatibilityRuntimeProducer(root, hostId),
+    tree_sha256: expected?.tree_sha256 ?? sha256(canonical(actualFiles)),
+    install_surface_sha256: sha256(canonical(actualFiles)),
+  });
+}
+
+function validateRuntimeBinding(value: unknown, expectedHost?: MigrationRuntimeHost): MigrationRuntimeBindingV1 | null {
+  const record = plainRecord(value);
+  if (!record || !exactKeys(record, ["host_id", "manifest_path", "manifest_sha256", "producer_sha256", "tree_sha256", "install_surface_sha256"])) return null;
+  if (record.host_id !== "claude-code-cli" && record.host_id !== "codex-cli") return null;
+  if (expectedHost && record.host_id !== expectedHost) return null;
+  const expectedManifest: MigrationRuntimePackageV1["manifest_path"] = record.host_id === "claude-code-cli" ? ".claude-plugin/plugin.json" : ".codex-plugin/plugin.json";
+  if (record.manifest_path !== expectedManifest || typeof record.manifest_sha256 !== "string" || !SHA256.test(record.manifest_sha256) || typeof record.producer_sha256 !== "string" || !SHA256.test(record.producer_sha256) || typeof record.tree_sha256 !== "string" || !SHA256.test(record.tree_sha256) || typeof record.install_surface_sha256 !== "string" || !SHA256.test(record.install_surface_sha256)) return null;
+  return Object.freeze({ host_id: record.host_id, manifest_path: expectedManifest, manifest_sha256: record.manifest_sha256, producer_sha256: record.producer_sha256, tree_sha256: record.tree_sha256, install_surface_sha256: record.install_surface_sha256 });
 }
 
 function validateRuntimePackage(value: unknown, expectedHost?: MigrationRuntimeHost): MigrationRuntimePackageV1 | null {
   const record = plainRecord(value);
-  if (!record || !exactKeys(record, ["host_id", "manifest_path", "manifest_sha256", "tree_sha256"])) return null;
-  if (record.host_id !== "claude-code-cli" && record.host_id !== "codex-cli") return null;
-  if (expectedHost && record.host_id !== expectedHost) return null;
-  const expectedManifest: MigrationRuntimePackageV1["manifest_path"] = record.host_id === "claude-code-cli" ? ".claude-plugin/plugin.json" : ".codex-plugin/plugin.json";
-  if (record.manifest_path !== expectedManifest || typeof record.manifest_sha256 !== "string" || !SHA256.test(record.manifest_sha256) || typeof record.tree_sha256 !== "string" || !SHA256.test(record.tree_sha256)) return null;
-  return Object.freeze({ host_id: record.host_id, manifest_path: expectedManifest, manifest_sha256: record.manifest_sha256, tree_sha256: record.tree_sha256 });
+  if (!record || !exactKeys(record, ["host_id", "manifest_path", "manifest_sha256", "producer_sha256", "tree_sha256", "install_surface_sha256", "files", "install_files"]) || !Array.isArray(record.files) || record.files.length === 0 || record.files.length > 4096 || !Array.isArray(record.install_files) || record.install_files.length === 0 || record.install_files.length > record.files.length) return null;
+  const binding = validateRuntimeBinding({ host_id: record.host_id, manifest_path: record.manifest_path, manifest_sha256: record.manifest_sha256, producer_sha256: record.producer_sha256, tree_sha256: record.tree_sha256, install_surface_sha256: record.install_surface_sha256 }, expectedHost);
+  if (!binding) return null;
+  const files: MigrationRuntimeFileV1[] = []; const seen = new Set<string>();
+  for (const raw of record.files) {
+    const file = plainRecord(raw);
+    if (!file || !exactKeys(file, ["path", "sha256"]) || !canonicalRelativePath(file.path) || typeof file.sha256 !== "string" || !SHA256.test(file.sha256) || seen.has(file.path)) return null;
+    seen.add(file.path); files.push(Object.freeze({ path: file.path, sha256: file.sha256 }));
+  }
+  files.sort((left, right) => left.path.localeCompare(right.path));
+  if (sha256(canonical(files)) !== binding.tree_sha256) return null;
+  const installFiles: MigrationRuntimeFileV1[] = [];
+  for (const raw of record.install_files) {
+    const file = plainRecord(raw);
+    if (!file || !exactKeys(file, ["path", "sha256"]) || !canonicalRelativePath(file.path) || typeof file.sha256 !== "string" || !SHA256.test(file.sha256) || !seen.has(file.path) || installFiles.some((entry) => entry.path === file.path)) return null;
+    const full = files.find((entry) => entry.path === file.path);
+    if (!full || full.sha256 !== file.sha256) return null;
+    installFiles.push(Object.freeze({ path: file.path, sha256: file.sha256 }));
+  }
+  installFiles.sort((left, right) => left.path.localeCompare(right.path));
+  if (sha256(canonical(installFiles)) !== binding.install_surface_sha256) return null;
+  return Object.freeze({ ...binding, files: Object.freeze(files), install_files: Object.freeze(installFiles) });
+}
+
+export function snapshotMigrationRuntimePackage(packageRoot: string, host: MigrationRuntimeHost, supportedInstallRoot?: string): MigrationRuntimePackageV1 {
+  const binding = runtimePackageBinding(packageRoot, host);
+  const files = snapshotRuntimeFiles(packageRoot);
+  const installFiles = supportedInstallRoot === undefined ? files : files.filter((entry) => {
+    try { return sha256(readRegularFileNoFollow(path.join(fs.realpathSync(supportedInstallRoot), entry.path), `${host} live install file ${entry.path}`)) === entry.sha256; }
+    catch { return false; }
+  });
+  const requiredInstallPaths = new Set([binding.manifest_path, ...COMPATIBILITY_PRODUCER_PATHS]);
+  if ([...requiredInstallPaths].some((required) => !installFiles.some((entry) => entry.path === required))) throw new Error(`supported ${host} install root omits a required compatibility producer file`);
+  const value = validateRuntimePackage({ ...binding, install_surface_sha256: sha256(canonical(installFiles)), files, install_files: installFiles }, host);
+  if (!value) throw new Error(`generated ${host} runtime package snapshot is invalid`);
+  return value;
+}
+
+export function verifyInstalledMigrationRuntimePackage(packageRoot: string, expected: MigrationRuntimePackageV1): MigrationRuntimeBindingV1 {
+  const runtimePackage = runtimePackageBinding(packageRoot, expected.host_id, expected);
+  const expectedBinding = validateRuntimeBinding({
+    host_id: expected.host_id,
+    manifest_path: expected.manifest_path,
+    manifest_sha256: expected.manifest_sha256,
+    producer_sha256: expected.producer_sha256,
+    tree_sha256: expected.tree_sha256,
+    install_surface_sha256: expected.install_surface_sha256,
+  }, expected.host_id);
+  if (!expectedBinding || canonical(runtimePackage) !== canonical(expectedBinding)) throw new Error(`runtime package does not match the attested ${expected.host_id} beta package`);
+  return runtimePackage;
 }
 
 export function loadAttestedMigrationBoundary(boundaryPath: string, persistProjectRoot?: string): AttestedMigrationBoundaryV1 {
@@ -293,7 +403,7 @@ function verifyMigrationBoundaryProvenance(boundaryPath: string, boundary: Migra
       "--source-digest", boundary.source_commit,
       "--deny-self-hosted-runners",
       "--format", "json",
-    ], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    ], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000 });
   } catch (error) {
     throw new Error(`migration boundary GitHub provenance verification failed: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -305,16 +415,19 @@ function verifyMigrationBoundaryProvenance(boundaryPath: string, boundary: Migra
   }
   let runResponse: string;
   try {
-    runResponse = execFileSync("gh", ["api", "--include", `repos/${PRODUCTION_REPOSITORY}/actions/runs/${boundary.workflow.run_id}`], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+    runResponse = execFileSync("gh", ["api", "--include", `repos/${PRODUCTION_REPOSITORY}/actions/runs/${boundary.workflow.run_id}`], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: 30_000 });
   } catch (error) {
     throw new Error(`migration boundary GitHub run verification failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const headerMatch = /(?:^|\n)date:\s*([^\r\n]+)/i.exec(runResponse);
-  const jsonStart = runResponse.indexOf("{");
-  if (!headerMatch || jsonStart < 0) throw new Error("migration boundary GitHub run response has no server Date header or JSON body");
-  const verifiedAt = new Date(headerMatch[1].trim()).toISOString();
+  const separator = Math.max(runResponse.lastIndexOf("\r\n\r\n"), runResponse.lastIndexOf("\n\n"));
+  const headerBlock = separator >= 0 ? runResponse.slice(0, separator) : "";
+  const jsonBody = separator >= 0 ? runResponse.slice(separator + (runResponse.startsWith("\r\n", separator) ? 4 : 2)).trim() : "";
+  const headerMatch = /(?:^|\n)date:\s*([^\r\n]+)/i.exec(headerBlock);
+  const verifiedAtMillis = headerMatch ? Date.parse(headerMatch[1].trim()) : Number.NaN;
+  if (!headerMatch || !Number.isFinite(verifiedAtMillis) || !jsonBody.startsWith("{")) throw new Error("migration boundary GitHub run response has no valid server Date header or JSON body");
+  const verifiedAt = new Date(verifiedAtMillis).toISOString();
   let run: Record<string, unknown> | null = null;
-  try { run = plainRecord(JSON.parse(runResponse.slice(jsonStart))); } catch { /* refusal below */ }
+  try { run = plainRecord(JSON.parse(jsonBody)); } catch { /* refusal below */ }
   if (!run || run.head_sha !== boundary.source_commit || run.head_branch !== "next" || run.event !== "push" || run.status !== "completed" || run.conclusion !== "success") {
     throw new Error("migration boundary GitHub run metadata does not match a successful next push for the attested commit");
   }
@@ -335,7 +448,7 @@ export function validateMigrationObservation(value: unknown): MigrationObservati
   if (boundaryMergedAt === null || boundaryMergedAt !== record.boundary_merged_at) return null;
   const observedAt = canonicalInstant(record.observed_at);
   if (observedAt === null || observedAt !== record.observed_at || Date.parse(observedAt) < Date.parse(boundaryMergedAt)) return null;
-  const runtimePackage = validateRuntimePackage(record.runtime_package);
+  const runtimePackage = validateRuntimeBinding(record.runtime_package);
   if (!runtimePackage) return null;
   if (typeof record.project_id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(record.project_id)) return null;
   if (typeof record.observation_hash !== "string" || !SHA256.test(record.observation_hash) || !Array.isArray(record.runs) || record.runs.length === 0 || record.runs.length > 64) return null;
@@ -397,7 +510,7 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown):
     try { rawProfile = JSON.parse(snapshots.get(run.profile.path)!.toString("utf8")); }
     catch { throw new Error(`migration observation profile is unreadable: ${run.profile.path}`); }
     const profile = validateProjectCapabilityProfileV1(rawProfile);
-    if (!profile || profile.run_id !== run.run_id || profile.project_id !== observation.project_id || profile.resolver_mode !== observation.mode || profile.mutation_window !== "run" || profile.mutation_performed !== false || Date.parse(profile.generated_at) < Date.parse(observation.boundary_merged_at)) {
+    if (!profile || profile.run_id !== run.run_id || profile.project_id !== observation.project_id || profile.source_commit === null || !COMMIT.test(profile.source_commit) || profile.resolver_mode !== observation.mode || profile.mutation_window !== "run" || profile.mutation_performed !== false || Date.parse(profile.generated_at) < Date.parse(observation.boundary_merged_at)) {
       throw new Error(`migration observation requires a whole-run ${observation.mode} profile for ${run.run_id}`);
     }
     profileInstants.push(Date.parse(profile.generated_at));
@@ -414,7 +527,13 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown):
     const expectedPayloadHashes = new Set(run.compatibility_payloads.map((ref) => ref.sha256));
     let qualifying = 0;
     for (const receipt of scan.records) {
-      if (receipt.scenario_id !== "PCL-09" || !receipt.operation_id.startsWith("compatibility-read:") || receipt.versions.runtime_version !== observation.boundary_release || receipt.output_hash === null || !expectedPayloadHashes.has(receipt.output_hash)) continue;
+      if (receipt.scenario_id !== "PCL-09"
+        || !receipt.operation_id.startsWith("compatibility-read:")
+        || receipt.versions.host_id !== observation.runtime_package.host_id
+        || receipt.versions.runtime_version !== observation.boundary_release
+        || receipt.versions.source_version !== `sha256:${observation.runtime_package.producer_sha256}`
+        || receipt.output_hash === null
+        || !expectedPayloadHashes.has(receipt.output_hash)) continue;
       const payloadRef = run.compatibility_payloads.find((ref) => ref.sha256 === receipt.output_hash)!;
       let rawPayload: unknown;
       try { rawPayload = JSON.parse(snapshots.get(payloadRef.path)!.toString("utf8")); } catch { continue; }
@@ -431,9 +550,8 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown):
 
 export function createMigrationObservation(options: { pluginRoot: string; runtimeHost: MigrationRuntimeHost; projectRoot: string; boundaryPath: string; projectId: string; mode: "observe" | "shadow"; runIds: readonly string[] }): MigrationObservationV1 {
   const boundary = loadMigrationBoundary(path.resolve(options.boundaryPath));
-  const runtimePackage = runtimePackageBinding(options.pluginRoot, options.runtimeHost);
   const expectedRuntime = boundary.packages[options.runtimeHost];
-  if (canonical(runtimePackage) !== canonical(expectedRuntime)) throw new Error(`runtime package does not match the attested ${options.runtimeHost} beta package`);
+  const runtimePackage = verifyInstalledMigrationRuntimePackage(options.pluginRoot, expectedRuntime);
   const snapshot = (sourceRel: string, destinationRel: string): MigrationEvidenceRefV1 => {
     const bytes = readEvidenceFile(options.projectRoot, sourceRel);
     const destination = path.join(fs.realpathSync(options.projectRoot), destinationRel);
@@ -618,8 +736,8 @@ export function createMigrationBoundary(options: BoundaryOptions): MigrationBoun
   if (!Number.isSafeInteger(options.runAttempt) || options.runAttempt < 1 || !/^[1-9]\d*$/.test(options.runId)) {
     throw new Error("migration boundary requires canonical GitHub workflow identity");
   }
-  const claudePackage = runtimePackageBinding(options.claudePackageRoot, "claude-code-cli");
-  const codexPackage = runtimePackageBinding(options.codexPackageRoot, "codex-cli");
+  const claudePackage = snapshotMigrationRuntimePackage(options.claudePackageRoot, "claude-code-cli", options.pluginRoot);
+  const codexPackage = snapshotMigrationRuntimePackage(options.codexPackageRoot, "codex-cli");
   if (claudePackage.manifest_sha256 !== sha256(manifestBytes)) throw new Error("generated Claude package manifest does not match the exact boundary commit");
   for (const [packageRoot, runtimePackage] of [[options.claudePackageRoot, claudePackage], [options.codexPackageRoot, codexPackage]] as const) {
     let generatedManifest: unknown;

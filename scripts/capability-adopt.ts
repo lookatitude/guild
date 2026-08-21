@@ -54,7 +54,7 @@ capability-adopt — project capability adoption migration (D6)
   capability-adopt catalog  [--plugin-root <p>] [--project-root <p>] [--freeze] [--json]
   capability-adopt g5       --windows <file> --project-local-default <semver> --current-version <semver> [--project-root <p>] [--plugin-root <p>] [--json]
   capability-adopt window   evidence --boundary <boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <id,id> [--plugin-root <package>] [--out-dir <dir>]
-  capability-adopt window   start --boundary <boundary.json> [--to observe] [--actor <id>]
+  capability-adopt window   start --boundary <boundary.json> --project-id <id> [--to observe] [--actor <id>]
   capability-adopt window   record --boundary <boundary.json> --observation <observation.json>
   capability-adopt window   advance --boundary <boundary.json> --to <mode> [--actor <id>]
   capability-adopt window   status [--project-root <p>]
@@ -194,7 +194,7 @@ function main(argv: readonly string[]): number {
     const allowedByAction: Record<string, readonly string[]> = {
       status: ["project-root", "json"],
       evidence: ["project-root", "plugin-root", "boundary", "project-id", "runtime-host", "mode", "run-ids", "out-dir", "json"],
-      start: ["project-root", "boundary", "to", "actor", "json"],
+      start: ["project-root", "boundary", "project-id", "to", "actor", "json"],
       record: ["project-root", "boundary", "observation", "json"],
       advance: ["project-root", "boundary", "to", "actor", "json"],
     };
@@ -230,8 +230,10 @@ function main(argv: readonly string[]): number {
     const observationPath = str(windowArgs, "observation");
     try {
       if (action === "start") {
+        const projectId = str(windowArgs, "project-id");
+        if (!projectId) fail("window start requires --project-id <id>", 1);
         const mode = (str(windowArgs, "to") ?? "observe") as never;
-        process.stdout.write(`${JSON.stringify(startMigrationWindow({ projectRoot, mode, boundaryPath, actor }), null, 2)}\n`);
+        process.stdout.write(`${JSON.stringify(startMigrationWindow({ projectRoot, projectId, mode, boundaryPath, actor }), null, 2)}\n`);
         return 0;
       }
       if (action === "record") {

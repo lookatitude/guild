@@ -21,12 +21,14 @@ function fixture(version = "2.7.0-beta.2") {
   git(root, "config", "user.email", "guild@example.invalid");
   mkdirSync(join(root, ".claude-plugin"), { recursive: true });
   mkdirSync(join(root, ".codex-plugin"), { recursive: true });
+  mkdirSync(join(root, "scripts/lib/capability"), { recursive: true });
   const claudeManifest = `${JSON.stringify({ name: "guild", version }, null, 2)}\n`;
   const codexManifest = `${JSON.stringify({ name: "guild", version, host: "codex" }, null, 2)}\n`;
   writeFileSync(join(root, ".claude-plugin", "plugin.json"), claudeManifest);
   writeFileSync(join(root, ".codex-plugin", "plugin.json"), codexManifest);
   writeFileSync(join(root, "payload.txt"), "boundary bytes\n");
-  git(root, "add", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "payload.txt");
+  writeFileSync(join(root, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
+  git(root, "add", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "scripts/lib/capability/compatibility-loader.ts", "payload.txt");
   git(root, "commit", "-qm", "beta boundary");
   const commit = git(root, "rev-parse", "HEAD");
   git(root, "update-ref", "refs/remotes/origin/next", commit);
@@ -41,8 +43,12 @@ function fixture(version = "2.7.0-beta.2") {
   const codexPackageRoot = join(root, "runtime-packages", "codex");
   mkdirSync(join(claudePackageRoot, ".claude-plugin"), { recursive: true });
   mkdirSync(join(codexPackageRoot, ".codex-plugin"), { recursive: true });
+  mkdirSync(join(claudePackageRoot, "scripts/lib/capability"), { recursive: true });
+  mkdirSync(join(codexPackageRoot, "scripts/lib/capability"), { recursive: true });
   writeFileSync(join(claudePackageRoot, ".claude-plugin", "plugin.json"), claudeManifest);
   writeFileSync(join(codexPackageRoot, ".codex-plugin", "plugin.json"), codexManifest);
+  writeFileSync(join(claudePackageRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
+  writeFileSync(join(codexPackageRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
   writeFileSync(join(claudePackageRoot, "runtime.js"), "claude runtime\n");
   writeFileSync(join(codexPackageRoot, "runtime.js"), "codex runtime\n");
   return { root, eventPath, commit, event, claudePackageRoot, codexPackageRoot };
@@ -181,6 +187,9 @@ describe("hash-bound next migration boundary", () => {
     expect(raw).toContain('--run-id "$GITHUB_RUN_ID"');
     expect(raw).toContain('git update-ref refs/remotes/origin/next "$GITHUB_SHA"');
     expect(raw).not.toContain("git fetch --no-tags origin next:");
+    expect(raw).toContain("Classify a new beta boundary");
+    expect(raw).toContain('current" != "$previous');
+    expect(raw).toContain("steps.boundary.outputs.emit == 'true'");
     expect(parsed.permissions).toEqual(expect.objectContaining({ contents: "read", "id-token": "write", attestations: "write" }));
     expect(raw).toContain("uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7");
     expect(raw).toContain("uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7");
