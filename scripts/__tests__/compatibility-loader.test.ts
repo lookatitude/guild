@@ -73,10 +73,11 @@ describe("instrumented compatibility loader", () => {
       mkdirSync(dirname(compatibilityPath), { recursive: true });
       writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
 
-      const result = readCompatibilityAsset({ pluginRoot, runtimeHost: "codex-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-codex-version", operationId: "codex-runtime-version", recordedAt: "2026-08-19T00:00:00Z" });
+      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-codex-version", operationId: "codex-runtime-version", recordedAt: "2026-08-19T00:00:00Z" });
       expect(result.status).toBe("loaded");
       const scan = scanReceiptJournal(join(projectRoot, ".guild/runs/run-codex-version/receipts/journal.jsonl"));
       expect(scan.records).toHaveLength(1);
+      expect(scan.records[0].versions.host_id).toBe("codex-cli");
       expect(scan.records[0].versions.runtime_version).toBe("9.8.7-beta.6");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });

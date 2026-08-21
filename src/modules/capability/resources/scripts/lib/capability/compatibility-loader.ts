@@ -37,9 +37,9 @@ interface RuntimeReceiptIdentity {
 }
 
 /**
- * Bind production compatibility reads to the exact generated host package.
- * Authored source trees deliberately carry both manifests, so they remain
- * identifiable as local/unbound and cannot qualify as migration evidence.
+ * Bind production compatibility reads to the exact attested host install
+ * surface. A generated package has one manifest; a supported source install
+ * may carry both and is disambiguated by the declared host (Claude by default).
  */
 function runtimeReceiptIdentity(pluginRoot: string, runtimeHost: MigrationRuntimeHost): RuntimeReceiptIdentity | null {
   const expectedDirectory = runtimeHost === "claude-code-cli" ? ".claude-plugin" : ".codex-plugin";
@@ -99,11 +99,14 @@ export function readCompatibilityAsset(options: {
   const entry = readCatalogEntry(options.entry);
   if (!entry) return { status: "refused", detail: "invalid compatibility catalog entry" };
   const root = fs.realpathSync(options.pluginRoot);
+  const manifestHosts = PLUGIN_MANIFEST_CANDIDATES.flatMap(([directory, file]) => fs.existsSync(path.join(root, directory, file))
+    ? [directory === ".claude-plugin" ? "claude-code-cli" as const : "codex-cli" as const]
+    : []);
   const declaredHost = options.runtimeHost ?? [process.env["GUILD_HOST_ID"], process.env["GUILD_ORCHESTRATOR_HOST"], process.env["GUILD_HOST"]]
     .find((value) => typeof value === "string" && /^(?:claude|codex)/.test(value.toLowerCase()));
-  const runtimeHost: MigrationRuntimeHost = typeof declaredHost === "string" && declaredHost.toLowerCase().startsWith("codex")
-    ? "codex-cli"
-    : "claude-code-cli";
+  const runtimeHost: MigrationRuntimeHost = typeof declaredHost === "string"
+    ? declaredHost.toLowerCase().startsWith("codex") ? "codex-cli" : "claude-code-cli"
+    : manifestHosts.length === 1 ? manifestHosts[0] : "claude-code-cli";
   const runtimeIdentity = runtimeReceiptIdentity(root, runtimeHost);
   if (runtimeIdentity === null) {
     return { status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" };
