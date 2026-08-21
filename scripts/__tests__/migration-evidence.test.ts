@@ -171,7 +171,10 @@ describe("hash-bound next migration boundary", () => {
     expect(raw).toContain('--event "$GITHUB_EVENT_PATH"');
     expect(raw).toContain('--run-id "$GITHUB_RUN_ID"');
     expect(parsed.permissions).toEqual(expect.objectContaining({ contents: "read", "id-token": "write", attestations: "write" }));
-    expect(raw).toContain("uses: actions/attest@v4");
+    expect(raw).toContain("uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7");
+    expect(raw).toContain("uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7");
+    expect(raw).toContain("uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4");
+    expect(raw).toContain("uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6");
     expect(raw).toContain('npm --prefix scripts run emit:migration-boundary');
     expect(raw).toContain('npm --prefix scripts run build:hosts');
     expect(raw).toContain('--claude-package-root "$GITHUB_WORKSPACE/dist/claude-code"');

@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the exact next boundary
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -29,7 +29,7 @@ jobs:
         run: git fetch --no-tags origin next:refs/remotes/origin/next
 
       - name: Set up Node 24
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
 
@@ -51,12 +51,12 @@ jobs:
             --out "$RUNNER_TEMP/capability-migration-boundaries"
 
       - name: Attest the exact boundary with GitHub OIDC provenance
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: ${{ runner.temp }}/capability-migration-boundaries/*.json
 
       - name: Upload the boundary as immutable workflow evidence
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: capability-migration-boundary-${{ github.sha }}
           path: ${{ runner.temp }}/capability-migration-boundaries/*.json
