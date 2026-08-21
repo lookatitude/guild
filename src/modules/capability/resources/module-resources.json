@@ -8,7 +8,7 @@
       "id": "adopt",
       "source_path": "commands/adopt.md",
       "resource_path": "resources/commands/adopt.md",
-      "sha256": "ed4be402e2a2e0d52aa4122477508a5ff7c7f356275cabd91ff97384e6045ba8"
+      "sha256": "404eb3f867e6f54972c1a2ad75f830840b44df96828de4858415841159de4d0c"
     },
     {
       "category": "commands",
@@ -106,14 +106,14 @@
       "id": "lib/capability/migration-evidence",
       "source_path": "scripts/lib/capability/migration-evidence.ts",
       "resource_path": "resources/scripts/lib/capability/migration-evidence.ts",
-      "sha256": "48f1966e4e8bc259fdba53d22b22fe348682210224924072baf1b7832641d724"
+      "sha256": "a9c9eeeb24d3e5ccf7212d4140e3984de6c2b3b35b37a6df60a745d825e64c9d"
     },
     {
       "category": "scripts",
       "id": "lib/capability/migration-window",
       "source_path": "scripts/lib/capability/migration-window.ts",
       "resource_path": "resources/scripts/lib/capability/migration-window.ts",
-      "sha256": "890ed8c09975fa6f51e81cd9c86da5a170df27d58d0a9964759cab3fe622972b"
+      "sha256": "5ac88129f89ed661e82975f4d9867e50a348a8d56788c195b891bbb22ba9d6b4"
     },
     {
       "category": "scripts",

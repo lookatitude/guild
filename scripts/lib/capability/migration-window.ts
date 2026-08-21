@@ -27,6 +27,7 @@ import {
 export const MIGRATION_WINDOW_SCHEMA = "guild.capability_migration_window.v3" as const;
 export const MIGRATION_WINDOW_RELPATH = ".guild/artifacts/capability/migration-window.json";
 export const MIGRATION_TRANSITION_SCHEMA = "guild.capability_migration_transition.v1" as const;
+export const MIGRATION_ADVANCE_CONFORMANCE_SCHEMA = "guild.capability_migration_advance_conformance.v1" as const;
 export const MIGRATION_TRANSITION_RELPATH = ".guild/artifacts/capability/migration-transition.json";
 export const MIN_RELEASES_PER_MODE = 3;
 export const MIN_DAYS_PER_MODE = 14;
@@ -301,7 +302,19 @@ export function evaluateMigrationAdvance(window: MigrationWindowV1, to: Capabili
   if ((window.mode === "observe" || window.mode === "shadow") && elapsedDays < MIN_DAYS_PER_MODE) blockers.push(`need >=${MIN_DAYS_PER_MODE} days in ${window.mode}`);
   const distinctRuns = new Set(window.observations.flatMap((observation) => observation.runs.map((run) => run.run_id))).size;
   if ((window.mode === "observe" || window.mode === "shadow") && distinctRuns < MIN_RELEASES_PER_MODE) blockers.push(`need >=${MIN_RELEASES_PER_MODE} distinct whole-run profiles in ${window.mode}`);
-  return { passed: blockers.length === 0, blockers, elapsed_days: elapsedDays, release_count: window.releases.length, run_count: distinctRuns };
+  const passed = blockers.length === 0;
+  return {
+    passed,
+    blockers,
+    elapsed_days: elapsedDays,
+    release_count: window.releases.length,
+    run_count: distinctRuns,
+    conformance: Object.freeze({
+      schema_version: MIGRATION_ADVANCE_CONFORMANCE_SCHEMA,
+      decision: passed ? "passed" as const : "refused" as const,
+      basis: "attested-boundaries+package-bound-whole-run-observations+ordered-resolver-transition" as const,
+    }),
+  };
 }
 
 export function advanceMigrationWindow(options: { projectRoot: string; to: CapabilityResolverMode; boundaryPath: string; actor: string }) {

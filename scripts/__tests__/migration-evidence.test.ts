@@ -106,6 +106,15 @@ describe("hash-bound next migration boundary", () => {
     }
   });
 
+  it("accepts the offset timestamp shape GitHub uses in real push payloads", () => {
+    const value = fixture();
+    try {
+      value.event.head_commit.timestamp = "2026-08-21T13:30:00+05:30";
+      writeFileSync(value.eventPath, `${JSON.stringify(value.event)}\n`);
+      expect(create(value).merged_at).toBe("2026-08-21T08:00:00.000Z");
+    } finally { rmSync(value.root, { recursive: true, force: true }); }
+  });
+
   it("refuses a stale checkout/origin-next split view", () => {
     const value = fixture();
     try {
@@ -170,6 +179,8 @@ describe("hash-bound next migration boundary", () => {
     expect(raw).toContain('ref: ${{ github.sha }}');
     expect(raw).toContain('--event "$GITHUB_EVENT_PATH"');
     expect(raw).toContain('--run-id "$GITHUB_RUN_ID"');
+    expect(raw).toContain('git update-ref refs/remotes/origin/next "$GITHUB_SHA"');
+    expect(raw).not.toContain("git fetch --no-tags origin next:");
     expect(parsed.permissions).toEqual(expect.objectContaining({ contents: "read", "id-token": "write", attestations: "write" }));
     expect(raw).toContain("uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7");
     expect(raw).toContain("uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7");

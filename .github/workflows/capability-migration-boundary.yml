@@ -25,8 +25,8 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Fetch the next tracking ref used by the verifier
-        run: git fetch --no-tags origin next:refs/remotes/origin/next
+      - name: Pin the verifier tracking ref to this push
+        run: git update-ref refs/remotes/origin/next "$GITHUB_SHA"
 
       - name: Set up Node 24
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7

@@ -253,6 +253,7 @@ describe("D03 evidence-bound migration window", () => {
       ];
       const window = validateMigrationWindow({ schema_version: MIGRATION_WINDOW_SCHEMA, mode: "observe", entered_at: first.boundary.merged_at, entry_boundary: first.boundary, releases: [first.boundary, second.boundary, third.boundary], observations, completed_phases: [], actor: "operator" })!;
       expect(evaluateMigrationAdvance(window, "shadow", advance.boundary).passed).toBe(true);
+      expect(evaluateMigrationAdvance(window, "shadow", advance.boundary).conformance).toEqual(expect.objectContaining({ schema_version: "guild.capability_migration_advance_conformance.v1", decision: "passed" }));
       expect(evaluateMigrationAdvance(window, "shadow", earlyAdvance.boundary).blockers).toContain("need >=14 days in observe");
       const tampered = JSON.parse(JSON.stringify(window));
       tampered.observations[0].runs[0].profile.sha256 = "0".repeat(64);

@@ -22,6 +22,7 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 const BETA = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+const GITHUB_EVENT_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const PRODUCTION_REPOSITORY = "lookatitude/guild";
 const BOUNDARY_SIGNER_WORKFLOW = "lookatitude/guild/.github/workflows/capability-migration-boundary.yml";
@@ -137,6 +138,11 @@ function exactKeys(record: Record<string, unknown>, keys: readonly string[]): bo
 
 function canonicalInstant(value: unknown): string | null {
   if (typeof value !== "string" || !RFC3339.test(value) || !Number.isFinite(Date.parse(value))) return null;
+  return new Date(value).toISOString();
+}
+
+function canonicalGitHubEventInstant(value: unknown): string | null {
+  if (typeof value !== "string" || !GITHUB_EVENT_INSTANT.test(value) || !Number.isFinite(Date.parse(value))) return null;
   return new Date(value).toISOString();
 }
 
@@ -578,7 +584,7 @@ export function createMigrationBoundary(options: BoundaryOptions): MigrationBoun
     throw new Error("migration boundary repository does not match the GitHub event");
   }
   const headCommit = plainRecord(push.head_commit);
-  const headTimestamp = canonicalInstant(headCommit?.timestamp);
+  const headTimestamp = canonicalGitHubEventInstant(headCommit?.timestamp);
   if (!headCommit || headCommit.id !== push.after || headTimestamp === null) {
     throw new Error("migration boundary event has no exact head-commit binding");
   }

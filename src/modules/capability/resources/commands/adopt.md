@@ -52,11 +52,18 @@ the exact production workflow, source commit, `next` ref, and GitHub-hosted runn
 a self-consistent local JSON file is not release provenance. Every admitted boundary
 is retained beside the window and its remote attestation is reverified whenever
 persisted state is read, so structurally valid historical JSON cannot be injected.
-Caller-supplied release labels, timestamps, and conformance booleans do not count,
-and evidence produced before entry into the current mode is refused. Advance closes
+Caller-supplied release labels, timestamps, and conformance booleans do not count.
+For D03, the machine-derived <code>guild.capability_migration_advance_conformance.v1</code>
+verdict is the conformance leg: it is recomputed from attested boundaries,
+package-bound whole-run observations, and the ordered resolver transition. The
+separate activated-host 31/31 release-conformance authority remains the downstream
+FU04/FU05 stable-promotion gate; requiring it here would create a promotion cycle.
+Evidence produced before entry into the current mode is refused. Advance closes
 the current phase and opens the next; collect and record the new mode's first evidence
-after that switch. Advance requires at least three distinct verified beta boundaries, three distinct
-whole-run profiles, and fourteen GitHub-observed days. `g5 --windows <file>` rebuilds its verdict only from hash-bound
+after that switch. Observe and shadow each require at least three distinct verified beta
+boundaries, three distinct whole-run profiles, and fourteen GitHub-observed days.
+The later project-local to strict rung still requires an attested newer boundary and
+the next ordered transition, but does not repeat the observe/shadow soak. `g5 --windows <file>` rebuilds its verdict only from hash-bound
 compatibility payloads referenced by intact MH-06 receipt journals. Missing
 payloads, damaged journals, uninstrumented assets, fewer than two clean release
 windows, or any dependence read block removal.
