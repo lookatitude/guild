@@ -1573,12 +1573,31 @@ function runRootAdmissionProveCli(argv: readonly string[]): number {
     },
     "root-admission-prove"
   );
+  const candidateManifestPath = path.resolve(parsed.candidate_manifest_path);
+  const materialPath = path.resolve(parsed.material_path);
+  const outputPath = path.resolve(parsed.output_path);
+  const registryPath = path.resolve(parsed.used_key_registry_path);
+  const custodyRoot = path.resolve(parsed.custody_root_path);
+  const positions = [
+    candidateManifestPath,
+    materialPath,
+    outputPath,
+    registryPath,
+    lockPathFor(registryPath),
+    custodyLockPathFor(custodyRoot),
+  ];
+  if (new Set(positions).size !== positions.length) {
+    refuse(
+      "root-admission candidate manifest, material, proof output, registry, registry lock, and custody lock must use distinct paths"
+    );
+  }
+  assertContainedPosition("root-admission candidate manifest", candidateManifestPath);
   const proof = signRootAdmissionProof({
-    candidate_manifest: readPublicJsonFile("root-admission candidate manifest", parsed.candidate_manifest_path),
-    material_path: parsed.material_path,
-    output_path: parsed.output_path,
-    used_key_registry_path: parsed.used_key_registry_path,
-    custody_root_path: parsed.custody_root_path,
+    candidate_manifest: readPublicJsonFile("root-admission candidate manifest", candidateManifestPath),
+    material_path: materialPath,
+    output_path: outputPath,
+    used_key_registry_path: registryPath,
+    custody_root_path: custodyRoot,
   });
   process.stdout.write(
     `${JSON.stringify(

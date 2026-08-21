@@ -2835,6 +2835,40 @@ describe("the FU04 public root-admission bridge", () => {
     );
 
     const freshRoots = candidateIds.map((id) => ReferenceMh09.buildTree(`fu04-manifest-${id}`).root);
+    for (let index = 0; index < oldRoots.length; index += 1) {
+      const oneRetired = [...freshRoots];
+      oneRetired[index] = oldRoots[index];
+      expect(() => Signer.invoke("rootAdmissionManifestDigest", candidateManifest(oneRetired))).toThrow(
+        /retired|fixture|replacement/i,
+      );
+    }
+    expect(() =>
+      Signer.invoke("rootAdmissionManifestDigest", {
+        ...candidateManifest(freshRoots),
+        candidates: candidateManifest(freshRoots).candidates.slice(0, 2),
+      }),
+    ).toThrow(/exactly|three|replacement/i);
+    expect(() =>
+      Signer.invoke("rootAdmissionManifestDigest", {
+        ...candidateManifest(freshRoots),
+        candidates: [
+          ...candidateManifest(freshRoots).candidates,
+          { attestor_id: "guild.extra", verification_root: "f".repeat(64) },
+        ],
+      }),
+    ).toThrow(/exactly|three|replacement/i);
+    expect(() =>
+      Signer.invoke(
+        "rootAdmissionManifestDigest",
+        candidateManifest([freshRoots[0], freshRoots[0], freshRoots[2]]),
+      ),
+    ).toThrow(/distinct|duplicate/i);
+    expect(() =>
+      Signer.invoke("rootAdmissionManifestDigest", {
+        ...candidateManifest(freshRoots),
+        predecessor_trust_root_digest: `nrt1:${"0".repeat(64)}`,
+      }),
+    ).toThrow(/predecessor|current|stale/i);
     const digest = Signer.invoke<string>("rootAdmissionManifestDigest", candidateManifest(freshRoots));
     expect(digest).toMatch(/^nra1:[0-9a-f]{64}$/);
   });
@@ -2990,5 +3024,38 @@ describe("the FU04 public root-admission bridge", () => {
       stderr.mockRestore();
       stdout.mockRestore();
     }
+  });
+
+  it("refuses root-admission prove when the proof output aliases the candidate manifest, without consuming a key", () => {
+    const material = writeAdmissionMaterial("prove-manifest-alias", candidateIds[0]);
+    const otherRoots = candidateIds.slice(1).map((id) => ReferenceMh09.buildTree(`fu04-alias-${id}`).root);
+    const manifest = candidateManifest([material.tree.root, ...otherRoots]);
+    const manifestPath = path.join(material.custodyRoot, "candidate-manifest.json");
+    const registryPath = path.join(material.custodyRoot, "used-one-time-keys.json");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
+    const stdout = jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(
+        Signer.invoke<number>("runSignerCli", [
+          "root-admission-prove",
+          "--candidate-manifest-path",
+          manifestPath,
+          "--material-path",
+          material.materialPath,
+          "--output-path",
+          manifestPath,
+          "--used-key-registry-path",
+          registryPath,
+          "--custody-root-path",
+          material.custodyRoot,
+        ]),
+      ).toBe(1);
+    } finally {
+      stderr.mockRestore();
+      stdout.mockRestore();
+    }
+    expect(JSON.parse(fs.readFileSync(manifestPath, "utf8"))).toEqual(manifest);
+    expect(fs.existsSync(registryPath)).toBe(false);
   });
 });
