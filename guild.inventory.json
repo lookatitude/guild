@@ -1,10 +1,10 @@
 {
   "schema_version": "guild.inventory.v1",
   "generated_at": "1970-01-01T00:00:00.000Z",
-  "plugin_version": "2.7.0-beta.1",
+  "plugin_version": "2.7.0-beta.2",
   "manifest": {
     "name": "guild",
-    "version": "2.7.0-beta.1",
+    "version": "2.7.0-beta.2",
     "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
@@ -1025,6 +1025,11 @@
       "kind": "cli"
     },
     {
+      "id": "capability-migration-boundary",
+      "source_path": "scripts/capability-migration-boundary.ts",
+      "kind": "cli"
+    },
+    {
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "kind": "cli"
@@ -1567,6 +1572,11 @@
     {
       "id": "lib/capability/definition-ref-for-dispatch",
       "source_path": "scripts/lib/capability/definition-ref-for-dispatch.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/migration-evidence",
+      "source_path": "scripts/lib/capability/migration-evidence.ts",
       "kind": "lib"
     },
     {

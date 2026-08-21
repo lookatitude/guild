@@ -44,6 +44,7 @@ import {
 } from "./lib/capability/compatibility-catalog";
 import { evaluateG5 } from "./lib/capability/compatibility-usage";
 import { collectCompatibilityUsageWindow, writeFrozenCompatibilityCatalog } from "./lib/capability/compatibility-loader";
+import { createMigrationObservation, writeMigrationObservation } from "./lib/capability/migration-evidence";
 import { advanceMigrationWindow, legacyRemovalEligibility, readMigrationWindow, recordMigrationRelease, startMigrationWindow } from "./lib/capability/migration-window";
 
 const USAGE = `
@@ -52,7 +53,9 @@ capability-adopt — project capability adoption migration (D6)
   capability-adopt report   --project-id <id> [--project-root <p>] [--plugin-root <p>] [--json]
   capability-adopt catalog  [--plugin-root <p>] [--project-root <p>] [--freeze] [--json]
   capability-adopt g5       --windows <file> --project-local-default <semver> --current-version <semver> [--project-root <p>] [--plugin-root <p>] [--json]
-  capability-adopt window   <start|record|advance|status> --release <semver> --at <rfc3339> [--to <mode>] [--actor <id>] [--conformance-pass]
+  capability-adopt window   evidence --boundary <boundary.json> --project-id <id> --mode <observe|shadow> --run-ids <id,id> [--out-dir <dir>]
+  capability-adopt window   <start|record|advance> --boundary <boundary.json> --observation <observation.json> [--to <mode>] [--actor <id>]
+  capability-adopt window   status [--project-root <p>]
   capability-adopt adopt    --project-id <id> --decisions <file> --run-id <id> \\
                             --authorized-by <decision-record> --adopted-at <rfc3339> [--dry-run]
   capability-adopt rollback --project-id <id> --run-id <id> --authorized-by <record> \\
@@ -186,29 +189,53 @@ function main(argv: readonly string[]): number {
   if (verb === "window") {
     const action = argv[1] ?? "status";
     const windowArgs = parseArgs(argv.slice(2));
+    const allowedByAction: Record<string, readonly string[]> = {
+      status: ["project-root", "json"],
+      evidence: ["project-root", "boundary", "project-id", "mode", "run-ids", "out-dir", "json"],
+      start: ["project-root", "boundary", "observation", "to", "actor", "json"],
+      record: ["project-root", "boundary", "observation", "json"],
+      advance: ["project-root", "boundary", "observation", "to", "actor", "json"],
+    };
+    const allowed = allowedByAction[action];
+    if (!allowed) { process.stderr.write(`${USAGE}\n`); return 1; }
+    const unknown = Object.keys(windowArgs).filter((key) => !allowed.includes(key));
+    if (unknown.length > 0) fail(`unknown window option(s): ${unknown.map((key) => `--${key}`).join(", ")}`, 1);
     if (action === "status") {
       const state = readMigrationWindow(projectRoot);
       process.stdout.write(`${JSON.stringify(state ?? { status: "absent" }, null, 2)}\n`);
       return state ? 0 : 2;
     }
-    const release = str(windowArgs, "release");
-    const at = str(windowArgs, "at");
+    const boundaryPath = str(windowArgs, "boundary");
+    if (!boundaryPath) fail("window actions require --boundary <guild.capability_migration_boundary.v1.json>", 1);
+    if (action === "evidence") {
+      const projectId = str(windowArgs, "project-id");
+      const mode = str(windowArgs, "mode");
+      const runIds = str(windowArgs, "run-ids")?.split(",").filter(Boolean) ?? [];
+      if (!projectId || (mode !== "observe" && mode !== "shadow") || runIds.length === 0) fail("window evidence requires --project-id <id> --mode <observe|shadow> --run-ids <id,id>", 1);
+      try {
+        const observation = createMigrationObservation({ projectRoot, boundaryPath, projectId, mode, runIds });
+        const out = writeMigrationObservation(str(windowArgs, "out-dir") ?? path.join(projectRoot, ".guild/artifacts/capability/observations"), observation);
+        process.stdout.write(`${JSON.stringify({ status: "written", path: out, observation }, null, 2)}\n`);
+        return 0;
+      } catch (error) { process.stderr.write(`refused: ${(error as Error).message}\n`); return 2; }
+    }
     const actor = str(windowArgs, "actor") ?? "operator";
-    if (!release || !at) fail("window actions require --release and --at", 1);
+    const observationPath = str(windowArgs, "observation");
+    if (!observationPath) fail("window actions require --observation <guild.capability_migration_observation.v1.json>", 1);
     try {
       if (action === "start") {
         const mode = (str(windowArgs, "to") ?? "observe") as never;
-        process.stdout.write(`${JSON.stringify(startMigrationWindow({ projectRoot, mode, release, recordedAt: at, actor }), null, 2)}\n`);
+        process.stdout.write(`${JSON.stringify(startMigrationWindow({ projectRoot, mode, boundaryPath, observationPath, actor }), null, 2)}\n`);
         return 0;
       }
       if (action === "record") {
-        process.stdout.write(`${JSON.stringify(recordMigrationRelease({ projectRoot, release, recordedAt: at }), null, 2)}\n`);
+        process.stdout.write(`${JSON.stringify(recordMigrationRelease({ projectRoot, boundaryPath, observationPath }), null, 2)}\n`);
         return 0;
       }
       if (action === "advance") {
         const to = str(windowArgs, "to");
         if (!to) fail("window advance requires --to <mode>", 1);
-        const result = advanceMigrationWindow({ projectRoot, to: to as never, release, recordedAt: at, actor, conformancePassed: windowArgs["conformance-pass"] === true });
+        const result = advanceMigrationWindow({ projectRoot, to: to as never, boundaryPath, observationPath, actor });
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
         return result.status === "advanced" ? 0 : 2;
       }

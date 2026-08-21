@@ -1,0 +1,61 @@
+name: capability-migration-boundary
+
+# A `next` merge is distributable immediately, but FU06 counts only an explicit
+# beta-version boundary. Restricting this workflow to the canonical manifest
+# means ordinary next merges do not become releases by accident: the operator
+# advances beta.N deliberately, and this job binds that exact merge/event/tree.
+on:
+  push:
+    branches: [next]
+    paths:
+      - .claude-plugin/plugin.json
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  emit-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the exact next boundary
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Fetch the next tracking ref used by the verifier
+        run: git fetch --no-tags origin next:refs/remotes/origin/next
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install exact script dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline
+
+      - name: Emit the hash-bound beta release boundary
+        run: |
+          npx tsx scripts/capability-migration-boundary.ts \
+            --root . \
+            --event "$GITHUB_EVENT_PATH" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --out .guild/artifacts/capability/migration-boundaries
+
+      - name: Attest the exact boundary with GitHub OIDC provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: .guild/artifacts/capability/migration-boundaries/*.json
+
+      - name: Upload the boundary as immutable workflow evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: capability-migration-boundary-${{ github.sha }}
+          path: .guild/artifacts/capability/migration-boundaries/*.json
+          if-no-files-found: error
+          retention-days: 90

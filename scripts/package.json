@@ -20,6 +20,7 @@
     "check:host-support-matrix": "npx tsx generate-support-matrix.ts --check",
     "check:channel-integrity": "npx tsx check-channel-integrity.ts",
     "check:stable-promotion": "npx tsx check-channel-integrity.ts promotion",
+    "emit:migration-boundary": "npx tsx capability-migration-boundary.ts",
     "emit:release-conformance": "npx tsx emit-release-conformance.ts",
     "sign:release-attestation": "npx tsx sign-release-attestation.ts",
     "verify:installer": "npx tsx verify-installer.ts",

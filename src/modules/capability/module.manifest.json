@@ -26,6 +26,7 @@
       "score-tier",
       "models-cmd",
       "capability-adopt",
+      "capability-migration-boundary",
       "capability-profile",
       "definition-ref-for-dispatch",
       "self-build-canonicalize",
