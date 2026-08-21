@@ -100,6 +100,8 @@ node_modules/
 !.guild/runs/*/verify.md
 !.guild/runs/*/review.md
 !.guild/runs/*/provenance.json
+!.guild/runs/*/logs/
+!.guild/runs/*/logs/v1.4-events.jsonl
 !.guild/runs/*/run.yaml
 !.guild/runs/*/summary.md
 !.guild/runs/*/share-payloads.flag

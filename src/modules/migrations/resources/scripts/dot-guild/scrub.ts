@@ -20,7 +20,7 @@ import { inShareSet, isPayloadFile } from "../lib/shared/share-set";
 // security F1). The operator-path + tilde-Claude-path + secret-pattern logic lives
 // in ONE module; audit.ts's package/receipt leak scan imports the SAME `redact` so
 // the write path and the scan can never drift.
-import { redact } from "../lib/shared/scrub-redact";
+import { redactShareableFile } from "../lib/shared/scrub-redact";
 // T4 dynamic-host-model-routing: the model-catalog discovery cache
 // (.guild/indexes/model-catalog/ — guild.model_catalog.v1 §7) is runtime-local
 // machine state (target-fingerprint-keyed snapshots + the fingerprint salt).
@@ -73,7 +73,7 @@ function processRun(runDir: string, dryRun: boolean): { files: number; changed: 
     }
     let content: string;
     try { content = fs.readFileSync(absPath, "utf8"); } catch { continue; }
-    const { out, opPaths, secrets } = redact(content);
+    const { out, opPaths, secrets } = redactShareableFile(content, rel);
     const didChange = out !== content;
     files++;
     if (didChange) changed++;

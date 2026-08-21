@@ -116,6 +116,48 @@ describe("v1.4-log-validator — hook-name mirror lines (hooks/capture-telemetry
 });
 
 describe("v1.4-log-validator — guild.trace.*.v1 lines (delegated to guild-trace-events)", () => {
+  it.each(["run_started", "run_closed"] as const)("accepts the frozen guild.trace_event.v1 %s lifecycle marker", (eventName) => {
+    expect(validateEvent({
+      schema_version: "guild.trace_event.v1",
+      event_id: "evt-123e4567-e89b-12d3-a456-426614174000",
+      event_name: eventName,
+      run_id: "run-20260821-120000-shareable-evidence",
+      at: "2026-08-21T12:00:00.000Z",
+    })).toEqual({ ok: true, errors: [] });
+  });
+
+  it("rejects an open or malformed guild.trace_event.v1 marker", () => {
+    const result = validateEvent({
+      schema_version: "guild.trace_event.v1",
+      event_id: "attacker",
+      event_name: "run_started",
+      run_id: "run-x",
+      at: "yesterday",
+      injected: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.stringContaining("invalid or open member shape"),
+      expect.stringContaining("event_id"),
+      expect.stringContaining("at"),
+    ]));
+  });
+
+  it.each([
+    ["hyphen-only pseudo UUID", { event_id: `evt-${"-".repeat(36)}` }],
+    ["impossible timestamp", { at: "2026-99-21T25:61:61.000Z" }],
+  ])("rejects a %s lifecycle marker", (_label, override) => {
+    const result = validateEvent({
+      schema_version: "guild.trace_event.v1",
+      event_id: "evt-123e4567-e89b-12d3-a456-426614174000",
+      event_name: "run_started",
+      run_id: "run-20260821-120000-shareable-evidence",
+      at: "2026-08-21T12:00:00.000Z",
+      ...override,
+    });
+    expect(result.ok).toBe(false);
+  });
+
   it("accepts a real-shape guild.trace.dispatch.v1 line", () => {
     const line = {
       schema_version: "guild.trace.dispatch.v1",
@@ -188,8 +230,15 @@ describe("v1.4-log-validator — original wrapped v1.4 EVENT_TYPES (back-compat,
 });
 
 describe("v1.4-log-validator — validateText over a mixed real-shape JSONL blob", () => {
-  it("validates a run log mixing hook-mirror lines and a guild.trace.dispatch.v1 line as 100% clean", () => {
+  it("validates a run log mixing lifecycle, hook-mirror, and guild.trace.dispatch.v1 lines as 100% clean", () => {
     const lines = [
+      {
+        schema_version: "guild.trace_event.v1",
+        event_id: "evt-123e4567-e89b-12d3-a456-426614174000",
+        event_name: "run_started",
+        run_id: "run-f4e8fda7",
+        at: "2026-06-12T19:39:00.000Z",
+      },
       {
         ts: "2026-06-12T19:39:57.418Z",
         event: "PostToolUse",
@@ -225,8 +274,8 @@ describe("v1.4-log-validator — validateText over a mixed real-shape JSONL blob
     ];
     const text = lines.map((l) => JSON.stringify(l)).join("\n") + "\n";
     const summary = validateText(text);
-    expect(summary.total).toBe(3);
+    expect(summary.total).toBe(4);
     expect(summary.invalid).toBe(0);
-    expect(summary.valid).toBe(3);
+    expect(summary.valid).toBe(4);
   });
 });

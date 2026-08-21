@@ -23,6 +23,7 @@
     "check:stable-promotion": "npx tsx check-channel-integrity.ts promotion",
     "capture:activated-host": "node dist/activated-host-conformance.js capture",
     "verify:activated-host": "node dist/activated-host-conformance.js verify",
+    "project:activated-host-public": "node dist/activated-host-conformance.js public-project",
     "emit:migration-boundary": "npx tsx capability-migration-boundary.ts",
     "emit:release-conformance": "npx tsx emit-release-conformance.ts",
     "sign:release-attestation": "npx tsx sign-release-attestation.ts",

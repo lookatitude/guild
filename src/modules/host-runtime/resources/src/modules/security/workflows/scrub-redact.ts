@@ -62,6 +62,111 @@ export interface RedactResult {
   secrets: SecretHit[];
 }
 
+const SHA256_VALUE = /^(?:sha256:)?[0-9a-f]{64}$/;
+const SHA256_FIELDS = new Set([
+  "sha256",
+  "content_tree_sha256",
+  "evidence_sha256",
+  "install_surface_sha256",
+  "manifest_sha256",
+  "public_evidence_sha256",
+  "producer_sha256",
+  "receipt_sha256",
+  "skill_sha256",
+  "tree_sha256",
+  "transcript_sha256",
+  "worker_command_sha256",
+  "worker_result_sha256",
+  "package_hash",
+]);
+const HASH_BEARING_SCHEMAS = new Set([
+  "guild.provenance.v1",
+  "guild.activated_host_public_evidence.v1",
+  "guild.activated_host_public_manifest.v1",
+]);
+
+function recognizedHashDocument(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const schema = (value as Record<string, unknown>).schema_version;
+  return typeof schema === "string" && (HASH_BEARING_SCHEMAS.has(schema) || schema.startsWith("guild.trace."));
+}
+
+function approvedHashPath(schema: string, pathParts: readonly string[]): boolean {
+  const pathKey = pathParts.join("/");
+  if (schema === "guild.activated_host_public_manifest.v1") {
+    return pathKey === "manifest_sha256" || pathKey === "evidence_sha256";
+  }
+  if (schema === "guild.activated_host_public_evidence.v1") {
+    return new Set([
+      "public_evidence_sha256",
+      "runtime_package/manifest_sha256",
+      "runtime_package/producer_sha256",
+      "runtime_package/tree_sha256",
+      "runtime_package/install_surface_sha256",
+      "host_executable/sha256",
+      "host_activation/receipt_sha256",
+      "host_activation/skill_sha256",
+      "consumer_trees/website/content_tree_sha256",
+      "consumer_trees/benchmark/content_tree_sha256",
+    ]).has(pathKey) || /^host_executable\/companions\/[0-9]+\/sha256$/.test(pathKey);
+  }
+  if (schema === "guild.provenance.v1") {
+    return pathParts.length === 2 && pathParts[0] === "artifacts" && SHA256_FIELDS.has(pathParts[1]);
+  }
+  return schema.startsWith("guild.trace.") && pathParts.length === 1 && SHA256_FIELDS.has(pathParts[0]);
+}
+
+function protectSchemaBoundSha256Occurrences(
+  content: string,
+  rel: string,
+): { content: string; tokens: Array<{ value: string; token: string }> } {
+  const tokens: Array<{ value: string; token: string }> = [];
+  let tokenIndex = 0;
+  const protectDocument = (documentContent: string): string => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(documentContent);
+    } catch {
+      return documentContent;
+    }
+    if (!recognizedHashDocument(parsed)) return documentContent;
+    const trailingNewline = documentContent.endsWith("\n");
+    const body = trailingNewline ? documentContent.slice(0, -1) : documentContent;
+    const compact = JSON.stringify(parsed);
+    const pretty = JSON.stringify(parsed, null, 2);
+    const indent = body === compact ? undefined : body === pretty ? 2 : null;
+    if (indent === null) return documentContent;
+    const schema = String(parsed.schema_version);
+    const protect = (value: unknown, pathParts: string[]): void => {
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => protect(entry, [...pathParts, String(index)]));
+        return;
+      }
+      if (typeof value !== "object" || value === null) return;
+      for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+        const childPath = [...pathParts, key];
+        if (typeof entry === "string" && SHA256_VALUE.test(entry) && approvedHashPath(schema, childPath)) {
+        let token = `<GUILD-SHA256-${tokenIndex++}>`;
+        while (content.includes(token)) token = `<GUILD-SHA256-${tokenIndex++}>`;
+          tokens.push({ value: entry, token });
+          (value as Record<string, unknown>)[key] = token;
+        } else {
+          protect(entry, childPath);
+        }
+      }
+    };
+    protect(parsed, []);
+    const serialized = JSON.stringify(parsed, null, indent === undefined ? undefined : indent);
+    return `${serialized}${trailingNewline ? "\n" : ""}`;
+  };
+
+  if (rel.split(/[\\/]/).join("/") === "logs/v1.4-events.jsonl") {
+    return { content: content.split("\n").map((line) => line.trim().length === 0 ? line : protectDocument(line)).join("\n"), tokens };
+  }
+  if (rel.endsWith(".json")) return { content: protectDocument(content), tokens };
+  return { content, tokens };
+}
+
 /**
  * Redact operator paths, tilde-Claude project paths, and secret-pattern matches.
  * Returns the scrubbed text plus the two independent counters. Idempotent +
@@ -90,4 +195,19 @@ export function redact(content: string): RedactResult {
     return l;
   }).join("\n");
   return { out, opPaths, secrets };
+}
+
+/**
+ * Redact one run-relative shareable file while preserving only SHA-256 values
+ * attached to reviewed fields in a recognized Guild schema. Unknown schemas,
+ * unstructured prose, credential-shaped strings, and arbitrary hex remain under
+ * the strict `redact()` heuristic.
+ */
+export function redactShareableFile(content: string, rel: string): RedactResult {
+  const protectedValue = protectSchemaBoundSha256Occurrences(content, rel);
+  if (protectedValue.tokens.length === 0) return redact(content);
+  const result = redact(protectedValue.content);
+  let out = result.out;
+  for (const { value, token } of protectedValue.tokens) out = out.split(token).join(value);
+  return { ...result, out };
 }

@@ -1700,7 +1700,7 @@
       "id": "projection:src/modules/security/workflows/scrub-redact.ts",
       "source_path": "src/modules/security/workflows/scrub-redact.ts",
       "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
-      "sha256": "7d08fca0a9d53c28713b875ddafeb78bab586f291d01139799dd79fdbe2d3682",
+      "sha256": "fd432db059631e02a1ccc2962dfc1c070b6086c728ea8b896ce4b0545c69e571",
       "projection_dependency": true
     },
     {
@@ -1732,7 +1732,7 @@
       "id": "projection:src/modules/security/workflows/share-set.ts",
       "source_path": "src/modules/security/workflows/share-set.ts",
       "resource_path": "resources/src/modules/security/workflows/share-set.ts",
-      "sha256": "bd89148015d34ae9837363d7460371d2445e101d62555cd922d6a903865d36c2",
+      "sha256": "b664aa1ddf9541a3e062f798e863ade8dfb71f24781a8a23b17fe6a7bf8e7616",
       "projection_dependency": true
     },
     {

@@ -19,6 +19,7 @@ const {
   isolatedCodexEnvironment,
   openHostExecutable,
   publishActivatedHostEvidence,
+  publishActivatedHostPublicEvidence,
   refreshSensitiveJsonValues,
   runJsonCommand,
   sealActivatedWorkerRuntime,
@@ -30,6 +31,7 @@ const {
   spawnOpenExecutable,
   runActivatedConformanceWorker,
   verifyActivatedHostConformanceReceipt,
+  verifyActivatedHostPublicEvidence,
 } = require("../activated-host-conformance") as any;
 
 const SOURCE_COMMIT = "cdbf6d1b9018f8e48f8d135898e47e64eb640b05";
@@ -39,6 +41,17 @@ const ADAPTER_VERSION = "guild.host_adapter.v1.0.0";
 const PLATFORM = "darwin-arm64";
 const CHALLENGE = "ab".repeat(32);
 const CAPTURED_AT = "2026-08-21T00:00:00.000Z";
+
+function canonicalTest(value: unknown): string {
+  const sort = (entry: unknown): unknown => {
+    if (Array.isArray(entry)) return entry.map(sort);
+    if (typeof entry !== "object" || entry === null) return entry;
+    return Object.fromEntries(Object.entries(entry as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, sort(child)]));
+  };
+  return JSON.stringify(sort(value));
+}
 
 type HostId = "claude-code-cli" | "codex-cli";
 
@@ -736,6 +749,147 @@ describe("activated-host conformance capture", () => {
       expectedRelease: RELEASE,
     });
     expect(reloaded).toEqual(expect.objectContaining({ ok: true, code: "verified" }));
+  });
+
+  it.each(["claude-code-cli", "codex-cli"] as const)("projects verified %s evidence into a scrub-clean public-only set", (host) => {
+    const run = verify(host);
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-public-out-"));
+    const plantedSocket = "/var/folders/operator/private/cmux.sock";
+    const plantedRequest = "request-operator-private-123";
+    const rawTranscript = `${run.rawTranscript}${JSON.stringify({ socket_path: plantedSocket, request_id: plantedRequest })}\n`;
+    const changed = JSON.parse(JSON.stringify(run.value));
+    changed.transcript_sha256 = sha256Hex(rawTranscript);
+    const { capture_id: _old, ...withoutId } = changed;
+    changed.capture_id = activatedHostCaptureId(withoutId);
+    const published = publishActivatedHostPublicEvidence(outDir, {
+      receipt: changed,
+      transcript: rawTranscript,
+      workerResult: run.rawWorker,
+      packageRoot: run.fixture.root,
+      expectedPackage: run.fixture.runtimePackage,
+      expectedSourceCommit: SOURCE_COMMIT,
+      expectedRelease: RELEASE,
+    });
+    const names = fs.readdirSync(published.directory).sort();
+    expect(names).toEqual(["activated-host-public-evidence.json", "manifest.json"]);
+    const bytes = names.map((name) => fs.readFileSync(path.join(published.directory, name), "utf8")).join("\n");
+    for (const raw of [
+      run.fixture.root,
+      run.value.activated_package_path,
+      run.value.host_executable.path,
+      run.value.session_id,
+      run.value.challenge,
+      plantedSocket,
+      plantedRequest,
+    ]) expect(bytes).not.toContain(raw);
+    expect(bytes).not.toMatch(/transcript\.jsonl|worker\.json|receipt\.json/);
+    const evidence = JSON.parse(fs.readFileSync(published.evidencePath, "utf8"));
+    expect(verifyActivatedHostPublicEvidence(
+      fs.readFileSync(published.evidencePath, "utf8"),
+      fs.readFileSync(published.manifestPath, "utf8"),
+    )).toEqual(expect.objectContaining({ ok: true, code: "verified" }));
+    expect(evidence).toEqual(expect.objectContaining({
+      schema_version: "guild.activated_host_public_evidence.v1",
+      raw_artifacts_included: false,
+      external_attestation_verified: false,
+      authorizes_promotion: false,
+    }));
+    expect(evidence.host_executable).not.toHaveProperty("path");
+    expect(evidence.host_executable).not.toHaveProperty("device");
+    expect(evidence.host_executable).not.toHaveProperty("inode");
+    expect(evidence.conformance.results).toHaveLength(31);
+  });
+
+  it("refuses public evidence tamper and a manifest that tries to include raw artifacts", () => {
+    const run = verify("claude-code-cli");
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-public-tamper-"));
+    const published = publishActivatedHostPublicEvidence(outDir, {
+      receipt: run.value,
+      transcript: run.rawTranscript,
+      workerResult: run.rawWorker,
+      packageRoot: run.fixture.root,
+      expectedPackage: run.fixture.runtimePackage,
+      expectedSourceCommit: SOURCE_COMMIT,
+      expectedRelease: RELEASE,
+    });
+    const evidence = fs.readFileSync(published.evidencePath, "utf8");
+    const manifest = fs.readFileSync(published.manifestPath, "utf8");
+    expect(verifyActivatedHostPublicEvidence(evidence.replace(RELEASE, "9.9.9"), manifest)).toEqual(expect.objectContaining({ ok: false }));
+    const badManifest = JSON.parse(manifest);
+    badManifest.raw_artifacts_included = true;
+    expect(verifyActivatedHostPublicEvidence(evidence, `${JSON.stringify(badManifest, null, 2)}\n`)).toEqual(expect.objectContaining({
+      ok: false,
+      code: "public_authority_overclaim",
+    }));
+  });
+
+  it("refuses a rehashed public result set with duplicated or open scenario rows", () => {
+    const run = verify("codex-cli");
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-public-coverage-"));
+    const published = publishActivatedHostPublicEvidence(outDir, {
+      receipt: run.value,
+      transcript: run.rawTranscript,
+      workerResult: run.rawWorker,
+      packageRoot: run.fixture.root,
+      expectedPackage: run.fixture.runtimePackage,
+      expectedSourceCommit: SOURCE_COMMIT,
+      expectedRelease: RELEASE,
+    });
+    const evidence = JSON.parse(fs.readFileSync(published.evidencePath, "utf8"));
+    evidence.conformance.results[1] = { ...evidence.conformance.results[0], injected: true };
+    const { public_evidence_sha256: _oldEvidenceId, ...withoutEvidenceId } = evidence;
+    evidence.public_evidence_sha256 = sha256Hex(canonicalTest(withoutEvidenceId));
+    const evidenceBytes = `${JSON.stringify(evidence, null, 2)}\n`;
+    const manifest = JSON.parse(fs.readFileSync(published.manifestPath, "utf8"));
+    manifest.evidence_sha256 = sha256Hex(evidenceBytes);
+    const { manifest_sha256: _oldManifestId, ...withoutManifestId } = manifest;
+    manifest.manifest_sha256 = sha256Hex(canonicalTest(withoutManifestId));
+    expect(verifyActivatedHostPublicEvidence(evidenceBytes, `${JSON.stringify(manifest, null, 2)}\n`)).toEqual(expect.objectContaining({
+      ok: false,
+      code: "public_scenario_coverage_incomplete",
+    }));
+  });
+
+  it("refuses a rehashed public projection with an impossible capture instant", () => {
+    const run = verify("claude-code-cli");
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-public-time-"));
+    const published = publishActivatedHostPublicEvidence(outDir, {
+      receipt: run.value,
+      transcript: run.rawTranscript,
+      workerResult: run.rawWorker,
+      packageRoot: run.fixture.root,
+      expectedPackage: run.fixture.runtimePackage,
+      expectedSourceCommit: SOURCE_COMMIT,
+      expectedRelease: RELEASE,
+    });
+    const evidence = JSON.parse(fs.readFileSync(published.evidencePath, "utf8"));
+    evidence.captured_at = "2026-99-21T25:61:61.000Z";
+    const { public_evidence_sha256: _oldEvidenceId, ...withoutEvidenceId } = evidence;
+    evidence.public_evidence_sha256 = sha256Hex(canonicalTest(withoutEvidenceId));
+    const evidenceBytes = `${JSON.stringify(evidence, null, 2)}\n`;
+    const manifest = JSON.parse(fs.readFileSync(published.manifestPath, "utf8"));
+    manifest.evidence_sha256 = sha256Hex(evidenceBytes);
+    const { manifest_sha256: _oldManifestId, ...withoutManifestId } = manifest;
+    manifest.manifest_sha256 = sha256Hex(canonicalTest(withoutManifestId));
+    expect(verifyActivatedHostPublicEvidence(evidenceBytes, `${JSON.stringify(manifest, null, 2)}\n`)).toEqual(expect.objectContaining({
+      ok: false,
+      code: "public_evidence_malformed",
+    }));
+  });
+
+  it("refuses to project raw evidence that does not independently verify", () => {
+    const run = verify("codex-cli");
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-public-refusal-"));
+    expect(() => publishActivatedHostPublicEvidence(outDir, {
+      receipt: run.value,
+      transcript: `${run.rawTranscript}tampered`,
+      workerResult: run.rawWorker,
+      packageRoot: run.fixture.root,
+      expectedPackage: run.fixture.runtimePackage,
+      expectedSourceCommit: SOURCE_COMMIT,
+      expectedRelease: RELEASE,
+    })).toThrow("raw activated-host evidence is not verified");
+    expect(fs.readdirSync(outDir)).toEqual([]);
   });
 
   it.each([2, 3])("rolls back the private staging directory when evidence write %i fails", (failureWrite) => {

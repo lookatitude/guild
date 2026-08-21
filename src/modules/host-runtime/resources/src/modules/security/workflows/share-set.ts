@@ -28,6 +28,13 @@ export const SHARED_SCRUBBED_NAMES = sealSet([
   "run-state.json",
 ], "SHARED_SCRUBBED_NAMES");
 
+/** The canonical mixed lifecycle/telemetry log required by the run-record contract. */
+export const CANONICAL_RUN_LOG = path.join("logs", "v1.4-events.jsonl");
+
+export function isCanonicalRunLog(rel: string): boolean {
+  return rel === CANONICAL_RUN_LOG;
+}
+
 /** A handoff receipt: handoffs/<...>.md (run-relative path). */
 export function isHandoffFile(rel: string): boolean {
   return rel.startsWith("handoffs" + path.sep) && rel.endsWith(".md");
@@ -46,7 +53,7 @@ export function isPayloadFile(rel: string): boolean {
  *   - everything else → false
  */
 export function inShareSet(rel: string, hasFlag: boolean): boolean {
-  if (SHARED_SCRUBBED_NAMES.has(path.basename(rel)) || isHandoffFile(rel)) return true;
+  if (SHARED_SCRUBBED_NAMES.has(path.basename(rel)) || isHandoffFile(rel) || isCanonicalRunLog(rel)) return true;
   if (isPayloadFile(rel)) return hasFlag;
   return false;
 }
