@@ -152,8 +152,9 @@ function main(): void {
   // here, PACKAGE-LOCAL ONLY:
   //   - version from the package's own manifest (state.version — the per-host
   //     probe order landed in readInstalledVersion);
-  //   - channel/ref from resolveInstallState's default (stable/main) — commit
-  //     unknowable for a native install, recorded null;
+  //   - channel/ref are derived from a canonical `-beta.N` package version;
+  //     otherwise resolveInstallState's stable/main default remains explicitly
+  //     marked as assumed. Commit is unknowable for a native install.
   //   - NEVER written to ~/.guild/receipts. The machine registry is the
   //     installer's ledger: a minted machine receipt would make
   //     `install.sh --update` re-render and RE-REGISTER the marketplace,
@@ -164,31 +165,42 @@ function main(): void {
   if (state.source === "default" && state.version) {
     try {
       const receiptPath = path.join(pluginRoot, RECEIPT_BASENAME);
-      if (!fs.existsSync(receiptPath)) {
+      const versionDerivedBeta = /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
+      const receiptChannel = versionDerivedBeta ? "beta" : state.channel;
+      const descriptor = fs.openSync(
+        receiptPath,
+        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
+        0o600,
+      );
+      try {
+        if (!fs.fstatSync(descriptor).isFile()) throw new Error("receipt target is not a regular file");
         fs.writeFileSync(
-          receiptPath,
+          descriptor,
           JSON.stringify(
             {
               schema_version: RECEIPT_SCHEMA,
               host: hostId,
-              channel: state.channel,
-              ref: state.channel === "beta" ? "next" : "main",
+              channel: receiptChannel,
+              ref: receiptChannel === "beta" ? "next" : "main",
               commit: null,
               version: state.version,
               installed_at: new Date().toISOString(),
               minted_by: "update-check-session-start",
-              // Honesty markers: a native install's channel is UNKNOWABLE from
-              // inside the package, so channel/ref above are the stable/main
-              // DEFAULT, not a fact. Nothing may clone from them: codex-cli's
-              // capability row is reinstall_command (never self_update), so the
-              // minted receipt is identification-only.
+              // Honesty markers: a canonical beta package carries its channel
+              // in its version. Other native installs retain the stable/main
+              // DEFAULT, explicitly marked as an assumption. Nothing may clone
+              // from either: codex-cli's capability row is reinstall_command
+              // (never self_update), so the receipt is identification-only.
               managed_by: "host-native",
-              channel_confidence: "assumed-default",
+              channel_confidence: versionDerivedBeta ? "version-derived" : "assumed-default",
             },
             null,
             2
           ) + "\n"
         );
+        fs.fsyncSync(descriptor);
+      } finally {
+        fs.closeSync(descriptor);
       }
     } catch {
       // fail-open — the signal below still works without a receipt

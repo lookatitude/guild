@@ -32307,31 +32307,42 @@ function main() {
   if (state.source === "default" && state.version) {
     try {
       const receiptPath = path42.join(pluginRoot, RECEIPT_BASENAME);
-      if (!fs35.existsSync(receiptPath)) {
+      const versionDerivedBeta = /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
+      const receiptChannel = versionDerivedBeta ? "beta" : state.channel;
+      const descriptor = fs35.openSync(
+        receiptPath,
+        fs35.constants.O_WRONLY | fs35.constants.O_CREAT | fs35.constants.O_EXCL | fs35.constants.O_NOFOLLOW,
+        384
+      );
+      try {
+        if (!fs35.fstatSync(descriptor).isFile()) throw new Error("receipt target is not a regular file");
         fs35.writeFileSync(
-          receiptPath,
+          descriptor,
           JSON.stringify(
             {
               schema_version: RECEIPT_SCHEMA,
               host: hostId,
-              channel: state.channel,
-              ref: state.channel === "beta" ? "next" : "main",
+              channel: receiptChannel,
+              ref: receiptChannel === "beta" ? "next" : "main",
               commit: null,
               version: state.version,
               installed_at: (/* @__PURE__ */ new Date()).toISOString(),
               minted_by: "update-check-session-start",
-              // Honesty markers: a native install's channel is UNKNOWABLE from
-              // inside the package, so channel/ref above are the stable/main
-              // DEFAULT, not a fact. Nothing may clone from them: codex-cli's
-              // capability row is reinstall_command (never self_update), so the
-              // minted receipt is identification-only.
+              // Honesty markers: a canonical beta package carries its channel
+              // in its version. Other native installs retain the stable/main
+              // DEFAULT, explicitly marked as an assumption. Nothing may clone
+              // from either: codex-cli's capability row is reinstall_command
+              // (never self_update), so the receipt is identification-only.
               managed_by: "host-native",
-              channel_confidence: "assumed-default"
+              channel_confidence: versionDerivedBeta ? "version-derived" : "assumed-default"
             },
             null,
             2
           ) + "\n"
         );
+        fs35.fsyncSync(descriptor);
+      } finally {
+        fs35.closeSync(descriptor);
       }
     } catch {
     }

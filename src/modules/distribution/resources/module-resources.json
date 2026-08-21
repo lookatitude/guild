@@ -5,10 +5,17 @@
   "entries": [
     {
       "category": "scripts",
+      "id": "activated-host-conformance",
+      "source_path": "scripts/activated-host-conformance.ts",
+      "resource_path": "resources/scripts/activated-host-conformance.ts",
+      "sha256": "b56105ce88771a10511d871e4b79099331153d893999da33e241f4e739ea765d"
+    },
+    {
+      "category": "scripts",
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "7f20e4f7b50216d354f951ba65e0883e354d604f7e6dbb1ef6a8189d9a78d495"
+      "sha256": "aad2e83bd93f85c4df0264ff6d2dee11f0332d51726c80760678c34ee1c88e2d"
     },
     {
       "category": "scripts",

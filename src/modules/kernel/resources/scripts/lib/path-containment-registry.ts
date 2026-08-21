@@ -191,6 +191,11 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "WAIVER: the private upward walk discovers the nearest workspace manifest and performs no write or containment verdict. The later project-root boundary decision separately delegates to checkContained and fails closed on refusal.",
   }),
   Object.freeze({
+    path: "scripts/activated-host-conformance.ts",
+    status: "waived",
+    note: "WAIVER: activated-host capture owns a stricter multi-file evidence transaction inside a process-created private stage: nofollow regular-file reads, exclusive creation, descriptor-bound executable copies, pre/post package and consumer snapshots, atomic directory rename, and directory fsync. Its path-relative checks classify the Codex cache/workspace separation rule; replacing the transaction with the shared single-file bounded writer would discard the atomic triple-publication and sealed-runtime guarantees. Adversarial tests pin symlink refusal, package/consumer drift, partial-write rollback, and durability failures.",
+  }),
+  Object.freeze({
     path: "src/modules/dispatch/workflows/task-assignment-v2.ts",
     status: "adopted",
     note: "TaskCell assignment, attempt, instance, and acknowledgment reads/writes use the shared physical containment primitive so a symlinked run-tree channel cannot escape the project.",

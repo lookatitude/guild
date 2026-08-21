@@ -16,8 +16,9 @@
  *   dist/claude-code/   .claude-plugin/plugin.json + commands/** + skills/** +
  *                       agents/** + hooks/{hooks.json,bootstrap.sh,*.sh,...} +
  *                       .mcp.json + scripts/** (the full installed tree).
- *   dist/codex/         .codex-plugin/plugin.json + .agents/skills/guild/**
- *                       (exposes the using-guild bootstrap skill).
+ *   dist/codex/         .codex-plugin/plugin.json + skills/** for native Codex
+ *                       plugin discovery + .agents/skills/guild/** for the
+ *                       instruction-file/wrapper fallback.
  *
  * REUSE vs ADD (per L2 scope): the Codex renderer is REUSED from
  * per-host-packaging.ts (renderCodexPluginJson); the Claude renderer is the new
@@ -361,6 +362,11 @@ function copyScriptRuntime(root: string, dest: string): void {
     copyFileEnsured(lock, path.join(dest, "scripts", "package-lock.json"));
   }
   copyScriptRuntimeDependencies(path.join(root, "scripts"), path.join(dest, "scripts"));
+  copyFileRequired(
+    path.join(root, "scripts", "dist", "activated-host-conformance.js"),
+    path.join(dest, "scripts", "dist", "activated-host-conformance.js"),
+    "scripts/dist/activated-host-conformance.js",
+  );
   // Some script modules reuse hook-side runtime libraries, notably
   // result-contracts -> hooks/lib/handoff-v2. Packages that bundle scripts must
   // carry those libraries or guild-run fails before its dry-run path can load.
@@ -424,6 +430,7 @@ export function toNeutralManifest(inv: GuildInventoryV1): GuildPluginManifest {
  * and the rendered manifest path could drift without either side noticing).
  */
 export const AGENTS_SKILL_ROOT = ".agents/skills/guild";
+export const CODEX_NATIVE_SKILL_ROOT = "skills";
 
 // ---------------------------------------------------------------------------
 // LogicalPackage loader (committed plugin tree OR generated dist/claude-code)
@@ -645,11 +652,14 @@ export function writeCodexTree(
   const codexJson = renderCodexPluginJson(toNeutralManifest(inv), { renderedAt: generatedAt });
   writeFileEnsured(path.join(dest, ".codex-plugin", "plugin.json"), stableJson(codexJson));
 
-  // Expose skills (incl. the using-guild bootstrap) under Codex's skill dir.
+  // Expose skills (incl. the using-guild bootstrap) through both Codex surfaces:
+  // root-level skills/** is the native plugin discovery contract, while the
+  // namespaced .agents tree remains the instruction-file/wrapper fallback.
   // RV-1/RV-2: ship SKILL.md AND every tracked companion sibling under the guild
   // skill tree (addressed by source_path), so loaded-on-demand references resolve.
   for (const sp of resources.sourcePathsForCategory("skills")) {
     const underSkills = sp.replace(/^skills\//, "");
+    resources.copyBySourcePath("skills", sp, path.join(dest, CODEX_NATIVE_SKILL_ROOT, underSkills));
     resources.copyBySourcePath("skills", sp, path.join(dest, AGENTS_SKILL_ROOT, underSkills));
   }
   // Bundle the guild-run CLI (scripts/) so the Codex launcher is self-contained,
@@ -884,7 +894,7 @@ function codexPackageRefs(
   return {
     host: "codex",
     command_ids: [],
-    skill_ids: inv.skills.map((s) => s.id), // exposed under .agents/skills/guild/**
+    skill_ids: inv.skills.map((s) => s.id), // native skills/** + .agents fallback
     agent_ids: [], // Codex flags agents unsupported (render-or-degrade) — none referenced.
     mcp_server_ids: [],
     script_ids: [],
