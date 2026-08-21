@@ -39,23 +39,26 @@ jobs:
 
       - name: Emit the hash-bound beta release boundary
         run: |
-          npx tsx scripts/capability-migration-boundary.ts \
-            --root . \
+          npm --prefix scripts run build:hosts
+          npm --prefix scripts run emit:migration-boundary -- \
+            --root "$GITHUB_WORKSPACE" \
+            --claude-package-root "$GITHUB_WORKSPACE/dist/claude-code" \
+            --codex-package-root "$GITHUB_WORKSPACE/dist/codex" \
             --event "$GITHUB_EVENT_PATH" \
             --repository "$GITHUB_REPOSITORY" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --out .guild/artifacts/capability/migration-boundaries
+            --out "$RUNNER_TEMP/capability-migration-boundaries"
 
       - name: Attest the exact boundary with GitHub OIDC provenance
         uses: actions/attest@v4
         with:
-          subject-path: .guild/artifacts/capability/migration-boundaries/*.json
+          subject-path: ${{ runner.temp }}/capability-migration-boundaries/*.json
 
       - name: Upload the boundary as immutable workflow evidence
         uses: actions/upload-artifact@v6
         with:
           name: capability-migration-boundary-${{ github.sha }}
-          path: .guild/artifacts/capability/migration-boundaries/*.json
+          path: ${{ runner.temp }}/capability-migration-boundaries/*.json
           if-no-files-found: error
           retention-days: 90

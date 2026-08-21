@@ -20,9 +20,13 @@ function fixture(version = "2.7.0-beta.2") {
   git(root, "config", "user.name", "Guild Test");
   git(root, "config", "user.email", "guild@example.invalid");
   mkdirSync(join(root, ".claude-plugin"), { recursive: true });
-  writeFileSync(join(root, ".claude-plugin", "plugin.json"), `${JSON.stringify({ name: "guild", version }, null, 2)}\n`);
+  mkdirSync(join(root, ".codex-plugin"), { recursive: true });
+  const claudeManifest = `${JSON.stringify({ name: "guild", version }, null, 2)}\n`;
+  const codexManifest = `${JSON.stringify({ name: "guild", version, host: "codex" }, null, 2)}\n`;
+  writeFileSync(join(root, ".claude-plugin", "plugin.json"), claudeManifest);
+  writeFileSync(join(root, ".codex-plugin", "plugin.json"), codexManifest);
   writeFileSync(join(root, "payload.txt"), "boundary bytes\n");
-  git(root, "add", ".claude-plugin/plugin.json", "payload.txt");
+  git(root, "add", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "payload.txt");
   git(root, "commit", "-qm", "beta boundary");
   const commit = git(root, "rev-parse", "HEAD");
   git(root, "update-ref", "refs/remotes/origin/next", commit);
@@ -33,12 +37,22 @@ function fixture(version = "2.7.0-beta.2") {
     head_commit: { id: commit, timestamp: "2026-08-21T08:00:00Z" },
   };
   writeFileSync(eventPath, `${JSON.stringify(event)}\n`);
-  return { root, eventPath, commit, event };
+  const claudePackageRoot = join(root, "runtime-packages", "claude-code");
+  const codexPackageRoot = join(root, "runtime-packages", "codex");
+  mkdirSync(join(claudePackageRoot, ".claude-plugin"), { recursive: true });
+  mkdirSync(join(codexPackageRoot, ".codex-plugin"), { recursive: true });
+  writeFileSync(join(claudePackageRoot, ".claude-plugin", "plugin.json"), claudeManifest);
+  writeFileSync(join(codexPackageRoot, ".codex-plugin", "plugin.json"), codexManifest);
+  writeFileSync(join(claudePackageRoot, "runtime.js"), "claude runtime\n");
+  writeFileSync(join(codexPackageRoot, "runtime.js"), "codex runtime\n");
+  return { root, eventPath, commit, event, claudePackageRoot, codexPackageRoot };
 }
 
 function create(value: ReturnType<typeof fixture>) {
   return createMigrationBoundary({
     pluginRoot: value.root,
+    claudePackageRoot: value.claudePackageRoot,
+    codexPackageRoot: value.codexPackageRoot,
     eventPath: value.eventPath,
     repository: "lookatitude/guild",
     runId: "32460000000",
@@ -61,11 +75,8 @@ describe("hash-bound next migration boundary", () => {
         event_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
         boundary_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
       }));
-      expect(boundary.manifest).toEqual(expect.objectContaining({
-        path: ".claude-plugin/plugin.json",
-        version: "2.7.0-beta.2",
-        sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-      }));
+      expect(boundary.packages["claude-code-cli"]).toEqual(expect.objectContaining({ host_id: "claude-code-cli", manifest_path: ".claude-plugin/plugin.json", manifest_sha256: expect.stringMatching(/^[0-9a-f]{64}$/), tree_sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }));
+      expect(boundary.packages["codex-cli"]).toEqual(expect.objectContaining({ host_id: "codex-cli", manifest_path: ".codex-plugin/plugin.json", manifest_sha256: expect.stringMatching(/^[0-9a-f]{64}$/), tree_sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }));
       expect(boundary.workflow).toEqual({
         repository: "lookatitude/guild",
         run_id: "32460000000",
@@ -124,7 +135,7 @@ describe("hash-bound next migration boundary", () => {
     ["release", (boundary: any) => { boundary.release = "2.7.0-beta.3"; }],
     ["source commit", (boundary: any) => { boundary.source_commit = "0".repeat(40); }],
     ["tree", (boundary: any) => { boundary.source_tree_hash = `sha256:${"0".repeat(64)}`; }],
-    ["manifest hash", (boundary: any) => { boundary.manifest.sha256 = "0".repeat(64); }],
+    ["package hash", (boundary: any) => { boundary.packages["claude-code-cli"].tree_sha256 = "0".repeat(64); }],
     ["event hash", (boundary: any) => { boundary.event_sha256 = "0".repeat(64); }],
     ["workflow run", (boundary: any) => { boundary.workflow.run_id = "0"; }],
   ])("the public validator refuses a tampered %s", (_label, mutate) => {
@@ -161,7 +172,11 @@ describe("hash-bound next migration boundary", () => {
     expect(raw).toContain('--run-id "$GITHUB_RUN_ID"');
     expect(parsed.permissions).toEqual(expect.objectContaining({ contents: "read", "id-token": "write", attestations: "write" }));
     expect(raw).toContain("uses: actions/attest@v4");
-    expect(raw).toContain("subject-path: .guild/artifacts/capability/migration-boundaries/*.json");
+    expect(raw).toContain('npm --prefix scripts run emit:migration-boundary');
+    expect(raw).toContain('npm --prefix scripts run build:hosts');
+    expect(raw).toContain('--claude-package-root "$GITHUB_WORKSPACE/dist/claude-code"');
+    expect(raw).toContain('--codex-package-root "$GITHUB_WORKSPACE/dist/codex"');
+    expect(raw).toContain('subject-path: ${{ runner.temp }}/capability-migration-boundaries/*.json');
     expect(raw).toContain('capability-migration-boundary-${{ github.sha }}');
   });
 });

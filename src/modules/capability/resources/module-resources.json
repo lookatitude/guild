@@ -8,7 +8,7 @@
       "id": "adopt",
       "source_path": "commands/adopt.md",
       "resource_path": "resources/commands/adopt.md",
-      "sha256": "966e60a1e2dfae72440d70d83dc6db436b80a4a9418804388b94db8c2ddf6dd0"
+      "sha256": "53965b62e85aae6fb8714c6a149e80051852fb3d9ce1807ec418a6dd9e719eeb"
     },
     {
       "category": "commands",
@@ -22,14 +22,14 @@
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
       "resource_path": "resources/scripts/capability-adopt.ts",
-      "sha256": "57aae8315743ccd8db5240a0f1eab0d0aea3af73d2999f9a22a1486e0e8c5291"
+      "sha256": "3bf42c984a069d437de88ce61dd574226f6da76daf58905cc30e2835cc1c03ec"
     },
     {
       "category": "scripts",
       "id": "capability-migration-boundary",
       "source_path": "scripts/capability-migration-boundary.ts",
       "resource_path": "resources/scripts/capability-migration-boundary.ts",
-      "sha256": "d24709e62676dcb4ac8a349063a393ad3637080688dc1c7fd34e9f05ef5d3bd8"
+      "sha256": "ff090a69aab8ebbfce4788cc9c13b6aa782fc9cab4cb2a4652b2b15106d4b45b"
     },
     {
       "category": "scripts",
@@ -106,14 +106,14 @@
       "id": "lib/capability/migration-evidence",
       "source_path": "scripts/lib/capability/migration-evidence.ts",
       "resource_path": "resources/scripts/lib/capability/migration-evidence.ts",
-      "sha256": "dd480404ab66667ae4e04d79ba77c3ec909c23ee6fe1549d06f4223867f2a878"
+      "sha256": "696eafefcb2e441df7e1c309bda8987a8126a99754d3da29f3a5b9775c49cb8b"
     },
     {
       "category": "scripts",
       "id": "lib/capability/migration-window",
       "source_path": "scripts/lib/capability/migration-window.ts",
       "resource_path": "resources/scripts/lib/capability/migration-window.ts",
-      "sha256": "3cfe3a2033c102309c7bf4cb449d9466cf03b98f70202b4da817b4a87ec82d60"
+      "sha256": "1f4212a25666341a0ca35dc3ce2e7002ef9f5c6e00707a04988d354659857f6b"
     },
     {
       "category": "scripts",

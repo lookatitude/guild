@@ -26,6 +26,8 @@ function positiveInteger(name: string): number {
 try {
   const boundary = createMigrationBoundary({
     pluginRoot: path.resolve(option("root")),
+    claudePackageRoot: path.resolve(option("claude-package-root")),
+    codexPackageRoot: path.resolve(option("codex-package-root")),
     eventPath: path.resolve(option("event")),
     repository: option("repository"),
     runId: option("run-id"),
