@@ -113,7 +113,7 @@
       "id": "lib/capability/migration-window",
       "source_path": "scripts/lib/capability/migration-window.ts",
       "resource_path": "resources/scripts/lib/capability/migration-window.ts",
-      "sha256": "ae75252b0e832e61ad1bcbfc4f22d01137182d4e159fcfca3139227cae253a32"
+      "sha256": "890ed8c09975fa6f51e81cd9c86da5a170df27d58d0a9964759cab3fe622972b"
     },
     {
       "category": "scripts",

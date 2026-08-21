@@ -143,6 +143,17 @@ function validateCompletedPhase(value: unknown): CompletedMigrationPhaseV1 | nul
   return Object.freeze({ mode: record.mode, entered_at: record.entered_at, ...series, advanced_with: advancedWith });
 }
 
+function verifyWindowBoundaryProvenance(projectRoot: string, value: MigrationWindowV1): void {
+  const boundaries = new Map<string, MigrationBoundaryV1>();
+  boundaries.set(value.entry_boundary.boundary_hash, value.entry_boundary);
+  for (const boundary of value.releases) boundaries.set(boundary.boundary_hash, boundary);
+  for (const phase of value.completed_phases) {
+    for (const boundary of phase.releases) boundaries.set(boundary.boundary_hash, boundary);
+    boundaries.set(phase.advanced_with.boundary_hash, phase.advanced_with);
+  }
+  for (const boundary of boundaries.values()) verifyPersistedMigrationBoundary(projectRoot, boundary);
+}
+
 export function validateMigrationWindow(value: unknown): MigrationWindowV1 | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
@@ -202,6 +213,10 @@ export function recoverMigrationTransition(projectRoot: string): boolean {
   if (raw === null) return false;
   let parsed: unknown; try { parsed = JSON.parse(raw); } catch { throw new Error("pending migration transition is invalid JSON"); }
   const intent = validateTransitionIntent(parsed); if (!intent) throw new Error("pending migration transition is invalid or tampered");
+  // A crafted self-hashed intent must never mutate either live state file. The
+  // exact boundary artifacts were persisted before the intent was written, so
+  // remote provenance can be re-established before deterministic roll-forward.
+  verifyWindowBoundaryProvenance(projectRoot, intent.next_window);
   let currentWindow: MigrationWindowV1 | null = null; let windowExists = false;
   try { const windowRaw = readOptionalStateFile(projectRoot, MIGRATION_WINDOW_RELPATH, "current migration window"); windowExists = windowRaw !== null; currentWindow = windowRaw === null ? null : validateMigrationWindow(JSON.parse(windowRaw)); }
   catch { throw new Error("current migration window is invalid during transition recovery"); }
@@ -226,14 +241,7 @@ export function readMigrationWindow(projectRoot: string): MigrationWindowV1 | nu
     if (raw === null) return null;
     const value = validateMigrationWindow(JSON.parse(raw));
     if (!value) return null;
-    const boundaries = new Map<string, MigrationBoundaryV1>();
-    boundaries.set(value.entry_boundary.boundary_hash, value.entry_boundary);
-    for (const boundary of value.releases) boundaries.set(boundary.boundary_hash, boundary);
-    for (const phase of value.completed_phases) {
-      for (const boundary of phase.releases) boundaries.set(boundary.boundary_hash, boundary);
-      boundaries.set(phase.advanced_with.boundary_hash, phase.advanced_with);
-    }
-    for (const boundary of boundaries.values()) verifyPersistedMigrationBoundary(projectRoot, boundary);
+    verifyWindowBoundaryProvenance(projectRoot, value);
     for (const phase of [...value.completed_phases, value]) for (const observation of phase.observations) verifyMigrationObservation(projectRoot, observation);
     return value;
   } catch { return null; }
