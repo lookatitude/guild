@@ -17,9 +17,10 @@
  *     equals the source-pinned root for its attestor id. The separate FU04
  *     root-admission action may sign only an `nra1:` possession challenge for a
  *     complete three-root replacement manifest that excludes every currently
- *     pinned fixture-era root. Its output cannot verify custody or authorize a
- *     trust-root change; changing the source-pinned table remains a reviewed
- *     code change.
+ *     pinned fixture-era root, and only while the live trust table still equals
+ *     the immutable predecessor snapshot. Its output cannot verify custody or
+ *     authorize a trust-root change; changing the source-pinned table remains a
+ *     reviewed code change and closes this predecessor's proving window.
  *   - UNTRUSTED PRODUCTION CUSTODY: production requires an explicit current-user
  *     custody root at mode 0700. Material, registry, output, and both locks must
  *     remain strictly beneath it through real, current-user 0700 directories.
@@ -97,6 +98,7 @@ import {
   NEUTRAL_ATTESTATION_SCHEME,
   NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN,
   NEUTRAL_ATTESTATION_TREE_HEIGHT,
+  NEUTRAL_ATTESTOR_TRUST_ROOT,
   neutralAttestorVerificationKey,
   neutralVerifyAttestationSignature,
 } from "../src/modules/lifecycle/workflows/neutral-conformance-core";
@@ -357,6 +359,17 @@ export function rootAdmissionManifestDigest(value: unknown): string {
   return `nra1:${neutralSha256Hex(
     `${ROOT_ADMISSION_DOMAIN}|MANIFEST|${neutralCanonicalJson(manifest)}`
   )}`;
+}
+
+function assertRootAdmissionProvingWindowOpen(): void {
+  if (
+    neutralCanonicalJson(NEUTRAL_ATTESTOR_TRUST_ROOT) !==
+    neutralCanonicalJson(ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT)
+  ) {
+    refuse(
+      "root-admission proving window is closed because the live source trust roots no longer match the predecessor snapshot"
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1339,6 +1352,7 @@ export function signReleaseAttestation(options: unknown): SignReleaseAttestation
 }
 
 export function signRootAdmissionProof(options: unknown): RootAdmissionProof {
+  assertRootAdmissionProvingWindowOpen();
   const record = closedRecord(options, "root-admission proof options", [
     "candidate_manifest",
     "material_path",

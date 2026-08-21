@@ -101,7 +101,11 @@ The admission record proves only that valid one-time signing material existed
 for all three proposed roots over the exact same candidate manifest. The tool
 rejects incomplete or duplicate proof sets, any currently pinned fixture-era
 root, a stale predecessor-root digest, and any proof rooted in a different
-manifest. Every manifest, proof, and bundle states
+manifest. New possession proofs are accepted only while the live source trust
+table still exactly matches that fixture-era predecessor; once the reviewed
+root rotation lands, the proving window closes while existing public bundles
+remain verifiable against their immutable predecessor snapshot. Every manifest,
+proof, and bundle states
 `external_custody_verified: false` and `authorizes_rotation: false`. Independent
 custody review and the actual source trust-root change remain separate required
 gates; this tool cannot perform or approve either one.

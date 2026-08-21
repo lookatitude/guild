@@ -2910,6 +2910,43 @@ describe("the FU04 public root-admission bridge", () => {
     }
   });
 
+  it("closes the proving window after the live source trust roots rotate while preserving historical verification", () => {
+    const material = writeAdmissionMaterial("rotated-live-root", candidateIds[0], 0);
+    const otherRoots = candidateIds.slice(1).map((id) => ReferenceMh09.buildTree(`fu04-rotated-${id}`).root);
+    const manifest = candidateManifest([material.tree.root, ...otherRoots]);
+    const registryPath = path.join(material.custodyRoot, "used-one-time-keys.json");
+    const rotatedTrustRoot = NEUTRAL_ATTESTOR_TRUST_ROOT.map((entry, index) => ({
+      ...entry,
+      verification_root: index === 0 ? material.tree.root : entry.verification_root,
+    }));
+
+    let rotatedSigner: Record<string, unknown> | undefined;
+    jest.isolateModules(() => {
+      jest.doMock("../../src/modules/lifecycle/workflows/neutral-conformance-core", () => ({
+        ...jest.requireActual("../../src/modules/lifecycle/workflows/neutral-conformance-core"),
+        NEUTRAL_ATTESTOR_TRUST_ROOT: rotatedTrustRoot,
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      rotatedSigner = require("../sign-release-attestation") as Record<string, unknown>;
+    });
+    jest.dontMock("../../src/modules/lifecycle/workflows/neutral-conformance-core");
+
+    expect(() =>
+      (rotatedSigner?.signRootAdmissionProof as (options: unknown) => unknown)({
+        candidate_manifest: manifest,
+        material_path: material.materialPath,
+        output_path: path.join(material.custodyRoot, "proof.json"),
+        used_key_registry_path: registryPath,
+        custody_root_path: material.custodyRoot,
+      }),
+    ).toThrow(/proving window|live trust|rotat|predecessor/i);
+    expect(fs.existsSync(registryPath)).toBe(false);
+
+    expect(() =>
+      Signer.invoke("rootAdmissionManifestDigest", manifest),
+    ).not.toThrow();
+  });
+
   it("assembles only three matching production proofs and still refuses to claim custody or authorize rotation", () => {
     const materials = candidateIds.map((id, index) => writeAdmissionMaterial(`bundle-${index}`, id));
     const manifest = candidateManifest(materials.map((entry) => entry.tree.root));
