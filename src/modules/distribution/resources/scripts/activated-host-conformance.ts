@@ -29,6 +29,7 @@ import {
 import {
   loadAttestedMigrationBoundary,
   snapshotMigrationRuntimePackage,
+  verifyInstalledMigrationRuntimePackage,
   type MigrationRuntimeHost,
   type MigrationRuntimePackageV1,
 } from "./lib/capability/migration-evidence";
@@ -74,6 +75,7 @@ export interface ActivatedConformanceWorkerOptions {
   readonly challenge: string;
   readonly sourceCommit: string;
   readonly packageHash: string;
+  readonly installSurfaceHash: string;
   readonly runtimeVersion: string;
   readonly hostVersion: string;
   readonly platform: string;
@@ -214,6 +216,30 @@ function bindingOf(pkg: MigrationRuntimePackageV1): PlainRecord {
     tree_sha256: pkg.tree_sha256,
     install_surface_sha256: pkg.install_surface_sha256,
   };
+}
+
+function fullPackageIdentity(pkg: MigrationRuntimePackageV1): PlainRecord {
+  return {
+    host_id: pkg.host_id,
+    manifest_path: pkg.manifest_path,
+    manifest_sha256: pkg.manifest_sha256,
+    producer_sha256: pkg.producer_sha256,
+    tree_sha256: pkg.tree_sha256,
+    files: pkg.files,
+  };
+}
+
+/** Verify the full generated tree and its separately attested supported-install subset. */
+export function verifyAttestedGeneratedRuntimePackage(
+  packageRoot: string,
+  expectedPackage: MigrationRuntimePackageV1,
+): MigrationRuntimePackageV1 {
+  const actualPackage = snapshotMigrationRuntimePackage(packageRoot, expectedPackage.host_id);
+  if (canonical(fullPackageIdentity(actualPackage)) !== canonical(fullPackageIdentity(expectedPackage))) {
+    throw new Error(`generated runtime package does not match the attested ${expectedPackage.host_id} full tree`);
+  }
+  verifyInstalledMigrationRuntimePackage(packageRoot, expectedPackage);
+  return expectedPackage;
 }
 
 const INSTALL_RECEIPT_KEYS = Object.freeze([
@@ -1089,7 +1115,7 @@ function prepareCodexActivation(
   if (marketplace.marketplaceName !== marketplaceName) throw new Error("Codex marketplace activation returned the wrong marketplace identity");
   if (installed.pluginId !== expectedPluginId || installed.version !== release || typeof installed.installedPath !== "string" || !path.isAbsolute(installed.installedPath)) throw new Error("Codex plugin activation did not return the expected plugin/release/path");
   const installedRoot = fs.realpathSync(installed.installedPath);
-  if (canonical(snapshotMigrationRuntimePackage(installedRoot, "codex-cli")) !== canonical(expectedPackage)) throw new Error("Codex installed plugin bytes do not match the attested package");
+  verifyAttestedGeneratedRuntimePackage(installedRoot, expectedPackage);
   if (!Array.isArray(listed.installed)) throw new Error("Codex plugin listing has no installed set");
   const listEntry = listed.installed.find((entry) => isRecord(entry) && entry.pluginId === expectedPluginId);
   if (!isRecord(listEntry) || listEntry.version !== release || listEntry.installed !== true || listEntry.enabled !== true) throw new Error("Codex plugin listing does not prove the exact enabled Guild release");
@@ -1127,7 +1153,8 @@ export function captureActivatedHostConformance(
     openedHostExecutable = openHostExecutable(options.hostId, process.env, stageRoot);
     const hostExecutable = openedHostExecutable.identity;
     const hostVersion = probeHostVersion(options.hostId, openedHostExecutable);
-    if (canonical(snapshotMigrationRuntimePackage(options.packageRoot, options.hostId)) !== canonical(options.expectedPackage)) return failed("runtime_package_mismatch", "source package does not match the attested boundary before staging");
+    try { verifyAttestedGeneratedRuntimePackage(options.packageRoot, options.expectedPackage); }
+    catch (error) { return failed("runtime_package_mismatch", error instanceof Error ? error.message : String(error)); }
     const stagedPlugin = path.join(stageRoot, "plugin");
     const stagedWebsite = path.join(stageRoot, "website");
     const stagedBenchmark = path.join(stageRoot, "benchmark");
@@ -1136,12 +1163,14 @@ export function captureActivatedHostConformance(
       website: snapshotOfficialConsumerGitTree("website", options.consumerRoots.website, stagedWebsite),
       benchmark: snapshotOfficialConsumerGitTree("benchmark", options.consumerRoots.benchmark, stagedBenchmark),
     });
-    if (canonical(snapshotMigrationRuntimePackage(stagedPlugin, options.hostId)) !== canonical(options.expectedPackage)) return failed("staged_package_mismatch", "staged package differs from the attested boundary");
+    try { verifyAttestedGeneratedRuntimePackage(stagedPlugin, options.expectedPackage); }
+    catch (error) { return failed("staged_package_mismatch", error instanceof Error ? error.message : String(error)); }
     const prepared = options.hostId === "codex-cli"
       ? prepareCodexActivation(stageRoot, stagedPlugin, options.expectedPackage, options.release, openedHostExecutable)
       : { packageRoot: fs.realpathSync(stagedPlugin), environment: hostEnvironment(), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
     const liveSensitiveValues = (): readonly string[] => refreshSensitiveJsonValues(prepared.sensitivePath, prepared.sensitiveValues);
-    if (canonical(snapshotMigrationRuntimePackage(prepared.packageRoot, options.hostId)) !== canonical(options.expectedPackage)) return failed("activated_package_mismatch", "activated package differs from the attested boundary before host launch");
+    try { verifyAttestedGeneratedRuntimePackage(prepared.packageRoot, options.expectedPackage); }
+    catch (error) { return failed("activated_package_mismatch", error instanceof Error ? error.message : String(error)); }
     const { website: activatedWebsite, benchmark: activatedBenchmark } = activatedConsumerRoots(
       options.hostId,
       stageRoot,
@@ -1161,6 +1190,7 @@ export function captureActivatedHostConformance(
       `--challenge ${challenge}`,
       `--source-commit ${options.sourceCommit}`,
       `--package-hash ${options.expectedPackage.tree_sha256}`,
+      `--install-surface-hash ${options.expectedPackage.install_surface_sha256}`,
       `--runtime-version ${safeToken(`guild-${options.release}`, "runtime version")}`,
       `--host-version ${safeToken(hostVersion, "host version")}`,
       `--platform ${safeToken(options.platform, "platform")}`,
@@ -1210,8 +1240,8 @@ export function captureActivatedHostConformance(
     const workerResultSha256 = sha256Hex(workerBytes);
     const sessionId = sessionIdFromTranscript(options.hostId, transcript);
     if (sessionId === null) return failed("transcript_malformed", "host transcript carries no session/thread id");
-    const postHostPackage = snapshotMigrationRuntimePackage(prepared.packageRoot, options.hostId);
-    if (canonical(postHostPackage) !== canonical(options.expectedPackage)) return failed("activated_package_drift", "activated package differs from the attested boundary after worker execution");
+    try { verifyAttestedGeneratedRuntimePackage(prepared.packageRoot, options.expectedPackage); }
+    catch (error) { return failed("activated_package_drift", error instanceof Error ? error.message : String(error)); }
     const withoutId = {
       schema_version: ACTIVATED_HOST_CONFORMANCE_SCHEMA,
       host_id: options.hostId,
@@ -1308,7 +1338,7 @@ export function runActivatedConformanceWorker(
     consumerTrees: null,
   });
   if (!HOSTS.includes(options.hostId)) return failed("host_identity_invalid", "worker host is not supported");
-  if (!SHA256.test(options.challenge) || !SHA256.test(options.packageHash) || !COMMIT.test(options.sourceCommit)) return failed("worker_identity_invalid", "worker challenge, package hash, or source commit is malformed");
+  if (!SHA256.test(options.challenge) || !SHA256.test(options.packageHash) || !SHA256.test(options.installSurfaceHash) || !COMMIT.test(options.sourceCommit)) return failed("worker_identity_invalid", "worker challenge, package hashes, or source commit is malformed");
   if (!validConsumerTreeSet(options.consumerIdentities)) return failed("consumer_identity_invalid", "worker consumer identities are missing or malformed");
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-conformance-worker-"));
   try {
@@ -1399,7 +1429,7 @@ export function runActivatedConformanceWorker(
       detail: "six production owner evaluators assembled the canonical 31-scenario evidence",
       marker,
       evidence: result.evidence,
-      packageSnapshot: bindingOf(packageBefore),
+      packageSnapshot: Object.freeze({ ...bindingOf(packageBefore), install_surface_sha256: options.installSurfaceHash }),
       hostActivation,
       consumerTrees: options.consumerIdentities,
     };
@@ -1607,7 +1637,7 @@ export function verifyActivatedHostConformanceReceipt(
   if (!isRecord(receipt.runtime_package) || canonical(receipt.runtime_package) !== canonical(bindingOf(options.expectedPackage))) return refusal("runtime_package_mismatch", "receipt runtime binding does not match the attested beta package");
   let actualPackage: MigrationRuntimePackageV1;
   try {
-    actualPackage = snapshotMigrationRuntimePackage(options.packageRoot, options.expectedPackage.host_id);
+    actualPackage = verifyAttestedGeneratedRuntimePackage(options.packageRoot, options.expectedPackage);
   } catch (error) {
     return refusal("runtime_package_mismatch", `runtime package cannot be snapshotted: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -1729,8 +1759,7 @@ function runCaptureCli(argv: readonly string[]): number {
   const boundary = loadAttestedMigrationBoundary(path.resolve(cliValue(argv, "--boundary"))).boundary;
   const packageRoot = fs.realpathSync(path.resolve(cliValue(argv, "--package-root")));
   const expectedPackage = boundary.packages[hostId];
-  const actualPackage = snapshotMigrationRuntimePackage(packageRoot, hostId);
-  if (canonical(actualPackage) !== canonical(expectedPackage)) throw new Error(`runtime package does not match attested ${boundary.release} ${hostId} bytes`);
+  verifyAttestedGeneratedRuntimePackage(packageRoot, expectedPackage);
   const consumers = parseConsumerRoots(cliValues(argv, "--consumer-root"));
   const result = captureActivatedHostConformance({
     hostId,
@@ -1774,7 +1803,7 @@ function runVerifyCli(argv: readonly string[]): number {
 
 function runWorkerCli(argv: readonly string[]): number {
   const allowed = new Set([
-    "--host", "--challenge", "--source-commit", "--package-hash", "--runtime-version",
+    "--host", "--challenge", "--source-commit", "--package-hash", "--install-surface-hash", "--runtime-version",
     "--host-version", "--platform", "--release", "--captured-at", "--plugin-root",
     "--module-boundary-root",
     "--consumer-root", "--consumer-identities", "--out",
@@ -1790,6 +1819,7 @@ function runWorkerCli(argv: readonly string[]): number {
     challenge,
     sourceCommit: cliValue(argv, "--source-commit"),
     packageHash: cliValue(argv, "--package-hash"),
+    installSurfaceHash: cliValue(argv, "--install-surface-hash"),
     runtimeVersion: cliValue(argv, "--runtime-version"),
     hostVersion: cliValue(argv, "--host-version"),
     platform: cliValue(argv, "--platform"),
