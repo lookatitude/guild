@@ -393,17 +393,20 @@ export function loadMigrationBoundary(boundaryPath: string): MigrationBoundaryV1
 
 function verifyMigrationBoundaryProvenance(boundaryPath: string, boundary: MigrationBoundaryV1): string {
   if (boundary.workflow.repository !== PRODUCTION_REPOSITORY) throw new Error("migration boundary is not issued by the production repository");
+  const ghEnvironment: NodeJS.ProcessEnv = { ...process.env, GH_HOST: "github.com" };
+  delete ghEnvironment["GH_ENTERPRISE_TOKEN"];
   let output: string;
   try {
     output = execFileSync("gh", [
       "attestation", "verify", path.resolve(boundaryPath),
+      "--hostname", "github.com",
       "--repo", PRODUCTION_REPOSITORY,
       "--signer-workflow", BOUNDARY_SIGNER_WORKFLOW,
       "--source-ref", "refs/heads/next",
       "--source-digest", boundary.source_commit,
       "--deny-self-hosted-runners",
       "--format", "json",
-    ], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000 });
+    ], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 30_000, env: ghEnvironment });
   } catch (error) {
     throw new Error(`migration boundary GitHub provenance verification failed: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -415,7 +418,7 @@ function verifyMigrationBoundaryProvenance(boundaryPath: string, boundary: Migra
   }
   let runResponse: string;
   try {
-    runResponse = execFileSync("gh", ["api", "--include", `repos/${PRODUCTION_REPOSITORY}/actions/runs/${boundary.workflow.run_id}`], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: 30_000 });
+    runResponse = execFileSync("gh", ["api", "--hostname", "github.com", "--include", `repos/${PRODUCTION_REPOSITORY}/actions/runs/${boundary.workflow.run_id}`], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: 30_000, env: ghEnvironment });
   } catch (error) {
     throw new Error(`migration boundary GitHub run verification failed: ${error instanceof Error ? error.message : String(error)}`);
   }

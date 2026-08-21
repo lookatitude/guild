@@ -33164,6 +33164,9 @@ init_compatibility_catalog();
 init_compatibility_usage();
 init_path_containment();
 
+// ../scripts/lib/host-id-namespace.ts
+init_host_id_namespace();
+
 // ../scripts/lib/capability/migration-evidence.ts
 var import_node_crypto3 = require("node:crypto");
 var fs39 = __toESM(require("node:fs"));
@@ -33272,15 +33275,21 @@ function runtimeReceiptIdentity(pluginRoot, runtimeHost) {
     }
   });
   if (manifests.length === 0) return null;
-  return { ...manifests[0], package_tree: `sha256:${hashCompatibilityRuntimeProducer(pluginRoot, manifests[0].host_id)}` };
+  try {
+    return { ...manifests[0], package_tree: `sha256:${hashCompatibilityRuntimeProducer(pluginRoot, manifests[0].host_id)}` };
+  } catch {
+    return null;
+  }
 }
 function readCompatibilityAsset(options) {
   const entry = readCatalogEntry(options.entry);
   if (!entry) return { status: "refused", detail: "invalid compatibility catalog entry" };
   const root = fs40.realpathSync(options.pluginRoot);
   const manifestHosts = PLUGIN_MANIFEST_CANDIDATES.flatMap(([directory, file]) => fs40.existsSync(path46.join(root, directory, file)) ? [directory === ".claude-plugin" ? "claude-code-cli" : "codex-cli"] : []);
-  const declaredHost = options.runtimeHost ?? [process.env["GUILD_HOST_ID"], process.env["GUILD_ORCHESTRATOR_HOST"], process.env["GUILD_HOST"]].find((value) => typeof value === "string" && /^(?:claude|codex)/.test(value.toLowerCase()));
-  const runtimeHost = typeof declaredHost === "string" ? declaredHost.toLowerCase().startsWith("codex") ? "codex-cli" : "claude-code-cli" : manifestHosts.length === 1 ? manifestHosts[0] : "claude-code-cli";
+  const declaredHost = [process.env["GUILD_HOST_ID"], process.env["GUILD_ORCHESTRATOR_HOST"], process.env["GUILD_HOST"]].find((value) => typeof value === "string" && value.trim().length > 0);
+  const normalizedHost = declaredHost === void 0 ? null : normalizeHostId(declaredHost);
+  const inferredHost = manifestHosts.length === 1 ? manifestHosts[0] : normalizedHost === "codex-cli" || normalizedHost === "claude-code-cli" ? normalizedHost : "claude-code-cli";
+  const runtimeHost = options.runtimeHost ?? inferredHost;
   const runtimeIdentity = runtimeReceiptIdentity(root, runtimeHost);
   if (runtimeIdentity === null) {
     return { status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" };

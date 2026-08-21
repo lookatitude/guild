@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { createMigrationBoundary, createMigrationObservation, writeMigrationBoundary, writeMigrationObservation } from "../lib/capability/migration-evidence";
-import { MIGRATION_TRANSITION_RELPATH, MIGRATION_WINDOW_SCHEMA, advanceMigrationWindow, evaluateMigrationAdvance, legacyRemovalEligibility, readMigrationWindow, recordMigrationRelease, recoverMigrationTransition, startMigrationWindow, validateMigrationWindow } from "../lib/capability/migration-window";
+import { MIGRATION_TRANSITION_RELPATH, MIGRATION_WINDOW_RELPATH, MIGRATION_WINDOW_SCHEMA, advanceMigrationWindow, evaluateMigrationAdvance, inspectMigrationWindow, legacyRemovalEligibility, readMigrationWindow, recordMigrationRelease, recoverMigrationTransition, startMigrationWindow, validateMigrationWindow } from "../lib/capability/migration-window";
 import { readCompatibilityAsset } from "../lib/capability/compatibility-loader";
 import { baselineBinding, emitCapabilityProfile, snapshotTreeHashes } from "../lib/capability/profile-emit";
 import { readFeatureGateRegistry } from "../lib/capability/strangler-control";
@@ -113,6 +113,9 @@ describe("D03 evidence-bound migration window", () => {
     const result = spawnSync(process.execPath, [tsx, cli, "window", "advance", "--boundary", "b.json", "--to", "shadow", "--at", "2026-09-04T00:00:00Z", "--conformance-pass"], { encoding: "utf8" });
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/unknown window option.*--at.*--conformance-pass/i);
+    const prototypeAction = spawnSync(process.execPath, [tsx, cli, "window", "toString", "--project-root", "/tmp/x"], { encoding: "utf8" });
+    expect(prototypeAction.status).toBe(1);
+    expect(prototypeAction.stderr).toContain("capability-adopt — project capability adoption migration");
   });
 
   it("starts only from a boundary paired with real non-synthetic whole-run evidence", () => {
@@ -130,6 +133,8 @@ describe("D03 evidence-bound migration window", () => {
       expect(readFeatureGateRegistry(projectRoot)?.resolver_mode).toBe("observe");
       const ghCalls = (execFileSync as jest.MockedFunction<typeof execFileSync>).mock.calls.filter(([file]) => file === "gh");
       expect(ghCalls.some(([, args]) => (args as string[]).includes("--signer-workflow") && (args as string[]).includes("--source-digest") && (args as string[]).includes("--deny-self-hosted-runners"))).toBe(true);
+      expect(ghCalls.every(([, args]) => (args as string[]).includes("--hostname") && (args as string[]).includes("github.com"))).toBe(true);
+      expect(ghCalls.every(([, , options]) => (options as { env?: NodeJS.ProcessEnv }).env?.GH_HOST === "github.com" && (options as { env?: NodeJS.ProcessEnv }).env?.GH_ENTERPRISE_TOKEN === undefined)).toBe(true);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
@@ -214,6 +219,7 @@ describe("D03 evidence-bound migration window", () => {
       expect(readMigrationWindow(projectRoot)?.entry_boundary).toEqual(fixture.boundary);
       mockGhFailure = true;
       expect(readMigrationWindow(projectRoot)).toBeNull();
+      expect(inspectMigrationWindow(projectRoot)).toEqual(expect.objectContaining({ status: "provenance_unavailable", detail: expect.stringMatching(/GitHub provenance verification failed/i) }));
     } finally {
       mockGhFailure = false;
       rmSync(projectRoot, { recursive: true, force: true });
@@ -292,6 +298,30 @@ describe("D03 evidence-bound migration window", () => {
     }
   });
 
+  it("discards a start intent when neither changed target landed", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const canonical = (value: any): string => Array.isArray(value)
+      ? `[${value.map(canonical).join(",")}]`
+      : value !== null && typeof value === "object"
+        ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`
+        : JSON.stringify(value);
+    try {
+      const window = startMigrationWindow({ projectRoot, projectId: "fx-project", mode: "observe", boundaryPath: fixture.boundaryPath, actor: "operator" });
+      const gates = readFeatureGateRegistry(projectRoot)!;
+      rmSync(join(projectRoot, MIGRATION_WINDOW_RELPATH));
+      const candidate = { schema_version: "guild.capability_migration_transition.v1", operation: "start", prior_window: null, prior_gates: gates, next_window: window, next_gates: gates };
+      const intent = { ...candidate, intent_hash: createHash("sha256").update(canonical(candidate)).digest("hex") };
+      writeFileSync(join(projectRoot, MIGRATION_TRANSITION_RELPATH), `${JSON.stringify(intent, null, 2)}\n`);
+      expect(recoverMigrationTransition(projectRoot)).toBe(false);
+      expect(existsSync(join(projectRoot, MIGRATION_WINDOW_RELPATH))).toBe(false);
+      expect(existsSync(join(projectRoot, MIGRATION_TRANSITION_RELPATH))).toBe(false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a correctly self-hashed transition whose successor semantics were forged", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
     const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
@@ -363,6 +393,21 @@ describe("D03 evidence-bound migration window", () => {
       const tampered = JSON.parse(JSON.stringify(window));
       tampered.observations[0].runs[0].profile.sha256 = "0".repeat(64);
       expect(validateMigrationWindow(tampered)).toBeNull();
+      const preEntryEvidence = JSON.parse(JSON.stringify(window));
+      preEntryEvidence.entered_at = second.boundary.merged_at;
+      expect(validateMigrationWindow(preEntryEvidence)).toBeNull();
+      const undersoaked = {
+        schema_version: MIGRATION_WINDOW_SCHEMA,
+        project_id: "fx-project",
+        mode: "shadow",
+        entered_at: advance.boundary.merged_at,
+        entry_boundary: advance.boundary,
+        releases: [],
+        observations: [],
+        completed_phases: [{ mode: "observe", entered_at: first.boundary.merged_at, releases: [first.boundary], observations: [observations[0]], advanced_with: second.boundary }],
+        actor: "operator",
+      };
+      expect(validateMigrationWindow(undersoaked)).toBeNull();
     } finally { rmSync(projectRoot, { recursive: true, force: true }); for (const f of [first, second, third, earlyAdvance, advance]) rmSync(f.root, { recursive: true, force: true }); }
   });
 

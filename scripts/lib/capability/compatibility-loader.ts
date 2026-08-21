@@ -7,6 +7,7 @@ import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog,
 import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/modules/capability/workflows/compatibility-usage";
 import type { CapabilityResolutionIntent } from "../../../src/modules/capability/workflows/resolver-mode";
 import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
+import { normalizeHostId } from "../host-id-namespace";
 import { hashCompatibilityRuntimeProducer, type MigrationRuntimeHost } from "./migration-evidence";
 
 const PLUGIN_MANIFEST_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
@@ -54,7 +55,14 @@ function runtimeReceiptIdentity(pluginRoot: string, runtimeHost: MigrationRuntim
     } catch { return []; }
   });
   if (manifests.length === 0) return null;
-  return { ...manifests[0], package_tree: `sha256:${hashCompatibilityRuntimeProducer(pluginRoot, manifests[0].host_id)}` };
+  try {
+    return { ...manifests[0], package_tree: `sha256:${hashCompatibilityRuntimeProducer(pluginRoot, manifests[0].host_id)}` };
+  } catch {
+    // A partial, redirected, or otherwise unreadable producer cannot issue a
+    // receipt identity. Returning null keeps every caller on its refusal path;
+    // throwing here can escape a hook guard whose outermost catch is advisory.
+    return null;
+  }
 }
 
 export type CompatibilityLoadResult =
@@ -102,11 +110,18 @@ export function readCompatibilityAsset(options: {
   const manifestHosts = PLUGIN_MANIFEST_CANDIDATES.flatMap(([directory, file]) => fs.existsSync(path.join(root, directory, file))
     ? [directory === ".claude-plugin" ? "claude-code-cli" as const : "codex-cli" as const]
     : []);
-  const declaredHost = options.runtimeHost ?? [process.env["GUILD_HOST_ID"], process.env["GUILD_ORCHESTRATOR_HOST"], process.env["GUILD_HOST"]]
-    .find((value) => typeof value === "string" && /^(?:claude|codex)/.test(value.toLowerCase()));
-  const runtimeHost: MigrationRuntimeHost = typeof declaredHost === "string"
-    ? declaredHost.toLowerCase().startsWith("codex") ? "codex-cli" : "claude-code-cli"
-    : manifestHosts.length === 1 ? manifestHosts[0] : "claude-code-cli";
+  const declaredHost = [process.env["GUILD_HOST_ID"], process.env["GUILD_ORCHESTRATOR_HOST"], process.env["GUILD_HOST"]]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+  const normalizedHost = declaredHost === undefined ? null : normalizeHostId(declaredHost);
+  // A generated package's sole manifest is stronger evidence than ambient
+  // cross-host/stale environment. Source installs carry both manifests and use
+  // the canonical host namespace; unknown/prefix-shaped strings never select.
+  const inferredHost: MigrationRuntimeHost = manifestHosts.length === 1
+    ? manifestHosts[0]
+    : normalizedHost === "codex-cli" || normalizedHost === "claude-code-cli"
+      ? normalizedHost
+      : "claude-code-cli";
+  const runtimeHost: MigrationRuntimeHost = options.runtimeHost ?? inferredHost;
   const runtimeIdentity = runtimeReceiptIdentity(root, runtimeHost);
   if (runtimeIdentity === null) {
     return { status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" };

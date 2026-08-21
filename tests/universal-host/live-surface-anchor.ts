@@ -567,9 +567,16 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * same commit. ANTI-VACUITY: the full cross-cutting suite was observed RED
  * against the prior pin and named only `commands/adopt.md`, the stale registry,
  * and `tree_pin_stale commands/commands`, computing 8d443082.
+ *
+ * Re-ratified 2026-08-21 after exact-head defensive review. `commands` moves
+ * 8d443082 → c100f261 because `adopt.md` now states the online fail-closed
+ * provenance dependency and the beta-only v4 migration boundary. The registry
+ * was re-extracted byte-for-byte. This accompanies executable repairs for the
+ * review's fail-open producer, GitHub-host pinning, persisted soak validation,
+ * and transition recovery findings; it does not weaken any guard predicate.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "8d4430820250df7e5ff004ee262b2744bf48639b",
+  commands: "c100f261f3d222eea1f8e573be23e94b71c0917d",
   skills: "28af180d5c79fcdf52dcfc6c076df5a2c8d5946f",
 });
 

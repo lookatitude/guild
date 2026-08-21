@@ -185,8 +185,8 @@ describe("hash-bound next migration boundary", () => {
     expect(raw).toContain('ref: ${{ github.sha }}');
     expect(raw).toContain('--event "$GITHUB_EVENT_PATH"');
     expect(raw).toContain('--run-id "$GITHUB_RUN_ID"');
-    expect(raw).toContain('git update-ref refs/remotes/origin/next "$GITHUB_SHA"');
-    expect(raw).not.toContain("git fetch --no-tags origin next:");
+    expect(raw).toContain("git fetch --no-tags origin refs/heads/next:refs/remotes/origin/next");
+    expect(raw).not.toContain("git update-ref refs/remotes/origin/next");
     expect(raw).toContain("Classify a new beta boundary");
     expect(raw).toContain('current" != "$previous');
     expect(raw).toContain("steps.boundary.outputs.emit == 'true'");

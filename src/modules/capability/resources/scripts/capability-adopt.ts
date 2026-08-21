@@ -45,7 +45,7 @@ import {
 import { evaluateG5 } from "./lib/capability/compatibility-usage";
 import { collectCompatibilityUsageWindow, writeFrozenCompatibilityCatalog } from "./lib/capability/compatibility-loader";
 import { createMigrationObservation, writeMigrationObservation } from "./lib/capability/migration-evidence";
-import { MIGRATION_TRANSITION_RELPATH, MIGRATION_WINDOW_RELPATH, advanceMigrationWindow, legacyRemovalEligibility, readMigrationWindow, recordMigrationRelease, startMigrationWindow } from "./lib/capability/migration-window";
+import { advanceMigrationWindow, inspectMigrationWindow, legacyRemovalEligibility, recordMigrationRelease, startMigrationWindow } from "./lib/capability/migration-window";
 
 const USAGE = `
 capability-adopt — project capability adoption migration (D6)
@@ -198,18 +198,14 @@ function main(argv: readonly string[]): number {
       record: ["project-root", "boundary", "observation", "json"],
       advance: ["project-root", "boundary", "to", "actor", "json"],
     };
-    const allowed = allowedByAction[action];
+    const allowed = Object.prototype.hasOwnProperty.call(allowedByAction, action) ? allowedByAction[action] : undefined;
     if (!allowed) { process.stderr.write(`${USAGE}\n`); return 1; }
     const unknown = Object.keys(windowArgs).filter((key) => !allowed.includes(key));
     if (unknown.length > 0) fail(`unknown window option(s): ${unknown.map((key) => `--${key}`).join(", ")}`, 1);
     if (action === "status") {
-      const state = readMigrationWindow(projectRoot);
-      const unresolvedState = [MIGRATION_WINDOW_RELPATH, MIGRATION_TRANSITION_RELPATH].some((relativePath) => {
-        try { fs.lstatSync(path.join(projectRoot, relativePath)); return true; }
-        catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
-      });
-      process.stdout.write(`${JSON.stringify(state ?? { status: unresolvedState ? "invalid_or_recovery_required" : "absent" }, null, 2)}\n`);
-      return state ? 0 : 2;
+      const inspected = inspectMigrationWindow(projectRoot);
+      process.stdout.write(`${JSON.stringify(inspected.status === "ok" ? inspected.window : inspected, null, 2)}\n`);
+      return inspected.status === "ok" ? 0 : 2;
     }
     const boundaryPath = str(windowArgs, "boundary");
     if (!boundaryPath) fail("window actions require --boundary <guild.capability_migration_boundary.v1.json>", 1);

@@ -145,8 +145,13 @@ function validateCompletedPhase(value: unknown): CompletedMigrationPhaseV1 | nul
   const series = validateSeries(record.releases, record.observations, record.mode, false);
   const advancedWith = validateMigrationBoundary(record.advanced_with);
   if (!series || !advancedWith) return null;
+  if (series.releases.length < MIN_RELEASES_PER_MODE) return null;
+  if (series.observations.some((observation) => Date.parse(observation.observed_at) < Date.parse(record.entered_at as string))) return null;
+  const distinctRuns = new Set(series.observations.flatMap((observation) => observation.runs.map((run) => run.run_id))).size;
+  if (distinctRuns < MIN_RELEASES_PER_MODE) return null;
   const last = series.releases[series.releases.length - 1];
   if (!strictlyNewerBeta(last.release, advancedWith.release) || Date.parse(advancedWith.merged_at) <= Date.parse(last.merged_at)) return null;
+  if (Date.parse(advancedWith.merged_at) - Date.parse(record.entered_at as string) < MIN_DAYS_PER_MODE * 86_400_000) return null;
   return Object.freeze({ mode: record.mode, entered_at: record.entered_at, ...series, advanced_with: advancedWith });
 }
 
@@ -173,6 +178,7 @@ export function validateMigrationWindow(value: unknown): MigrationWindowV1 | nul
     ? validateSeries(record.releases, record.observations, mode, true)
     : Array.isArray(record.releases) && record.releases.length === 0 && Array.isArray(record.observations) && record.observations.length === 0 ? { releases: [], observations: [] } : null;
   if (!series) return null;
+  if (series.observations.some((observation) => Date.parse(observation.observed_at) < Date.parse(record.entered_at as string))) return null;
   const completed: CompletedMigrationPhaseV1[] = [];
   for (const raw of record.completed_phases) {
     const phase = validateCompletedPhase(raw); if (!phase) return null;
@@ -180,6 +186,8 @@ export function validateMigrationWindow(value: unknown): MigrationWindowV1 | nul
     if (phase.mode === "shadow" && !completed.some((entry) => entry.mode === "observe")) return null;
     completed.push(phase);
   }
+  const expectedCompletedModes: readonly string[] = mode === "observe" ? [] : mode === "shadow" ? ["observe"] : ["observe", "shadow"];
+  if (completed.map((phase) => phase.mode).join(",") !== expectedCompletedModes.join(",")) return null;
   if (mode === "observe" && completed.length > 0) return null;
   if (mode === "shadow" && !completed.some((phase) => phase.mode === "observe")) return null;
   if ((mode === "project-local" || mode === "strict") && !completed.some((phase) => phase.mode === "shadow")) return null;
@@ -316,7 +324,10 @@ export function recoverMigrationTransition(projectRoot: string): boolean {
   // An intent alone is not authority. If no target landed, discard it and let
   // the operator retry; only a partially/fully applied in-process commit may
   // recover forward from disk.
-  if (windowAtPrior && gatesAtPrior && !windowAtNext && !gatesAtNext) {
+  const windowChanged = !same(intent.prior_window, intent.next_window);
+  const gatesChanged = !same(intent.prior_gates, intent.next_gates);
+  const anyTargetLanded = (windowChanged && windowAtNext) || (gatesChanged && gatesAtNext);
+  if (windowAtPrior && gatesAtPrior && !anyTargetLanded) {
     fs.unlinkSync(transitionPath(projectRoot));
     return false;
   }
@@ -341,6 +352,26 @@ function readMigrationWindowVerified(projectRoot: string): MigrationWindowV1 | n
 export function readMigrationWindow(projectRoot: string): MigrationWindowV1 | null {
   try { return readMigrationWindowVerified(projectRoot); }
   catch { return null; }
+}
+
+export type MigrationWindowInspection =
+  | { readonly status: "ok"; readonly window: MigrationWindowV1 }
+  | { readonly status: "absent" }
+  | { readonly status: "provenance_unavailable"; readonly detail: string }
+  | { readonly status: "invalid_or_recovery_required" };
+
+/** Distinguish a fail-closed remote-verification outage from damaged local state. */
+export function inspectMigrationWindow(projectRoot: string): MigrationWindowInspection {
+  try {
+    const window = readMigrationWindowVerified(projectRoot);
+    return window === null ? { status: "absent" } : { status: "ok", window };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (/migration boundary GitHub (?:provenance|run) verification failed/i.test(detail)) {
+      return { status: "provenance_unavailable", detail };
+    }
+    return { status: "invalid_or_recovery_required" };
+  }
 }
 
 export function writeMigrationWindow(projectRoot: string, value: MigrationWindowV1): void {

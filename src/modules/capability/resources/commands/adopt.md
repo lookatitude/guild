@@ -52,6 +52,12 @@ the exact production workflow, source commit, `next` ref, and GitHub-hosted runn
 a self-consistent local JSON file is not release provenance. Every admitted boundary
 is retained beside the window and its remote attestation is reverified whenever
 persisted state is read, so structurally valid historical JSON cannot be injected.
+That read is intentionally online and fail-closed: if GitHub or authenticated
+<code>gh</code> verification is unavailable, <code>window status</code> reports
+<code>provenance_unavailable</code> rather than labelling the local bytes damaged;
+restore access and retry without rewriting the window. The beta-only window schema is
+<code>guild.capability_migration_window.v4</code>; pre-beta v1-v3 fixtures are not
+upgraded in place and must be retired before starting this first attested window.
 Caller-supplied release labels, timestamps, and conformance booleans do not count.
 For D03, the machine-derived <code>guild.capability_migration_advance_conformance.v1</code>
 verdict is the conformance leg: it is recomputed from attested boundaries,
