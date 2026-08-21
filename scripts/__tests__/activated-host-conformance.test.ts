@@ -880,13 +880,19 @@ describe("activated-host conformance capture", () => {
   it("refuses a package containing a planted symlink before host execution", () => {
     const fixture = packageFixture("claude-code-cli");
     fs.symlinkSync("scripts/activated-host-conformance.ts", path.join(fixture.root, "planted-link"));
-    const result = captureActivatedHostConformance({
-      hostId: "claude-code-cli", packageRoot: fixture.root, expectedPackage: fixture.runtimePackage,
-      sourceCommit: SOURCE_COMMIT, release: RELEASE, platform: PLATFORM,
-      capturedAt: CAPTURED_AT, challenge: CHALLENGE, consumerRoots: { website: fixture.root, benchmark: fixture.root },
-      outDir: fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-symlink-out-")),
-    });
-    expect(result).toEqual(expect.objectContaining({ ok: false, code: "runtime_package_mismatch" }));
+    const priorPath = process.env.PATH;
+    process.env.PATH = "";
+    try {
+      const result = captureActivatedHostConformance({
+        hostId: "claude-code-cli", packageRoot: fixture.root, expectedPackage: fixture.runtimePackage,
+        sourceCommit: SOURCE_COMMIT, release: RELEASE, platform: PLATFORM,
+        capturedAt: CAPTURED_AT, challenge: CHALLENGE, consumerRoots: { website: fixture.root, benchmark: fixture.root },
+        outDir: fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-symlink-out-")),
+      });
+      expect(result).toEqual(expect.objectContaining({ ok: false, code: "runtime_package_mismatch" }));
+    } finally {
+      process.env.PATH = priorPath;
+    }
   });
 
   it("refuses to persist a host transcript containing allowlisted authentication material", () => {

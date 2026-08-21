@@ -25827,14 +25827,14 @@ function captureActivatedHostConformance(options) {
   const stageRoot = fs20.mkdtempSync(path24.join(os4.tmpdir(), "guild-activated-host-stage-"));
   let openedHostExecutable = null;
   try {
-    openedHostExecutable = openHostExecutable(options.hostId, process.env, stageRoot);
-    const hostExecutable = openedHostExecutable.identity;
-    const hostVersion = probeHostVersion(options.hostId, openedHostExecutable);
     try {
       verifyAttestedGeneratedRuntimePackage(options.packageRoot, options.expectedPackage);
     } catch (error) {
       return failed2("runtime_package_mismatch", error instanceof Error ? error.message : String(error));
     }
+    openedHostExecutable = openHostExecutable(options.hostId, process.env, stageRoot);
+    const hostExecutable = openedHostExecutable.identity;
+    const hostVersion = probeHostVersion(options.hostId, openedHostExecutable);
     const stagedPlugin = path24.join(stageRoot, "plugin");
     const stagedWebsite = path24.join(stageRoot, "website");
     const stagedBenchmark = path24.join(stageRoot, "benchmark");

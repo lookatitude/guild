@@ -1150,11 +1150,11 @@ export function captureActivatedHostConformance(
   const stageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-host-stage-"));
   let openedHostExecutable: OpenedHostExecutable | null = null;
   try {
+    try { verifyAttestedGeneratedRuntimePackage(options.packageRoot, options.expectedPackage); }
+    catch (error) { return failed("runtime_package_mismatch", error instanceof Error ? error.message : String(error)); }
     openedHostExecutable = openHostExecutable(options.hostId, process.env, stageRoot);
     const hostExecutable = openedHostExecutable.identity;
     const hostVersion = probeHostVersion(options.hostId, openedHostExecutable);
-    try { verifyAttestedGeneratedRuntimePackage(options.packageRoot, options.expectedPackage); }
-    catch (error) { return failed("runtime_package_mismatch", error instanceof Error ? error.message : String(error)); }
     const stagedPlugin = path.join(stageRoot, "plugin");
     const stagedWebsite = path.join(stageRoot, "website");
     const stagedBenchmark = path.join(stageRoot, "benchmark");
