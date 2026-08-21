@@ -16,6 +16,7 @@ import { validateProjectCapabilityProfileV1 } from "../core/contracts/project-ca
 export const MIGRATION_BOUNDARY_SCHEMA = "guild.capability_migration_boundary.v1" as const;
 export const MIGRATION_BOUNDARY_CHANNEL = "next" as const;
 export const MIGRATION_OBSERVATION_SCHEMA = "guild.capability_migration_observation.v1" as const;
+export const MIGRATION_BOUNDARY_EVIDENCE_RELPATH = ".guild/artifacts/capability/migration-boundaries";
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
@@ -223,7 +224,7 @@ function validateRuntimePackage(value: unknown, expectedHost?: MigrationRuntimeH
   return Object.freeze({ host_id: record.host_id, manifest_path: expectedManifest, manifest_sha256: record.manifest_sha256, tree_sha256: record.tree_sha256 });
 }
 
-export function loadAttestedMigrationBoundary(boundaryPath: string): AttestedMigrationBoundaryV1 {
+export function loadAttestedMigrationBoundary(boundaryPath: string, persistProjectRoot?: string): AttestedMigrationBoundaryV1 {
   let parsed: unknown;
   const boundaryBytes = readRegularFileNoFollow(boundaryPath, "migration boundary");
   try {
@@ -240,8 +241,34 @@ export function loadAttestedMigrationBoundary(boundaryPath: string): AttestedMig
     try { fs.writeFileSync(descriptor, boundaryBytes); fs.fsyncSync(descriptor); }
     finally { fs.closeSync(descriptor); }
     const verifiedAt = verifyMigrationBoundaryProvenance(snapshotPath, boundary);
+    if (persistProjectRoot !== undefined) persistBoundaryArtifact(persistProjectRoot, boundary, boundaryBytes);
     return Object.freeze({ boundary, verified_at: verifiedAt });
   } finally { fs.rmSync(temporaryDirectory, { recursive: true, force: true }); }
+}
+
+function persistedBoundaryRelativePath(boundary: MigrationBoundaryV1): string {
+  return `${MIGRATION_BOUNDARY_EVIDENCE_RELPATH}/${boundary.boundary_hash}/boundary.json`;
+}
+
+function persistBoundaryArtifact(projectRoot: string, boundary: MigrationBoundaryV1, bytes: Buffer): void {
+  const relativePath = persistedBoundaryRelativePath(boundary);
+  const destination = path.join(fs.realpathSync(projectRoot), relativePath);
+  try {
+    const existing = readEvidenceFile(projectRoot, relativePath);
+    if (!existing.equals(bytes)) throw new Error(`persisted migration boundary collision: ${boundary.boundary_hash}`);
+    return;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("boundary collision")) throw error;
+  }
+  const written = writeContainedFile(projectRoot, destination, bytes, { policy: "physical" });
+  if (!written.written) throw new Error(`persisted migration boundary refused [${written.code}]: ${boundary.boundary_hash}`);
+}
+
+/** Re-establish remote provenance for a boundary recovered from durable window state. */
+export function verifyPersistedMigrationBoundary(projectRoot: string, expected: MigrationBoundaryV1): void {
+  const artifactPath = path.join(fs.realpathSync(projectRoot), persistedBoundaryRelativePath(expected));
+  const actual = loadMigrationBoundary(artifactPath);
+  if (canonical(actual) !== canonical(expected)) throw new Error(`persisted migration boundary does not match window state: ${expected.boundary_hash}`);
 }
 
 export function loadMigrationBoundary(boundaryPath: string): MigrationBoundaryV1 {

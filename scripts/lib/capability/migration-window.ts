@@ -16,6 +16,7 @@ import {
   loadAttestedMigrationBoundary,
   loadMigrationBoundary,
   loadMigrationObservation,
+  verifyPersistedMigrationBoundary,
   verifyMigrationObservation,
   validateMigrationBoundary,
   validateMigrationObservation,
@@ -225,6 +226,14 @@ export function readMigrationWindow(projectRoot: string): MigrationWindowV1 | nu
     if (raw === null) return null;
     const value = validateMigrationWindow(JSON.parse(raw));
     if (!value) return null;
+    const boundaries = new Map<string, MigrationBoundaryV1>();
+    boundaries.set(value.entry_boundary.boundary_hash, value.entry_boundary);
+    for (const boundary of value.releases) boundaries.set(boundary.boundary_hash, boundary);
+    for (const phase of value.completed_phases) {
+      for (const boundary of phase.releases) boundaries.set(boundary.boundary_hash, boundary);
+      boundaries.set(phase.advanced_with.boundary_hash, phase.advanced_with);
+    }
+    for (const boundary of boundaries.values()) verifyPersistedMigrationBoundary(projectRoot, boundary);
     for (const phase of [...value.completed_phases, value]) for (const observation of phase.observations) verifyMigrationObservation(projectRoot, observation);
     return value;
   } catch { return null; }
@@ -243,7 +252,7 @@ export function startMigrationWindow(options: { projectRoot: string; mode: Capab
   const root = fs.realpathSync(options.projectRoot); const windowPath = path.join(root, MIGRATION_WINDOW_RELPATH);
   try { fs.lstatSync(windowPath); throw new Error("migration window already exists or is invalid"); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  const attested = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath));
+  const attested = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath), options.projectRoot);
   const enteredAt = new Date(Math.max(Date.parse(attested.boundary.merged_at), Date.parse(attested.verified_at))).toISOString();
   const value = validateMigrationWindow({ schema_version: MIGRATION_WINDOW_SCHEMA, mode: "observe", entered_at: enteredAt, entry_boundary: attested.boundary, releases: [], observations: [], completed_phases: [], actor: options.actor });
   if (!value) throw new Error("invalid migration-window start");
@@ -264,7 +273,7 @@ function lastKnownBoundary(window: MigrationWindowV1): MigrationBoundaryV1 | nul
 export function recordMigrationRelease(options: { projectRoot: string; boundaryPath: string; observationPath: string }): MigrationWindowV1 {
   const current = readMigrationWindow(options.projectRoot); if (!current) throw new Error("migration window absent, invalid, or has detached evidence");
   if (current.mode !== "observe" && current.mode !== "shadow") throw new Error(`mode ${current.mode} does not collect migration observations`);
-  const boundary = loadMigrationBoundary(path.resolve(options.boundaryPath)); const observation = loadMigrationObservation(options.projectRoot, path.resolve(options.observationPath));
+  const boundary = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath), options.projectRoot).boundary; const observation = loadMigrationObservation(options.projectRoot, path.resolve(options.observationPath));
   if (Date.parse(observation.observed_at) < Date.parse(current.entered_at)) throw new Error(`${current.mode} evidence predates entry into the current migration phase`);
   const previous = lastKnownBoundary(current);
   const reusesEntryBoundary = current.releases.length === 0 && current.entry_boundary.boundary_hash === boundary.boundary_hash;
@@ -291,7 +300,7 @@ export function advanceMigrationWindow(options: { projectRoot: string; to: Capab
   recoverMigrationTransition(options.projectRoot);
   const current = readMigrationWindow(options.projectRoot); const gates = readFeatureGateRegistry(options.projectRoot);
   if (!current || !gates || current.mode !== gates.resolver_mode) return { status: "refused" as const, blockers: ["migration-window and feature-gate state are absent or disagree"] };
-  const attested = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath)); const boundary = attested.boundary; const verdict = evaluateMigrationAdvance(current, options.to, boundary);
+  const attested = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath), options.projectRoot); const boundary = attested.boundary; const verdict = evaluateMigrationAdvance(current, options.to, boundary);
   if (!verdict.passed) return { status: "refused" as const, blockers: verdict.blockers };
   const completed = current.mode === "observe" || current.mode === "shadow" ? [...current.completed_phases, { mode: current.mode, entered_at: current.entered_at, releases: current.releases, observations: current.observations, advanced_with: boundary }] : current.completed_phases;
   const enteredAt = new Date(Math.max(Date.parse(boundary.merged_at), Date.parse(attested.verified_at))).toISOString();

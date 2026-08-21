@@ -154,6 +154,21 @@ describe("D03 evidence-bound migration window", () => {
     }
   });
 
+  it("reverifies every persisted boundary before trusting recovered window state", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      startMigrationWindow({ projectRoot, mode: "observe", boundaryPath: fixture.boundaryPath, actor: "operator" });
+      expect(readMigrationWindow(projectRoot)?.entry_boundary).toEqual(fixture.boundary);
+      mockGhFailure = true;
+      expect(readMigrationWindow(projectRoot)).toBeNull();
+    } finally {
+      mockGhFailure = false;
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("cannot skip observe or overwrite a corrupt existing timer", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
     const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);

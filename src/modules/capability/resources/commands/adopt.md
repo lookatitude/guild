@@ -49,7 +49,9 @@ qualifies. Accepted run material is copied into immutable project evidence stora
 so normal run retention does not detach a live migration window.
 The boundary must also pass GitHub CLI artifact-attestation verification against
 the exact production workflow, source commit, `next` ref, and GitHub-hosted runner;
-a self-consistent local JSON file is not release provenance.
+a self-consistent local JSON file is not release provenance. Every admitted boundary
+is retained beside the window and its remote attestation is reverified whenever
+persisted state is read, so structurally valid historical JSON cannot be injected.
 Caller-supplied release labels, timestamps, and conformance booleans do not count,
 and evidence produced before entry into the current mode is refused. Advance closes
 the current phase and opens the next; collect and record the new mode's first evidence
