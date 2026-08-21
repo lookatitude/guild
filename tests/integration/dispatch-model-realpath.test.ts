@@ -97,6 +97,39 @@ function validPolicy(): Record<string, unknown> {
   };
 }
 
+function makeLaunchableTmuxBin(root: string): string {
+  const binDir = path.join(root, "fakebin-launchable");
+  const logPath = path.join(root, ".fake-tmux.log");
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(binDir, "tmux"),
+    [
+      "#!/bin/sh",
+      'case "$1" in',
+      '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
+      "  has-session) exit 1;;",
+      "  list-windows) exit 0;;",
+      `  *) printf '%s\\n' "$*" >> ${JSON.stringify(logPath)}; exit 0;;`,
+      "esac",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  return binDir;
+}
+
+function assignmentFiles(root: string, runId: string): string[] {
+  const taskCells = path.join(root, ".guild", "runs", runId, "task-cells");
+  if (!fs.existsSync(taskCells)) return [];
+  return (fs.readdirSync(taskCells, { recursive: true }) as string[])
+    .filter((entry) => entry.endsWith("assignment.json"));
+}
+
+function fakeTmuxLog(root: string): string {
+  const logPath = path.join(root, ".fake-tmux.log");
+  return fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8") : "";
+}
+
 function runLauncher(
   cwd: string,
   extraArgs: string[] = [],
@@ -121,6 +154,9 @@ function runLauncher(
   } else {
     delete env.GUILD_DISPATCH_APPROVAL_OVERRIDE;
   }
+  if (opts.dryRun === false) {
+    env.PATH = `${makeLaunchableTmuxBin(cwd)}:${env.PATH ?? ""}`;
+  }
   const result = spawnSync(
     "npx",
     [
@@ -132,10 +168,10 @@ function runLauncher(
       "guild-t6-realpath",
       "--cwd",
       cwd,
-      // FIC-48: the in-process (agent-mode) rung plans lane models ONLY on a
-      // non-dry run — a dry preflight persists nothing, and the model planner
-      // records M0/M1 evidence. Tests that read the model off the in-process
-      // dispatch descriptor must therefore run that rung non-dry (the
+      // FIC-48/FU08: both paths resolve lane models, but only a real launch
+      // records M0/M1 evidence and emits durable task cells. Tests that read a
+      // dispatch-authorized in-process descriptor must therefore run that rung
+      // non-dry (the
       // in-process port is declarative: it emits cells + a dispatchPlan
       // signal; it spawns no processes).
       ...(opts.dryRun === false ? [] : ["--dry-run"]),
@@ -293,7 +329,8 @@ describe("REAL PATH (F5): production dispatch emits M1 shadow provenance", () =>
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
     });
     seedLifecycleRun(tmp, seededRunId);
-    const { exitCode, stdout, stderr } = runLauncher(tmp);
+    seedContextBundles(tmp, seededRunId);
+    const { exitCode, stdout, stderr } = runLauncher(tmp, [], { dryRun: false });
     expect([stderr, exitCode]).toEqual([stderr, 0]);
 
     const runDirs = findRunDirs(tmp);
@@ -308,12 +345,10 @@ describe("REAL PATH (F5): production dispatch emits M1 shadow provenance", () =>
     // the production writer); the launcher verified it before any write.
     expect(loadRunBinding({ root: tmp, run_id: runId })).not.toBeNull();
 
-    // Task cells were emitted on the production channel. A dry preflight
-    // persists no cells and prints no "emitted" summary line (FIC-48) — the
-    // dispatch channel it exposes is the pane spec itself, where every lane
-    // carries its guild.task_assignment.v2 ref:
-    expect(stdout.match(/GUILD_TASK_ASSIGNMENT=/g)).toHaveLength(3);
-    expect(stdout).toMatch(/task-cells\/architect\/attempts\/1\/instances\//);
+    // Task cells were emitted on the production channel. The deterministic
+    // tmux double executes no host process, but the real launcher persisted one
+    // immutable assignment per lane before invoking that backend.
+    expect(assignmentFiles(tmp, runId)).toHaveLength(3);
     // ...and EVERY cell carried an M1 shadow leg (the F5 wiring):
     expect(stdout.match(/M1 shadow comparison recorded/g)).toHaveLength(3);
 
@@ -349,17 +384,18 @@ describe("REAL PATH (F5): production dispatch emits M1 shadow provenance", () =>
     setupConsumerRepo(tmp, {
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
     });
-    seedLifecycleRun(tmp, "run-20260730-140000-legacy-control");
-    const { exitCode, stdout } = runLauncher(tmp);
+    const runId = "run-20260730-140000-legacy-control";
+    seedLifecycleRun(tmp, runId);
+    seedContextBundles(tmp, runId);
+    const { exitCode, stdout } = runLauncher(tmp, [], { dryRun: false });
     expect(exitCode).toBe(0);
     const runDirs = findRunDirs(tmp);
     expect(runDirs).toHaveLength(1);
     expect(fs.existsSync(path.join(runDirs[0], "shadow"))).toBe(false);
     expect(stdout).not.toMatch(/M1 shadow comparison recorded/);
     expect(stdout).not.toMatch(/M2 v2 selection/);
-    // The production channel still dispatched normally (dry-run signal — the
-    // per-lane assignment refs in the pane spec, FIC-48):
-    expect(stdout.match(/GUILD_TASK_ASSIGNMENT=/g)).toHaveLength(3);
+    // The production channel still dispatched normally; the recorder was inert.
+    expect(assignmentFiles(tmp, runId)).toHaveLength(3);
   });
 });
 
@@ -500,8 +536,8 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
     }
 
     // Non-dry, hash-bound approval-verified unscoped control for the same reason as the
-    // enabled-on rung: a dry preflight skips model planning and is never
-    // dispatch-authorized, so it would make this expectation vacuous.
+    // enabled-on rung: a dry preflight plans in memory but is never dispatch-
+    // authorized, so it would make this expectation vacuous.
     writeApprovedUnscopedCustomTeam(tmp, runId);
     seedContextBundles(tmp, runId, ["custom-role"]);
     const agentRun = runLauncher(tmp, ["--run-id", runId, "--agent-mode=agent"], {
@@ -628,7 +664,10 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
    * cache entry keyed off that context's identity tuple. NO inspection report
    * is planted — that is the thing under test.
    */
-  function seedRunIdentity(runId: string): string {
+  function seedRunIdentity(
+    runId: string,
+    catalogModels: typeof CATALOG_MODELS = CATALOG_MODELS,
+  ): string {
     const binding = mintRunBinding({ root: tmp, run_id: runId });
     const sessionContext = {
       schema_version: SESSION_CONTEXT_SCHEMA,
@@ -685,7 +724,7 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
             failure_reason: null,
           },
           generation: 1,
-          models: CATALOG_MODELS.map((m) => ({
+          models: catalogModels.map((m) => ({
             canonical_id: m.canonical_id,
             tier: m.tier,
             evidence: {
@@ -711,10 +750,15 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
     });
     seedRunIdentity(runId);
+    seedContextBundles(tmp, runId);
     // Precondition: nothing has ever written an inspection report here.
     expect(fs.existsSync(path.join(tmp, ".guild", "runs", runId, "inspection"))).toBe(false);
 
-    const { exitCode, stdout, stderr } = runLauncher(tmp, ["--run-id", runId]);
+    const { exitCode, stdout, stderr } = runLauncher(
+      tmp,
+      ["--run-id", runId],
+      { dryRun: false },
+    );
     expect([stderr, exitCode]).toEqual([stderr, 0]);
     expect(stdout).toMatch(/M0 inspection evidence recorded/);
 
@@ -769,10 +813,15 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
     });
     seedRunIdentity(runId);
+    seedContextBundles(tmp, runId);
     expect(fs.existsSync(path.join(tmp, ".guild", "runs", runId, "inspection"))).toBe(false);
     expect(fs.existsSync(path.join(tmp, ".guild", "runs", runId, "shadow"))).toBe(false);
 
-    const { exitCode, stdout, stderr } = runLauncher(tmp, ["--run-id", runId]);
+    const { exitCode, stdout, stderr } = runLauncher(
+      tmp,
+      ["--run-id", runId],
+      { dryRun: false },
+    );
     expect([stderr, exitCode]).toEqual([stderr, 0]);
     expect(stdout).toMatch(/M0 inspection evidence recorded/);
 
@@ -791,13 +840,49 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
     // the real spawn spec.
     const v2Selections = stdout.match(/M2 v2 selection/g) ?? [];
     expect(v2Selections.length).toBeGreaterThan(0);
-    const modelPanes = stdout
+    const modelPanes = fakeTmuxLog(tmp)
       .split("\n")
-      .filter((l) => l.includes("tmux split-window") && l.includes("--model"));
+      .filter((l) => l.startsWith("split-window ") && l.includes("--model"));
     expect(modelPanes).toHaveLength(v2Selections.length);
     for (const line of modelPanes) {
       expect(line).toContain("--model powerful-model-1");
     }
+  });
+
+  test("dry-run warns that fresh-run M0/M1 evolution can expose a later §6 confirmation while remaining write-free", () => {
+    const runId = "run-20260730-140000-fu08-preview-stage-evolution";
+    const policy = validPolicy();
+    const implementation = (policy.purposes as Record<string, Record<string, unknown>>)
+      .implementation;
+    implementation.confirm_on_degradation = true;
+    const route = (implementation.routes as Array<{
+      fallbacks: Array<Record<string, unknown>>;
+    }>)[0];
+    route.fallbacks[0].effort = "high";
+    setupConsumerRepo(tmp, {
+      model_routing: { shadow: "on", enabled: "on" },
+      model_policy: policy,
+      models: { tiers: { mid: { claude: "legacy-model-9" } } },
+    });
+    const catalog = CATALOG_MODELS.map((model, index) => ({
+      ...model,
+      evidence: { state: index === 0 ? "unavailable" : "available" },
+    })) as typeof CATALOG_MODELS;
+    seedRunIdentity(runId, catalog);
+    seedContextBundles(tmp, runId);
+
+    const runDir = path.join(tmp, ".guild", "runs", runId);
+    const preview = runLauncher(tmp, ["--run-id", runId], { dryRun: true });
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toMatch(
+      /BLOCKED PREVIEW:.*M0\/M1.*later-lane M2 selection.*confirmation/is,
+    );
+    expect(fs.existsSync(path.join(runDir, "inspection"))).toBe(false);
+    expect(fs.existsSync(path.join(runDir, "shadow"))).toBe(false);
+
+    const real = runLauncher(tmp, ["--run-id", runId], { dryRun: false });
+    expect(real.exitCode).not.toBe(0);
+    expect(real.stderr).toMatch(/confirmation_required/);
   });
 
   test("CONTROL (anti-vacuity): ADR-default flags over the SAME identity tree → NO inspection report is written at all", () => {
@@ -808,15 +893,19 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
       models: { tiers: { mid: { claude: "legacy-model-9" } } },
     });
     seedRunIdentity(runId);
+    seedContextBundles(tmp, runId);
 
-    const { exitCode, stdout, stderr } = runLauncher(tmp, ["--run-id", runId]);
+    const { exitCode, stdout, stderr } = runLauncher(
+      tmp,
+      ["--run-id", runId],
+      { dryRun: false },
+    );
     expect([stderr, exitCode]).toEqual([stderr, 0]);
     expect(stdout).not.toMatch(/M0 inspection evidence recorded/);
     expect(stdout).not.toMatch(/M2 v2 selection/);
     expect(fs.existsSync(path.join(tmp, ".guild", "runs", runId, "inspection"))).toBe(false);
     // The dispatch still happened — the recorder is inert, not blocking.
-    // (Dry-run dispatch signal: the per-lane assignment refs, FIC-48.)
-    expect(stdout.match(/GUILD_TASK_ASSIGNMENT=/g)).toHaveLength(3);
+    expect(assignmentFiles(tmp, runId)).toHaveLength(3);
   });
 });
 

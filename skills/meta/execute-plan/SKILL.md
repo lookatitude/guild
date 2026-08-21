@@ -165,7 +165,7 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
 
 **Per-backend injection (concrete, code-backed):**
 
-- **Subagent / in-process (`agent`) — model-driven path:** the launcher refuses this rung when any lane has a resolved scope. The resolver contract below is retained for the future verified child-env capability and for the legacy unscoped unknown/project-role path; it does not authorize a scoped production `Agent()` call. Every `--dry-run`—scoped or unscoped—emits a non-dispatchable preview (`dispatchAllowed:false`, `previewOnly:true`) for inspection only:
+- **Subagent / in-process (`agent`) — model-driven path:** the launcher refuses this rung when any lane has a resolved scope. The resolver contract below is retained for the future verified child-env capability and for the legacy unscoped unknown/project-role path; it does not authorize a scoped production `Agent()` call. Every `--dry-run`—scoped or unscoped—emits a non-dispatchable, write-free preview (`dispatchAllowed:false`, `previewOnly:true`) for inspection only; it consumes no approval override and writes no run-tree state:
 
   ```ts
   // (-1) CONSUME THE LAUNCHER'S FAIL-CLOSED DECISION BEFORE ANY LANE WORK.

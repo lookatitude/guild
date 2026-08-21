@@ -799,6 +799,8 @@ export interface TeamLaunchRequestLike {
   readonly targetName: string;
   readonly mode: string;
   readonly dryRun: boolean;
+  /** Adapter-only preflight pass owned by a pending real dispatch. */
+  readonly preflightOnly?: boolean;
   /**
    * Optional run-scoping the shipped backends already accept. Declared here so a
    * RUN-SCOPED launch fits the versioned request without the caller reaching past
@@ -1116,6 +1118,18 @@ export function selectExecutionSubstrate(
 
   if (probe.insideMultiplexer()) {
     return selection("team", "tmux", "auto: $TMUX set → team in-session");
+  }
+  // FU08: auto preview may read ambient environment facts, but it must not
+  // execute `tmux -V` (or any other substrate probe). Use the closed serial
+  // floor and say exactly what the later real dispatch will re-evaluate.
+  if (request.dry_run) {
+    return selection(
+      "subagent",
+      null,
+      "auto preview: tmux availability probe withheld → subagent preview floor",
+      null,
+      "[agent-team-launcher] NOTICE: pure preview did not execute `tmux -V`; a real dispatch will probe again and may select tmux.\n",
+    );
   }
   if (probe.multiplexerAvailable()) {
     return selection("team", "tmux", "auto: tmux installed → team new-session");

@@ -111,6 +111,18 @@ function runLauncher(
   return { exitCode: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
 }
 
+function makeFakeCmuxBin(root: string): string {
+  const binDir = path.join(root, "fake-cmux-bin");
+  fs.mkdirSync(binDir, { recursive: true });
+  const cmux = path.join(binDir, "cmux");
+  fs.writeFileSync(
+    cmux,
+    ["#!/bin/sh", "exit 0", ""].join("\n"),
+    { mode: 0o755 },
+  );
+  return binDir;
+}
+
 describe("W4 — frozen snapshot.dispatch is authoritative on the launcher path", () => {
   let tmpDir: string;
 
@@ -136,6 +148,34 @@ describe("W4 — frozen snapshot.dispatch is authoritative on the launcher path"
     const signal = JSON.parse(stdout.trim().split("\n").pop() as string);
     expect(signal.backend).toBe("cmux");
     expect(signal.reason).toMatch(/frozen at run start/i);
+  });
+
+  it("real frozen-cmux dispatch refuses adapter preflight before immutable task-cell writes", () => {
+    const { teamPath } = seedRepo(tmpDir);
+    fs.copyFileSync(path.join(FIXTURES, "team-mixed-host.yaml"), teamPath);
+    // An empty .git directory is not a repository and makes the strict
+    // specialist-instance source-commit probe fail before dispatch ordering;
+    // this case exercises cmux preflight, so retain the normal non-repo fixture.
+    fs.rmSync(path.join(tmpDir, ".git"), { recursive: true, force: true });
+    writeFrozenDispatch(tmpDir, "cmux");
+    const emptyCodexHome = path.join(tmpDir, "empty-codex-home");
+    fs.mkdirSync(emptyCodexHome, { recursive: true });
+    const fakeBin = makeFakeCmuxBin(tmpDir);
+
+    const { exitCode, stderr } = runLauncher(
+      ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team"],
+      {
+        CMUX_WORKSPACE_ID: "ws-real-preflight",
+        CODEX_HOME: emptyCodexHome,
+        OPENAI_API_KEY: undefined,
+        PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+      },
+    );
+
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/cmux preflight refused|no OPENAI_API_KEY/i);
+    expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", RUN_ID, "task-cells"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", RUN_ID, "task-runs"))).toBe(false);
   });
 
   it("frozen tmux wins when ambient CMUX_WORKSPACE_ID IS set at dispatch", () => {
@@ -193,6 +233,15 @@ describe("W4 — frozen snapshot.dispatch is authoritative on the launcher path"
     const signal = JSON.parse(stdout.trim().split("\n").pop() as string);
     expect(signal.backend).toBe("cmux");
     expect(signal.reason).toMatch(/frozen at run start/i);
+    expect(signal.taskCellsWritten).toBe(0);
+    expect(signal.plannedCommands).toEqual(expect.arrayContaining([
+      expect.stringMatching(/cmux new-pane/),
+    ]));
+    expect(signal.notes.join(" ")).toMatch(/availability.*withheld.*real dispatch/i);
+    expect(signal.teamResult).toBeNull();
+    expect(signal.manifest).toBeNull();
+    expect(signal.teamResultPreview).toBeDefined();
+    expect(signal.manifestPreview).toBeDefined();
   });
 
   it.each(["agent", "subagent"] as const)(

@@ -445,7 +445,7 @@
       "id": "projection:src/modules/dispatch/workflows/confirmation-gate.ts",
       "source_path": "src/modules/dispatch/workflows/confirmation-gate.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/confirmation-gate.ts",
-      "sha256": "ea6142ff8c350e30d658eea37ba21189270d0e0dd475f4c7421458336fbf6983",
+      "sha256": "6bf1001e65f5b42944a6724760e4fbd4e0750fc08988c159c0749c39ce6d21e0",
       "projection_dependency": true
     },
     {
@@ -461,7 +461,7 @@
       "id": "projection:src/modules/dispatch/workflows/execution-transport-ports.ts",
       "source_path": "src/modules/dispatch/workflows/execution-transport-ports.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-ports.ts",
-      "sha256": "f4e744f907ab6fc29cae9a46990bd26e2db9234687a11e0e950514dd2b327d70",
+      "sha256": "2973ab867149ce79dd1e82079bdb3e2b12b01fd2583b8902abcb09afc22b1713",
       "projection_dependency": true
     },
     {
@@ -485,7 +485,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-assignment-v2.ts",
       "source_path": "src/modules/dispatch/workflows/task-assignment-v2.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-assignment-v2.ts",
-      "sha256": "7646c62a863502f0a9c586e3bbdb1a5b334ea32ffe1950a7228507770940f45d",
+      "sha256": "a662f11a57db06ff7a4dbe3c7be121de2c4a610974a984e2bc21b1ed1a8e7937",
       "projection_dependency": true
     },
     {
@@ -1647,14 +1647,14 @@
       "id": "guild-execute-plan",
       "source_path": "skills/meta/execute-plan/SKILL.md",
       "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
-      "sha256": "6d83d8153b3740f42da600dc390c746d5743a7882b2878b75426e8fabc96b8a4"
+      "sha256": "85750138684a73ff36a1c4b5dcba1719b90a6ba4581930596c4eb74a61395c93"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan/dispatch.md",
       "source_path": "skills/meta/execute-plan/dispatch.md",
       "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
-      "sha256": "3511e49de024176a30eff181af40e1a0ba2fc6bb560851b019cd535e6c8c8500"
+      "sha256": "78c44150d27803ed51b2ba41d310faec6c207c2ad3d0c2322aeb83ad33a16ba4"
     },
     {
       "category": "skills",

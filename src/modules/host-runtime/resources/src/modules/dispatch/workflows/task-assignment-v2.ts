@@ -75,7 +75,11 @@ import {
 // point. Before this, `claimPrompt`/`createRunLocalState` had zero production
 // callers, so nothing stopped one degradation approval from being reused
 // across a different target, purpose, or fallback shape.
-import { claimConfirmation } from "./confirmation-gate";
+import {
+  claimConfirmation,
+  previewConfirmation,
+  type PreviewConfirmationSession,
+} from "./confirmation-gate";
 import type { SpecialistModelProvenance } from "./specialist-contract";
 import { publishTaskCellFile, type TaskCellArtifactKind } from "./task-cell-artifact-join";
 
@@ -785,6 +789,10 @@ export function planProductionDispatchModel(input: {
   catalogSnapshot?: unknown;
   policy?: unknown;
   request?: ResolveRequest;
+  /** Compute the exact plan but suppress every run-tree write. */
+  preview?: boolean;
+  /** Shared by all lanes in one preview so prompt ids match sequential dispatch. */
+  previewConfirmationSession?: PreviewConfirmationSession;
 }): ProductionDispatchModelOutcome {
   const settings =
     input.settings !== undefined ? input.settings : readSettingsJson(input.cwd);
@@ -822,7 +830,7 @@ export function planProductionDispatchModel(input: {
     receiptPath: null,
     comparisonPath: null,
   };
-  if (plan.shadow.ran) {
+  if (plan.shadow.ran && input.preview !== true) {
     shadowArtifacts = persistShadowArtifacts(input.cwd, plan.shadow, {
       run_id: input.runId,
       binding_ref: input.binding?.binding_ref,
@@ -892,13 +900,21 @@ export function planProductionDispatchModel(input: {
           "confirm_on_degradation:false — no prompt claimed",
       };
     } else {
-      // A partial key throws inside the arbiter (fail closed); an unverifiable
-      // binding throws before any write. Neither is swallowed here.
-      const claim = claimConfirmation({
-        root: input.cwd,
-        binding: { run_id: input.runId, binding_ref: input.binding?.binding_ref as string },
-        key: confirmationKeyForReceipt(receipt),
-      });
+      // Preview replays the same exact-key arbiter in memory without claiming
+      // a durable prompt. The real path keeps the binding-verified write.
+      const key = confirmationKeyForReceipt(receipt);
+      const claim = input.preview === true
+        ? previewConfirmation({
+            root: input.cwd,
+            runId: input.runId,
+            key,
+            session: input.previewConfirmationSession,
+          })
+        : claimConfirmation({
+            root: input.cwd,
+            binding: { run_id: input.runId, binding_ref: input.binding?.binding_ref as string },
+            key,
+          });
       confirmation = {
         required: true,
         decided: claim.already_decided,
@@ -906,7 +922,8 @@ export function planProductionDispatchModel(input: {
         prompt_id: claim.prompt_id,
         reason:
           `v2 selection degraded (${degradation.kind}: ${degradation.note}) and the purpose policy ` +
-          `requires confirmation — §6 prompt ${claim.prompt_id} claimed over the exact 6-tuple; ` +
+          `requires confirmation — §6 prompt ${claim.prompt_id} ` +
+          `${input.preview === true ? "previewed without persistence" : "claimed"} over the exact 6-tuple; ` +
           (claim.already_decided
             ? `already decided "${claim.decision}"`
             : "AWAITING a user decision — dispatch must block (Guild never auto-approves)"),

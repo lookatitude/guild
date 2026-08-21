@@ -19,7 +19,8 @@
  *     cross-host routing block calls planTeamRouting() → onDecision persists
  *     {host, tier, model} into run-state.json keyed by the plan task-id.
  *     The launcher is spawned as a real subprocess (its hooks-heavy import
- *     chain cannot be imported under ts-jest) with --dry-run, and the test
+ *     chain cannot be imported under ts-jest) against a deterministic tmux
+ *     double, and the test
  *     reads the run-state file the production onDecision wrote. If the caller
  *     dropped the scored tier, lanes[task].host.tier would be "mid".
  *
@@ -158,9 +159,9 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     });
     expect(fs.existsSync(manifestPath)).toBe(true);
 
-    // 4. Run the REAL launcher (dry-run: no tmux spawned; the routing block +
-    //    run-state persistence run before any spawn). Cross-host enabled via env
-    //    so the planTeamRouting block engages.
+    // 4. Run the REAL launcher against a deterministic tmux double. FU08 makes
+    //    dry-run a pure preview, so persistence coverage must exercise the real
+    //    launch path while preventing any actual pane/session creation.
     const env = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
     delete env["TMUX"]; // force new-session mode regardless of the test runner's env
     env["GUILD_HOST_ID"] = "claude";
@@ -175,6 +176,27 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
 
     const runId = "run-20260812-071100-tier-threading";
     mintRunBinding({ root: repo, run_id: runId });
+    const contextDir = path.join(repo, ".guild", "context", runId);
+    fs.mkdirSync(contextDir, { recursive: true });
+    fs.writeFileSync(path.join(contextDir, "sec-arch-T1-route.md"), "# security context\n");
+    fs.writeFileSync(path.join(contextDir, "doc-check-T2-check.md"), "# docs context\n");
+    const fakeBin = path.join(repo, "fakebin");
+    fs.mkdirSync(fakeBin, { recursive: true });
+    fs.writeFileSync(
+      path.join(fakeBin, "tmux"),
+      [
+        "#!/bin/sh",
+        'case "$1" in',
+        '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
+        "  has-session) exit 1;;",
+        "  list-windows) exit 0;;",
+        "  *) exit 0;;",
+        "esac",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    env["PATH"] = `${fakeBin}:${env["PATH"] ?? ""}`;
     const r = spawnSync(
       "npx",
       [
@@ -187,7 +209,6 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
         "--run-id",
         runId,
         "--agent-mode=team",
-        "--dry-run",
         "--session-name",
         "guild-tierthread-test",
       ],

@@ -583,6 +583,36 @@ describe("T7R-R1-B1 — the ONLY escape is an explicit, audited operator overrid
     expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
   });
 
+  it("FU08: preview validates but does not consume an override; the next real dispatch must re-present it", () => {
+    const { root, teamPath } = seedNone();
+    const reason = "preview only; real dispatch must ask again";
+    const preview = launchWith(root, teamPath, {
+      dryRun: true,
+      extraArgs: ["--approval-override", reason],
+    });
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stderr).toMatch(/withheld.*real dispatch.*re-present/i);
+    expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
+
+    const real = launchWith(root, teamPath, { dryRun: false });
+    expect(real.exitCode).not.toBe(0);
+    expect(real.stderr).toContain("no_persisted_proposal");
+    expect(real.tmuxInvocations).toEqual([]);
+    expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
+  });
+
+  it("FU08: a boolean-shaped preview override is refused exactly like a real one", () => {
+    const { root, teamPath } = seedNone();
+    const preview = launchWith(root, teamPath, {
+      dryRun: true,
+      extraArgs: ["--approval-override", "1"],
+    });
+    expect(preview.exitCode).not.toBe(0);
+    expect(preview.stderr).toContain("dispatch_approval_override_unreasoned");
+    expect(preview.tmuxInvocations).toEqual([]);
+    expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
+  });
+
   it("an ENV override with a boolean value is refused the same way (no silent default)", () => {
     const { root, teamPath } = seedNone();
     const run = launchWith(root, teamPath, {

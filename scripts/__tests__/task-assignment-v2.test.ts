@@ -44,6 +44,10 @@ import {
   mintRunBinding,
   runBindingPath,
 } from "../../src/modules/lifecycle/workflows/run-binding";
+import {
+  createPreviewConfirmationSession,
+  previewConfirmation,
+} from "../../src/modules/dispatch/workflows/confirmation-gate";
 
 /** T3 F3: mint-or-load the run's binding under this test root (writers verify it). */
 function bindFor(cwd: string, runId: string): { binding_ref: string } {
@@ -363,5 +367,42 @@ describe("T3 F3 — v2 descriptor writers fail closed on the run binding", () =>
     // And the hijacked run id (no minted binding) cannot authorize anything.
     const hijacked = buildTaskCell(dispatch({ runId: "run-hijack", logicalTaskId: "T9-x" }));
     expect(() => writeTaskCell(cwd, hijacked, bind)).toThrow(BindingRejectedError);
+  });
+});
+
+describe("FU08 — one preview session allocates faithful run-local confirmation ids", () => {
+  const key = (target: string) => ({
+    run_id: "run-fu08-confirmations",
+    purpose: "implementation",
+    target_id: target,
+    policy_hash: "sha256:policy",
+    catalog_hash: "sha256:catalog",
+    fallback_hash: "sha256:fallback",
+  });
+
+  it("shares the in-memory arbiter so distinct lane keys cannot collide", () => {
+    const cwd = tmpCwd();
+    const session = createPreviewConfirmationSession(cwd, "run-fu08-confirmations");
+    const first = previewConfirmation({
+      root: cwd,
+      runId: "run-fu08-confirmations",
+      key: key("model-a"),
+      session,
+    });
+    const second = previewConfirmation({
+      root: cwd,
+      runId: "run-fu08-confirmations",
+      key: key("model-b"),
+      session,
+    });
+    const repeat = previewConfirmation({
+      root: cwd,
+      runId: "run-fu08-confirmations",
+      key: key("model-a"),
+      session,
+    });
+
+    expect([first.prompt_id, second.prompt_id, repeat.prompt_id]).toEqual([0, 1, 0]);
+    expect(fs.existsSync(first.statePath)).toBe(false);
   });
 });

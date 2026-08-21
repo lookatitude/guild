@@ -549,10 +549,19 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * unscoped production signal can be `true` / `false`. Registry and mirrors were
  * regenerated. ANTI-VACUITY: check-surface-pins was observed RED against the
  * Round-6 pin and named only `tree_pin_stale skills/skills`, computing 3096e445.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-08 pure launcher previews) — `skills` moves
+ * 3096e445 → 28af180d. Execute-plan now states the launcher-wide invariant:
+ * every dry run is write-free, consumes no approval override, and must
+ * re-present approval for a real dispatch. `skill-src/skill-registry.json` and
+ * module-resource mirrors were regenerated. ANTI-VACUITY: the full cross-
+ * cutting suite was observed RED against the Round-7 pin and named both the
+ * stale execute-plan registry and `tree_pin_stale skills/skills`, computing
+ * 28af180d.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "b4695c3fad17bb19ccdb0f4768e7938658d122de",
-  skills: "3096e445c72b96d81c6e51f4d257e58b95a5f4c4",
+  skills: "28af180d5c79fcdf52dcfc6c076df5a2c8d5946f",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

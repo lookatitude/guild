@@ -164,6 +164,74 @@ describe("W4 — CmuxTeamBackend", () => {
     expect(result.ok).toBe(true);
     expect(run).not.toHaveBeenCalled();
     expect(result.plannedCommands.join("\n")).toContain("--focus false");
+    expect(result.notes.join(" ")).toMatch(/availability.*withheld.*real dispatch/i);
+    expect(result.notes.join(" ")).toMatch(/real dispatch may refuse.*before.*writ.*launch/i);
+  });
+
+  it("FU08 CONTROL: dry-run skips adapter preflight and performs no cmux calls", () => {
+    const run: jest.MockedFunction<RunFn> = jest.fn(
+      (_cmd: string, _args: string[]) => ({ status: 0, stdout: "", stderr: "" }),
+    );
+    const refusingAdapter: PaneAdapter = {
+      hostKind: "codex",
+      adapterVersion: "test",
+      preflight: jest.fn(() => { throw new Error("planted preview subprocess"); }),
+      command: () => "codex exec",
+      env: () => ({}),
+      expectedOutputs: () => [],
+    };
+    const result = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      run,
+      resolveAdapter: () => refusingAdapter,
+    }).launch({
+      slug: "cmux-preview-failure",
+      runId: "run-20260820-120000-cmux-preview-failure",
+      cwd: process.cwd(),
+      specialists: [{ ...lane("backend", "T1"), host_kind: "codex" }],
+      targetName: "workspace:9",
+      mode: "in-session",
+      dryRun: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(refusingAdapter.preflight).not.toHaveBeenCalled();
+    expect(result.plannedCommands.join("\n")).toContain("codex exec");
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("real-dispatch planning preflights adapters without opening cmux surfaces", () => {
+    const run: jest.MockedFunction<RunFn> = jest.fn(
+      (_cmd: string, _args: string[]) => ({ status: 0, stdout: "", stderr: "" }),
+    );
+    const refusingAdapter: PaneAdapter = {
+      hostKind: "codex",
+      adapterVersion: "test",
+      preflight: jest.fn(() => ({ ok: false, message: "planted unavailable Codex" })),
+      command: () => "codex exec",
+      env: () => ({}),
+      expectedOutputs: () => [],
+    };
+    const backend = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      run,
+      resolveAdapter: () => refusingAdapter,
+    });
+
+    const result = backend.launch({
+      slug: "cmux-real-preflight",
+      runId: "run-20260820-120000-cmux-real-preflight",
+      cwd: process.cwd(),
+      specialists: [{ ...lane("backend", "T1"), host_kind: "codex" }],
+      targetName: "workspace:9",
+      mode: "in-session",
+      dryRun: true,
+      preflightOnly: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.notes.join("\n")).toMatch(/planted unavailable Codex/);
+    expect(refusingAdapter.preflight).toHaveBeenCalledTimes(1);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("carries and consumes the exact definition ref for a non-Claude lane before reporting it", () => {

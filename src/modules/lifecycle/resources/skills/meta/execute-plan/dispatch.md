@@ -54,7 +54,10 @@ Only an unscoped unknown/project role can reach the legacy declarative path
 below in production; that path makes no capability-scope claim. Every
 `--dry-run`, including an unscoped custom/project role, may return the same
 descriptor shape solely for inspection, always with `dispatchAllowed:false`
-and `previewOnly:true`. The shape is retained as the future re-enable seam:
+and `previewOnly:true`. It is a pure preview: approval overrides are not
+consumed or recorded, and no task-run, TaskCell, receipt, evidence, result,
+manifest, trace, or other run-tree state is written. The shape is retained as
+the future re-enable seam:
 
 The consumer must require the exact tuple `dispatchAllowed:true` and
 `previewOnly:false` before any task-run write, scope resolution, descriptor
@@ -388,13 +391,13 @@ When the target repo IS the Guild plugin itself (self-build), `team.yaml` is com
 
 ## Agent-team launcher
 
-When the snapshot-resolved backend is `agent-team` (the D5 ladder resolved `agent_mode` to `team` at intake; team is primary whenever tmux is present — not an opt-in), invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; it writes a session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
+When the snapshot-resolved backend is `agent-team` (the D5 ladder resolved `agent_mode` to `team` at intake; team is primary whenever tmux is present — not an opt-in), invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; a real launch writes its session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
 
 ```
 npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root>
 ```
 
-`<resolved-team-path>` is the **`resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** result (`scripts/lib/team-file.ts`) — the per-phase `.guild/team/<slug>.<phase>.yaml` (or legacy `.guild/team/<slug>.yaml` on back-compat). **Never reconstruct `.guild/team/<slug>.yaml` here** — pass the resolved path the input step (`## Input`) already computed. The launcher's `slugFromTeamPath` tolerates the `<slug>.<phase>.yaml` basename. Pass `--dry-run` first to preview the tmux commands without spawning the session; use `--session-name` when a name collision would otherwise block launch.
+`<resolved-team-path>` is the **`resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** result (`scripts/lib/team-file.ts`) — the per-phase `.guild/team/<slug>.<phase>.yaml` (or legacy `.guild/team/<slug>.yaml` on back-compat). **Never reconstruct `.guild/team/<slug>.yaml` here** — pass the resolved path the input step (`## Input`) already computed. The launcher's `slugFromTeamPath` tolerates the `<slug>.<phase>.yaml` basename. Pass `--dry-run` first to preview the resolved commands and in-memory manifest without spawning the session or writing anything; use `--session-name` when a name collision would otherwise block launch.
 
 ## Capability-scope env injection
 
