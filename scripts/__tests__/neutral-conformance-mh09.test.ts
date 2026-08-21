@@ -2928,13 +2928,22 @@ describe("the FU04 public root-admission bridge", () => {
   });
 
   it("closes the proving window after the live source trust roots rotate while preserving historical verification", () => {
-    const material = writeAdmissionMaterial("rotated-live-root", candidateIds[0], 0);
-    const otherRoots = candidateIds.slice(1).map((id) => ReferenceMh09.buildTree(`fu04-rotated-${id}`).root);
-    const manifest = candidateManifest([material.tree.root, ...otherRoots]);
-    const registryPath = path.join(material.custodyRoot, "used-one-time-keys.json");
+    const materials = candidateIds.map((id, index) => writeAdmissionMaterial(`rotated-live-root-${index}`, id, 0));
+    const manifest = candidateManifest(materials.map((entry) => entry.tree.root));
+    const proofs = materials.map((entry) =>
+      Signer.invoke<Record<string, unknown>>("signRootAdmissionProof", {
+        candidate_manifest: manifest,
+        material_path: entry.materialPath,
+        output_path: path.join(entry.custodyRoot, "proof.json"),
+        used_key_registry_path: path.join(entry.custodyRoot, "used-one-time-keys.json"),
+        custody_root_path: entry.custodyRoot,
+      }),
+    );
+    const registryPath = path.join(materials[0].custodyRoot, "used-one-time-keys.json");
+    const registryBefore = fs.readFileSync(registryPath, "utf8");
     const rotatedTrustRoot = NEUTRAL_ATTESTOR_TRUST_ROOT.map((entry, index) => ({
       ...entry,
-      verification_root: index === 0 ? material.tree.root : entry.verification_root,
+      verification_root: index === 0 ? materials[0].tree.root : entry.verification_root,
     }));
 
     let rotatedSigner: Record<string, unknown> | undefined;
@@ -2951,17 +2960,21 @@ describe("the FU04 public root-admission bridge", () => {
     expect(() =>
       (rotatedSigner?.signRootAdmissionProof as (options: unknown) => unknown)({
         candidate_manifest: manifest,
-        material_path: material.materialPath,
-        output_path: path.join(material.custodyRoot, "proof.json"),
+        material_path: materials[0].materialPath,
+        output_path: path.join(materials[0].custodyRoot, "second-proof.json"),
         used_key_registry_path: registryPath,
-        custody_root_path: material.custodyRoot,
+        custody_root_path: materials[0].custodyRoot,
       }),
     ).toThrow(/proving window|live trust|rotat|predecessor/i);
-    expect(fs.existsSync(registryPath)).toBe(false);
+    expect(fs.readFileSync(registryPath, "utf8")).toBe(registryBefore);
 
-    expect(() =>
-      Signer.invoke("rootAdmissionManifestDigest", manifest),
-    ).not.toThrow();
+    const historicalBundle = (rotatedSigner?.verifyRootAdmissionBundle as (
+      candidateManifest: unknown,
+      possessionProofs: unknown,
+    ) => Record<string, unknown>)(manifest, proofs);
+    expect(historicalBundle.candidate_root_possession_verified).toBe(true);
+    expect(historicalBundle.external_custody_verified).toBe(false);
+    expect(historicalBundle.authorizes_rotation).toBe(false);
   });
 
   it("assembles only three matching production proofs and still refuses to claim custody or authorize rotation", () => {
