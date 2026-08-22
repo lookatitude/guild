@@ -29434,12 +29434,13 @@ function createRunLifecycle(env) {
           const failAndRollback = (reason) => {
             throw new Error(reason);
           };
-          if (!env.recordCapabilityBaselineCapture) {
-            failAndRollback(`[run-lifecycle] capability run-start receipt recorder is unavailable for ${runId}`);
+          const recordCapabilityBaselineCapture = env.recordCapabilityBaselineCapture;
+          if (!recordCapabilityBaselineCapture) {
+            throw new Error(`[run-lifecycle] capability run-start receipt recorder is unavailable for ${runId}`);
           }
           let recorded = false;
           try {
-            recorded = env.recordCapabilityBaselineCapture(root, {
+            recorded = recordCapabilityBaselineCapture(root, {
               run_id: runId,
               run_started_at: nowIso,
               snapshot_sha256: capabilityBaselineHash,
