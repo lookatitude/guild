@@ -57,7 +57,7 @@
       "id": "lib/path-containment-registry",
       "source_path": "scripts/lib/path-containment-registry.ts",
       "resource_path": "resources/scripts/lib/path-containment-registry.ts",
-      "sha256": "8c7db3c922cef72cbcaf2384d91809f5eccfbed8cae95eb3c40fe19189f9da1e"
+      "sha256": "60a8dd67094731ed30943ffd5899547629a51f21dc4fa3b610fed189fc00d654"
     },
     {
       "category": "scripts",
