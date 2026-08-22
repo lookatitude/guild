@@ -14147,7 +14147,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep8) => `${key}${sep8}${KV_REDACTED}`
+    (_match, key, sep9) => `${key}${sep9}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -25482,6 +25482,7 @@ var init_run_lifecycle = __esm({
 // run-trace-close.ts
 var run_trace_close_exports = {};
 __export(run_trace_close_exports, {
+  collectCorroboratedTouchedTasks: () => collectCorroboratedTouchedTasks,
   findActiveWork: () => findActiveWork,
   findTerminalCheckpoint: () => findTerminalCheckpoint,
   recoverPrematureClose: () => recoverPrematureClose
@@ -26763,6 +26764,79 @@ var readScalarField2 = readScalarField;
 
 // run-trace-close.ts
 var REOPEN_TOLERANCE_MS = 2e3;
+var SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/;
+var TERMINAL_LANE_STATUSES = /* @__PURE__ */ new Set(["done", "failed", "dead", "skipped"]);
+var MAX_PROVENANCE_LANES = 512;
+var MAX_ATTEMPTS_PER_LANE = 64;
+function readRegularJson(filePath) {
+  let descriptor = null;
+  try {
+    const stats = fs26.lstatSync(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) return null;
+    descriptor = fs26.openSync(filePath, fs26.constants.O_RDONLY | fs26.constants.O_NOFOLLOW);
+    if (!fs26.fstatSync(descriptor).isFile()) return null;
+    const parsed = JSON.parse(fs26.readFileSync(descriptor, "utf8"));
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== null) fs26.closeSync(descriptor);
+  }
+}
+function pathIsPhysicallyContained(parent, candidate) {
+  try {
+    const realParent = fs26.realpathSync(parent);
+    const realCandidate = fs26.realpathSync(candidate);
+    return realCandidate.startsWith(`${realParent}${path35.sep}`);
+  } catch {
+    return false;
+  }
+}
+function directoryChainIsPhysical(parent, candidate) {
+  const relative7 = path35.relative(parent, candidate);
+  if (relative7.length === 0 || relative7.startsWith("..") || path35.isAbsolute(relative7)) return false;
+  let current = parent;
+  try {
+    for (const segment of relative7.split(path35.sep)) {
+      current = path35.join(current, segment);
+      const stats = fs26.lstatSync(current);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) return false;
+    }
+    return pathIsPhysicallyContained(parent, candidate);
+  } catch {
+    return false;
+  }
+}
+function collectCorroboratedTouchedTasks(runDir4, runId) {
+  const state = readRegularJson(path35.join(runDir4, "run-state.json"));
+  const lanes = state?.["lanes"];
+  if (state?.["schema_version"] !== "guild.run_state.v1" || state?.["run_id"] !== runId || lanes === null || typeof lanes !== "object" || Array.isArray(lanes)) return [];
+  const entries = Object.entries(lanes);
+  if (entries.length === 0 || entries.length > MAX_PROVENANCE_LANES) return [];
+  const touched = [];
+  for (const [taskId, rawLane] of entries) {
+    if (!SAFE_TASK_ID.test(taskId) || rawLane === null || typeof rawLane !== "object" || Array.isArray(rawLane)) continue;
+    const lane = rawLane;
+    if (typeof lane["status"] !== "string" || !TERMINAL_LANE_STATUSES.has(lane["status"])) continue;
+    const attemptsDir = path35.join(runDir4, "task-cells", taskId, "attempts");
+    if (!directoryChainIsPhysical(runDir4, attemptsDir)) continue;
+    let attemptNames;
+    try {
+      attemptNames = fs26.readdirSync(attemptsDir).filter((name) => SAFE_TASK_ID.test(name)).sort();
+    } catch {
+      continue;
+    }
+    if (attemptNames.length === 0 || attemptNames.length > MAX_ATTEMPTS_PER_LANE) continue;
+    const corroborated = attemptNames.some((attemptName) => {
+      const attemptPath = path35.join(attemptsDir, attemptName, "attempt.json");
+      if (!directoryChainIsPhysical(runDir4, path35.dirname(attemptPath)) || !pathIsPhysicallyContained(runDir4, attemptPath)) return false;
+      const attempt = readRegularJson(attemptPath);
+      return attempt?.["schema_version"] === "guild.task_attempt.v1" && attempt["run_id"] === runId && attempt["logical_task_id"] === taskId && attempt["immutable"] === true && typeof attempt["terminal_state"] === "string" && attempt["terminal_state"].length > 0 && typeof attempt["terminated_at"] === "string" && Number.isFinite(Date.parse(attempt["terminated_at"]));
+    });
+    if (corroborated) touched.push(taskId);
+  }
+  return touched.sort();
+}
 function findActiveWork(runDir4) {
   try {
     const raw = fs26.readFileSync(path35.join(runDir4, "run-state.json"), "utf8");
@@ -26940,8 +27014,10 @@ async function main2() {
     }
   }
   const finalLearningCheckpoint = findTerminalCheckpoint(runDir4, runId);
+  const touchedTasks = collectCorroboratedTouchedTasks(runDir4, runId);
   emitRunClosed(root, runId, defaultResolveHost, {
     status: "closed",
+    touched: { tasks: touchedTasks },
     ...finalLearningCheckpoint !== null ? { final_learning_checkpoint: finalLearningCheckpoint } : {}
   });
   process.exit(0);
@@ -26957,6 +27033,7 @@ if (require.main === module) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  collectCorroboratedTouchedTasks,
   findActiveWork,
   findTerminalCheckpoint,
   recoverPrematureClose

@@ -108,7 +108,7 @@ function writeRunState(root: string, runId: string, laneStatus: string): void {
   fs.writeFileSync(path.join(runDir, "run-state.json"), JSON.stringify(state, null, 2) + "\n", "utf8");
 }
 
-function writeAttempt(root: string, runId: string, terminalState: string | null): void {
+function writeAttempt(root: string, runId: string, terminalState: string | null): string {
   const attemptDir = path.join(
     root,
     ".guild",
@@ -139,7 +139,9 @@ function writeAttempt(root: string, runId: string, terminalState: string | null)
     orphaned: false,
     reap_attempts: 0,
   };
-  fs.writeFileSync(path.join(attemptDir, "attempt.json"), JSON.stringify(attempt, null, 2) + "\n", "utf8");
+  const attemptPath = path.join(attemptDir, "attempt.json");
+  fs.writeFileSync(attemptPath, JSON.stringify(attempt, null, 2) + "\n", "utf8");
+  return attemptPath;
 }
 
 function provenancePath(root: string, runId: string): string {
@@ -190,6 +192,61 @@ describe("run-trace-close.ts — active-worker close guard (Fix C)", () => {
     expect(exitCode).toBe(0);
     const prov = JSON.parse(fs.readFileSync(provenancePath(tmpDir, RUN_ID), "utf8"));
     expect(prov.status).toBe("closed");
+    expect(prov.touched.tasks).toEqual(["W4-W5-tooling-completion"]);
+  });
+
+  it("INSTALLED-BUNDLE CONTROL: the rebuilt bundle retains corroborated task provenance", () => {
+    writeRunState(tmpDir, RUN_ID, "done");
+    writeAttempt(tmpDir, RUN_ID, "terminated");
+    const bundle = path.resolve(__dirname, "../dist/run-trace-close.js");
+    const result = spawnSync("node", [bundle], {
+      input: stopPayload,
+      encoding: "utf8",
+      env: { ...process.env, ...env() },
+      timeout: 30000,
+    });
+    expect(result.status ?? 1).toBe(0);
+    const prov = JSON.parse(fs.readFileSync(provenancePath(tmpDir, RUN_ID), "utf8"));
+    expect(prov.touched.tasks).toEqual(["W4-W5-tooling-completion"]);
+  });
+
+  it("does not trust a hand-authored done lane without a matching immutable task attempt", () => {
+    writeRunState(tmpDir, RUN_ID, "done");
+    const { exitCode } = runScript(stopPayload, env());
+    expect(exitCode).toBe(0);
+    const prov = JSON.parse(fs.readFileSync(provenancePath(tmpDir, RUN_ID), "utf8"));
+    expect(prov.status).toBe("closed");
+    expect(prov.touched.tasks).toEqual([]);
+  });
+
+  it.each([
+    ["a mismatched run", { run_id: "run-20260811-000000-other" }],
+    ["a mismatched logical task", { logical_task_id: "other-task" }],
+    ["a mutable attempt", { immutable: false }],
+    ["an absent terminal timestamp", { terminated_at: null }],
+  ])("does not trust %s as task provenance", (_label, mutation) => {
+    writeRunState(tmpDir, RUN_ID, "done");
+    const attemptPath = writeAttempt(tmpDir, RUN_ID, "terminated");
+    const attempt = JSON.parse(fs.readFileSync(attemptPath, "utf8"));
+    fs.writeFileSync(attemptPath, JSON.stringify({ ...attempt, ...mutation }, null, 2) + "\n", "utf8");
+    const { exitCode } = runScript(stopPayload, env());
+    expect(exitCode).toBe(0);
+    const prov = JSON.parse(fs.readFileSync(provenancePath(tmpDir, RUN_ID), "utf8"));
+    expect(prov.touched.tasks).toEqual([]);
+  });
+
+  it("does not trust a symlinked attempt directory even when it resolves inside the run", () => {
+    writeRunState(tmpDir, RUN_ID, "done");
+    const attemptPath = writeAttempt(tmpDir, RUN_ID, "terminated");
+    const attemptsDir = path.dirname(path.dirname(attemptPath));
+    const runDir = path.join(tmpDir, ".guild", "runs", RUN_ID);
+    const relocated = path.join(runDir, "relocated-attempts");
+    fs.renameSync(attemptsDir, relocated);
+    fs.symlinkSync(path.relative(path.dirname(attemptsDir), relocated), attemptsDir);
+    const { exitCode } = runScript(stopPayload, env());
+    expect(exitCode).toBe(0);
+    const prov = JSON.parse(fs.readFileSync(provenancePath(tmpDir, RUN_ID), "utf8"));
+    expect(prov.touched.tasks).toEqual([]);
   });
 
   it("POSITIVE CONTROL: a bare run with no lanes and no cells still closes (no regression)", () => {
