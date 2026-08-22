@@ -3,6 +3,45 @@ import { redactShareableFile } from "../../src/modules/security/workflows/scrub-
 const SHA = "0123456789abcdef".repeat(4);
 
 describe("shareable-file schema-bound SHA-256 redaction", () => {
+  it("preserves only the guild.run.v1 start-snapshot SHA while redacting paths and credentials", () => {
+    const input = [
+      "schema_version: guild.run.v1",
+      "run_id: run-20260822-080000-public-projection",
+      "cwd: /Users/operator/Projects/private",
+      "capability_start_snapshot_ref:",
+      "  path: capability/run-start-snapshot.json",
+      `  sha256: ${SHA}`,
+      `operator_note: api_key=sk-abcdefghijklmnop`,
+      `arbitrary_entropy: ${"f".repeat(64)}`,
+      "",
+    ].join("\n");
+    const result = redactShareableFile(input, "run.yaml");
+    expect(result.out).toContain(`sha256: ${SHA}`);
+    expect(result.out).not.toContain("/Users/operator");
+    expect(result.out).not.toContain("sk-abcdefghijklmnop");
+    expect(result.out).not.toContain("f".repeat(64));
+    expect(result.opPaths).toBe(1);
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "api_key-assignment" }),
+      expect.objectContaining({ category: "high-entropy hex string (potential secret)" }),
+    ]));
+  });
+
+  it("fails closed when the reviewed guild.run.v1 SHA value is duplicated elsewhere", () => {
+    const input = [
+      "schema_version: guild.run.v1",
+      "run_id: run-20260822-080000-duplicate-hash",
+      "capability_start_snapshot_ref:",
+      "  path: capability/run-start-snapshot.json",
+      `  sha256: ${SHA}`,
+      `operator_note: ${SHA}`,
+      "",
+    ].join("\n");
+    const result = redactShareableFile(input, "run.yaml");
+    expect(result.out).not.toContain(SHA);
+    expect(result.secrets).toHaveLength(2);
+  });
+
   it("preserves a reviewed SHA-256 field while redacting paths and credentials", () => {
     const input = `${JSON.stringify({
       schema_version: "guild.activated_host_public_evidence.v1",

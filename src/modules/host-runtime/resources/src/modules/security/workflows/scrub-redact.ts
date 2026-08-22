@@ -25,6 +25,7 @@
  */
 
 import { SECRET_PATTERNS } from "./secret-patterns";
+import { parseYaml } from "../../state";
 
 // Operator-path patterns (Decision H.2 + Decision M relative-paths-policy).
 // Placeholders are idempotent — they won't re-match.
@@ -83,6 +84,12 @@ const HASH_BEARING_SCHEMAS = new Set([
   "guild.provenance.v1",
   "guild.activated_host_public_evidence.v1",
   "guild.activated_host_public_manifest.v1",
+  "guild.capability_run_start_snapshot.v1",
+  "guild.capability_run_baseline.v1",
+  "guild.project_capability_profile.v1",
+  "guild.receipt_record.v1",
+  "guild.compatibility_usage.v1",
+  "guild.session_context.v1",
 ]);
 
 function recognizedHashDocument(value: unknown): value is Record<string, unknown> {
@@ -93,6 +100,34 @@ function recognizedHashDocument(value: unknown): value is Record<string, unknown
 
 function approvedHashPath(schema: string, pathParts: readonly string[]): boolean {
   const pathKey = pathParts.join("/");
+  if (schema === "guild.capability_run_start_snapshot.v1" || schema === "guild.capability_run_baseline.v1") {
+    return new Set(["agents", "skills", "registries", "bound_root"]).has(pathKey);
+  }
+  if (schema === "guild.project_capability_profile.v1") {
+    return new Set([
+      "feedstock/codebase_map_hash",
+      "feedstock/knowledge_graph_hash",
+      "feedstock/roster_hash",
+      "mutation_evidence/agents_tree_hash_before",
+      "mutation_evidence/agents_tree_hash_after",
+      "mutation_evidence/skills_tree_hash_before",
+      "mutation_evidence/skills_tree_hash_after",
+      "mutation_evidence/registry_hash_before",
+      "mutation_evidence/registry_hash_after",
+      "source_commit",
+    ]).has(pathKey) || /^(?:coverage|candidates)\/.*\/(?:profile_hash|content_hash|sha256)$/.test(pathKey);
+  }
+  if (schema === "guild.receipt_record.v1") {
+    return pathKey === "input_hash" || pathKey === "output_hash" || pathKey === "record_hash" || pathKey === "versions/source_version";
+  }
+  if (schema === "guild.compatibility_usage.v1") return pathKey === "content_hash";
+  if (schema === "guild.session_context.v1") {
+    return new Set([
+      "execution_target/account_fingerprint",
+      "execution_target/endpoint_fingerprint",
+      "execution_target/org_fingerprint",
+    ]).has(pathKey);
+  }
   if (schema === "guild.activated_host_public_manifest.v1") {
     return pathKey === "manifest_sha256" || pathKey === "evidence_sha256";
   }
@@ -122,6 +157,11 @@ function protectSchemaBoundSha256Occurrences(
 ): { content: string; tokens: Array<{ value: string; token: string }> } {
   const tokens: Array<{ value: string; token: string }> = [];
   let tokenIndex = 0;
+  const uniqueToken = (): string => {
+    let token = `<GUILD-SHA256-${tokenIndex++}>`;
+    while (content.includes(token)) token = `<GUILD-SHA256-${tokenIndex++}>`;
+    return token;
+  };
   const protectDocument = (documentContent: string): string => {
     let parsed: unknown;
     try {
@@ -145,9 +185,11 @@ function protectSchemaBoundSha256Occurrences(
       if (typeof value !== "object" || value === null) return;
       for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
         const childPath = [...pathParts, key];
-        if (typeof entry === "string" && SHA256_VALUE.test(entry) && approvedHashPath(schema, childPath)) {
-        let token = `<GUILD-SHA256-${tokenIndex++}>`;
-        while (content.includes(token)) token = `<GUILD-SHA256-${tokenIndex++}>`;
+        const approvedValue = SHA256_VALUE.test(String(entry))
+          || (schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)))
+          || (schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry)));
+        if (typeof entry === "string" && approvedValue && approvedHashPath(schema, childPath)) {
+          const token = uniqueToken();
           tokens.push({ value: entry, token });
           (value as Record<string, unknown>)[key] = token;
         } else {
@@ -160,10 +202,29 @@ function protectSchemaBoundSha256Occurrences(
     return `${serialized}${trailingNewline ? "\n" : ""}`;
   };
 
-  if (rel.split(/[\\/]/).join("/") === "logs/v1.4-events.jsonl") {
+  const normalizedRel = rel.split(/[\\/]/).join("/");
+  if (normalizedRel.endsWith(".jsonl")) {
     return { content: content.split("\n").map((line) => line.trim().length === 0 ? line : protectDocument(line)).join("\n"), tokens };
   }
-  if (rel.endsWith(".json")) return { content: protectDocument(content), tokens };
+  if (normalizedRel.endsWith(".json")) return { content: protectDocument(content), tokens };
+  if (normalizedRel.endsWith("run.yaml")) {
+    let document: Record<string, unknown> | null = null;
+    try {
+      const parsed = parseYaml(content);
+      document = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    } catch { document = null; }
+    const rawRef = document?.capability_start_snapshot_ref;
+    const ref = typeof rawRef === "object" && rawRef !== null && !Array.isArray(rawRef) ? rawRef as Record<string, unknown> : null;
+    const reviewedSnapshotPath = ref?.path === "capability/run-start-snapshot.json" || ref?.path === "run-start-snapshot.json";
+    const reviewedHash = document?.schema_version === "guild.run.v1" && reviewedSnapshotPath && typeof ref?.sha256 === "string" && SHA256_VALUE.test(ref.sha256)
+      ? ref.sha256
+      : null;
+    if (reviewedHash && content.split(reviewedHash).length - 1 === 1) {
+      const token = uniqueToken();
+      tokens.push({ value: reviewedHash, token });
+      return { content: content.replace(reviewedHash, token), tokens };
+    }
+  }
   return { content, tokens };
 }
 

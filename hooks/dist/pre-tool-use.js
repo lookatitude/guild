@@ -32118,6 +32118,7 @@ var init_secret_patterns = __esm({
 var init_scrub_redact = __esm({
   "../src/modules/security/workflows/scrub-redact.ts"() {
     init_secret_patterns();
+    init_state();
   }
 });
 
@@ -33522,6 +33523,11 @@ init_frontmatter();
 // ../scripts/lib/capability/migration-evidence.ts
 init_run_lifecycle();
 init_run_binding();
+
+// ../scripts/lib/shared/scrub-redact.ts
+init_scrub_redact();
+
+// ../scripts/lib/capability/migration-evidence.ts
 function sha2563(bytes) {
   return (0, import_node_crypto3.createHash)("sha256").update(bytes).digest("hex");
 }

@@ -54,6 +54,7 @@ capability-adopt — project capability adoption migration (D6)
   capability-adopt catalog  [--plugin-root <p>] [--project-root <p>] [--freeze] [--json]
   capability-adopt g5       --windows <file> --project-local-default <semver> --current-version <semver> [--project-root <p>] [--plugin-root <p>] [--json]
   capability-adopt window   evidence --boundary <boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <id> [--plugin-root <package>] [--out-dir <dir>]
+  capability-adopt window   publish --boundary <boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <id> [--plugin-root <package>] [--out-dir <dir>]
   capability-adopt window   seal-run --run-id <id>
   capability-adopt window   start --boundary <boundary.json> --project-id <id> [--to observe] [--actor <id>]
   capability-adopt window   restart --boundary <boundary.json> --reason <text> [--actor <id>]
@@ -197,6 +198,7 @@ function main(argv: readonly string[]): number {
       status: ["project-root", "json"],
       "seal-run": ["project-root", "run-id", "json"],
       evidence: ["project-root", "plugin-root", "boundary", "project-id", "runtime-host", "mode", "run-ids", "out-dir", "json"],
+      publish: ["project-root", "plugin-root", "boundary", "project-id", "runtime-host", "mode", "run-ids", "out-dir", "json"],
       start: ["project-root", "boundary", "project-id", "to", "actor", "json"],
       restart: ["project-root", "boundary", "reason", "actor", "json"],
       record: ["project-root", "boundary", "observation", "json"],
@@ -222,16 +224,21 @@ function main(argv: readonly string[]): number {
     }
     const boundaryPath = str(windowArgs, "boundary");
     if (!boundaryPath) fail("window actions require --boundary <guild.capability_migration_boundary.v1.json>", 1);
-    if (action === "evidence") {
+    if (action === "evidence" || action === "publish") {
       const projectId = str(windowArgs, "project-id");
       const runtimeHost = str(windowArgs, "runtime-host");
       const mode = str(windowArgs, "mode");
       const runIds = str(windowArgs, "run-ids")?.split(",").filter(Boolean) ?? [];
-      if (!projectId || (runtimeHost !== "claude-code-cli" && runtimeHost !== "codex-cli") || (mode !== "observe" && mode !== "shadow") || runIds.length !== 1) fail("window evidence requires --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <exactly-one-id>", 1);
+      if (!projectId || (runtimeHost !== "claude-code-cli" && runtimeHost !== "codex-cli") || (mode !== "observe" && mode !== "shadow") || runIds.length !== 1) fail(`window ${action} requires --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <exactly-one-id>`, 1);
       try {
         const observation = createMigrationObservation({ pluginRoot, runtimeHost, projectRoot, boundaryPath, projectId, mode, runIds });
         const out = writeMigrationObservation(str(windowArgs, "out-dir") ?? path.join(projectRoot, ".guild/artifacts/capability/observations"), observation);
-        process.stdout.write(`${JSON.stringify({ status: "written", path: out, observation }, null, 2)}\n`);
+        if (action === "publish") {
+          const window = recordMigrationRelease({ projectRoot, boundaryPath, observationPath: out });
+          process.stdout.write(`${JSON.stringify({ status: "published", path: out, observation, window }, null, 2)}\n`);
+        } else {
+          process.stdout.write(`${JSON.stringify({ status: "written", path: out, observation }, null, 2)}\n`);
+        }
         return 0;
       } catch (error) { process.stderr.write(`refused: ${(error as Error).message}\n`); return 2; }
     }
