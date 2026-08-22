@@ -612,6 +612,54 @@ describe("run-trace lib (Lane B3)", () => {
       expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
     });
 
+    it("production start persists the live Claude native-adapter identity in session-context.json", () => {
+      const { exitCode, stdout } = runCli(
+        ["start", "--command=/guild:build", `--cwd=${cliRoot}`],
+        { CLAUDECODE: "1", CLAUDE_PLUGIN_ROOT: "" },
+      );
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      const sessionContext = JSON.parse(fs.readFileSync(
+        path.join(cliRoot, ".guild", "runs", runId, "session-context.json"),
+        "utf8",
+      ));
+      expect(sessionContext.host).toMatchObject({
+        family: "claude",
+        surface: "cli",
+        adapter_id: "claude-code-native",
+        adapter_version: "guild.host_adapter.v1.0.0",
+      });
+      expect(sessionContext.identity).toMatchObject({
+        source: "native_adapter",
+        trust: "verified",
+        confidence: "high",
+      });
+      expect(sessionContext.identity.evidence).toContain(
+        "adapter contract guild.host_adapter.v1.0.0",
+      );
+    });
+
+    it("production start without a live host marker preserves the honest unknown identity", () => {
+      const { exitCode, stdout } = runCli(
+        ["start", "--command=/guild:build", `--cwd=${cliRoot}`],
+        { CLAUDECODE: "0", CLAUDE_PLUGIN_ROOT: "" },
+      );
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      const sessionContext = JSON.parse(fs.readFileSync(
+        path.join(cliRoot, ".guild", "runs", runId, "session-context.json"),
+        "utf8",
+      ));
+      expect(sessionContext.host).toMatchObject({
+        family: "unknown",
+        adapter_version: "unknown",
+      });
+      expect(sessionContext.identity).toMatchObject({
+        source: "none",
+        confidence: "low",
+      });
+    });
+
     it("start --initiative=foo records the attachment with NO initiatives/ dir created (P2b/NN#5)", () => {
       const { exitCode, stdout } = runCli([
         "start",
@@ -667,8 +715,11 @@ describe("run-trace lib (Lane B3)", () => {
       }
     });
 
-    it("status sub-command still works (OQ6 gate alias)", () => {
-      const { exitCode, stdout } = runCli(["status", `--cwd=${cliRoot}`]);
+    it("status sub-command preserves the live native-adapter identity (OQ6 gate alias)", () => {
+      const { exitCode, stdout } = runCli(
+        ["status", `--cwd=${cliRoot}`],
+        { CLAUDECODE: "1", CLAUDE_PLUGIN_ROOT: "" },
+      );
       expect(exitCode).toBe(0);
       const runId = stdout.trim();
       expect(runId.length).toBeGreaterThan(0);
@@ -679,6 +730,21 @@ describe("run-trace lib (Lane B3)", () => {
         ),
       );
       expect(prov.run_class).toBe("lightweight");
+      const sessionContext = JSON.parse(fs.readFileSync(
+        path.join(cliRoot, ".guild", "runs", runId, "session-context.json"),
+        "utf8",
+      ));
+      expect(sessionContext.host).toMatchObject({
+        family: "claude",
+        surface: "cli",
+        adapter_id: "claude-code-native",
+        adapter_version: "guild.host_adapter.v1.0.0",
+      });
+      expect(sessionContext.identity).toMatchObject({
+        source: "native_adapter",
+        trust: "verified",
+        confidence: "high",
+      });
     });
 
     it("status sub-command respects OQ6 gate (record_status_runs:false → empty stdout)", () => {

@@ -63,15 +63,16 @@ import {
   appendPhase,
   isCanonicalPhase,
   type RunLifecycleEnv,
+  type StartRunOpts,
   type CapabilityBaselineCaptureEvidence,
   type TargetKind,
 } from "../../scripts/lib/run-lifecycle.js";
 // U3/U6 wiring (audit fix, plugin-audit-remediation G3c): the run-start
 // preflight pipeline (settings resolve + validate + tmux probe + provider
 // detect) previously had ZERO production callers — resolved-settings.json
-// never landed on disk in a real run. resolvePreflightSnapshot() below is the
+// never landed on disk in a real run. resolveRunStartPreflight() below is the
 // deterministic caller; the CLI (hooks/run-trace.ts `start`) invokes it and
-// threads the result into startRunOnly/startAndCloseRun via StartAndCloseOpts.snapshot.
+// threads both the snapshot and adapter identity into startRunOnly/startAndCloseRun.
 import {
   runStartPreflight,
   type PreflightProbe,
@@ -488,6 +489,11 @@ export interface StartAndCloseOpts {
    * behavior unchanged) — e.g. when the preflight computation degraded.
    */
   snapshot?: ResolvedSettingsSnapshot;
+  /**
+   * T3: identity resolved by the same run-start preflight that produced the
+   * snapshot. Threaded into session-context.json; absent records `unknown`.
+   */
+  session_identity?: StartRunOpts["session_identity"];
 }
 
 /**
@@ -791,6 +797,7 @@ function buildStartRunOpts(
     // U6: thread the resolved-settings snapshot straight through. Undefined
     // when the caller passed none (back-compat: startRun skips the write).
     snapshot: opts.snapshot,
+    session_identity: opts.session_identity,
   };
 }
 
@@ -817,10 +824,20 @@ function buildStartRunOpts(
  * of prompting" contract) and emits a one-line stderr note so the operator can
  * still see that tmux team-mode was available but not auto-enabled.
  */
-export function resolvePreflightSnapshot(
+export interface ResolvedRunStartPreflight {
+  snapshot: ResolvedSettingsSnapshot;
+  session_identity: StartRunOpts["session_identity"];
+}
+
+/**
+ * Resolve the complete production preflight payload. Keeping snapshot and
+ * identity together prevents the adapter identity from being computed and
+ * then accidentally discarded before startRun writes session-context.json.
+ */
+export function resolveRunStartPreflight(
   cwd: string,
   probe?: PreflightProbe,
-): ResolvedSettingsSnapshot | undefined {
+): ResolvedRunStartPreflight | undefined {
   try {
     const result = runStartPreflight({ cwd, probe });
     if (result.needsTmuxPrompt) {
@@ -831,7 +848,10 @@ export function resolvePreflightSnapshot(
           `Run \`guild:config role\` / \`config set agent_mode team\` to pin it.\n`,
       );
     }
-    return result.snapshot;
+    return {
+      snapshot: result.snapshot,
+      session_identity: result.session_identity,
+    };
   } catch (err) {
     process.stderr.write(
       `[run-trace] WARN: run-start preflight failed; starting the run WITHOUT ` +
@@ -840,6 +860,14 @@ export function resolvePreflightSnapshot(
     );
     return undefined;
   }
+}
+
+/** Back-compatible snapshot-only view for library callers. */
+export function resolvePreflightSnapshot(
+  cwd: string,
+  probe?: PreflightProbe,
+): ResolvedSettingsSnapshot | undefined {
+  return resolveRunStartPreflight(cwd, probe)?.snapshot;
 }
 
 /**
@@ -1050,11 +1078,17 @@ export function recordStatusLightweight(
 ): string | null {
   // OQ6 rollback gate — false reverts /guild:status to pure-read (no run).
   if (!readRecordStatusRuns(root)) return null;
+  // The status alias is a distinct production start path. Resolve the same
+  // preflight payload as `run-trace start` so its immutable session context
+  // never drops a live native-adapter identity.
+  const preflight = resolveRunStartPreflight(opts.cwd ?? root);
   return startAndCloseRun(root, resolveHost, {
     command: "/guild:status",
     cwd: opts.cwd,
     target_kind: opts.target_kind,
     run_class: "lightweight",
+    snapshot: preflight?.snapshot,
+    session_identity: preflight?.session_identity,
   });
 }
 
