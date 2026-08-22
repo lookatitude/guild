@@ -3454,31 +3454,28 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    // CH-6/R8: fail-fast preflight for adapter-backed teams. Probe every
-    // actually-present pane host BEFORE any pane
-    // spawns; on failure abort naming the specialist + host + missing
-    // dependency, with ZERO panes opened (no partial spawn). No-op for a
-    // pure-claude team (no resolver wired → preflight returns ok).
-    if (adapterBacked) {
-      const probed = tmuxPort.preflight(launchRequest);
-      if (probed.status !== "succeeded" || !probed.value) {
-        process.stderr.write(
-          `[agent-team-launcher] ERROR: mixed-host preflight could not run — ` +
-            `${probed.detail ?? probed.status}\n`
-        );
-        process.exit(1);
-      }
-      const pf = probed.value;
-      if (!pf.ok) {
-        const lines = pf.failures
-          .map((f) => `    - ${f.specialist} [${f.host_kind}]: ${f.message}`)
-          .join("\n");
-        process.stderr.write(
-          `[agent-team-launcher] ERROR: mixed-host preflight failed ` +
-            `(CH-6 fail-fast — zero panes opened):\n${lines}\n`
-        );
-        process.exit(1);
-      }
+    // CH-6/R8 plus exact-package activation: probe every actually-present pane
+    // host BEFORE immutable TaskCells are written. Pure-Claude teams have no
+    // adapter dependency, but still validate the exact Guild package that each
+    // pane will activate. Any refusal therefore leaves zero poisoned attempts.
+    const probed = tmuxPort.preflight(launchRequest);
+    if (probed.status !== "succeeded" || !probed.value) {
+      process.stderr.write(
+        `[agent-team-launcher] ERROR: tmux preflight could not run — ` +
+          `${probed.detail ?? probed.status}\n`
+      );
+      process.exit(1);
+    }
+    const pf = probed.value;
+    if (!pf.ok) {
+      const lines = pf.failures
+        .map((f) => `    - ${f.specialist} [${f.host_kind}]: ${f.message}`)
+        .join("\n");
+      process.stderr.write(
+        `[agent-team-launcher] ERROR: tmux preflight failed ` +
+          `(CH-6 fail-fast — zero panes opened):\n${lines}\n`
+      );
+      process.exit(1);
     }
   }
 
@@ -3534,8 +3531,45 @@ async function main(): Promise<void> {
   const launched = tmuxPort.launch(launchRequest);
   const launchResult = launched.value;
   if (!launchResult) {
+    if (!args.dryRun) {
+      const settled = settleFailedCmuxTaskCells({
+        cwd,
+        runId,
+        lanes: team.specialists as TaskCellLaunchLane[],
+        unconfirmedPaneIds: {},
+        reason: `tmux final plan refused before pane spawn: ${launched.detail ?? launched.status}`,
+      });
+      process.stderr.write(
+        `[agent-team-launcher] tmux no-pane failure lifecycle: ${settled.failed} failed, ` +
+          `${settled.orphaned} orphaned${settled.errors.length ? `; errors: ${settled.errors.join("; ")}` : ""}\n`,
+      );
+    }
     process.stderr.write(
       `[agent-team-launcher] tmux dispatch failed: ${launched.detail ?? launched.status}\n`
+    );
+    process.exit(2);
+  }
+
+  // A failed plan is a failed dispatch even in preview mode. Check this before
+  // the dry-run success path so invalid exact-package activation cannot be
+  // presented as a completed preview with an empty command list.
+  if (!launchResult.ok) {
+    if (!args.dryRun && launchResult.planned_commands.length === 0) {
+      const settled = settleFailedCmuxTaskCells({
+        cwd,
+        runId,
+        lanes: team.specialists as TaskCellLaunchLane[],
+        unconfirmedPaneIds: {},
+        reason: `tmux final plan refused before pane spawn: ${launchResult.failure_detail ?? launchResult.notes.join(" | ")}`,
+      });
+      process.stderr.write(
+        `[agent-team-launcher] tmux no-pane failure lifecycle: ${settled.failed} failed, ` +
+          `${settled.orphaned} orphaned${settled.errors.length ? `; errors: ${settled.errors.join("; ")}` : ""}\n`,
+      );
+    }
+    process.stderr.write(
+      `[agent-team-launcher] tmux command failed: ${launchResult.failed_command ?? "(unknown)"}\n` +
+        `  stderr: ${launchResult.failure_detail ?? launchResult.notes.join(" | ")}\n`
     );
     process.exit(2);
   }
@@ -3577,18 +3611,6 @@ async function main(): Promise<void> {
         "\n[agent-team-launcher] dry-run complete — no state written.\n",
     );
     process.exit(0);
-  }
-
-  // Real run: the port executed the plan through the substrate, tearing down the
-  // partial target on first failure (kill-window in-session / kill-session
-  // new-session) and collecting teammate pane ids. The exact failed command and
-  // its stderr survive as typed fields, so this message is unchanged.
-  if (!launchResult.ok) {
-    process.stderr.write(
-      `[agent-team-launcher] tmux command failed: ${launchResult.failed_command ?? "(unknown)"}\n` +
-        `  stderr: ${launchResult.failure_detail ?? ""}\n`
-    );
-    process.exit(2);
   }
 
   const lifecycle = reconcileTaskCellLifecycleTelemetry({

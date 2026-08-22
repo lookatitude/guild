@@ -47,6 +47,11 @@ import { createAgentsFileAdapter } from "../lib/host-adapters/agents-file";
 import { DERIVED_HOST_CAPABILITY_ROWS } from "../lib/host-registry";
 import type { HostKind } from "../lib/host-types";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
+
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 // "agents-file" WAS this file's one documented dispatch_selectable:true exception,
 // carved out rather than flipped because the row is the ABSTRACT universal package
@@ -180,7 +185,7 @@ describe("G4b contract — every dispatch_selectable:false row is an honest app/
 // generic-adapter pane command (no seam, no reimplementation) ─────────────────
 
 describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches through the REAL launcher CLI", () => {
-  const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
+  const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
   const FIXTURE = path.resolve(__dirname, "../fixtures/team-wrapped-cli-host.yaml");
 
   it("dry-run prints a cursor-agent pane command and previews host_kind:\"cursor\" without a manifest write", () => {
@@ -197,6 +202,7 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
       for (const [k, v] of Object.entries(process.env)) {
         if (v !== undefined && k !== "TMUX") env[k] = v;
       }
+      env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
       // T7R-R1-B1: this fixture is about host reachability, not approval, and
       // carries no team-plan trail. Opt into the ONE audited escape hatch; the
       // gate's own pins live in t7-h1-dispatch-approval.test.ts.

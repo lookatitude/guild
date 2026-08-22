@@ -32,6 +32,39 @@ import {
   validateProjectDefinitionRefV1,
   type ProjectDefinitionRefV1,
 } from "../lib/core/contracts/project-definition-ref";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import {
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+  computePhysicalNativeClaudePayloadDigest,
+} from "../lib/release-package-identity";
+
+const TEST_PLUGIN_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "tmux-ref-native-plugin-"));
+fs.mkdirSync(path.join(TEST_PLUGIN_ROOT, ".claude-plugin"), { recursive: true });
+fs.writeFileSync(
+  path.join(TEST_PLUGIN_ROOT, ".claude-plugin", "plugin.json"),
+  JSON.stringify({ name: "guild", version: "2.7.0-beta.14" }),
+);
+fs.writeFileSync(
+  path.join(TEST_PLUGIN_ROOT, NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE),
+  `${JSON.stringify({
+    schema_version: NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+    release_version: "2.7.0-beta.14",
+    payload_digest: computePhysicalNativeClaudePayloadDigest(TEST_PLUGIN_ROOT),
+  }, null, 2)}\n`,
+);
+
+afterAll(() => fs.rmSync(TEST_PLUGIN_ROOT, { recursive: true, force: true }));
+
+function tmuxBackend(): TmuxTeamBackend {
+  return new TmuxTeamBackend({
+    run: fakeRun,
+    env: { GUILD_PLUGIN_ROOT: TEST_PLUGIN_ROOT } as NodeJS.ProcessEnv,
+    pluginOwnerRoot: TEST_PLUGIN_ROOT,
+  });
+}
 
 const REF: ProjectDefinitionRefV1 = {
   schema_version: "guild.project_definition_ref.v1",
@@ -101,7 +134,7 @@ function probeSession(
   commands: ParsedTmuxCommand[],
 ): { outcome: ReturnType<TeamDispatchExecutionTransport["launch"]>; spawn: jest.Mock } {
   const specs = Array.isArray(requested) ? requested : [requested];
-  const backend = new TmuxTeamBackend({ run: fakeRun });
+  const backend = tmuxBackend();
   const spawn = jest.fn(() => ({
     ok: true,
     failedCommand: null,
@@ -133,7 +166,7 @@ function probeSession(
 
 describe("Fix A — tmux backend carries the exact definition_ref with a forwarding proof", () => {
   it("pane command exports and consumes the complete serialized definition_ref", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const result = backend.launch(request(specialist(true)));
     expect(result.ok).toBe(true);
     const laneCommands = result.plannedCommands.filter((c) => c.includes("split-window"));
@@ -144,7 +177,7 @@ describe("Fix A — tmux backend carries the exact definition_ref with a forward
   });
 
   it("launch result exposes the exact per-specialist definition_ref on dispatchPlan", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const result = backend.launch(request(specialist(true)));
     expect(result.dispatchPlan).toBeDefined();
     const entry = (result.dispatchPlan ?? []).find((d) => d.name === "tooling-engineer");
@@ -153,7 +186,7 @@ describe("Fix A — tmux backend carries the exact definition_ref with a forward
   });
 
   it("a lane WITHOUT a definition_ref gets a plan entry without one (no fabrication)", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const result = backend.launch(request(specialist(false)));
     const entry = (result.dispatchPlan ?? []).find((d) => d.name === "tooling-engineer");
     expect(entry).toBeDefined();
@@ -439,7 +472,7 @@ describe("Fix A — tmux backend carries the exact definition_ref with a forward
 
 describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   it("declared port + ref-carrying request → succeeded (portHonoredInjection proof)", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const port = new TeamDispatchExecutionTransport({
       transport_id: "tmux",
       backend,
@@ -452,7 +485,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("REAL (non-dry) session launch also succeeds — the session path exposes the same proof", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const port = new TeamDispatchExecutionTransport({
       transport_id: "tmux",
       backend,
@@ -467,7 +500,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
     const first = taskSpecialist("task-a");
     const second = taskSpecialist("task-b");
     const specs = [first, second];
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const port = new TeamDispatchExecutionTransport({
       transport_id: "tmux",
       backend,
@@ -486,7 +519,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: the session adapter refuses argv that mentions the hash but never consumes the exact ref", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const forged = JSON.stringify({ ...REF, id: "wrong-role" });
     const session = {
       sessionExists: () => false,
@@ -528,7 +561,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: the session adapter refuses exact export/check text placed after claude", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const serialized = JSON.stringify(REF);
     const forgedPostSpawn =
       `claude prompt; export GUILD_DEFINITION_REF='${serialized}'; ` +
@@ -575,7 +608,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: wrapper launch before an exact guard and direct decoy is refused before spawn", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const serialized = JSON.stringify(REF);
     const forgedPostSpawn =
       `command claude prompt; export GUILD_DEFINITION_REF='${serialized}'; ` +
@@ -622,7 +655,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: an eval-defined host wrapper cannot mutate the ref after the guard", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const serialized = JSON.stringify(REF);
     const forgedMutation =
       `eval 'clau''de() { export GUILD_DEFINITION_REF=mutated; }'; ` +
@@ -671,7 +704,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: proof in a non-executed argv element is refused before session spawn", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const spawn = jest.fn(() => ({
       ok: true,
       failedCommand: null,
@@ -711,7 +744,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: a display-string title decoy cannot associate orphan proof with a lane", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const spawn = jest.fn(() => ({
       ok: true,
       failedCommand: null,
@@ -759,7 +792,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: duplicate exact lane titles are refused before session spawn", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const spawn = jest.fn(() => ({
       ok: true,
       failedCommand: null,
@@ -937,7 +970,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: an undeclared tmux port refuses the ref-carrying launch (never strips)", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const port = new TeamDispatchExecutionTransport({
       transport_id: "tmux",
       backend,
@@ -949,7 +982,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("NEGATIVE: a declaring port whose backend drops the ref fails invalid_request", () => {
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const stripping = {
       kind: "tmux",
       isAvailable: () => true,
@@ -979,7 +1012,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   it("NEGATIVE: backend verification cannot cross-credit two same-name task lanes", () => {
     const credited = taskSpecialist("task-a");
     const uncredited = taskSpecialist("task-b");
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const stripping = {
       kind: "tmux",
       isAvailable: () => true,
@@ -1013,7 +1046,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
 
   it("NEGATIVE: duplicate backend plan entries cannot satisfy an exact-one proof", () => {
     const requested = taskSpecialist("task-a");
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const duplicate = {
       kind: "tmux",
       isAvailable: () => true,
@@ -1079,7 +1112,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
       orchestratorPaneId: "%1",
       teammatePaneIds: {},
     }));
-    const backend = new TmuxTeamBackend({ run: fakeRun });
+    const backend = tmuxBackend();
     const session = {
       sessionExists: () => false,
       windowExists: () => false,
@@ -1145,7 +1178,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
     const spawn = jest.fn();
     const port = new TeamDispatchExecutionTransport({
       transport_id: "tmux",
-      backend: new TmuxTeamBackend({ run: fakeRun }),
+      backend: tmuxBackend(),
       session: {
         sessionExists: () => false,
         windowExists: () => false,
@@ -1267,13 +1300,13 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
       get commands(): ParsedTmuxCommand[] {
         reads += 1;
         return reads === 1
-          ? new TmuxTeamBackend({ run: fakeRun }).plan(request(requested, false)).commands
+          ? tmuxBackend().plan(request(requested, false)).commands
           : [{ argv: ["tmux", "split-window", "printf MALFORMED"], display: "malformed" }];
       },
     };
     const port = new TeamDispatchExecutionTransport({
       transport_id: "tmux",
-      backend: new TmuxTeamBackend({ run: fakeRun }),
+      backend: tmuxBackend(),
       session: {
         sessionExists: () => false,
         windowExists: () => false,

@@ -39,11 +39,15 @@ import * as fs from "fs";
 import * as os from "os";
 import * as yaml from "js-yaml";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const LAUNCHER = path.resolve(__dirname, "../agent-team-launcher.ts");
 const SUMMARIZER = path.resolve(__dirname, "../trace-summarize.ts");
 const PANE_TRACE_CLI = path.resolve(__dirname, "../lib/host/pane-dispatch-trace.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function runScript(
   script: string,
@@ -60,6 +64,7 @@ function runScript(
   delete baseEnv.GUILD_HOST_ID;
   delete baseEnv.GUILD_ORCHESTRATOR_HOST;
   delete baseEnv.CMUX_WORKSPACE_ID;
+  baseEnv.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   const finalEnv: Record<string, string> = {};
   for (const [k, v] of Object.entries({ ...baseEnv, ...env })) {
     if (v !== undefined) finalEnv[k] = v;

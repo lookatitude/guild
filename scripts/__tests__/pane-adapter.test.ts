@@ -16,8 +16,8 @@
  *       (d) codex --version failing → refuse regardless of auth
  *   - preflightTeam fail-fast: orchestrator uses the starting host; specialist
  *     host picked from host_kind or inherited from the orchestrator; failures collected.
- *   - TmuxTeamBackend.preflight() no-ops without a resolver (regression) and
- *     reports failures with one.
+ *   - TmuxTeamBackend.preflight() skips adapter probes without a resolver while
+ *     still enforcing exact Claude package activation, and reports adapter failures with one.
  *   - composeTmuxCommands with an all-claude resolver === the no-resolver path
  *     (byte-for-byte — issue #54's local Claude launch flags apply to BOTH,
  *     since composeTmuxCommands intercepts every claude host_kind before it
@@ -25,6 +25,8 @@
  *     codex specialist (unaffected by issue #54 — the resolver is still
  *     consulted for any non-claude host_kind).
  */
+
+import * as fs from "fs";
 
 import {
   buildAdapters,
@@ -44,6 +46,11 @@ import {
   type RunResult,
   type Specialist,
 } from "../lib/team-backend";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
+
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 const OK: RunResult = { status: 0, stdout: "ok", stderr: "" };
 const FAIL: RunResult = { status: 127, stdout: "", stderr: "not found" };
@@ -541,8 +548,15 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
     expect(result.notes.join(" ")).toMatch(/mixed-host adapter preflight withheld/i);
   });
 
-  it("TmuxTeamBackend.preflight() no-ops without a resolver (regression)", () => {
-    const backend = new TmuxTeamBackend({ run: runner({}) });
+  it("TmuxTeamBackend.preflight() skips adapter probes but still accepts exact activation without a resolver", () => {
+    const backend = new TmuxTeamBackend({
+      run: runner({}),
+      pluginOwnerRoot: EXACT_CLAUDE_PLUGIN_ROOT,
+      env: {
+        GUILD_PLUGIN_ROOT: EXACT_CLAUDE_PLUGIN_ROOT,
+        HOME: EXACT_CLAUDE_PLUGIN_ROOT,
+      } as NodeJS.ProcessEnv,
+    });
     expect(backend.preflight(SPECIALISTS)).toEqual({ ok: true, failures: [] });
   });
 

@@ -209,15 +209,22 @@ sync-back is a fast-forward rather than a delta copy:
 1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump the
    version in **`.claude-plugin/plugin.json` ONLY** — the single canonical
    version field — then propagate it with
-   `cd scripts && npm run sync:claude-install && npm run build:inventory`
-   (regenerates `marketplace.json` from `plugin.json` and refreshes
-   `guild.inventory.json`; both deterministic, keeping the zero-epoch
-   `generated_at`). **Do not hand-edit `marketplace.json`** — it is generated,
+   `cd scripts && npm run sync:claude-install`
+   (regenerates `marketplace.json` from `plugin.json`, refreshes the deterministic
+   zero-epoch `guild.inventory.json`, refreshes the tracked native Claude package
+   identity over those final bytes, and rebuilds the generated host packages).
+   **Do not hand-edit `marketplace.json` or the native package identity** — both
+   are generated,
    and CI (`check:claude-install`) fails any hand edit that disagrees with the
    canonical field;
    (b) the changelog section + notes seed via
    `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (then `--notes`
-   for the PR body); polish both. **No live-surface guard pin re-ratification is
+   for the PR body); polish both, then run
+   `cd scripts && npm run sync:claude-install` again and include the refreshed
+   native identity in this second commit. The final refresh is mandatory because
+   the identity binds tracked `CHANGELOG.md`; changing the changelog after the
+   first refresh otherwise makes the release package unverifiable. **No
+   live-surface guard pin re-ratification is
    needed** — the `p2-w2-sc5`/`p2-w3-sc6` guards tolerate a pure `version`-field
    bump in the two `.claude-plugin` manifests (they only re-red on a real
    command/skill/agent surface change). `dist/` is gitignored — do not commit it;

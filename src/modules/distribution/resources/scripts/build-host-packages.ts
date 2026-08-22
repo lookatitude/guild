@@ -11,8 +11,8 @@
  *           inventory).
  *
  * Output trees (default mode writes only under dist/; pass
- * `--sync-claude-install` to update the live `.claude-plugin` metadata from the
- * same generated Claude manifest):
+ * `--sync-claude-install` to update the live `.claude-plugin` metadata and
+ * native package identity from the same generated Claude manifest):
  *   dist/claude-code/   .claude-plugin/plugin.json + commands/** + skills/** +
  *                       agents/** + hooks/{hooks.json,bootstrap.sh,*.sh,...} +
  *                       .mcp.json + scripts/** (the full installed tree).
@@ -44,6 +44,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 
 import type { GuildInventoryV1 } from "./lib/inventory-schema";
 import { validateInventoryV1 } from "./lib/inventory-schema";
@@ -84,6 +85,12 @@ import {
   type ModuleResourcePlan,
   type ModuleResourceEntry,
 } from "./lib/module-resources";
+import {
+  assertNativeClaudePackageIdentityCurrent,
+  assertLockedScriptRuntimeDependencies,
+  writeNativeClaudePackageIdentity,
+  writeReleasePackageIdentitySet,
+} from "./lib/release-package-identity";
 
 // ---------------------------------------------------------------------------
 // IO helpers
@@ -97,6 +104,90 @@ function readJson(abs: string): Record<string, unknown> {
     return JSON.parse(readText(abs)) as Record<string, unknown>;
   } catch {
     return {};
+  }
+}
+
+const DIRECT_TRACKED_BUILD_INPUTS = Object.freeze([
+  ".claude-plugin/plugin.json",
+  ".claude-plugin/marketplace.json",
+  ".codex-plugin/plugin.json",
+  ".mcp.json",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "command-src/command-registry.json",
+  "hooks/bootstrap.sh",
+  "hooks/emit-learning-checkpoint.ts",
+  "hooks/hooks.json",
+  "hooks/dist/emit-learning-checkpoint.js",
+  "hooks/dist/pre-tool-use.js",
+  "hooks/dist/update-check.js",
+  "scripts/codex-guild-prompt-bridge.ts",
+  "scripts/dist/activated-host-conformance.js",
+  "scripts/package-lock.json",
+  "scripts/package.json",
+] as const);
+
+const RECURSIVE_TRACKED_BUILD_INPUTS = Object.freeze([
+  "hooks/lib",
+  "mcp-servers",
+  "src",
+  "templates",
+] as const);
+
+function everyCopiedInputIsCommitOrLockBound(root: string): boolean {
+  const tracked = new Set(
+    execFileSync("git", ["-C", root, "ls-files", "-z"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).split("\0").filter(Boolean),
+  );
+  for (const relativePath of DIRECT_TRACKED_BUILD_INPUTS) {
+    if (!tracked.has(relativePath)) return false;
+  }
+
+  const visitTrackedTree = (relativeDirectory: string): boolean => {
+    const absoluteDirectory = path.join(root, relativeDirectory);
+    const entries = fs.readdirSync(absoluteDirectory, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules") continue;
+      const relativePath = path.join(relativeDirectory, entry.name);
+      const absolutePath = path.join(root, relativePath);
+      const stats = fs.lstatSync(absolutePath);
+      if (entry.isSymbolicLink() || stats.isSymbolicLink()) return false;
+      if (entry.isDirectory() && stats.isDirectory()) {
+        if (!visitTrackedTree(relativePath)) return false;
+        continue;
+      }
+      if (!entry.isFile() || !stats.isFile() || !tracked.has(relativePath)) return false;
+    }
+    return true;
+  };
+  if (!RECURSIVE_TRACKED_BUILD_INPUTS.every(visitTrackedTree)) return false;
+
+  try {
+    assertLockedScriptRuntimeDependencies(root);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+function cleanSourceCommit(root: string): string | null {
+  try {
+    const status = execFileSync(
+      "git",
+      ["-C", root, "status", "--porcelain", "--untracked-files=all"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    );
+    if (status.trim().length > 0) return null;
+    if (!everyCopiedInputIsCommitOrLockBound(root)) return null;
+    const commit = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(commit) ? commit : null;
+  } catch {
+    return null;
   }
 }
 function writeFileEnsured(abs: string, content: string): void {
@@ -956,9 +1047,11 @@ function newHostPackageRefs(
 /**
  * Resolve the inventory to render from. Rebuilt FRESH from the live surface on
  * every run (SC-1: "build from one inventory" must reflect the current tree, not
- * a stale snapshot) and persisted to guild.inventory.json so the on-disk artifact
- * stays in sync. buildInventory() already validates + self-checks SC-7a coverage
- * and throws on any failure, so a re-validate here would be redundant.
+ * a stale snapshot). The committed inventory always retains the deterministic
+ * zero-epoch timestamp; a caller-provided render timestamp belongs only in the
+ * generated output and must not mutate the native marketplace payload after its
+ * identity has been verified. buildInventory() already validates + self-checks
+ * SC-7a coverage and throws on any failure.
  */
 function loadInventory(root: string, generatedAt: string): GuildInventoryV1 {
   const file = path.join(root, "guild.inventory.json");
@@ -968,7 +1061,8 @@ function loadInventory(root: string, generatedAt: string): GuildInventoryV1 {
   if (!v.valid) {
     throw new Error("freshly built inventory failed validation:\n  " + v.errors.join("\n  "));
   }
-  writeFileEnsured(file, serializeInventory(inv));
+  const persisted = buildInventory(root, UNSTAMPED_GENERATED_AT);
+  writeFileEnsured(file, serializeInventory(persisted));
   return inv;
 }
 
@@ -980,12 +1074,36 @@ export function buildHostPackages(opts: {
   syncClaudeInstall: boolean;
   checkClaudeInstall: boolean;
 }): BuildResult {
-  const inv = loadInventory(opts.root, opts.generatedAt);
+  const sourceManifest = readJson(path.join(opts.root, ".claude-plugin", "plugin.json"));
+  const sourceVersion = sourceManifest["version"];
+  if (typeof sourceVersion !== "string" || sourceVersion.length === 0) {
+    throw new Error("source Claude manifest has no version");
+  }
+  let nativeClaudeIdentity;
+  let sourceCommit: string | null;
+  let inv: GuildInventoryV1;
+  if (opts.syncClaudeInstall) {
+    // Release-surface synchronization is an ordered transaction: first update
+    // every tracked derived byte, then refresh the native identity over that
+    // final payload, and only then render generated packages. This avoids the
+    // version-bump deadlock where an old identity blocks the command required
+    // to update the derived marketplace metadata.
+    inv = loadInventory(opts.root, opts.generatedAt);
+    syncClaudeInstallSurface(opts.root, inv, opts.generatedAt);
+    nativeClaudeIdentity = writeNativeClaudePackageIdentity(opts.root, sourceVersion);
+    sourceCommit = cleanSourceCommit(opts.root);
+  } else {
+    nativeClaudeIdentity = assertNativeClaudePackageIdentityCurrent(opts.root, sourceVersion);
+    // Capture provenance before loadInventory can update a stale deterministic
+    // inventory. Dirty/local source builds remain fully self-verified but do
+    // not claim a native-marketplace commit match.
+    sourceCommit = cleanSourceCommit(opts.root);
+    inv = loadInventory(opts.root, opts.generatedAt);
+  }
   const resources = loadModuleResourceResolver(opts.root);
 
   const claudeDir = writeClaudeTree(opts.root, inv, opts.distRoot, opts.generatedAt, resources);
   const codexDir = writeCodexTree(opts.root, inv, opts.distRoot, opts.generatedAt, resources);
-  const codexMarketplaceDir = writeCodexMarketplaceTree(codexDir, opts.distRoot);
   // P1-L6: new-host trees (INFERRED capability rows, installability: target).
   const agentsDir = writeAgentsTree(opts.root, inv, opts.distRoot, opts.generatedAt, resources);
   const piDir = writePiTree(opts.root, inv, opts.distRoot, opts.generatedAt, resources);
@@ -995,11 +1113,19 @@ export function buildHostPackages(opts: {
   for (const hostId of NEW_CLI_HOST_IDS) {
     newCliDirs[hostId] = writeNewCliTree(opts.root, inv, opts.distRoot, opts.generatedAt, hostId, resources);
   }
+  writeReleasePackageIdentitySet(inv.manifest.version, {
+    "claude-code": claudeDir,
+    codex: codexDir,
+    agents: agentsDir,
+    pi: piDir,
+    antigravity: antigravityDir,
+    ...newCliDirs,
+  }, sourceCommit, nativeClaudeIdentity.payload_digest);
+  // Build the marketplace only after the inner Codex package carries its
+  // release identity, so an installed nested package retains the same proof.
+  const codexMarketplaceDir = writeCodexMarketplaceTree(codexDir, opts.distRoot);
 
   const reasons: string[] = [];
-  if (opts.syncClaudeInstall) {
-    syncClaudeInstallSurface(opts.root, inv, opts.generatedAt);
-  }
   const claudeInstallSurface = opts.checkClaudeInstall
     ? checkClaudeInstallSurface(opts.root, inv, opts.generatedAt)
     : undefined;
@@ -1072,6 +1198,7 @@ interface CliArgs {
   gates: boolean;
   syncClaudeInstall: boolean;
   checkClaudeInstall: boolean;
+  syncNativeIdentity: boolean;
 }
 
 export function parseArgs(argv: string[]): CliArgs | { error: string } {
@@ -1081,6 +1208,7 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
   let gates = true;
   let syncClaudeInstall = false;
   let checkClaudeInstall = false;
+  let syncNativeIdentity = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--root" && argv[i + 1] !== undefined) root = path.resolve(argv[++i]);
@@ -1091,12 +1219,21 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
     else if (a.startsWith("--generated-at=")) generatedAt = a.slice("--generated-at=".length);
     else if (a === "--sync-claude-install") syncClaudeInstall = true;
     else if (a === "--check-claude-install") checkClaudeInstall = true;
+    else if (a === "--sync-native-identity") syncNativeIdentity = true;
     else if (a === "--no-gates") gates = false;
     else return { error: `unknown argument: ${a}` };
   }
   if (syncClaudeInstall) checkClaudeInstall = true;
   if (!distRoot) distRoot = path.join(root, "dist");
-  return { root, distRoot, generatedAt, gates, syncClaudeInstall, checkClaudeInstall };
+  return {
+    root,
+    distRoot,
+    generatedAt,
+    gates,
+    syncClaudeInstall,
+    checkClaudeInstall,
+    syncNativeIdentity,
+  };
 }
 
 function main(): number {
@@ -1104,9 +1241,30 @@ function main(): number {
   if ("error" in parsed) {
     process.stderr.write(
       parsed.error +
-        "\nusage: build-host-packages.ts [--root <pluginRoot>] [--out <distDir>] [--generated-at <iso>] [--sync-claude-install] [--check-claude-install] [--no-gates]\n"
+        "\nusage: build-host-packages.ts [--root <pluginRoot>] [--out <distDir>] [--generated-at <iso>] [--sync-native-identity] [--sync-claude-install] [--check-claude-install] [--no-gates]\n"
     );
     return 1;
+  }
+
+  if (parsed.syncNativeIdentity) {
+    try {
+      const manifest = readJson(path.join(parsed.root, ".claude-plugin", "plugin.json"));
+      const version = manifest["version"];
+      if (typeof version !== "string" || version.length === 0) {
+        throw new Error("source Claude manifest has no version");
+      }
+      const identity = writeNativeClaudePackageIdentity(parsed.root, version);
+      process.stdout.write(
+        `build:hosts: synchronized native Claude payload identity ${identity.payload_digest}\n`,
+      );
+      return 0;
+    } catch (err) {
+      process.stderr.write(
+        "build:hosts: native Claude identity sync failed: " +
+          String(err instanceof Error ? err.message : err) + "\n",
+      );
+      return 1;
+    }
   }
 
   let result: BuildResult;

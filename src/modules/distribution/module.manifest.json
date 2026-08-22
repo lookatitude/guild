@@ -36,6 +36,7 @@
       "lib/parity-contract",
       "lib/per-host-packaging",
       "lib/release-distribution-contract",
+      "lib/release-package-identity",
       "lib/result-contracts",
       "lib/self-update",
       "lib/skill-source-transform",

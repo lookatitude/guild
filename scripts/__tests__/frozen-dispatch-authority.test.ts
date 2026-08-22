@@ -31,14 +31,18 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const binding = require("../../src/modules/lifecycle/workflows/run-binding") as
   typeof import("../../src/modules/lifecycle/workflows/run-binding");
 
-const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 const RUN_ID = "run-20260811-000800-frozen-dispatch";
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function seedRepo(tmpDir: string): { teamPath: string } {
   const teamDir = path.join(tmpDir, ".guild", "team");
@@ -98,6 +102,7 @@ function runLauncher(
   delete baseEnv.GUILD_HOST_ID;
   delete baseEnv.GUILD_ORCHESTRATOR_HOST;
   delete baseEnv.CMUX_WORKSPACE_ID;
+  baseEnv.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   baseEnv.GUILD_DISPATCH_APPROVAL_OVERRIDE =
     "frozen-dispatch fixture: approval verification is pinned separately";
   const finalEnv: Record<string, string> = {};

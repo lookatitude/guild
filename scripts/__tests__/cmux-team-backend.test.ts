@@ -9,6 +9,34 @@ import type {
   Specialist,
 } from "../lib/core/contracts/team-backend";
 import type { ProjectDefinitionRefV1 } from "../lib/core/contracts/project-definition-ref";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import {
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+  computePhysicalNativeClaudePayloadDigest,
+} from "../lib/release-package-identity";
+
+const TEST_PLUGIN_ROOT = fs.realpathSync(process.cwd());
+const testClaudeActivation = () => ({
+  args: ["--plugin-dir", TEST_PLUGIN_ROOT],
+  pluginRoot: TEST_PLUGIN_ROOT,
+});
+
+function writeNativeClaudeIdentity(root: string): void {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8"),
+  ) as { version: string };
+  fs.writeFileSync(
+    path.join(root, NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE),
+    `${JSON.stringify({
+      schema_version: NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+      release_version: manifest.version,
+      payload_digest: computePhysicalNativeClaudePayloadDigest(root),
+    }, null, 2)}\n`,
+  );
+}
 
 const DEFINITION_REF: ProjectDefinitionRefV1 = {
   schema_version: "guild.project_definition_ref.v1",
@@ -50,7 +78,11 @@ describe("W4 — CmuxTeamBackend", () => {
       }
       return { status: 0, stdout: "", stderr: "" };
     };
-    const backend = new CmuxTeamBackend({ workspaceId: "workspace:9", run });
+    const backend = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      run,
+      resolveClaudeActivation: testClaudeActivation,
+    });
     const result = backend.launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
@@ -98,7 +130,11 @@ describe("W4 — CmuxTeamBackend", () => {
       }
       return { status: 0, stdout: "", stderr: "" };
     };
-    const result = new CmuxTeamBackend({ workspaceId: "workspace:9", run }).launch({
+    const result = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      run,
+      resolveClaudeActivation: testClaudeActivation,
+    }).launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
       cwd: process.cwd(),
@@ -131,7 +167,11 @@ describe("W4 — CmuxTeamBackend", () => {
       }
       return { status: 0, stdout: "", stderr: "" };
     };
-    const result = new CmuxTeamBackend({ workspaceId: "workspace:9", run }).launch({
+    const result = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      run,
+      resolveClaudeActivation: testClaudeActivation,
+    }).launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
       cwd: process.cwd(),
@@ -152,7 +192,11 @@ describe("W4 — CmuxTeamBackend", () => {
 
   it("dry-run performs no cmux calls and pins --focus false in the plan", () => {
     const run = jest.fn(() => ({ status: 0, stdout: "", stderr: "" }));
-    const result = new CmuxTeamBackend({ workspaceId: "workspace:9", run }).launch({
+    const result = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      run,
+      resolveClaudeActivation: testClaudeActivation,
+    }).launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
       cwd: process.cwd(),
@@ -166,6 +210,117 @@ describe("W4 — CmuxTeamBackend", () => {
     expect(result.plannedCommands.join("\n")).toContain("--focus false");
     expect(result.notes.join(" ")).toMatch(/availability.*withheld.*real dispatch/i);
     expect(result.notes.join(" ")).toMatch(/real dispatch may refuse.*before.*writ.*launch/i);
+  });
+
+  it("activates the exact launcher-owning Guild package in a local Claude surface", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "cmux-exact-plugin-"));
+    try {
+      fs.mkdirSync(path.join(root, ".claude-plugin"));
+      fs.writeFileSync(
+        path.join(root, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "guild", version: "2.7.0-beta.13" }),
+      );
+      writeNativeClaudeIdentity(root);
+      const result = new CmuxTeamBackend({
+        workspaceId: "workspace:9",
+        env: { CLAUDE_PLUGIN_ROOT: root, GUILD_PLUGIN_ROOT: root } as NodeJS.ProcessEnv,
+        pluginOwnerRoot: root,
+      }).launch({
+        slug: "cmux-proof",
+        runId: "run-20260812-000000-cmux-proof",
+        cwd: root,
+        specialists: [lane("backend", "T1")],
+        targetName: "workspace:9",
+        mode: "in-session",
+        dryRun: true,
+      });
+      expect(result.ok).toBe(true);
+      expect(result.plannedCommands.join("\n")).toContain(
+        `--plugin-dir ${fs.realpathSync(root)} --permission-mode bypassPermissions`,
+      );
+      expect(result.plannedCommands.join("\n")).toContain(
+        `export GUILD_PLUGIN_ROOT=${fs.realpathSync(root)};`,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("verifies exact Claude activation once for a multi-lane launch", () => {
+    const root = fs.realpathSync(process.cwd());
+    const resolveClaudeActivation = jest.fn(() => ({
+      args: ["--plugin-dir", root],
+      pluginRoot: root,
+    }));
+    const result = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      resolveClaudeActivation,
+    }).launch({
+      slug: "cmux-one-activation",
+      runId: "run-20260822-000000-cmux-one-activation",
+      cwd: root,
+      specialists: [lane("backend", "T1"), lane("security", "T2")],
+      targetName: "workspace:9",
+      mode: "in-session",
+      dryRun: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(resolveClaudeActivation).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps definition-ref carriage before the executable when the plugin path contains the launch token", () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "cmux-token-path-"));
+    const root = path.join(parent, "package command claude release");
+    try {
+      fs.mkdirSync(path.join(root, ".claude-plugin"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "guild", version: "2.7.0-beta.14" }),
+      );
+      writeNativeClaudeIdentity(root);
+      const result = new CmuxTeamBackend({
+        workspaceId: "workspace:9",
+        env: { GUILD_PLUGIN_ROOT: root } as NodeJS.ProcessEnv,
+        pluginOwnerRoot: root,
+      }).launch({
+        slug: "cmux-token-proof",
+        runId: "run-20260822-000000-cmux-token-proof",
+        cwd: root,
+        specialists: [{ ...lane("backend", "T1"), definition_ref: DEFINITION_REF }],
+        targetName: "workspace:9",
+        mode: "in-session",
+        dryRun: true,
+      });
+      expect(result.ok).toBe(true);
+      const command = result.plannedCommands.join("\n");
+      expect(command).toContain(fs.realpathSync(root));
+      expect(command.indexOf("GUILD_DEFINITION_REF")).toBeLessThan(
+        command.indexOf("command claude --settings"),
+      );
+      expect(result.dispatchPlan[0]?.env["GUILD_DEFINITION_REF"]).toBe(
+        JSON.stringify(DEFINITION_REF),
+      );
+    } finally {
+      fs.rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a cmux plan whose explicit Guild package root is invalid", () => {
+    const result = new CmuxTeamBackend({
+      workspaceId: "workspace:9",
+      env: { GUILD_PLUGIN_ROOT: path.join(os.tmpdir(), "missing-cmux-guild-package") } as NodeJS.ProcessEnv,
+    }).launch({
+      slug: "cmux-proof",
+      runId: "run-20260812-000000-cmux-proof",
+      cwd: process.cwd(),
+      specialists: [lane("backend", "T1")],
+      targetName: "workspace:9",
+      mode: "in-session",
+      dryRun: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.notes.join(" ")).toMatch(/explicit Guild plugin root.*invalid/i);
   });
 
   it("FU08 CONTROL: dry-run skips adapter preflight and performs no cmux calls", () => {
