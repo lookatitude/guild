@@ -5354,8 +5354,8 @@ function realFs() {
 function sessionContextPath(root, runId) {
   return path6.join(root, ".guild", "runs", runId, "session-context.json");
 }
-function writeSessionContext(root, ctx, fs38) {
-  const f = fs38 ?? realFs();
+function writeSessionContext(root, ctx, fs39) {
+  const f = fs39 ?? realFs();
   const p = sessionContextPath(root, ctx.run_id);
   const serialized = JSON.stringify(ctx, null, 2) + "\n";
   const existing = f.readFile(p);
@@ -5368,8 +5368,8 @@ function writeSessionContext(root, ctx, fs38) {
   f.mkdirp(path6.dirname(p));
   f.writeFile(p, serialized);
 }
-function loadSessionContext(root, runId, fs38) {
-  const f = fs38 ?? realFs();
+function loadSessionContext(root, runId, fs39) {
+  const f = fs39 ?? realFs();
   const raw = f.readFile(sessionContextPath(root, runId));
   if (raw === null) return null;
   try {
@@ -13052,12 +13052,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path46, code, message) {
-  return { path: path46, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path48, code, message) {
+  return { path: path48, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path46, code, message) {
+function pushIssue(issues, path48, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path46, code, message));
+  issues.push(issue(path48, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -13068,15 +13068,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path46, depth) => {
+  const walk = (node, path48, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path46, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path48, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path46, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path48, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -13085,7 +13085,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path46, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path48, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -13093,17 +13093,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path46, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path48, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path46, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path48, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path46, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path48, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -13111,26 +13111,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path46, "array_length_unreadable", length.reason);
+          pushIssue(errors, path48, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path46, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path48, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path46}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path48}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path46}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path48}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path46}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path48}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -13138,11 +13138,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path46, "own_keys_threw", keys.reason);
+        pushIssue(errors, path48, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path46, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path48, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -13150,14 +13150,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path46}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path48}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path46}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path48}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path46}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path48}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -13213,38 +13213,38 @@ var init_document_safe = __esm({
 });
 
 // ../src/modules/documents/workflows/document-records.ts
-function readShape(issues, value, path46, allowed) {
+function readShape(issues, value, path48, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path46, "not_an_object", `${path46} must be an object`);
+    pushIssue(issues, path48, "not_an_object", `${path48} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path46, "not_an_object", `${path46} must be an object, not an array`);
+    pushIssue(issues, path48, "not_an_object", `${path48} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path46, "own_keys_threw", `${path46}: ${keys.reason}`);
+    pushIssue(issues, path48, "own_keys_threw", `${path48}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path46}.${key}`, "unexpected_key", `${path46}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path48}.${key}`, "unexpected_key", `${path48}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path46}.${key}`, "missing_field", `${path46}.${key} is required`);
+      pushIssue(issues, `${path48}.${key}`, "missing_field", `${path48}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path46, key, options = {}) {
-  const fieldPath = `${path46}.${key}`;
+function readString(issues, parent, path48, key, options = {}) {
+  const fieldPath = `${path48}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -13279,8 +13279,8 @@ function readString(issues, parent, path46, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path46, key, options = {}) {
-  const fieldPath = `${path46}.${key}`;
+function readArray(issues, parent, path48, key, options = {}) {
+  const fieldPath = `${path48}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -13323,10 +13323,10 @@ function readArray(issues, parent, path46, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path46, key, options = {}) {
-  const items = readArray(issues, parent, path46, key, options);
+function readStringArray(issues, parent, path48, key, options = {}) {
+  const items = readArray(issues, parent, path48, key, options);
   if (items === null) return null;
-  const fieldPath = `${path46}.${key}`;
+  const fieldPath = `${path48}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -13352,10 +13352,10 @@ function readStringArray(issues, parent, path46, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path46, key, options, readItem) {
-  const items = readArray(issues, parent, path46, key, options);
+function readItemArray(issues, parent, path48, key, options, readItem) {
+  const items = readArray(issues, parent, path48, key, options);
   if (items === null) return null;
-  const fieldPath = `${path46}.${key}`;
+  const fieldPath = `${path48}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -13382,13 +13382,13 @@ function readItemArray(issues, parent, path46, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path46) {
+function readProvenance(issues, parent, path48) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path46}.provenance`, "property_read_threw", `${path46}.provenance: property read threw`);
+    pushIssue(issues, `${path48}.provenance`, "property_read_threw", `${path48}.provenance: property read threw`);
     return null;
   }
-  const provenancePath3 = `${path46}.provenance`;
+  const provenancePath3 = `${path48}.provenance`;
   if (!readShape(issues, read.value, provenancePath3, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath3, "author_id", {
@@ -13429,10 +13429,10 @@ function readProvenance(issues, parent, path46) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path46) {
-  if (!readShape(issues, body, path46, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path46, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path46, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path48) {
+  if (!readShape(issues, body, path48, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path48, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path48, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -13443,12 +13443,12 @@ function readPlanBody(issues, body, path46) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path46) {
-  if (!readShape(issues, body, path46, ["requirements"])) return null;
+function readSpecBody(issues, body, path48) {
+  if (!readShape(issues, body, path48, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path46,
+    path48,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -13465,22 +13465,22 @@ function readSpecBody(issues, body, path46) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path46) {
-  if (!readShape(issues, body, path46, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path46, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path46, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path46, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path46, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path48) {
+  if (!readShape(issues, body, path48, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path48, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path48, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path48, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path48, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path46) {
-  if (!readShape(issues, body, path46, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path46, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path48) {
+  if (!readShape(issues, body, path48, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path48, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path46,
+    path48,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -13495,13 +13495,13 @@ function readReviewBody(issues, body, path46) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path46) {
-  if (!readShape(issues, body, path46, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path46, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path48) {
+  if (!readShape(issues, body, path48, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path48, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path46,
+    path48,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -16344,11 +16344,11 @@ function exclusionSentinelPath(runDir4) {
   return (0, import_node_path.join)(runDir4, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir4) {
-  const path46 = stableLockPath(runDir4);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path46), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path46)) return;
+  const path48 = stableLockPath(runDir4);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path48), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path48)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path46, "wx");
+    const fd = (0, import_node_fs.openSync)(path48, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -16446,9 +16446,9 @@ function appendEvent(runDir4, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path46 = laneFallbackPath(runDir4, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path46), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path46, "a");
+    const path48 = laneFallbackPath(runDir4, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path48), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path48, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -19025,19 +19025,19 @@ function failed(input, code, message, disposition = "failed") {
     failure: { code, message }
   };
 }
-function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}) {
+function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}, options = {}) {
   const invalid = validateInput(input);
   if (invalid) return failed(input, "invalid_record", invalid);
   const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append", paths.checkpoint);
   if (!acquired.ok) return failed(input, acquired.failure.code, acquired.failure.message);
   const authority = acquired.authority;
   try {
-    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority);
+    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority, options);
   } finally {
     authority.release();
   }
 }
-function appendLocked(paths, input, io, authority) {
+function appendLocked(paths, input, io, authority, options) {
   const bound = authority.bind(io);
   const scan = scanReceiptJournal(paths.journal, bound);
   if (scan.integrity !== "intact" && scan.integrity !== "absent") {
@@ -19050,6 +19050,13 @@ function appendLocked(paths, input, io, authority) {
   if (scan.records.some((r) => r.event_id === input.event_id)) {
     return {
       ...failed(input, "duplicate_event_id", `event_id already present: ${input.event_id}`, "refused"),
+      observation_state: input.observation_state,
+      blocks_dependent_completion: false
+    };
+  }
+  if (options.uniqueOperation && scan.records.some((r) => r.operation_id === input.operation_id)) {
+    return {
+      ...failed(input, "duplicate_operation_id", `operation_id already present: ${input.operation_id}`, "refused"),
       observation_state: input.observation_state,
       blocks_dependent_completion: false
     };
@@ -29499,6 +29506,16 @@ function realBindingFs() {
   return {
     mkdirp: (p) => fsReal2.mkdirSync(p, { recursive: true }),
     writeFile: (p, c) => fsReal2.writeFileSync(p, c, "utf8"),
+    writeFileExclusive: (p, c) => {
+      fsReal2.mkdirSync(path39.dirname(p), { recursive: true });
+      try {
+        fsReal2.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        return true;
+      } catch (error) {
+        if (error.code === "EEXIST") return false;
+        throw error;
+      }
+    },
     readFile: (p) => fsReal2.existsSync(p) ? fsReal2.readFileSync(p, "utf8") : null,
     exists: (p) => fsReal2.existsSync(p)
   };
@@ -29506,10 +29523,25 @@ function realBindingFs() {
 function runBindingPath(root, runId) {
   return path39.join(root, ".guild", "runs", runId, "binding.json");
 }
+function withRunBindingExclusion(root, runId, fn) {
+  if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
+    throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
+  }
+  const persisted = readRunBindingRecord({ root, run_id: runId });
+  if (persisted.status === "absent") throw new BindingRejectedError("binding_not_minted", runId);
+  if (persisted.status === "malformed") throw new BindingRejectedError("binding_malformed", runId);
+  return withStableLock(path39.join(root, ".guild", "runs", runId), fn);
+}
+function initializeRunBindingExclusion(root, runId) {
+  if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
+    throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
+  }
+  initStableLockfile(path39.join(root, ".guild", "runs", runId));
+}
 function mintRunBinding(opts) {
-  const fs38 = opts.fs ?? realBindingFs();
+  const fs39 = opts.fs ?? realBindingFs();
   const p = runBindingPath(opts.root, opts.run_id);
-  if (fs38.exists(p)) {
+  if (fs39.exists(p)) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
     );
@@ -29520,8 +29552,14 @@ function mintRunBinding(opts) {
     binding_ref: `rb-${crypto10.randomBytes(16).toString("hex")}`,
     state: "open"
   };
-  fs38.mkdirp(path39.dirname(p));
-  fs38.writeFile(p, JSON.stringify(record, null, 2) + "\n");
+  fs39.mkdirp(path39.dirname(p));
+  const contents = JSON.stringify(record, null, 2) + "\n";
+  const created = fs39.writeFileExclusive ? fs39.writeFileExclusive(p, contents) : !fs39.exists(p) && (fs39.writeFile(p, contents), true);
+  if (!created) {
+    throw new Error(
+      `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
+    );
+  }
   return record;
 }
 function validateRunBindingRecord(parsed, expectedRunId) {
@@ -29540,8 +29578,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs38 = opts.fs ?? realBindingFs();
-  const raw = fs38.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs39 = opts.fs ?? realBindingFs();
+  const raw = fs39.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -29558,16 +29596,19 @@ function loadRunBinding(opts) {
   return read.status === "ok" ? read.record : null;
 }
 function closeRunBinding(opts) {
-  const fs38 = opts.fs ?? realBindingFs();
+  const fs39 = opts.fs ?? realBindingFs();
   const record = loadRunBinding(opts);
   if (record === null || record.state === "closed") return;
-  fs38.writeFile(
+  fs39.writeFile(
     runBindingPath(opts.root, opts.run_id),
     JSON.stringify({ ...record, state: "closed" }, null, 2) + "\n"
   );
 }
 function reopenRunBinding(opts, binding_ref) {
-  const fs38 = opts.fs ?? realBindingFs();
+  return withRunBindingExclusion(opts.root, opts.run_id, () => reopenRunBindingUnderExclusion(opts, binding_ref));
+}
+function reopenRunBindingUnderExclusion(opts, binding_ref) {
+  const fs39 = opts.fs ?? realBindingFs();
   const read = readRunBindingRecord(opts);
   if (read.status === "absent") throw new BindingRejectedError("binding_not_minted", opts.run_id);
   if (read.status === "malformed") throw new BindingRejectedError("binding_malformed", opts.run_id);
@@ -29577,7 +29618,7 @@ function reopenRunBinding(opts, binding_ref) {
   }
   if (record.state === "open") return record;
   const reopened = { ...record, state: "open" };
-  fs38.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
+  fs39.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
   return reopened;
 }
 function verifyRunBinding(input) {
@@ -29603,8 +29644,8 @@ function assertWritableBinding(input) {
   if (verdict.ok === false) throw new BindingRejectedError(verdict.reason, input.run_id);
   return verdict.binding;
 }
-function locateCandidateRunId(root, fs38) {
-  const f = fs38 ?? realBindingFs();
+function locateCandidateRunId(root, fs39) {
+  const f = fs39 ?? realBindingFs();
   const candidates = [
     [path39.join(root, ".guild", "runs", "current-run-id"), "sentinel-legacy"],
     [path39.join(root, ".guild", "current-run-id"), "sentinel-b2"]
@@ -29628,6 +29669,7 @@ var init_run_binding = __esm({
     crypto10 = __toESM(require("crypto"));
     fsReal2 = __toESM(require("fs"));
     path39 = __toESM(require("path"));
+    init_stable_lock();
     BindingRejectedError = class extends Error {
       constructor(reason, run_id) {
         super(`binding_rejected (${reason}) for run ${run_id ?? "<absent>"}`);
@@ -30559,6 +30601,7 @@ var lifecycle_exports = {};
 __export(lifecycle_exports, {
   BindingRejectedError: () => BindingRejectedError,
   CANONICAL_PHASES: () => CANONICAL_PHASES,
+  CAPABILITY_RUN_START_SNAPSHOT_SCHEMA: () => CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
   DEFAULT_HEARTBEAT_TIMEOUT_MS: () => DEFAULT_HEARTBEAT_TIMEOUT_MS,
   HOOK_BINDING_ENV_BINDING_REF: () => HOOK_BINDING_ENV_BINDING_REF,
   HOOK_BINDING_ENV_RUN_ID: () => HOOK_BINDING_ENV_RUN_ID,
@@ -30651,6 +30694,7 @@ __export(lifecycle_exports, {
   assertWritableBinding: () => assertWritableBinding,
   buildMultiWaveProgram: () => buildMultiWaveProgram,
   calcDelayMs: () => calcDelayMs,
+  capabilityRunStartIdentityHash: () => capabilityRunStartIdentityHash,
   closeRunBinding: () => closeRunBinding,
   collectNeutralBoundNames: () => collectNeutralBoundNames,
   createRealEnv: () => createRealEnv,
@@ -30668,6 +30712,7 @@ __export(lifecycle_exports, {
   extractNeutralImportSpecifiers: () => extractNeutralImportSpecifiers,
   freezeNeutralCapabilitySnapshot: () => freezeNeutralCapabilitySnapshot,
   initRunManifest: () => initRunManifest,
+  initializeRunBindingExclusion: () => initializeRunBindingExclusion,
   isCanonicalPhase: () => isCanonicalPhase,
   isCanonicalRunId: () => isCanonicalRunId,
   isNeutralCleanObservation: () => isNeutralCleanObservation,
@@ -30756,6 +30801,7 @@ __export(lifecycle_exports, {
   validateRunManifest: () => validateRunManifest,
   verifyRunBinding: () => verifyRunBinding,
   wireRunManifest: () => wireRunManifest,
+  withRunBindingExclusion: () => withRunBindingExclusion,
   writePluginConfigSnapshot: () => writePluginConfigSnapshot,
   writeResolvedSettingsSnapshot: () => writeResolvedSettingsSnapshot,
   writeRunManifest: () => writeRunManifest,
@@ -31217,6 +31263,18 @@ var init_host_runtime = __esm({
 });
 
 // ../src/modules/lifecycle/workflows/run-lifecycle.ts
+function canonicalRecord(value) {
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${JSON.stringify(value[key])}`).join(",")}}`;
+}
+function capabilityRunStartIdentityHash(runId, startedAt, snapshotHash2) {
+  const body = canonicalRecord({
+    schema_version: "guild.run.v1",
+    run_id: runId,
+    started_at: startedAt,
+    capability_start_snapshot_sha256: snapshotHash2
+  });
+  return `sha256:${crypto11.createHash("sha256").update(body).digest("hex")}`;
+}
 function runDir2(root, runId) {
   return path42.join(root, ".guild", "runs", runId);
 }
@@ -31234,6 +31292,9 @@ function resolvedSettingsPath(root, runId) {
 }
 function pluginConfigSnapshotPath(root, runId) {
   return path42.join(runDir2(root, runId), "plugin-config-snapshot.json");
+}
+function capabilityRunStartSnapshotPath(root, runId) {
+  return path42.join(runDir2(root, runId), "capability", "run-start-snapshot.json");
 }
 function sentinelPath(root) {
   return path42.join(root, ".guild", "runs", "current-run-id");
@@ -31338,7 +31399,7 @@ function serializeRunYaml(rec) {
   emit(rec, 0);
   return lines.join("\n") + "\n";
 }
-function buildRunManifest(opts, runId, env, written) {
+function buildRunManifest(opts, runId, env, startedAt, written) {
   const host = env.resolveHost(opts.host_requested);
   const runClass = opts.run_class ?? "full";
   const runScope = opts.initiative ? "initiative" : "independent";
@@ -31368,7 +31429,7 @@ function buildRunManifest(opts, runId, env, written) {
     project: opts.project,
     host: hostBlock,
     model_tier_policy: opts.model_tier_policy,
-    started_at: env.now(),
+    started_at: startedAt,
     ignore_policy: opts.ignore_policy,
     scan_policy: opts.scan_policy,
     run_scope: runScope,
@@ -31377,6 +31438,7 @@ function buildRunManifest(opts, runId, env, written) {
     independent_run_group: independentGroup,
     entry_prompt_ref: opts.entry_prompt_ref ?? null,
     config_snapshot_ref: written.pluginConfig ? "plugin-config-snapshot.json" : null,
+    capability_start_snapshot_ref: written.capabilityBaselineHash ? { path: "capability/run-start-snapshot.json", sha256: written.capabilityBaselineHash } : null,
     attachment_resolution: {
       scope: runScope,
       initiative_id: opts.initiative,
@@ -31388,7 +31450,7 @@ function buildRunManifest(opts, runId, env, written) {
     run_class: runClass,
     gates: {},
     status: "open",
-    phases_log: phase ? [{ phase, at: env.now() }] : []
+    phases_log: phase ? [{ phase, at: startedAt }] : []
   };
   if (opts.snapshot && written.resolvedSettings) {
     manifest["settings_ref"] = {
@@ -31483,148 +31545,225 @@ function createRunLifecycle(env) {
       const preferredRunId = makeRunId(opts, nowIso);
       const root = opts.root;
       const runId = env.fs.exists(runDir2(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto11.randomUUID()}`) : preferredRunId;
-      const binding = mintRunBinding({ root, run_id: runId, fs: env.fs });
-      env.fs.mkdirp(logsDir(root, runId));
-      let resolvedSettingsWritten = false;
-      let pluginConfigWritten = false;
-      if (opts.snapshot) {
-        writeResolvedSettingsSnapshot(runId, opts.snapshot, {
-          cwd: root,
-          fs: env.fs,
-          // Use the run-id as the resolved_at_ref (deterministic, no Date.now).
-          resolvedAtRef: runId
-        });
-        resolvedSettingsWritten = env.fs.exists(resolvedSettingsPath(root, runId));
-        writePluginConfigSnapshot(runId, opts.snapshot, opts, env);
-        pluginConfigWritten = env.fs.exists(pluginConfigSnapshotPath(root, runId));
+      const runClass = opts.run_class ?? "full";
+      const capabilityBaseline = runClass === "full" ? env.captureCapabilityBaseline?.(root, runId) ?? null : null;
+      if (runClass === "full" && env.captureCapabilityBaseline && (!capabilityBaseline || capabilityBaseline.bound_run_id !== runId)) {
+        throw new Error(`[run-lifecycle] capability run-start baseline capture failed for ${runId}`);
       }
-      const manifest = buildRunManifest(opts, runId, env, {
-        resolvedSettings: resolvedSettingsWritten,
-        pluginConfig: pluginConfigWritten
-      });
-      env.fs.writeFile(runYamlPath(root, runId), serializeRunYaml(manifest));
-      const identity = opts.session_identity ?? {};
-      writeSessionContext(
-        root,
-        buildSessionContext({
-          run_id: runId,
-          started_at: env.now(),
-          envelope_host: identity.envelope_host,
-          env: identity.env,
-          native_adapter: identity.native_adapter,
-          handshake: identity.handshake,
-          execution_target: identity.execution_target,
-          active_model: identity.active_model,
-          run_binding: { binding_ref: binding.binding_ref, state: binding.state }
-        }),
-        env.fs
-      );
-      env.fs.writeFile(sentinelPath(root), runId);
-      if (env.emitAnalysisEvent) {
-        const runScope = opts.initiative ? "initiative" : "independent";
-        const independentGroup = runScope === "independent" ? opts.independent_run_group?.trim() || deriveRunSlug(opts) : null;
-        const eventBase = {
-          ts: env.now(),
-          run_id: runId,
-          lane_id: "",
-          actor_type: "system",
-          actor_id: "run-lifecycle",
-          status: "ok",
-          initiative_id: opts.initiative ?? void 0,
-          run_scope: runScope,
-          config_snapshot_ref: pluginConfigWritten ? "plugin-config-snapshot.json" : void 0
-        };
-        env.emitAnalysisEvent(makeAnalysisTraceEvent({ ...eventBase, event_class: "run_started" }), runDir2(root, runId));
-        env.emitAnalysisEvent(
-          makeAnalysisTraceEvent({
-            ...eventBase,
-            event_class: "run_attachment_resolved",
-            signature: `${runScope}:${opts.initiative ?? independentGroup}`
+      let ownsBaselineRunTransaction = false;
+      let ownedBindingRef = null;
+      const rollbackBaselineRunTransaction = (cause) => {
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        const rollbackFailures = [];
+        const persistedBinding = readRunBindingRecord({ root, run_id: runId, fs: env.fs });
+        const stillOwnsRun = ownedBindingRef !== null && persistedBinding.status === "ok" && persistedBinding.record.binding_ref === ownedBindingRef && persistedBinding.record.state === "open";
+        if (!stillOwnsRun) {
+          throw new Error(
+            `${reason}; rollback of ${runId} refused because this transaction no longer owns the open run binding`
+          );
+        }
+        try {
+          if (env.fs.readFile(sentinelPath(root))?.trim() === runId) {
+            env.fs.removeTree(sentinelPath(root));
+          }
+        } catch (error) {
+          rollbackFailures.push(`sentinel cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        try {
+          env.fs.removeTree(runDir2(root, runId));
+        } catch (error) {
+          rollbackFailures.push(`run cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        throw new Error(rollbackFailures.length === 0 ? reason : `${reason}; rollback of ${runId} also failed: ${rollbackFailures.join("; ")}`);
+      };
+      try {
+        const binding = mintRunBinding({ root, run_id: runId, fs: env.fs });
+        ownedBindingRef = binding.binding_ref;
+        ownsBaselineRunTransaction = capabilityBaseline !== null;
+        env.initializeRunBindingExclusion?.(root, runId);
+        env.fs.mkdirp(logsDir(root, runId));
+        let capabilityBaselineHash = null;
+        if (capabilityBaseline) {
+          const snapshotBytes = `${JSON.stringify({
+            schema_version: CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+            run_id: runId,
+            run_started_at: nowIso,
+            captured_at: nowIso,
+            ...capabilityBaseline
+          }, null, 2)}
+`;
+          capabilityBaselineHash = crypto11.createHash("sha256").update(snapshotBytes).digest("hex");
+          env.fs.writeFile(capabilityRunStartSnapshotPath(root, runId), snapshotBytes);
+        }
+        let resolvedSettingsWritten = false;
+        let pluginConfigWritten = false;
+        if (opts.snapshot) {
+          writeResolvedSettingsSnapshot(runId, opts.snapshot, {
+            cwd: root,
+            fs: env.fs,
+            // Use the run-id as the resolved_at_ref (deterministic, no Date.now).
+            resolvedAtRef: runId
+          });
+          resolvedSettingsWritten = env.fs.exists(resolvedSettingsPath(root, runId));
+          writePluginConfigSnapshot(runId, opts.snapshot, opts, env);
+          pluginConfigWritten = env.fs.exists(pluginConfigSnapshotPath(root, runId));
+        }
+        const manifest = buildRunManifest(opts, runId, env, nowIso, {
+          resolvedSettings: resolvedSettingsWritten,
+          pluginConfig: pluginConfigWritten,
+          capabilityBaselineHash
+        });
+        env.fs.writeFile(runYamlPath(root, runId), serializeRunYaml(manifest));
+        if (capabilityBaselineHash) {
+          const failAndRollback = (reason) => {
+            throw new Error(reason);
+          };
+          if (!env.recordCapabilityBaselineCapture) {
+            failAndRollback(`[run-lifecycle] capability run-start receipt recorder is unavailable for ${runId}`);
+          }
+          let recorded = false;
+          try {
+            recorded = env.recordCapabilityBaselineCapture(root, {
+              run_id: runId,
+              run_started_at: nowIso,
+              snapshot_sha256: capabilityBaselineHash,
+              start_identity_hash: capabilityRunStartIdentityHash(runId, nowIso, capabilityBaselineHash)
+            });
+          } catch (error) {
+            failAndRollback(`[run-lifecycle] capability run-start receipt capture threw for ${runId}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          if (!recorded) {
+            failAndRollback(`[run-lifecycle] capability run-start receipt capture failed for ${runId}`);
+          }
+        }
+        const identity = opts.session_identity ?? {};
+        writeSessionContext(
+          root,
+          buildSessionContext({
+            run_id: runId,
+            started_at: nowIso,
+            envelope_host: identity.envelope_host,
+            env: identity.env,
+            native_adapter: identity.native_adapter,
+            handshake: identity.handshake,
+            execution_target: identity.execution_target,
+            active_model: identity.active_model,
+            run_binding: { binding_ref: binding.binding_ref, state: binding.state }
           }),
-          runDir2(root, runId)
+          env.fs
         );
-        if (pluginConfigWritten) {
+        if (env.emitAnalysisEvent) {
+          const runScope = opts.initiative ? "initiative" : "independent";
+          const independentGroup = runScope === "independent" ? opts.independent_run_group?.trim() || deriveRunSlug(opts) : null;
+          const eventBase = {
+            ts: nowIso,
+            run_id: runId,
+            lane_id: "",
+            actor_type: "system",
+            actor_id: "run-lifecycle",
+            status: "ok",
+            initiative_id: opts.initiative ?? void 0,
+            run_scope: runScope,
+            config_snapshot_ref: pluginConfigWritten ? "plugin-config-snapshot.json" : void 0
+          };
+          env.emitAnalysisEvent(makeAnalysisTraceEvent({ ...eventBase, event_class: "run_started" }), runDir2(root, runId));
           env.emitAnalysisEvent(
             makeAnalysisTraceEvent({
               ...eventBase,
-              event_class: "config_snapshot_written",
-              payload_ref: "plugin-config-snapshot.json",
-              redaction: "redacted"
+              event_class: "run_attachment_resolved",
+              signature: `${runScope}:${opts.initiative ?? independentGroup}`
+            }),
+            runDir2(root, runId)
+          );
+          if (pluginConfigWritten) {
+            env.emitAnalysisEvent(
+              makeAnalysisTraceEvent({
+                ...eventBase,
+                event_class: "config_snapshot_written",
+                payload_ref: "plugin-config-snapshot.json",
+                redaction: "redacted"
+              }),
+              runDir2(root, runId)
+            );
+          }
+        }
+        env.fs.writeFile(sentinelPath(root), runId);
+        return runId;
+      } catch (error) {
+        if (ownsBaselineRunTransaction) rollbackBaselineRunTransaction(error);
+        throw error;
+      }
+    },
+    closeRun(runId, opts) {
+      const root = resolveCloseRoot(env);
+      env.withRunBindingExclusion(root, runId, () => {
+        assertWritableBinding({ root, run_id: runId, binding_ref: opts.binding_ref, fs: env.fs });
+        const facts = readStartFacts(env, root, runId);
+        const runClass = facts.run_class;
+        const now = env.now();
+        const finalCheckpoint = runClass === "lightweight" ? null : opts.final_learning_checkpoint ?? null;
+        const terminalTraceEvent = {
+          event_id: `evt-${crypto11.randomUUID()}`,
+          event_name: "run_closed",
+          at: now,
+          log_ref: logRefFor(runId)
+        };
+        const provenance = {
+          schema_version: "guild.provenance.v1",
+          run_id: runId,
+          command: facts.command,
+          initiative: facts.initiative,
+          retention_class: facts.initiative ? "until-archive" : "one-off-90d",
+          started_at: facts.started_at,
+          closed_at: now,
+          status: opts.status,
+          run_class: runClass,
+          terminal_trace_event: terminalTraceEvent,
+          final_learning_checkpoint: finalCheckpoint,
+          gates: opts.gates ?? {},
+          touched: mergeTouched(opts.touched),
+          artifacts: opts.artifacts ?? {},
+          benchmark_eligible: opts.status === "closed"
+        };
+        if (opts.coverage) provenance.coverage = opts.coverage;
+        const provPath = provenancePath(root, runId);
+        const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
+        if (env.fs.scrubbedWriteDurable) {
+          const runDir4 = path42.join(root, ".guild", "runs", runId);
+          const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir4, runId);
+          if (result.blocked) {
+            process.stderr.write(
+              `[run-lifecycle] WARN: provenance.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
+`
+            );
+          }
+        } else {
+          env.fs.writeFile(provPath, provenanceContent);
+        }
+        flipRunStatus(env, root, runId, opts.status);
+        closeRunBinding({ root, run_id: runId, fs: env.fs });
+        const sp = sentinelPath(root);
+        const currentSentinel = env.fs.readFile(sp);
+        if (currentSentinel !== null && currentSentinel.trim() === runId) {
+          env.fs.writeFile(sp, "");
+        }
+        if (env.emitAnalysisEvent) {
+          env.emitAnalysisEvent(
+            makeAnalysisTraceEvent({
+              ts: now,
+              run_id: runId,
+              lane_id: "",
+              event_class: "run_closed",
+              actor_type: "system",
+              actor_id: "run-lifecycle",
+              run_scope: facts.initiative ? "initiative" : "independent",
+              initiative_id: facts.initiative ?? void 0,
+              status: opts.status === "closed" ? "ok" : "incomplete"
             }),
             runDir2(root, runId)
           );
         }
-      }
-      return runId;
-    },
-    closeRun(runId, opts) {
-      const root = resolveCloseRoot(env);
-      assertWritableBinding({ root, run_id: runId, binding_ref: opts.binding_ref, fs: env.fs });
-      const facts = readStartFacts(env, root, runId);
-      const runClass = facts.run_class;
-      const now = env.now();
-      const finalCheckpoint = runClass === "lightweight" ? null : opts.final_learning_checkpoint ?? null;
-      const terminalTraceEvent = {
-        event_id: `evt-${crypto11.randomUUID()}`,
-        event_name: "run_closed",
-        at: now,
-        log_ref: logRefFor(runId)
-      };
-      const provenance = {
-        schema_version: "guild.provenance.v1",
-        run_id: runId,
-        command: facts.command,
-        initiative: facts.initiative,
-        retention_class: facts.initiative ? "until-archive" : "one-off-90d",
-        started_at: facts.started_at,
-        closed_at: now,
-        status: opts.status,
-        run_class: runClass,
-        terminal_trace_event: terminalTraceEvent,
-        final_learning_checkpoint: finalCheckpoint,
-        gates: opts.gates ?? {},
-        touched: mergeTouched(opts.touched),
-        artifacts: opts.artifacts ?? {},
-        benchmark_eligible: opts.status === "closed"
-      };
-      if (opts.coverage) provenance.coverage = opts.coverage;
-      const provPath = provenancePath(root, runId);
-      const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
-      if (env.fs.scrubbedWriteDurable) {
-        const runDir4 = path42.join(root, ".guild", "runs", runId);
-        const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir4, runId);
-        if (result.blocked) {
-          process.stderr.write(
-            `[run-lifecycle] WARN: provenance.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
-`
-          );
-        }
-      } else {
-        env.fs.writeFile(provPath, provenanceContent);
-      }
-      flipRunStatus(env, root, runId, opts.status);
-      closeRunBinding({ root, run_id: runId, fs: env.fs });
-      const sp = sentinelPath(root);
-      const currentSentinel = env.fs.readFile(sp);
-      if (currentSentinel !== null && currentSentinel.trim() === runId) {
-        env.fs.writeFile(sp, "");
-      }
-      if (env.emitAnalysisEvent) {
-        env.emitAnalysisEvent(
-          makeAnalysisTraceEvent({
-            ts: now,
-            run_id: runId,
-            lane_id: "",
-            event_class: "run_closed",
-            actor_type: "system",
-            actor_id: "run-lifecycle",
-            run_scope: facts.initiative ? "initiative" : "independent",
-            initiative_id: facts.initiative ?? void 0,
-            status: opts.status === "closed" ? "ok" : "incomplete"
-          }),
-          runDir2(root, runId)
-        );
-      }
+      });
     }
   };
 }
@@ -31633,9 +31772,9 @@ function resolveCloseRoot(env) {
   if (hint) return hint;
   return resolveGuildRoot2(process.cwd());
 }
-function createRealEnv(root, resolveHost) {
+function createRealEnv(root, resolveHost, captureCapabilityBaseline2, recordCapabilityBaselineCapture2) {
   const env = {
-    now: () => (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z"),
+    now: () => (/* @__PURE__ */ new Date()).toISOString(),
     fs: {
       mkdirp(absPath) {
         fsNode.mkdirSync(absPath, { recursive: true });
@@ -31643,6 +31782,16 @@ function createRealEnv(root, resolveHost) {
       writeFile(absPath, contents) {
         fsNode.mkdirSync(path42.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
+      },
+      writeFileExclusive(absPath, contents) {
+        fsNode.mkdirSync(path42.dirname(absPath), { recursive: true });
+        try {
+          fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx" });
+          return true;
+        } catch (error) {
+          if (error.code === "EEXIST") return false;
+          throw error;
+        }
       },
       readFile(absPath) {
         try {
@@ -31654,12 +31803,19 @@ function createRealEnv(root, resolveHost) {
       exists(absPath) {
         return fsNode.existsSync(absPath);
       },
+      removeTree(absPath) {
+        fsNode.rmSync(absPath, { recursive: true, force: true });
+      },
       // HK-06: real scrubbedWrite wired for provenance.json (fail-CLOSED).
       scrubbedWriteDurable(outPath, contents, surface, runDir4, runId) {
         return scrubbedWrite(outPath, contents, { surface, runDir: runDir4, runId });
       }
     },
+    withRunBindingExclusion,
+    initializeRunBindingExclusion,
     resolveHost,
+    ...captureCapabilityBaseline2 ? { captureCapabilityBaseline: captureCapabilityBaseline2 } : {},
+    ...recordCapabilityBaselineCapture2 ? { recordCapabilityBaselineCapture: recordCapabilityBaselineCapture2 } : {},
     emitAnalysisEvent: (event, activeRunDir) => emitTraceEvent(event, activeRunDir),
     __rootHint: root
   };
@@ -31716,7 +31872,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs38 = fsSeam ?? realProvenanceFsSeam();
+  const fs39 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
   const runsBase = path42.resolve(cwd, ".guild", "runs");
   assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
@@ -31725,9 +31881,9 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     resolved_at_ref: resolvedAtRef ?? runId
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs38.scrubbedWriteDurable) {
+  if (fs39.scrubbedWriteDurable) {
     const runDir4 = path42.join(cwd, ".guild", "runs", runId);
-    const result = fs38.scrubbedWriteDurable(outPath, serialized, "config", runDir4, runId);
+    const result = fs39.scrubbedWriteDurable(outPath, serialized, "config", runDir4, runId);
     if (result.blocked) {
       process.stderr.write(
         `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
@@ -31735,7 +31891,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
       );
     }
   } else {
-    fs38.writeFile(outPath, serialized);
+    fs39.writeFile(outPath, serialized);
   }
   return outPath;
 }
@@ -31828,7 +31984,7 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs38 = fsSeam ?? realProvenanceFsSeam();
+  const fs39 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
   const runsBase = path42.resolve(cwd, ".guild", "runs");
   try {
@@ -31836,7 +31992,7 @@ function readResolvedSettingsSnapshot(runId, opts) {
   } catch {
     return null;
   }
-  const raw = fs38.readFile(filePath);
+  const raw = fs39.readFile(filePath);
   if (raw === null) return null;
   try {
     return JSON.parse(raw);
@@ -31895,14 +32051,14 @@ function writeGateBlock(raw, gate, rec) {
   lines.splice(end, 0, gateKeyLine, ...entryLines);
   return lines.join("\n");
 }
-function appendGateOutcome(fs38, root, runId, gate, record) {
+function appendGateOutcome(fs39, root, runId, gate, record) {
   if (!GATE_TOKEN.test(gate)) return false;
   const p = runYamlPath(root, runId);
-  const raw = fs38.readFile(p);
+  const raw = fs39.readFile(p);
   if (raw === null) return false;
   const next = writeGateBlock(raw, gate, record);
   if (next === null) return false;
-  fs38.writeFile(p, next);
+  fs39.writeFile(p, next);
   return true;
 }
 function readRunStartedAt(runDir4, readFile = (p) => {
@@ -31921,7 +32077,7 @@ function readRunStartedAt(runDir4, readFile = (p) => {
   if (v === void 0 || v === null) return null;
   return String(v).trim() || null;
 }
-var crypto11, fsNode, path42, CANONICAL_RUN_ID_RE, CANONICAL_PHASES, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
+var crypto11, fsNode, path42, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, CANONICAL_PHASES, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
 var init_run_lifecycle = __esm({
   "../src/modules/lifecycle/workflows/run-lifecycle.ts"() {
     crypto11 = __toESM(require("crypto"));
@@ -31934,6 +32090,7 @@ var init_run_lifecycle = __esm({
     init_run_binding();
     init_security();
     init_telemetry();
+    CAPABILITY_RUN_START_SNAPSHOT_SCHEMA = "guild.capability_run_start_snapshot.v1";
     CANONICAL_RUN_ID_RE = /^run-(\d{8})-(\d{6})-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$/;
     CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
     WORKSPACE_KNOWLEDGE_DEFAULTS = {
@@ -31976,8 +32133,8 @@ function resolveGuildRoot(startCwd) {
 }
 
 // lib/run-trace.ts
-var fs37 = __toESM(require("fs"));
-var path45 = __toESM(require("path"));
+var fs38 = __toESM(require("fs"));
+var path47 = __toESM(require("path"));
 var crypto12 = __toESM(require("crypto"));
 
 // ../scripts/lib/run-lifecycle.ts
@@ -32013,9 +32170,295 @@ function formatBindingRejected(hook, auth) {
 `;
 }
 
-// emit-learning-checkpoint.ts
+// ../scripts/lib/capability/profile-emit.ts
+var import_crypto = require("crypto");
 var fs35 = __toESM(require("fs"));
+var path44 = __toESM(require("path"));
+
+// ../scripts/lib/core/contracts/project-definition-ref.ts
+var DEFINITION_KINDS = Object.freeze(["agent", "skill"]);
+var DEFINITION_KIND_SET = new Set(DEFINITION_KINDS);
+var DEFINITION_LAYERS = Object.freeze([
+  "plugin-shipped",
+  "dot-claude-agents",
+  "project-guild",
+  "umbrella-guild"
+]);
+var DEFINITION_LAYER_SET = new Set(DEFINITION_LAYERS);
+var REF_VERIFICATION_FAILURES = Object.freeze([
+  /** The ref itself is malformed → transport `invalid_request`. */
+  "invalid_ref",
+  /** Bytes were supplied but their hash does not match → transport `invalid_request`. */
+  "hash_mismatch",
+  /** The definition could not be read at `relative_path` → transport `capability_absent`. */
+  "bytes_absent"
+]);
+
+// ../scripts/lib/core/contracts/project-capability-profile.ts
+var RESOLVER_MODES = Object.freeze(["legacy", "observe", "shadow", "project-local", "strict"]);
+var RESOLVER_MODE_SET2 = new Set(RESOLVER_MODES);
+var CONFIDENCE_GRADES = Object.freeze(["high", "medium", "low"]);
+var CONFIDENCE_SET2 = new Set(CONFIDENCE_GRADES);
+var CANDIDATE_ACTIONS = Object.freeze(["propose", "observe", "defer"]);
+var CANDIDATE_ACTION_SET = new Set(CANDIDATE_ACTIONS);
+var CANDIDATE_KINDS = Object.freeze(["agent", "skill"]);
+var CANDIDATE_KIND_SET = new Set(CANDIDATE_KINDS);
+var EVIDENCE_SOURCES = Object.freeze([
+  "codebase_map",
+  "knowledge_graph",
+  "run",
+  "reflection",
+  "roster"
+]);
+var EVIDENCE_SOURCE_SET = new Set(EVIDENCE_SOURCES);
+var MUTATION_WINDOWS = Object.freeze(["run", "emission"]);
+var MUTATION_WINDOW_SET = new Set(MUTATION_WINDOWS);
+var HISTORICAL_EVIDENCE_SOURCES = Object.freeze(["run", "reflection"]);
+var HISTORICAL_SOURCE_SET = new Set(HISTORICAL_EVIDENCE_SOURCES);
+var MAX_PROFILE_BYTES = 256 * 1024;
+
+// ../scripts/lib/capability/profile-emit.ts
+init_path_containment();
+
+// ../scripts/lib/capability/candidate-surface.ts
 var path43 = __toESM(require("path"));
+var PROFILE_LEAF = path43.join("capability", "profile.json");
+var PROFILE_MAX_BYTES = 256 * 1024;
+var EMPTY_REASONS = Object.freeze([
+  "no_runs_directory",
+  "no_profile_found",
+  "profile_invalid",
+  "profile_too_large",
+  "invalid_options",
+  "profile_has_no_candidates",
+  "all_candidates_satisfied"
+]);
+var EMPTY_TEXT = Object.freeze({
+  no_runs_directory: "no runs yet \u2014 capability profiling has not run",
+  no_profile_found: "no capability profile emitted yet (run /guild:learn)",
+  profile_invalid: "the newest capability profile FAILED validation \u2014 treat it as absent",
+  profile_too_large: "the newest capability profile exceeds the size bound \u2014 not read",
+  invalid_options: "the surfacing options were malformed \u2014 nothing was read",
+  profile_has_no_candidates: "profiled, no candidates proposed",
+  all_candidates_satisfied: "all proposed candidates already exist in the roster"
+});
+
+// ../scripts/lib/capability/context-manager-contract.ts
+var CONTEXT_MANAGER_TOOLS = Object.freeze([
+  "Read",
+  "Grep",
+  "Glob",
+  "Write",
+  "Edit"
+]);
+var CONTEXT_MANAGER_WITHHELD_TOOLS = Object.freeze([
+  "Bash",
+  // a shell is a universal write primitive — it would void the path allowlist
+  "Task",
+  // spawning lanes is orchestration; this role assembles, it does not dispatch
+  "WebFetch",
+  // context comes from the project, not the internet
+  "WebSearch"
+]);
+var CONTEXT_MANAGER_CAPABILITY_SCOPE = Object.freeze([
+  "assemble_context_bundle",
+  "summarize_for_bundle",
+  "resolve_recall_query",
+  "record_context_receipt",
+  "emit_capability_profile"
+]);
+var CAPABILITY_SCOPE_SET = new Set(
+  CONTEXT_MANAGER_CAPABILITY_SCOPE
+);
+var CONTEXT_MANAGER_FORBIDDEN_OPERATIONS = Object.freeze([
+  "write_agent_definition",
+  "write_skill_definition",
+  "promote_knowledge",
+  "register_capability",
+  "approve_candidate",
+  "decide_project_question",
+  "advance_resolver_mode"
+]);
+var FORBIDDEN_OPERATION_SET = new Set(
+  CONTEXT_MANAGER_FORBIDDEN_OPERATIONS
+);
+var CONTEXT_MANAGER_WRITE_ROOTS = Object.freeze([
+  ".guild/context",
+  ".guild/artifacts",
+  ".guild/runs"
+]);
+var CONTEXT_MANAGER_FORBIDDEN_WRITE_ROOTS = Object.freeze([
+  ".guild/agents",
+  // may NOT write agent definitions
+  ".guild/skills",
+  // may NOT write skill definitions
+  ".guild/wiki",
+  // may NOT promote knowledge
+  ".guild/knowledge",
+  ".guild/memory",
+  ".guild/teams",
+  ".guild/initiatives",
+  ".guild/settings.json",
+  ".guild/guild.yaml",
+  ".guild/workspace.json"
+]);
+var CONTEXT_MANAGER_READ_ROOTS = Object.freeze([
+  ".guild",
+  "docs",
+  "src",
+  "scripts"
+]);
+var CONTEXT_MANAGER_DENY_REASONS = Object.freeze([
+  "malformed_path",
+  "forbidden_root",
+  "outside_write_roots"
+]);
+
+// ../scripts/lib/capability/profile-emit.ts
+var HASHED_TREES = Object.freeze([
+  ".guild/agents",
+  ".guild/skills"
+]);
+var HASHED_REGISTRIES = Object.freeze([
+  ".guild/agents/registry.yaml",
+  ".guild/skills/registry.yaml"
+]);
+var EMPTY_TREE_HASH = (0, import_crypto.createHash)("sha256").update("").digest("hex");
+function sha256File(abs) {
+  try {
+    return (0, import_crypto.createHash)("sha256").update(fs35.readFileSync(abs)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+var MAX_TREE_DEPTH = 32;
+function listTree(absRoot, rel = "", depth = 0) {
+  if (depth > MAX_TREE_DEPTH) return null;
+  let entries;
+  try {
+    entries = fs35.readdirSync(absRoot, { withFileTypes: true });
+  } catch (e) {
+    if (e?.code === "ENOENT") return [];
+    return null;
+  }
+  const out = [];
+  for (const e of entries) {
+    const childRel = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isSymbolicLink()) {
+      out.push({ rel: childRel, kind: "symlink" });
+    } else if (e.isDirectory()) {
+      out.push({ rel: childRel, kind: "dir" });
+      const child = listTree(path44.join(absRoot, e.name), childRel, depth + 1);
+      if (child === null) return null;
+      out.push(...child);
+    } else if (e.isFile()) {
+      out.push({ rel: childRel, kind: "file" });
+    } else {
+      out.push({ rel: childRel, kind: "symlink" });
+    }
+  }
+  return out.sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
+}
+function hashTree(projectRoot, relRoot) {
+  const abs = path44.join(projectRoot, relRoot);
+  try {
+    const st = fs35.lstatSync(abs);
+    if (st.isSymbolicLink()) return null;
+    if (!st.isDirectory()) return null;
+  } catch (e) {
+    if (e?.code !== "ENOENT") return null;
+    return EMPTY_TREE_HASH;
+  }
+  const entries = listTree(abs);
+  if (entries === null) return null;
+  if (entries.length === 0) return EMPTY_TREE_HASH;
+  const h = (0, import_crypto.createHash)("sha256");
+  for (const e of entries) {
+    if (e.kind !== "file") {
+      h.update(`${e.rel}\0${e.kind}
+`);
+      continue;
+    }
+    const fileHash = sha256File(path44.join(abs, e.rel));
+    if (fileHash === null) return null;
+    h.update(`${e.rel}\0${fileHash}
+`);
+  }
+  return h.digest("hex");
+}
+function hashFileSet(projectRoot, relPaths) {
+  const h = (0, import_crypto.createHash)("sha256");
+  let any = false;
+  for (const rel of [...relPaths].sort()) {
+    const abs = path44.join(projectRoot, rel);
+    let exists;
+    try {
+      const st = fs35.lstatSync(abs);
+      if (st.isSymbolicLink()) return null;
+      exists = st.isFile();
+    } catch (e) {
+      if (e?.code !== "ENOENT") return null;
+      exists = false;
+    }
+    if (!exists) continue;
+    const fileHash = sha256File(abs);
+    if (fileHash === null) return null;
+    any = true;
+    h.update(`${rel}\0${fileHash}
+`);
+  }
+  return any ? h.digest("hex") : EMPTY_TREE_HASH;
+}
+function baselineBinding(projectRoot) {
+  try {
+    return (0, import_crypto.createHash)("sha256").update(fs35.realpathSync(projectRoot)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+function snapshotTreeHashes(projectRoot) {
+  const agents = hashTree(projectRoot, HASHED_TREES[0]);
+  const skills = hashTree(projectRoot, HASHED_TREES[1]);
+  const registries = hashFileSet(projectRoot, HASHED_REGISTRIES);
+  if (agents === null || skills === null || registries === null) return null;
+  return { agents, skills, registries };
+}
+var FEEDSTOCK_INPUTS = Object.freeze([
+  Object.freeze({ name: "codebase_map", rel: ".guild/indexes/codebase-map.json" }),
+  Object.freeze({ name: "knowledge_graph", rel: ".guild/indexes/knowledge-graph.json" }),
+  Object.freeze({ name: "roster", rel: ".guild/agents/registry.yaml" })
+]);
+var EMIT_REFUSAL_CODES = Object.freeze([
+  "resolver_mode_disabled",
+  "invalid_run_id",
+  "invalid_project_id",
+  "invalid_generated_at",
+  "invalid_options",
+  "invalid_baseline",
+  "hash_incomplete",
+  "escapes_project_root",
+  "mutation_detected",
+  "profile_invalid",
+  "write_forbidden",
+  "write_failed",
+  "post_write_mutation"
+]);
+var MAX_PRIOR_PROFILE_BYTES = 256 * 1024;
+var PROFILE_EMITTING_MODES = Object.freeze([
+  "observe",
+  "shadow",
+  "project-local",
+  "strict"
+]);
+var EMITTING_MODE_SET = new Set(PROFILE_EMITTING_MODES);
+
+// lib/run-trace.ts
+init_receipt_journal();
+init_receipt_reconcile();
+
+// emit-learning-checkpoint.ts
+var fs36 = __toESM(require("fs"));
+var path45 = __toESM(require("path"));
 
 // ../src/modules/initiatives/workflows/classify-proposal.ts
 function classifyProposal(input) {
@@ -32556,12 +32999,12 @@ function buildYaml(opts) {
 }
 function appendKnowledgeLinksIndex(guildRoot, links) {
   if (links.length === 0) return;
-  const indexDir = path43.join(guildRoot, ".guild", "indexes");
-  const indexPath = path43.join(indexDir, "knowledge-links.json");
+  const indexDir = path45.join(guildRoot, ".guild", "indexes");
+  const indexPath = path45.join(indexDir, "knowledge-links.json");
   let existing = [];
-  if (fs35.existsSync(indexPath)) {
+  if (fs36.existsSync(indexPath)) {
     try {
-      const raw = fs35.readFileSync(indexPath, "utf8");
+      const raw = fs36.readFileSync(indexPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed["links"])) {
         existing = parsed["links"];
@@ -32583,8 +33026,8 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
   if (novel.length === 0) return;
   const merged = [...existing, ...novel];
   try {
-    fs35.mkdirSync(indexDir, { recursive: true });
-    fs35.writeFileSync(
+    fs36.mkdirSync(indexDir, { recursive: true });
+    fs36.writeFileSync(
       indexPath,
       JSON.stringify(
         { schema_version: "guild.knowledge_links.v1", links: merged },
@@ -32603,14 +33046,14 @@ function appendKnowledgeLinksIndex(guildRoot, links) {
 function appendReflections(guildRoot, runId, phase, decisions) {
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return;
-  const reflectionsDir = path43.join(guildRoot, ".guild", "reflections");
-  fs35.mkdirSync(reflectionsDir, { recursive: true });
-  const reflPath = path43.join(reflectionsDir, `${runId}.md`);
+  const reflectionsDir = path45.join(guildRoot, ".guild", "reflections");
+  fs36.mkdirSync(reflectionsDir, { recursive: true });
+  const reflPath = path45.join(reflectionsDir, `${runId}.md`);
   const entry = `
 ## Phase: ${phase} (${runId})
 
 ` + nonNone.map((k) => `- ${k}: ${decisions[k]}`).join("\n") + "\n";
-  fs35.appendFileSync(reflPath, entry, "utf8");
+  fs36.appendFileSync(reflPath, entry, "utf8");
 }
 function writeCheckpoint(opts) {
   assertPhase(opts.phase);
@@ -32619,11 +33062,11 @@ function writeCheckpoint(opts) {
   assertNodePrefixes(links);
   const guildRoot = opts.guildRoot ?? process.cwd();
   const decisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
-  const learningDir = path43.join(guildRoot, ".guild", "runs", opts.runId, "learning");
-  fs35.mkdirSync(learningDir, { recursive: true });
-  const checkpointFile = path43.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
+  const learningDir = path45.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  fs36.mkdirSync(learningDir, { recursive: true });
+  const checkpointFile = path45.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path43.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path45.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
   const observed = opts.observed ?? [];
   const yaml4 = buildYaml({
     runId: opts.runId,
@@ -32635,7 +33078,7 @@ function writeCheckpoint(opts) {
     knowledgeLinksBatch: links,
     ...opts.backstop === true ? { backstop: true } : {}
   });
-  fs35.writeFileSync(checkpointFile, yaml4, "utf8");
+  fs36.writeFileSync(checkpointFile, yaml4, "utf8");
   appendReflections(guildRoot, opts.runId, opts.phase, decisions);
   appendKnowledgeLinksIndex(guildRoot, links);
   void reflectionsAbsPath;
@@ -32660,7 +33103,7 @@ function main() {
   let decisions;
   if (verdictPath) {
     try {
-      const raw = fs35.readFileSync(verdictPath, "utf8");
+      const raw = fs36.readFileSync(verdictPath, "utf8");
       decisions = JSON.parse(raw);
     } catch (e) {
       process.stderr.write(
@@ -32671,7 +33114,7 @@ function main() {
   }
   if (decisions === void 0 && artifactsJsonPath) {
     try {
-      const rawArtifacts = fs35.readFileSync(artifactsJsonPath, "utf8");
+      const rawArtifacts = fs36.readFileSync(artifactsJsonPath, "utf8");
       const artifacts = JSON.parse(rawArtifacts);
       if (!artifacts.runId) artifacts.runId = runId;
       if (!artifacts.phase) artifacts.phase = phase ?? void 0;
@@ -32692,7 +33135,7 @@ function main() {
   let knowledgeLinksBatch = [];
   if (linksPath) {
     try {
-      const raw = fs35.readFileSync(linksPath, "utf8");
+      const raw = fs36.readFileSync(linksPath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         knowledgeLinksBatch = parsed;
@@ -32749,8 +33192,8 @@ var PHASE_TOKEN_TO_CHECKPOINT = {
 };
 
 // lib/heartbeat.ts
-var fs36 = __toESM(require("node:fs"));
-var path44 = __toESM(require("node:path"));
+var fs37 = __toESM(require("node:fs"));
+var path46 = __toESM(require("node:path"));
 
 // lib/run-state.ts
 init_run_state();
@@ -32769,10 +33212,10 @@ function isLaneTier(t) {
   return t === "cheap" || t === "mid" || t === "powerful";
 }
 function readExplicitHeartbeatTimeoutMs(cwd) {
-  const settingsPath = path44.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path46.join(resolveGuildRoot(cwd), ".guild", "settings.json");
   let raw;
   try {
-    raw = fs36.readFileSync(settingsPath, "utf8");
+    raw = fs37.readFileSync(settingsPath, "utf8");
   } catch {
     return null;
   }
@@ -32834,17 +33277,72 @@ function extractHandoffEnvelope(content) {
 }
 
 // lib/run-trace.ts
+function captureCapabilityBaseline(root, runId) {
+  const hashes = snapshotTreeHashes(root);
+  const boundRoot = baselineBinding(root);
+  if (!hashes || !boundRoot) return null;
+  return Object.freeze({ ...hashes, bound_root: boundRoot, bound_run_id: runId });
+}
+function recordCapabilityBaselineCapture(root, evidence) {
+  const operationId = `capability-start-snapshot:${evidence.run_id}`;
+  const outputHash = `sha256:${evidence.snapshot_sha256}`;
+  const paths = {
+    journal: path47.join(root, ".guild", "runs", evidence.run_id, "receipts", "journal.jsonl"),
+    checkpoint: path47.join(root, ".guild", "runs", evidence.run_id, "receipts", "checkpoint.json")
+  };
+  const input = makeReceiptInput({
+    run_id: evidence.run_id,
+    operation_id: operationId,
+    correlation_id: operationId,
+    event_id: `${operationId}:${evidence.snapshot_sha256.slice(0, 12)}`,
+    causation_id: null,
+    scenario_id: "PCL-09",
+    event_name: "receipt.append",
+    outcome_type: "guild.capability_outcome.v1",
+    disposition: "succeeded",
+    observation_state: "checked_clean",
+    input_hash: evidence.start_identity_hash,
+    output_hash: outputHash,
+    terminal: false,
+    recorded_at: evidence.run_started_at,
+    observed_at: evidence.run_started_at,
+    versions: {
+      host_id: "guild-lifecycle",
+      host_version: "unknown",
+      runtime_version: CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+      source_version: evidence.start_identity_hash,
+      contract_version: "guild.observability.v1"
+    },
+    affected_event_range: null
+  });
+  const matches = (record) => record.sequence === 1 && record.run_id === evidence.run_id && record.operation_id === operationId && record.correlation_id === operationId && record.event_id === input.event_id && record.scenario_id === "PCL-09" && record.event_name === "receipt.append" && record.disposition === "succeeded" && record.observation_state === "checked_clean" && record.input_hash === evidence.start_identity_hash && record.output_hash === outputHash && record.terminal === false && record.recorded_at === evidence.run_started_at && record.observed_at === evidence.run_started_at;
+  const appended = appendReceipt(paths, input);
+  if (appended.durable && appended.sequence === 1 && appended.record && matches(appended.record)) return true;
+  let scan = scanReceiptJournal(paths.journal);
+  if (scan.integrity !== "intact" || scan.blocks_clean_close || scan.records.length !== 1 || !matches(scan.records[0])) return false;
+  const repaired = reconcileReceiptJournal({
+    journalPath: paths.journal,
+    checkpointPath: paths.checkpoint,
+    run_id: evidence.run_id,
+    producerCheckpoint: { last_sequence: 1, record_count: 1 },
+    reconciled_at: evidence.run_started_at,
+    repair_checkpoint: true
+  });
+  if (!repaired.checkpoint_repair.verified || repaired.blocks_clean_close) return false;
+  scan = scanReceiptJournal(paths.journal);
+  return scan.integrity === "intact" && scan.records.length === 1 && matches(scan.records[0]) && compareCheckpointToJournal(readCheckpointState(paths.checkpoint), scan, evidence.run_id).length === 0;
+}
 function runDir3(root, runId) {
-  return path45.join(root, ".guild", "runs", runId);
+  return path47.join(root, ".guild", "runs", runId);
 }
 function liveLogPath3(root, runId) {
-  return path45.join(runDir3(root, runId), "logs", "v1.4-events.jsonl");
+  return path47.join(runDir3(root, runId), "logs", "v1.4-events.jsonl");
 }
 function provenancePath2(root, runId) {
-  return path45.join(runDir3(root, runId), "provenance.json");
+  return path47.join(runDir3(root, runId), "provenance.json");
 }
 function skippedFilesPath(root, runId) {
-  return path45.join(runDir3(root, runId), "learn", "skipped-files.json");
+  return path47.join(runDir3(root, runId), "learn", "skipped-files.json");
 }
 function resolveRunIdForTrace(_root, env) {
   const fromEnv = env.GUILD_RUN_ID;
@@ -32871,8 +33369,8 @@ function defaultResolveHost(requested) {
   return { requested, resolved };
 }
 function appendTraceLine(file, event) {
-  fs37.mkdirSync(path45.dirname(file), { recursive: true });
-  fs37.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
+  fs38.mkdirSync(path47.dirname(file), { recursive: true });
+  fs38.appendFileSync(file, JSON.stringify(event) + "\n", "utf8");
 }
 function emitRunClosed(root, runId, resolveHost, opts = {}) {
   try {
@@ -32881,7 +33379,7 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
       process.stderr.write(formatBindingRejected("run-trace", auth));
       return;
     }
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     lifecycle.closeRun(runId, {
       status: opts.status ?? "closed",
       binding_ref: auth.binding_ref,
@@ -32890,7 +33388,7 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
       final_learning_checkpoint: opts.final_learning_checkpoint,
       artifacts: opts.artifacts
     });
-    const prov = JSON.parse(fs37.readFileSync(provenancePath2(root, runId), "utf8"));
+    const prov = JSON.parse(fs38.readFileSync(provenancePath2(root, runId), "utf8"));
     const pointer = prov.terminal_trace_event;
     if (!pointer || typeof pointer.event_id !== "string") {
       process.stderr.write(
@@ -32918,20 +33416,20 @@ function newestRunActivityMs(root, runId) {
   const dir = runDir3(root, runId);
   const candidates = [
     liveLogPath3(root, runId),
-    path45.join(dir, "events.ndjson"),
-    path45.join(dir, "run.yaml")
+    path47.join(dir, "events.ndjson"),
+    path47.join(dir, "run.yaml")
   ];
   try {
-    const inProgress = path45.join(dir, "in-progress");
-    for (const name of fs37.readdirSync(inProgress)) {
-      candidates.push(path45.join(inProgress, name));
+    const inProgress = path47.join(dir, "in-progress");
+    for (const name of fs38.readdirSync(inProgress)) {
+      candidates.push(path47.join(inProgress, name));
     }
   } catch {
   }
   let newest = 0;
   for (const p of candidates) {
     try {
-      newest = Math.max(newest, fs37.statSync(p).mtimeMs);
+      newest = Math.max(newest, fs38.statSync(p).mtimeMs);
     } catch {
     }
   }
@@ -32946,7 +33444,7 @@ function closeStalePriorOpenRun(root, resolveHost, now = Date.now) {
     if (!priorId) return;
     let runYaml;
     try {
-      runYaml = fs37.readFileSync(path45.join(runDir3(root, priorId), "run.yaml"), "utf8");
+      runYaml = fs38.readFileSync(path47.join(runDir3(root, priorId), "run.yaml"), "utf8");
     } catch {
       return;
     }
@@ -32962,7 +33460,7 @@ function closeStalePriorOpenRun(root, resolveHost, now = Date.now) {
 function startRunOnly(root, resolveHost, opts = {}) {
   try {
     closeStalePriorOpenRun(root, resolveHost);
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     return lifecycle.startRun(buildStartRunOpts(root, opts));
   } catch (err) {
     process.stderr.write(
@@ -32974,12 +33472,12 @@ function startRunOnly(root, resolveHost, opts = {}) {
 }
 function hashFile(file) {
   try {
-    return crypto12.createHash("sha256").update(fs37.readFileSync(file)).digest("hex");
+    return crypto12.createHash("sha256").update(fs38.readFileSync(file)).digest("hex");
   } catch {
     return null;
   }
 }
-function resolveInstalledPluginIdentity(env = process.env, fallbackRoot = path45.resolve(__dirname, "../..")) {
+function resolveInstalledPluginIdentity(env = process.env, fallbackRoot = path47.resolve(__dirname, "../..")) {
   const pluginRoot = env["GUILD_PLUGIN_ROOT"] ?? env["PLUGIN_ROOT"] ?? env["CLAUDE_PLUGIN_ROOT"] ?? env["CODEX_PLUGIN_ROOT"] ?? fallbackRoot;
   const manifestCandidates = [
     ".claude-plugin/plugin.json",
@@ -32995,9 +33493,9 @@ function resolveInstalledPluginIdentity(env = process.env, fallbackRoot = path45
   let version = null;
   let identityFile = null;
   for (const rel of manifestCandidates) {
-    const candidate = path45.join(pluginRoot, rel);
+    const candidate = path47.join(pluginRoot, rel);
     try {
-      const parsed = JSON.parse(fs37.readFileSync(candidate, "utf8"));
+      const parsed = JSON.parse(fs38.readFileSync(candidate, "utf8"));
       if (typeof parsed["version"] === "string" && parsed["version"] !== "") {
         version = parsed["version"];
         identityFile = candidate;
@@ -33008,18 +33506,18 @@ function resolveInstalledPluginIdentity(env = process.env, fallbackRoot = path45
   }
   if (version === null) {
     try {
-      const agents = fs37.readFileSync(path45.join(pluginRoot, "AGENTS.md"), "utf8");
+      const agents = fs38.readFileSync(path47.join(pluginRoot, "AGENTS.md"), "utf8");
       version = /source_version:\s*([0-9A-Za-z.+-]+)/.exec(agents)?.[1] ?? null;
-      if (version) identityFile = path45.join(pluginRoot, "AGENTS.md");
+      if (version) identityFile = path47.join(pluginRoot, "AGENTS.md");
     } catch {
     }
   }
-  const refHash = identityFile ? hashFile(identityFile) : hashFile(path45.join(pluginRoot, "scripts", "run-analysis.ts"));
-  const commandRegistry = hashFile(path45.join(pluginRoot, "command-src", "command-registry.json"));
+  const refHash = identityFile ? hashFile(identityFile) : hashFile(path47.join(pluginRoot, "scripts", "run-analysis.ts"));
+  const commandRegistry = hashFile(path47.join(pluginRoot, "command-src", "command-registry.json"));
   const claudeCommands = (() => {
-    const dir = path45.join(pluginRoot, "commands");
+    const dir = path47.join(pluginRoot, "commands");
     try {
-      const material = fs37.readdirSync(dir).filter((name) => name.endsWith(".md")).sort().map((name) => `${name}\0${fs37.readFileSync(path45.join(dir, name), "utf8")}`).join("\0");
+      const material = fs38.readdirSync(dir).filter((name) => name.endsWith(".md")).sort().map((name) => `${name}\0${fs38.readFileSync(path47.join(dir, name), "utf8")}`).join("\0");
       return material ? crypto12.createHash("sha256").update(material).digest("hex") : null;
     } catch {
       return null;
@@ -33083,12 +33581,12 @@ function resolvePreflightSnapshot(cwd, probe) {
 function buildPhaseArtifacts(root, runId) {
   const artifacts = { runId };
   try {
-    const hDir = path45.join(runDir3(root, runId), "handoffs");
+    const hDir = path47.join(runDir3(root, runId), "handoffs");
     const blocks = [];
     const texts = [];
-    for (const f of fs37.readdirSync(hDir)) {
+    for (const f of fs38.readdirSync(hDir)) {
       if (!f.endsWith(".md")) continue;
-      const content = fs37.readFileSync(path45.join(hDir, f), "utf8");
+      const content = fs38.readFileSync(path47.join(hDir, f), "utf8");
       texts.push(content);
       const env = extractHandoffEnvelope(content);
       if (env && typeof env === "object") blocks.push(env);
@@ -33098,7 +33596,7 @@ function buildPhaseArtifacts(root, runId) {
   } catch {
   }
   try {
-    const prov = JSON.parse(fs37.readFileSync(provenancePath2(root, runId), "utf8"));
+    const prov = JSON.parse(fs38.readFileSync(provenancePath2(root, runId), "utf8"));
     if (prov && typeof prov.touched === "object") artifacts.provenanceTouched = prov.touched;
   } catch {
   }
@@ -33108,7 +33606,7 @@ function emitPhaseCheckpoint(root, runId, phase) {
   try {
     const checkpointPhase = PHASE_TOKEN_TO_CHECKPOINT[phase];
     if (checkpointPhase === void 0) return;
-    const checkpointFile = path45.join(
+    const checkpointFile = path47.join(
       root,
       ".guild",
       "runs",
@@ -33116,7 +33614,7 @@ function emitPhaseCheckpoint(root, runId, phase) {
       "learning",
       `${checkpointPhase}-${runId}.yaml`
     );
-    if (fs37.existsSync(checkpointFile)) return;
+    if (fs38.existsSync(checkpointFile)) return;
     let decisions;
     try {
       const verdict = classifyPhase(buildPhaseArtifacts(root, runId));
@@ -33151,7 +33649,7 @@ function recordPhase(root, phase, opts = {}) {
       process.stderr.write(formatBindingRejected("run-trace", auth));
       return null;
     }
-    const lifecycleEnv = createRealEnv(root, defaultResolveHost);
+    const lifecycleEnv = createRealEnv(root, defaultResolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture);
     if (!appendPhase(lifecycleEnv, root, runId, phase)) return null;
     emitPhaseCheckpoint(root, runId, phase);
     return runId;
@@ -33162,7 +33660,7 @@ function recordPhase(root, phase, opts = {}) {
 function startAndCloseRun(root, resolveHost, opts = {}) {
   try {
     closeStalePriorOpenRun(root, resolveHost);
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
     emitRunClosed(root, runId, resolveHost, {
       status: "closed",
@@ -33200,8 +33698,8 @@ function writeSkippedFiles(root, runId, entries, opts = {}) {
     skipped_count: entries.length,
     skipped: entries
   };
-  fs37.mkdirSync(path45.dirname(out), { recursive: true });
-  fs37.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
+  fs38.mkdirSync(path47.dirname(out), { recursive: true });
+  fs38.writeFileSync(out, JSON.stringify(body, null, 2) + "\n", "utf8");
   return out;
 }
 

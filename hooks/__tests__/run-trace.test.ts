@@ -57,6 +57,12 @@ import * as runstartPreflightOriginal from "../../src/modules/lifecycle/workflow
 // Shared js-yaml frontmatter parser (OD-3 compliant) — read run.yaml fields by
 // parsing the document instead of hand-rolled line-anchored regex assertions.
 import { parseYaml } from "../../scripts/lib/frontmatter";
+import {
+  compareCheckpointToJournal,
+  defaultJournalIo,
+  readCheckpointState,
+  scanReceiptJournal,
+} from "../../src/modules/telemetry/workflows/receipt-journal";
 
 /** Parse a run.yaml document to its top-level fields (fail-loud null on parse error). */
 const runYamlFields = (text: string) =>
@@ -304,6 +310,47 @@ describe("run-trace lib (Lane B3)", () => {
       expect(prov.run_class).toBe("full");
     });
 
+    it("recovers a journal-won start receipt before exposing the full run id", () => {
+      const checkpointWrite = jest.spyOn(defaultJournalIo, "writeCheckpoint")
+        .mockImplementationOnce(() => { throw new Error("planted start-checkpoint crash"); });
+      let runId: string | null = null;
+      try {
+        runId = startRunOnly(root, resolveHost, { command: "/guild:learn", run_class: "full" });
+      } finally {
+        checkpointWrite.mockRestore();
+      }
+      expect(runId).not.toBeNull();
+      expect(fs.readFileSync(path.join(root, ".guild", "runs", "current-run-id"), "utf8")).toBe(runId);
+      const receipts = path.join(root, ".guild", "runs", runId as string, "receipts");
+      const scan = scanReceiptJournal(path.join(receipts, "journal.jsonl"));
+      expect(scan.records).toHaveLength(1);
+      expect(scan.records[0]).toEqual(expect.objectContaining({
+        sequence: 1,
+        operation_id: `capability-start-snapshot:${runId}`,
+      }));
+      expect(compareCheckpointToJournal(
+        readCheckpointState(path.join(receipts, "checkpoint.json")),
+        scan,
+        runId as string,
+      )).toEqual([]);
+    });
+
+    it("removes the full run transaction when its start receipt cannot be appended", () => {
+      const acquire = jest.spyOn(defaultJournalIo, "acquireLock")
+        .mockImplementation(() => { throw new Error("planted non-recoverable lock failure"); });
+      let runId: string | null = "unexpected";
+      try {
+        runId = startRunOnly(root, resolveHost, { command: "/guild:learn", run_class: "full" });
+      } finally {
+        acquire.mockRestore();
+      }
+      expect(runId).toBeNull();
+      const runsRoot = path.join(root, ".guild", "runs");
+      const entries = fs.existsSync(runsRoot) ? fs.readdirSync(runsRoot) : [];
+      expect(entries.filter((entry) => entry.startsWith("run-"))).toEqual([]);
+      expect(fs.existsSync(path.join(runsRoot, "current-run-id"))).toBe(false);
+    });
+
     it("run_class=lightweight: writes runs/-only, never wiki/indexes/reflections/initiatives, checkpoint null", () => {
       const runId = startAndCloseRun(root, resolveHost, {
         command: "/guild:status",
@@ -319,6 +366,8 @@ describe("run-trace lib (Lane B3)", () => {
       );
       expect(prov.run_class).toBe("lightweight");
       expect(prov.final_learning_checkpoint).toBeNull();
+      expect(fs.existsSync(path.join(runDir, "capability"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "receipts"))).toBe(false);
       // NEVER writes durable store dirs.
       for (const forbidden of ["wiki", "indexes", "reflections", "initiatives"]) {
         expect(fs.existsSync(path.join(root, ".guild", forbidden))).toBe(false);

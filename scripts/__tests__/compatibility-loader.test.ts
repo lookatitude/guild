@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { buildCompatibilityCatalog } from "../lib/capability/compatibility-catalog";
 import { collectCompatibilityUsageWindow, readCompatibilityAsset, writeFrozenCompatibilityCatalog } from "../lib/capability/compatibility-loader";
 import { scanReceiptJournal } from "../../src/modules/telemetry";
+import { closeRunBinding, mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+
+function openBinding(projectRoot: string, runId: string): string {
+  return mintRunBinding({ root: projectRoot, run_id: runId }).binding_ref;
+}
 
 describe("instrumented compatibility loader", () => {
   it("freezes only the complete attributed deprecated catalog and never overwrites drift", () => {
@@ -23,7 +28,7 @@ describe("instrumented compatibility loader", () => {
       const pluginRoot = join(__dirname, "../..");
       const catalog = buildCompatibilityCatalog({ pluginRoot, deprecation: "deprecated", deprecatedBy: "cap-loc-D03" });
       const entry = catalog.entries.find((candidate) => candidate.kind === "shipped_template")!;
-      const result = readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "shadow", intent: "mint", synthetic: false, specialistId: entry.id, runId: "run-compat", operationId: "test-read-1", recordedAt: "2026-08-10T00:00:00Z" });
+      const result = readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "shadow", intent: "mint", synthetic: false, specialistId: entry.id, runId: "run-compat", bindingRef: openBinding(projectRoot, "run-compat"), operationId: "test-read-1" });
       expect(result.status).toBe("loaded");
       const scan = scanReceiptJournal(join(projectRoot, ".guild/runs/run-compat/receipts/journal.jsonl"));
       expect(scan.integrity).toBe("intact");
@@ -42,12 +47,30 @@ describe("instrumented compatibility loader", () => {
     } finally { rmSync(projectRoot, { recursive: true, force: true }); }
   });
 
+  it("derives receipt time itself and refuses a post-close compatibility read", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-compat-closed-"));
+    try {
+      const pluginRoot = join(__dirname, "../..");
+      const entry = buildCompatibilityCatalog({ pluginRoot }).entries.find((candidate) => candidate.kind === "shipped_template")!;
+      const runId = "run-closed-compat";
+      const bindingRef = openBinding(projectRoot, runId);
+      closeRunBinding({ root: projectRoot, run_id: runId });
+      jest.useFakeTimers({ now: new Date("2000-01-01T00:00:00.000Z") });
+      let result;
+      try {
+        result = readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId, bindingRef, operationId: "backdate-attempt" });
+      } finally { jest.useRealTimers(); }
+      expect(result).toEqual(expect.objectContaining({ status: "refused", detail: expect.stringMatching(/binding_closed/) }));
+      expect(scanReceiptJournal(join(projectRoot, ".guild/runs", runId, "receipts/journal.jsonl")).integrity).toBe("absent");
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); }
+  });
+
   it("fails closed when no shipped manifest can bind the runtime version", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "guild-compat-version-project-"));
     const pluginRoot = mkdtempSync(join(tmpdir(), "guild-compat-version-plugin-"));
     try {
       const entry = buildCompatibilityCatalog({ pluginRoot: join(__dirname, "../..") }).entries[0];
-      const result = readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-no-version", operationId: "missing-runtime-version", recordedAt: "2026-08-19T00:00:00Z" });
+      const result = readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-no-version", bindingRef: openBinding(projectRoot, "run-no-version"), operationId: "missing-runtime-version" });
       expect(result).toEqual({
         status: "refused",
         detail: "compatibility runtime version is not available from a shipped plugin manifest",
@@ -75,8 +98,9 @@ describe("instrumented compatibility loader", () => {
       mkdirSync(dirname(compatibilityPath), { recursive: true });
       writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
 
-      expect(() => readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-producer-refusal", operationId: `producer-${shape}`, recordedAt: "2026-08-21T00:00:00Z" })).not.toThrow();
-      expect(readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-producer-refusal", operationId: `producer-${shape}`, recordedAt: "2026-08-21T00:00:00Z" })).toEqual({ status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" });
+      const bindingRef = openBinding(projectRoot, "run-producer-refusal");
+      expect(() => readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-producer-refusal", bindingRef, operationId: `producer-${shape}` })).not.toThrow();
+      expect(readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-producer-refusal", bindingRef, operationId: `producer-${shape}` })).toEqual({ status: "refused", detail: "compatibility runtime version is not available from a shipped plugin manifest" });
       expect(scanReceiptJournal(join(projectRoot, ".guild/runs/run-producer-refusal/receipts/journal.jsonl")).integrity).toBe("absent");
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
@@ -100,7 +124,7 @@ describe("instrumented compatibility loader", () => {
       writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
       process.env["GUILD_HOST_ID"] = "codex-cli";
 
-      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-stale-host", operationId: "stale-host", recordedAt: "2026-08-21T00:00:00Z" });
+      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-stale-host", bindingRef: openBinding(projectRoot, "run-stale-host"), operationId: "stale-host" });
       expect(result.status).toBe("loaded");
       expect(scanReceiptJournal(join(projectRoot, ".guild/runs/run-stale-host/receipts/journal.jsonl")).records[0].versions.host_id).toBe("claude-code-cli");
     } finally {
@@ -124,7 +148,7 @@ describe("instrumented compatibility loader", () => {
       mkdirSync(dirname(compatibilityPath), { recursive: true });
       writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
 
-      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-codex-version", operationId: "codex-runtime-version", recordedAt: "2026-08-19T00:00:00Z" });
+      const result = readCompatibilityAsset({ pluginRoot, projectRoot, entry, mode: "observe", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-codex-version", bindingRef: openBinding(projectRoot, "run-codex-version"), operationId: "codex-runtime-version" });
       expect(result.status).toBe("loaded");
       const scan = scanReceiptJournal(join(projectRoot, ".guild/runs/run-codex-version/receipts/journal.jsonl"));
       expect(scan.records).toHaveLength(1);
@@ -141,7 +165,7 @@ describe("instrumented compatibility loader", () => {
     try {
       const pluginRoot = join(__dirname, "../..");
       const entry = buildCompatibilityCatalog({ pluginRoot }).entries[0];
-      expect(readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "strict", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-refused", operationId: "test-refusal", recordedAt: "2026-08-10T00:00:00Z" }).status).toBe("refused");
+      expect(readCompatibilityAsset({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, entry, mode: "strict", intent: "dispatch", synthetic: false, specialistId: null, runId: "run-refused", bindingRef: openBinding(projectRoot, "run-refused"), operationId: "test-refusal" }).status).toBe("refused");
       expect(scanReceiptJournal(join(projectRoot, ".guild/runs/run-refused/receipts/journal.jsonl")).integrity).toBe("absent");
     } finally { rmSync(projectRoot, { recursive: true, force: true }); }
   });

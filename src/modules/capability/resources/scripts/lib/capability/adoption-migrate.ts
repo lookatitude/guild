@@ -104,6 +104,7 @@ import {
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
 import { readCompatibilityAsset, readRuntimeVersion } from "./compatibility-loader";
+import { assertWritableBinding } from "../../../src/modules/lifecycle/workflows/run-binding";
 import {
   appendReceipt,
   makeReceiptInput,
@@ -923,6 +924,7 @@ const APPLY_KEYS = [
   "report",
   "decisions",
   "runId",
+  "bindingRef",
   "adoptedAt",
   "authorizedBy",
   "dryRun",
@@ -1406,7 +1408,19 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
   if (!compatibilityCatalog.census_matches) {
     return { status: "refused", reason: "compatibility catalog census is incomplete" };
   }
-  for (const entry of pendingEntries.filter((candidate) => candidate.reason === "migrated")) {
+  const migratedEntries = pendingEntries.filter((candidate) => candidate.reason === "migrated");
+  const bindingRef = o["bindingRef"];
+  if (migratedEntries.length > 0) {
+    if (!isToken(bindingRef)) {
+      return { status: "refused", reason: "compatibility reads require the caller-presented adoption run binding reference" };
+    }
+    try {
+      assertWritableBinding({ root: projRoot, run_id: runId, binding_ref: bindingRef });
+    } catch {
+      return { status: "refused", reason: "compatibility reads require the caller-presented adoption run's open lifecycle binding" };
+    }
+  }
+  for (const entry of migratedEntries) {
     const catalogEntry = compatibilityCatalog.entries.find((candidate) =>
       candidate.id === entry.from.id &&
       candidate.kind === (entry.kind === "agent" ? "shipped_template" : "shipped_domain_skill")
@@ -1421,8 +1435,8 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
       synthetic: false,
       specialistId: entry.kind === "agent" ? entry.to?.id ?? null : null,
       runId,
+      bindingRef: bindingRef as string,
       operationId: `adoption-${entry.kind}-${entry.from.id}`,
-      recordedAt: adoptedAt,
     });
     if (loaded.status !== "loaded") return { status: "refused", reason: `compatibility read was not durably instrumented: ${loaded.detail}` };
   }

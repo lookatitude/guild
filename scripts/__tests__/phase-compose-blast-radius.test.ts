@@ -65,7 +65,9 @@ function realEnv() {
         }
       },
       exists: (p: string) => fs.existsSync(p),
+      removeTree: (p: string) => fs.rmSync(p, { recursive: true, force: true }),
     },
+    withRunBindingExclusion: <T>(_root: string, _runId: string, fn: () => T): T => fn(),
     resolveHost: (requested: string) => ({ requested, resolved: "claude" as const }),
   };
 }

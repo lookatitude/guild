@@ -8,6 +8,7 @@
  *
  * Sub-commands
  *   hash-tree    print the three tree hashes a profile's `mutation_evidence` carries
+ *   baseline     publish the lifecycle transaction's retained run-start baseline
  *   emit         emit `guild.project_capability_profile.v1` for a run (report-only)
  *   candidates   print the F7 candidate surface (READ-ONLY — what /guild:status shows)
  *
@@ -22,8 +23,9 @@
  *
  * Usage
  *   npx tsx scripts/capability-profile.ts hash-tree  --cwd <root> [--json] [--for-run <run-id>]
+ *   npx tsx scripts/capability-profile.ts baseline   --cwd <root> --run-id <id>
  *   npx tsx scripts/capability-profile.ts emit       --cwd <root> --run-id <id>
- *                                                    --project-id <id> --generated-at <rfc3339>
+ *                                                    --project-id <id>
  *                                                    [--facts <file.json>] [--source-commit <sha>]
  *                                                    [--resolver-mode <mode>] [--budget <n>]
  *                                                    [--baseline <run-start hash-tree --json output>]
@@ -35,9 +37,13 @@
  *
  * Invariants
  *   - `hash-tree` and `candidates` write NOTHING.
+ *   - `baseline` stages and publishes the immutable lifecycle transaction's
+ *     run-start file only after verifying the lifecycle's sequence-1 producer
+ *     receipt, then appends its own publication receipt; retries recover idempotently.
  *   - `emit` writes exactly one file, under `.guild/runs/<run-id>/capability/`, and
  *     only after the context-manager contract allows the path.
- *   - Deterministic: no clock (`--generated-at` is required), no network.
+ *   - `emit` owns its timestamp; caller-supplied `--generated-at` is refused.
+ *   - No network.
  */
 
 import * as fs from "fs";
@@ -56,6 +62,11 @@ import {
   snapshotTreeHashes,
   type DerivedFacts,
 } from "./lib/capability/profile-emit";
+import {
+  captureMigrationRunBaseline,
+  profileBaselineFromMigrationRunBaseline,
+  validateMigrationRunBaseline,
+} from "./lib/capability/migration-evidence";
 import {
   CAPABILITY_RESOLVER_MODES,
   type CapabilityResolverMode,
@@ -183,16 +194,27 @@ function cmdHashTree(argv: string[]): void {
   process.stdout.write(`${HASHED_REGISTRIES.join(" + ")}  ${h.registries}\n`);
 }
 
+function cmdBaseline(argv: string[]): void {
+  if (has(argv, "captured-at")) fail("unknown_option", "--captured-at is forbidden; baseline capture time belongs to the lifecycle start transaction");
+  const root = path.resolve(flag(argv, "cwd") ?? process.cwd());
+  const runId = flag(argv, "run-id");
+  if (runId === null) fail("missing_arg", "--run-id is required");
+  try {
+    const baseline = captureMigrationRunBaseline({ projectRoot: root, runId });
+    process.stdout.write(`${JSON.stringify({ status: "written", rel_path: `.guild/runs/${runId}/capability/run-start-baseline.json`, baseline }, null, 2)}\n`);
+  } catch (error) {
+    fail("baseline_refused", error instanceof Error ? error.message : String(error));
+  }
+}
+
 function cmdEmit(argv: string[]): void {
+  if (has(argv, "generated-at")) fail("unknown_option", "--generated-at is forbidden; profile emission time comes from the tool clock");
   const root = path.resolve(flag(argv, "cwd") ?? process.cwd());
   const runId = flag(argv, "run-id");
   const projectId = flag(argv, "project-id");
-  const generatedAt = flag(argv, "generated-at");
+  const generatedAt = new Date().toISOString();
   if (runId === null) fail("missing_arg", "--run-id is required");
   if (projectId === null) fail("missing_arg", "--project-id is required");
-  // No clock in this tool by design: a caller-supplied timestamp keeps a replayed
-  // run byte-identical to the original.
-  if (generatedAt === null) fail("missing_arg", "--generated-at is required (RFC3339 UTC)");
 
   const modeRaw = flag(argv, "resolver-mode") ?? "observe";
   if (!(CAPABILITY_RESOLVER_MODES as readonly string[]).includes(modeRaw)) {
@@ -211,7 +233,9 @@ function cmdEmit(argv: string[]): void {
   let baselineHashes: unknown;
   if (baselineFile !== null) {
     try {
-      baselineHashes = JSON.parse(fs.readFileSync(baselineFile, "utf8"));
+      const parsed = JSON.parse(fs.readFileSync(baselineFile, "utf8"));
+      const retained = validateMigrationRunBaseline(parsed);
+      baselineHashes = retained ? profileBaselineFromMigrationRunBaseline(retained) : parsed;
     } catch (e) {
       fail("bad_baseline_file", `${baselineFile}: ${String(e)}`);
     }
@@ -269,12 +293,14 @@ function main(): void {
   switch (sub) {
     case "hash-tree":
       return cmdHashTree(argv);
+    case "baseline":
+      return cmdBaseline(argv);
     case "emit":
       return cmdEmit(argv);
     case "candidates":
       return cmdCandidates(argv);
     default:
-      fail("unknown_subcommand", `expected hash-tree|emit|candidates, got "${sub ?? ""}"`);
+      fail("unknown_subcommand", `expected hash-tree|baseline|emit|candidates, got "${sub ?? ""}"`);
   }
 }
 

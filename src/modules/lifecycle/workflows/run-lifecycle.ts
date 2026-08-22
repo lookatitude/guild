@@ -50,7 +50,14 @@ import {
 } from "../../host-runtime";
 import { resolveSettings } from "../../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../../state";
-import { assertWritableBinding, closeRunBinding, mintRunBinding } from "./run-binding";
+import {
+  assertWritableBinding,
+  closeRunBinding,
+  initializeRunBindingExclusion,
+  mintRunBinding,
+  readRunBindingRecord,
+  withRunBindingExclusion,
+} from "./run-binding";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../../security";
 import { emitTraceEvent, makeAnalysisTraceEvent, type GuildTraceAnalysisV2 } from "../../telemetry";
@@ -65,8 +72,12 @@ export interface RunLifecycleEnv {
   fs: {
     mkdirp(absPath: string): void;
     writeFile(absPath: string, contents: string): void;
+    /** Atomic create used to establish unique run ownership. */
+    writeFileExclusive?(absPath: string, contents: string): boolean;
     readFile(absPath: string): string | null;
     exists(absPath: string): boolean;
+    /** Remove one run-start transaction tree after a pre-exposure failure. */
+    removeTree(absPath: string): void;
     /**
      * HK-06: scrub-then-write for the provenance.json durable surface.
      * When present, `closeRun` uses this INSTEAD of `writeFile` for provenance.
@@ -83,6 +94,10 @@ export interface RunLifecycleEnv {
       runId: string,
     ): ScrubbedWriteResult;
   };
+  /** Shared per-run exclusion for lifecycle transitions and receipt writers. */
+  withRunBindingExclusion<T>(root: string, runId: string, fn: () => T): T;
+  /** Create the permanent per-run lock inode during a successful start. */
+  initializeRunBindingExclusion?(root: string, runId: string): void;
   /**
    * Resolves the host via the host-adapter contract — NEVER Claude-pinned.
    * Returns the requested + resolved HostKind and an optional capabilities ref.
@@ -96,6 +111,49 @@ export interface RunLifecycleEnv {
   };
   /** Optional behavior-neutral semantic trace seam; the real adapter appends to the canonical log. */
   emitAnalysisEvent?(event: GuildTraceAnalysisV2, runDir: string): boolean;
+  /**
+   * Optional production-owned capability snapshot seam. When supplied, startRun
+   * captures and persists the baseline inside the same start transaction. The
+   * later migration CLI may publish that immutable fact, but may not re-snapshot
+   * mutable project trees and call the result a run-start baseline.
+   */
+  captureCapabilityBaseline?(root: string, runId: string): {
+    readonly agents: string;
+    readonly skills: string;
+    readonly registries: string;
+    readonly bound_root: string;
+    readonly bound_run_id: string;
+  } | null;
+  /**
+   * Append-only producer binding for the snapshot captured above. Production
+   * supplies this alongside `captureCapabilityBaseline`; a snapshot without
+   * this lifecycle-owned receipt is not eligible for whole-run evidence.
+   */
+  recordCapabilityBaselineCapture?(root: string, evidence: CapabilityBaselineCaptureEvidence): boolean;
+}
+
+export const CAPABILITY_RUN_START_SNAPSHOT_SCHEMA = "guild.capability_run_start_snapshot.v1" as const;
+
+export interface CapabilityBaselineCaptureEvidence {
+  readonly run_id: string;
+  readonly run_started_at: string;
+  readonly snapshot_sha256: string;
+  readonly start_identity_hash: string;
+}
+
+function canonicalRecord(value: Record<string, unknown>): string {
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${JSON.stringify(value[key])}`).join(",")}}`;
+}
+
+/** Shared producer/verifier identity for the lifecycle-captured snapshot. */
+export function capabilityRunStartIdentityHash(runId: string, startedAt: string, snapshotHash: string): string {
+  const body = canonicalRecord({
+    schema_version: "guild.run.v1",
+    run_id: runId,
+    started_at: startedAt,
+    capability_start_snapshot_sha256: snapshotHash,
+  });
+  return `sha256:${crypto.createHash("sha256").update(body).digest("hex")}`;
 }
 
 // ── Public types (B1 §4) ─────────────────────────────────────────────────────
@@ -305,6 +363,9 @@ function resolvedSettingsPath(root: string, runId: string): string {
 function pluginConfigSnapshotPath(root: string, runId: string): string {
   return path.join(runDir(root, runId), "plugin-config-snapshot.json");
 }
+function capabilityRunStartSnapshotPath(root: string, runId: string): string {
+  return path.join(runDir(root, runId), "capability", "run-start-snapshot.json");
+}
 function sentinelPath(root: string): string {
   // Canonical sentinel location: .guild/runs/current-run-id.
   // startRun is the SOLE writer (new-run-id.ts deleted in SC-8 W2B-4).
@@ -463,7 +524,8 @@ function buildRunManifest(
   opts: StartRunOpts,
   runId: string,
   env: RunLifecycleEnv,
-  written: { resolvedSettings: boolean; pluginConfig: boolean },
+  startedAt: string,
+  written: { resolvedSettings: boolean; pluginConfig: boolean; capabilityBaselineHash: string | null },
 ): Record<string, unknown> {
   const host = env.resolveHost(opts.host_requested);
   const runClass: RunClass = opts.run_class ?? "full";
@@ -501,7 +563,7 @@ function buildRunManifest(
     project: opts.project,
     host: hostBlock,
     model_tier_policy: opts.model_tier_policy,
-    started_at: env.now(),
+    started_at: startedAt,
     ignore_policy: opts.ignore_policy,
     scan_policy: opts.scan_policy,
     run_scope: runScope,
@@ -509,6 +571,9 @@ function buildRunManifest(
     independent_run_group: independentGroup,
     entry_prompt_ref: opts.entry_prompt_ref ?? null,
     config_snapshot_ref: written.pluginConfig ? "plugin-config-snapshot.json" : null,
+    capability_start_snapshot_ref: written.capabilityBaselineHash
+      ? { path: "capability/run-start-snapshot.json", sha256: written.capabilityBaselineHash }
+      : null,
     attachment_resolution: {
       scope: runScope,
       initiative_id: opts.initiative,
@@ -521,7 +586,7 @@ function buildRunManifest(
     gates: {},
     status: "open" as RunStatus,
     phases_log: phase
-      ? [{ phase, at: env.now() }]
+      ? [{ phase, at: startedAt }]
       : [],
   };
 
@@ -708,16 +773,82 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       const runId = env.fs.exists(runDir(root, preferredRunId))
         ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto.randomUUID()}`)
         : preferredRunId;
+      const runClass: RunClass = opts.run_class ?? "full";
+
+      // Full runs capture before the first run write. Lightweight status runs
+      // deliberately retain their small lifecycle surface and never mint PCL-09
+      // capability evidence. A configured production seam is fail-closed for a
+      // full run: an incomplete tree walk must abort the start rather than create
+      // a run that can never produce honest whole-run evidence.
+      const capabilityBaseline = runClass === "full"
+        ? (env.captureCapabilityBaseline?.(root, runId) ?? null)
+        : null;
+      if (runClass === "full" && env.captureCapabilityBaseline && (!capabilityBaseline || capabilityBaseline.bound_run_id !== runId)) {
+        throw new Error(`[run-lifecycle] capability run-start baseline capture failed for ${runId}`);
+      }
+
+      let ownsBaselineRunTransaction = false;
+      let ownedBindingRef: string | null = null;
+      const rollbackBaselineRunTransaction = (cause: unknown): never => {
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        const rollbackFailures: string[] = [];
+        const persistedBinding = readRunBindingRecord({ root, run_id: runId, fs: env.fs });
+        const stillOwnsRun = ownedBindingRef !== null
+          && persistedBinding.status === "ok"
+          && persistedBinding.record.binding_ref === ownedBindingRef
+          && persistedBinding.record.state === "open";
+        if (!stillOwnsRun) {
+          throw new Error(
+            `${reason}; rollback of ${runId} refused because this transaction no longer ` +
+              `owns the open run binding`,
+          );
+        }
+        // The sentinel is outside the run tree. Remove it only when it still
+        // names this failed transaction; a later concurrent start wins.
+        try {
+          if (env.fs.readFile(sentinelPath(root))?.trim() === runId) {
+            env.fs.removeTree(sentinelPath(root));
+          }
+        } catch (error) {
+          rollbackFailures.push(`sentinel cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        try {
+          env.fs.removeTree(runDir(root, runId));
+        } catch (error) {
+          rollbackFailures.push(`run cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        throw new Error(rollbackFailures.length === 0
+          ? reason
+          : `${reason}; rollback of ${runId} also failed: ${rollbackFailures.join("; ")}`);
+      };
+
+      try {
 
       // guild.session_context.v1 §5 (rework F2): mint the run's binding FIRST —
       // before ANY other write lands under the run dir. Run start mints the
       // binding before any write; there is no window in which run records
       // exist without a verifiable binding. The nonce is revoked at close.
       const binding = mintRunBinding({ root, run_id: runId, fs: env.fs });
+      ownedBindingRef = binding.binding_ref;
+      ownsBaselineRunTransaction = capabilityBaseline !== null;
+      env.initializeRunBindingExclusion?.(root, runId);
 
       // logs/ dir (mkdirp also ensures runs/<id>/ exists). NN#5: we touch ONLY
       // .guild/runs/<id>/ — never .guild/initiatives/.
       env.fs.mkdirp(logsDir(root, runId));
+
+      let capabilityBaselineHash: string | null = null;
+      if (capabilityBaseline) {
+        const snapshotBytes = `${JSON.stringify({
+          schema_version: CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+          run_id: runId,
+          run_started_at: nowIso,
+          captured_at: nowIso,
+          ...capabilityBaseline,
+        }, null, 2)}\n`;
+        capabilityBaselineHash = crypto.createHash("sha256").update(snapshotBytes).digest("hex");
+        env.fs.writeFile(capabilityRunStartSnapshotPath(root, runId), snapshotBytes);
+      }
 
       // U6: write resolved-settings.json BEFORE run.yaml so the file is on disk
       // before any consumer might read it. When no snapshot, skip (back-compat).
@@ -736,11 +867,35 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       }
 
       // run.yaml (guild.run.v1) — the single start manifest.
-      const manifest = buildRunManifest(opts, runId, env, {
+      const manifest = buildRunManifest(opts, runId, env, nowIso, {
         resolvedSettings: resolvedSettingsWritten,
         pluginConfig: pluginConfigWritten,
+        capabilityBaselineHash,
       });
       env.fs.writeFile(runYamlPath(root, runId), serializeRunYaml(manifest));
+
+      if (capabilityBaselineHash) {
+        const failAndRollback = (reason: string): never => {
+          throw new Error(reason);
+        };
+        if (!env.recordCapabilityBaselineCapture) {
+          failAndRollback(`[run-lifecycle] capability run-start receipt recorder is unavailable for ${runId}`);
+        }
+        let recorded = false;
+        try {
+          recorded = env.recordCapabilityBaselineCapture(root, {
+            run_id: runId,
+            run_started_at: nowIso,
+            snapshot_sha256: capabilityBaselineHash,
+            start_identity_hash: capabilityRunStartIdentityHash(runId, nowIso, capabilityBaselineHash),
+          });
+        } catch (error) {
+          failAndRollback(`[run-lifecycle] capability run-start receipt capture threw for ${runId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (!recorded) {
+          failAndRollback(`[run-lifecycle] capability run-start receipt capture failed for ${runId}`);
+        }
+      }
 
       // §1: the immutable session context — written once at start, restored
       // verbatim on resume. Identity comes from the adapter-injected inputs;
@@ -751,7 +906,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
         root,
         buildSessionContext({
           run_id: runId,
-          started_at: env.now(),
+          started_at: nowIso,
           envelope_host: identity.envelope_host,
           env: identity.env,
           native_adapter: identity.native_adapter,
@@ -763,11 +918,6 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
         env.fs
       );
 
-      // current-run-id sentinel — interactive command intake ONLY (§5): it may
-      // locate a candidate run for a user-typed command; it never authorizes a
-      // write and never serves as a fallback binding.
-      env.fs.writeFile(sentinelPath(root), runId);
-
       // RTE P2: semantic lifecycle identity events are additive and
       // behavior-neutral. Test/embedded adapters may omit the seam; the real
       // adapter appends validated events to the canonical v1.4 log.
@@ -777,7 +927,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
           ? (opts.independent_run_group?.trim() || deriveRunSlug(opts))
           : null;
         const eventBase = {
-          ts: env.now(),
+          ts: nowIso,
           run_id: runId,
           lane_id: "",
           actor_type: "system" as const,
@@ -809,7 +959,17 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
         }
       }
 
+      // current-run-id sentinel — interactive command intake ONLY (§5): it may
+      // locate a candidate run for a user-typed command; it never authorizes a
+      // write and never serves as a fallback binding. It is the final start
+      // write, after all receipt-backed transaction work has succeeded.
+      env.fs.writeFile(sentinelPath(root), runId);
+
       return runId;
+      } catch (error) {
+        if (ownsBaselineRunTransaction) rollbackBaselineRunTransaction(error);
+        throw error;
+      }
     },
 
     closeRun(runId: string, opts: CloseRunOpts): void {
@@ -818,6 +978,8 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // We reconstruct root by reading the run.yaml under the same base the
       // caller's env.fs sees; the real adapter is rooted at the project root.
       const root = resolveCloseRoot(env);
+
+      env.withRunBindingExclusion(root, runId, () => {
 
       // §5 fail-closed gate (rework F2): the caller-threaded nonce is ALWAYS
       // fully verified — absent, malformed, not-minted, closed, or mismatched
@@ -917,6 +1079,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
           runDir(root, runId),
         );
       }
+      });
     },
   };
 }
@@ -962,10 +1125,12 @@ function resolveCloseRoot(env: RunLifecycleEnv): string {
  */
 export function createRealEnv(
   root: string,
-  resolveHost: RunLifecycleEnv["resolveHost"]
+  resolveHost: RunLifecycleEnv["resolveHost"],
+  captureCapabilityBaseline?: RunLifecycleEnv["captureCapabilityBaseline"],
+  recordCapabilityBaselineCapture?: RunLifecycleEnv["recordCapabilityBaselineCapture"],
 ): RunLifecycleEnv {
   const env: RunLifecycleEnv & { __rootHint?: string } = {
-    now: () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    now: () => new Date().toISOString(),
     fs: {
       mkdirp(absPath: string): void {
         fsNode.mkdirSync(absPath, { recursive: true });
@@ -973,6 +1138,16 @@ export function createRealEnv(
       writeFile(absPath: string, contents: string): void {
         fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
+      },
+      writeFileExclusive(absPath: string, contents: string): boolean {
+        fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
+        try {
+          fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx" });
+          return true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+          throw error;
+        }
       },
       readFile(absPath: string): string | null {
         try {
@@ -983,6 +1158,9 @@ export function createRealEnv(
       },
       exists(absPath: string): boolean {
         return fsNode.existsSync(absPath);
+      },
+      removeTree(absPath: string): void {
+        fsNode.rmSync(absPath, { recursive: true, force: true });
       },
       // HK-06: real scrubbedWrite wired for provenance.json (fail-CLOSED).
       scrubbedWriteDurable(
@@ -995,7 +1173,11 @@ export function createRealEnv(
         return scrubbedWrite(outPath, contents, { surface, runDir, runId });
       },
     },
+    withRunBindingExclusion,
+    initializeRunBindingExclusion,
     resolveHost,
+    ...(captureCapabilityBaseline ? { captureCapabilityBaseline } : {}),
+    ...(recordCapabilityBaselineCapture ? { recordCapabilityBaselineCapture } : {}),
     emitAnalysisEvent: (event, activeRunDir) => emitTraceEvent(event, activeRunDir),
     __rootHint: root,
   };

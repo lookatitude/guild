@@ -2082,6 +2082,7 @@ export function scanReceiptJournal(journalPath: string, io: JournalIo = defaultJ
 export type AppendFailureCode =
   | "invalid_record"
   | "duplicate_event_id"
+  | "duplicate_operation_id"
   | "unknown_causation"
   | "journal_not_reconciled"
   | "journal_append_failed"
@@ -2108,6 +2109,15 @@ export interface ReceiptAppendOutcome {
   checkpoint: ReceiptCheckpointV1 | null;
   record: ReceiptRecordV1 | null;
   failure: { code: AppendFailureCode; message: string } | null;
+}
+
+export interface ReceiptAppendOptions {
+  /**
+   * Refuse a second record for the same operation while the retained journal
+   * authority is held. This is for producers whose operation is intrinsically
+   * single-shot even when a retry races the first process.
+   */
+  readonly uniqueOperation?: boolean;
 }
 
 function validateInput(input: ReceiptAppendInput): string | null {
@@ -2189,6 +2199,7 @@ export function appendReceipt(
   input: ReceiptAppendInput,
   io: JournalIo = defaultJournalIo,
   lockOptions: JournalLockOptions = {},
+  options: ReceiptAppendOptions = {},
 ): ReceiptAppendOutcome {
   const invalid = validateInput(input);
   if (invalid) return failed(input, "invalid_record", invalid);
@@ -2201,7 +2212,7 @@ export function appendReceipt(
   try {
     // Write authority is bound to the physical journal we hold, so a swap AFTER
     // this point cannot redirect the bytes and cannot escape detection either.
-    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority);
+    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority, options);
   } finally {
     // A typed failure must never leak the lock and wedge every later writer —
     // and must never delete a lock this caller does not hold.
@@ -2220,6 +2231,7 @@ function appendLocked(
   input: ReceiptAppendInput,
   io: JournalIo,
   authority: RetainedJournalAuthority,
+  options: ReceiptAppendOptions,
 ): ReceiptAppendOutcome {
   const bound = authority.bind(io);
   const scan = scanReceiptJournal(paths.journal, bound);
@@ -2238,6 +2250,14 @@ function appendLocked(
   if (scan.records.some((r) => r.event_id === input.event_id)) {
     return {
       ...failed(input, "duplicate_event_id", `event_id already present: ${input.event_id}`, "refused"),
+      observation_state: input.observation_state,
+      blocks_dependent_completion: false,
+    };
+  }
+
+  if (options.uniqueOperation && scan.records.some((r) => r.operation_id === input.operation_id)) {
+    return {
+      ...failed(input, "duplicate_operation_id", `operation_id already present: ${input.operation_id}`, "refused"),
       observation_state: input.observation_state,
       blocks_dependent_completion: false,
     };

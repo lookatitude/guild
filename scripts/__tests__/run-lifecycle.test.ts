@@ -20,6 +20,7 @@
  */
 
 import * as path from "path";
+import { createHash } from "crypto";
 import {
   createRunLifecycle,
   appendPhase,
@@ -83,6 +84,11 @@ function memFs(): MemFs {
     exists(absPath: string): boolean {
       return files.has(absPath) || dirs.has(absPath);
     },
+    removeTree(absPath: string): void {
+      const prefix = `${absPath}${path.sep}`;
+      for (const key of [...files.keys()]) if (key === absPath || key.startsWith(prefix)) files.delete(key);
+      for (const key of [...dirs]) if (key === absPath || key.startsWith(prefix)) dirs.delete(key);
+    },
   };
   return { files, dirs, env };
 }
@@ -97,6 +103,7 @@ function makeEnv(
   return {
     now: () => clock,
     fs: mem.env,
+    withRunBindingExclusion: <T>(_root: string, _runId: string, fn: () => T): T => fn(),
     resolveHost: (requested: string) => ({
       requested,
       resolved: opts.resolved ?? ("claude" as HostKind),
@@ -136,12 +143,16 @@ function baseStartOpts(over: Partial<StartRunOpts> = {}): StartRunOpts {
 describe("run-lifecycle — startRun (SC-B §1)", () => {
   it("returns a run_id and writes it to .guild/runs/current-run-id", () => {
     const mem = memFs();
-    const lc = createRunLifecycle(makeEnv(mem));
+    const env = makeEnv(mem);
+    const initializeRunBindingExclusion = jest.fn();
+    env.initializeRunBindingExclusion = initializeRunBindingExclusion;
+    const lc = createRunLifecycle(env);
     const runId = lc.startRun(baseStartOpts({ initiative: "learn-knowledge-convergence" }));
     expect(typeof runId).toBe("string");
     expect(runId.length).toBeGreaterThan(0);
     const sentinel = path.join(ROOT, ".guild", "runs", "current-run-id");
     expect(mem.files.get(sentinel)).toBe(runId);
+    expect(initializeRunBindingExclusion).toHaveBeenCalledWith(ROOT, runId);
   });
 
   it("generates run-<UTC-compact>-<slug> for an initiative-attached run", () => {
@@ -195,6 +206,112 @@ describe("run-lifecycle — startRun (SC-B §1)", () => {
     expect(raw).toContain("started_at: 2026-05-29T08:40:21Z");
     expect(raw).toContain("status: open");
     expect(raw).toContain("initiative_attachment: alpha");
+  });
+
+  it("captures and hash-binds the capability baseline inside the run-start transaction", () => {
+    const mem = memFs();
+    const env = makeEnv(mem);
+    const recorded: unknown[] = [];
+    env.captureCapabilityBaseline = (_root, runId) => ({
+      agents: "1".repeat(64), skills: "2".repeat(64), registries: "3".repeat(64),
+      bound_root: "4".repeat(64), bound_run_id: runId,
+    });
+    env.recordCapabilityBaselineCapture = (_root, evidence) => { recorded.push(evidence); return true; };
+    const runId = createRunLifecycle(env).startRun(baseStartOpts());
+    const snapshotPath = path.join(ROOT, ".guild", "runs", runId, "capability", "run-start-snapshot.json");
+    const snapshot = mem.files.get(snapshotPath);
+    expect(snapshot).toBeDefined();
+    expect(JSON.parse(snapshot!)).toEqual(expect.objectContaining({
+      schema_version: "guild.capability_run_start_snapshot.v1",
+      run_id: runId,
+      run_started_at: "2026-05-29T08:40:21Z",
+      captured_at: "2026-05-29T08:40:21Z",
+      bound_run_id: runId,
+    }));
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml"))!;
+    const ref = runField(raw, "capability_start_snapshot_ref") as Record<string, unknown>;
+    expect(ref).toEqual({
+      path: "capability/run-start-snapshot.json",
+      sha256: createHash("sha256").update(snapshot!).digest("hex"),
+    });
+    expect(recorded).toEqual([expect.objectContaining({
+      run_id: runId,
+      run_started_at: "2026-05-29T08:40:21Z",
+      snapshot_sha256: ref.sha256,
+      start_identity_hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+    })]);
+  });
+
+  it("refuses to return a baseline-capturing run without its append-only producer receipt", () => {
+    const mem = memFs();
+    const env = makeEnv(mem);
+    env.captureCapabilityBaseline = (_root, runId) => ({
+      agents: "1".repeat(64), skills: "2".repeat(64), registries: "3".repeat(64),
+      bound_root: "4".repeat(64), bound_run_id: runId,
+    });
+    expect(() => createRunLifecycle(env).startRun(baseStartOpts())).toThrow(/receipt recorder is unavailable/i);
+    expect(mem.files.get(path.join(ROOT, ".guild", "runs", "current-run-id"))).toBeUndefined();
+    expect([...mem.files.keys()].some((key) => key.includes("/.guild/runs/run-"))).toBe(false);
+    expect([...mem.dirs].some((key) => key.includes("/.guild/runs/run-"))).toBe(false);
+  });
+
+  it("rolls back every pre-exposure run write when the producer receipt is refused", () => {
+    const mem = memFs();
+    const env = makeEnv(mem);
+    env.captureCapabilityBaseline = (_root, runId) => ({
+      agents: "1".repeat(64), skills: "2".repeat(64), registries: "3".repeat(64),
+      bound_root: "4".repeat(64), bound_run_id: runId,
+    });
+    env.recordCapabilityBaselineCapture = () => false;
+    expect(() => createRunLifecycle(env).startRun(baseStartOpts())).toThrow(/receipt capture failed/i);
+    expect([...mem.files.keys()].some((key) => key.includes("/.guild/runs/run-"))).toBe(false);
+    expect([...mem.dirs].some((key) => key.includes("/.guild/runs/run-"))).toBe(false);
+  });
+
+  it("retains a same-ID run when rollback no longer owns its binding", () => {
+    const mem = memFs();
+    const env = makeEnv(mem);
+    env.captureCapabilityBaseline = (_root, runId) => ({
+      agents: "1".repeat(64), skills: "2".repeat(64), registries: "3".repeat(64),
+      bound_root: "4".repeat(64), bound_run_id: runId,
+    });
+    env.recordCapabilityBaselineCapture = (_root, evidence) => {
+      const bindingPath = path.join(ROOT, ".guild", "runs", evidence.run_id, "binding.json");
+      mem.files.set(bindingPath, `${JSON.stringify({
+        schema_version: "guild.run_binding.v1",
+        run_id: evidence.run_id,
+        binding_ref: "rb-concurrent-winner",
+        state: "open",
+      }, null, 2)}\n`);
+      return false;
+    };
+    expect(() => createRunLifecycle(env).startRun(baseStartOpts()))
+      .toThrow(/rollback.*refused.*no longer owns/i);
+    expect([...mem.files.keys()].some((key) => key.endsWith("/binding.json"))).toBe(true);
+    expect([...mem.files.keys()].some((key) => key.endsWith("/run.yaml"))).toBe(true);
+  });
+
+  it("rolls back a receipt-backed run when a later start step fails", () => {
+    const mem = memFs();
+    const env = makeEnv(mem);
+    env.captureCapabilityBaseline = (_root, runId) => ({
+      agents: "1".repeat(64), skills: "2".repeat(64), registries: "3".repeat(64),
+      bound_root: "4".repeat(64), bound_run_id: runId,
+    });
+    env.recordCapabilityBaselineCapture = () => true;
+    env.emitAnalysisEvent = () => { throw new Error("planted post-receipt analysis failure"); };
+    expect(() => createRunLifecycle(env).startRun(baseStartOpts())).toThrow(/post-receipt analysis failure/i);
+    expect(mem.files.get(path.join(ROOT, ".guild", "runs", "current-run-id"))).toBeUndefined();
+    expect([...mem.files.keys()].some((key) => key.includes("/.guild/runs/run-"))).toBe(false);
+    expect([...mem.dirs].some((key) => key.includes("/.guild/runs/run-"))).toBe(false);
+  });
+
+  it("writes no run state when the configured capability baseline capture fails", () => {
+    const mem = memFs();
+    const env = makeEnv(mem);
+    env.captureCapabilityBaseline = () => null;
+    expect(() => createRunLifecycle(env).startRun(baseStartOpts())).toThrow(/baseline capture failed/i);
+    expect([...mem.files.keys()].some((key) => key.includes("/.guild/runs/"))).toBe(false);
   });
 
   it("creates the logs/ directory at start", () => {
@@ -352,6 +469,7 @@ describe("run-lifecycle — closeRun (SC-B §2)", () => {
     const lc = createRunLifecycle({
       now: () => t,
       fs: mem.env,
+      withRunBindingExclusion: <T>(_root: string, _runId: string, fn: () => T): T => fn(),
       resolveHost: (requested) => ({ requested, resolved: "claude" as HostKind }),
       __rootHint: ROOT,
     } as RunLifecycleEnv);
@@ -588,6 +706,24 @@ describe("run-lifecycle — lightweight run_class (SC-B §5)", () => {
     const runId = lc.startRun(baseStartOpts({ command: "/guild:status", run_class: "lightweight" }));
     const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
     expect(raw).toContain("run_class: lightweight");
+  });
+
+  it("lightweight start never invokes or writes the full-run capability baseline", () => {
+    const mem = memFs();
+    const env = makeEnv(mem);
+    const capture = jest.fn((_root: string, runId: string) => ({
+      agents: "1".repeat(64), skills: "2".repeat(64), registries: "3".repeat(64),
+      bound_root: "4".repeat(64), bound_run_id: runId,
+    }));
+    const record = jest.fn(() => true);
+    env.captureCapabilityBaseline = capture;
+    env.recordCapabilityBaselineCapture = record;
+    const runId = createRunLifecycle(env).startRun(baseStartOpts({ command: "/guild:status", run_class: "lightweight" }));
+    expect(capture).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
+    expect(mem.files.has(path.join(ROOT, ".guild", "runs", runId, "capability", "run-start-snapshot.json"))).toBe(false);
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml"))!;
+    expect(runField(raw, "capability_start_snapshot_ref")).toBeNull();
   });
 
   it("closeRun short-circuits the learning checkpoint (final_learning_checkpoint === null)", () => {
