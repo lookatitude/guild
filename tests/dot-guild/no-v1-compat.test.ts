@@ -708,12 +708,12 @@ describe("SC-VALIDATION: no v1 compat outside converter+wiring", () => {
   //                                                ANY var name — G3 generalized)
   //   "first word ... restart" prose
   //
-  // G3: a v2 codebase has NO legitimate `=== "restart"` comparison (verified —
-  // grep of scripts/ + hooks/ + mcp-servers/*/src found zero). So we flag ANY
-  // bare-string comparison to the literal "restart" / 'restart' as a positional
-  // dispatch. The legitimate v2 `--restart` NAMED flag is NOT matched — it is
-  // always compared as the "--restart" string (with the -- prefix), which the
-  // bare-"restart" pattern (anchored on a quote boundary, no leading --) excludes.
+  // G3: flag every bare-string comparison to "restart" / 'restart' except the
+  // closed migration-window vocabulary. That v2 operation is namespaced under
+  // `capability-adopt window restart`; only `action === "restart"` in that CLI
+  // and `record.operation === "restart"` in its schema validator are legitimate.
+  // Path alone is not an exemption: another bare comparison planted in either
+  // file must still fail this rail. The v2 `--restart` named flag is not matched.
   // ───────────────────────────────────────────────────────────────────────────
 
   test("Marker 8: v1 --restart first-word positional / bare 'restart' comparison absent from source", () => {
@@ -737,6 +737,15 @@ describe("SC-VALIDATION: no v1 compat outside converter+wiring", () => {
     const rawHits = scanSource(positionalForms, CODE_EXTS);
     const hits = rawHits.filter((h) => {
       const t = lineTextOf(h);
+      const normalizedHit = h.replace(/\\/g, "/");
+      const migrationAction =
+        normalizedHit.includes("/scripts/capability-adopt.ts:") &&
+        /^\s*if \(action === ["']restart["']\) \{$/.test(t);
+      const migrationRecordOperation =
+        normalizedHit.includes("/scripts/lib/capability/migration-window.ts:") &&
+        /record\.operation/.test(t) &&
+        /(?:===|!==) ["']restart["']/.test(t);
+      if (migrationAction || migrationRecordOperation) return false;
       // Drop lines that ONLY compare against the named flag "--restart" and never
       // the bare positional "restart".
       const hasBare = /===?\s*["']restart["']|["']restart["']\s*===?/.test(t);

@@ -194,6 +194,10 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/package-lock.json",
   "hooks/agent-team/package-lock.json",
   "hooks/dist/detect-guild-version.js",
+  // PCL-FU-06 beta.8 CI repair: the release manifest advances to the fresh
+  // boundary and the close/reopen regression fixture adopts a canonical run id.
+  ".claude-plugin/marketplace.json",
+  "hooks/__tests__/run-trace-close-reopen.test.ts",
 ]);
 
 function gitLines(args: string[]): string[] {
@@ -230,12 +234,11 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
     // The allowlist names ONLY verified migration/convergence deltas. Prove it did
     // not get widened to a wildcard: representative entry paths that are NOT part of
     // any admitted delta must be absent, so the offending-filter above would still
-    // flag them. (`.claude-plugin/plugin.json` moved into the allowlist with the
-    // FIC-51 convergence landing — its slot here is taken by `marketplace.json`,
-    // which is byte-untouched by that delta and admitted by nothing.)
+    // flag them. Versioned manifests are legitimate release deltas, so the
+    // controls remain ordinary command/hook entry paths with no admitted change.
     for (const notAllowed of [
       "commands/guild-build.md",
-      ".claude-plugin/marketplace.json",
+      "commands/status.md",
       "hooks/hooks.json",
     ]) {
       expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);
