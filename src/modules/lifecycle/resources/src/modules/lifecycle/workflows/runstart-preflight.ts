@@ -45,6 +45,7 @@ import {
   type Source,
 } from "../../config";
 import {
+  HOST_ADAPTER_CONTRACT_VERSION,
   detectProviders,
   defaultProbeEnv,
   recommendProvider,
@@ -111,6 +112,35 @@ export interface PreflightProbe {
    * and an `auto` host resolves the honest `unknown` (§3) — never claude.
    */
   hostIdentity?(): NativeAdapterIdentity | null;
+}
+
+/**
+ * Version of Guild's native Claude host-adapter contract. This is deliberately
+ * independent of the Claude Code executable version: session-context has a
+ * separate `execution_target.tool_version` field for the running host binary.
+ */
+export const CLAUDE_CODE_NATIVE_ADAPTER_VERSION = HOST_ADAPTER_CONTRACT_VERSION;
+
+/**
+ * Resolve the native Claude adapter only after a host-set marker is present.
+ * The host marker is the identity proof. The adapter version names Guild's
+ * stable adapter contract, not whichever `claude` executable PATH happens to
+ * resolve after the session has already started.
+ */
+export function detectClaudeNativeAdapterIdentity(
+  env: Record<string, string | undefined>,
+): NativeAdapterIdentity | null {
+  if (env["CLAUDECODE"] !== "1" && !env["CLAUDE_PLUGIN_ROOT"]) return null;
+  return {
+    family: "claude",
+    surface: "cli",
+    adapter_id: "claude-code-native",
+    adapter_version: CLAUDE_CODE_NATIVE_ADAPTER_VERSION,
+    evidence:
+      "host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) " +
+      "injected by the Claude Code host at spawn; interpreted by Guild " +
+      `adapter contract ${CLAUDE_CODE_NATIVE_ADAPTER_VERSION}`,
+  };
 }
 
 /** Options for runStartPreflight. */
@@ -703,19 +733,7 @@ export function defaultPreflightProbe(cwd: string): PreflightProbe {
     // caller then records the honest "unknown", never a defaulted family.
     hostIdentity: () =>
       safeProbe<NativeAdapterIdentity | null>(() => {
-        const env = process.env;
-        if (env["CLAUDECODE"] === "1" || env["CLAUDE_PLUGIN_ROOT"]) {
-          return {
-            family: "claude",
-            surface: "cli",
-            adapter_id: "claude-code-native",
-            adapter_version: env["CLAUDE_CODE_VERSION"] ?? "unknown",
-            evidence:
-              "host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) " +
-              "injected by the Claude Code host at spawn",
-          };
-        }
-        return null;
+        return detectClaudeNativeAdapterIdentity(process.env);
       }, null),
   };
 }

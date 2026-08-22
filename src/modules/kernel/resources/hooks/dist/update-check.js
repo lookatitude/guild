@@ -30114,6 +30114,16 @@ var init_capability = __esm({
 });
 
 // ../src/modules/lifecycle/workflows/runstart-preflight.ts
+function detectClaudeNativeAdapterIdentity(env) {
+  if (env["CLAUDECODE"] !== "1" && !env["CLAUDE_PLUGIN_ROOT"]) return null;
+  return {
+    family: "claude",
+    surface: "cli",
+    adapter_id: "claude-code-native",
+    adapter_version: CLAUDE_CODE_NATIVE_ADAPTER_VERSION,
+    evidence: `host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) injected by the Claude Code host at spawn; interpreted by Guild adapter contract ${CLAUDE_CODE_NATIVE_ADAPTER_VERSION}`
+  };
+}
 function resolveRunStartDispatchBackend(agentMode, facts) {
   const base = {
     cmux_workspace_present: facts.cmuxWorkspacePresent,
@@ -30325,17 +30335,7 @@ function defaultPreflightProbe(cwd) {
     // is native-adapter evidence for family "claude". No marker ⇒ null — the
     // caller then records the honest "unknown", never a defaulted family.
     hostIdentity: () => safeProbe(() => {
-      const env = process.env;
-      if (env["CLAUDECODE"] === "1" || env["CLAUDE_PLUGIN_ROOT"]) {
-        return {
-          family: "claude",
-          surface: "cli",
-          adapter_id: "claude-code-native",
-          adapter_version: env["CLAUDE_CODE_VERSION"] ?? "unknown",
-          evidence: "host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) injected by the Claude Code host at spawn"
-        };
-      }
-      return null;
+      return detectClaudeNativeAdapterIdentity(process.env);
     }, null)
   };
 }
@@ -30346,7 +30346,7 @@ function safeProbe(fn, fallback) {
     return fallback;
   }
 }
-var import_child_process3, import_fs, import_path;
+var import_child_process3, import_fs, import_path, CLAUDE_CODE_NATIVE_ADAPTER_VERSION;
 var init_runstart_preflight = __esm({
   "../src/modules/lifecycle/workflows/runstart-preflight.ts"() {
     init_config2();
@@ -30356,6 +30356,7 @@ var init_runstart_preflight = __esm({
     import_child_process3 = require("child_process");
     import_fs = require("fs");
     import_path = require("path");
+    CLAUDE_CODE_NATIVE_ADAPTER_VERSION = HOST_ADAPTER_CONTRACT_VERSION;
   }
 });
 
@@ -30650,6 +30651,7 @@ __export(lifecycle_exports, {
   BindingRejectedError: () => BindingRejectedError,
   CANONICAL_PHASES: () => CANONICAL_PHASES,
   CAPABILITY_RUN_START_SNAPSHOT_SCHEMA: () => CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+  CLAUDE_CODE_NATIVE_ADAPTER_VERSION: () => CLAUDE_CODE_NATIVE_ADAPTER_VERSION,
   DEFAULT_HEARTBEAT_TIMEOUT_MS: () => DEFAULT_HEARTBEAT_TIMEOUT_MS,
   HOOK_BINDING_ENV_BINDING_REF: () => HOOK_BINDING_ENV_BINDING_REF,
   HOOK_BINDING_ENV_RUN_ID: () => HOOK_BINDING_ENV_RUN_ID,
@@ -30749,6 +30751,7 @@ __export(lifecycle_exports, {
   createRunLifecycle: () => createRunLifecycle,
   defaultPreflightProbe: () => defaultPreflightProbe,
   deriveNeutralSupportClaim: () => deriveNeutralSupportClaim,
+  detectClaudeNativeAdapterIdentity: () => detectClaudeNativeAdapterIdentity,
   evaluateNeutralAdmission: () => evaluateNeutralAdmission,
   evaluateNeutralCapability: () => evaluateNeutralCapability,
   evaluateNeutralConformanceDecision: () => evaluateNeutralConformanceDecision,

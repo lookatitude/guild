@@ -30067,6 +30067,16 @@ var init_run_manifest_wiring = __esm({
 });
 
 // ../src/modules/lifecycle/workflows/runstart-preflight.ts
+function detectClaudeNativeAdapterIdentity(env) {
+  if (env["CLAUDECODE"] !== "1" && !env["CLAUDE_PLUGIN_ROOT"]) return null;
+  return {
+    family: "claude",
+    surface: "cli",
+    adapter_id: "claude-code-native",
+    adapter_version: CLAUDE_CODE_NATIVE_ADAPTER_VERSION,
+    evidence: `host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) injected by the Claude Code host at spawn; interpreted by Guild adapter contract ${CLAUDE_CODE_NATIVE_ADAPTER_VERSION}`
+  };
+}
 function resolveRunStartDispatchBackend(agentMode, facts) {
   const base = {
     cmux_workspace_present: facts.cmuxWorkspacePresent,
@@ -30278,17 +30288,7 @@ function defaultPreflightProbe(cwd) {
     // is native-adapter evidence for family "claude". No marker ⇒ null — the
     // caller then records the honest "unknown", never a defaulted family.
     hostIdentity: () => safeProbe(() => {
-      const env = process.env;
-      if (env["CLAUDECODE"] === "1" || env["CLAUDE_PLUGIN_ROOT"]) {
-        return {
-          family: "claude",
-          surface: "cli",
-          adapter_id: "claude-code-native",
-          adapter_version: env["CLAUDE_CODE_VERSION"] ?? "unknown",
-          evidence: "host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) injected by the Claude Code host at spawn"
-        };
-      }
-      return null;
+      return detectClaudeNativeAdapterIdentity(process.env);
     }, null)
   };
 }
@@ -30299,7 +30299,7 @@ function safeProbe(fn, fallback) {
     return fallback;
   }
 }
-var import_child_process2, import_fs, import_path;
+var import_child_process2, import_fs, import_path, CLAUDE_CODE_NATIVE_ADAPTER_VERSION;
 var init_runstart_preflight = __esm({
   "../src/modules/lifecycle/workflows/runstart-preflight.ts"() {
     init_config2();
@@ -30309,6 +30309,7 @@ var init_runstart_preflight = __esm({
     import_child_process2 = require("child_process");
     import_fs = require("fs");
     import_path = require("path");
+    CLAUDE_CODE_NATIVE_ADAPTER_VERSION = HOST_ADAPTER_CONTRACT_VERSION;
   }
 });
 
@@ -30603,6 +30604,7 @@ __export(lifecycle_exports, {
   BindingRejectedError: () => BindingRejectedError,
   CANONICAL_PHASES: () => CANONICAL_PHASES,
   CAPABILITY_RUN_START_SNAPSHOT_SCHEMA: () => CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+  CLAUDE_CODE_NATIVE_ADAPTER_VERSION: () => CLAUDE_CODE_NATIVE_ADAPTER_VERSION,
   DEFAULT_HEARTBEAT_TIMEOUT_MS: () => DEFAULT_HEARTBEAT_TIMEOUT_MS,
   HOOK_BINDING_ENV_BINDING_REF: () => HOOK_BINDING_ENV_BINDING_REF,
   HOOK_BINDING_ENV_RUN_ID: () => HOOK_BINDING_ENV_RUN_ID,
@@ -30702,6 +30704,7 @@ __export(lifecycle_exports, {
   createRunLifecycle: () => createRunLifecycle,
   defaultPreflightProbe: () => defaultPreflightProbe,
   deriveNeutralSupportClaim: () => deriveNeutralSupportClaim,
+  detectClaudeNativeAdapterIdentity: () => detectClaudeNativeAdapterIdentity,
   evaluateNeutralAdmission: () => evaluateNeutralAdmission,
   evaluateNeutralCapability: () => evaluateNeutralCapability,
   evaluateNeutralConformanceDecision: () => evaluateNeutralConformanceDecision,
@@ -33559,10 +33562,11 @@ function buildStartRunOpts(root, opts) {
     plugin_identity: resolveInstalledPluginIdentity(),
     // U6: thread the resolved-settings snapshot straight through. Undefined
     // when the caller passed none (back-compat: startRun skips the write).
-    snapshot: opts.snapshot
+    snapshot: opts.snapshot,
+    session_identity: opts.session_identity
   };
 }
-function resolvePreflightSnapshot(cwd, probe) {
+function resolveRunStartPreflight(cwd, probe) {
   try {
     const result = runStartPreflight({ cwd, probe });
     if (result.needsTmuxPrompt) {
@@ -33571,7 +33575,10 @@ function resolvePreflightSnapshot(cwd, probe) {
 `
       );
     }
-    return result.snapshot;
+    return {
+      snapshot: result.snapshot,
+      session_identity: result.session_identity
+    };
   } catch (err) {
     process.stderr.write(
       `[run-trace] WARN: run-start preflight failed; starting the run WITHOUT a resolved-settings snapshot (degraded): ${err instanceof Error ? err.message : String(err)}
@@ -33679,11 +33686,14 @@ function startAndCloseRun(root, resolveHost, opts = {}) {
 }
 function recordStatusLightweight(root, resolveHost, opts = {}) {
   if (!readRecordStatusRuns(root)) return null;
+  const preflight = resolveRunStartPreflight(opts.cwd ?? root);
   return startAndCloseRun(root, resolveHost, {
     command: "/guild:status",
     cwd: opts.cwd,
     target_kind: opts.target_kind,
-    run_class: "lightweight"
+    run_class: "lightweight",
+    snapshot: preflight?.snapshot,
+    session_identity: preflight?.session_identity
   });
 }
 function writeSkippedFiles(root, runId, entries, opts = {}) {
@@ -33734,13 +33744,16 @@ async function main2() {
     const runClass = runClassRaw === "lightweight" ? "lightweight" : "full";
     const initiative = flag(argv, "initiative") ?? null;
     const phase = flag(argv, "phase") ?? null;
-    const snapshot = resolvePreflightSnapshot(cwd);
+    const preflight = resolveRunStartPreflight(cwd);
+    const snapshot = preflight?.snapshot;
+    const session_identity = preflight?.session_identity;
     const runId = runClass === "lightweight" ? startAndCloseRun(root, defaultResolveHost, {
       command,
       cwd,
       run_class: "lightweight",
       initiative,
-      snapshot
+      snapshot,
+      session_identity
     }) : startRunOnly(root, defaultResolveHost, {
       command,
       cwd,
@@ -33748,7 +33761,8 @@ async function main2() {
       initiative,
       phase,
       // T0: seed run.yaml phase: + first phases_log entry (canonical-validated downstream)
-      snapshot
+      snapshot,
+      session_identity
     });
     if (runId) process.stdout.write(runId + "\n");
     process.exit(0);
