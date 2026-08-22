@@ -93,6 +93,111 @@ import { readScalarField } from "../scripts/lib/frontmatter.js";
  */
 const REOPEN_TOLERANCE_MS = 2000;
 
+const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/;
+const TERMINAL_LANE_STATUSES = new Set(["done", "failed", "dead", "skipped"]);
+const MAX_PROVENANCE_LANES = 512;
+const MAX_ATTEMPTS_PER_LANE = 64;
+
+function readRegularJson(filePath: string): Record<string, unknown> | null {
+  let descriptor: number | null = null;
+  try {
+    const stats = fs.lstatSync(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) return null;
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    if (!fs.fstatSync(descriptor).isFile()) return null;
+    const parsed: unknown = JSON.parse(fs.readFileSync(descriptor, "utf8"));
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== null) fs.closeSync(descriptor);
+  }
+}
+
+function pathIsPhysicallyContained(parent: string, candidate: string): boolean {
+  try {
+    const realParent = fs.realpathSync(parent);
+    const realCandidate = fs.realpathSync(candidate);
+    return realCandidate.startsWith(`${realParent}${path.sep}`);
+  } catch {
+    return false;
+  }
+}
+
+function directoryChainIsPhysical(parent: string, candidate: string): boolean {
+  const relative = path.relative(parent, candidate);
+  if (relative.length === 0 || relative.startsWith("..") || path.isAbsolute(relative)) return false;
+  let current = parent;
+  try {
+    for (const segment of relative.split(path.sep)) {
+      current = path.join(current, segment);
+      const stats = fs.lstatSync(current);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) return false;
+    }
+    return pathIsPhysicallyContained(parent, candidate);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Derive terminal task provenance from the two production-owned dispatch
+ * records that must agree: run-state's terminal lane and the immutable
+ * task-cell attempt for that same run + logical task. A hand-authored lane,
+ * a symlinked tree, a mismatched run/task id, or an unbounded checkpoint earns
+ * no provenance claim.
+ */
+export function collectCorroboratedTouchedTasks(runDir: string, runId: string): string[] {
+  const state = readRegularJson(path.join(runDir, "run-state.json"));
+  const lanes = state?.["lanes"];
+  if (
+    state?.["schema_version"] !== "guild.run_state.v1" ||
+    state?.["run_id"] !== runId ||
+    lanes === null || typeof lanes !== "object" || Array.isArray(lanes)
+  ) return [];
+
+  const entries = Object.entries(lanes as Record<string, unknown>);
+  if (entries.length === 0 || entries.length > MAX_PROVENANCE_LANES) return [];
+  const touched: string[] = [];
+
+  for (const [taskId, rawLane] of entries) {
+    if (!SAFE_TASK_ID.test(taskId) || rawLane === null || typeof rawLane !== "object" || Array.isArray(rawLane)) continue;
+    const lane = rawLane as Record<string, unknown>;
+    if (typeof lane["status"] !== "string" || !TERMINAL_LANE_STATUSES.has(lane["status"])) continue;
+
+    const attemptsDir = path.join(runDir, "task-cells", taskId, "attempts");
+    if (!directoryChainIsPhysical(runDir, attemptsDir)) continue;
+    let attemptNames: string[];
+    try {
+      attemptNames = fs.readdirSync(attemptsDir)
+        .filter((name) => SAFE_TASK_ID.test(name))
+        .sort();
+    } catch {
+      continue;
+    }
+    if (attemptNames.length === 0 || attemptNames.length > MAX_ATTEMPTS_PER_LANE) continue;
+
+    const corroborated = attemptNames.some((attemptName) => {
+      const attemptPath = path.join(attemptsDir, attemptName, "attempt.json");
+      if (!directoryChainIsPhysical(runDir, path.dirname(attemptPath)) || !pathIsPhysicallyContained(runDir, attemptPath)) return false;
+      const attempt = readRegularJson(attemptPath);
+      return attempt?.["schema_version"] === "guild.task_attempt.v1"
+        && attempt["run_id"] === runId
+        && attempt["logical_task_id"] === taskId
+        && attempt["immutable"] === true
+        && typeof attempt["terminal_state"] === "string"
+        && attempt["terminal_state"].length > 0
+        && typeof attempt["terminated_at"] === "string"
+        && Number.isFinite(Date.parse(attempt["terminated_at"]));
+    });
+    if (corroborated) touched.push(taskId);
+  }
+
+  return touched.sort();
+}
+
 // ── Fix C (run-identity-and-dispatch) — active-worker close guard ─────────
 
 /**
@@ -405,8 +510,10 @@ async function main(): Promise<void> {
 
   // HK-09: populate provenance.json.final_learning_checkpoint
   const finalLearningCheckpoint = findTerminalCheckpoint(runDir, runId);
+  const touchedTasks = collectCorroboratedTouchedTasks(runDir, runId);
   emitRunClosed(root, runId, defaultResolveHost, {
     status: "closed",
+    touched: { tasks: touchedTasks },
     ...(finalLearningCheckpoint !== null
       ? { final_learning_checkpoint: finalLearningCheckpoint }
       : {}),
