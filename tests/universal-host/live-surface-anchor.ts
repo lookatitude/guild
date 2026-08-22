@@ -574,10 +574,22 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * was re-extracted byte-for-byte. This accompanies executable repairs for the
  * review's fail-open producer, GitHub-host pinning, persisted soak validation,
  * and transition recovery findings; it does not weaken any guard predicate.
+ *
+ * Re-ratified 2026-08-22 (PCL-FU-06 lifecycle-bound evidence completion) —
+ * `commands` moves c100f261 → 9f85a488 and `skills` moves 28af180d →
+ * 3dce0439. These are the deliberate beta.7 surfaces: `/guild:adopt` documents
+ * v2 observation sealing/restart and `guild:learn` publishes the immutable
+ * lifecycle-owned run-start baseline before compatibility work. The adopt
+ * registry was re-extracted byte-for-byte; module mirrors were regenerated.
+ * The beta.8 CI repair also narrows the legacy bare-restart detector to the
+ * closed `capability-adopt window restart` vocabulary and makes its legacy-close
+ * fixture use a production-valid run id. ANTI-VACUITY: PR #166 CI was RED
+ * against the prior pins and named exactly `commands/adopt.md` and
+ * `skills/knowledge/learn/SKILL.md` before these values were ratified.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "c100f261f3d222eea1f8e573be23e94b71c0917d",
-  skills: "28af180d5c79fcdf52dcfc6c076df5a2c8d5946f",
+  commands: "9f85a4882d919db6195b7a93d4c4290510309ab4",
+  skills: "3dce04393e1538edbd0b9bf7b6a1460cb272bc77",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
