@@ -24,6 +24,7 @@
 import * as crypto from "crypto";
 import * as fsReal from "fs";
 import * as path from "path";
+import { initStableLockfile, withStableLock } from "./stable-lock";
 
 // ── Schema ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,8 @@ export class BindingRejectedError extends Error {
 export interface BindingFs {
   mkdirp(absPath: string): void;
   writeFile(absPath: string, contents: string): void;
+  /** Create a new file without replacing an existing inode. */
+  writeFileExclusive?(absPath: string, contents: string): boolean;
   readFile(absPath: string): string | null;
   exists(absPath: string): boolean;
 }
@@ -73,6 +76,16 @@ function realBindingFs(): BindingFs {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
     writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    writeFileExclusive: (p, c) => {
+      fsReal.mkdirSync(path.dirname(p), { recursive: true });
+      try {
+        fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+        throw error;
+      }
+    },
     readFile: (p) => (fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null),
     exists: (p) => fsReal.existsSync(p),
   };
@@ -80,6 +93,36 @@ function realBindingFs(): BindingFs {
 
 export function runBindingPath(root: string, runId: string): string {
   return path.join(root, ".guild", "runs", runId, "binding.json");
+}
+
+/**
+ * Serialize a lifecycle-state transition with every receipt-producing runtime
+ * write for the same run. Both close and compatibility reads use this exact
+ * exclusion domain, so a receipt linearizes wholly before close or is refused
+ * wholly after it; there is no post-hoc journal cleanup path.
+ */
+export function withRunBindingExclusion<T>(
+  root: string,
+  runId: string,
+  fn: () => T,
+): T {
+  if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
+    throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
+  }
+  // Fail before withStableLock initializes logs/.lock. A refused operation for
+  // a nonexistent or malformed run must not manufacture a phantom run tree.
+  const persisted = readRunBindingRecord({ root, run_id: runId });
+  if (persisted.status === "absent") throw new BindingRejectedError("binding_not_minted", runId);
+  if (persisted.status === "malformed") throw new BindingRejectedError("binding_malformed", runId);
+  return withStableLock(path.join(root, ".guild", "runs", runId), fn);
+}
+
+/** Initialize the permanent exclusion inode as part of a successful run start. */
+export function initializeRunBindingExclusion(root: string, runId: string): void {
+  if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
+    throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
+  }
+  initStableLockfile(path.join(root, ".guild", "runs", runId));
 }
 
 // ── Mint / load / close ──────────────────────────────────────────────────────
@@ -113,7 +156,19 @@ export function mintRunBinding(opts: RunBindingLocator): RunBindingRecord {
     state: "open",
   };
   fs.mkdirp(path.dirname(p));
-  fs.writeFile(p, JSON.stringify(record, null, 2) + "\n");
+  const contents = JSON.stringify(record, null, 2) + "\n";
+  // Production adapters publish the binding with O_EXCL. The preliminary
+  // exists check above improves the normal diagnostic but is not the race
+  // control: only this exclusive create makes one same-ID starter the owner.
+  const created = fs.writeFileExclusive
+    ? fs.writeFileExclusive(p, contents)
+    : !fs.exists(p) && (fs.writeFile(p, contents), true);
+  if (!created) {
+    throw new Error(
+      `run-binding: a binding for ${opts.run_id} is already minted — ` +
+        `resume restores it (loadRunBinding); it is never re-minted`
+    );
+  }
   return record;
 }
 
@@ -214,6 +269,14 @@ export function closeRunBinding(opts: RunBindingLocator): void {
  * Idempotent when the record is already open.
  */
 export function reopenRunBinding(opts: RunBindingLocator, binding_ref: string): RunBindingRecord {
+  return withRunBindingExclusion(opts.root, opts.run_id, () =>
+    reopenRunBindingUnderExclusion(opts, binding_ref));
+}
+
+function reopenRunBindingUnderExclusion(
+  opts: RunBindingLocator,
+  binding_ref: string,
+): RunBindingRecord {
   const fs = opts.fs ?? realBindingFs();
   const read = readRunBindingRecord(opts);
   if (read.status === "absent") throw new BindingRejectedError("binding_not_minted", opts.run_id);

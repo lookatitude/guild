@@ -16,6 +16,7 @@
  */
 
 import { execFileSync } from "child_process";
+import { createHash } from "crypto";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -31,6 +32,8 @@ import {
   type DerivedFacts,
 } from "../lib/capability/profile-emit";
 import { validateProjectCapabilityProfileV1 } from "../lib/core/contracts/project-capability-profile";
+import { appendReceipt, makeReceiptInput } from "../../src/modules/telemetry/workflows/receipt-journal";
+import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../src/modules/lifecycle/workflows/run-lifecycle";
 
 const CLI = path.join(__dirname, "..", "capability-profile.ts");
 const RUN_ID = "run-20260801-120000-cap-profile";
@@ -466,6 +469,61 @@ describe("the CLI is the REAL path (conformance rule 3)", () => {
     expect(out.agents).toBe(shellHashTree(tmp, ".guild/agents"));
   });
 
+  it("`baseline` publishes the transaction-captured run-start snapshot and recovers idempotently", () => {
+    mk(".guild/agents/backend.md", "# backend\n");
+    const writeStart = (runId: string, startedAt: string) => {
+      const snapshot = {
+        schema_version: "guild.capability_run_start_snapshot.v1",
+        run_id: runId,
+        run_started_at: startedAt,
+        captured_at: startedAt,
+        ...snapshotTreeHashes(tmp)!,
+        bound_root: baselineBinding(tmp)!,
+        bound_run_id: runId,
+      };
+      const bytes = `${JSON.stringify(snapshot, null, 2)}\n`;
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      mk(`.guild/runs/${runId}/capability/run-start-snapshot.json`, bytes);
+      mk(`.guild/runs/${runId}/run.yaml`, `schema_version: guild.run.v1\nrun_id: ${runId}\nstarted_at: ${startedAt}\ncapability_start_snapshot_ref:\n  path: capability/run-start-snapshot.json\n  sha256: ${hash}\nstatus: open\n`);
+      const operationId = `capability-start-snapshot:${runId}`;
+      const identity = capabilityRunStartIdentityHash(runId, startedAt, hash);
+      const receipt = appendReceipt({
+        journal: path.join(tmp, ".guild", "runs", runId, "receipts", "journal.jsonl"),
+        checkpoint: path.join(tmp, ".guild", "runs", runId, "receipts", "checkpoint.json"),
+      }, makeReceiptInput({
+        run_id: runId, operation_id: operationId, correlation_id: operationId,
+        event_id: `${operationId}:${hash.slice(0, 12)}`, causation_id: null, scenario_id: "PCL-09",
+        event_name: "receipt.append", outcome_type: "guild.capability_outcome.v1", disposition: "succeeded",
+        observation_state: "checked_clean", input_hash: identity, output_hash: `sha256:${hash}`,
+        terminal: false, recorded_at: startedAt, observed_at: startedAt,
+        versions: { host_id: "guild-lifecycle", host_version: "unknown", runtime_version: CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, source_version: identity, contract_version: "guild.observability.v1" },
+        affected_event_range: null,
+      }));
+      expect(receipt.durable).toBe(true);
+    };
+    const startedAt = new Date().toISOString();
+    writeStart(RUN_ID, startedAt);
+    const out = JSON.parse(run(["baseline", "--cwd", tmp, "--run-id", RUN_ID]));
+    expect(out).toEqual(expect.objectContaining({
+      status: "written",
+      rel_path: `.guild/runs/${RUN_ID}/capability/run-start-baseline.json`,
+      baseline: expect.objectContaining({
+        schema_version: "guild.capability_run_baseline.v1",
+        run_id: RUN_ID,
+        bound_run_id: RUN_ID,
+      }),
+    }));
+    expect(out.baseline.captured_at).toBe(startedAt);
+    expect(fs.existsSync(path.join(tmp, out.rel_path))).toBe(true);
+    const replay = JSON.parse(run(["baseline", "--cwd", tmp, "--run-id", RUN_ID]));
+    expect(replay.baseline).toEqual(out.baseline);
+    expect(() => run(["baseline", "--cwd", tmp, "--run-id", `${RUN_ID}-other`, "--captured-at", "2026-01-01T00:00:00Z"])).toThrow();
+    const lateRun = `${RUN_ID}-late`;
+    const oldStart = new Date(Date.now() - 61_000).toISOString();
+    writeStart(lateRun, oldStart);
+    expect(JSON.parse(run(["baseline", "--cwd", tmp, "--run-id", lateRun])).baseline.captured_at).toBe(oldStart);
+  });
+
   it("finding 6 — `--baseline` with NO VALUE is a hard error, never a silent downgrade", () => {
     // `emit ... --baseline --resolver-mode observe` previously read as "no
     // baseline", emitted with the NARROW window, and reported success — exactly
@@ -475,7 +533,6 @@ describe("the CLI is the REAL path (conformance rule 3)", () => {
     try {
       run([
         "emit", "--cwd", tmp, "--run-id", RUN_ID, "--project-id", "fx",
-        "--generated-at", "2026-08-01T12:00:00Z",
         "--baseline", "--resolver-mode", "observe",
       ]);
     } catch (e) {
@@ -498,8 +555,6 @@ describe("the CLI is the REAL path (conformance rule 3)", () => {
         RUN_ID,
         "--project-id",
         "fx-empty",
-        "--generated-at",
-        "2026-08-01T12:00:00Z",
       ])
     );
     expect(out.status).toBe("emitted");
@@ -509,6 +564,15 @@ describe("the CLI is the REAL path (conformance rule 3)", () => {
     expect(shellHashTree(tmp, ".guild/agents")).toBe(shellBefore);
     const onDisk = readCapabilityProfile(tmp, RUN_ID);
     expect(onDisk?.mutation_evidence.agents_tree_hash_after).toBe(shellBefore);
+    expect(Date.parse(onDisk!.generated_at)).toBeGreaterThan(Date.now() - 30_000);
+  });
+
+  it("`emit` refuses caller-supplied profile timestamps", () => {
+    expect(() => run([
+      "emit", "--cwd", tmp, "--run-id", RUN_ID, "--project-id", "fx-empty",
+      "--generated-at", "2099-01-01T00:00:00Z",
+    ])).toThrow();
+    expect(fs.existsSync(path.join(tmp, profileRelPath(RUN_ID)))).toBe(false);
   });
 });
 

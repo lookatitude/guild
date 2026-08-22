@@ -44,8 +44,8 @@ import {
 } from "./lib/capability/compatibility-catalog";
 import { evaluateG5 } from "./lib/capability/compatibility-usage";
 import { collectCompatibilityUsageWindow, writeFrozenCompatibilityCatalog } from "./lib/capability/compatibility-loader";
-import { createMigrationObservation, writeMigrationObservation } from "./lib/capability/migration-evidence";
-import { advanceMigrationWindow, inspectMigrationWindow, legacyRemovalEligibility, recordMigrationRelease, startMigrationWindow } from "./lib/capability/migration-window";
+import { createMigrationObservation, sealMigrationObservationRun, writeMigrationObservation } from "./lib/capability/migration-evidence";
+import { advanceMigrationWindow, inspectMigrationWindow, legacyRemovalEligibility, recordMigrationRelease, restartMigrationWindow, startMigrationWindow } from "./lib/capability/migration-window";
 
 const USAGE = `
 capability-adopt — project capability adoption migration (D6)
@@ -53,12 +53,14 @@ capability-adopt — project capability adoption migration (D6)
   capability-adopt report   --project-id <id> [--project-root <p>] [--plugin-root <p>] [--json]
   capability-adopt catalog  [--plugin-root <p>] [--project-root <p>] [--freeze] [--json]
   capability-adopt g5       --windows <file> --project-local-default <semver> --current-version <semver> [--project-root <p>] [--plugin-root <p>] [--json]
-  capability-adopt window   evidence --boundary <boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <id,id> [--plugin-root <package>] [--out-dir <dir>]
+  capability-adopt window   evidence --boundary <boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <id> [--plugin-root <package>] [--out-dir <dir>]
+  capability-adopt window   seal-run --run-id <id>
   capability-adopt window   start --boundary <boundary.json> --project-id <id> [--to observe] [--actor <id>]
+  capability-adopt window   restart --boundary <boundary.json> --reason <text> [--actor <id>]
   capability-adopt window   record --boundary <boundary.json> --observation <observation.json>
   capability-adopt window   advance --boundary <boundary.json> --to <mode> [--actor <id>]
   capability-adopt window   status [--project-root <p>]
-  capability-adopt adopt    --project-id <id> --decisions <file> --run-id <id> \\
+  capability-adopt adopt    --project-id <id> --decisions <file> --run-id <id> --binding-ref <ref> \\
                             --authorized-by <decision-record> --adopted-at <rfc3339> [--dry-run]
   capability-adopt rollback --project-id <id> --run-id <id> --authorized-by <record> \\
                             --adopted-at <rfc3339> --reason <text> [--sequences 3,4] [--dry-run]
@@ -193,8 +195,10 @@ function main(argv: readonly string[]): number {
     const windowArgs = parseArgs(argv.slice(2));
     const allowedByAction: Record<string, readonly string[]> = {
       status: ["project-root", "json"],
+      "seal-run": ["project-root", "run-id", "json"],
       evidence: ["project-root", "plugin-root", "boundary", "project-id", "runtime-host", "mode", "run-ids", "out-dir", "json"],
       start: ["project-root", "boundary", "project-id", "to", "actor", "json"],
+      restart: ["project-root", "boundary", "reason", "actor", "json"],
       record: ["project-root", "boundary", "observation", "json"],
       advance: ["project-root", "boundary", "to", "actor", "json"],
     };
@@ -207,6 +211,15 @@ function main(argv: readonly string[]): number {
       process.stdout.write(`${JSON.stringify(inspected.status === "ok" ? inspected.window : inspected, null, 2)}\n`);
       return inspected.status === "ok" ? 0 : 2;
     }
+    if (action === "seal-run") {
+      const runId = str(windowArgs, "run-id");
+      if (!runId) fail("window seal-run requires --run-id <id>", 1);
+      try {
+        const receipt = sealMigrationObservationRun({ projectRoot, runId });
+        process.stdout.write(`${JSON.stringify({ status: "sealed", receipt }, null, 2)}\n`);
+        return 0;
+      } catch (error) { process.stderr.write(`refused: ${(error as Error).message}\n`); return 2; }
+    }
     const boundaryPath = str(windowArgs, "boundary");
     if (!boundaryPath) fail("window actions require --boundary <guild.capability_migration_boundary.v1.json>", 1);
     if (action === "evidence") {
@@ -214,7 +227,7 @@ function main(argv: readonly string[]): number {
       const runtimeHost = str(windowArgs, "runtime-host");
       const mode = str(windowArgs, "mode");
       const runIds = str(windowArgs, "run-ids")?.split(",").filter(Boolean) ?? [];
-      if (!projectId || (runtimeHost !== "claude-code-cli" && runtimeHost !== "codex-cli") || (mode !== "observe" && mode !== "shadow") || runIds.length === 0) fail("window evidence requires --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <id,id>", 1);
+      if (!projectId || (runtimeHost !== "claude-code-cli" && runtimeHost !== "codex-cli") || (mode !== "observe" && mode !== "shadow") || runIds.length !== 1) fail("window evidence requires --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode <observe|shadow> --run-ids <exactly-one-id>", 1);
       try {
         const observation = createMigrationObservation({ pluginRoot, runtimeHost, projectRoot, boundaryPath, projectId, mode, runIds });
         const out = writeMigrationObservation(str(windowArgs, "out-dir") ?? path.join(projectRoot, ".guild/artifacts/capability/observations"), observation);
@@ -233,8 +246,14 @@ function main(argv: readonly string[]): number {
         return 0;
       }
       if (action === "record") {
-        if (!observationPath) fail("window record requires --observation <guild.capability_migration_observation.v1.json>", 1);
+        if (!observationPath) fail("window record requires --observation <guild.capability_migration_observation.v2.json>", 1);
         process.stdout.write(`${JSON.stringify(recordMigrationRelease({ projectRoot, boundaryPath, observationPath }), null, 2)}\n`);
+        return 0;
+      }
+      if (action === "restart") {
+        const reason = str(windowArgs, "reason");
+        if (!reason) fail("window restart requires --reason <text>", 1);
+        process.stdout.write(`${JSON.stringify(restartMigrationWindow({ projectRoot, boundaryPath, actor, reason }), null, 2)}\n`);
         return 0;
       }
       if (action === "advance") {
@@ -277,10 +296,12 @@ function main(argv: readonly string[]): number {
   if (verb === "adopt") {
     const decisionsPath = str(args, "decisions");
     const runId = str(args, "run-id");
+    const bindingRef = str(args, "binding-ref");
     const authorizedBy = str(args, "authorized-by");
     const adoptedAt = str(args, "adopted-at");
     if (decisionsPath === null) fail("--decisions <file> is required", 1);
     if (runId === null) fail("--run-id is required", 1);
+    if (bindingRef === null) fail("--binding-ref is required", 1);
     if (authorizedBy === null) fail("--authorized-by <decision-record> is required", 1);
     // Caller-supplied, never `new Date()`: the contract has no clock, and a
     // deterministic timestamp is what lets a replay produce a byte-identical
@@ -305,6 +326,7 @@ function main(argv: readonly string[]): number {
       report,
       decisions,
       runId,
+      bindingRef,
       authorizedBy,
       adoptedAt,
       dryRun: args["dry-run"] === true,

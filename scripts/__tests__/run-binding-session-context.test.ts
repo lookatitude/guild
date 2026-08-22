@@ -25,6 +25,7 @@ import {
   readRunBindingRecord,
   runBindingPath,
   verifyRunBinding,
+  withRunBindingExclusion,
 } from "../lib/run-binding";
 import {
   buildSessionContext,
@@ -70,6 +71,25 @@ describe("run-binding — mint/verify/fail-closed (§5)", () => {
     expect(() => mintRunBinding({ root, run_id: "run-x" })).toThrow(/already minted/);
   });
 
+  it("loses an atomic same-ID mint race without replacing the winner", () => {
+    const root = tmpRoot();
+    const winner = mintRunBinding({ root, run_id: "run-x" });
+    const writes: string[] = [];
+    expect(() => mintRunBinding({
+      root,
+      run_id: "run-x",
+      fs: {
+        mkdirp: () => undefined,
+        writeFile: (_p, contents) => { writes.push(contents); },
+        writeFileExclusive: () => false,
+        readFile: () => null,
+        exists: () => false,
+      },
+    })).toThrow(/already minted/);
+    expect(writes).toEqual([]);
+    expect(loadRunBinding({ root, run_id: "run-x" })).toEqual(winner);
+  });
+
   it("verify rejects each §5 failure class with diagnostic binding_rejected", () => {
     const root = tmpRoot();
     const b = mintRunBinding({ root, run_id: "run-x" });
@@ -102,6 +122,14 @@ describe("run-binding — mint/verify/fail-closed (§5)", () => {
       expect((e as BindingRejectedError).diagnostic).toBe("binding_rejected");
       expect((e as BindingRejectedError).reason).toBe("binding_not_minted");
     }
+  });
+
+  it("refuses missing run exclusion without creating a phantom run tree", () => {
+    const root = tmpRoot();
+    const missingRun = "run-missing";
+    expect(() => withRunBindingExclusion(root, missingRun, () => undefined))
+      .toThrow(BindingRejectedError);
+    expect(fs.existsSync(path.join(root, ".guild", "runs", missingRun))).toBe(false);
   });
 
   it("F2: there is NO migration posture — an absent binding_ref is refused even for a minted OPEN run", () => {
@@ -338,6 +366,11 @@ function memFs(): MemFs {
     writeFile: (p, c) => { files.set(p, c); },
     readFile: (p) => (files.has(p) ? (files.get(p) as string) : null),
     exists: (p) => files.has(p) || dirs.has(p),
+    removeTree: (p) => {
+      const prefix = `${p}${path.sep}`;
+      for (const key of [...files.keys()]) if (key === p || key.startsWith(prefix)) files.delete(key);
+      for (const key of [...dirs]) if (key === p || key.startsWith(prefix)) dirs.delete(key);
+    },
   };
   return { files, env };
 }
@@ -348,6 +381,7 @@ function makeEnv(mem: MemFs): RunLifecycleEnv {
   const env: RunLifecycleEnv = {
     now: () => "2026-07-30T12:00:00Z",
     fs: mem.env,
+    withRunBindingExclusion: <T>(_root: string, _runId: string, fn: () => T): T => fn(),
     resolveHost: (requested) => ({ requested, resolved: "claude" }),
   };
   (env as RunLifecycleEnv & { __rootHint?: string }).__rootHint = ROOT;

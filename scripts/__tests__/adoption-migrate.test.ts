@@ -34,6 +34,7 @@ import {
   readAdoptionManifest,
   rollbackAdoption,
 } from "../lib/capability/adoption-migrate";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import {
   manifestCommitment,
   resolveHistorical,
@@ -48,6 +49,13 @@ type Flat = Record<string, unknown> & { status: string };
 const flat = (v: unknown): Flat => v as unknown as Flat;
 
 let tmp: string;
+let bindingRefs: Map<string, string>;
+
+function bindingRef(runId: string): string {
+  const ref = bindingRefs.get(runId);
+  if (!ref) throw new Error(`missing planted binding for ${runId}`);
+  return ref;
+}
 
 function write(rel: string, body: string): void {
   const abs = path.join(tmp, rel);
@@ -72,6 +80,14 @@ function treeHash(root: string): string {
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-adopt-"));
+  bindingRefs = new Map();
+  for (const runId of [
+    "run-20260801-120000-adopt",
+    "run-20260801-140000-readopt",
+    "run-a",
+  ]) {
+    bindingRefs.set(runId, mintRunBinding({ root: tmp, run_id: runId }).binding_ref);
+  }
   // A team file referencing the `qa` template, and a plan referencing the
   // `qa-test-strategy` domain skill. Both are HISTORICAL EVIDENCE.
   write(
@@ -187,6 +203,7 @@ describe("D6 — applying a plan", () => {
         report: report(),
         decisions,
         runId: "run-20260801-120000-adopt",
+        bindingRef: bindingRef("run-20260801-120000-adopt"),
         authorizedBy: "cap-loc-D06",
         adoptedAt: AT,
         ...over,
@@ -347,6 +364,8 @@ describe("D6 — applying a plan", () => {
     expect(flat(apply({ authorizedBy: undefined })).status).toBe("refused");
     expect(flat(apply({ adoptedAt: "yesterday" })).status).toBe("refused");
     expect(flat(apply({ runId: "run id with spaces" })).status).toBe("refused");
+    expect(flat(apply({ bindingRef: undefined })).status).toBe("refused");
+    expect(flat(apply({ bindingRef: bindingRef("run-20260801-140000-readopt") })).status).toBe("refused");
   });
 
   it("is deterministic — the same inputs produce the same commitment", () => {
@@ -386,6 +405,7 @@ describe("D6 — one-command rollback", () => {
           { kind: "skill", id: "qa-test-strategy", disposition: "adopt_as_is" },
         ],
         runId: "run-20260801-120000-adopt",
+        bindingRef: bindingRef("run-20260801-120000-adopt"),
         authorizedBy: "cap-loc-D06",
         adoptedAt: AT,
       }),
@@ -489,6 +509,7 @@ describe("D6 — one-command rollback", () => {
         report: report(),
         decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
         runId: "run-20260801-140000-readopt",
+        bindingRef: bindingRef("run-20260801-140000-readopt"),
         authorizedBy: "cap-loc-D06",
         adoptedAt: "2026-08-01T14:00:00Z",
       }),
@@ -537,6 +558,7 @@ describe("D6 — codex round 1 regressions", () => {
         report: report(),
         decisions,
         runId: "run-20260801-120000-adopt",
+        bindingRef: bindingRef("run-20260801-120000-adopt"),
         authorizedBy: "cap-loc-D06",
         adoptedAt: AT,
         ...over,
@@ -690,6 +712,7 @@ describe("D6 — codex round 2 regressions (literal-only fixes)", () => {
         report: report(),
         decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
         runId: "run-20260801-120000-adopt",
+        bindingRef: bindingRef("run-20260801-120000-adopt"),
         authorizedBy: "cap-loc-D06",
         adoptedAt: AT,
         ...over,
@@ -791,6 +814,8 @@ describe("D6 — the capability-adopt command, end to end", () => {
           plan,
           "--run-id",
           "run-a",
+          "--binding-ref",
+          bindingRef("run-a"),
           "--authorized-by",
           "cap-loc-D06",
           "--adopted-at",
@@ -860,6 +885,7 @@ describe("D6 — codex round 3 regressions (rollback mutation phase)", () => {
         report: report(),
         decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
         runId: "run-a",
+        bindingRef: bindingRef("run-a"),
         authorizedBy: "cap-loc-D06",
         adoptedAt: AT,
       }),
@@ -941,6 +967,7 @@ describe("D6 — re-running the report over an already-migrated project", () => 
         report: report(),
         decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
         runId: "run-a",
+        bindingRef: bindingRef("run-a"),
         authorizedBy: "cap-loc-D06",
         adoptedAt: AT,
       }),

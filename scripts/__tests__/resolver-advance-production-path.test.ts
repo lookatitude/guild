@@ -37,6 +37,7 @@ import * as os from "os";
 import * as path from "path";
 
 import { applyAdoptionPlan, buildAdoptionReport } from "../lib/capability/adoption-migrate";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import {
   RESOLVER_ADVANCE_TARGET,
   applyResolverModeAdvanceOnApproval,
@@ -50,6 +51,13 @@ type Flat = Record<string, unknown> & { status: string };
 const flat = (v: unknown): Flat => v as unknown as Flat;
 
 let tmp: string;
+let bindingRefs: Map<string, string>;
+
+function bindingRef(runId: string): string {
+  const ref = bindingRefs.get(runId);
+  if (!ref) throw new Error(`missing planted binding for ${runId}`);
+  return ref;
+}
 
 function write(rel: string, body: string): void {
   const abs = path.join(tmp, rel);
@@ -98,6 +106,15 @@ function settingsFixture(opts: {
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-resolver-advance-"));
+  bindingRefs = new Map();
+  for (const runId of [
+    "run-20260817-090000-advance",
+    "run-20260817-091500-advance2",
+    "run-20260817-092000-advance3",
+    "run-20260817-093000-advcli",
+  ]) {
+    bindingRefs.set(runId, mintRunBinding({ root: tmp, run_id: runId }).binding_ref);
+  }
   // Historical evidence referencing the shipped `qa` template and the
   // `qa-test-strategy` domain skill — same shape as adoption-migrate.test.ts.
   write(
@@ -112,6 +129,9 @@ afterEach(() => {
 });
 
 function apply(over: Record<string, unknown> = {}): Flat {
+  const runId = typeof over["runId"] === "string"
+    ? over["runId"]
+    : "run-20260817-090000-advance";
   return flat(
     applyAdoptionPlan({
       pluginRoot: PLUGIN_ROOT,
@@ -119,7 +139,8 @@ function apply(over: Record<string, unknown> = {}): Flat {
       projectId: "demo",
       report: buildAdoptionReport({ pluginRoot: PLUGIN_ROOT, projectRoot: tmp, projectId: "demo" }),
       decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
-      runId: "run-20260817-090000-advance",
+      runId,
+      bindingRef: bindingRef(runId),
       authorizedBy: "cap-loc-D04",
       adoptedAt: AT,
       ...over,
@@ -233,6 +254,7 @@ describe("FIC45-A4-B1 — D04 resolver-mode advance fires on the production appr
           report: isolatedReport({ pluginRoot: PLUGIN_ROOT, projectRoot: tmp, projectId: "demo" }),
           decisions: [{ kind: "agent", id: "qa", disposition: "adopt_as_is" }],
           runId: "run-20260817-092000-advance3",
+          bindingRef: bindingRef("run-20260817-092000-advance3"),
           authorizedBy: "cap-loc-D04",
           adoptedAt: AT,
         }),
@@ -350,6 +372,7 @@ describe("FIC45-A4-B1 — D04 resolver-mode advance fires on the production appr
           "--plugin-root", PLUGIN_ROOT,
           "--decisions", plan,
           "--run-id", "run-20260817-093000-advcli",
+          "--binding-ref", bindingRef("run-20260817-093000-advcli"),
           "--authorized-by", "cap-loc-D04",
           "--adopted-at", AT,
         ]),

@@ -14,6 +14,7 @@ import {
   SHIPPED_DOMAIN_SKILL_IDS,
 } from "../../scripts/lib/capability/compatibility-catalog";
 import { scanReceiptJournal } from "../../src/modules/telemetry";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const SCRIPT = path.resolve(__dirname, "../pre-tool-use.ts");
 const DIST_SCRIPT = path.resolve(__dirname, "../dist/pre-tool-use.js");
@@ -21,6 +22,7 @@ const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const RUN_ID = "run-pcl09-native-skill";
 
 let projectRoot: string;
+let bindingRef: string;
 
 function writeMode(mode: "legacy" | "observe" | "shadow" | "project-local" | "strict"): void {
   fs.writeFileSync(
@@ -58,6 +60,7 @@ function runHook(
       ...process.env,
       GUILD_CWD: projectRoot,
       GUILD_RUN_ID: options.runId ?? RUN_ID,
+      GUILD_RUN_BINDING_REF: bindingRef,
       GUILD_PLUGIN_ROOT: options.pluginRoot ?? PLUGIN_ROOT,
       CLAUDE_PLUGIN_ROOT: options.pluginRoot ?? PLUGIN_ROOT,
       CMUX_WORKSPACE_ID: "",
@@ -88,6 +91,7 @@ describe("pre-tool-use.ts — PCL-09 native domain-skill reads", () => {
     projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-pcl09-native-skill-"));
     fs.mkdirSync(path.join(projectRoot, ".git"), { recursive: true });
     fs.mkdirSync(path.join(projectRoot, ".guild", "runs", RUN_ID), { recursive: true });
+    bindingRef = mintRunBinding({ root: projectRoot, run_id: RUN_ID }).binding_ref;
   });
 
   afterEach(() => fs.rmSync(projectRoot, { recursive: true, force: true }));

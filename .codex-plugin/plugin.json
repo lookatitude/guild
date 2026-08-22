@@ -1,6 +1,6 @@
 {
   "name": "guild",
-  "version": "2.7.0-beta.6",
+  "version": "2.7.0-beta.7",
   "mcpServers": {
     "guild-memory": {
       "type": "stdio",

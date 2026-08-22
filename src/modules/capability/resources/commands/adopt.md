@@ -21,14 +21,18 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist
 `report`, `status`, and an unfrozen `catalog` are read-only. `catalog --freeze`,
 `adopt`, `rollback`, and `window` mutate project-owned `.guild/` state and require
 operator confirmation before invocation. `adopt` requires a reviewed decisions
-JSON file plus explicit run, authority, and RFC3339 timestamp. `rollback` appends
-reversal entries and preserves history.
+JSON file plus the explicit run id and its caller-held `--binding-ref`, authority,
+and RFC3339 timestamp. The tool verifies the pair against the still-open lifecycle
+binding; naming another open run is not authorization. `rollback` appends reversal
+entries and preserves history.
 
 The D03 window is machine-enforced:
 
 ```bash
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window start --project-root "$(pwd)" --boundary <beta-boundary.json> --project-id <id> --to observe
-npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window evidence --plugin-root "$GUILD_PLUGIN_ROOT" --project-root "$(pwd)" --boundary <beta-boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode observe --run-ids <real-run-id,...>
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window restart --project-root "$(pwd)" --boundary <newer-beta-boundary.json> --reason "upgrade legacy observations to baseline-bound v2"
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window seal-run --project-root "$(pwd)" --run-id <completed-real-run-id>
+npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window evidence --plugin-root "$GUILD_PLUGIN_ROOT" --project-root "$(pwd)" --boundary <beta-boundary.json> --project-id <id> --runtime-host <claude-code-cli|codex-cli> --mode observe --run-ids <real-run-id>
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window record --project-root "$(pwd)" --boundary <beta-boundary.json> --observation <observation.json>
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window record --project-root "$(pwd)" --boundary <newer-beta-boundary.json> --observation <observation.json>
 npx tsx $GUILD_PLUGIN_ROOT/scripts/capability-adopt.ts window advance --project-root "$(pwd)" --boundary <newer-beta-boundary.json> --to shadow
@@ -41,8 +45,29 @@ the two-minor rollback floor and refuses legacy removal throughout v2.
 Start accepts only a hash-bound <code>guild.capability_migration_boundary.v1</code>
 emitted by the post-merge <code>next</code> workflow and begins the prospective
 observe clock before any evidence can count. Record pairs that boundary with a
-<code>guild.capability_migration_observation.v1</code> rebuilt from real whole-run
-profiles, intact receipt journals/checkpoints, and non-synthetic PCL-09 payloads.
+<code>guild.capability_migration_observation.v2</code> rebuilt from real whole-run
+profiles, intact receipt journals/checkpoints, non-synthetic PCL-09 payloads, and
+the immutable run-start baseline captured inside the lifecycle start transaction.
+The lifecycle appends a sequence-1, checkpoint-bound receipt for the exact snapshot
+before returning the new run. The baseline command publishes that already-captured,
+manifest-hash-bound snapshot only when the lifecycle receipt matches;
+it never re-hashes mutable project trees and calls the later state a run-start fact.
+The durable append-only receipt is written before any pending or final baseline;
+it makes an interrupted capture idempotently recoverable while a caller-shaped
+pending file without that prior receipt is refused.
+The observation retains and hash-binds the start snapshot, published baseline,
+terminal run manifest, lifecycle <code>provenance.json</code>, and the exact terminal
+trace log; it verifies the provenance pointer resolves to one matching
+<code>run_closed</code> event and requires the
+baseline to predate the qualifying compatibility receipt and profile generation to
+follow the receipt but precede the real <code>run_closed</code> event. After the run
+is genuinely closed, <code>window seal-run</code> appends the distinct terminal
+PCL-09 receipt and binds both verified close provenance and the freshly re-read capability trees to the final profile;
+evidence refuses a missing, stale, detached, or non-final seal. Source files
+are fully verified before one run's snapshot tree is atomically published; the
+three-release window supplies the three distinct runs. Legacy v1 observations,
+including already-completed phases, remain readable as history but never count
+toward a new advance.
 The boundary commits to the exact generated Claude and Codex package trees; evidence
 must name one host and hash to that attested package, so a version string alone never
 qualifies. Accepted run material is copied into immutable project evidence storage,
@@ -58,6 +83,17 @@ That read is intentionally online and fail-closed: if GitHub or authenticated
 restore access and retry without rewriting the window. The beta-only window schema is
 <code>guild.capability_migration_window.v4</code>; pre-beta v1-v3 fixtures are not
 upgraded in place and must be retired before starting this first attested window.
+If an active observe or shadow window already contains legacy v1 observations, the narrowly
+scoped <code>window restart</code> action requires a strictly newer attested beta,
+retains the complete prior window under a content-addressed history record, and
+hash-binds that record independently into both the live window and the matching
+same-mode feature-gate history. Completed observe history remains intact when a
+legacy shadow window restarts. Deleting either binding, or deleting or
+semantically tampering with the record, invalidates status, record, and advance.
+It refuses v2-only
+windows, so it is not a general-purpose soak-timer reset. Interrupted restart
+recovery reverifies the archived observations and boundary provenance before it
+may publish that history record.
 Caller-supplied release labels, timestamps, and conformance booleans do not count.
 For D03, the machine-derived <code>guild.capability_migration_advance_conformance.v1</code>
 verdict is the conformance leg: it is recomputed from attested boundaries,

@@ -37,11 +37,92 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
+// ../src/modules/lifecycle/workflows/stable-lock.ts
+function stableLockPath(runDir2) {
+  return (0, import_node_path.join)(runDir2, "logs", ".lock");
+}
+function exclusionSentinelPath(runDir2) {
+  return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
+}
+function initStableLockfile(runDir2) {
+  const path29 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path29), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path29)) return;
+  try {
+    const fd = (0, import_node_fs.openSync)(path29, "wx");
+    (0, import_node_fs.closeSync)(fd);
+  } catch (err) {
+    if (err?.code !== "EEXIST") throw err;
+  }
+}
+function sleepSyncMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+  }
+}
+function withStableLock(runDir2, fn, opts = {}) {
+  initStableLockfile(runDir2);
+  const sentinel = exclusionSentinelPath(runDir2);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
+  const start = Date.now();
+  let attempt = 0;
+  for (; ; ) {
+    try {
+      const fd = (0, import_node_fs.openSync)(sentinel, "wx");
+      try {
+        (0, import_node_fs.writeSync)(fd, `${process.pid}
+`);
+      } catch {
+      }
+      (0, import_node_fs.closeSync)(fd);
+      try {
+        return fn();
+      } finally {
+        try {
+          (0, import_node_fs.unlinkSync)(sentinel);
+        } catch {
+        }
+      }
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") throw err;
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(
+          `v1.4-lock: timed out waiting for ${sentinel} (${timeoutMs}ms). Stale lock? Remove the file if you are sure no other process holds it.`
+        );
+      }
+      const idx = Math.min(attempt, backoff.length - 1);
+      sleepSyncMs(backoff[idx]);
+      attempt += 1;
+    }
+  }
+}
+var import_node_fs, import_node_path, DEFAULT_BACKOFF_MS, DEFAULT_TIMEOUT_MS;
+var init_stable_lock = __esm({
+  "../src/modules/lifecycle/workflows/stable-lock.ts"() {
+    import_node_fs = require("node:fs");
+    import_node_path = require("node:path");
+    DEFAULT_BACKOFF_MS = [2, 5, 10, 25, 50, 100, 200];
+    DEFAULT_TIMEOUT_MS = 5e3;
+  }
+});
+
 // ../src/modules/lifecycle/workflows/run-binding.ts
 function realBindingFs() {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
     writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    writeFileExclusive: (p, c) => {
+      fsReal.mkdirSync(path2.dirname(p), { recursive: true });
+      try {
+        fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        return true;
+      } catch (error) {
+        if (error.code === "EEXIST") return false;
+        throw error;
+      }
+    },
     readFile: (p) => fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null,
     exists: (p) => fsReal.existsSync(p)
   };
@@ -107,6 +188,7 @@ var init_run_binding = __esm({
   "../src/modules/lifecycle/workflows/run-binding.ts"() {
     fsReal = __toESM(require("fs"));
     path2 = __toESM(require("path"));
+    init_stable_lock();
     HOOK_BINDING_ENV_RUN_ID = "GUILD_RUN_ID";
     HOOK_BINDING_ENV_BINDING_REF = "GUILD_RUN_BINDING_REF";
   }
@@ -12510,77 +12592,6 @@ var init_security = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/stable-lock.ts
-function stableLockPath(runDir2) {
-  return (0, import_node_path.join)(runDir2, "logs", ".lock");
-}
-function exclusionSentinelPath(runDir2) {
-  return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
-}
-function initStableLockfile(runDir2) {
-  const path29 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path29), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path29)) return;
-  try {
-    const fd = (0, import_node_fs.openSync)(path29, "wx");
-    (0, import_node_fs.closeSync)(fd);
-  } catch (err) {
-    if (err?.code !== "EEXIST") throw err;
-  }
-}
-function sleepSyncMs(ms) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-  }
-}
-function withStableLock(runDir2, fn, opts = {}) {
-  initStableLockfile(runDir2);
-  const sentinel = exclusionSentinelPath(runDir2);
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
-  const start = Date.now();
-  let attempt = 0;
-  for (; ; ) {
-    try {
-      const fd = (0, import_node_fs.openSync)(sentinel, "wx");
-      try {
-        (0, import_node_fs.writeSync)(fd, `${process.pid}
-`);
-      } catch {
-      }
-      (0, import_node_fs.closeSync)(fd);
-      try {
-        return fn();
-      } finally {
-        try {
-          (0, import_node_fs.unlinkSync)(sentinel);
-        } catch {
-        }
-      }
-    } catch (err) {
-      const code = err?.code;
-      if (code !== "EEXIST") throw err;
-      if (Date.now() - start > timeoutMs) {
-        throw new Error(
-          `v1.4-lock: timed out waiting for ${sentinel} (${timeoutMs}ms). Stale lock? Remove the file if you are sure no other process holds it.`
-        );
-      }
-      const idx = Math.min(attempt, backoff.length - 1);
-      sleepSyncMs(backoff[idx]);
-      attempt += 1;
-    }
-  }
-}
-var import_node_fs, import_node_path, DEFAULT_BACKOFF_MS, DEFAULT_TIMEOUT_MS;
-var init_stable_lock = __esm({
-  "../src/modules/lifecycle/workflows/stable-lock.ts"() {
-    import_node_fs = require("node:fs");
-    import_node_path = require("node:path");
-    DEFAULT_BACKOFF_MS = [2, 5, 10, 25, 50, 100, 200];
-    DEFAULT_TIMEOUT_MS = 5e3;
-  }
-});
-
 // ../src/modules/lifecycle/workflows/trace-v2.ts
 function genSpanId(runId, eventType, ts, actorId) {
   const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
@@ -17874,19 +17885,19 @@ function failed(input, code, message, disposition = "failed") {
     failure: { code, message }
   };
 }
-function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}) {
+function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}, options = {}) {
   const invalid = validateInput(input);
   if (invalid) return failed(input, "invalid_record", invalid);
   const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append", paths.checkpoint);
   if (!acquired.ok) return failed(input, acquired.failure.code, acquired.failure.message);
   const authority = acquired.authority;
   try {
-    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority);
+    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority, options);
   } finally {
     authority.release();
   }
 }
-function appendLocked(paths, input, io, authority) {
+function appendLocked(paths, input, io, authority, options) {
   const bound = authority.bind(io);
   const scan = scanReceiptJournal(paths.journal, bound);
   if (scan.integrity !== "intact" && scan.integrity !== "absent") {
@@ -17899,6 +17910,13 @@ function appendLocked(paths, input, io, authority) {
   if (scan.records.some((r) => r.event_id === input.event_id)) {
     return {
       ...failed(input, "duplicate_event_id", `event_id already present: ${input.event_id}`, "refused"),
+      observation_state: input.observation_state,
+      blocks_dependent_completion: false
+    };
+  }
+  if (options.uniqueOperation && scan.records.some((r) => r.operation_id === input.operation_id)) {
+    return {
+      ...failed(input, "duplicate_operation_id", `operation_id already present: ${input.operation_id}`, "refused"),
       observation_state: input.observation_state,
       blocks_dependent_completion: false
     };

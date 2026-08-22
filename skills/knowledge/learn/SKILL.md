@@ -76,9 +76,28 @@ The run must be started **before** any scan (brief §141-158).
 
 Implements brief §178-201 ordered flow, SC-A:
 
-1. **Start run.** `startRun` (B2 API). Record command, args, cwd, target kind,
-   workspace/project identity, host, tier policy, ignore policy, scan policy,
-   user-approved gates, run status.
+1. **Start run and retain the capability baseline.** `startRun` (B2 API).
+   Record command, args, cwd, target kind, workspace/project identity, host,
+   tier policy, ignore policy, scan policy, user-approved gates, run status.
+   `startRun` captures and hash-references the capability-tree snapshot inside
+   its own start transaction. Immediately after it returns the canonical run
+   id—and before any scan or compatibility operation—publish that frozen fact:
+
+   ```bash
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts baseline \
+     --cwd <root> --run-id <run-id>
+   ```
+
+   This writes the immutable
+   `.guild/runs/<run-id>/capability/run-start-baseline.json` plus its append-only
+   publication receipt. Run start has already appended the sequence-1 lifecycle
+   receipt for the exact start snapshot; publication refuses if that producer binding
+   is missing or detached. The durable publication receipt lands before any pending or final baseline;
+   a retry returns the same baseline and repairs a journal-won checkpoint failure,
+   while a caller-shaped pending file without that prior receipt is refused. The
+   command never replaces retained bytes, never re-snapshots the current trees,
+   and requires the matching manifest-bound lifecycle start snapshot. Keep this
+   step adjacent to `startRun` so compatibility dispatch cannot precede its receipt.
 2. **Resolve project root.** Worktree-redirect via `lib/paths.ts`.
 3. **Load existing wiki and indexes.** Read `.guild/settings.json`;
    read existing `.guild/indexes/codebase-map.json` if present.
@@ -127,9 +146,9 @@ Implements brief §178-201 ordered flow, SC-A:
 
     ```bash
     npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts emit \
-      --cwd <root> --run-id <id> --project-id <id> --generated-at <rfc3339> \
+      --cwd <root> --run-id <id> --project-id <id> \
       [--facts .guild/runs/<run-id>/learn/capability-facts.json] \
-      --baseline .guild/runs/<run-id>/capability/baseline.json \
+      --baseline .guild/runs/<run-id>/capability/run-start-baseline.json \
       --resolver-mode <resolved capability.resolver_mode>
     ```
 
@@ -142,29 +161,32 @@ Implements brief §178-201 ordered flow, SC-A:
     **`--baseline` is what makes the window the WHOLE RUN**, and it is why step 1
     captures it. Without it the emitter can only bracket its own execution, so a
     stage that wrote to `.guild/agents/` back at step 8 would be measured across a
-    window in which nothing happened. Capture the baseline at **step 1**, right
-    after `startRun`, before any scan:
+    window in which nothing happened. Capture the baseline inside **step 1**, in
+    the `startRun` transaction before any scan:
 
-    ```bash
-    npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts hash-tree \
-      --cwd <root> --json --for-run <run-id> > .guild/runs/<run-id>/capability/baseline.json
-    ```
-
-    **`--for-run <run-id>` is required**, not decorative: it BINDS the baseline to
-    this project root and this run. Without it the emitter refuses the baseline
-    rather than treating an unbound hash triple as a run-start capture — a
-    cross-project baseline was otherwise accepted and reported whole-run coverage
-    it never had.
+    Use the `baseline` command from step 1. It binds the snapshot to this
+    project root and run, preserves the lifecycle-owned start instant, and publishes
+    it only with the matching append-only capture receipt. The emitter accepts that retained wrapper directly; an unbound
+    hash triple is never migration evidence.
 
     A malformed, foreign or wrong-run baseline is a REFUSAL (`invalid_baseline`),
     never a silent fall-back to the narrow window — falling back would quietly
     downgrade the claim the emitted profile makes.
 
-    **What the binding cannot prove: CAPTURE TIME.** Capturing at step 8 and
-    passing it here yields `mutation_window: "run"` for a window that began at
-    step 8. `"run"` therefore means "the caller asserts this is from run start";
-    only `"emission"` is established unaided. Capture it at step 1 as written
-    above and the assertion is true.
+    Migration observation v2 retains the lifecycle start snapshot, baseline,
+    terminal run manifest, close provenance, and the referenced terminal trace log
+    beside the journal and profile,
+    hash-binds all of them into the observation,
+    verifies the run identity/start time, the exact `run_closed` trace event, and that baseline capture
+    precedes the qualifying compatibility receipt while tool-clock-owned profile
+    generation follows the receipt. The production CLI refuses caller-supplied
+    profile timestamps. After step 17, close the lifecycle run only when it will
+    not resume; the qualifying receipt and final profile must already exist. Then
+    `capability-adopt window seal-run --project-root <root> --run-id <run-id>`
+    appends the distinct final PCL-09 receipt required by observation v2, after
+    verifying the real `run_closed` provenance, re-reading the capability trees,
+    and binding both to the final profile. Legacy
+    unbound observations remain readable for history but cannot advance a migration window.
 
     Mode behaviour, all one implementation:
     - `capability.resolver_mode: legacy` → **no emission** (typed refusal
@@ -193,6 +215,11 @@ Implements brief §178-201 ordered flow, SC-A:
 16. **Emit reflection candidates.** Write
     `.guild/runs/<run-id>/learn/reflection-candidates.md`.
 17. **Close the run.** `closeRun` (B2 API), terminal trace event via B3.
+18. **Seal only a completed PCL-09 observation run.** When this run is being used
+    for the D03 migration window and will not resume, invoke `capability-adopt
+    window seal-run --project-root <root> --run-id <run-id>`. Do not seal a
+    conversational pause; any later PCL-09 receipt makes the seal stale, and any
+    post-profile capability-tree mutation makes sealing or publication refuse.
 
 All wiki/decision/evolve promotions stay **human-gated**. This skill emits
 **candidates only** (non-negotiables #1 and #2).

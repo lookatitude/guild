@@ -7,6 +7,10 @@ import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog,
 import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/modules/capability/workflows/compatibility-usage";
 import type { CapabilityResolutionIntent } from "../../../src/modules/capability/workflows/resolver-mode";
 import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
+import {
+  assertWritableBinding,
+  withRunBindingExclusion,
+} from "../../../src/modules/lifecycle/workflows/run-binding";
 import { normalizeHostId } from "../host-id-namespace";
 import { hashCompatibilityRuntimeProducer, type MigrationRuntimeHost } from "./migration-evidence";
 
@@ -100,9 +104,10 @@ export function readCompatibilityAsset(options: {
   synthetic: boolean;
   specialistId: string | null;
   runId: string;
+  /** Exact open lifecycle binding threaded by the dispatching host. */
+  bindingRef: string;
   /** Caller-owned idempotency key for this concrete read. */
   operationId: string;
-  recordedAt: string;
 }): CompatibilityLoadResult {
   const entry = readCatalogEntry(options.entry);
   if (!entry) return { status: "refused", detail: "invalid compatibility catalog entry" };
@@ -128,53 +133,59 @@ export function readCompatibilityAsset(options: {
   }
   const target = path.join(root, entry.path);
   try {
-    const contained = checkContained(root, target, { policy: "physical", requireRegularFileLeaf: true });
-    if (isRefused(contained)) return { status: "refused", detail: `compatibility asset refused [${contained.code}]` };
-    const bytes = fs.readFileSync(contained.realPath);
-    const actual = createHash("sha256").update(bytes).digest("hex");
-    if (actual !== entry.content_hash) return { status: "refused", detail: "compatibility asset bytes do not match the catalog" };
-    const emitted = compatibilityUsageForRead({ entry, mode: options.mode, intent: options.intent, synthetic: options.synthetic, specialist_id: options.specialistId });
-    if (emitted.status !== "ok") return { status: "refused", detail: emitted.detail };
-    const payloadBytes = Buffer.from(`${JSON.stringify(emitted.payload, null, 2)}\n`, "utf8");
-    const payloadHash = createHash("sha256").update(payloadBytes).digest("hex");
-    const receipts = path.join(path.resolve(options.projectRoot), ".guild", "runs", options.runId, "receipts");
-    const safeOperation = options.operationId.replace(/[^a-zA-Z0-9._-]/g, "-");
-    if (!safeOperation || safeOperation.length > 160) return { status: "refused", detail: "operationId is not a bounded identity" };
-    const payloadRel = path.posix.join("payloads", `${safeOperation}-${payloadHash.slice(0, 16)}.compatibility-usage.json`);
-    const payloadPath = path.join(receipts, payloadRel);
-    if (fs.existsSync(payloadPath)) {
-      if (!fs.lstatSync(payloadPath).isFile() || !fs.readFileSync(payloadPath).equals(payloadBytes)) return { status: "refused", detail: "compatibility payload identity collision" };
-    } else {
-      const written = writeContainedFile(options.projectRoot, payloadPath, payloadBytes, { policy: "physical" });
-      if (!written.written) return { status: "refused", detail: `compatibility payload write refused [${written.code}]: ${written.detail}` };
-    }
-    const appended = appendReceipt(
-      { journal: path.join(receipts, "journal.jsonl"), checkpoint: path.join(receipts, "checkpoint.json") },
-      makeReceiptInput({
-        run_id: options.runId,
-        operation_id: `compatibility-read:${options.operationId}`,
-        correlation_id: `compatibility-read:${options.operationId}`,
-        event_id: `compatibility-read:${options.operationId}:${payloadHash.slice(0, 12)}`,
-        causation_id: null,
-        scenario_id: "PCL-09",
-        event_name: "task.dispatch",
-        outcome_type: "guild.capability_outcome.v1",
-        disposition: "degraded",
-        observation_state: "checked_clean",
-        input_hash: actual,
-        output_hash: payloadHash,
-        terminal: false,
-        recorded_at: options.recordedAt,
-        observed_at: options.recordedAt,
-        versions: { host_id: runtimeIdentity.host_id, host_version: "unknown", runtime_version: runtimeIdentity.runtime_version, source_version: runtimeIdentity.package_tree, contract_version: "guild.observability.v1" },
-        affected_event_range: null,
-      }),
-    );
-    if (!appended.durable || appended.sequence === null) {
-      try { fs.rmSync(payloadPath, { force: true }); } catch { /* refusal below remains authoritative */ }
-      return { status: "refused", detail: appended.failure?.message ?? "compatibility receipt was not durable" };
-    }
-    return { status: "loaded", bytes, payload: emitted.payload, receipt_sequence: appended.sequence };
+    return withRunBindingExclusion(options.projectRoot, options.runId, () => {
+      // A compatibility load is a runtime write. The caller must prove it belongs
+      // to this still-open run while holding the same exclusion close uses.
+      assertWritableBinding({ root: options.projectRoot, run_id: options.runId, binding_ref: options.bindingRef });
+      const contained = checkContained(root, target, { policy: "physical", requireRegularFileLeaf: true });
+      if (isRefused(contained)) return { status: "refused", detail: `compatibility asset refused [${contained.code}]` };
+      const bytes = fs.readFileSync(contained.realPath);
+      const actual = createHash("sha256").update(bytes).digest("hex");
+      if (actual !== entry.content_hash) return { status: "refused", detail: "compatibility asset bytes do not match the catalog" };
+      const emitted = compatibilityUsageForRead({ entry, mode: options.mode, intent: options.intent, synthetic: options.synthetic, specialist_id: options.specialistId });
+      if (emitted.status !== "ok") return { status: "refused", detail: emitted.detail };
+      const payloadBytes = Buffer.from(`${JSON.stringify(emitted.payload, null, 2)}\n`, "utf8");
+      const payloadHash = createHash("sha256").update(payloadBytes).digest("hex");
+      const receipts = path.join(path.resolve(options.projectRoot), ".guild", "runs", options.runId, "receipts");
+      const safeOperation = options.operationId.replace(/[^a-zA-Z0-9._-]/g, "-");
+      if (!safeOperation || safeOperation.length > 160) return { status: "refused", detail: "operationId is not a bounded identity" };
+      const payloadRel = path.posix.join("payloads", `${safeOperation}-${payloadHash.slice(0, 16)}.compatibility-usage.json`);
+      const payloadPath = path.join(receipts, payloadRel);
+      if (fs.existsSync(payloadPath)) {
+        if (!fs.lstatSync(payloadPath).isFile() || !fs.readFileSync(payloadPath).equals(payloadBytes)) return { status: "refused", detail: "compatibility payload identity collision" };
+      } else {
+        const written = writeContainedFile(options.projectRoot, payloadPath, payloadBytes, { policy: "physical" });
+        if (!written.written) return { status: "refused", detail: `compatibility payload write refused [${written.code}]: ${written.detail}` };
+      }
+      const recordedAt = new Date().toISOString();
+      const appended = appendReceipt(
+        { journal: path.join(receipts, "journal.jsonl"), checkpoint: path.join(receipts, "checkpoint.json") },
+        makeReceiptInput({
+          run_id: options.runId,
+          operation_id: `compatibility-read:${options.operationId}`,
+          correlation_id: `compatibility-read:${options.operationId}`,
+          event_id: `compatibility-read:${options.operationId}:${payloadHash.slice(0, 12)}`,
+          causation_id: null,
+          scenario_id: "PCL-09",
+          event_name: "task.dispatch",
+          outcome_type: "guild.capability_outcome.v1",
+          disposition: "degraded",
+          observation_state: "checked_clean",
+          input_hash: actual,
+          output_hash: payloadHash,
+          terminal: false,
+          recorded_at: recordedAt,
+          observed_at: recordedAt,
+          versions: { host_id: runtimeIdentity.host_id, host_version: "unknown", runtime_version: runtimeIdentity.runtime_version, source_version: runtimeIdentity.package_tree, contract_version: "guild.observability.v1" },
+          affected_event_range: null,
+        }),
+      );
+      if (!appended.durable || appended.sequence === null) {
+        try { fs.rmSync(payloadPath, { force: true }); } catch { /* refusal below remains authoritative */ }
+        return { status: "refused", detail: appended.failure?.message ?? "compatibility receipt was not durable" };
+      }
+      return { status: "loaded", bytes, payload: emitted.payload, receipt_sequence: appended.sequence };
+    });
   } catch (error) {
     return { status: "refused", detail: error instanceof Error ? error.message : String(error) };
   }

@@ -60,6 +60,11 @@ function memFs(): MemFs {
     exists(absPath: string): boolean {
       return files.has(absPath) || dirs.has(absPath);
     },
+    removeTree(absPath: string): void {
+      const prefix = `${absPath}${path.sep}`;
+      for (const key of [...files.keys()]) if (key === absPath || key.startsWith(prefix)) files.delete(key);
+      for (const key of [...dirs]) if (key === absPath || key.startsWith(prefix)) dirs.delete(key);
+    },
   };
   return { files, dirs, env };
 }
@@ -72,6 +77,7 @@ function makeEnv(
   return {
     now: () => clock,
     fs: mem.env,
+    withRunBindingExclusion: <T>(_root: string, _runId: string, fn: () => T): T => fn(),
     resolveHost: (requested: string) => ({
       requested,
       resolved: opts.resolved ?? ("claude" as HostKind),

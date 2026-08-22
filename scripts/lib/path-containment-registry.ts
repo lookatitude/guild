@@ -176,6 +176,11 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "PCL-10 migration-window state previously repeated a realpath-prefix write check; it now uses the shared bounded writer.",
   }),
   Object.freeze({
+    path: "scripts/lib/capability/migration-evidence.ts",
+    status: "adopted",
+    note: "PCL-FU-06 immutable baseline, observation, restart-history, and atomic publication paths use the shared physical containment primitive; its additional descriptor and directory-identity checks strengthen multi-file evidence publication without creating a second containment verdict.",
+  }),
+  Object.freeze({
     path: "scripts/lib/capability/self-build-canonicalize.ts",
     status: "adopted",
     note: "PCL-15 adoption-manifest and definition-ref artifacts are project-bounded writes and now use the shared primitive.",

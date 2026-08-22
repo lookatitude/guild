@@ -18,6 +18,7 @@ import {
 import { readCompatibilityAsset } from "../../scripts/lib/capability/compatibility-loader";
 import { resolveSettings } from "../../scripts/lib/settings-resolver";
 import type { CapabilityResolverMode } from "../../src/modules/config";
+import { readHookBindingEnvelope } from "../../src/modules/lifecycle/workflows/run-binding";
 import type { GuildHookEvent } from "./guild-hook-event";
 
 export type CompatibilitySkillGuardResult =
@@ -96,7 +97,6 @@ export function evaluateCompatibilitySkillUse(options: {
   projectRoot: string;
   runId: string | null;
   env?: NodeJS.ProcessEnv;
-  recordedAt?: string;
 }): CompatibilitySkillGuardResult {
   if (options.payload.tool_name !== "Skill") return { status: "not-applicable" };
   const skillId = invokedGuildSkill(options.payload.tool_input);
@@ -147,6 +147,13 @@ export function evaluateCompatibilitySkillUse(options: {
       reason: `PCL-09: shipped domain skill ${skillId} has no valid run identity for its receipt`,
     };
   }
+  const binding = readHookBindingEnvelope(env);
+  if (binding === null || binding.run_id !== options.runId) {
+    return {
+      status: "denied",
+      reason: `PCL-09: shipped domain skill ${skillId} has no matching open run binding for its receipt`,
+    };
+  }
 
   const mode = resolverMode(options.projectRoot);
   if (mode === "project-local" || mode === "strict") {
@@ -174,8 +181,8 @@ export function evaluateCompatibilitySkillUse(options: {
     synthetic: false,
     specialistId,
     runId: options.runId,
+    bindingRef: binding.binding_ref,
     operationId: `native-skill-${skillId}-${invocationId}`,
-    recordedAt: options.recordedAt ?? new Date().toISOString(),
   });
   if (loaded.status !== "loaded") {
     return {

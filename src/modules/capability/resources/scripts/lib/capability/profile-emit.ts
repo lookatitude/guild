@@ -54,7 +54,8 @@
  * may not. A contract only used by the surface it describes is decoration; used by
  * the code that does the work, it is a boundary.
  *
- * CONTRACT: no clock (timestamps are caller-supplied), no network. Filesystem
+ * CONTRACT: the emitter accepts an injected timestamp and has no network. The
+ * production CLI owns the clock; direct callers remain deterministic. Filesystem
  * reads plus exactly one bounded write. NEVER throws — every failure is a typed
  * refusal, because a thrown emitter would abort the Learn run it is a side-report of.
  *
@@ -305,7 +306,7 @@ export interface TreeHashes {
  * is only usable for the project and run it was taken in.
  *
  * ── EXACTLY WHAT THE BINDING DOES AND DOES NOT PREVENT ──────────────────────
- * It is UNKEYED metadata the caller supplies, so be precise about its value:
+ * This object is UNKEYED metadata, so be precise about its value in isolation:
  *
  *   PREVENTS  reusing a baseline OBJECT captured elsewhere — a foreign or stale
  *             baseline passed as-is is refused, which is the realistic mistake
@@ -317,14 +318,16 @@ export interface TreeHashes {
  *             reproduced. Making this unforgeable would need a secret this module
  *             does not have and could not keep.
  *
- *   DOES NOT  establish CAPTURE TIME. A caller snapshotting at Learn step 8 gets
- *   PREVENT   `"run"` for a window that began at step 8.
+ *   DOES NOT  by itself establish capture time. The migration-evidence path
+ *   PREVENT   closes that gap outside this emitter: lifecycle start captures the
+ *             snapshot and appends the sequence-1 receipt; baseline publication
+ *             and observation verification require that immutable producer
+ *             binding. A direct emitter caller does not inherit that proof.
  *
- * So `mutation_window: "run"` means "the CALLER asserts this baseline is from run
- * start in this project", and `"emission"` is the only value this module
- * establishes unaided. The binding raises the floor from "any valid-shaped triple"
- * to "a deliberate assertion about this project and run" — worth having, and not
- * worth mistaking for authentication.
+ * So this module establishes only that the supplied before-state is bound to the
+ * project/run and differs or agrees with the after-state. The surrounding
+ * lifecycle receipt is what authenticates "run start" for migration evidence;
+ * do not mistake this data object's path binding for that producer proof.
  */
 export interface BoundBaseline extends TreeHashes {
   /** sha256 of the realpath'd project root — binds the baseline to ONE project. */
@@ -468,7 +471,7 @@ export interface EmitProfileOptions {
   projectRoot: string;
   runId: string;
   projectId: string;
-  /** RFC3339 UTC, caller-supplied. This module has no clock. */
+  /** RFC3339 UTC. The production CLI supplies its tool clock; tests inject it here. */
   generatedAt: string;
   sourceCommit: string | null;
   resolverMode: ResolverMode;
@@ -489,7 +492,7 @@ export interface EmitProfileOptions {
    * Passing hashes captured at RUN START closes that: `before` becomes the run's
    * actual starting state, so any mutation anywhere in the run lands inside the
    * compared window. `guild:learn` step 12b passes it; `capability-profile.ts
-   * hash-tree --json` at run start produces it.
+   * baseline` publishes the retained input captured by the lifecycle start transaction.
    *
    * OMITTING IT IS STILL VALID — the emitter then reports honestly on the only
    * window it can see, rather than pretending to a wider one. The narrower claim

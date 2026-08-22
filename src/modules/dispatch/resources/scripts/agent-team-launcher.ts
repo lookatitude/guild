@@ -974,6 +974,7 @@ function compatibilityResolverMode(cwd: string): CapabilityResolverMode {
 function readSpecialistTemplateCompatibility(
   cwd: string,
   runId: string,
+  bindingRef: string,
   logicalTaskId: string,
   specialist: TaskCellLaunchLane,
   runtimeRoot: string,
@@ -1004,8 +1005,8 @@ function readSpecialistTemplateCompatibility(
     synthetic: false,
     specialistId: specialist.name,
     runId,
+    bindingRef,
     operationId: `task-cell-identity-${safeSegment(logicalTaskId)}-${safeSegment(specialist.name)}`,
-    recordedAt: new Date().toISOString(),
   });
   if (loaded.status !== "loaded") {
     throw new Error(
@@ -1018,6 +1019,7 @@ function readSpecialistTemplateCompatibility(
 function specialistIdentity(
   cwd: string,
   runId: string,
+  bindingRef: string,
   logicalTaskId: string,
   specialist: TaskCellLaunchLane,
 ): {
@@ -1048,6 +1050,7 @@ function specialistIdentity(
   const templateBytes = readSpecialistTemplateCompatibility(
     cwd,
     runId,
+    bindingRef,
     logicalTaskId,
     specialist,
     runtimeRoot,
@@ -1160,7 +1163,7 @@ function emitTaskCellsV2(
   for (const s of specialists) {
     const hostId = hostIdFor(s);
     const logicalTaskId = s.taskId;
-    const identity = specialistIdentity(cwd, runId, logicalTaskId, s);
+    const identity = specialistIdentity(cwd, runId, bindingRef, logicalTaskId, s);
     const tools = s.capability_scope ?? [];
     // Fresh, per-TASK context pointer — never shared across a specialist's tasks (D3).
     const contextRef = path.join(".guild", "context", runId, `${s.name}-${logicalTaskId}.md`);

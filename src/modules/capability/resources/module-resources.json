@@ -8,7 +8,7 @@
       "id": "adopt",
       "source_path": "commands/adopt.md",
       "resource_path": "resources/commands/adopt.md",
-      "sha256": "d77095ca3ccbc0a218ebab23f7d4980a191da11c6380e1a87b16a67c2812d802"
+      "sha256": "dbc7275a67287e43659aeba7705b92687716194c10546c0cbac92c3f2e3d9a43"
     },
     {
       "category": "commands",
@@ -22,7 +22,7 @@
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
       "resource_path": "resources/scripts/capability-adopt.ts",
-      "sha256": "2ffd0d798c1bb3cff9b6ab14ab27ba7605739161b44a03a0dd50d239a73e091f"
+      "sha256": "68801288fbf19dd36189eeb9ab5301d6103e7e71d41e324f3919c3f35c65b368"
     },
     {
       "category": "scripts",
@@ -36,7 +36,7 @@
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "resource_path": "resources/scripts/capability-profile.ts",
-      "sha256": "55674fc362817e1f3c24c8a1cf8d47a588086985300b9ad2c529a65418860b6d"
+      "sha256": "5b5be6c1666e0349e8dc431d7deb691908831db93a0761924f8ea0abb51060e8"
     },
     {
       "category": "scripts",
@@ -50,7 +50,7 @@
       "id": "lib/capability/adoption-migrate",
       "source_path": "scripts/lib/capability/adoption-migrate.ts",
       "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
-      "sha256": "e508a9facae7834f1010ceb8c6cdc2359b6d4acdf1fa28cb6497879e3235a0fb"
+      "sha256": "12d9136288cad0f05e49933a8888d826292c3c7b42ce4fe6422883a8f42d851d"
     },
     {
       "category": "scripts",
@@ -78,7 +78,7 @@
       "id": "lib/capability/compatibility-loader",
       "source_path": "scripts/lib/capability/compatibility-loader.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-loader.ts",
-      "sha256": "3c2d080672121433e69e1f351e7195e78ac74202eeb26c6255ea46f5635f5fad"
+      "sha256": "d8275ea68720453ce7bcc7668ae861ca98871737c753b7bb533c91fc9ee0e2c1"
     },
     {
       "category": "scripts",
@@ -106,21 +106,21 @@
       "id": "lib/capability/migration-evidence",
       "source_path": "scripts/lib/capability/migration-evidence.ts",
       "resource_path": "resources/scripts/lib/capability/migration-evidence.ts",
-      "sha256": "97b8f800628ab803e220c3097b8542d57e2fc50393b4192cb53ab976b391b826"
+      "sha256": "1907386fe9ebf62505dd5943a5091792801a8f6f90e40e5d86554bb99a10887e"
     },
     {
       "category": "scripts",
       "id": "lib/capability/migration-window",
       "source_path": "scripts/lib/capability/migration-window.ts",
       "resource_path": "resources/scripts/lib/capability/migration-window.ts",
-      "sha256": "55950f366908f5bd76b266fdd64835cb89532ebd45637dc7c51225c0a8ee8227"
+      "sha256": "c42a265c7b225f9aecc1ce18cbe9026bb3d019c3e202c535a9087c9965d11e78"
     },
     {
       "category": "scripts",
       "id": "lib/capability/profile-emit",
       "source_path": "scripts/lib/capability/profile-emit.ts",
       "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
-      "sha256": "89bb86ac54543dddfc97cc73002df138acc694e0a24197c1d2048e1e2af283ec"
+      "sha256": "8c4aa1e12e1950645542f4f7e6a541d84984f2c47fe589dd3e46a82b1b15cec4"
     },
     {
       "category": "scripts",

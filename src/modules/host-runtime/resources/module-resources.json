@@ -1500,7 +1500,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-binding.ts",
       "source_path": "src/modules/lifecycle/workflows/run-binding.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-binding.ts",
-      "sha256": "abf2c6138fe4b30b2817924a261eaba4b4b896daa600e3d454d8a42abca1f2f9",
+      "sha256": "3a9b947927237663fe0d4964ab7eae7833f281c6ee4f8b94709095ebfe8d6940",
       "projection_dependency": true
     },
     {
@@ -1508,7 +1508,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "cd695a0b14b2e55a1b81f31ccf4ab47616bcc9c32d85b2344f989918c3f04afd",
+      "sha256": "64660d1a28ba6ef4f365c41e4a07eb2312903aefc0944ca4cb501f9c1b2fc72d",
       "projection_dependency": true
     },
     {
@@ -1916,7 +1916,7 @@
       "id": "projection:src/modules/telemetry/workflows/receipt-journal.ts",
       "source_path": "src/modules/telemetry/workflows/receipt-journal.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/receipt-journal.ts",
-      "sha256": "d6282d9e147917affda8a892b35a212832e7da53039f468c9f3f4cae7c9d7170",
+      "sha256": "217002cc7ff6be3488c4d6559b9004856f5f4032b1dd75bcd17b6f5f2fbd2cc1",
       "projection_dependency": true
     },
     {
