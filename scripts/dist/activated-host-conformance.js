@@ -12106,6 +12106,19 @@ var init_dependency_graph_reader = __esm({
 });
 
 // ../src/modules/state/workflows/frontmatter.ts
+function yamlApi() {
+  if (loadedYaml === null) loadedYaml = loadYamlApi();
+  return loadedYaml;
+}
+function parseYaml(text, opts = {}) {
+  try {
+    const yaml4 = yamlApi();
+    const value = yaml4.load(text, { schema: opts.schema ?? yaml4.JSON_SCHEMA });
+    return value === void 0 ? null : value;
+  } catch {
+    return null;
+  }
+}
 function readScalarField(content, key) {
   const prefix = key + ":";
   for (const ln of content.split("\n")) {
@@ -12121,9 +12134,11 @@ function readScalarField(content, key) {
   }
   return void 0;
 }
+var loadedYaml;
 var init_frontmatter = __esm({
   "../src/modules/state/workflows/frontmatter.ts"() {
     init_kernel();
+    loadedYaml = null;
   }
 });
 
@@ -13175,6 +13190,34 @@ function recognizedHashDocument(value) {
 }
 function approvedHashPath(schema, pathParts) {
   const pathKey = pathParts.join("/");
+  if (schema === "guild.capability_run_start_snapshot.v1" || schema === "guild.capability_run_baseline.v1") {
+    return (/* @__PURE__ */ new Set(["agents", "skills", "registries", "bound_root"])).has(pathKey);
+  }
+  if (schema === "guild.project_capability_profile.v1") {
+    return (/* @__PURE__ */ new Set([
+      "feedstock/codebase_map_hash",
+      "feedstock/knowledge_graph_hash",
+      "feedstock/roster_hash",
+      "mutation_evidence/agents_tree_hash_before",
+      "mutation_evidence/agents_tree_hash_after",
+      "mutation_evidence/skills_tree_hash_before",
+      "mutation_evidence/skills_tree_hash_after",
+      "mutation_evidence/registry_hash_before",
+      "mutation_evidence/registry_hash_after",
+      "source_commit"
+    ])).has(pathKey) || /^(?:coverage|candidates)\/.*\/(?:profile_hash|content_hash|sha256)$/.test(pathKey);
+  }
+  if (schema === "guild.receipt_record.v1") {
+    return pathKey === "input_hash" || pathKey === "output_hash" || pathKey === "record_hash" || pathKey === "versions/source_version";
+  }
+  if (schema === "guild.compatibility_usage.v1") return pathKey === "content_hash";
+  if (schema === "guild.session_context.v1") {
+    return (/* @__PURE__ */ new Set([
+      "execution_target/account_fingerprint",
+      "execution_target/endpoint_fingerprint",
+      "execution_target/org_fingerprint"
+    ])).has(pathKey);
+  }
   if (schema === "guild.activated_host_public_manifest.v1") {
     return pathKey === "manifest_sha256" || pathKey === "evidence_sha256";
   }
@@ -13200,6 +13243,11 @@ function approvedHashPath(schema, pathParts) {
 function protectSchemaBoundSha256Occurrences(content, rel) {
   const tokens = [];
   let tokenIndex = 0;
+  const uniqueToken = () => {
+    let token = `<GUILD-SHA256-${tokenIndex++}>`;
+    while (content.includes(token)) token = `<GUILD-SHA256-${tokenIndex++}>`;
+    return token;
+  };
   const protectDocument = (documentContent) => {
     let parsed;
     try {
@@ -13223,9 +13271,9 @@ function protectSchemaBoundSha256Occurrences(content, rel) {
       if (typeof value !== "object" || value === null) return;
       for (const [key, entry] of Object.entries(value)) {
         const childPath = [...pathParts, key];
-        if (typeof entry === "string" && SHA256_VALUE.test(entry) && approvedHashPath(schema, childPath)) {
-          let token = `<GUILD-SHA256-${tokenIndex++}>`;
-          while (content.includes(token)) token = `<GUILD-SHA256-${tokenIndex++}>`;
+        const approvedValue = SHA256_VALUE.test(String(entry)) || schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)) || schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry));
+        if (typeof entry === "string" && approvedValue && approvedHashPath(schema, childPath)) {
+          const token = uniqueToken();
           tokens.push({ value: entry, token });
           value[key] = token;
         } else {
@@ -13237,10 +13285,29 @@ function protectSchemaBoundSha256Occurrences(content, rel) {
     const serialized = JSON.stringify(parsed, null, indent === void 0 ? void 0 : indent);
     return `${serialized}${trailingNewline ? "\n" : ""}`;
   };
-  if (rel.split(/[\\/]/).join("/") === "logs/v1.4-events.jsonl") {
+  const normalizedRel = rel.split(/[\\/]/).join("/");
+  if (normalizedRel.endsWith(".jsonl")) {
     return { content: content.split("\n").map((line) => line.trim().length === 0 ? line : protectDocument(line)).join("\n"), tokens };
   }
-  if (rel.endsWith(".json")) return { content: protectDocument(content), tokens };
+  if (normalizedRel.endsWith(".json")) return { content: protectDocument(content), tokens };
+  if (normalizedRel.endsWith("run.yaml")) {
+    let document = null;
+    try {
+      const parsed = parseYaml(content);
+      document = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      document = null;
+    }
+    const rawRef = document?.capability_start_snapshot_ref;
+    const ref = typeof rawRef === "object" && rawRef !== null && !Array.isArray(rawRef) ? rawRef : null;
+    const reviewedSnapshotPath = ref?.path === "capability/run-start-snapshot.json" || ref?.path === "run-start-snapshot.json";
+    const reviewedHash = document?.schema_version === "guild.run.v1" && reviewedSnapshotPath && typeof ref?.sha256 === "string" && SHA256_VALUE.test(ref.sha256) ? ref.sha256 : null;
+    if (reviewedHash && content.split(reviewedHash).length - 1 === 1) {
+      const token = uniqueToken();
+      tokens.push({ value: reviewedHash, token });
+      return { content: content.replace(reviewedHash, token), tokens };
+    }
+  }
   return { content, tokens };
 }
 function redact(content) {
@@ -13287,6 +13354,7 @@ var OPERATOR_PATH_RE, WORKSPACE_ROOT_MARKER, TILDE_CLAUDE_PROJECT_RE, OPERATOR_M
 var init_scrub_redact = __esm({
   "../src/modules/security/workflows/scrub-redact.ts"() {
     init_secret_patterns();
+    init_state();
     OPERATOR_PATH_RE = /\/Users\/[^/\s]+\/Projects\/[^/\s]+/g;
     WORKSPACE_ROOT_MARKER = "<workspace-root>";
     TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
@@ -13313,7 +13381,13 @@ var init_scrub_redact = __esm({
     HASH_BEARING_SCHEMAS = /* @__PURE__ */ new Set([
       "guild.provenance.v1",
       "guild.activated_host_public_evidence.v1",
-      "guild.activated_host_public_manifest.v1"
+      "guild.activated_host_public_manifest.v1",
+      "guild.capability_run_start_snapshot.v1",
+      "guild.capability_run_baseline.v1",
+      "guild.project_capability_profile.v1",
+      "guild.receipt_record.v1",
+      "guild.compatibility_usage.v1",
+      "guild.session_context.v1"
     ]);
   }
 });
@@ -24951,6 +25025,11 @@ var readScalarField2 = readScalarField;
 // lib/capability/migration-evidence.ts
 init_run_lifecycle();
 init_run_binding();
+
+// lib/shared/scrub-redact.ts
+init_scrub_redact();
+
+// lib/capability/migration-evidence.ts
 var MIGRATION_BOUNDARY_SCHEMA = "guild.capability_migration_boundary.v1";
 var MIGRATION_BOUNDARY_CHANNEL = "next";
 var MIGRATION_BOUNDARY_EVIDENCE_RELPATH = ".guild/artifacts/capability/migration-boundaries";
@@ -25289,9 +25368,6 @@ function validateMigrationBoundary(value) {
   if (record.boundary_hash !== boundaryHash(candidate)) return null;
   return Object.freeze({ ...candidate, boundary_hash: record.boundary_hash });
 }
-
-// lib/shared/scrub-redact.ts
-init_scrub_redact();
 
 // activated-host-conformance.ts
 var ACTIVATED_HOST_CONFORMANCE_SCHEMA = "guild.activated_host_conformance.v1";

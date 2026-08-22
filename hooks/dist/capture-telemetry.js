@@ -12576,6 +12576,7 @@ var init_secret_patterns = __esm({
 var init_scrub_redact = __esm({
   "../src/modules/security/workflows/scrub-redact.ts"() {
     init_secret_patterns();
+    init_state();
   }
 });
 

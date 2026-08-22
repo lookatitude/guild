@@ -32,6 +32,7 @@ import {
   readRunBindingRecord,
   withRunBindingExclusion,
 } from "../../../src/modules/lifecycle/workflows/run-binding";
+import { redactShareableFile } from "../shared/scrub-redact";
 
 export const MIGRATION_BOUNDARY_SCHEMA = "guild.capability_migration_boundary.v1" as const;
 export const MIGRATION_BOUNDARY_CHANNEL = "next" as const;
@@ -136,9 +137,15 @@ export interface MigrationObservationRunV1 {
 export interface MigrationObservationRunV2 extends MigrationObservationRunV1 {
   readonly run_manifest: MigrationEvidenceRefV1;
   readonly provenance: MigrationEvidenceRefV1;
+  /** Present on scrub-clean public projections; absent only on historical v2 records. */
+  readonly source_provenance_sha256?: string;
+  /** Hash of the run-time session record covered by the terminal seal. */
+  readonly source_session_context_sha256?: string;
   readonly terminal_trace_log: MigrationEvidenceRefV1;
   readonly start_snapshot: MigrationEvidenceRefV1;
   readonly baseline: MigrationEvidenceRefV1;
+  /** Present on session-bound public projections; absent only on historical v2 records. */
+  readonly session_context?: MigrationEvidenceRefV1;
 }
 
 export interface MigrationObservationV1 {
@@ -279,14 +286,14 @@ function terminalSealOutputHash(profileHash: string, trees: CapabilityTreeSnapsh
   return `sha256:${sha256(canonical({ profile_hash: profileHash, terminal_capability_trees: trees }))}`;
 }
 
-function migrationRunManifestFacts(bytes: Buffer, runId: string, status: "open" | "closed"): { readonly started_at: string; readonly capability_start_snapshot_sha256: string | null } | null {
+function migrationRunManifestFacts(bytes: Buffer, runId: string, status: "open" | "closed", snapshotPath = "capability/run-start-snapshot.json"): { readonly started_at: string; readonly capability_start_snapshot_sha256: string | null } | null {
   const manifest = plainRecord(parseYaml(bytes.toString("utf8")));
   if (!manifest || manifest.schema_version !== "guild.run.v1" || manifest.run_id !== runId || manifest.status !== status || typeof manifest.started_at !== "string") return null;
   const startedInstant = Date.parse(manifest.started_at);
   const ref = plainRecord(manifest.capability_start_snapshot_ref);
   const snapshotHash = ref === null && manifest.capability_start_snapshot_ref === null
     ? null
-    : ref?.path === "capability/run-start-snapshot.json" && typeof ref.sha256 === "string" && SHA256.test(ref.sha256)
+    : ref?.path === snapshotPath && typeof ref.sha256 === "string" && SHA256.test(ref.sha256)
       ? ref.sha256
       : undefined;
   return Number.isFinite(startedInstant) && snapshotHash !== undefined
@@ -310,14 +317,14 @@ interface MigrationRunCloseFacts {
   readonly closed_at: string;
 }
 
-function migrationRunCloseFacts(bytes: Buffer, terminalLogBytes: Buffer, runId: string): MigrationRunCloseFacts | null {
+function migrationRunCloseFacts(bytes: Buffer, terminalLogBytes: Buffer, runId: string, logRef = `.guild/runs/${runId}/logs/v1.4-events.jsonl`): MigrationRunCloseFacts | null {
   let parsed: unknown;
   try { parsed = JSON.parse(bytes.toString("utf8")); } catch { return null; }
   const record = plainRecord(parsed);
   const terminal = plainRecord(record?.terminal_trace_event);
   if (!record || record.schema_version !== "guild.provenance.v1" || record.run_id !== runId || record.status !== "closed"
     || !terminal || terminal.event_name !== "run_closed" || typeof terminal.event_id !== "string"
-    || terminal.log_ref !== `.guild/runs/${runId}/logs/v1.4-events.jsonl`) return null;
+    || terminal.log_ref !== logRef) return null;
   const startedAt = canonicalInstant(record.started_at);
   const closedAt = canonicalInstant(record.closed_at);
   const terminalAt = canonicalInstant(terminal.at);
@@ -336,13 +343,23 @@ function migrationRunCloseFacts(bytes: Buffer, terminalLogBytes: Buffer, runId: 
   return Object.freeze({ started_at: startedAt, closed_at: closedAt });
 }
 
-function migrationRunCloseIdentityHash(runId: string, facts: MigrationRunCloseFacts, provenanceHash: string): string {
+function migrationRunCloseIdentityHash(
+  runId: string,
+  facts: MigrationRunCloseFacts,
+  provenanceHash: string,
+  sessionContextHash?: string,
+  projectedProvenanceHash?: string,
+  projectedSessionContextHash?: string,
+): string {
   return `sha256:${sha256(canonical({
     schema_version: "guild.provenance.v1",
     run_id: runId,
     started_at: facts.started_at,
     closed_at: facts.closed_at,
     provenance_sha256: provenanceHash,
+    ...(sessionContextHash ? { session_context_sha256: sessionContextHash } : {}),
+    ...(projectedProvenanceHash ? { projected_provenance_sha256: projectedProvenanceHash } : {}),
+    ...(projectedSessionContextHash ? { projected_session_context_sha256: projectedSessionContextHash } : {}),
   }))}`;
 }
 
@@ -575,6 +592,12 @@ function sealMigrationObservationRunUnderExclusion(
   const manifest = migrationRunManifestFacts(manifestBytes, options.runId, "closed");
   if (!manifest) throw new Error("migration run seal requires a closed guild.run.v1 manifest");
   const provenanceBytes = readEvidenceFile(options.projectRoot, `.guild/runs/${options.runId}/provenance.json`);
+  const sessionContextBytes = readEvidenceFile(options.projectRoot, `.guild/runs/${options.runId}/session-context.json`);
+  let sessionContext: Record<string, unknown> | null = null;
+  try { sessionContext = plainRecord(JSON.parse(sessionContextBytes.toString("utf8"))); } catch { sessionContext = null; }
+  if (!sessionContext || sessionContext.schema_version !== "guild.session_context.v1" || sessionContext.run_id !== options.runId || sessionContext.started_at !== manifest.started_at) {
+    throw new Error("migration run seal requires the run-time session context");
+  }
   let terminalTraceLogBytes: Buffer;
   try { terminalTraceLogBytes = readEvidenceFile(options.projectRoot, `.guild/runs/${options.runId}/logs/v1.4-events.jsonl`); }
   catch { throw new Error("migration run seal requires the referenced run_closed trace event"); }
@@ -596,7 +619,28 @@ function sealMigrationObservationRunUnderExclusion(
   const sealedAt = new Date().toISOString();
   if (Date.parse(sealedAt) < Date.parse(closeFacts.closed_at)) throw new Error("migration run seal cannot predate lifecycle close");
   const operationId = `capability-terminal:${options.runId}`;
-  const closeHash = migrationRunCloseIdentityHash(options.runId, closeFacts, sha256(provenanceBytes));
+  const projectedProvenanceHash = sha256(projectMigrationEvidenceBytes(
+    options.projectRoot,
+    options.runId,
+    `.guild/runs/${options.runId}/provenance.json`,
+    `.guild/artifacts/capability/migration-evidence/seal/${options.runId}/provenance.json`,
+    provenanceBytes,
+  ));
+  const projectedSessionContextHash = sha256(projectMigrationEvidenceBytes(
+    options.projectRoot,
+    options.runId,
+    `.guild/runs/${options.runId}/session-context.json`,
+    `.guild/artifacts/capability/migration-evidence/seal/${options.runId}/session-context.json`,
+    sessionContextBytes,
+  ));
+  const closeHash = migrationRunCloseIdentityHash(
+    options.runId,
+    closeFacts,
+    sha256(provenanceBytes),
+    sha256(sessionContextBytes),
+    projectedProvenanceHash,
+    projectedSessionContextHash,
+  );
   const profileHash = `sha256:${sha256(profileBytes)}`;
   const sealHash = terminalSealOutputHash(profileHash, terminalTrees);
   const input = makeReceiptInput({
@@ -946,18 +990,27 @@ export function validateMigrationObservation(value: unknown): MigrationObservati
   const seenRuns = new Set<string>();
   for (const rawRun of record.runs) {
     const run = plainRecord(rawRun);
-    const expectedRunKeys = isV2 ? ["run_id", "run_manifest", "provenance", "terminal_trace_log", "start_snapshot", "baseline", "profile", "journal", "checkpoint", "compatibility_payloads"] : ["run_id", "profile", "journal", "checkpoint", "compatibility_payloads"];
-    if (!run || !exactKeys(run, expectedRunKeys)) return null;
+    const historicalV2Keys = ["run_id", "run_manifest", "provenance", "terminal_trace_log", "start_snapshot", "baseline", "profile", "journal", "checkpoint", "compatibility_payloads"];
+    const projectedV2Keys = [...historicalV2Keys, "source_provenance_sha256", "source_session_context_sha256", "session_context"];
+    if (!run || !(isV2 ? exactKeys(run, historicalV2Keys) || exactKeys(run, projectedV2Keys) : exactKeys(run, ["run_id", "profile", "journal", "checkpoint", "compatibility_payloads"]))) return null;
     if (typeof run.run_id !== "string" || !/^run-\d{8}-\d{6}-[a-z0-9][a-z0-9-]*$/.test(run.run_id) || seenRuns.has(run.run_id)) return null;
     const profile = validateEvidenceRef(run.profile);
     const runManifest = isV2 ? validateEvidenceRef(run.run_manifest) : null;
     const provenance = isV2 ? validateEvidenceRef(run.provenance) : null;
+    const sessionContext = isV2 && Object.prototype.hasOwnProperty.call(run, "session_context") ? validateEvidenceRef(run.session_context) : null;
+    const sourceProvenanceSha256 = isV2 && Object.prototype.hasOwnProperty.call(run, "source_provenance_sha256") && typeof run.source_provenance_sha256 === "string" && SHA256.test(run.source_provenance_sha256)
+      ? run.source_provenance_sha256
+      : null;
+    const sourceSessionContextSha256 = isV2 && Object.prototype.hasOwnProperty.call(run, "source_session_context_sha256") && typeof run.source_session_context_sha256 === "string" && SHA256.test(run.source_session_context_sha256)
+      ? run.source_session_context_sha256
+      : null;
     const terminalTraceLog = isV2 ? validateEvidenceRef(run.terminal_trace_log) : null;
     const startSnapshot = isV2 ? validateEvidenceRef(run.start_snapshot) : null;
     const baseline = isV2 ? validateEvidenceRef(run.baseline) : null;
     const journal = validateEvidenceRef(run.journal);
     const checkpoint = validateEvidenceRef(run.checkpoint);
-    if (!profile || (isV2 && (!runManifest || !provenance || !terminalTraceLog || !startSnapshot || !baseline)) || !journal || !checkpoint || !Array.isArray(run.compatibility_payloads) || run.compatibility_payloads.length === 0 || run.compatibility_payloads.length > 256) return null;
+    const projectedFieldsPresent = Object.prototype.hasOwnProperty.call(run, "session_context") || Object.prototype.hasOwnProperty.call(run, "source_provenance_sha256") || Object.prototype.hasOwnProperty.call(run, "source_session_context_sha256");
+    if (!profile || (isV2 && (!runManifest || !provenance || !terminalTraceLog || !startSnapshot || !baseline || (projectedFieldsPresent && (!sessionContext || !sourceProvenanceSha256 || !sourceSessionContextSha256)))) || !journal || !checkpoint || !Array.isArray(run.compatibility_payloads) || run.compatibility_payloads.length === 0 || run.compatibility_payloads.length > 256) return null;
     const payloads: MigrationEvidenceRefV1[] = [];
     const seenPayloads = new Set<string>();
     for (const rawPayload of run.compatibility_payloads) {
@@ -967,7 +1020,7 @@ export function validateMigrationObservation(value: unknown): MigrationObservati
       payloads.push(payload);
     }
     seenRuns.add(run.run_id);
-    runs.push(Object.freeze({ run_id: run.run_id, ...(runManifest ? { run_manifest: runManifest } : {}), ...(provenance ? { provenance } : {}), ...(terminalTraceLog ? { terminal_trace_log: terminalTraceLog } : {}), ...(startSnapshot ? { start_snapshot: startSnapshot } : {}), ...(baseline ? { baseline } : {}), profile, journal, checkpoint, compatibility_payloads: Object.freeze(payloads) }));
+    runs.push(Object.freeze({ run_id: run.run_id, ...(runManifest ? { run_manifest: runManifest } : {}), ...(provenance ? { provenance } : {}), ...(sourceProvenanceSha256 ? { source_provenance_sha256: sourceProvenanceSha256 } : {}), ...(sourceSessionContextSha256 ? { source_session_context_sha256: sourceSessionContextSha256 } : {}), ...(terminalTraceLog ? { terminal_trace_log: terminalTraceLog } : {}), ...(startSnapshot ? { start_snapshot: startSnapshot } : {}), ...(baseline ? { baseline } : {}), ...(sessionContext ? { session_context: sessionContext } : {}), profile, journal, checkpoint, compatibility_payloads: Object.freeze(payloads) }));
   }
   const candidate = {
     schema_version: record.schema_version as typeof MIGRATION_OBSERVATION_SCHEMA | typeof MIGRATION_OBSERVATION_SCHEMA_V1,
@@ -996,14 +1049,17 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     const v2Run = observation.schema_version === MIGRATION_OBSERVATION_SCHEMA ? run as MigrationObservationRunV2 : null;
     const runManifestRef = v2Run?.run_manifest ?? null;
     const provenanceRef = v2Run?.provenance ?? null;
+    const sourceProvenanceSha256 = v2Run?.source_provenance_sha256 ?? null;
+    const sourceSessionContextSha256 = v2Run?.source_session_context_sha256 ?? null;
     const terminalTraceLogRef = v2Run?.terminal_trace_log ?? null;
     const startSnapshotRef = v2Run?.start_snapshot ?? null;
     const baselineRef = v2Run?.baseline ?? null;
-    if ((runManifestRef && runManifestRef.path !== `${expectedPrefix}run.yaml`) || (provenanceRef && provenanceRef.path !== `${expectedPrefix}provenance.json`) || (terminalTraceLogRef && terminalTraceLogRef.path !== `${expectedPrefix}terminal-trace-log.jsonl`) || (startSnapshotRef && startSnapshotRef.path !== `${expectedPrefix}run-start-snapshot.json`) || (baselineRef && baselineRef.path !== `${expectedPrefix}baseline.json`) || run.profile.path !== `${expectedPrefix}profile.json` || run.journal.path !== `${expectedPrefix}journal.jsonl` || run.checkpoint.path !== `${expectedPrefix}checkpoint.json`) {
+    const sessionContextRef = v2Run?.session_context ?? null;
+    if ((runManifestRef && runManifestRef.path !== `${expectedPrefix}run.yaml`) || (provenanceRef && provenanceRef.path !== `${expectedPrefix}provenance.json`) || (terminalTraceLogRef && terminalTraceLogRef.path !== `${expectedPrefix}terminal-trace-log.jsonl`) || (startSnapshotRef && startSnapshotRef.path !== `${expectedPrefix}run-start-snapshot.json`) || (baselineRef && baselineRef.path !== `${expectedPrefix}baseline.json`) || (sessionContextRef && sessionContextRef.path !== `${expectedPrefix}session-context.json`) || run.profile.path !== `${expectedPrefix}profile.json` || run.journal.path !== `${expectedPrefix}journal.jsonl` || run.checkpoint.path !== `${expectedPrefix}checkpoint.json`) {
       throw new Error(`migration observation run ${run.run_id} has non-canonical evidence paths`);
     }
     const snapshots = new Map<string, Buffer>();
-    for (const ref of [...(runManifestRef ? [runManifestRef] : []), ...(provenanceRef ? [provenanceRef] : []), ...(terminalTraceLogRef ? [terminalTraceLogRef] : []), ...(startSnapshotRef ? [startSnapshotRef] : []), ...(baselineRef ? [baselineRef] : []), run.profile, run.journal, run.checkpoint, ...run.compatibility_payloads]) {
+    for (const ref of [...(runManifestRef ? [runManifestRef] : []), ...(provenanceRef ? [provenanceRef] : []), ...(terminalTraceLogRef ? [terminalTraceLogRef] : []), ...(startSnapshotRef ? [startSnapshotRef] : []), ...(baselineRef ? [baselineRef] : []), ...(sessionContextRef ? [sessionContextRef] : []), run.profile, run.journal, run.checkpoint, ...run.compatibility_payloads]) {
       if (!ref.path.startsWith(expectedPrefix)) throw new Error(`migration observation evidence path mismatch: ${ref.path}`);
       const bytes = stagedSnapshots?.get(ref.path) ?? readEvidenceFile(projectRoot, ref.path);
       if (sha256(bytes) !== ref.sha256) throw new Error(`migration observation evidence hash mismatch: ${ref.path}`);
@@ -1031,7 +1087,7 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     let retainedRunManifest: { readonly started_at: string; readonly capability_start_snapshot_sha256: string | null } | null = null;
     let retainedCloseFacts: MigrationRunCloseFacts | null = null;
     if (runManifestRef && baseline) {
-      retainedRunManifest = migrationRunManifestFacts(snapshots.get(runManifestRef.path)!, run.run_id, "closed");
+      retainedRunManifest = migrationRunManifestFacts(snapshots.get(runManifestRef.path)!, run.run_id, "closed", sessionContextRef ? "run-start-snapshot.json" : "capability/run-start-snapshot.json");
       if (!retainedRunManifest || retainedRunManifest.started_at !== baseline.run_started_at) {
         throw new Error(`migration observation retained run manifest is invalid or detached for ${run.run_id}`);
       }
@@ -1043,13 +1099,32 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
         throw new Error(`migration observation retained run-start transaction snapshot is invalid or detached for ${run.run_id}`);
       }
     }
+    if (sessionContextRef && retainedRunManifest) {
+      let session: Record<string, unknown> | null = null;
+      try { session = plainRecord(JSON.parse(snapshots.get(sessionContextRef.path)!.toString("utf8"))); } catch { session = null; }
+      const host = plainRecord(session?.host);
+      const identity = plainRecord(session?.identity);
+      if (!session || session.schema_version !== "guild.session_context.v1" || session.run_id !== run.run_id || session.started_at !== retainedRunManifest.started_at
+        || !host || host.family === "unknown" || host.surface === "unknown" || host.adapter_id === "unknown" || host.adapter_version === "unknown"
+        || !identity || identity.trust !== "verified" || identity.confidence !== "high" || (identity.source !== "native_adapter" && identity.source !== "host_handshake")) {
+        throw new Error(`migration observation requires a verified high-confidence session identity for ${run.run_id}`);
+      }
+    }
     if (provenanceRef && terminalTraceLogRef && retainedRunManifest) {
-      retainedCloseFacts = migrationRunCloseFacts(snapshots.get(provenanceRef.path)!, snapshots.get(terminalTraceLogRef.path)!, run.run_id);
+      retainedCloseFacts = migrationRunCloseFacts(snapshots.get(provenanceRef.path)!, snapshots.get(terminalTraceLogRef.path)!, run.run_id, sessionContextRef ? "terminal-trace-log.jsonl" : `.guild/runs/${run.run_id}/logs/v1.4-events.jsonl`);
       if (!retainedCloseFacts || retainedCloseFacts.started_at !== retainedRunManifest.started_at) {
         throw new Error(`migration observation retained close provenance is invalid or detached for ${run.run_id}`);
       }
       if (Date.parse(profile.generated_at) > Date.parse(retainedCloseFacts.closed_at)) {
         throw new Error(`migration observation profile was produced after lifecycle close for ${run.run_id}`);
+      }
+    }
+    if (sessionContextRef && provenanceRef) {
+      let retainedProvenance: Record<string, unknown> | null = null;
+      try { retainedProvenance = plainRecord(JSON.parse(snapshots.get(provenanceRef.path)!.toString("utf8"))); } catch { retainedProvenance = null; }
+      const touched = plainRecord(retainedProvenance?.touched);
+      if (!touched || !Array.isArray(touched.tasks) || touched.tasks.length === 0 || touched.tasks.some((task) => typeof task !== "string" || task.length === 0)) {
+        throw new Error(`migration observation requires substantive touched.tasks evidence for ${run.run_id}`);
       }
     }
     profileInstants.push(Date.parse(profile.generated_at));
@@ -1132,14 +1207,14 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
       let rawPayload: unknown;
       try { rawPayload = JSON.parse(snapshots.get(payloadRef.path)!.toString("utf8")); } catch { continue; }
       const payload = parseCompatibilityUsageV1(rawPayload);
-      if (payload && payload.resolver_mode === observation.mode && payload.synthetic === false) {
+      if (payload && payload.resolver_mode === observation.mode && payload.synthetic === false && (!sessionContextRef || payload.specialist_id !== null)) {
         qualifying += 1;
         earliestQualifyingReceipt = Math.min(earliestQualifyingReceipt, Date.parse(receipt.recorded_at));
         latestQualifyingReceipt = Math.max(latestQualifyingReceipt, Date.parse(receipt.recorded_at));
         earliestQualifyingSequence = Math.min(earliestQualifyingSequence, receipt.sequence);
       }
     }
-    if (qualifying === 0) throw new Error(`migration observation has no non-synthetic PCL-09 ${observation.mode} receipt for ${run.run_id} at ${observation.boundary_release}`);
+    if (qualifying === 0) throw new Error(`migration observation has no non-synthetic PCL-09 ${observation.mode} receipt with substantive specialist binding for ${run.run_id} at ${observation.boundary_release}`);
     if (baselineReceipts.length === 1 && baselineReceipts[0].sequence >= earliestQualifyingSequence) throw new Error(`migration observation baseline capture receipt does not precede compatibility dispatch for ${run.run_id}`);
     // Journal sequence is the authoritative ordering proof. Filesystems and the
     // RFC3339 clock can legitimately place the baseline and first dispatch in
@@ -1152,7 +1227,14 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     if (baseline && retainedRunManifest && retainedCloseFacts && provenanceRef) {
       if (terminalReceipts.length !== 1) throw new Error(`migration observation requires one explicit terminal run seal for ${run.run_id}`);
       const terminal = terminalReceipts[0];
-      const expectedCloseHash = migrationRunCloseIdentityHash(run.run_id, retainedCloseFacts, provenanceRef.sha256);
+      const expectedCloseHash = migrationRunCloseIdentityHash(
+        run.run_id,
+        retainedCloseFacts,
+        sourceProvenanceSha256 ?? provenanceRef.sha256,
+        sourceSessionContextSha256 ?? undefined,
+        sourceSessionContextSha256 ? provenanceRef.sha256 : undefined,
+        sourceSessionContextSha256 && sessionContextRef ? sessionContextRef.sha256 : undefined,
+      );
       const expectedProfileHash = `sha256:${run.profile.sha256}`;
       const expectedSealHash = terminalSealOutputHash(expectedProfileHash, {
         agents: profile.mutation_evidence.agents_tree_hash_after,
@@ -1183,6 +1265,42 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
   return observation;
 }
 
+function projectMigrationEvidenceBytes(projectRoot: string, runId: string, sourceRel: string, destinationRel: string, source: Buffer): Buffer {
+  const root = fs.realpathSync(projectRoot);
+  let projected = source.toString("utf8");
+  let rootPathReplacements = 0;
+  for (const candidate of new Set([projectRoot, path.resolve(projectRoot), root])) {
+    const occurrences = projected.split(candidate).length - 1;
+    if (occurrences > 0) {
+      rootPathReplacements += occurrences;
+      projected = projected.split(candidate).join("<workspace-root>");
+    }
+  }
+  if (destinationRel.endsWith("/run.yaml")) {
+    projected = projected.replace(/(^capability_start_snapshot_ref:\s*$\n(?:^[ \t]+[^\n]*\n)*?^[ \t]+path:\s*)capability\/run-start-snapshot\.json\s*$/m, "$1run-start-snapshot.json");
+  } else if (destinationRel.endsWith("/provenance.json")) {
+    let provenance: Record<string, unknown> | null = null;
+    try { provenance = plainRecord(JSON.parse(projected)); } catch { provenance = null; }
+    const terminal = plainRecord(provenance?.terminal_trace_event);
+    const artifacts = plainRecord(provenance?.artifacts);
+    if (!provenance || provenance.schema_version !== "guild.provenance.v1" || provenance.run_id !== runId || !terminal || !artifacts) {
+      throw new Error(`migration public projection refuses malformed provenance: ${sourceRel}`);
+    }
+    terminal.log_ref = "terminal-trace-log.jsonl";
+    artifacts.capability_profile = "profile.json";
+    projected = `${JSON.stringify(provenance, null, 2)}\n`;
+  }
+  const scrubbed = redactShareableFile(projected, path.posix.basename(destinationRel));
+  if (scrubbed.secrets.length > 0) {
+    const categories = [...new Set(scrubbed.secrets.map((hit) => hit.category))].sort().join(", ");
+    throw new Error(`migration public projection refuses credential, secret, or arbitrary entropy in ${sourceRel}: ${categories}`);
+  }
+  if (rootPathReplacements + scrubbed.opPaths > 0 && /\/(?:profile\.json|journal\.jsonl|checkpoint\.json)$/.test(destinationRel)) {
+    throw new Error(`migration public projection refuses an operator path in seal-bound evidence ${sourceRel}; regenerate the run without private paths`);
+  }
+  return Buffer.from(scrubbed.out, "utf8");
+}
+
 export function createMigrationObservation(options: { pluginRoot: string; runtimeHost: MigrationRuntimeHost; projectRoot: string; boundaryPath: string; projectId: string; mode: "observe" | "shadow"; runIds: readonly string[] }): MigrationObservationV2 {
   const boundary = loadMigrationBoundary(path.resolve(options.boundaryPath));
   const expectedRuntime = boundary.packages[options.runtimeHost];
@@ -1200,10 +1318,11 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
     if (!terminal) throw new Error(`migration observation requires the terminal closed run manifest before snapshotting ${runId}`);
   }
   const stagedSnapshots = new Map<string, Buffer>();
+  const sourceHashes = new Map<string, string>();
   const stage = (sourceRel: string, destinationRel: string): MigrationEvidenceRefV1 => {
-    let bytes: Buffer;
-    try { bytes = readEvidenceFile(options.projectRoot, destinationRel); }
-    catch { bytes = readEvidenceFile(options.projectRoot, sourceRel); }
+    const source = readEvidenceFile(options.projectRoot, sourceRel);
+    sourceHashes.set(sourceRel, sha256(source));
+    const bytes = projectMigrationEvidenceBytes(options.projectRoot, options.runIds[0], sourceRel, destinationRel, source);
     stagedSnapshots.set(destinationRel, bytes);
     return Object.freeze({ path: destinationRel, sha256: sha256(bytes) });
   };
@@ -1218,9 +1337,12 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
       run_id: runId,
       run_manifest: stage(`${prefix}/run.yaml`, `${destinationPrefix}/run.yaml`),
       provenance: stage(`${prefix}/provenance.json`, `${destinationPrefix}/provenance.json`),
+      source_provenance_sha256: sourceHashes.get(`${prefix}/provenance.json`)!,
       terminal_trace_log: stage(`${prefix}/logs/v1.4-events.jsonl`, `${destinationPrefix}/terminal-trace-log.jsonl`),
       start_snapshot: stage(`${prefix}/capability/run-start-snapshot.json`, `${destinationPrefix}/run-start-snapshot.json`),
       baseline: stage(`${prefix}/capability/run-start-baseline.json`, `${destinationPrefix}/baseline.json`),
+      session_context: stage(`${prefix}/session-context.json`, `${destinationPrefix}/session-context.json`),
+      source_session_context_sha256: sourceHashes.get(`${prefix}/session-context.json`)!,
       profile: stage(`${prefix}/capability/profile.json`, `${destinationPrefix}/profile.json`),
       journal: stage(`${prefix}/receipts/journal.jsonl`, `${destinationPrefix}/journal.jsonl`),
       checkpoint: stage(`${prefix}/receipts/checkpoint.json`, `${destinationPrefix}/checkpoint.json`),
@@ -1392,9 +1514,18 @@ export function writeMigrationObservation(outputDirectory: string, observation: 
   const directory = path.resolve(outputDirectory);
   fs.mkdirSync(directory, { recursive: true });
   const target = path.join(directory, migrationObservationFilename(validated));
+  const serialized = `${JSON.stringify(validated, null, 2)}\n`;
+  try {
+    const existing = readRegularFileNoFollow(target, "migration observation output");
+    if (existing.equals(Buffer.from(serialized, "utf8"))) return target;
+    throw new Error(`migration observation output collision refuses replacement: ${target}`);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("collision refuses replacement")) throw error;
+    if (!(error instanceof Error) || !/ENOENT|no such file/i.test(error.message)) throw error;
+  }
   const descriptor = fs.openSync(target, "wx", 0o600);
   try {
-    fs.writeFileSync(descriptor, `${JSON.stringify(validated, null, 2)}\n`);
+    fs.writeFileSync(descriptor, serialized);
     fs.fsyncSync(descriptor);
   } finally {
     fs.closeSync(descriptor);

@@ -657,9 +657,15 @@ export function recordMigrationRelease(options: { projectRoot: string; boundaryP
   if (current.mode !== "observe" && current.mode !== "shadow") throw new Error(`mode ${current.mode} does not collect migration observations`);
   const boundary = loadAttestedMigrationBoundary(path.resolve(options.boundaryPath), options.projectRoot).boundary; const observation = loadMigrationObservation(options.projectRoot, path.resolve(options.observationPath));
   if (observation.schema_version !== MIGRATION_OBSERVATION_SCHEMA) throw new Error("migration release requires a baseline-bound v2 observation");
+  if (observation.runs.some((run) => !("session_context" in run) || !("source_provenance_sha256" in run) || !("source_session_context_sha256" in run))) throw new Error("migration release requires a scrub-clean session-bound public projection");
   if (current.observations.some((entry) => entry.schema_version !== MIGRATION_OBSERVATION_SCHEMA)) throw new Error("migration window contains legacy observations; restart at a newer attested beta before recording v2 evidence");
   if (observation.project_id !== current.project_id) throw new Error(`migration observation project ${observation.project_id} does not match window project ${current.project_id}`);
   if (Date.parse(observation.observed_at) < Date.parse(current.entered_at)) throw new Error(`${current.mode} evidence predates entry into the current migration phase`);
+  const existingIndex = current.releases.findIndex((entry) => entry.boundary_hash === boundary.boundary_hash);
+  if (existingIndex >= 0) {
+    if (canonical(current.releases[existingIndex]) === canonical(boundary) && canonical(current.observations[existingIndex]) === canonical(observation)) return current;
+    throw new Error("migration release collision refuses replacement of an existing boundary observation");
+  }
   const previous = lastKnownBoundary(current);
   const reusesEntryBoundary = current.releases.length === 0 && current.entry_boundary.boundary_hash === boundary.boundary_hash;
   if (!reusesEntryBoundary && previous && (!strictlyNewerBeta(previous.release, boundary.release) || Date.parse(boundary.merged_at) <= Date.parse(previous.merged_at))) throw new Error("migration release boundary must be a strictly newer beta with a later GitHub push instant");

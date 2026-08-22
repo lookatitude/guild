@@ -1700,7 +1700,7 @@
       "id": "projection:src/modules/security/workflows/scrub-redact.ts",
       "source_path": "src/modules/security/workflows/scrub-redact.ts",
       "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
-      "sha256": "fd432db059631e02a1ccc2962dfc1c070b6086c728ea8b896ce4b0545c69e571",
+      "sha256": "e5a2f4ac3d9375fa7ed4212ccf706fe77b0fe0fa06ee970ac181621d070957a2",
       "projection_dependency": true
     },
     {

@@ -11,6 +11,7 @@ import { FEATURE_GATE_RELPATH, readFeatureGateRegistry } from "../lib/capability
 import { appendReceipt, defaultJournalIo, makeReceiptInput, scanReceiptJournal, sealReceiptRecord } from "../../src/modules/telemetry/workflows/receipt-journal";
 import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../src/modules/lifecycle/workflows/run-lifecycle";
 import { closeRunBinding, loadRunBinding, mintRunBinding, reopenRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { buildSessionContext, writeSessionContext } from "../../src/modules/host-runtime/workflows/session-context";
 
 let mockGhFailure = false;
 let mockGhSourceDigest = "";
@@ -79,7 +80,14 @@ function projectSourceCommit(projectRoot: string): string {
   return git(projectRoot, "rev-parse", "HEAD");
 }
 
-function writeRunState(projectRoot: string, runId: string, startedAt: string, status: "open" | "closed", closedAt?: string): void {
+function writeRunState(
+  projectRoot: string,
+  runId: string,
+  startedAt: string,
+  status: "open" | "closed",
+  closedAt?: string,
+  options: { readonly touchedTasks?: readonly string[]; readonly manifestExtra?: string } = {},
+): void {
   const runRoot = join(projectRoot, ".guild", "runs", runId);
   const snapshotPath = join(runRoot, "capability", "run-start-snapshot.json");
   mkdirSync(dirname(snapshotPath), { recursive: true });
@@ -101,7 +109,7 @@ function writeRunState(projectRoot: string, runId: string, startedAt: string, st
     }, null, 2)}\n`);
   }
   const snapshotHash = createHash("sha256").update(readFileSync(snapshotPath)).digest("hex");
-  writeFileSync(join(runRoot, "run.yaml"), `schema_version: guild.run.v1\nrun_id: ${runId}\nstarted_at: ${startedAt}\ncapability_start_snapshot_ref:\n  path: capability/run-start-snapshot.json\n  sha256: ${snapshotHash}\nstatus: ${status}\n`);
+  writeFileSync(join(runRoot, "run.yaml"), `schema_version: guild.run.v1\nrun_id: ${runId}\ncwd: ${projectRoot}\nworkspace:\n  root: ${projectRoot}\nstarted_at: ${startedAt}\ncapability_start_snapshot_ref:\n  path: capability/run-start-snapshot.json\n  sha256: ${snapshotHash}\n${options.manifestExtra ?? ""}status: ${status}\n`);
   const journal = join(runRoot, "receipts", "journal.jsonl");
   const checkpoint = join(runRoot, "receipts", "checkpoint.json");
   const startOperation = `capability-start-snapshot:${runId}`;
@@ -130,12 +138,14 @@ function writeRunState(projectRoot: string, runId: string, startedAt: string, st
       closed_at: closedAt,
       status: "closed",
       terminal_trace_event: { event_id: `evt-${runId}`, event_name: "run_closed", at: closedAt, log_ref: `.guild/runs/${runId}/logs/v1.4-events.jsonl` },
+      touched: { tasks: [...(options.touchedTasks ?? [])], agents: [], skills: [], decisions: [], features: [], files: [], runs: [] },
+      artifacts: { capability_profile: `.guild/runs/${runId}/capability/profile.json` },
     }, null, 2)}\n`);
     closeRunBinding({ root: projectRoot, run_id: runId });
   }
 }
 
-function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean } = {}) {
+function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean } = {}) {
   const pluginRoot = fixture.claudePackageRoot;
   const assetPath = "templates/specialists/researcher.md";
   const assetBytes = Buffer.from("# researcher\n");
@@ -143,7 +153,21 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
   const receiptAt = timing.receiptAt ?? new Date(Date.parse(profileAt) - 1_000).toISOString();
   const baselineAt = timing.baselineAt ?? new Date(Date.parse(profileAt) - 2_000).toISOString();
   const runStartedAt = new Date(Date.parse(baselineAt) - 1_000).toISOString();
-  writeRunState(projectRoot, runId, runStartedAt, "open");
+  const manifestExtra = `${timing.plantedCredential ? "operator_note: api_key=sk-abcdefghijklmnop\n" : ""}${timing.plantedEntropy ? `arbitrary_entropy: ${"f".repeat(64)}\n` : ""}`;
+  writeRunState(projectRoot, runId, runStartedAt, "open", undefined, { manifestExtra });
+  const binding = loadRunBinding({ root: projectRoot, run_id: runId })!;
+  writeSessionContext(projectRoot, buildSessionContext({
+    run_id: runId,
+    started_at: runStartedAt,
+    native_adapter: timing.unresolvedIdentity ? null : {
+      family: "claude",
+      surface: "cli",
+      adapter_id: "claude-code-cli",
+      adapter_version: fixture.boundary.release,
+      evidence: "test-owned native adapter identity",
+    },
+    run_binding: { binding_ref: binding.binding_ref, state: "open" },
+  }));
   jest.useFakeTimers({ now: new Date(baselineAt) });
   let baseline;
   try { baseline = captureMigrationRunBaseline({ projectRoot, runId }); }
@@ -158,8 +182,8 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
     loaded = readCompatibilityAsset({
       pluginRoot, runtimeHost: "claude-code-cli", projectRoot,
       entry: { kind: "shipped_template", id: "researcher", path: assetPath, content_hash: createHash("sha256").update(assetBytes).digest("hex"), deprecation: "deprecated", deprecated_by: "cap-loc-D03" },
-      mode, intent: mode === "shadow" ? "shadow_compare" : "dispatch", synthetic, specialistId: null, runId,
-      bindingRef: loadRunBinding({ root: projectRoot, run_id: runId })!.binding_ref,
+      mode, intent: mode === "shadow" ? "shadow_compare" : "dispatch", synthetic, specialistId: timing.compatibilityOnly ? null : "researcher", runId,
+      bindingRef: binding.binding_ref,
       operationId: `migration-${mode}`,
     });
   } finally { jest.useRealTimers(); }
@@ -187,7 +211,10 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
   }
   if (!timing.leaveRunOpen && !timing.omitTerminalSeal) {
     const closedAt = timing.closeAt ?? new Date(Date.parse(profileAt) + 1_000).toISOString();
-    writeRunState(projectRoot, runId, runStartedAt, "closed", closedAt);
+    writeRunState(projectRoot, runId, runStartedAt, "closed", closedAt, {
+      manifestExtra,
+      touchedTasks: timing.compatibilityOnly ? [] : [`task:${runId}`],
+    });
     if (timing.omitProvenance) rmSync(join(projectRoot, ".guild", "runs", runId, "provenance.json"), { force: true });
     const terminalLog = join(projectRoot, ".guild", "runs", runId, "logs", "v1.4-events.jsonl");
     if (timing.omitTerminalTrace) rmSync(terminalLog, { force: true });
@@ -200,7 +227,16 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
     mkdirSync(join(projectRoot, ".guild", "agents"), { recursive: true });
     writeFileSync(join(projectRoot, ".guild", "agents", `${runId}.after-seal.md`), "post-seal mutation\n");
   }
-  if (!timing.leaveRunOpen && timing.omitTerminalSeal) writeRunState(projectRoot, runId, runStartedAt, "closed", new Date(Date.parse(profileAt) + 1_000).toISOString());
+  if (timing.tamperSessionAfterSeal) {
+    const sessionPath = join(projectRoot, ".guild", "runs", runId, "session-context.json");
+    const session = JSON.parse(readFileSync(sessionPath, "utf8"));
+    session.host.adapter_id = "forged-after-close";
+    writeFileSync(sessionPath, `${JSON.stringify(session, null, 2)}\n`);
+  }
+  if (!timing.leaveRunOpen && timing.omitTerminalSeal) writeRunState(projectRoot, runId, runStartedAt, "closed", new Date(Date.parse(profileAt) + 1_000).toISOString(), {
+    manifestExtra,
+    touchedTasks: timing.compatibilityOnly ? [] : [`task:${runId}`],
+  });
   if (timing.corruptProfileAfterSeal) writeFileSync(join(projectRoot, ".guild", "runs", runId, "capability", "profile.json"), "{broken\n");
   if (timing.removeBaseline) rmSync(join(projectRoot, ".guild", "runs", runId, "capability", "run-start-baseline.json"));
   const observation = createMigrationObservation({ pluginRoot, runtimeHost: "claude-code-cli", projectRoot, boundaryPath: fixture.boundaryPath, projectId: "fx-project", mode, runIds: [runId] });
@@ -221,7 +257,7 @@ function asLegacyObservation(observation: ReturnType<typeof observationFixture>[
   const body = {
     ...observation,
     schema_version: "guild.capability_migration_observation.v1",
-    runs: observation.runs.map(({ run_manifest: _runManifest, provenance: _provenance, terminal_trace_log: _terminalTraceLog, start_snapshot: _startSnapshot, baseline: _baseline, ...run }) => run),
+    runs: observation.runs.map(({ run_manifest: _runManifest, provenance: _provenance, source_provenance_sha256: _sourceProvenanceSha256, source_session_context_sha256: _sourceSessionContextSha256, terminal_trace_log: _terminalTraceLog, start_snapshot: _startSnapshot, baseline: _baseline, session_context: _sessionContext, ...run }) => run),
   } as Record<string, unknown>;
   delete body.observation_hash;
   return { ...body, observation_hash: createHash("sha256").update(canonical(body)).digest("hex") };
@@ -237,6 +273,9 @@ describe("D03 evidence-bound migration window", () => {
     const prototypeAction = spawnSync(process.execPath, [tsx, cli, "window", "toString", "--project-root", "/tmp/x"], { encoding: "utf8" });
     expect(prototypeAction.status).toBe(1);
     expect(prototypeAction.stderr).toContain("capability-adopt — project capability adoption migration");
+    const help = spawnSync(process.execPath, [tsx, cli, "--help"], { encoding: "utf8" });
+    expect(help.status).toBe(0);
+    expect(help.stdout).toContain("window   publish");
   });
 
   it("starts only from a boundary paired with real non-synthetic whole-run evidence", () => {
@@ -256,6 +295,104 @@ describe("D03 evidence-bound migration window", () => {
       expect(ghCalls.some(([, args]) => (args as string[]).includes("--signer-workflow") && (args as string[]).includes("--source-digest") && (args as string[]).includes("--deny-self-hosted-runners"))).toBe(true);
       expect(ghCalls.every(([, args]) => (args as string[]).includes("--hostname") && (args as string[]).includes("github.com"))).toBe(true);
       expect(ghCalls.every(([, , options]) => (options as { env?: NodeJS.ProcessEnv }).env?.GH_HOST === "github.com" && (options as { env?: NodeJS.ProcessEnv }).env?.GH_ENTERPRISE_TOKEN === undefined)).toBe(true);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("projects a scrub-clean, self-resolving, session-bound public evidence tree before hashing", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = "run-20260821-090000-public-projection";
+    try {
+      const evidence = observationFixture(projectRoot, fixture, runId, false, "observe", "2026-08-21T09:00:00.000Z");
+      const run = evidence.observation.runs[0] as typeof evidence.observation.runs[0] & { session_context?: { path: string; sha256: string } };
+      expect(run.session_context).toEqual(expect.objectContaining({
+        path: expect.stringMatching(/\/session-context\.json$/),
+        sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }));
+      expect(run.source_session_context_sha256).toMatch(/^[0-9a-f]{64}$/);
+      const retainedRun = readFileSync(join(projectRoot, run.run_manifest.path), "utf8");
+      const retainedProvenance = JSON.parse(readFileSync(join(projectRoot, run.provenance.path), "utf8"));
+      const retainedSession = JSON.parse(readFileSync(join(projectRoot, run.session_context!.path), "utf8"));
+      expect(retainedRun).toContain("cwd: <workspace-root>");
+      expect(retainedRun).toContain("root: <workspace-root>");
+      expect(retainedRun).toContain("path: run-start-snapshot.json");
+      expect(retainedRun).not.toContain(projectRoot);
+      expect(retainedProvenance.terminal_trace_event.log_ref).toBe("terminal-trace-log.jsonl");
+      expect(retainedProvenance.artifacts.capability_profile).toBe("profile.json");
+      expect(retainedSession.identity).toEqual(expect.objectContaining({ trust: "verified", confidence: "high" }));
+      expect(retainedSession.host).toEqual(expect.objectContaining({ family: "claude", adapter_id: "claude-code-cli" }));
+      expect(readFileSync(join(projectRoot, ".guild", "runs", runId, "run.yaml"), "utf8")).toContain(projectRoot);
+      expect(verifyMigrationObservation(projectRoot, evidence.observation)).toEqual(evidence.observation);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it.each([
+    ["credential", { plantedCredential: true }, /credential|secret|public projection/i],
+    ["arbitrary entropy", { plantedEntropy: true }, /entropy|secret|public projection/i],
+  ] as const)("refuses a planted %s before any public evidence directory lands", (_label, timing, message) => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = `run-20260821-090000-planted-${_label === "credential" ? "credential" : "entropy"}`;
+    try {
+      expect(() => observationFixture(projectRoot, fixture, runId, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, timing)).toThrow(message);
+      expect(existsSync(join(projectRoot, ".guild", "artifacts", "capability", "migration-evidence", fixture.boundary.boundary_hash, runId))).toBe(false);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it.each([
+    ["unresolved session identity", { unresolvedIdentity: true }, /session identity|verified.*identity/i],
+    ["compatibility-only lifecycle", { compatibilityOnly: true }, /substantive|touched\.tasks|specialist/i],
+  ] as const)("does not publish or count a %s", (_label, timing, message) => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = `run-20260821-090000-${_label === "unresolved session identity" ? "unresolved" : "compatibility-only"}`;
+    try {
+      startMigrationWindow({ projectRoot, projectId: "fx-project", mode: "observe", boundaryPath: fixture.boundaryPath, actor: "operator" });
+      expect(() => observationFixture(projectRoot, fixture, runId, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, timing)).toThrow(message);
+      expect(readMigrationWindow(projectRoot)?.observations).toEqual([]);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("refuses a strong-looking session identity substituted after the terminal seal", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      expect(() => observationFixture(projectRoot, fixture, "run-20260821-090000-session-substitution", false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, { tamperSessionAfterSeal: true })).toThrow(/terminal run seal|session.*seal|stale.*seal/i);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it.each(["session", "provenance"] as const)("refuses a hand-authored projected %s tree even when its source hash still matches the seal", (kind) => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(projectRoot, fixture, `run-20260821-090000-forged-projected-${kind}`, false, "observe", "2026-08-21T09:00:00.000Z");
+      const forged = JSON.parse(JSON.stringify(evidence.observation));
+      const run = forged.runs[0];
+      const ref = kind === "session" ? run.session_context : run.provenance;
+      const target = join(projectRoot, ref.path);
+      const document = JSON.parse(readFileSync(target, "utf8"));
+      if (kind === "session") document.host.adapter_id = "hand-authored-strong-identity";
+      else document.touched.tasks = ["task:hand-authored-substantive-work"];
+      const bytes = Buffer.from(`${JSON.stringify(document, null, 2)}\n`);
+      writeFileSync(target, bytes);
+      ref.sha256 = createHash("sha256").update(bytes).digest("hex");
+      delete forged.observation_hash;
+      forged.observation_hash = createHash("sha256").update(canonical(forged)).digest("hex");
+      expect(() => verifyMigrationObservation(projectRoot, forged)).toThrow(/terminal run seal|stale.*seal|detached/i);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("retries identical observation and window publication byte-for-byte but refuses collisions", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      startMigrationWindow({ projectRoot, projectId: "fx-project", mode: "observe", boundaryPath: fixture.boundaryPath, actor: "operator" });
+      const evidence = observationFixture(projectRoot, fixture, "run-20260821-090000-idempotent", false, "observe", "2026-08-21T09:00:00.000Z");
+      expect(writeMigrationObservation(dirname(evidence.observationPath), evidence.observation)).toBe(evidence.observationPath);
+      const first = recordMigrationRelease({ projectRoot, boundaryPath: fixture.boundaryPath, observationPath: evidence.observationPath });
+      expect(recordMigrationRelease({ projectRoot, boundaryPath: fixture.boundaryPath, observationPath: evidence.observationPath })).toEqual(first);
+      writeFileSync(evidence.observationPath, `${JSON.stringify({ ...evidence.observation, project_id: "collision" }, null, 2)}\n`);
+      expect(() => writeMigrationObservation(dirname(evidence.observationPath), evidence.observation)).toThrow(/collision|replacement/i);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
@@ -335,7 +472,7 @@ describe("D03 evidence-bound migration window", () => {
       expect(() => observationFixture(projectRoot, fixture, runId, false, "observe", profileAt, projectSourceCommit(projectRoot), undefined, { leaveRunOpen: true })).toThrow(/terminal closed run manifest before snapshotting/i);
       const retainedRun = join(projectRoot, ".guild", "artifacts", "capability", "migration-evidence", fixture.boundary.boundary_hash, runId, "run.yaml");
       expect(existsSync(retainedRun)).toBe(false);
-      writeRunState(projectRoot, runId, "2026-08-21T08:59:57.000Z", "closed", "2026-08-21T09:00:01.000Z");
+      writeRunState(projectRoot, runId, "2026-08-21T08:59:57.000Z", "closed", "2026-08-21T09:00:01.000Z", { touchedTasks: [`task:${runId}`] });
       jest.useFakeTimers({ now: new Date("2026-08-21T09:00:02.000Z") });
       try { sealMigrationObservationRun({ projectRoot, runId }); }
       finally { jest.useRealTimers(); }
