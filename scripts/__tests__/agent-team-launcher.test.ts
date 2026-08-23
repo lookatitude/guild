@@ -73,6 +73,11 @@ import {
 } from "../lib/core/contracts/specialist-identity";
 import { parseFrontmatter } from "../lib/frontmatter";
 import {
+  BENIGN_COMPATIBILITY_READ_REASONS,
+  COMPATIBILITY_USAGE_SCHEMA,
+  DEPENDENCE_COMPATIBILITY_READ_REASONS,
+} from "../../src/modules/capability/workflows/compatibility-usage";
+import {
   NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
   NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
   computePhysicalNativeClaudePayloadDigest,
@@ -4188,10 +4193,35 @@ describe("FU20 — compatibility read under a complete project definition ref", 
     const payloadBytes = retainedPayloadBytesFor(runDir, receipt.output_hash);
     expect(payloadBytes).not.toBeNull();
 
+    // `guild.compatibility_usage.v1` records no `intent` field — the dispatch
+    // intent is carried as the read REASON, and a dispatch read is a genuine
+    // DEPENDENCE read (never one of the benign mint/shadow reasons). Assert the
+    // fields the shipped contract actually records.
     const payload = JSON.parse((payloadBytes as Buffer).toString("utf8")) as Record<string, unknown>;
+    expect(payload["schema_version"]).toBe(COMPATIBILITY_USAGE_SCHEMA);
+    expect(payload["asset_kind"]).toBe("shipped_template");
+    expect(payload["asset_id"]).toBe("researcher");
+    expect(payload["asset_path"]).toBe("templates/specialists/researcher.md");
+    // The payload names the SAME bytes the receipt hashed — one read, not two.
+    expect(payload["content_hash"]).toBe(shippedResearcherContentHash());
+    expect(payload["content_hash"]).toBe(receipt.input_hash);
+    expect(payload["resolver_mode"]).toBe("observe");
     expect(payload["synthetic"]).toBe(false);
     expect(payload["specialist_id"]).toBe("researcher");
-    expect(JSON.stringify(payload)).toContain("dispatch");
+    expect(DEPENDENCE_COMPATIBILITY_READ_REASONS).toContain(payload["reason"]);
+    expect(BENIGN_COMPATIBILITY_READ_REASONS).not.toContain(payload["reason"]);
+
+    // Task-bound and causally ordered: this payload belongs to THIS lane's read,
+    // and the read completed before the assignment it justifies was written.
+    expect(receipt.operation_id).toBe(
+      "compatibility-read:task-cell-identity-T0-researcher-researcher",
+    );
+    expect(receipt.output_hash).toBe(bareSha256(payloadBytes as Buffer));
+    const assignment = assignmentFor(runDir, "T0-researcher");
+    expect(assignment["specialist_profile_id"]).toBe("researcher");
+    expect(Date.parse(receipt.recorded_at)).toBeLessThan(
+      Date.parse(assignment["written_at"] as string),
+    );
   });
 
   it("a DIVERGENT committed ref refuses BEFORE assignment when the read bytes disagree (RED)", () => {
