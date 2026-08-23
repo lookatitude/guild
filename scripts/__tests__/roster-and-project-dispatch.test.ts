@@ -39,10 +39,14 @@ import type { Specialist, TeamLaunchRequest } from "../lib/core/contracts/team-b
 import { buildPrompt } from "../lib/host/tmux-backend";
 import { mintRunBinding } from "../lib/run-binding";
 import { parseYaml } from "../agent-team-launcher";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const LAUNCHER = path.resolve(__dirname, "../agent-team-launcher.ts");
 const EVOLVE_LOOP = path.resolve(__dirname, "../evolve-loop.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function mkTmp(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -791,6 +795,7 @@ describe("agent-team-launcher parseYaml — no generic `source:` alias", () => {
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined && k !== "TMUX") env[k] = v;
     }
+    env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
     // T7R-R1-B1: this fixture is about roster/agent-definition dispatch, not
     // approval, and carries no team-plan trail. Opt into the ONE audited escape
     // hatch; the gate's own pins live in t7-h1-dispatch-approval.test.ts.
@@ -849,6 +854,7 @@ describe("agent-team-launcher CLI — committed definition gate", () => {
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined && k !== "TMUX") env[k] = v;
     }
+    env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
     // T7R-R1-B1: this fixture is about roster/agent-definition dispatch, not
     // approval, and carries no team-plan trail. Opt into the ONE audited escape
     // hatch; the gate's own pins live in t7-h1-dispatch-approval.test.ts.

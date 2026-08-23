@@ -36,8 +36,12 @@ import {
   resolveDispatchAttribution,
 } from "../../hooks/lib/dispatch-attribution";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const LAUNCHER = path.resolve(__dirname, "..", "agent-team-launcher.ts");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function req(specialists: Specialist[], overrides: Partial<TeamLaunchRequest> = {}): TeamLaunchRequest {
   return {
@@ -243,6 +247,7 @@ describe("G3 — end-to-end: team.yaml tier + score reach the dispatch env", () 
     for (const [k, v] of Object.entries(process.env)) {
       if (v !== undefined && k !== "TMUX") env[k] = v;
     }
+    env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
     const runId = "run-20260812-071100-g3-tier-marker";
     mintRunBinding({ root: tmpDir, run_id: runId });
     const result = spawnSync(

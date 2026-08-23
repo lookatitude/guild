@@ -50,11 +50,15 @@ import { recordDecision, writeDecision } from "../../src/modules/teams/workflows
 // binding, so the fixture mints one — otherwise the POSITIVE CONTROL would fail
 // for a reason unrelated to approval and the anti-vacuity leg would be useless.
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
 const RUN_ID = "run-20260811-020000-t7h1-approval";
 const SLUG = "t7h1";
 const PHASE = "build";
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 /** The three approved worker lanes the launcher is expected to spawn. */
 const APPROVED_WORKERS = ["backend", "frontend", "qa"];
@@ -222,6 +226,7 @@ function launchWith(
   delete env.GUILD_DISPATCH_APPROVAL_OVERRIDE;
   env.PATH = `${binDir}:${env.PATH ?? ""}`;
   env.GUILD_HOST_ID = "claude-code-cli";
+  env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   for (const [k, v] of Object.entries(opts.env ?? {})) env[k] = v;
 
   const runId = opts.runId === undefined ? RUN_ID : opts.runId;

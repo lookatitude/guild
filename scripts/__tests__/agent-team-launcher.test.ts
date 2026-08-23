@@ -46,10 +46,14 @@ import {
 } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
 import { scanReceiptJournal } from "../../src/modules/telemetry";
 import { settleFailedCmuxTaskCells } from "../agent-team-launcher";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 const INHERITED_RUN_ID = "run-20260811-000000-launcher-test";
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function runScript(
   args: string[],
@@ -77,6 +81,7 @@ function runScript(
   delete baseEnv.GUILD_HOST_ID;
   delete baseEnv.GUILD_ORCHESTRATOR_HOST;
   delete baseEnv.CMUX_WORKSPACE_ID;
+  baseEnv.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   // W1/W2: normal launcher fixtures represent execute-plan after lifecycle
   // start. Seed the lifecycle-owned sentinel + binding when a dispatch caller
   // intentionally omits --run-id; the production launcher must inherit this

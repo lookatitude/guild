@@ -53,11 +53,15 @@ import { loadRunBinding, mintRunBinding } from "../../src/modules/lifecycle/work
 import { selfReferentialHash } from "../../src/modules/teams/workflows/canonical-hash";
 import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
 import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
+import { createExactClaudePluginFixture } from "../../scripts/__tests__/fixtures/exact-claude-plugin-fixture";
 
 const SESSION_CONTEXT_SCHEMA = "guild.session_context.v1";
 
-const SCRIPT = path.resolve(__dirname, "../../scripts/agent-team-launcher.ts");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
 const TEAM_FIXTURE = path.resolve(__dirname, "../../scripts/fixtures/team-agent-team.yaml");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 const CATALOG_MODELS = [
   {
@@ -143,6 +147,7 @@ function runLauncher(
   delete env.TMUX;
   delete env.GUILD_RUN_ID;
   delete env.GUILD_RUN_BINDING_REF;
+  env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   // T7R-R1-B1: approve-before-dispatch verification is MANDATORY on the real
   // launcher path. These fixtures are about M0/M1/M2 model selection, not
   // approval, and carry no team-plan trail — opt into the ONE audited escape

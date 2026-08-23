@@ -23,6 +23,7 @@
 
 import * as fs from "fs";
 import * as os from "os";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 import * as path from "path";
 import { spawnSync } from "child_process";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
@@ -467,14 +468,18 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
  * no remote specialist → cross-host routing block is bypassed when disabled).
  */
 
-const LAUNCHER_SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
 const FIXTURES_DIR = path.resolve(__dirname, "../fixtures");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER_SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function runLauncher(
   args: string[],
   env: Record<string, string | undefined> = {}
 ): { exitCode: number; stdout: string; stderr: string } {
   const baseEnv: Record<string, string | undefined> = { ...process.env };
+  baseEnv.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   delete baseEnv.TMUX; // prevent host terminal state from tripping tests
   // T7R-R1-B1: these fixtures carry no team-plan trail and are about consumer
   // migration, not approval. Opt into the ONE audited escape hatch with a stated

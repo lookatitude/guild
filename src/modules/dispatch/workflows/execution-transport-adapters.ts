@@ -1183,6 +1183,7 @@ const GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
   "GUILD_STATUSLINE",
   "GUILD_CAPABILITY_SCOPE",
   "GUILD_MODEL",
+  "GUILD_PLUGIN_ROOT",
 ] as const);
 
 function consumeGeneratedShellWord(input: string, start: number): number {

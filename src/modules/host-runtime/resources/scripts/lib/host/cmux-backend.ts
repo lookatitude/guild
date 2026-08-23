@@ -26,9 +26,16 @@ import {
   specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
-import { paneCommand, resolveClaudeTeamLaunchArgs, shellQuote } from "./tmux-backend";
+import {
+  paneCommand,
+  resolveClaudePluginActivation,
+  resolveClaudeTeamLaunchArgs,
+  shellQuote,
+  type ClaudePluginActivation,
+} from "./tmux-backend";
 import { readRuntimePermissionConfig } from "../permission-policy";
 import { validateProjectDefinitionRefV1 } from "../core/contracts/project-definition-ref";
+import * as path from "node:path";
 
 function definitionRefCarriage(
   value: unknown,
@@ -136,6 +143,9 @@ export interface CmuxBackendOpts {
   workspaceId: string;
   run?: RunFn;
   resolveAdapter?: AdapterResolver;
+  env?: NodeJS.ProcessEnv;
+  pluginOwnerRoot?: string;
+  resolveClaudeActivation?: typeof resolveClaudePluginActivation;
 }
 
 export class CmuxTeamBackend implements TeamBackend {
@@ -143,18 +153,28 @@ export class CmuxTeamBackend implements TeamBackend {
   private readonly workspaceId: string;
   private readonly run: RunFn;
   private readonly resolveAdapter?: AdapterResolver;
+  private readonly env: NodeJS.ProcessEnv;
+  private readonly pluginOwnerRoot: string;
+  private readonly resolveClaudeActivation: typeof resolveClaudePluginActivation;
 
   constructor(opts: CmuxBackendOpts) {
     this.workspaceId = opts.workspaceId.trim();
     this.run = opts.run ?? defaultRun;
     this.resolveAdapter = opts.resolveAdapter;
+    this.env = opts.env ?? process.env;
+    this.pluginOwnerRoot = opts.pluginOwnerRoot ?? path.resolve(__dirname, "../../..");
+    this.resolveClaudeActivation = opts.resolveClaudeActivation ?? resolveClaudePluginActivation;
   }
 
   isAvailable(): boolean {
     return this.workspaceId.length > 0 && this.run("cmux", ["--help"]).status === 0;
   }
 
-  private commandFor(req: TeamLaunchRequest, lane: Specialist): {
+  private commandFor(
+    req: TeamLaunchRequest,
+    lane: Specialist,
+    claudePluginActivation?: ClaudePluginActivation,
+  ): {
     command: string;
     descriptor: GuildDispatchDescriptor;
   } {
@@ -183,6 +203,10 @@ export class CmuxTeamBackend implements TeamBackend {
     let command: string;
     let carriageProven = false;
     if (hostKind === "claude") {
+      if (claudePluginActivation === undefined) {
+        throw new Error("cmux Claude lane has no verified plugin activation");
+      }
+      const activation = claudePluginActivation;
       const hostCommand = paneCommand(
           prompt,
           req.runId,
@@ -190,29 +214,18 @@ export class CmuxTeamBackend implements TeamBackend {
           lane.taskId,
           lane.name,
           false,
-          resolveClaudeTeamLaunchArgs(readRuntimePermissionConfig(req.cwd)),
+          [
+            ...activation.args,
+            ...resolveClaudeTeamLaunchArgs(readRuntimePermissionConfig(req.cwd)),
+          ],
           model,
           lane.task_cell_assignment_path,
           lane.task_cell_instance_id,
-          undefined,
+          lane.definition_ref,
+          activation.pluginRoot,
         );
-      if (definitionCarriage === null) {
-        command = hostCommand;
-      } else {
-        const launchToken = "command claude ";
-        const launchIndex = hostCommand.lastIndexOf(launchToken);
-        if (launchIndex < 0 || hostCommand.includes("GUILD_DEFINITION_REF")) {
-          throw new Error("cmux Claude command has no unambiguous definition-ref launch boundary");
-        }
-        command =
-          hostCommand.slice(0, launchIndex) +
-          definitionCarriage.fragment +
-          hostCommand.slice(launchIndex);
-        carriageProven = command.startsWith(
-          definitionCarriage.fragment + launchToken,
-          launchIndex,
-        );
-      }
+      command = hostCommand;
+      carriageProven = definitionCarriage !== null;
     } else {
       if (!this.resolveAdapter) {
         throw new Error(`cmux lane ${lane.name} requires a ${hostKind} adapter`);
@@ -330,10 +343,21 @@ export class CmuxTeamBackend implements TeamBackend {
       };
     };
 
+    let claudePluginActivation: ClaudePluginActivation | undefined;
+    try {
+      if (req.specialists.some(
+        (lane) => (lane.host_kind ?? req.orchestratorHostKind ?? "claude") === "claude",
+      )) {
+        claudePluginActivation = this.resolveClaudeActivation(this.env, this.pluginOwnerRoot);
+      }
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
+
     for (const lane of req.specialists) {
       let composed: ReturnType<CmuxTeamBackend["commandFor"]>;
       try {
-        composed = this.commandFor(req, lane);
+        composed = this.commandFor(req, lane, claudePluginActivation);
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

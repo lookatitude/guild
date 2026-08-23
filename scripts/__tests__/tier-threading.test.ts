@@ -39,12 +39,15 @@ import { planTeamRouting, type RoutableHost } from "../lib/host-router";
 import { buildCapability, writeHostCapability } from "../write-host-capability";
 import { writeBackScoredTier } from "../lib/write-back-scored-tier";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const LAUNCHER = path.resolve(__dirname, "..", "agent-team-launcher.ts");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
 
 const TEMP_DIRS: string[] = [];
 afterAll(() => {
   for (const d of TEMP_DIRS) fs.rmSync(d, { recursive: true, force: true });
+  fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true });
 });
 function mkRepo(): string {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), "guild-tier-thread-"));
@@ -168,6 +171,7 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     env["GUILD_HOST"] = "claude";
     env["GUILD_CROSS_HOST_ENABLED"] = "1";
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "1";
+    env["GUILD_PLUGIN_ROOT"] = EXACT_CLAUDE_PLUGIN_ROOT;
     // T7R-R1-B1: this fixture is about tier threading, not approval, and carries
     // no team-plan trail. Opt into the ONE audited escape hatch; the gate's own
     // pins live in t7-h1-dispatch-approval.test.ts.

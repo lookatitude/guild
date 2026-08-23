@@ -195,10 +195,16 @@ Local development:
 ```bash
 git clone https://github.com/lookatitude/guild.git
 cd guild
-claude plugin marketplace add .
+(cd scripts && npm ci && npm run sync:claude-install)
+claude plugin marketplace add ./dist/claude-code
 claude plugin marketplace update guild
 claude plugin install guild@guild --scope project
 ```
+
+Use the generated Claude package for development sessions. A dependency-populated
+checkout contains ignored executable files and is intentionally not accepted as an
+exact runtime package. Re-run `npm run sync:claude-install` after changing plugin
+source so the generated package and its complete identity stay aligned.
 
 Restart Claude Code before running `/guild` from the project. Claude Code loads
 plugin commands, agents, skills, hooks, and optional MCP entries at session

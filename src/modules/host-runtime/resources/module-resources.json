@@ -284,7 +284,7 @@
       "id": "projection:scripts/lib/host/cmux-backend.ts",
       "source_path": "scripts/lib/host/cmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/cmux-backend.ts",
-      "sha256": "3e3ec96b1afe681ab11769924e89e1af4fffdd41ba0e16fc512c32c504f06b0d",
+      "sha256": "5c8464b7ff7e9887d1db74921a516b418a7b1d44e2744ae140a6cb4448dbf248",
       "projection_dependency": true
     },
     {
@@ -308,7 +308,7 @@
       "id": "projection:scripts/lib/host/tmux-backend.ts",
       "source_path": "scripts/lib/host/tmux-backend.ts",
       "resource_path": "resources/scripts/lib/host/tmux-backend.ts",
-      "sha256": "e97fa17e4bcd80acd94b209aa3d83d8c78ed8c3d1bb454137fabff897587c7a1",
+      "sha256": "d38960e6061f40b71fc4e9c0a76c01d9428c76592dc879342e3c73e8bfdbd005",
       "projection_dependency": true
     },
     {
@@ -333,6 +333,14 @@
       "source_path": "scripts/lib/permission-policy.ts",
       "resource_path": "resources/scripts/lib/permission-policy.ts",
       "sha256": "4cbc49a281b950432ee69f5fd828c742ef905caf6046f279a9aefaf0733fd008",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:scripts/lib/release-package-identity.ts",
+      "source_path": "scripts/lib/release-package-identity.ts",
+      "resource_path": "resources/scripts/lib/release-package-identity.ts",
+      "sha256": "a12f312b7f87f1a5e44b12ff61f385def7cb7a001eb9363cf758ad7e3df23667",
       "projection_dependency": true
     },
     {
@@ -716,7 +724,7 @@
       "id": "projection:src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "source_path": "src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-adapters.ts",
-      "sha256": "86a24cde0f3c65aea40b0f5483a4ea527df4f1722e6c2fab9655dfcc9922ba47",
+      "sha256": "7b6be5a167090ffd868e59b5104e29c8085e7d32b43e743c9d2e1d50217531c5",
       "projection_dependency": true
     },
     {
@@ -909,6 +917,14 @@
       "source_path": "src/modules/distribution/workflows/release-distribution-contract.ts",
       "resource_path": "resources/src/modules/distribution/workflows/release-distribution-contract.ts",
       "sha256": "ebe668778c60434010d73f2d546ddd891fb9dcabfa54ee2b20a85d4123cdd789",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-package-identity.ts",
+      "source_path": "src/modules/distribution/workflows/release-package-identity.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-package-identity.ts",
+      "sha256": "337daa03a567469506f6c4eb819aff3394b2800528e1281ea3eef2920213dd42",
       "projection_dependency": true
     },
     {

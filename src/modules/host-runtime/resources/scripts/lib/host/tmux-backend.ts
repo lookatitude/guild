@@ -8,6 +8,8 @@
  */
 
 import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { buildPrompt } from "../../../src/modules/prompting/workflows/team-prompt";
 import type {
   AdapterResolver,
@@ -35,6 +37,11 @@ import {
   specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import type { HostKind } from "../host-types";
+import {
+  readVerifiedNativeClaudePackageIdentity,
+  readVerifiedReleasePackageIdentity,
+  type ReleasePackageIdentityV1,
+} from "../release-package-identity";
 // P1-L10 permission-policy machinery (issue #54): resolve the host-native
 // launch flags a spawned Claude team pane should carry, instead of dropping
 // the resolved host_mode on the floor and launching every pane bare (which
@@ -153,6 +160,297 @@ export function resolveClaudeTeamLaunchArgs(
   return resolveHostLaunch("claude", resolveTeamPaneHostMode(config)).args;
 }
 
+function physicalDirectory(candidate: string): string {
+  if (!path.isAbsolute(candidate)) throw new Error("root is not absolute");
+  const stats = fs.lstatSync(candidate);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error("root is not a physical directory");
+  }
+  return fs.realpathSync(candidate);
+}
+
+function readPhysicalFile(filePath: string, label: string): Buffer {
+  const stats = fs.lstatSync(filePath);
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error(`${label} is not a physical regular file`);
+  }
+  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try {
+    if (!fs.fstatSync(descriptor).isFile()) throw new Error(`${label} changed type`);
+    return fs.readFileSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function readGuildManifestVersion(root: string, relativePath: string): string {
+  const manifest = JSON.parse(
+    readPhysicalFile(path.join(root, relativePath), "manifest").toString("utf8"),
+  ) as unknown;
+  if (
+    manifest === null ||
+    typeof manifest !== "object" ||
+    Array.isArray(manifest) ||
+    (manifest as Record<string, unknown>)["name"] !== "guild" ||
+    typeof (manifest as Record<string, unknown>)["version"] !== "string" ||
+    ((manifest as Record<string, unknown>)["version"] as string).length === 0
+  ) {
+    throw new Error("manifest is not a versioned Guild package");
+  }
+  return (manifest as Record<string, string>)["version"]!;
+}
+
+function hasClaudeManifest(root: string): boolean {
+  try {
+    fs.lstatSync(path.join(root, ".claude-plugin", "plugin.json"));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function installedClaudePluginRegistry(env: NodeJS.ProcessEnv): {
+  installations: Array<{ root: string }>;
+  pluginIds: string[];
+} {
+  const configRoot = env["CLAUDE_CONFIG_DIR"]?.trim()
+    || (env["HOME"]?.trim() ? path.join(env["HOME"]!.trim(), ".claude") : undefined);
+  if (!configRoot) return { installations: [], pluginIds: ["guild@guild"] };
+  if (!path.isAbsolute(configRoot)) {
+    throw new Error("Claude config root is not absolute");
+  }
+
+  const registryPath = path.join(configRoot, "plugins", "installed_plugins.json");
+  let raw: Buffer;
+  try {
+    raw = readPhysicalFile(registryPath, "Claude installed-plugin registry");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { installations: [], pluginIds: ["guild@guild"] };
+    }
+    throw error;
+  }
+  if (raw.length > 1024 * 1024) {
+    throw new Error("Claude installed-plugin registry exceeds 1 MiB");
+  }
+
+  const parsed = JSON.parse(raw.toString("utf8")) as unknown;
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Claude installed-plugin registry is not an object");
+  }
+  const plugins = (parsed as Record<string, unknown>)["plugins"];
+  if (plugins === null || typeof plugins !== "object" || Array.isArray(plugins)) {
+    throw new Error("Claude installed-plugin registry has no plugin map");
+  }
+
+  const installations: Array<{ root: string }> = [];
+  const pluginIds = new Set<string>(["guild@guild"]);
+  for (const [pluginId, value] of Object.entries(plugins as Record<string, unknown>)) {
+    if (!/^guild@/.test(pluginId)) continue;
+    pluginIds.add(pluginId);
+    const entries = Array.isArray(value) ? value : [value];
+    for (const entry of entries) {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const installPath = (entry as Record<string, unknown>)["installPath"];
+      if (typeof installPath === "string" && path.isAbsolute(installPath.trim())) {
+        installations.push({ root: installPath.trim() });
+      }
+    }
+  }
+  return { installations, pluginIds: [...pluginIds].sort() };
+}
+
+function exactClaudeActivationArgs(root: string, ambientGuildIds: string[]): string[] {
+  const enabledPlugins = Object.fromEntries(ambientGuildIds.map((id) => [id, false]));
+  return [
+    "--settings",
+    JSON.stringify({ enabledPlugins }),
+    "--plugin-dir",
+    root,
+  ];
+}
+
+function assertSameGeneratedHostIdentity(
+  ownerRoot: string,
+  claudeRoot: string,
+): string {
+  const candidateRoot = physicalDirectory(claudeRoot);
+  const ownerIdentity = readVerifiedReleasePackageIdentity(ownerRoot);
+  let claudeIdentity: ReleasePackageIdentityV1;
+  try {
+    claudeIdentity = readVerifiedReleasePackageIdentity(candidateRoot);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const nativeIdentity = readVerifiedNativeClaudePackageIdentity(candidateRoot);
+    if (
+      nativeIdentity.release_version !== ownerIdentity.release_version ||
+      nativeIdentity.payload_digest !== ownerIdentity.native_claude_payload_digest
+    ) {
+      throw new Error("native Claude payload identity does not match generated owner release");
+    }
+    return candidateRoot;
+  }
+  if (ownerIdentity.current_package === "claude-code") {
+    throw new Error("non-Claude launcher carries a Claude package identity");
+  }
+  if (claudeIdentity.current_package !== "claude-code") {
+    throw new Error("activation candidate is not the generated Claude package");
+  }
+  if (
+    ownerIdentity.release_version !== claudeIdentity.release_version ||
+    ownerIdentity.release_id !== claudeIdentity.release_id
+  ) {
+    throw new Error("generated host complete release identities do not match");
+  }
+  return candidateRoot;
+}
+
+/**
+ * Bind spawned LOCAL Claude panes to the exact release package that owns the
+ * launcher. A Claude-owned launcher activates itself. A generated non-Claude
+ * package discovers an installed Claude package from an explicit root, its
+ * physical build-tree sibling, or Claude's authoritative installed-plugin
+ * registry. A build-emitted release identity re-hashes every shipped file in
+ * both packages and binds all package digests to one release id before activation. A
+ * session settings overlay disables ambient installed Guild IDs so the exact
+ * package is the only enabled Guild instance in the spawned Claude process.
+ *
+ * GUILD_PLUGIN_ROOT is the explicit launcher selection and takes precedence
+ * over an inherited CLAUDE_PLUGIN_ROOT. Invalid, symlinked, non-Guild, foreign,
+ * or cross-release roots fail closed; discovery never falls back to Claude's
+ * ambient default plugin selection.
+ */
+export interface ClaudePluginActivation {
+  args: string[];
+  pluginRoot: string;
+}
+
+export function resolveClaudePluginActivation(
+  env: NodeJS.ProcessEnv = process.env,
+  ownerPluginRoot: string = path.resolve(__dirname, "../../.."),
+): ClaudePluginActivation {
+  let ownerRealRoot: string;
+  try {
+    ownerRealRoot = physicalDirectory(ownerPluginRoot);
+  } catch (error) {
+    throw new Error(
+      `launcher-owning Guild plugin root is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  const guildRoot = env["GUILD_PLUGIN_ROOT"]?.trim();
+  const claudeRoot = env["CLAUDE_PLUGIN_ROOT"]?.trim();
+  const selected = guildRoot || (hasClaudeManifest(ownerRealRoot) ? claudeRoot : undefined);
+  if (selected) {
+    let selectedRealRoot: string;
+    try {
+      selectedRealRoot = physicalDirectory(selected);
+    } catch (error) {
+      const key = guildRoot ? "GUILD_PLUGIN_ROOT" : "CLAUDE_PLUGIN_ROOT";
+      throw new Error(
+        `explicit Guild plugin root ${key} is invalid: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    if (selectedRealRoot !== ownerRealRoot) {
+      throw new Error(
+        "explicit Guild plugin root does not match the package that owns the launcher; refusing cross-package activation",
+      );
+    }
+  }
+
+  let installedRegistry: {
+    installations: Array<{ root: string }>;
+    pluginIds: string[];
+  };
+  try {
+    installedRegistry = installedClaudePluginRegistry(env);
+  } catch (error) {
+    throw new Error(
+      `Claude installed-plugin registry is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  if (hasClaudeManifest(ownerRealRoot)) {
+    try {
+      readGuildManifestVersion(ownerRealRoot, path.join(".claude-plugin", "plugin.json"));
+      try {
+        const generatedIdentity = readVerifiedReleasePackageIdentity(ownerRealRoot);
+        if (generatedIdentity.current_package !== "claude-code") {
+          throw new Error("launcher-owning Claude package has a non-Claude release identity");
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        readVerifiedNativeClaudePackageIdentity(ownerRealRoot);
+      }
+    } catch (error) {
+      throw new Error(
+        `launcher-owning Claude plugin root is invalid: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    return {
+      args: exactClaudeActivationArgs(ownerRealRoot, installedRegistry.pluginIds),
+      pluginRoot: ownerRealRoot,
+    };
+  }
+
+  const candidates: Array<{ label: string; root: string }> = [];
+  if (claudeRoot) candidates.push({ label: "CLAUDE_PLUGIN_ROOT", root: claudeRoot });
+  candidates.push({
+    label: "generated claude-code sibling",
+    root: path.join(path.dirname(ownerRealRoot), "claude-code"),
+  });
+
+  const rejections: string[] = [];
+  for (const installation of installedRegistry.installations) {
+    candidates.push({
+      label: "Claude installed-plugin registry",
+      root: installation.root,
+    });
+  }
+
+  const attempted = new Set<string>();
+  for (const candidate of candidates) {
+    const attemptKey = candidate.root;
+    if (attempted.has(attemptKey)) continue;
+    attempted.add(attemptKey);
+    try {
+      const matchedRoot = assertSameGeneratedHostIdentity(
+        ownerRealRoot,
+        candidate.root,
+      );
+      return {
+        args: exactClaudeActivationArgs(matchedRoot, installedRegistry.pluginIds),
+        pluginRoot: matchedRoot,
+      };
+    } catch (error) {
+      rejections.push(
+        `${candidate.label}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  throw new Error(
+    `launcher-owning non-Claude package has no identity-matched installed Claude package (${rejections.join("; ")})`,
+  );
+}
+
+/** Backward-compatible argv-only view used by callers that do not spawn a shell. */
+export function resolveClaudePluginActivationArgs(
+  env: NodeJS.ProcessEnv = process.env,
+  ownerPluginRoot: string = path.resolve(__dirname, "../../.."),
+): string[] {
+  return resolveClaudePluginActivation(env, ownerPluginRoot).args;
+}
+
 /**
  * ISSUE #94 — the Codex launch argv for a local team pane, resolved from the
  * SAME `host_mode` ladder as Claude's. Codex used to be excluded here on
@@ -209,7 +507,22 @@ export function paneCommand(
    * Absent ⇒ the emitted command is byte-identical to the pre-fix one.
    */
   definitionRef?: ProjectDefinitionRefV1,
+  /** Verified Claude package root exported so spawned hooks resolve this package, not the parent host. */
+  pluginRoot?: string,
 ): string {
+  const pluginDirIndexes = launchArgs.flatMap((arg, index) => arg === "--plugin-dir" ? [index] : []);
+  if (pluginDirIndexes.length > 0 && pluginRoot === undefined) {
+    throw new Error("--plugin-dir activation requires the paired child GUILD_PLUGIN_ROOT");
+  }
+  if (pluginRoot !== undefined) {
+    if (
+      !path.isAbsolute(pluginRoot) ||
+      pluginDirIndexes.length !== 1 ||
+      launchArgs[pluginDirIndexes[0]! + 1] !== pluginRoot
+    ) {
+      throw new Error("child GUILD_PLUGIN_ROOT must exactly match one absolute --plugin-dir argument");
+    }
+  }
   const taskFragment =
     taskId !== undefined && taskId.length > 0
       ? `export GUILD_TASK_ID=${shellQuote(taskId)}; `
@@ -264,6 +577,10 @@ export function paneCommand(
     model !== undefined && model.length > 0
       ? `export GUILD_MODEL=${shellQuote(model)}; `
       : "";
+  const pluginRootFragment =
+    pluginRoot !== undefined && pluginRoot.length > 0
+      ? `export GUILD_PLUGIN_ROOT=${shellQuote(pluginRoot)}; `
+      : "";
   const teardownTail = debug
     ? `command claude ${launchFragment}${modelArg}${shellQuote(prompt)}; ` +
       `tmux select-pane -t "$TMUX_PANE" -T ${shellQuote(debugTitle)} 2>/dev/null || true; ` +
@@ -284,6 +601,7 @@ export function paneCommand(
     statuslineFragment +
     scopeFragment +
     modelFragment +
+    pluginRootFragment +
     // Keep the exact-carriage guard adjacent to the real host launch. The
     // verifier accepts only this generated grammar, so no wrapper, mutation,
     // or decoy command can fit between the equality check and `claude`.
@@ -304,6 +622,10 @@ export function composeTmuxCommands(opts: {
   teamPath?: string;
   /** Issue #54: the project's permission config, feeding paneCommand's host launch-flag resolution. */
   permissionConfig?: RuntimePermissionConfig;
+  /** Validated exact-package argv for local Claude panes. */
+  claudePluginActivationArgs?: string[];
+  /** Verified root paired with claudePluginActivationArgs; exported into the child process. */
+  claudePluginRoot?: string;
   /** FU08: compose a pure preview; adapter enforcement probes are forbidden. */
   preview?: boolean;
 }): ParsedTmuxCommand[] {
@@ -318,6 +640,8 @@ export function composeTmuxCommands(opts: {
     orchestratorHostKind = "claude",
     teamPath,
     permissionConfig = RUNTIME_DEFAULT_CONFIG,
+    claudePluginActivationArgs = [],
+    claudePluginRoot,
     preview = false,
   } = opts;
   const cmds: ParsedTmuxCommand[] = [];
@@ -351,7 +675,7 @@ export function composeTmuxCommands(opts: {
         spec?.taskId,
         spec?.name,
         undefined, // keep paneCommand's own GUILD_PANE_DEBUG default
-        resolveClaudeTeamLaunchArgs(permissionConfig),
+        [...claudePluginActivationArgs, ...resolveClaudeTeamLaunchArgs(permissionConfig)],
         model,
         spec?.task_cell_assignment_path,
         spec?.task_cell_instance_id,
@@ -359,6 +683,7 @@ export function composeTmuxCommands(opts: {
         // pinned definition bundle (codex + generic adapter branches already
         // carried it). The exact hash-bound ref now rides GUILD_DEFINITION_REF.
         spec?.definition_ref,
+        claudePluginRoot,
       );
     }
     // ISSUE #94: a codex pane's opt-in bypass argv is resolved HERE, from the
@@ -682,6 +1007,7 @@ const GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
   "GUILD_STATUSLINE",
   "GUILD_CAPABILITY_SCOPE",
   "GUILD_MODEL",
+  "GUILD_PLUGIN_ROOT",
 ] as const);
 
 function consumeGeneratedShellWord(input: string, start: number): number {
@@ -806,10 +1132,19 @@ export class TmuxTeamBackend implements TeamBackend {
   readonly kind = "tmux" as const;
   private run: RunFn;
   private resolveAdapter?: AdapterResolver;
+  private env: NodeJS.ProcessEnv;
+  private pluginOwnerRoot: string;
 
-  constructor(opts: { run?: RunFn; resolveAdapter?: AdapterResolver } = {}) {
+  constructor(opts: {
+    run?: RunFn;
+    resolveAdapter?: AdapterResolver;
+    env?: NodeJS.ProcessEnv;
+    pluginOwnerRoot?: string;
+  } = {}) {
     this.run = opts.run ?? defaultRun;
     this.resolveAdapter = opts.resolveAdapter;
+    this.env = opts.env ?? process.env;
+    this.pluginOwnerRoot = opts.pluginOwnerRoot ?? path.resolve(__dirname, "../../..");
   }
 
   isAvailable(): boolean {
@@ -854,6 +1189,15 @@ export class TmuxTeamBackend implements TeamBackend {
     // (degrades to RUNTIME_DEFAULT_CONFIG-equivalent on any read/parse failure), so
     // this call is safe even on a missing/corrupt settings.json.
     const permissionConfig = readRuntimePermissionConfig(req.cwd);
+    const orchestratorHostKind = req.orchestratorHostKind ?? "claude";
+    const hasClaudePane =
+      orchestratorHostKind === "claude" ||
+      req.specialists.some(
+        (specialist) => (specialist.host_kind ?? orchestratorHostKind) === "claude",
+      );
+    const claudePluginActivation = hasClaudePane
+      ? resolveClaudePluginActivation(this.env, this.pluginOwnerRoot)
+      : null;
     const commands = composeTmuxCommands({
       mode: req.mode,
       targetName: req.targetName,
@@ -862,9 +1206,11 @@ export class TmuxTeamBackend implements TeamBackend {
       runId: req.runId,
       specialists: req.specialists,
       resolveAdapter: this.resolveAdapter,
-      orchestratorHostKind: req.orchestratorHostKind ?? "claude",
+      orchestratorHostKind,
       teamPath: req.teamPath,
       permissionConfig,
+      claudePluginActivationArgs: claudePluginActivation?.args ?? [],
+      claudePluginRoot: claudePluginActivation?.pluginRoot,
       preview: req.dryRun,
     });
     return { mode: req.mode, targetName: req.targetName, commands };
@@ -874,12 +1220,31 @@ export class TmuxTeamBackend implements TeamBackend {
     ok: boolean;
     failures: Array<{ specialist: string; hostKind: HostKind; message: string }>;
   } {
-    if (!this.resolveAdapter) return { ok: true, failures: [] };
     const failures: Array<{ specialist: string; hostKind: HostKind; message: string }> = [];
     const panes: Array<{ name: string; hostKind: HostKind }> = [
       { name: "orchestrator", hostKind: orchestratorHostKind },
       ...specialists.map((s) => ({ name: s.name, hostKind: s.host_kind ?? orchestratorHostKind })),
     ];
+
+    // Exact package activation is itself a pre-pane dependency. Validate it
+    // here so the launcher can refuse before persisting immutable TaskCells.
+    // plan() deliberately validates again immediately before command emission
+    // so a package mutation between preflight and launch still fails closed.
+    if (panes.some((pane) => pane.hostKind === "claude")) {
+      try {
+        resolveClaudePluginActivation(this.env, this.pluginOwnerRoot);
+      } catch (error) {
+        failures.push({
+          specialist: "orchestrator",
+          hostKind: "claude",
+          message: `exact Guild plugin activation failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        });
+      }
+    }
+
+    if (!this.resolveAdapter) return { ok: failures.length === 0, failures };
     const probed = new Set<HostKind>();
     for (const pane of panes) {
       if (probed.has(pane.hostKind)) continue;
@@ -940,7 +1305,22 @@ export class TmuxTeamBackend implements TeamBackend {
   }
 
   launch(req: TeamLaunchRequest): TeamLaunchResult {
-    const plan = this.plan(req);
+    let plan: TmuxPlan;
+    try {
+      plan = this.plan(req);
+    } catch (error) {
+      return {
+        kind: this.kind,
+        ok: false,
+        plannedCommands: [],
+        orchestratorPaneId: null,
+        teammatePaneIds: {},
+        notes: [
+          `tmux plan failed: ${error instanceof Error ? error.message : String(error)}`,
+        ],
+        dispatchPlan: [],
+      };
+    }
     const plannedCommands = plan.commands.map((c) => c.display);
     // Fix A: the per-specialist forwarding proof (see dispatchPlanFromTmuxPlan)
     // rides every launch result — dry and real — so the declaring dispatch
