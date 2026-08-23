@@ -13176,6 +13176,15 @@ var init_secret_patterns = __esm({
       Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
       Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
       Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+      // ── Personally identifying forms retained by public evidence projections ─
+      // Task objectives and handoff prose are operator-authored and can contain
+      // direct contact details or tenant identifiers. Those artifacts are copied
+      // into migration evidence, so the share scrubber must recognize them before
+      // publication. Keep the patterns prefix-shaped and their labels inert so the
+      // redaction remains deterministic and idempotent.
+      Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
+      Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
+      Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
       // High-entropy string heuristic: 40+ hex chars (SHA-like)
       Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
     ]);
@@ -13211,6 +13220,26 @@ function approvedHashPath(schema, pathParts) {
     return pathKey === "input_hash" || pathKey === "output_hash" || pathKey === "record_hash" || pathKey === "versions/source_version";
   }
   if (schema === "guild.compatibility_usage.v1") return pathKey === "content_hash";
+  if (schema === "guild.capability_substantive_operation.v1") {
+    return (/* @__PURE__ */ new Set([
+      "compatibility_payload_sha256",
+      "assignment_sha256",
+      "handoff_sha256",
+      "handoff_receipt_sha256",
+      "validation_sha256",
+      "attempt_sha256",
+      "acceptance_sha256",
+      "projected_assignment_sha256",
+      "projected_handoff_sha256",
+      "projected_handoff_receipt_sha256",
+      "projected_validation_sha256",
+      "projected_attempt_sha256",
+      "projected_acceptance_sha256"
+    ])).has(pathKey);
+  }
+  if (schema === "guild.task_assignment.v2") {
+    return (/* @__PURE__ */ new Set(["specialist_type_hash", "specialist_profile_hash", "context_bundle_hash", "host_capabilities_hash"])).has(pathKey);
+  }
   if (schema === "guild.session_context.v1") {
     return (/* @__PURE__ */ new Set([
       "execution_target/account_fingerprint",
@@ -13387,6 +13416,8 @@ var init_scrub_redact = __esm({
       "guild.project_capability_profile.v1",
       "guild.receipt_record.v1",
       "guild.compatibility_usage.v1",
+      "guild.capability_substantive_operation.v1",
+      "guild.task_assignment.v2",
       "guild.session_context.v1"
     ]);
   }
@@ -23215,6 +23246,7 @@ var init_retry_lane = __esm({
 // ../src/modules/lifecycle/workflows/run-binding.ts
 var init_run_binding = __esm({
   "../src/modules/lifecycle/workflows/run-binding.ts"() {
+    init_kernel();
     init_stable_lock();
   }
 });
@@ -25022,9 +25054,241 @@ var EMITTING_MODE_SET = new Set(PROFILE_EMITTING_MODES);
 init_frontmatter();
 var readScalarField2 = readScalarField;
 
+// ../hooks/lib/handoff-v2.ts
+init_sealed_collections();
+var ALLOWED_INJECTION_CLEAN_VALUES2 = sealSet([
+  "clean",
+  "flagged",
+  "unverified"
+], "ALLOWED_INJECTION_CLEAN_VALUES");
+var ALLOWED_TOP_LEVEL_KEYS2 = sealSet([
+  "schema_version",
+  "task_id",
+  "tier",
+  "status",
+  "summary",
+  "artifacts",
+  "issues",
+  "escalate_reason",
+  "learnings",
+  "notes",
+  "injection_clean"
+  // HK-08 additive-optional
+], "ALLOWED_TOP_LEVEL_KEYS");
+
 // lib/capability/migration-evidence.ts
 init_run_lifecycle();
 init_run_binding();
+
+// ../src/modules/lifecycle/workflows/run-record-validate.ts
+init_run_lifecycle();
+init_distribution();
+init_documents();
+
+// ../src/modules/dispatch/workflows/shadow-routing.ts
+init_capability();
+init_capability();
+init_lifecycle();
+init_teams();
+
+// ../src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts
+var TASK_CELL_STATES = Object.freeze([
+  "declared",
+  "instantiated",
+  "ready",
+  "assigned",
+  "assignment_acknowledged",
+  "running",
+  "handoff_submitted",
+  "handoff_validated",
+  "handoff_accepted",
+  "terminating",
+  "terminated",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "rejected"
+]);
+var TERMINAL_STATES = Object.freeze([
+  "terminated",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "rejected"
+]);
+var TERMINAL_SET = new Set(TERMINAL_STATES);
+var LEGAL_TRANSITIONS = Object.freeze({
+  declared: Object.freeze(["instantiated", "failed", "cancelled"]),
+  instantiated: Object.freeze(["ready", "failed", "cancelled", "timed_out"]),
+  ready: Object.freeze(["assigned", "failed", "cancelled", "timed_out"]),
+  assigned: Object.freeze(["assignment_acknowledged", "failed", "cancelled", "timed_out"]),
+  // The ack gate: `running` has exactly ONE inbound edge.
+  assignment_acknowledged: Object.freeze(["running", "failed", "cancelled", "timed_out"]),
+  running: Object.freeze(["handoff_submitted", "failed", "cancelled", "timed_out"]),
+  handoff_submitted: Object.freeze(["handoff_validated", "rejected", "failed", "cancelled", "timed_out"]),
+  handoff_validated: Object.freeze(["handoff_accepted", "rejected", "failed", "cancelled", "timed_out"]),
+  // Only a durable acceptance record authorizes termination (D5). After
+  // acceptance the ONLY legal path is `terminating -> terminated`; there is no
+  // edge to `failed` — a post-acceptance teardown problem parks in
+  // `terminating` for the reaper, it never terminal-fails the accepted work.
+  handoff_accepted: Object.freeze(["terminating"]),
+  // A failed teardown leaves the instance HERE, orphaned, for the reaper to
+  // retry until it reaches `terminated`. `terminating` therefore has no
+  // `failed` edge (the reaper never abandons an accepted instance to failed).
+  terminating: Object.freeze(["terminated"]),
+  terminated: Object.freeze([]),
+  failed: Object.freeze([]),
+  cancelled: Object.freeze([]),
+  timed_out: Object.freeze([]),
+  rejected: Object.freeze([])
+});
+var ACCEPTANCE_AUTHORITIES = Object.freeze([
+  "deterministic_floor",
+  "team_lead",
+  "reviewer_cell"
+]);
+
+// ../src/modules/dispatch/workflows/task-cell-artifact-join.ts
+init_communication();
+init_teams();
+
+// ../src/modules/dispatch/workflows/task-cell-runtime.ts
+init_communication();
+init_telemetry();
+
+// ../src/modules/dispatch/workflows/task-assignment-v2.ts
+init_kernel();
+init_lifecycle();
+init_capability();
+
+// ../src/modules/dispatch/workflows/confirmation-gate.ts
+init_lifecycle();
+init_capability();
+
+// ../src/modules/dispatch/workflows/task-cell-telemetry-reconcile.ts
+init_telemetry();
+
+// ../src/modules/dispatch/workflows/task-cell-host-conformance.ts
+init_communication();
+init_lifecycle();
+init_telemetry();
+
+// ../src/modules/dispatch/workflows/execution-transport-ports.ts
+init_lifecycle();
+var EXECUTION_OPERATIONS = Object.freeze([
+  "spawn",
+  "send",
+  "wait",
+  "interrupt",
+  "close",
+  "connect",
+  "probe"
+]);
+var EXECUTION_OUTCOME_STATUSES = Object.freeze([
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "unsupported"
+]);
+var EXECUTION_REASON_CODES = Object.freeze([
+  "operation_unsupported",
+  "transport_unavailable",
+  "capability_absent",
+  "authentication_failed",
+  "invalid_request",
+  "contract_version_unsupported",
+  "spawn_failed",
+  "send_failed",
+  "wait_failed",
+  "interrupt_failed",
+  "close_failed",
+  "remote_unreachable",
+  "cancelled_by_caller",
+  "deadline_exceeded"
+]);
+var EXECUTION_TRANSPORT_IDS = Object.freeze([
+  "pane",
+  "in-process",
+  "serial",
+  "tmux",
+  "cmux",
+  "remote",
+  "runtime"
+]);
+var EXECUTION_STATUS_TO_NEUTRAL_DISPOSITION = Object.freeze({
+  succeeded: "succeeded",
+  failed: "failed",
+  cancelled: "failed",
+  timed_out: "failed",
+  unsupported: "unsupported"
+});
+var EXECUTION_REASON_TO_NEUTRAL_REASON = Object.freeze({
+  operation_unsupported: "capability_absent",
+  transport_unavailable: "execution_failed",
+  capability_absent: "capability_absent",
+  authentication_failed: "authentication_failed",
+  invalid_request: "execution_failed",
+  contract_version_unsupported: "capability_absent",
+  spawn_failed: "execution_failed",
+  send_failed: "execution_failed",
+  wait_failed: "execution_failed",
+  interrupt_failed: "execution_failed",
+  close_failed: "execution_failed",
+  remote_unreachable: "execution_failed",
+  cancelled_by_caller: "execution_failed",
+  deadline_exceeded: "execution_failed"
+});
+var TEAM_DISPATCH_SCOPES = Object.freeze(["session", "window"]);
+var EXECUTION_DISPATCH_MODES = Object.freeze(["team", "agent", "subagent"]);
+
+// ../src/modules/dispatch/workflows/execution-transport-adapters.ts
+var GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
+  "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+  "GUILD_DISPATCH_PRODUCER",
+  "GUILD_RUN_ID",
+  "GUILD_TASK_ID",
+  "GUILD_SPECIALIST",
+  "GUILD_TASK_ASSIGNMENT",
+  "GUILD_TASK_CELL_INSTANCE_ID",
+  "GUILD_STATUSLINE",
+  "GUILD_CAPABILITY_SCOPE",
+  "GUILD_MODEL",
+  "GUILD_PLUGIN_ROOT"
+]);
+var DEFINITION_REF_KEYS = Object.freeze([
+  "schema_version",
+  "project_id",
+  "layer",
+  "kind",
+  "id",
+  "relative_path",
+  "content_hash",
+  "source_commit",
+  "specialist_profile_hash",
+  "specialist_type_hash",
+  "skills"
+]);
+var PINNED_SKILL_KEYS = Object.freeze(["id", "relative_path", "content_hash"]);
+
+// ../src/modules/lifecycle/workflows/run-record-validate.ts
+var RUN_RECORD_FINDING_CODES = Object.freeze([
+  "non_canonical_name",
+  "missing_run_yaml",
+  "missing_provenance",
+  "missing_events_log",
+  "no_valid_handoff",
+  "document_dump",
+  "not_a_directory",
+  "usage"
+]);
+var RECEIPT_SECTIONS = Object.freeze([
+  "changed_files",
+  "opens_for",
+  "assumptions",
+  "evidence",
+  "followups"
+]);
 
 // lib/shared/scrub-redact.ts
 init_scrub_redact();
@@ -25040,7 +25304,7 @@ var RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 var REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 var PRODUCTION_REPOSITORY = "lookatitude/guild";
 var BOUNDARY_SIGNER_WORKFLOW = "lookatitude/guild/.github/workflows/capability-migration-boundary.yml";
-function sha2563(bytes) {
+function sha2564(bytes) {
   return (0, import_node_crypto3.createHash)("sha256").update(bytes).digest("hex");
 }
 function canonical(value) {
@@ -25066,7 +25330,7 @@ function canonicalInstant(value) {
   return new Date(value).toISOString();
 }
 function boundaryHash(value) {
-  return sha2563(canonical(value));
+  return sha2564(canonical(value));
 }
 function canonicalRelativePath(value) {
   if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\\") || path25.posix.isAbsolute(value)) return false;
@@ -25111,7 +25375,7 @@ function snapshotRuntimeFiles(packageRoot) {
         continue;
       }
       if (!stats.isFile()) throw new Error(`runtime package contains a non-regular entry: ${childRelative}`);
-      entries.push({ path: childRelative, sha256: sha2563(readRegularFileNoFollow(absolute, `runtime package entry ${childRelative}`)) });
+      entries.push({ path: childRelative, sha256: sha2564(readRegularFileNoFollow(absolute, `runtime package entry ${childRelative}`)) });
     }
   };
   visit(root, "");
@@ -25128,9 +25392,9 @@ function hashCompatibilityRuntimeProducer(packageRoot, hostId) {
   const paths = [manifestPath, ...COMPATIBILITY_PRODUCER_PATHS];
   const entries = paths.map((relativePath) => Object.freeze({
     path: relativePath,
-    sha256: sha2563(readRegularFileNoFollow(path25.join(root, relativePath), `${hostId} compatibility producer ${relativePath}`))
+    sha256: sha2564(readRegularFileNoFollow(path25.join(root, relativePath), `${hostId} compatibility producer ${relativePath}`))
   }));
-  return sha2563(canonical(entries));
+  return sha2564(canonical(entries));
 }
 function runtimePackageBinding(packageRoot, hostId, expected) {
   const manifestPath = hostId === "claude-code-cli" ? ".claude-plugin/plugin.json" : ".codex-plugin/plugin.json";
@@ -25139,16 +25403,16 @@ function runtimePackageBinding(packageRoot, hostId, expected) {
   const files = expected?.install_files ?? snapshotRuntimeFiles(root);
   const actualFiles = files.map((entry) => Object.freeze({
     path: entry.path,
-    sha256: sha2563(readRegularFileNoFollow(path25.join(root, entry.path), `${hostId} attested runtime file ${entry.path}`))
+    sha256: sha2564(readRegularFileNoFollow(path25.join(root, entry.path), `${hostId} attested runtime file ${entry.path}`))
   }));
   if (expected && canonical(actualFiles) !== canonical(expected.install_files)) throw new Error(`runtime package files do not match the attested ${hostId} beta package`);
   return Object.freeze({
     host_id: hostId,
     manifest_path: manifestPath,
-    manifest_sha256: sha2563(manifestBytes),
+    manifest_sha256: sha2564(manifestBytes),
     producer_sha256: hashCompatibilityRuntimeProducer(root, hostId),
-    tree_sha256: expected?.tree_sha256 ?? sha2563(canonical(actualFiles)),
-    install_surface_sha256: sha2563(canonical(actualFiles))
+    tree_sha256: expected?.tree_sha256 ?? sha2564(canonical(actualFiles)),
+    install_surface_sha256: sha2564(canonical(actualFiles))
   });
 }
 function validateRuntimeBinding(value, expectedHost) {
@@ -25174,7 +25438,7 @@ function validateRuntimePackage(value, expectedHost) {
     files.push(Object.freeze({ path: file.path, sha256: file.sha256 }));
   }
   files.sort((left, right) => left.path.localeCompare(right.path));
-  if (sha2563(canonical(files)) !== binding.tree_sha256) return null;
+  if (sha2564(canonical(files)) !== binding.tree_sha256) return null;
   const installFiles = [];
   for (const raw of record.install_files) {
     const file = plainRecord(raw);
@@ -25184,7 +25448,7 @@ function validateRuntimePackage(value, expectedHost) {
     installFiles.push(Object.freeze({ path: file.path, sha256: file.sha256 }));
   }
   installFiles.sort((left, right) => left.path.localeCompare(right.path));
-  if (sha2563(canonical(installFiles)) !== binding.install_surface_sha256) return null;
+  if (sha2564(canonical(installFiles)) !== binding.install_surface_sha256) return null;
   return Object.freeze({ ...binding, files: Object.freeze(files), install_files: Object.freeze(installFiles) });
 }
 function snapshotMigrationRuntimePackage(packageRoot, host, supportedInstallRoot) {
@@ -25192,14 +25456,14 @@ function snapshotMigrationRuntimePackage(packageRoot, host, supportedInstallRoot
   const files = snapshotRuntimeFiles(packageRoot);
   const installFiles = supportedInstallRoot === void 0 ? files : files.filter((entry) => {
     try {
-      return sha2563(readRegularFileNoFollow(path25.join(fs19.realpathSync(supportedInstallRoot), entry.path), `${host} live install file ${entry.path}`)) === entry.sha256;
+      return sha2564(readRegularFileNoFollow(path25.join(fs19.realpathSync(supportedInstallRoot), entry.path), `${host} live install file ${entry.path}`)) === entry.sha256;
     } catch {
       return false;
     }
   });
   const requiredInstallPaths = /* @__PURE__ */ new Set([binding.manifest_path, ...COMPATIBILITY_PRODUCER_PATHS]);
   if ([...requiredInstallPaths].some((required) => !installFiles.some((entry) => entry.path === required))) throw new Error(`supported ${host} install root omits a required compatibility producer file`);
-  const value = validateRuntimePackage({ ...binding, install_surface_sha256: sha2563(canonical(installFiles)), files, install_files: installFiles }, host);
+  const value = validateRuntimePackage({ ...binding, install_surface_sha256: sha2564(canonical(installFiles)), files, install_files: installFiles }, host);
   if (!value) throw new Error(`generated ${host} runtime package snapshot is invalid`);
   return value;
 }
