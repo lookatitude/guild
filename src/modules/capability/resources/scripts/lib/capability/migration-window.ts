@@ -20,6 +20,7 @@ import {
   verifyMigrationObservation,
   validateMigrationBoundary,
   validateMigrationObservation,
+  isSubstantiveMigrationObservation,
   MIGRATION_OBSERVATION_SCHEMA,
   type MigrationBoundaryV1,
   type MigrationObservation,
@@ -683,15 +684,19 @@ export function evaluateMigrationAdvance(window: MigrationWindowV1, to: Capabili
   const baselineBoundObservations = window.observations.filter((observation) => observation.schema_version === MIGRATION_OBSERVATION_SCHEMA);
   if ((window.mode === "observe" || window.mode === "shadow") && baselineBoundObservations.length < MIN_RELEASES_PER_MODE) blockers.push(`need >=${MIN_RELEASES_PER_MODE} baseline-bound v2 releases in ${window.mode}`);
   if ((window.mode === "observe" || window.mode === "shadow") && elapsedDays < MIN_DAYS_PER_MODE) blockers.push(`need >=${MIN_DAYS_PER_MODE} days in ${window.mode}`);
-  const distinctRuns = new Set(baselineBoundObservations.flatMap((observation) => observation.runs.map((run) => run.run_id))).size;
-  if ((window.mode === "observe" || window.mode === "shadow") && distinctRuns < MIN_RELEASES_PER_MODE) blockers.push(`need >=${MIN_RELEASES_PER_MODE} distinct whole-run profiles in ${window.mode}`);
+  const releaseRuns = new Set(baselineBoundObservations.flatMap((observation) => observation.runs.map((run) => run.run_id))).size;
+  const substantiveObservations = baselineBoundObservations.filter(isSubstantiveMigrationObservation);
+  const substantiveRuns = new Set(substantiveObservations.flatMap((observation) => observation.runs.map((run) => run.run_id))).size;
+  if ((window.mode === "observe" || window.mode === "shadow") && substantiveRuns < MIN_RELEASES_PER_MODE) blockers.push(`need >=${MIN_RELEASES_PER_MODE} distinct substantive operations in ${window.mode}; compatibility-only release observations do not qualify`);
   const passed = blockers.length === 0;
   return {
     passed,
     blockers,
     elapsed_days: elapsedDays,
     release_count: baselineBoundObservations.length,
-    run_count: distinctRuns,
+    release_run_count: releaseRuns,
+    run_count: substantiveRuns,
+    substantive_run_count: substantiveRuns,
     conformance: Object.freeze({
       schema_version: MIGRATION_ADVANCE_CONFORMANCE_SCHEMA,
       decision: passed ? "passed" as const : "refused" as const,

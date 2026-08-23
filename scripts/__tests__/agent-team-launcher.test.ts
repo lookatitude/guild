@@ -23,6 +23,7 @@ import {
   writeTaskCell,
   type TaskCellDispatchInput,
 } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import { taskCellPaths } from "../../src/modules/dispatch/workflows/task-cell-contract";
 // T3 F3: descriptor writers fail closed without the run's minted binding.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const launcherTestBinding = require("../../src/modules/lifecycle/workflows/run-binding") as
@@ -37,6 +38,7 @@ function launcherTestBindFor(cwd: string, runId: string): { binding_ref: string 
 import {
   buildAcceptance,
   markAttemptOrphaned,
+  readAssignmentForInstance,
   readAttemptForInstance,
   runDeterministicFloor,
   writeAcceptanceRecord,
@@ -45,7 +47,11 @@ import {
   type TaskCellInstanceIds,
 } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
 import { scanReceiptJournal } from "../../src/modules/telemetry";
-import { settleFailedCmuxTaskCells } from "../agent-team-launcher";
+import {
+  reconcileTerminalSubstantiveOperations,
+  sealTerminalAttemptWithSubstantiveEvidence,
+  settleFailedCmuxTaskCells,
+} from "../agent-team-launcher";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 const FIXTURES = path.resolve(__dirname, "../fixtures");
@@ -820,6 +826,13 @@ describe("agent-team-launcher.ts", () => {
         "compatibility-read:task-cell-identity-qa-qa",
       ]);
       expect(compatibilityReceipts.every((record) => record.observation_state === "checked_clean")).toBe(true);
+      for (const receipt of compatibilityReceipts) {
+        const logicalTaskId = receipt.operation_id
+          .replace("compatibility-read:task-cell-identity-", "")
+          .replace(/-(architect|backend|qa)$/, "");
+        const assignment = JSON.parse(fs.readFileSync(assignmentPath(logicalTaskId), "utf8"));
+        expect(Date.parse(receipt.recorded_at)).toBeLessThan(Date.parse(assignment.written_at));
+      }
     });
 
     it("prints tmux commands to stdout in dry-run mode", () => {
@@ -1204,6 +1217,76 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toBe("");
       expect(stderr).toContain("REFUSED (capability-scope carriage)");
       expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "run-20260811-010000-agent-shape-test", "task-cells"))).toBe(false);
+    });
+
+    it("agent-mode=agent: production retains a lifecycle manifest and an accepted in-process TaskCell can terminate", () => {
+      const runId = "run-20260823-010000-agent-lifecycle";
+      const { teamPath } = setupConsumerRepo(tmpDir, "custom-agent-lifecycle", "team-subagent.yaml");
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/custom-agent-lifecycle.md",
+          "backend: subagent",
+          "specialists:",
+          "  - name: custom-role",
+          "    scope: approved project-specific work",
+          "    depends-on: []",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      launcherTestBindFor(tmpDir, runId);
+      writeRunContexts(tmpDir, runId, [["custom-role", "custom-role"]]);
+
+      const launched = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--agent-mode=agent",
+        "--run-id", runId,
+      ]);
+      expect(launched.exitCode).toBe(0);
+      const manifestPath = path.join(tmpDir, ".guild", "runs", runId, "agent-team", "session.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      expect(manifest.backend).toBe("in-process");
+      expect(manifest.migration_observation_eligible).toBe(false);
+      expect(manifest.migration_observation_blocker).toMatch(/compatibility|scoped.*direct/i);
+      expect(manifest.teammate_panes).toEqual([
+        expect.objectContaining({ specialist: "custom-role", pane_id: "(unknown)" }),
+      ]);
+
+      const [cell] = findRunTaskCells(tmpDir, runId);
+      const assignment = readAssignmentForInstance(tmpDir, cell.ids);
+      expect(assignment).not.toBeNull();
+      const acceptedAt = new Date(Date.parse(assignment!.written_at) + 1_000).toISOString();
+      const validation = runDeterministicFloor({
+        assignment: assignment!,
+        submitted: {
+          receipt_id: "receipt-custom-role",
+          receipt_path: `.guild/runs/${runId}/handoffs/custom-role-custom-role.md`,
+          schema_valid: true,
+          claimed_changed_files: [],
+          acceptance_tests_passed: [],
+          submitted_at: acceptedAt,
+        },
+        validationResultId: "validation-custom-role",
+        now: () => acceptedAt,
+      });
+      writeAcceptanceRecord(tmpDir, buildAcceptance({
+        validation,
+        acceptancePolicyVersion: "1.0.0",
+        authoritiesRequired: ["deterministic_floor", "team_lead"],
+        authoritiesObserved: [
+          { authority: "deterministic_floor", decision: "accepted", at: acceptedAt, reason: null },
+          { authority: "team_lead", decision: "accepted", at: acceptedAt, reason: null },
+        ],
+        now: () => acceptedAt,
+      }));
+
+      const dismissed = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      expect(dismissed.exitCode).toBe(0);
+      expect(dismissed.stdout).toMatch(/\[TERMINATED\].*custom-role/);
+      expect(readAttemptForInstance(tmpDir, cell.ids)?.terminal_state).toBe("terminated");
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", runId, "receipts", "payloads"))).toBe(false);
     });
 
     // A dry run retains the descriptor for inspection but marks it non-dispatchable.
@@ -2174,6 +2257,176 @@ describe("agent-team-launcher.ts", () => {
       expect(second.exitCode).toBe(0);
       expect(second.stdout).not.toMatch(/\[TERMINATED\]/);
       expect(second.stdout).toMatch(/no acceptance-authorized lanes to terminate/);
+    });
+
+    it("FU18: retries substantive evidence for an accepted attempt already sealed terminal", () => {
+      const ids: TaskCellInstanceIds = {
+        run_id: "run-reconcile-evidence-001",
+        logical_task_id: "lt-reconcile",
+        attempt: 1,
+        instance_id: "lt-reconcile.a1.i1",
+      };
+      const acceptance = {
+        ids,
+        acceptance: { downstream_release_at: SEED_NOW() },
+      } as never;
+      let calls = 0;
+      const deps = {
+        readAttempt: (() => ({ terminal_state: "terminated" })) as never,
+        readPending: (() => ({ state: "pending", task_id: ids.logical_task_id })) as never,
+        recover: (() => {
+          calls++;
+          if (calls === 1) throw new Error("planted append interruption");
+          return { emitted: 1 };
+        }) as never,
+      };
+
+      const first = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        acceptances: [acceptance],
+      }, deps);
+      expect(first).toEqual({
+        attempted: 1,
+        emitted: 0,
+        errors: [expect.stringMatching(/planted append interruption/)],
+      });
+
+      const retry = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        acceptances: [acceptance],
+      }, deps);
+      expect(retry).toEqual({ attempted: 1, emitted: 1, errors: [] });
+      expect(calls).toBe(2);
+    });
+
+    it("FU18: repairs instance and terminal artifacts before reconciling a partially sealed attempt", () => {
+      const runId = "run-reconcile-partial-terminal-001";
+      const ids: TaskCellInstanceIds = {
+        run_id: runId,
+        logical_task_id: "lt-partial",
+        attempt: 1,
+        instance_id: "lt-partial.a1.i1",
+      };
+      seedAcceptance(tmpDir, runId, ids.logical_task_id, "backend");
+      launcherTestBinding.stagePendingSubstantiveOperation({ root: tmpDir, run_id: runId, task_id: ids.logical_task_id });
+      const paths = taskCellPaths(ids);
+      const attemptPath = path.join(tmpDir, paths.attempt_path);
+      const attempt = JSON.parse(fs.readFileSync(attemptPath, "utf8"));
+      fs.writeFileSync(attemptPath, `${JSON.stringify({
+        ...attempt,
+        terminal_state: "terminated",
+        terminal_reason: "accepted",
+        terminated_at: SEED_NOW(),
+        immutable: true,
+      }, null, 2)}\n`, "utf8");
+
+      const result = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId,
+        acceptances: [{ ids, acceptance: { downstream_release_at: SEED_NOW() } } as never],
+      });
+
+      expect(result).toEqual({ attempted: 1, emitted: 0, errors: [] });
+      expect(JSON.parse(fs.readFileSync(path.join(tmpDir, paths.instance_path), "utf8"))).toMatchObject({
+        terminal_state: "terminated",
+        terminal_reason: "accepted",
+      });
+      expect(fs.existsSync(path.join(tmpDir, paths.terminal_path))).toBe(true);
+    });
+
+    it("FU18: does not replay terminal publications after the transaction marker is complete", () => {
+      const ids: TaskCellInstanceIds = {
+        run_id: "run-reconcile-complete-001",
+        logical_task_id: "lt-complete",
+        attempt: 1,
+        instance_id: "lt-complete.a1.i1",
+      };
+      let recoveries = 0;
+      const result = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        acceptances: [{ ids, acceptance: { downstream_release_at: SEED_NOW() } } as never],
+      }, {
+        readAttempt: (() => ({ terminal_state: "terminated" })) as never,
+        readPending: (() => ({ state: "complete", task_id: ids.logical_task_id })) as never,
+        recover: (() => { recoveries++; return { emitted: 1 }; }) as never,
+      });
+      expect(result).toEqual({ attempted: 0, emitted: 0, errors: [] });
+      expect(recoveries).toBe(0);
+    });
+
+    it("FU18: holds one exclusion across terminal sealing and substantive evidence append", () => {
+      const events: string[] = [];
+      const ids: TaskCellInstanceIds = {
+        run_id: "run-atomic-terminal-001",
+        logical_task_id: "lt-atomic",
+        attempt: 1,
+        instance_id: "lt-atomic.a1.i1",
+      };
+      const result = sealTerminalAttemptWithSubstantiveEvidence({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        ids,
+        terminalState: "terminated",
+        reason: null,
+        accepted: true,
+        now: SEED_NOW,
+      }, {
+        withExclusion: ((_root: string, _runId: string, fn: () => unknown) => {
+          events.push("lock");
+          const value = fn();
+          events.push("unlock");
+          return value;
+        }) as never,
+        readBinding: (() => {
+          events.push("binding-open");
+          return { status: "ok", record: { state: "open" } };
+        }) as never,
+        stage: (() => {
+          events.push("stage");
+        }) as never,
+        seal: (() => {
+          events.push("seal");
+          return {};
+        }) as never,
+        recordUnderExclusion: (() => {
+          events.push("record");
+          return [{}];
+        }) as never,
+        complete: (() => {
+          events.push("complete");
+        }) as never,
+      } as never);
+      expect(result).toEqual({ emitted: 1 });
+      expect(events).toEqual(["lock", "binding-open", "stage", "seal", "record", "complete", "unlock"]);
+    });
+
+    it("FU18: refuses a terminal mutation when lifecycle close already won", () => {
+      let sealed = false;
+      expect(() => sealTerminalAttemptWithSubstantiveEvidence({
+        cwd: tmpDir,
+        runId: "run-closed-terminal-001",
+        ids: {
+          run_id: "run-closed-terminal-001",
+          logical_task_id: "lt-closed",
+          attempt: 1,
+          instance_id: "lt-closed.a1.i1",
+        },
+        terminalState: "terminated",
+        reason: null,
+        accepted: true,
+        now: SEED_NOW,
+      }, {
+        withExclusion: ((_root: string, _runId: string, fn: () => unknown) => fn()) as never,
+        readBinding: (() => ({ status: "ok", record: { state: "closed" } })) as never,
+        stage: (() => { throw new Error("stage must not run"); }) as never,
+        seal: (() => { sealed = true; return {}; }) as never,
+        recordUnderExclusion: (() => [{}]) as never,
+        complete: (() => { throw new Error("complete must not run"); }) as never,
+      })).toThrow(/open run binding/i);
+      expect(sealed).toBe(false);
     });
 
     it("exits 0 with no crash when session.json does not exist", () => {

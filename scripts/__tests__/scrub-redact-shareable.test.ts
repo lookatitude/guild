@@ -107,4 +107,56 @@ describe("shareable-file schema-bound SHA-256 redaction", () => {
     expect(result.out).toContain(SHA);
     expect(result.out).not.toContain("f".repeat(64));
   });
+
+  it("preserves only the reviewed substantive-operation bindings", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.capability_substantive_operation.v1",
+      compatibility_payload_sha256: SHA,
+      assignment_sha256: "1".repeat(64),
+      handoff_sha256: "2".repeat(64),
+      handoff_receipt_sha256: "3".repeat(64),
+      validation_sha256: "4".repeat(64),
+      attempt_sha256: "5".repeat(64),
+      acceptance_sha256: "6".repeat(64),
+      arbitrary_entropy: "f".repeat(64),
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "substantive-operation.json");
+    expect(result.out).toContain(SHA);
+    expect(result.out).toContain("1".repeat(64));
+    expect(result.out).toContain("2".repeat(64));
+    expect(result.out).toContain("3".repeat(64));
+    expect(result.out).not.toContain("f".repeat(64));
+  });
+
+  it("preserves only contract hash fields in a retained task assignment", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.task_assignment.v2",
+      specialist_type_hash: SHA,
+      specialist_profile_hash: "1".repeat(64),
+      context_bundle_hash: `sha256:${"2".repeat(64)}`,
+      host_capabilities_hash: `sha256:${"3".repeat(64)}`,
+      arbitrary_entropy: "f".repeat(64),
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "assignment.json");
+    expect(result.out).toContain(SHA);
+    expect(result.out).toContain("1".repeat(64));
+    expect(result.out).toContain(`sha256:${"2".repeat(64)}`);
+    expect(result.out).toContain(`sha256:${"3".repeat(64)}`);
+    expect(result.out).not.toContain("f".repeat(64));
+  });
+
+  it("redacts personal and customer identifiers from retained task evidence", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.task_assignment.v2",
+      objective: "Contact alice@example.com about account acct_12345 and customer_id=cust-7788",
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "assignment.json");
+    expect(result.out).not.toContain("alice@example.com");
+    expect(result.out).not.toContain("acct_12345");
+    expect(result.out).not.toContain("cust-7788");
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "email-address" }),
+      expect.objectContaining({ category: "customer-identifier" }),
+    ]));
+  });
 });

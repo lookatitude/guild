@@ -1,6 +1,6 @@
 {
   "name": "guild",
-  "version": "2.7.0-beta.15",
+  "version": "2.7.0-beta.16",
   "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
   "homepage": "https://guildstack.dev",
   "repository": "https://github.com/lookatitude/guild",

@@ -35,6 +35,10 @@ describe("instrumented compatibility loader", () => {
       expect(scan.records).toHaveLength(1);
       expect(scan.records[0].outcome_type).toBe("guild.capability_outcome.v1");
       expect(scan.records[0].disposition).toBe("degraded");
+      expect(result).toEqual(expect.objectContaining({
+        status: "loaded",
+        receipt_recorded_at: scan.records[0].recorded_at,
+      }));
       const canonicalVersion = JSON.parse(
         readFileSync(join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
       ).version;
@@ -44,6 +48,39 @@ describe("instrumented compatibility loader", () => {
       expect(rollup.unreadable).toBe(0);
       expect(rollup.observed_asset_ids).toEqual([entry.id]);
       expect(rollup.total_dependence_reads).toBe(0);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); }
+  });
+
+  it("retries one compatibility operation idempotently without appending a duplicate receipt", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-compat-idempotent-"));
+    try {
+      const pluginRoot = join(__dirname, "../..");
+      const entry = buildCompatibilityCatalog({ pluginRoot, deprecation: "deprecated", deprecatedBy: "cap-loc-D03" })
+        .entries.find((candidate) => candidate.kind === "shipped_template")!;
+      const bindingRef = openBinding(projectRoot, "run-compat-idempotent");
+      const options = {
+        pluginRoot,
+        runtimeHost: "claude-code-cli" as const,
+        projectRoot,
+        entry,
+        mode: "observe" as const,
+        intent: "dispatch" as const,
+        synthetic: false,
+        specialistId: entry.id,
+        runId: "run-compat-idempotent",
+        bindingRef,
+        operationId: "task-cell-identity-T1-researcher",
+      };
+
+      const first = readCompatibilityAsset(options);
+      const retry = readCompatibilityAsset(options);
+      const scan = scanReceiptJournal(join(projectRoot, ".guild/runs/run-compat-idempotent/receipts/journal.jsonl"));
+
+      expect(first.status).toBe("loaded");
+      expect(retry).toEqual(first);
+      expect(scan.integrity).toBe("intact");
+      expect(scan.records).toHaveLength(1);
+      expect(scan.records[0].operation_id).toBe("compatibility-read:task-cell-identity-T1-researcher");
     } finally { rmSync(projectRoot, { recursive: true, force: true }); }
   });
 

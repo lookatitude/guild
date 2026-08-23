@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "e2c33c781f7ffd3f613adc4cfd7c2267e66090a781b3744793de5c90c2c422e5"
+      "sha256": "16af21fe3b7b9dac3eea640b1976e5907b0b0d467a4ad51a11ea5046635ceb4e"
     },
     {
       "category": "scripts",
@@ -1157,7 +1157,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-binding.ts",
       "source_path": "src/modules/lifecycle/workflows/run-binding.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-binding.ts",
-      "sha256": "3a9b947927237663fe0d4964ab7eae7833f281c6ee4f8b94709095ebfe8d6940",
+      "sha256": "e45fda88312848d858f54b2ef756afd4071e7fad7d11c61c0b580f28465664df",
       "projection_dependency": true
     },
     {
@@ -1165,7 +1165,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "b09714a68225a0be3e46be58fbd613c9ac14ed556bba05a0115ebd171bd84037",
+      "sha256": "ceed0491650edd46f047b1ecaa9484507807b679038df593bde5cb10c310bde1",
       "projection_dependency": true
     },
     {
@@ -1357,7 +1357,7 @@
       "id": "projection:src/modules/security/workflows/scrub-redact.ts",
       "source_path": "src/modules/security/workflows/scrub-redact.ts",
       "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
-      "sha256": "e5a2f4ac3d9375fa7ed4212ccf706fe77b0fe0fa06ee970ac181621d070957a2",
+      "sha256": "9f5dfa43e0ab063b9405c192315db3a178bf429a9c1fbc9cbe81ce41aef18e0a",
       "projection_dependency": true
     },
     {
@@ -1373,7 +1373,7 @@
       "id": "projection:src/modules/security/workflows/secret-patterns.ts",
       "source_path": "src/modules/security/workflows/secret-patterns.ts",
       "resource_path": "resources/src/modules/security/workflows/secret-patterns.ts",
-      "sha256": "319166216093f567c6307308f3d708f43b079068076cb353e78bd278f50ad812",
+      "sha256": "e53cc33f1a8b133b4a5ab546a9fba6795405ef8badf434cbb0b8b057db7fe944",
       "projection_dependency": true
     },
     {

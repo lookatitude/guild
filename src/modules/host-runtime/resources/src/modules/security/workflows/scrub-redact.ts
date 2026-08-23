@@ -89,6 +89,8 @@ const HASH_BEARING_SCHEMAS = new Set([
   "guild.project_capability_profile.v1",
   "guild.receipt_record.v1",
   "guild.compatibility_usage.v1",
+  "guild.capability_substantive_operation.v1",
+  "guild.task_assignment.v2",
   "guild.session_context.v1",
 ]);
 
@@ -121,6 +123,16 @@ function approvedHashPath(schema: string, pathParts: readonly string[]): boolean
     return pathKey === "input_hash" || pathKey === "output_hash" || pathKey === "record_hash" || pathKey === "versions/source_version";
   }
   if (schema === "guild.compatibility_usage.v1") return pathKey === "content_hash";
+  if (schema === "guild.capability_substantive_operation.v1") {
+    return new Set([
+      "compatibility_payload_sha256",
+      "assignment_sha256", "handoff_sha256", "handoff_receipt_sha256", "validation_sha256", "attempt_sha256", "acceptance_sha256",
+      "projected_assignment_sha256", "projected_handoff_sha256", "projected_handoff_receipt_sha256", "projected_validation_sha256", "projected_attempt_sha256", "projected_acceptance_sha256",
+    ]).has(pathKey);
+  }
+  if (schema === "guild.task_assignment.v2") {
+    return new Set(["specialist_type_hash", "specialist_profile_hash", "context_bundle_hash", "host_capabilities_hash"]).has(pathKey);
+  }
   if (schema === "guild.session_context.v1") {
     return new Set([
       "execution_target/account_fingerprint",

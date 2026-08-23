@@ -593,7 +593,7 @@ export function detectDismissible(
  */
 export interface SessionManifest {
   run_id: string;
-  backend?: "tmux" | "cmux";
+  backend?: "tmux" | "cmux" | "in-process";
   session_name?: string;
   teammate_panes: Array<{
     specialist: string;

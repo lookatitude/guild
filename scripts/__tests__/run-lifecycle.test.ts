@@ -775,6 +775,26 @@ describe("run-lifecycle — lightweight run_class (SC-B §5)", () => {
   });
 });
 
+describe("run-lifecycle — pending substantive operation barrier", () => {
+  it("refuses close before mutating provenance or status while a terminal evidence transaction is pending", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const runId = lc.startRun(baseStartOpts());
+    const runYaml = path.join(ROOT, ".guild", "runs", runId, "run.yaml");
+    const before = mem.files.get(runYaml);
+    mem.env.writeFile(
+      path.join(ROOT, ".guild", "runs", runId, "capability", "pending-substantive-operation.json"),
+      `${JSON.stringify({ schema_version: "guild.pending_substantive_operation.v1", state: "pending", run_id: runId, task_id: "lt-crash" })}\n`,
+    );
+
+    expect(() => lc.closeRun(runId, { status: "closed", binding_ref: refOf(mem, runId) }))
+      .toThrow(/pending substantive operation/i);
+    expect(mem.files.has(path.join(ROOT, ".guild", "runs", runId, "provenance.json"))).toBe(false);
+    expect(mem.files.get(runYaml)).toBe(before);
+    expect(loadRunBinding({ root: ROOT, run_id: runId, fs: mem.env })?.state).toBe("open");
+  });
+});
+
 // ── T0 (G-PHASE-COMPOSE) — appendPhase + canonical-phase validation ───────────
 
 describe("run-lifecycle — appendPhase (T0 full-run phase recording)", () => {

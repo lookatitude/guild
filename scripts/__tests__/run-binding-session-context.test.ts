@@ -18,12 +18,16 @@ import {
   BindingRejectedError,
   assertWritableBinding,
   closeRunBinding,
+  completePendingSubstantiveOperation,
   loadRunBinding,
   locateCandidateRunId,
   mintRunBinding,
+  pendingSubstantiveOperationPath,
   readHookBindingEnvelope,
+  readPendingSubstantiveOperation,
   readRunBindingRecord,
   runBindingPath,
+  stagePendingSubstantiveOperation,
   verifyRunBinding,
   withRunBindingExclusion,
 } from "../lib/run-binding";
@@ -53,6 +57,31 @@ const BINDING = { binding_ref: "rb-test", state: "open" as const };
 // ── run-binding: mint / verify / close ───────────────────────────────────────
 
 describe("run-binding — mint/verify/fail-closed (§5)", () => {
+  it("refuses a pending-operation marker through a symlinked capability directory", () => {
+    const root = tmpRoot();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-t3-outside-"));
+    const runId = "run-symlink-marker";
+    mintRunBinding({ root, run_id: runId });
+    const runDir = path.join(root, ".guild", "runs", runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.symlinkSync(outside, path.join(runDir, "capability"));
+
+    expect(() => stagePendingSubstantiveOperation({ root, run_id: runId, task_id: "lt-escape" }))
+      .toThrow(/write refused|symlink|contain/i);
+    expect(fs.existsSync(path.join(outside, "pending-substantive-operation.json"))).toBe(false);
+  });
+
+  it("publishes a complete pending-operation marker as valid atomic replacement bytes", () => {
+    const root = tmpRoot();
+    const runId = "run-atomic-marker";
+    mintRunBinding({ root, run_id: runId });
+    stagePendingSubstantiveOperation({ root, run_id: runId, task_id: "lt-atomic" });
+    completePendingSubstantiveOperation({ root, run_id: runId, task_id: "lt-atomic" });
+    const pending = readPendingSubstantiveOperation(root, runId);
+    expect(pending).toMatchObject({ state: "complete", task_id: "lt-atomic" });
+    expect(() => JSON.parse(fs.readFileSync(pendingSubstantiveOperationPath(root, runId), "utf8"))).not.toThrow();
+  });
+
   it("mint → verify round-trips ok; the record persists on disk", () => {
     const root = tmpRoot();
     const b = mintRunBinding({ root, run_id: "run-x" });

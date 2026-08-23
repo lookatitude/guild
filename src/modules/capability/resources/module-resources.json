@@ -78,7 +78,7 @@
       "id": "lib/capability/compatibility-loader",
       "source_path": "scripts/lib/capability/compatibility-loader.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-loader.ts",
-      "sha256": "d8275ea68720453ce7bcc7668ae861ca98871737c753b7bb533c91fc9ee0e2c1"
+      "sha256": "e6b897a1eb11a937aae7c072077c301196fb5407798625208e805a3928a1dc70"
     },
     {
       "category": "scripts",
@@ -106,14 +106,14 @@
       "id": "lib/capability/migration-evidence",
       "source_path": "scripts/lib/capability/migration-evidence.ts",
       "resource_path": "resources/scripts/lib/capability/migration-evidence.ts",
-      "sha256": "a2a453e7aa143e5d05de5881a4761bfc7a0fef8d39c4855f9681e5218dd90116"
+      "sha256": "481ff4826d59ce0ea2628bffa2a48228e20766780575b3e64f26d02cbaaf2708"
     },
     {
       "category": "scripts",
       "id": "lib/capability/migration-window",
       "source_path": "scripts/lib/capability/migration-window.ts",
       "resource_path": "resources/scripts/lib/capability/migration-window.ts",
-      "sha256": "7c2e5d3257b4bef0824b43b53da45017031f0922e1d1326e78db3958f3d55388"
+      "sha256": "479b49a3c1653464f8aa171e758258316c740040bf8b7091326344442e2549eb"
     },
     {
       "category": "scripts",

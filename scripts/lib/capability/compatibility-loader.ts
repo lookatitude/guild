@@ -2,7 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import type { CapabilityResolverMode } from "../../../src/modules/config";
-import { appendReceipt, makeReceiptInput, scanReceiptJournal } from "../../../src/modules/telemetry";
+import {
+  appendReceipt,
+  compareCheckpointToJournal,
+  makeReceiptInput,
+  readCheckpointState,
+  scanReceiptJournal,
+} from "../../../src/modules/telemetry";
 import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog, type CompatibilityCatalogEntry } from "../../../src/modules/capability/workflows/compatibility-catalog";
 import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/modules/capability/workflows/compatibility-usage";
 import type { CapabilityResolutionIntent } from "../../../src/modules/capability/workflows/resolver-mode";
@@ -70,7 +76,7 @@ function runtimeReceiptIdentity(pluginRoot: string, runtimeHost: MigrationRuntim
 }
 
 export type CompatibilityLoadResult =
-  | { status: "loaded"; bytes: Buffer; payload: unknown; receipt_sequence: number }
+  | { status: "loaded"; bytes: Buffer; payload: unknown; receipt_sequence: number; receipt_recorded_at: string }
   | { status: "refused"; detail: string };
 
 export const FROZEN_COMPATIBILITY_CATALOG_RELPATH = ".guild/artifacts/capability/compatibility-catalog.json";
@@ -157,14 +163,43 @@ export function readCompatibilityAsset(options: {
         const written = writeContainedFile(options.projectRoot, payloadPath, payloadBytes, { policy: "physical" });
         if (!written.written) return { status: "refused", detail: `compatibility payload write refused [${written.code}]: ${written.detail}` };
       }
+      const journalPath = path.join(receipts, "journal.jsonl");
+      const checkpointPath = path.join(receipts, "checkpoint.json");
+      const operationId = `compatibility-read:${options.operationId}`;
+      const eventId = `${operationId}:${payloadHash.slice(0, 12)}`;
+      const versions = { host_id: runtimeIdentity.host_id, host_version: "unknown", runtime_version: runtimeIdentity.runtime_version, source_version: runtimeIdentity.package_tree, contract_version: "guild.observability.v1" };
+      const prior = scanReceiptJournal(journalPath);
+      const matchingOperation = prior.records.filter((record) => record.operation_id === operationId);
+      if (matchingOperation.length > 0) {
+        const record = matchingOperation[0];
+        const retryMatches = matchingOperation.length === 1
+          && prior.integrity === "intact"
+          && !prior.blocks_clean_close
+          && compareCheckpointToJournal(readCheckpointState(checkpointPath), prior, options.runId).length === 0
+          && record.event_id === eventId
+          && record.correlation_id === operationId
+          && record.causation_id === null
+          && record.scenario_id === "PCL-09"
+          && record.event_name === "task.dispatch"
+          && record.outcome_type === "guild.capability_outcome.v1"
+          && record.disposition === "degraded"
+          && record.observation_state === "checked_clean"
+          && record.input_hash === actual
+          && record.output_hash === payloadHash
+          && record.terminal === false
+          && record.observed_at === record.recorded_at
+          && JSON.stringify(record.versions) === JSON.stringify(versions);
+        if (!retryMatches) return { status: "refused", detail: "compatibility operation identity collision or damaged journal authority" };
+        return { status: "loaded", bytes, payload: emitted.payload, receipt_sequence: record.sequence, receipt_recorded_at: record.recorded_at };
+      }
       const recordedAt = new Date().toISOString();
       const appended = appendReceipt(
-        { journal: path.join(receipts, "journal.jsonl"), checkpoint: path.join(receipts, "checkpoint.json") },
+        { journal: journalPath, checkpoint: checkpointPath },
         makeReceiptInput({
           run_id: options.runId,
-          operation_id: `compatibility-read:${options.operationId}`,
-          correlation_id: `compatibility-read:${options.operationId}`,
-          event_id: `compatibility-read:${options.operationId}:${payloadHash.slice(0, 12)}`,
+          operation_id: operationId,
+          correlation_id: operationId,
+          event_id: eventId,
           causation_id: null,
           scenario_id: "PCL-09",
           event_name: "task.dispatch",
@@ -176,15 +211,18 @@ export function readCompatibilityAsset(options: {
           terminal: false,
           recorded_at: recordedAt,
           observed_at: recordedAt,
-          versions: { host_id: runtimeIdentity.host_id, host_version: "unknown", runtime_version: runtimeIdentity.runtime_version, source_version: runtimeIdentity.package_tree, contract_version: "guild.observability.v1" },
+          versions,
           affected_event_range: null,
         }),
+        undefined,
+        {},
+        { uniqueOperation: true },
       );
       if (!appended.durable || appended.sequence === null) {
         try { fs.rmSync(payloadPath, { force: true }); } catch { /* refusal below remains authoritative */ }
         return { status: "refused", detail: appended.failure?.message ?? "compatibility receipt was not durable" };
       }
-      return { status: "loaded", bytes, payload: emitted.payload, receipt_sequence: appended.sequence };
+      return { status: "loaded", bytes, payload: emitted.payload, receipt_sequence: appended.sequence, receipt_recorded_at: recordedAt };
     });
   } catch (error) {
     return { status: "refused", detail: error instanceof Error ? error.message : String(error) };
