@@ -1,0 +1,42 @@
+schema_version: guild.run.v1
+run_id: run-20260823-165720-learn
+command: /guild:learn
+arguments: {}
+cwd: /Users/miguelp/Projects/guild/plugin/.worktrees/pcl-fu20-observe-definition-ref-compat
+target_kind: existing_guild_project
+workspace:
+  is_workspace: false
+  root: /Users/miguelp/Projects/guild/plugin/.worktrees/pcl-fu20-observe-definition-ref-compat
+project: project
+host:
+  requested: auto
+  resolved: unknown
+model_tier_policy: default (full run)
+started_at: 2026-08-23T16:57:20.787Z
+ignore_policy: default
+scan_policy: default
+run_scope: independent
+initiative_attachment: null
+independent_run_group: learn
+entry_prompt_ref: null
+config_snapshot_ref: plugin-config-snapshot.json
+capability_start_snapshot_ref:
+  path: capability/run-start-snapshot.json
+  sha256: dc6e65eae33c967391dc5fb514987c9d0ccf3015c8521bcb46e9faad8638d63f
+attachment_resolution:
+  scope: independent
+  initiative_id: null
+  independent_group_id: learn
+  source: independent
+  confidence: high
+phase: null
+run_class: full
+gates: {}
+status: open
+phases_log: []
+settings_ref:
+  path: resolved-settings.json
+  schema_version: guild.resolved_settings.v1
+  effective_backend: team
+  review: cross
+  recommended_provider: null

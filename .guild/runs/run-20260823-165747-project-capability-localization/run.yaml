@@ -1,0 +1,44 @@
+schema_version: guild.run.v1
+run_id: run-20260823-165747-project-capability-localization
+command: /guild:plan
+arguments: {}
+cwd: /Users/miguelp/Projects/guild/plugin/.worktrees/pcl-fu20-observe-definition-ref-compat
+target_kind: existing_guild_project
+workspace:
+  is_workspace: false
+  root: /Users/miguelp/Projects/guild/plugin/.worktrees/pcl-fu20-observe-definition-ref-compat
+project: project
+host:
+  requested: auto
+  resolved: unknown
+model_tier_policy: default (full run)
+started_at: 2026-08-23T16:57:47.659Z
+ignore_policy: default
+scan_policy: default
+run_scope: initiative
+initiative_attachment: project-capability-localization
+independent_run_group: null
+entry_prompt_ref: null
+config_snapshot_ref: plugin-config-snapshot.json
+capability_start_snapshot_ref:
+  path: capability/run-start-snapshot.json
+  sha256: 3141a751e14856fec1ac74c74f2d839188ef6dcb75a199451490dccd0daaa9e9
+attachment_resolution:
+  scope: initiative
+  initiative_id: project-capability-localization
+  independent_group_id: null
+  source: user_selected
+  confidence: high
+phase: plan
+run_class: full
+gates: {}
+status: open
+phases_log:
+  - phase: plan
+    at: 2026-08-23T16:57:47.659Z
+settings_ref:
+  path: resolved-settings.json
+  schema_version: guild.resolved_settings.v1
+  effective_backend: team
+  review: cross
+  recommended_provider: null
