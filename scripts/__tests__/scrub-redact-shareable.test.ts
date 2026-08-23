@@ -144,4 +144,19 @@ describe("shareable-file schema-bound SHA-256 redaction", () => {
     expect(result.out).toContain(`sha256:${"3".repeat(64)}`);
     expect(result.out).not.toContain("f".repeat(64));
   });
+
+  it("redacts personal and customer identifiers from retained task evidence", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.task_assignment.v2",
+      objective: "Contact alice@example.com about account acct_12345 and customer_id=cust-7788",
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "assignment.json");
+    expect(result.out).not.toContain("alice@example.com");
+    expect(result.out).not.toContain("acct_12345");
+    expect(result.out).not.toContain("cust-7788");
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "email-address" }),
+      expect.objectContaining({ category: "customer-identifier" }),
+    ]));
+  });
 });

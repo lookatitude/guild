@@ -95,7 +95,6 @@ import { definitionRefForDispatch } from "./lib/capability/definition-ref-for-di
 import { buildCompatibilityCatalog, type CompatibilityCatalog } from "./lib/capability/compatibility-catalog";
 import { readCompatibilityAsset } from "./lib/capability/compatibility-loader";
 import {
-  reconcileMigrationSubstantiveTaskOperation,
   recordMigrationSubstantiveTaskOperationUnderExclusion,
 } from "./lib/capability/migration-evidence";
 import {
@@ -298,11 +297,13 @@ export function sealTerminalAttemptWithSubstantiveEvidence(
 }
 
 /**
- * Repair the crash boundary between terminal-attempt sealing and substantive
- * migration evidence recording. An accepted attempt that was already sealed on
- * a prior dismiss pass is deliberately revisited; rejected/non-terminal attempts
- * never qualify. The default dependencies are injectable only for the planted
- * recovery control in the launcher suite.
+ * Repair the crash boundary anywhere inside terminal-attempt sealing and
+ * substantive migration evidence recording. Re-running the complete idempotent
+ * terminal transaction repairs the sibling instance/terminal artifacts before
+ * evidence is admitted; a terminal attempt alone is not proof that the whole
+ * transition landed. Rejected/non-terminal attempts never qualify. The default
+ * dependencies are injectable only for the planted recovery control in the
+ * launcher suite.
  */
 export function reconcileTerminalSubstantiveOperations(
   input: {
@@ -312,10 +313,10 @@ export function reconcileTerminalSubstantiveOperations(
   },
   deps: {
     readonly readAttempt: typeof readAttemptForInstance;
-    readonly record: typeof reconcileMigrationSubstantiveTaskOperation;
+    readonly recover: typeof sealTerminalAttemptWithSubstantiveEvidence;
   } = {
     readAttempt: readAttemptForInstance,
-    record: reconcileMigrationSubstantiveTaskOperation,
+    recover: sealTerminalAttemptWithSubstantiveEvidence,
   },
 ): TerminalSubstantiveReconciliation {
   let attempted = 0;
@@ -323,14 +324,20 @@ export function reconcileTerminalSubstantiveOperations(
   const errors: string[] = [];
   for (const ra of input.acceptances) {
     if (ra.acceptance.downstream_release_at === null) continue;
-    if (deps.readAttempt(input.cwd, ra.ids)?.terminal_state !== "terminated") continue;
+    const attempt = deps.readAttempt(input.cwd, ra.ids);
+    if (attempt?.terminal_state !== "terminated") continue;
     attempted++;
     try {
-      emitted += deps.record({
-        projectRoot: input.cwd,
+      emitted += deps.recover({
+        cwd: input.cwd,
         runId: input.runId,
-        taskId: ra.ids.logical_task_id,
-      }).length;
+        ids: ra.ids,
+        terminalState: "terminated",
+        reason: attempt.terminal_reason,
+        accepted: true,
+        orphaned: attempt.orphaned,
+        now: () => attempt.terminated_at ?? new Date().toISOString(),
+      }).emitted;
     } catch (error) {
       errors.push(
         `${ra.ids.logical_task_id}/${ra.ids.instance_id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -2890,8 +2897,10 @@ async function main(): Promise<void> {
         const resultPath = writeLaunchTeamResult(cwd, runId, args.team, launchLanes);
         // In-process dispatch has no tmux pane, but it still needs a durable
         // lifecycle registry so --dismiss-completed can seal an accepted
-        // TaskCell and record substantive migration evidence. Placeholder pane
-        // ids deliberately select the existing no-live-pane terminal path.
+        // TaskCell. Substantive migration evidence is recorded only when a
+        // qualifying compatibility read exists; this custom-role path is
+        // explicitly ineligible below. Placeholder pane ids deliberately
+        // select the existing no-live-pane terminal path.
         const manifestPath = writeManifest(cwd, {
           ...buildManifest({
           runId,

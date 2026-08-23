@@ -1732,7 +1732,7 @@
       "id": "projection:src/modules/security/workflows/secret-patterns.ts",
       "source_path": "src/modules/security/workflows/secret-patterns.ts",
       "resource_path": "resources/src/modules/security/workflows/secret-patterns.ts",
-      "sha256": "319166216093f567c6307308f3d708f43b079068076cb353e78bd278f50ad812",
+      "sha256": "e53cc33f1a8b133b4a5ab546a9fba6795405ef8badf434cbb0b8b057db7fe944",
       "projection_dependency": true
     },
     {

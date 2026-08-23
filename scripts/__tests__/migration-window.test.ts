@@ -146,7 +146,7 @@ function writeRunState(
   }
 }
 
-type TaskCellFixtureVariant = "done" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "private-path" | "reaped" | "orphaned-unreaped";
+type TaskCellFixtureVariant = "done" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "private-path" | "pii" | "reaped" | "orphaned-unreaped";
 
 function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: string, specialistId: string, completedAt: string, pointerReceipt = true, variant: TaskCellFixtureVariant = "done"): void {
   const instanceId = `${taskId}.a1.i-fixture`;
@@ -178,7 +178,11 @@ function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: strin
     host_id: "claude-code-cli",
     adapter_id: "claude-code-cli@1",
     host_capabilities_hash: `sha256:${"d".repeat(64)}`,
-    objective: variant === "private-path" ? `complete ${taskId} from /Users/alice/Projects/demo/src/input.ts` : `complete ${taskId}`,
+    objective: variant === "private-path"
+      ? `complete ${taskId} from /Users/alice/Projects/demo/src/input.ts`
+      : variant === "pii"
+        ? `contact alice@example.com about account acct_12345 for ${taskId}`
+        : `complete ${taskId}`,
     non_goals: [],
     scope_paths: [],
     output_schema: "guild.handoff_receipt.v1",
@@ -320,7 +324,7 @@ function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: strin
   }
 }
 
-function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; taskCompletedAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; omitSubstantiveOperation?: boolean; corruptCheckpointBeforeSubstantive?: boolean; detachedCompatibility?: boolean; taskCellChain?: "missing-handoff" | "missing-receipt" | "failed-validation" | "direct-handoff" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "reaped" | "orphaned-unreaped"; taskPrivatePath?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean; noisyTrace?: boolean } = {}) {
+function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; taskCompletedAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; omitSubstantiveOperation?: boolean; corruptCheckpointBeforeSubstantive?: boolean; detachedCompatibility?: boolean; taskCellChain?: "missing-handoff" | "missing-receipt" | "failed-validation" | "direct-handoff" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "reaped" | "orphaned-unreaped"; taskPrivatePath?: boolean; taskPii?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean; noisyTrace?: boolean } = {}) {
   const pluginRoot = fixture.claudePackageRoot;
   const assetPath = "templates/specialists/researcher.md";
   const assetBytes = Buffer.from("# researcher\n");
@@ -389,6 +393,8 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
     const closedAt = timing.closeAt ?? new Date(Date.parse(profileAt) + 1_000).toISOString();
     const fixtureVariant: TaskCellFixtureVariant = timing.taskPrivatePath
       ? "private-path"
+      : timing.taskPii
+        ? "pii"
       : (["blocked-handoff", "duplicate-handoff", "noncanonical-receipt", "early-termination", "early-authorization", "foreign-specialist", "stale-receipt", "reaped", "orphaned-unreaped"] as const).includes(timing.taskCellChain as never)
         ? timing.taskCellChain as TaskCellFixtureVariant
         : "done";
@@ -589,6 +595,34 @@ describe("D03 evidence-bound migration window", () => {
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
+  it("refuses PII in retained substantive task-cell evidence before publication", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = "run-20260821-090000-task-pii";
+    try {
+      expect(() => observationFixture(
+        projectRoot,
+        fixture,
+        runId,
+        false,
+        "observe",
+        "2026-08-21T09:00:00.000Z",
+        projectSourceCommit(projectRoot),
+        undefined,
+        { taskPii: true },
+      )).toThrow(/public projection refuses|email-address|customer-identifier/i);
+      expect(existsSync(join(
+        projectRoot,
+        ".guild",
+        "artifacts",
+        "capability",
+        "migration-evidence",
+        fixture.boundary.boundary_hash,
+        runId,
+      ))).toBe(false);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
   it("refuses tampering with retained substantive task-cell bytes", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
     const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
@@ -688,6 +722,37 @@ describe("D03 evidence-bound migration window", () => {
         { corruptCheckpointBeforeSubstantive: true },
       )).toThrow(/checkpoint|journal.*intact/i);
       expect(loadRunBinding({ root: projectRoot, run_id: runId })?.state).toBe("open");
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("leaves an expected substantive operation pending when its accepted TaskCell chain is incomplete", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = "run-20260821-090000-incomplete-pending";
+    try {
+      expect(() => observationFixture(
+        projectRoot,
+        fixture,
+        runId,
+        false,
+        "observe",
+        "2026-08-21T09:00:00.000Z",
+        projectSourceCommit(projectRoot),
+        undefined,
+        { taskCellChain: "missing-receipt" },
+      )).toThrow(/expected substantive operation|accepted TaskCell evidence is incomplete/i);
+      expect(loadRunBinding({ root: projectRoot, run_id: runId })?.state).toBe("open");
+      expect(JSON.parse(readFileSync(join(
+        projectRoot,
+        ".guild",
+        "runs",
+        runId,
+        "capability",
+        "pending-substantive-operation.json",
+      ), "utf8"))).toMatchObject({
+        state: "pending",
+        task_id: `task-${runId}`,
+      });
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
@@ -792,7 +857,7 @@ describe("D03 evidence-bound migration window", () => {
       expect(() => observationFixture(projectRoot, fixture, "run-20260821-090000-early-profile", false, "observe", profileAt, projectSourceCommit(projectRoot), undefined, {
         baselineAt: "2026-08-21T08:59:58.000Z",
         receiptAt: "2026-08-21T09:00:01.000Z",
-      })).toThrow(/profile predates compatibility dispatch|distinct substantive operation|pre-existing resolver-emitted substantive operation/i);
+      })).toThrow(/profile predates compatibility dispatch|distinct substantive operation|pre-existing resolver-emitted substantive operation|expected substantive operation/i);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
@@ -813,7 +878,7 @@ describe("D03 evidence-bound migration window", () => {
     ["missing referenced run_closed trace event", { omitTerminalTrace: true }, /referenced run_closed trace event/i],
     ["tampered referenced run_closed trace event", { tamperTerminalTrace: true }, /close evidence/i],
     ["a profile produced after lifecycle close", { closeAt: "2026-08-21T08:59:59.000Z" }, /profile before lifecycle close/i],
-    ["compatibility evidence produced after lifecycle close", { receiptAt: "2026-08-21T09:00:02.000Z", closeAt: "2026-08-21T09:00:01.000Z" }, /after lifecycle close/i],
+    ["compatibility evidence produced after lifecycle close", { receiptAt: "2026-08-21T09:00:02.000Z", closeAt: "2026-08-21T09:00:01.000Z" }, /after lifecycle close|expected substantive operation/i],
   ] as const)("refuses terminal sealing with %s", (_label, timing, expected) => {
     const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
     const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
@@ -1378,7 +1443,7 @@ describe("D03 evidence-bound migration window", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
     const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
     try {
-      expect(() => observationFixture(projectRoot, fixture, `run-20260821-090000-wrong-${binding}`, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), binding)).toThrow(/no non-synthetic|substantive operation.*specialist|pre-existing resolver-emitted substantive operation/i);
+      expect(() => observationFixture(projectRoot, fixture, `run-20260821-090000-wrong-${binding}`, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), binding)).toThrow(/no non-synthetic|substantive operation.*specialist|pre-existing resolver-emitted substantive operation|expected substantive operation/i);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 

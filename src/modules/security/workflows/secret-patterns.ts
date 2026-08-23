@@ -61,6 +61,16 @@ export const SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = Object.
   Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"] as const),
   Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"] as const),
 
+  // ── Personally identifying forms retained by public evidence projections ─
+  // Task objectives and handoff prose are operator-authored and can contain
+  // direct contact details or tenant identifiers. Those artifacts are copied
+  // into migration evidence, so the share scrubber must recognize them before
+  // publication. Keep the patterns prefix-shaped and their labels inert so the
+  // redaction remains deterministic and idempotent.
+  Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"] as const),
+  Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"] as const),
+  Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"] as const),
+
   // High-entropy string heuristic: 40+ hex chars (SHA-like)
   Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"] as const),
 ] as const);

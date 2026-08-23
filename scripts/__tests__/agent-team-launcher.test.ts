@@ -23,6 +23,7 @@ import {
   writeTaskCell,
   type TaskCellDispatchInput,
 } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import { taskCellPaths } from "../../src/modules/dispatch/workflows/task-cell-contract";
 // T3 F3: descriptor writers fail closed without the run's minted binding.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const launcherTestBinding = require("../../src/modules/lifecycle/workflows/run-binding") as
@@ -2272,10 +2273,10 @@ describe("agent-team-launcher.ts", () => {
       let calls = 0;
       const deps = {
         readAttempt: (() => ({ terminal_state: "terminated" })) as never,
-        record: (() => {
+        recover: (() => {
           calls++;
           if (calls === 1) throw new Error("planted append interruption");
-          return [{}];
+          return { emitted: 1 };
         }) as never,
       };
 
@@ -2297,6 +2298,40 @@ describe("agent-team-launcher.ts", () => {
       }, deps);
       expect(retry).toEqual({ attempted: 1, emitted: 1, errors: [] });
       expect(calls).toBe(2);
+    });
+
+    it("FU18: repairs instance and terminal artifacts before reconciling a partially sealed attempt", () => {
+      const runId = "run-reconcile-partial-terminal-001";
+      const ids: TaskCellInstanceIds = {
+        run_id: runId,
+        logical_task_id: "lt-partial",
+        attempt: 1,
+        instance_id: "lt-partial.a1.i1",
+      };
+      seedAcceptance(tmpDir, runId, ids.logical_task_id, "backend");
+      const paths = taskCellPaths(ids);
+      const attemptPath = path.join(tmpDir, paths.attempt_path);
+      const attempt = JSON.parse(fs.readFileSync(attemptPath, "utf8"));
+      fs.writeFileSync(attemptPath, `${JSON.stringify({
+        ...attempt,
+        terminal_state: "terminated",
+        terminal_reason: "accepted",
+        terminated_at: SEED_NOW(),
+        immutable: true,
+      }, null, 2)}\n`, "utf8");
+
+      const result = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId,
+        acceptances: [{ ids, acceptance: { downstream_release_at: SEED_NOW() } } as never],
+      });
+
+      expect(result).toEqual({ attempted: 1, emitted: 0, errors: [] });
+      expect(JSON.parse(fs.readFileSync(path.join(tmpDir, paths.instance_path), "utf8"))).toMatchObject({
+        terminal_state: "terminated",
+        terminal_reason: "accepted",
+      });
+      expect(fs.existsSync(path.join(tmpDir, paths.terminal_path))).toBe(true);
     });
 
     it("FU18: holds one exclusion across terminal sealing and substantive evidence append", () => {

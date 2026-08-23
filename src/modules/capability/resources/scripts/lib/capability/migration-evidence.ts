@@ -1171,6 +1171,11 @@ export function recordMigrationSubstantiveTaskOperationUnderExclusion(options: {
     closedAt: recordedAt,
     compatibility,
   });
+  const expectedCompatibility = compatibility.some(({ payload, receipt }) => typeof payload.specialist_id === "string"
+    && receipt.operation_id === `compatibility-read:task-cell-identity-${options.taskId}-${payload.specialist_id}`);
+  if (candidates.length === 0 && expectedCompatibility) {
+    throw new Error(`expected substantive operation for ${options.taskId}, but its accepted task-cell evidence is incomplete or not linked in the required order`);
+  }
   const emitted: MigrationSubstantiveOperationV1[] = [];
   const paths = receiptPaths(options.projectRoot, options.runId);
   for (const { payload, bytes, relativePath, identity, linked } of candidates) {

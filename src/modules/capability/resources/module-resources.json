@@ -106,7 +106,7 @@
       "id": "lib/capability/migration-evidence",
       "source_path": "scripts/lib/capability/migration-evidence.ts",
       "resource_path": "resources/scripts/lib/capability/migration-evidence.ts",
-      "sha256": "295f99bd6fadd5c9e3ac11827b6def5f25a4a7aa03ff156b2151f22ee34c65bd"
+      "sha256": "481ff4826d59ce0ea2628bffa2a48228e20766780575b3e64f26d02cbaaf2708"
     },
     {
       "category": "scripts",
