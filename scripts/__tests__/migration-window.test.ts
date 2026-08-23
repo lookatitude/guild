@@ -86,7 +86,7 @@ function writeRunState(
   startedAt: string,
   status: "open" | "closed",
   closedAt?: string,
-  options: { readonly touchedTasks?: readonly string[]; readonly manifestExtra?: string } = {},
+  options: { readonly touchedTasks?: readonly string[]; readonly manifestExtra?: string; readonly traceExtra?: readonly unknown[] } = {},
 ): void {
   const runRoot = join(projectRoot, ".guild", "runs", runId);
   const snapshotPath = join(runRoot, "capability", "run-start-snapshot.json");
@@ -130,7 +130,7 @@ function writeRunState(
     if (!closedAt) throw new Error("fixture close requires closedAt");
     const event = { schema_version: "guild.trace_event.v1", event_id: `evt-${runId}`, event_name: "run_closed", run_id: runId, at: closedAt };
     mkdirSync(join(runRoot, "logs"), { recursive: true });
-    writeFileSync(join(runRoot, "logs", "v1.4-events.jsonl"), `${JSON.stringify(event)}\n`);
+    writeFileSync(join(runRoot, "logs", "v1.4-events.jsonl"), `${[...(options.traceExtra ?? []), event].map((entry) => JSON.stringify(entry)).join("\n")}\n`);
     writeFileSync(join(runRoot, "provenance.json"), `${JSON.stringify({
       schema_version: "guild.provenance.v1",
       run_id: runId,
@@ -145,7 +145,7 @@ function writeRunState(
   }
 }
 
-function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean } = {}) {
+function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean; noisyTrace?: boolean } = {}) {
   const pluginRoot = fixture.claudePackageRoot;
   const assetPath = "templates/specialists/researcher.md";
   const assetBytes = Buffer.from("# researcher\n");
@@ -214,6 +214,12 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
     writeRunState(projectRoot, runId, runStartedAt, "closed", closedAt, {
       manifestExtra,
       touchedTasks: timing.compatibilityOnly ? [] : [`task:${runId}`],
+      traceExtra: timing.noisyTrace ? [{
+        schema_version: "guild.trace.analysis.v2",
+        event_class: "tool_call_finished",
+        run_id: runId,
+        result_excerpt_redacted: `normal receipt hash ${"f".repeat(64)} must not enter the public close projection`,
+      }] : [],
     });
     if (timing.omitProvenance) rmSync(join(projectRoot, ".guild", "runs", runId, "provenance.json"), { force: true });
     const terminalLog = join(projectRoot, ".guild", "runs", runId, "logs", "v1.4-events.jsonl");
@@ -324,6 +330,34 @@ describe("D03 evidence-bound migration window", () => {
       expect(readFileSync(join(projectRoot, ".guild", "runs", runId, "run.yaml"), "utf8")).toContain(projectRoot);
       expect(verifyMigrationObservation(projectRoot, evidence.observation)).toEqual(evidence.observation);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("projects only the provenance-bound close event from a noisy operational trace", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = "run-20260821-090000-noisy-terminal-trace";
+    try {
+      const evidence = observationFixture(projectRoot, fixture, runId, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, { noisyTrace: true });
+      const retained = readFileSync(join(projectRoot, evidence.observation.runs[0].terminal_trace_log.path), "utf8").trim().split("\n");
+      expect(retained).toHaveLength(1);
+      expect(JSON.parse(retained[0])).toEqual(expect.objectContaining({
+        schema_version: "guild.trace_event.v1",
+        event_name: "run_closed",
+        run_id: runId,
+      }));
+      expect(retained[0]).not.toContain("f".repeat(64));
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("verifies a published observation after the project checkout moves", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-origin-"));
+    const movedRoot = `${projectRoot}-moved`;
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(projectRoot, fixture, "run-20260821-090000-portable-observation", false, "observe", "2026-08-21T09:00:00.000Z");
+      renameSync(projectRoot, movedRoot);
+      expect(verifyMigrationObservation(movedRoot, evidence.observation)).toEqual(evidence.observation);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(movedRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
   it.each([

@@ -1076,7 +1076,13 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     if (baselineRef) {
       try { baseline = validateMigrationRunBaseline(JSON.parse(snapshots.get(baselineRef.path)!.toString("utf8"))); }
       catch { baseline = null; }
-      const expectedBinding = baselineBinding(projectRoot);
+      // Creation verifies the retained baseline against the physical source
+      // checkout. Published evidence is intentionally portable: after its
+      // atomic projection lands in git, a clone or worktree has a different
+      // realpath. At that point the retained run-start snapshot (checked below),
+      // profile hashes, journal, and terminal seal are the binding authority;
+      // recomputing today's checkout path would reject unchanged evidence.
+      const expectedBinding = stagedSnapshots ? baselineBinding(projectRoot) : baseline?.bound_root ?? null;
       if (!baseline || baseline.run_id !== run.run_id || baseline.bound_run_id !== run.run_id || expectedBinding === null || baseline.bound_root !== expectedBinding
         || baseline.agents !== profile.mutation_evidence.agents_tree_hash_before
         || baseline.skills !== profile.mutation_evidence.skills_tree_hash_before
@@ -1265,7 +1271,7 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
   return observation;
 }
 
-function projectMigrationEvidenceBytes(projectRoot: string, runId: string, sourceRel: string, destinationRel: string, source: Buffer): Buffer {
+function projectMigrationEvidenceBytes(projectRoot: string, runId: string, sourceRel: string, destinationRel: string, source: Buffer, terminalEventId?: string): Buffer {
   const root = fs.realpathSync(projectRoot);
   let projected = source.toString("utf8");
   let rootPathReplacements = 0;
@@ -1289,6 +1295,21 @@ function projectMigrationEvidenceBytes(projectRoot: string, runId: string, sourc
     terminal.log_ref = "terminal-trace-log.jsonl";
     artifacts.capability_profile = "profile.json";
     projected = `${JSON.stringify(provenance, null, 2)}\n`;
+  } else if (destinationRel.endsWith("/terminal-trace-log.jsonl")) {
+    if (!terminalEventId) throw new Error(`migration public projection refuses an unbound terminal trace: ${sourceRel}`);
+    const matching = projected.split("\n").filter((line) => line.trim().length > 0).flatMap((line) => {
+      try {
+        const event = plainRecord(JSON.parse(line));
+        return event?.schema_version === "guild.trace_event.v1"
+          && event.event_id === terminalEventId
+          && event.event_name === "run_closed"
+          && event.run_id === runId
+          ? [event]
+          : [];
+      } catch { return []; }
+    });
+    if (matching.length !== 1) throw new Error(`migration public projection refuses a missing, duplicated, or malformed terminal event: ${sourceRel}`);
+    projected = `${JSON.stringify(matching[0])}\n`;
   }
   const scrubbed = redactShareableFile(projected, path.posix.basename(destinationRel));
   if (scrubbed.secrets.length > 0) {
@@ -1318,11 +1339,13 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
     if (!terminal) throw new Error(`migration observation requires the terminal closed run manifest before snapshotting ${runId}`);
   }
   const stagedSnapshots = new Map<string, Buffer>();
+  const sourceSnapshots = new Map<string, Buffer>();
   const sourceHashes = new Map<string, string>();
-  const stage = (sourceRel: string, destinationRel: string): MigrationEvidenceRefV1 => {
+  const stage = (sourceRel: string, destinationRel: string, terminalEventId?: string): MigrationEvidenceRefV1 => {
     const source = readEvidenceFile(options.projectRoot, sourceRel);
+    sourceSnapshots.set(sourceRel, source);
     sourceHashes.set(sourceRel, sha256(source));
-    const bytes = projectMigrationEvidenceBytes(options.projectRoot, options.runIds[0], sourceRel, destinationRel, source);
+    const bytes = projectMigrationEvidenceBytes(options.projectRoot, options.runIds[0], sourceRel, destinationRel, source, terminalEventId);
     stagedSnapshots.set(destinationRel, bytes);
     return Object.freeze({ path: destinationRel, sha256: sha256(bytes) });
   };
@@ -1333,12 +1356,20 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
     if (isRefused(checkedDirectory)) throw new Error(`migration observation payload directory refused [${checkedDirectory.code}]`);
     const payloadNames = fs.readdirSync(checkedDirectory.realPath).filter((name) => name.endsWith(".compatibility-usage.json")).sort();
     const destinationPrefix = `.guild/artifacts/capability/migration-evidence/${boundary.boundary_hash}/${runId}`;
+    const runManifest = stage(`${prefix}/run.yaml`, `${destinationPrefix}/run.yaml`);
+    const provenance = stage(`${prefix}/provenance.json`, `${destinationPrefix}/provenance.json`);
+    let terminalEventId: string | null = null;
+    try {
+      const sourceProvenance = plainRecord(JSON.parse(sourceSnapshots.get(`${prefix}/provenance.json`)!.toString("utf8")));
+      const terminal = plainRecord(sourceProvenance?.terminal_trace_event);
+      terminalEventId = typeof terminal?.event_id === "string" ? terminal.event_id : null;
+    } catch { terminalEventId = null; }
     return Object.freeze({
       run_id: runId,
-      run_manifest: stage(`${prefix}/run.yaml`, `${destinationPrefix}/run.yaml`),
-      provenance: stage(`${prefix}/provenance.json`, `${destinationPrefix}/provenance.json`),
+      run_manifest: runManifest,
+      provenance,
       source_provenance_sha256: sourceHashes.get(`${prefix}/provenance.json`)!,
-      terminal_trace_log: stage(`${prefix}/logs/v1.4-events.jsonl`, `${destinationPrefix}/terminal-trace-log.jsonl`),
+      terminal_trace_log: stage(`${prefix}/logs/v1.4-events.jsonl`, `${destinationPrefix}/terminal-trace-log.jsonl`, terminalEventId ?? undefined),
       start_snapshot: stage(`${prefix}/capability/run-start-snapshot.json`, `${destinationPrefix}/run-start-snapshot.json`),
       baseline: stage(`${prefix}/capability/run-start-baseline.json`, `${destinationPrefix}/baseline.json`),
       session_context: stage(`${prefix}/session-context.json`, `${destinationPrefix}/session-context.json`),
