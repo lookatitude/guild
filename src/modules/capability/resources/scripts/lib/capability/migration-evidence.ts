@@ -30,7 +30,9 @@ import {
   capabilityRunStartIdentityHash,
 } from "../../../src/modules/lifecycle/workflows/run-lifecycle";
 import {
+  completePendingSubstantiveOperation,
   readRunBindingRecord,
+  stagePendingSubstantiveOperation,
   withRunBindingExclusion,
 } from "../../../src/modules/lifecycle/workflows/run-binding";
 import { isCanonicalLaneReceipt } from "../../../src/modules/lifecycle/workflows/run-record-validate";
@@ -804,8 +806,14 @@ interface QualifyingCompatibilityReceipt {
 function readQualifyingCompatibilityReceipts(projectRoot: string, runId: string): readonly QualifyingCompatibilityReceipt[] {
   const paths = receiptPaths(projectRoot, runId);
   const scan = scanReceiptJournal(paths.journal);
-  if (scan.integrity !== "intact" || scan.blocks_clean_close
-    || compareCheckpointToJournal(readCheckpointState(paths.checkpoint), scan, runId).length > 0) {
+  if (scan.integrity === "absent") return Object.freeze([]);
+  if (scan.integrity !== "intact" || scan.blocks_clean_close) {
+    throw new Error("migration run seal requires an intact checkpoint-bound receipt journal");
+  }
+  const compatibilityRecords = scan.records.filter((receipt) => receipt.scenario_id === "PCL-09"
+    && receipt.operation_id.startsWith("compatibility-read:") && receipt.output_hash !== null);
+  if (compatibilityRecords.length === 0) return Object.freeze([]);
+  if (compareCheckpointToJournal(readCheckpointState(paths.checkpoint), scan, runId).length > 0) {
     throw new Error("migration run seal requires an intact checkpoint-bound receipt journal");
   }
   const payloadDir = path.join(fs.realpathSync(projectRoot), ".guild", "runs", runId, "receipts", "payloads");
@@ -818,8 +826,7 @@ function readQualifyingCompatibilityReceipts(projectRoot: string, runId: string)
     try { payload = parseCompatibilityUsageV1(JSON.parse(bytes.toString("utf8"))); } catch { payload = null; }
     payloads.set(sha256(bytes), payload);
   }
-  const qualifying = scan.records.flatMap((receipt): QualifyingCompatibilityReceipt[] => {
-    if (receipt.scenario_id !== "PCL-09" || !receipt.operation_id.startsWith("compatibility-read:") || receipt.output_hash === null) return [];
+  const qualifying = compatibilityRecords.flatMap((receipt): QualifyingCompatibilityReceipt[] => {
     const payload = payloads.get(receipt.output_hash);
     return payload?.synthetic === false
       ? [{ receipt, payload }]
@@ -1119,8 +1126,25 @@ export function recordMigrationSubstantiveTaskOperation(options: {
   readonly runId: string;
   readonly taskId: string;
 }): readonly MigrationSubstantiveOperationV1[] {
-  return withRunBindingExclusion(options.projectRoot, options.runId, () =>
-    recordMigrationSubstantiveTaskOperationUnderExclusion(options));
+  return withRunBindingExclusion(options.projectRoot, options.runId, () => {
+    const binding = readRunBindingRecord({ root: options.projectRoot, run_id: options.runId });
+    if (binding.status !== "ok" || binding.record.state !== "open") {
+      throw new Error("substantive migration operation must be recorded while the run binding is open");
+    }
+    stagePendingSubstantiveOperation({ root: options.projectRoot, run_id: options.runId, task_id: options.taskId });
+    const emitted = recordMigrationSubstantiveTaskOperationUnderExclusion(options);
+    completePendingSubstantiveOperation({ root: options.projectRoot, run_id: options.runId, task_id: options.taskId });
+    return emitted;
+  });
+}
+
+/** Recover or complete the terminal-evidence transaction under the run lock. */
+export function reconcileMigrationSubstantiveTaskOperation(options: {
+  readonly projectRoot: string;
+  readonly runId: string;
+  readonly taskId: string;
+}): readonly MigrationSubstantiveOperationV1[] {
+  return recordMigrationSubstantiveTaskOperation(options);
 }
 
 /**
@@ -1139,9 +1163,7 @@ export function recordMigrationSubstantiveTaskOperationUnderExclusion(options: {
   }
   const recordedAt = canonicalInstant(new Date().toISOString());
   if (!recordedAt) throw new Error("substantive migration operation requires a canonical recording instant");
-  let compatibility: readonly QualifyingCompatibilityReceipt[];
-  try { compatibility = readQualifyingCompatibilityReceipts(options.projectRoot, options.runId); }
-  catch { return Object.freeze([]); }
+  const compatibility = readQualifyingCompatibilityReceipts(options.projectRoot, options.runId);
   const candidates = substantiveOperationCandidates({
     projectRoot: options.projectRoot,
     runId: options.runId,

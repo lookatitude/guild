@@ -95,11 +95,13 @@ import { definitionRefForDispatch } from "./lib/capability/definition-ref-for-di
 import { buildCompatibilityCatalog, type CompatibilityCatalog } from "./lib/capability/compatibility-catalog";
 import { readCompatibilityAsset } from "./lib/capability/compatibility-loader";
 import {
-  recordMigrationSubstantiveTaskOperation,
+  reconcileMigrationSubstantiveTaskOperation,
   recordMigrationSubstantiveTaskOperationUnderExclusion,
 } from "./lib/capability/migration-evidence";
 import {
+  completePendingSubstantiveOperation,
   readRunBindingRecord,
+  stagePendingSubstantiveOperation,
   withRunBindingExclusion,
 } from "../src/modules/lifecycle/workflows/run-binding";
 import type { CapabilityResolverMode } from "../src/modules/config";
@@ -252,19 +254,26 @@ export function sealTerminalAttemptWithSubstantiveEvidence(
   deps: {
     readonly withExclusion: typeof withRunBindingExclusion;
     readonly readBinding: typeof readRunBindingRecord;
+    readonly stage: typeof stagePendingSubstantiveOperation;
     readonly seal: typeof sealTerminalAttempt;
     readonly recordUnderExclusion: typeof recordMigrationSubstantiveTaskOperationUnderExclusion;
+    readonly complete: typeof completePendingSubstantiveOperation;
   } = {
     withExclusion: withRunBindingExclusion,
     readBinding: readRunBindingRecord,
+    stage: stagePendingSubstantiveOperation,
     seal: sealTerminalAttempt,
     recordUnderExclusion: recordMigrationSubstantiveTaskOperationUnderExclusion,
+    complete: completePendingSubstantiveOperation,
   },
 ): AtomicTerminalSubstantiveResult {
   return deps.withExclusion(input.cwd, input.runId, () => {
     const binding = deps.readBinding({ root: input.cwd, run_id: input.runId });
     if (binding.status !== "ok" || binding.record.state !== "open") {
       throw new Error("terminal TaskCell transition requires an open run binding");
+    }
+    if (input.accepted) {
+      deps.stage({ root: input.cwd, run_id: input.runId, task_id: input.ids.logical_task_id });
     }
     deps.seal({
       cwd: input.cwd,
@@ -281,6 +290,9 @@ export function sealTerminalAttemptWithSubstantiveEvidence(
           taskId: input.ids.logical_task_id,
         }).length
       : 0;
+    if (input.accepted) {
+      deps.complete({ root: input.cwd, run_id: input.runId, task_id: input.ids.logical_task_id });
+    }
     return Object.freeze({ emitted });
   });
 }
@@ -300,10 +312,10 @@ export function reconcileTerminalSubstantiveOperations(
   },
   deps: {
     readonly readAttempt: typeof readAttemptForInstance;
-    readonly record: typeof recordMigrationSubstantiveTaskOperation;
+    readonly record: typeof reconcileMigrationSubstantiveTaskOperation;
   } = {
     readAttempt: readAttemptForInstance,
-    record: recordMigrationSubstantiveTaskOperation,
+    record: reconcileMigrationSubstantiveTaskOperation,
   },
 ): TerminalSubstantiveReconciliation {
   let attempted = 0;
@@ -825,6 +837,8 @@ interface Manifest {
     capability_scope?: string[];
   }>;
   env: Record<string, string>;
+  migration_observation_eligible?: boolean;
+  migration_observation_blocker?: string;
 }
 
 function buildManifest(opts: {
@@ -2878,7 +2892,8 @@ async function main(): Promise<void> {
         // lifecycle registry so --dismiss-completed can seal an accepted
         // TaskCell and record substantive migration evidence. Placeholder pane
         // ids deliberately select the existing no-live-pane terminal path.
-        const manifestPath = writeManifest(cwd, buildManifest({
+        const manifestPath = writeManifest(cwd, {
+          ...buildManifest({
           runId,
           mode: process.env["TMUX"] ? "in-session" : "new-session",
           sessionName: args.sessionName ?? `guild-${slug}`,
@@ -2888,7 +2903,14 @@ async function main(): Promise<void> {
           realPaneIds: null,
           orchestratorHostKind,
           backend: "in-process",
-        }));
+          }),
+          // The approval-bound custom-role path has no shipped compatibility
+          // read, while scoped canonical direct dispatch remains refused until
+          // FU17 proves child-environment carriage. It can exercise TaskCell
+          // lifecycle, but it must never be counted as a migration observation.
+          migration_observation_eligible: false,
+          migration_observation_blocker: "no shipped compatibility read; scoped direct dispatch remains refused pending FU17",
+        });
         process.stderr.write(`[agent-team-launcher] wrote TaskCell team_result → ${resultPath}\n`);
         process.stderr.write(`[agent-team-launcher] wrote in-process lifecycle manifest → ${manifestPath}\n`);
       }

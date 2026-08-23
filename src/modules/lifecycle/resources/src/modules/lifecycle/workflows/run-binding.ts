@@ -95,6 +95,74 @@ export function runBindingPath(root: string, runId: string): string {
   return path.join(root, ".guild", "runs", runId, "binding.json");
 }
 
+export const PENDING_SUBSTANTIVE_OPERATION_SCHEMA = "guild.pending_substantive_operation.v1" as const;
+
+export interface PendingSubstantiveOperationRecord {
+  readonly schema_version: typeof PENDING_SUBSTANTIVE_OPERATION_SCHEMA;
+  readonly state: "pending" | "complete";
+  readonly run_id: string;
+  readonly task_id: string;
+}
+
+export function pendingSubstantiveOperationPath(root: string, runId: string): string {
+  return path.join(root, ".guild", "runs", runId, "capability", "pending-substantive-operation.json");
+}
+
+function readPendingSubstantiveOperation(root: string, runId: string, fs: BindingFs): PendingSubstantiveOperationRecord | null {
+  const raw = fs.readFile(pendingSubstantiveOperationPath(root, runId));
+  if (raw === null) return null;
+  let value: unknown;
+  try { value = JSON.parse(raw); } catch { throw new Error("pending substantive operation marker is malformed"); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("pending substantive operation marker is malformed");
+  const record = value as Record<string, unknown>;
+  if (record.schema_version !== PENDING_SUBSTANTIVE_OPERATION_SCHEMA
+    || (record.state !== "pending" && record.state !== "complete")
+    || record.run_id !== runId
+    || typeof record.task_id !== "string" || record.task_id.length === 0 || record.task_id.length > 192) {
+    throw new Error("pending substantive operation marker is malformed");
+  }
+  return record as unknown as PendingSubstantiveOperationRecord;
+}
+
+function writePendingSubstantiveOperation(root: string, record: PendingSubstantiveOperationRecord, fs: BindingFs): void {
+  const target = pendingSubstantiveOperationPath(root, record.run_id);
+  fs.mkdirp(path.dirname(target));
+  fs.writeFile(target, `${JSON.stringify(record, null, 2)}\n`);
+}
+
+/** Caller must already hold withRunBindingExclusion for this run. */
+export function stagePendingSubstantiveOperation(opts: RunBindingLocator & { readonly task_id: string }): void {
+  const fs = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs);
+  if (prior?.state === "pending" && prior.task_id !== opts.task_id) {
+    throw new Error(`pending substantive operation for ${prior.task_id} must be recovered before ${opts.task_id}`);
+  }
+  if (prior?.state === "pending") return;
+  writePendingSubstantiveOperation(opts.root, {
+    schema_version: PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
+    state: "pending",
+    run_id: opts.run_id,
+    task_id: opts.task_id,
+  }, fs);
+}
+
+/** Caller must already hold withRunBindingExclusion for this run. */
+export function completePendingSubstantiveOperation(opts: RunBindingLocator & { readonly task_id: string }): void {
+  const fs = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs);
+  if (!prior || prior.task_id !== opts.task_id) throw new Error("pending substantive operation completion has no matching transaction");
+  if (prior.state === "complete") return;
+  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs);
+}
+
+/** Close-time fail-closed barrier; call while holding withRunBindingExclusion. */
+export function assertNoPendingSubstantiveOperation(opts: RunBindingLocator): void {
+  const record = readPendingSubstantiveOperation(opts.root, opts.run_id, opts.fs ?? realBindingFs());
+  if (record?.state === "pending") {
+    throw new Error(`pending substantive operation for ${record.task_id} must be recovered before lifecycle close`);
+  }
+}
+
 /**
  * Serialize a lifecycle-state transition with every receipt-producing runtime
  * write for the same run. Both close and compatibility reads use this exact

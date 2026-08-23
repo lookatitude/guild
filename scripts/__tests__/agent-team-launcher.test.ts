@@ -1247,6 +1247,8 @@ describe("agent-team-launcher.ts", () => {
       const manifestPath = path.join(tmpDir, ".guild", "runs", runId, "agent-team", "session.json");
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
       expect(manifest.backend).toBe("in-process");
+      expect(manifest.migration_observation_eligible).toBe(false);
+      expect(manifest.migration_observation_blocker).toMatch(/compatibility|scoped.*direct/i);
       expect(manifest.teammate_panes).toEqual([
         expect.objectContaining({ specialist: "custom-role", pane_id: "(unknown)" }),
       ]);
@@ -1283,6 +1285,7 @@ describe("agent-team-launcher.ts", () => {
       expect(dismissed.exitCode).toBe(0);
       expect(dismissed.stdout).toMatch(/\[TERMINATED\].*custom-role/);
       expect(readAttemptForInstance(tmpDir, cell.ids)?.terminal_state).toBe("terminated");
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", runId, "receipts", "payloads"))).toBe(false);
     });
 
     // A dry run retains the descriptor for inspection but marks it non-dispatchable.
@@ -2323,6 +2326,9 @@ describe("agent-team-launcher.ts", () => {
           events.push("binding-open");
           return { status: "ok", record: { state: "open" } };
         }) as never,
+        stage: (() => {
+          events.push("stage");
+        }) as never,
         seal: (() => {
           events.push("seal");
           return {};
@@ -2331,9 +2337,12 @@ describe("agent-team-launcher.ts", () => {
           events.push("record");
           return [{}];
         }) as never,
-      });
+        complete: (() => {
+          events.push("complete");
+        }) as never,
+      } as never);
       expect(result).toEqual({ emitted: 1 });
-      expect(events).toEqual(["lock", "binding-open", "seal", "record", "unlock"]);
+      expect(events).toEqual(["lock", "binding-open", "stage", "seal", "record", "complete", "unlock"]);
     });
 
     it("FU18: refuses a terminal mutation when lifecycle close already won", () => {
@@ -2354,8 +2363,10 @@ describe("agent-team-launcher.ts", () => {
       }, {
         withExclusion: ((_root: string, _runId: string, fn: () => unknown) => fn()) as never,
         readBinding: (() => ({ status: "ok", record: { state: "closed" } })) as never,
+        stage: (() => { throw new Error("stage must not run"); }) as never,
         seal: (() => { sealed = true; return {}; }) as never,
         recordUnderExclusion: (() => [{}]) as never,
+        complete: (() => { throw new Error("complete must not run"); }) as never,
       })).toThrow(/open run binding/i);
       expect(sealed).toBe(false);
     });

@@ -51,6 +51,7 @@ import {
 import { resolveSettings } from "../../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../../state";
 import {
+  assertNoPendingSubstantiveOperation,
   assertWritableBinding,
   closeRunBinding,
   initializeRunBindingExclusion,
@@ -988,6 +989,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // migration posture (fresh-run, open-unreferenced, legacy) authorizes a
       // close: a legacy run is migrated (mint via run start tooling) or refused.
       assertWritableBinding({ root, run_id: runId, binding_ref: opts.binding_ref, fs: env.fs });
+      assertNoPendingSubstantiveOperation({ root, run_id: runId, fs: env.fs });
 
       const facts = readStartFacts(env, root, runId);
       const runClass = facts.run_class;

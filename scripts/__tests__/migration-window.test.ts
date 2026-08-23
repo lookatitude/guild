@@ -320,7 +320,7 @@ function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: strin
   }
 }
 
-function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; taskCompletedAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; omitSubstantiveOperation?: boolean; detachedCompatibility?: boolean; taskCellChain?: "missing-handoff" | "missing-receipt" | "failed-validation" | "direct-handoff" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "reaped" | "orphaned-unreaped"; taskPrivatePath?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean; noisyTrace?: boolean } = {}) {
+function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; taskCompletedAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; omitSubstantiveOperation?: boolean; corruptCheckpointBeforeSubstantive?: boolean; detachedCompatibility?: boolean; taskCellChain?: "missing-handoff" | "missing-receipt" | "failed-validation" | "direct-handoff" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "reaped" | "orphaned-unreaped"; taskPrivatePath?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean; noisyTrace?: boolean } = {}) {
   const pluginRoot = fixture.claudePackageRoot;
   const assetPath = "templates/specialists/researcher.md";
   const assetBytes = Buffer.from("# researcher\n");
@@ -413,6 +413,9 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
     if (!timing.compatibilityOnly && !timing.omitSubstantiveOperation) {
       const taskCompletedAt = timing.taskCompletedAt ?? profileAt;
       const recordedAt = new Date(Math.max(Date.parse(profileAt), Date.parse(taskCompletedAt)) + 1).toISOString();
+      if (timing.corruptCheckpointBeforeSubstantive) {
+        writeFileSync(join(projectRoot, ".guild", "runs", runId, "receipts", "checkpoint.json"), "{}\n");
+      }
       jest.useFakeTimers({ now: new Date(recordedAt) });
       try { recordMigrationSubstantiveTaskOperation({ projectRoot, runId, taskId }); }
       finally { jest.useRealTimers(); }
@@ -665,6 +668,26 @@ describe("D03 evidence-bound migration window", () => {
         taskId: `task-${runId}`,
       })).toThrow(/while the run binding is open/i);
       expect(readFileSync(journalPath, "utf8")).toBe(before);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("propagates active migration journal corruption before lifecycle close", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = "run-20260821-090000-corrupt-substantive-checkpoint";
+    try {
+      expect(() => observationFixture(
+        projectRoot,
+        fixture,
+        runId,
+        false,
+        "observe",
+        "2026-08-21T09:00:00.000Z",
+        projectSourceCommit(projectRoot),
+        undefined,
+        { corruptCheckpointBeforeSubstantive: true },
+      )).toThrow(/checkpoint|journal.*intact/i);
+      expect(loadRunBinding({ root: projectRoot, run_id: runId })?.state).toBe("open");
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
