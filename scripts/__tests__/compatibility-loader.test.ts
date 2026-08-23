@@ -35,6 +35,10 @@ describe("instrumented compatibility loader", () => {
       expect(scan.records).toHaveLength(1);
       expect(scan.records[0].outcome_type).toBe("guild.capability_outcome.v1");
       expect(scan.records[0].disposition).toBe("degraded");
+      expect(result).toEqual(expect.objectContaining({
+        status: "loaded",
+        receipt_recorded_at: scan.records[0].recorded_at,
+      }));
       const canonicalVersion = JSON.parse(
         readFileSync(join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8"),
       ).version;

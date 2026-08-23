@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { captureMigrationRunBaseline, createMigrationBoundary, createMigrationObservation, profileBaselineFromMigrationRunBaseline, sealMigrationObservationRun, verifyMigrationObservation, writeMigrationBoundary, writeMigrationObservation } from "../lib/capability/migration-evidence";
+import { captureMigrationRunBaseline, createMigrationBoundary, createMigrationObservation, profileBaselineFromMigrationRunBaseline, recordMigrationSubstantiveTaskOperation, sealMigrationObservationRun, verifyMigrationObservation, verifySubstantiveMigrationObservation, writeMigrationBoundary, writeMigrationObservation } from "../lib/capability/migration-evidence";
 import { MIGRATION_RESTART_HISTORY_RELPATH, MIGRATION_TRANSITION_RELPATH, MIGRATION_WINDOW_RELPATH, MIGRATION_WINDOW_SCHEMA, advanceMigrationWindow, evaluateMigrationAdvance, inspectMigrationWindow, legacyRemovalEligibility, readMigrationWindow, recordMigrationRelease, recoverMigrationTransition, restartMigrationWindow, startMigrationWindow, validateMigrationRestartRecord, validateMigrationWindow, writeMigrationWindow } from "../lib/capability/migration-window";
 import { readCompatibilityAsset } from "../lib/capability/compatibility-loader";
 import { baselineBinding, emitCapabilityProfile, snapshotTreeHashes } from "../lib/capability/profile-emit";
@@ -12,6 +12,7 @@ import { appendReceipt, defaultJournalIo, makeReceiptInput, scanReceiptJournal, 
 import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../src/modules/lifecycle/workflows/run-lifecycle";
 import { closeRunBinding, loadRunBinding, mintRunBinding, reopenRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import { buildSessionContext, writeSessionContext } from "../../src/modules/host-runtime/workflows/session-context";
+import { buildTaskAssignmentV2, taskCellPaths } from "../../src/modules/dispatch/workflows/task-cell-contract";
 
 let mockGhFailure = false;
 let mockGhSourceDigest = "";
@@ -145,7 +146,181 @@ function writeRunState(
   }
 }
 
-function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean; noisyTrace?: boolean } = {}) {
+type TaskCellFixtureVariant = "done" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "private-path" | "reaped" | "orphaned-unreaped";
+
+function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: string, specialistId: string, completedAt: string, pointerReceipt = true, variant: TaskCellFixtureVariant = "done"): void {
+  const instanceId = `${taskId}.a1.i-fixture`;
+  const paths = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: 1, instance_id: instanceId });
+  const assignment = buildTaskAssignmentV2({
+    run_id: runId,
+    cell_id: `cell-${taskId}`,
+    goal_id: "goal-migration-observation",
+    phase_id: "build",
+    step_id: taskId,
+    team_id: "migration-observation",
+    logical_task_id: taskId,
+    task_run_id: `${taskId}.tr1`,
+    attempt: 1,
+    attempt_id: `${taskId}.att1`,
+    previous_attempt_id: null,
+    retry_reason: null,
+    instance_id: instanceId,
+    team_lead_instance_id: null,
+    lead_binding_id: "lead-binding-migration-observation",
+    worker_role: specialistId,
+    specialist_type_id: specialistId,
+    specialist_type_version: "1",
+    specialist_type_hash: "a".repeat(64),
+    specialist_profile_id: specialistId,
+    specialist_profile_hash: "b".repeat(64),
+    context_bundle_id: `.guild/context/${runId}/${specialistId}-${taskId}.md`,
+    context_bundle_hash: `sha256:${"c".repeat(64)}`,
+    host_id: "claude-code-cli",
+    adapter_id: "claude-code-cli@1",
+    host_capabilities_hash: `sha256:${"d".repeat(64)}`,
+    objective: variant === "private-path" ? `complete ${taskId} from /Users/alice/Projects/demo/src/input.ts` : `complete ${taskId}`,
+    non_goals: [],
+    scope_paths: [],
+    output_schema: "guild.handoff_receipt.v1",
+    acceptance_tests: [],
+    dependencies: [],
+    projection: { tools: ["Read"], permissions: [], recorded_losses: [] },
+    autonomy_policy: "supervised",
+    budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+    deadline: null,
+    written_at: completedAt,
+  });
+  const attempt = {
+    schema_version: "guild.task_attempt.v1",
+    run_id: runId,
+    cell_id: assignment.cell_id,
+    logical_task_id: taskId,
+    task_run_id: assignment.task_run_id,
+    attempt: 1,
+    attempt_id: assignment.attempt_id,
+    previous_attempt_id: null,
+    retry_reason: null,
+    instance_id: instanceId,
+    created_at: completedAt,
+    terminal_state: "terminated",
+    terminal_reason: variant === "reaped" ? "reaper: pane already gone" : "accepted",
+    terminated_at: variant === "early-termination" ? new Date(Date.parse(completedAt) - 1_000).toISOString() : completedAt,
+    immutable: true,
+    orphaned: variant === "reaped" || variant === "orphaned-unreaped",
+    reap_attempts: variant === "reaped" ? 1 : 0,
+  };
+  const receiptId = `receipt-${assignment.attempt_id}`;
+  const receiptSpecialist = variant === "foreign-specialist" ? "seo" : specialistId;
+  const receiptGeneratedAt = variant === "stale-receipt"
+    ? new Date(Date.parse(completedAt) - 1_000).toISOString()
+    : completedAt;
+  const handoffReceiptPath = `.guild/runs/${runId}/handoffs/${receiptSpecialist}-${taskId}.md`;
+  const envelope = {
+    schema_version: "guild.handoff.v2",
+    task_id: taskId,
+    tier: "mid",
+    status: variant === "blocked-handoff" ? "blocked" : "done",
+    summary: variant === "private-path" ? `completed /Users/alice/Projects/demo/src/output.ts for ${taskId}` : `completed ${taskId}`,
+    artifacts: [],
+    issues: [],
+  };
+  const handoffReceipt = [
+    "---",
+    "schema_version: guild.handoff_receipt.v1",
+    `task_id: ${taskId}`,
+    `specialist: ${receiptSpecialist}`,
+    "model_family: claude",
+    "host: claude-code-cli",
+    `generated_at: ${receiptGeneratedAt}`,
+    "---",
+    "",
+    ...(variant === "noncanonical-receipt" ? [] : [
+      "## changed_files", "- none", "",
+      "## opens_for", "- lead", "",
+      "## assumptions", "- none", "",
+      "## evidence", "- accepted fixture", "",
+      "## followups", "- none", "",
+    ]),
+    "```guild.handoff.v2",
+    JSON.stringify(envelope),
+    "```",
+    ...(variant === "duplicate-handoff" ? ["", "```guild.handoff.v2", JSON.stringify({ ...envelope, status: "blocked", summary: `conflicting ${taskId}` }), "```"] : []),
+    "",
+  ].join("\n");
+  const handoff = pointerReceipt ? {
+    receipt_id: receiptId,
+    receipt_path: handoffReceiptPath,
+    schema_valid: true,
+    claimed_changed_files: [],
+    acceptance_tests_passed: [],
+    submitted_at: completedAt,
+  } : {
+    schema_version: "guild.handoff_receipt.v1",
+    run_id: runId,
+    task_id: taskId,
+    instance_id: instanceId,
+    worker_role: specialistId,
+    status: "done",
+    changed_files: [],
+    opens_for: {},
+    assumptions: [],
+    evidence: ["production-shaped accepted task cell"],
+    followups: [],
+  };
+  const validation = {
+    schema_version: "guild.handoff_validation.v1",
+    validation_result_id: `validation-${assignment.attempt_id}`,
+    run_id: runId,
+    cell_id: assignment.cell_id,
+    logical_task_id: taskId,
+    task_run_id: assignment.task_run_id,
+    attempt: 1,
+    instance_id: instanceId,
+    assignment_id: `${assignment.task_run_id}:1:${instanceId}`,
+    receipt_id: receiptId,
+    schema_valid: true,
+    scope_valid: true,
+    tests_passed: true,
+    out_of_scope_files: [],
+    failed_acceptance_tests: [],
+    result: "passed",
+    reason: null,
+    validated_at: completedAt,
+  };
+  const acceptance = {
+    schema_version: "guild.handoff_acceptance.v1",
+    run_id: runId,
+    cell_id: assignment.cell_id,
+    logical_task_id: taskId,
+    task_run_id: assignment.task_run_id,
+    attempt: 1,
+    instance_id: instanceId,
+    assignment_id: `${assignment.task_run_id}:1:${instanceId}`,
+    receipt_id: receiptId,
+    validation_result_id: validation.validation_result_id,
+    acceptance_policy_version: "1.0.0",
+    authorities_required: ["deterministic_floor", "team_lead"],
+    authorities_observed: [
+      { authority: "deterministic_floor", decision: "accepted", at: completedAt, reason: null },
+      { authority: "team_lead", decision: "accepted", at: completedAt, reason: null },
+    ],
+    reviewer_cell_id: null,
+    downstream_release_at: completedAt,
+    termination_authorized_at: variant === "early-authorization" ? new Date(Date.parse(completedAt) - 1_000).toISOString() : completedAt,
+  };
+  if (pointerReceipt) {
+    const receiptTarget = join(projectRoot, handoffReceiptPath);
+    mkdirSync(dirname(receiptTarget), { recursive: true });
+    writeFileSync(receiptTarget, handoffReceipt);
+  }
+  for (const [relativePath, value] of [[paths.assignment_path, assignment], [paths.handoff_path, handoff], [paths.validation_path, validation], [paths.attempt_path, attempt], [paths.acceptance_path, acceptance]] as const) {
+    const target = join(projectRoot, relativePath);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+  }
+}
+
+function observationFixture(projectRoot: string, fixture: ReturnType<typeof boundaryFixture>, runId: string, synthetic = false, mode: "observe" | "shadow" = "observe", generatedAt?: string, sourceCommit: string | null = projectSourceCommit(projectRoot), tamperRuntimeBinding?: "host" | "tree", timing: { baselineAt?: string; receiptAt?: string; taskCompletedAt?: string; closeAt?: string; removeBaseline?: boolean; removeBaselineReceipt?: boolean; leaveRunOpen?: boolean; omitTerminalSeal?: boolean; omitProvenance?: boolean; omitTerminalTrace?: boolean; tamperTerminalTrace?: boolean; corruptProfileAfterSeal?: boolean; mutateAfterProfile?: boolean; mutateAfterSeal?: boolean; tamperSessionAfterSeal?: boolean; unresolvedIdentity?: boolean; compatibilityOnly?: boolean; omitSubstantiveOperation?: boolean; detachedCompatibility?: boolean; taskCellChain?: "missing-handoff" | "missing-receipt" | "failed-validation" | "direct-handoff" | "blocked-handoff" | "duplicate-handoff" | "noncanonical-receipt" | "early-termination" | "early-authorization" | "foreign-specialist" | "stale-receipt" | "reaped" | "orphaned-unreaped"; taskPrivatePath?: boolean; plantedCredential?: boolean; plantedEntropy?: boolean; noisyTrace?: boolean } = {}) {
   const pluginRoot = fixture.claudePackageRoot;
   const assetPath = "templates/specialists/researcher.md";
   const assetBytes = Buffer.from("# researcher\n");
@@ -153,6 +328,7 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
   const receiptAt = timing.receiptAt ?? new Date(Date.parse(profileAt) - 1_000).toISOString();
   const baselineAt = timing.baselineAt ?? new Date(Date.parse(profileAt) - 2_000).toISOString();
   const runStartedAt = new Date(Date.parse(baselineAt) - 1_000).toISOString();
+  const taskId = `task-${runId}`;
   const manifestExtra = `${timing.plantedCredential ? "operator_note: api_key=sk-abcdefghijklmnop\n" : ""}${timing.plantedEntropy ? `arbitrary_entropy: ${"f".repeat(64)}\n` : ""}`;
   writeRunState(projectRoot, runId, runStartedAt, "open", undefined, { manifestExtra });
   const binding = loadRunBinding({ root: projectRoot, run_id: runId })!;
@@ -182,9 +358,9 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
     loaded = readCompatibilityAsset({
       pluginRoot, runtimeHost: "claude-code-cli", projectRoot,
       entry: { kind: "shipped_template", id: "researcher", path: assetPath, content_hash: createHash("sha256").update(assetBytes).digest("hex"), deprecation: "deprecated", deprecated_by: "cap-loc-D03" },
-      mode, intent: mode === "shadow" ? "shadow_compare" : "dispatch", synthetic, specialistId: timing.compatibilityOnly ? null : "researcher", runId,
+      mode, intent: mode === "shadow" ? "shadow_compare" : "dispatch", synthetic, specialistId: "researcher", runId,
       bindingRef: binding.binding_ref,
-      operationId: `migration-${mode}`,
+      operationId: timing.detachedCompatibility ? `task-cell-identity-other-task-researcher` : `task-cell-identity-${taskId}-researcher`,
     });
   } finally { jest.useRealTimers(); }
   expect(loaded.status).toBe("loaded");
@@ -211,9 +387,39 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
   }
   if (!timing.leaveRunOpen && !timing.omitTerminalSeal) {
     const closedAt = timing.closeAt ?? new Date(Date.parse(profileAt) + 1_000).toISOString();
+    const fixtureVariant: TaskCellFixtureVariant = timing.taskPrivatePath
+      ? "private-path"
+      : (["blocked-handoff", "duplicate-handoff", "noncanonical-receipt", "early-termination", "early-authorization", "foreign-specialist", "stale-receipt", "reaped", "orphaned-unreaped"] as const).includes(timing.taskCellChain as never)
+        ? timing.taskCellChain as TaskCellFixtureVariant
+        : "done";
+    if (!timing.compatibilityOnly) writeAcceptedTaskCell(projectRoot, runId, taskId, "researcher", timing.taskCompletedAt ?? profileAt, timing.taskCellChain !== "direct-handoff", fixtureVariant);
+    if (timing.taskCellChain === "missing-handoff") {
+      const paths = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: 1, instance_id: `${taskId}.a1.i-fixture` });
+      rmSync(join(projectRoot, paths.handoff_path), { force: true });
+    }
+    if (timing.taskCellChain === "missing-receipt") {
+      rmSync(join(projectRoot, `.guild/runs/${runId}/handoffs/researcher-${taskId}.md`), { force: true });
+    }
+    if (timing.taskCellChain === "failed-validation") {
+      const paths = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: 1, instance_id: `${taskId}.a1.i-fixture` });
+      const validationPath = join(projectRoot, paths.validation_path);
+      const validation = JSON.parse(readFileSync(validationPath, "utf8"));
+      validation.result = "failed";
+      validation.tests_passed = false;
+      validation.failed_acceptance_tests = ["planted failure"];
+      validation.reason = "planted failure";
+      writeFileSync(validationPath, `${JSON.stringify(validation, null, 2)}\n`);
+    }
+    if (!timing.compatibilityOnly && !timing.omitSubstantiveOperation) {
+      const taskCompletedAt = timing.taskCompletedAt ?? profileAt;
+      const recordedAt = new Date(Math.max(Date.parse(profileAt), Date.parse(taskCompletedAt)) + 1).toISOString();
+      jest.useFakeTimers({ now: new Date(recordedAt) });
+      try { recordMigrationSubstantiveTaskOperation({ projectRoot, runId, taskId }); }
+      finally { jest.useRealTimers(); }
+    }
     writeRunState(projectRoot, runId, runStartedAt, "closed", closedAt, {
       manifestExtra,
-      touchedTasks: timing.compatibilityOnly ? [] : [`task:${runId}`],
+      touchedTasks: [taskId],
       traceExtra: timing.noisyTrace ? [{
         schema_version: "guild.trace.analysis.v2",
         event_class: "tool_call_finished",
@@ -241,7 +447,7 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
   }
   if (!timing.leaveRunOpen && timing.omitTerminalSeal) writeRunState(projectRoot, runId, runStartedAt, "closed", new Date(Date.parse(profileAt) + 1_000).toISOString(), {
     manifestExtra,
-    touchedTasks: timing.compatibilityOnly ? [] : [`task:${runId}`],
+    touchedTasks: [`task-${runId}`],
   });
   if (timing.corruptProfileAfterSeal) writeFileSync(join(projectRoot, ".guild", "runs", runId, "capability", "profile.json"), "{broken\n");
   if (timing.removeBaseline) rmSync(join(projectRoot, ".guild", "runs", runId, "capability", "run-start-baseline.json"));
@@ -263,7 +469,7 @@ function asLegacyObservation(observation: ReturnType<typeof observationFixture>[
   const body = {
     ...observation,
     schema_version: "guild.capability_migration_observation.v1",
-    runs: observation.runs.map(({ run_manifest: _runManifest, provenance: _provenance, source_provenance_sha256: _sourceProvenanceSha256, source_session_context_sha256: _sourceSessionContextSha256, terminal_trace_log: _terminalTraceLog, start_snapshot: _startSnapshot, baseline: _baseline, session_context: _sessionContext, ...run }) => run),
+    runs: observation.runs.map(({ run_manifest: _runManifest, provenance: _provenance, source_provenance_sha256: _sourceProvenanceSha256, source_session_context_sha256: _sourceSessionContextSha256, terminal_trace_log: _terminalTraceLog, start_snapshot: _startSnapshot, baseline: _baseline, session_context: _sessionContext, substantive_operations: _substantiveOperations, substantive_evidence: _substantiveEvidence, ...run }) => run),
   } as Record<string, unknown>;
   delete body.observation_hash;
   return { ...body, observation_hash: createHash("sha256").update(canonical(body)).digest("hex") };
@@ -356,8 +562,39 @@ describe("D03 evidence-bound migration window", () => {
     try {
       const evidence = observationFixture(projectRoot, fixture, "run-20260821-090000-portable-observation", false, "observe", "2026-08-21T09:00:00.000Z");
       renameSync(projectRoot, movedRoot);
+      rmSync(join(movedRoot, ".guild", "runs", "run-20260821-090000-portable-observation"), { recursive: true, force: true });
       expect(verifyMigrationObservation(movedRoot, evidence.observation)).toEqual(evidence.observation);
+      expect(verifySubstantiveMigrationObservation(movedRoot, evidence.observation)).toEqual(evidence.observation);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(movedRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("binds substantive operations to scrub-clean projected task-cell hashes", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(projectRoot, fixture, "run-20260821-090000-projected-task-cell", false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, { taskPrivatePath: true });
+      const run = evidence.observation.runs[0];
+      const assignmentRef = run.substantive_evidence!.find((ref) => ref.path.endsWith("/assignment.json"))!;
+      const operationRef = run.substantive_operations![0];
+      const assignmentBytes = readFileSync(join(projectRoot, assignmentRef.path));
+      const operation = JSON.parse(readFileSync(join(projectRoot, operationRef.path), "utf8"));
+      expect(assignmentBytes.toString("utf8")).toContain("<workspace-root>/src/input.ts");
+      expect(assignmentBytes.toString("utf8")).not.toContain("/Users/alice/Projects/demo");
+      expect(operation.projected_assignment_sha256).toBe(createHash("sha256").update(assignmentBytes).digest("hex"));
+      expect(operation.assignment_sha256).not.toBe(operation.projected_assignment_sha256);
+      expect(verifyMigrationObservation(projectRoot, evidence.observation)).toEqual(evidence.observation);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("refuses tampering with retained substantive task-cell bytes", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(projectRoot, fixture, "run-20260821-090000-tampered-task-cell", false, "observe", "2026-08-21T09:00:00.000Z");
+      const retained = evidence.observation.runs[0].substantive_evidence![0];
+      writeFileSync(join(projectRoot, retained.path), "{}\n");
+      expect(() => verifyMigrationObservation(projectRoot, evidence.observation)).toThrow(/evidence hash mismatch|substantive evidence/i);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
   it.each([
@@ -384,6 +621,72 @@ describe("D03 evidence-bound migration window", () => {
       startMigrationWindow({ projectRoot, projectId: "fx-project", mode: "observe", boundaryPath: fixture.boundaryPath, actor: "operator" });
       expect(() => observationFixture(projectRoot, fixture, runId, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, timing)).toThrow(message);
       expect(readMigrationWindow(projectRoot)?.observations).toEqual([]);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("does not let terminal sealing manufacture a substantive operation for an otherwise accepted task cell", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      expect(() => observationFixture(projectRoot, fixture, "run-20260821-090000-no-preclose-operation", false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, { omitSubstantiveOperation: true }))
+        .toThrow(/pre-existing resolver-emitted substantive operation/i);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("admits an accepted attempt after a successful reaper terminal transition", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      expect(() => observationFixture(projectRoot, fixture, "run-20260821-090000-reaped-success", false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, { taskCellChain: "reaped" }))
+        .not.toThrow();
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("refuses an orphan flag without a successful reaper history", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      expect(() => observationFixture(projectRoot, fixture, "run-20260821-090000-orphan-unreaped", false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, { taskCellChain: "orphaned-unreaped" }))
+        .toThrow(/accepted task cell|substantive/i);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it("refuses substantive evidence recording after lifecycle close without changing the journal", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const runId = "run-20260821-090000-post-close-operation";
+    try {
+      observationFixture(projectRoot, fixture, runId, false, "observe", "2026-08-21T09:00:00.000Z");
+      const journalPath = join(projectRoot, ".guild", "runs", runId, "receipts", "journal.jsonl");
+      const before = readFileSync(journalPath, "utf8");
+      expect(() => recordMigrationSubstantiveTaskOperation({
+        projectRoot,
+        runId,
+        taskId: `task-${runId}`,
+      })).toThrow(/while the run binding is open/i);
+      expect(readFileSync(journalPath, "utf8")).toBe(before);
+    } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
+  });
+
+  it.each([
+    ["missing handoff", "no-handoff", { taskCellChain: "missing-handoff" as const }],
+    ["missing referenced receipt", "no-receipt", { taskCellChain: "missing-receipt" as const }],
+    ["failed deterministic validation", "bad-validation", { taskCellChain: "failed-validation" as const }],
+    ["a direct JSON handoff substituted for the canonical pointer chain", "direct-handoff", { taskCellChain: "direct-handoff" as const }],
+    ["a blocked handoff envelope", "blocked-handoff", { taskCellChain: "blocked-handoff" as const }],
+    ["duplicate handoff envelopes", "duplicate-handoff", { taskCellChain: "duplicate-handoff" as const }],
+    ["a noncanonical receipt wrapper", "noncanonical-receipt", { taskCellChain: "noncanonical-receipt" as const }],
+    ["termination before acceptance", "early-termination", { taskCellChain: "early-termination" as const }],
+    ["termination authorization before validation", "early-authorization", { taskCellChain: "early-authorization" as const }],
+    ["a receipt from another specialist", "foreign-specialist", { taskCellChain: "foreign-specialist" as const }],
+    ["a receipt generated before assignment", "stale-receipt", { taskCellChain: "stale-receipt" as const }],
+    ["compatibility read for another task", "wrong-task", { detachedCompatibility: true }],
+    ["compatibility read not preceding task assignment", "late-read", { receiptAt: "2026-08-21T08:59:59.000Z", taskCompletedAt: "2026-08-21T08:59:59.000Z" }],
+  ])("refuses a substantive operation with %s", (_label, slug, timing) => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      expect(() => observationFixture(projectRoot, fixture, `run-20260821-090000-chain-${slug}`, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), undefined, timing)).toThrow(/accepted task-cell|distinct substantive operation|pre-existing resolver-emitted substantive operation/i);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
@@ -466,7 +769,7 @@ describe("D03 evidence-bound migration window", () => {
       expect(() => observationFixture(projectRoot, fixture, "run-20260821-090000-early-profile", false, "observe", profileAt, projectSourceCommit(projectRoot), undefined, {
         baselineAt: "2026-08-21T08:59:58.000Z",
         receiptAt: "2026-08-21T09:00:01.000Z",
-      })).toThrow(/profile predates compatibility dispatch/i);
+      })).toThrow(/profile predates compatibility dispatch|distinct substantive operation|pre-existing resolver-emitted substantive operation/i);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 
@@ -506,7 +809,12 @@ describe("D03 evidence-bound migration window", () => {
       expect(() => observationFixture(projectRoot, fixture, runId, false, "observe", profileAt, projectSourceCommit(projectRoot), undefined, { leaveRunOpen: true })).toThrow(/terminal closed run manifest before snapshotting/i);
       const retainedRun = join(projectRoot, ".guild", "artifacts", "capability", "migration-evidence", fixture.boundary.boundary_hash, runId, "run.yaml");
       expect(existsSync(retainedRun)).toBe(false);
-      writeRunState(projectRoot, runId, "2026-08-21T08:59:57.000Z", "closed", "2026-08-21T09:00:01.000Z", { touchedTasks: [`task:${runId}`] });
+      const taskId = `task-${runId}`;
+      writeAcceptedTaskCell(projectRoot, runId, taskId, "researcher", profileAt);
+      jest.useFakeTimers({ now: new Date("2026-08-21T09:00:00.001Z") });
+      try { recordMigrationSubstantiveTaskOperation({ projectRoot, runId, taskId }); }
+      finally { jest.useRealTimers(); }
+      writeRunState(projectRoot, runId, "2026-08-21T08:59:57.000Z", "closed", "2026-08-21T09:00:01.000Z", { touchedTasks: [taskId] });
       jest.useFakeTimers({ now: new Date("2026-08-21T09:00:02.000Z") });
       try { sealMigrationObservationRun({ projectRoot, runId }); }
       finally { jest.useRealTimers(); }
@@ -1047,7 +1355,7 @@ describe("D03 evidence-bound migration window", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
     const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
     try {
-      expect(() => observationFixture(projectRoot, fixture, `run-20260821-090000-wrong-${binding}`, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), binding)).toThrow(/no non-synthetic/i);
+      expect(() => observationFixture(projectRoot, fixture, `run-20260821-090000-wrong-${binding}`, false, "observe", "2026-08-21T09:00:00.000Z", projectSourceCommit(projectRoot), binding)).toThrow(/no non-synthetic|substantive operation.*specialist|pre-existing resolver-emitted substantive operation/i);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });
 

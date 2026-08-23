@@ -94,6 +94,14 @@ import { parseFrontmatter } from "./lib/frontmatter";
 import { definitionRefForDispatch } from "./lib/capability/definition-ref-for-dispatch";
 import { buildCompatibilityCatalog, type CompatibilityCatalog } from "./lib/capability/compatibility-catalog";
 import { readCompatibilityAsset } from "./lib/capability/compatibility-loader";
+import {
+  recordMigrationSubstantiveTaskOperation,
+  recordMigrationSubstantiveTaskOperationUnderExclusion,
+} from "./lib/capability/migration-evidence";
+import {
+  readRunBindingRecord,
+  withRunBindingExclusion,
+} from "../src/modules/lifecycle/workflows/run-binding";
 import type { CapabilityResolverMode } from "../src/modules/config";
 // P1-3 A2b: force-reap of dead panes. (Receipt-based `detectDismissible` is
 // retired from the dismiss path — dismissal is acceptance-gated in G4, below.)
@@ -122,6 +130,7 @@ import {
   type RunAcceptance,
   type TaskCellInstanceIds,
 } from "../src/modules/dispatch/workflows/task-cell-acceptance";
+
 import { reconcileTaskCellLifecycleTelemetry } from "../src/modules/dispatch/workflows/task-cell-telemetry-reconcile";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
@@ -211,6 +220,113 @@ import {
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
 import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2-A2(d)
 import { captureHostCapabilitySnapshot } from "../src/modules/host-runtime";
+
+export interface TerminalSubstantiveReconciliation {
+  readonly attempted: number;
+  readonly emitted: number;
+  readonly errors: readonly string[];
+}
+
+export interface AtomicTerminalSubstantiveResult {
+  readonly emitted: number;
+}
+
+/**
+ * Linearize an accepted terminal transition and its substantive receipt against
+ * lifecycle close. A close that wins the exclusion is refused before any
+ * terminal mutation; a terminal transition that wins retains the open binding
+ * through the evidence append, so close cannot strand the operation between the
+ * two durable writes.
+ */
+export function sealTerminalAttemptWithSubstantiveEvidence(
+  input: {
+    readonly cwd: string;
+    readonly runId: string;
+    readonly ids: TaskCellInstanceIds;
+    readonly terminalState: "terminated" | "rejected";
+    readonly reason: string | null;
+    readonly accepted: boolean;
+    readonly orphaned?: boolean;
+    readonly now: () => string;
+  },
+  deps: {
+    readonly withExclusion: typeof withRunBindingExclusion;
+    readonly readBinding: typeof readRunBindingRecord;
+    readonly seal: typeof sealTerminalAttempt;
+    readonly recordUnderExclusion: typeof recordMigrationSubstantiveTaskOperationUnderExclusion;
+  } = {
+    withExclusion: withRunBindingExclusion,
+    readBinding: readRunBindingRecord,
+    seal: sealTerminalAttempt,
+    recordUnderExclusion: recordMigrationSubstantiveTaskOperationUnderExclusion,
+  },
+): AtomicTerminalSubstantiveResult {
+  return deps.withExclusion(input.cwd, input.runId, () => {
+    const binding = deps.readBinding({ root: input.cwd, run_id: input.runId });
+    if (binding.status !== "ok" || binding.record.state !== "open") {
+      throw new Error("terminal TaskCell transition requires an open run binding");
+    }
+    deps.seal({
+      cwd: input.cwd,
+      ids: input.ids,
+      terminal_state: input.terminalState,
+      reason: input.reason,
+      ...(input.orphaned === undefined ? {} : { orphaned: input.orphaned }),
+      now: input.now,
+    });
+    const emitted = input.accepted
+      ? deps.recordUnderExclusion({
+          projectRoot: input.cwd,
+          runId: input.runId,
+          taskId: input.ids.logical_task_id,
+        }).length
+      : 0;
+    return Object.freeze({ emitted });
+  });
+}
+
+/**
+ * Repair the crash boundary between terminal-attempt sealing and substantive
+ * migration evidence recording. An accepted attempt that was already sealed on
+ * a prior dismiss pass is deliberately revisited; rejected/non-terminal attempts
+ * never qualify. The default dependencies are injectable only for the planted
+ * recovery control in the launcher suite.
+ */
+export function reconcileTerminalSubstantiveOperations(
+  input: {
+    readonly cwd: string;
+    readonly runId: string;
+    readonly acceptances: readonly RunAcceptance[];
+  },
+  deps: {
+    readonly readAttempt: typeof readAttemptForInstance;
+    readonly record: typeof recordMigrationSubstantiveTaskOperation;
+  } = {
+    readAttempt: readAttemptForInstance,
+    record: recordMigrationSubstantiveTaskOperation,
+  },
+): TerminalSubstantiveReconciliation {
+  let attempted = 0;
+  let emitted = 0;
+  const errors: string[] = [];
+  for (const ra of input.acceptances) {
+    if (ra.acceptance.downstream_release_at === null) continue;
+    if (deps.readAttempt(input.cwd, ra.ids)?.terminal_state !== "terminated") continue;
+    attempted++;
+    try {
+      emitted += deps.record({
+        projectRoot: input.cwd,
+        runId: input.runId,
+        taskId: ra.ids.logical_task_id,
+      }).length;
+    } catch (error) {
+      errors.push(
+        `${ra.ids.logical_task_id}/${ra.ids.instance_id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return Object.freeze({ attempted, emitted, errors: Object.freeze(errors) });
+}
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -683,7 +799,7 @@ function parseFlowList(value: string): string[] {
 
 interface Manifest {
   run_id: string;
-  backend: "tmux" | "cmux";
+  backend: "tmux" | "cmux" | "in-process";
   mode: LaunchMode;
   session_name: string;
   // Non-null only in in-session mode: the window we created in the current
@@ -722,7 +838,7 @@ function buildManifest(opts: {
   dryRun: boolean;
   realPaneIds: { orchestrator: string; teammates: Record<string, string> } | null;
   orchestratorHostKind?: HostKind;
-  backend?: "tmux" | "cmux";
+  backend?: "tmux" | "cmux" | "in-process";
 }): Manifest {
   const {
     runId,
@@ -978,7 +1094,7 @@ function readSpecialistTemplateCompatibility(
   logicalTaskId: string,
   specialist: TaskCellLaunchLane,
   runtimeRoot: string,
-): Buffer | null {
+): { readonly bytes: Buffer; readonly receiptRecordedAt: string } | null {
   const mode = compatibilityResolverMode(cwd);
   if (mode === "project-local" || mode === "strict") return null;
 
@@ -1013,7 +1129,7 @@ function readSpecialistTemplateCompatibility(
       `compatibility_read_refused: ${specialist.name}/${logicalTaskId} — ${loaded.detail}`,
     );
   }
-  return loaded.bytes;
+  return { bytes: loaded.bytes, receiptRecordedAt: loaded.receipt_recorded_at };
 }
 
 function specialistIdentity(
@@ -1028,6 +1144,7 @@ function specialistIdentity(
   typeHash: string;
   profileId: string;
   profileHash: string;
+  compatibilityRecordedAt: string | null;
 } {
   const ref = specialist.definition_ref;
   if (ref?.specialist_type_hash && ref.specialist_profile_hash) {
@@ -1037,6 +1154,7 @@ function specialistIdentity(
       typeHash: ref.specialist_type_hash,
       profileId: specialist.name,
       profileHash: ref.specialist_profile_hash,
+      compatibilityRecordedAt: null,
     };
   }
 
@@ -1047,7 +1165,7 @@ function specialistIdentity(
     ? path.resolve(definitionRoot, specialist.definition)
     : null;
   const definitionBytes = definitionPath ? readRegularFile(definitionPath) : null;
-  const templateBytes = readSpecialistTemplateCompatibility(
+  const templateRead = readSpecialistTemplateCompatibility(
     cwd,
     runId,
     bindingRef,
@@ -1055,6 +1173,7 @@ function specialistIdentity(
     specialist,
     runtimeRoot,
   );
+  const templateBytes = templateRead?.bytes ?? null;
   const templateFm = templateBytes ? parseFrontmatter(templateBytes.toString("utf8")) : null;
   const projectedType = templateFm
     ? specialistTypeFromTemplateFrontmatter(templateFm)
@@ -1110,6 +1229,7 @@ function specialistIdentity(
     typeHash,
     profileId: profile.profile_id,
     profileHash: hashSpecialistProfile(profile),
+    compatibilityRecordedAt: templateRead?.receiptRecordedAt ?? null,
   };
 }
 
@@ -1164,6 +1284,17 @@ function emitTaskCellsV2(
     const hostId = hostIdFor(s);
     const logicalTaskId = s.taskId;
     const identity = specialistIdentity(cwd, runId, bindingRef, logicalTaskId, s);
+    const compatibilityRecordedAtMillis = identity.compatibilityRecordedAt === null
+      ? Number.NEGATIVE_INFINITY
+      : Date.parse(identity.compatibilityRecordedAt);
+    if (identity.compatibilityRecordedAt !== null && !Number.isFinite(compatibilityRecordedAtMillis)) {
+      throw new Error(`compatibility_read_refused: ${s.name}/${logicalTaskId} — receipt time is invalid`);
+    }
+    // The compatibility read occurs before TaskCell construction. Preserve that
+    // causal order even when both operations fall in the same wall-clock
+    // millisecond, so later evidence can prove the asset was available before
+    // assignment rather than merely before acceptance.
+    const assignmentWrittenAt = new Date(Math.max(Date.now(), compatibilityRecordedAtMillis + 1)).toISOString();
     const tools = s.capability_scope ?? [];
     // Fresh, per-TASK context pointer — never shared across a specialist's tasks (D3).
     const contextRef = path.join(".guild", "context", runId, `${s.name}-${logicalTaskId}.md`);
@@ -1209,7 +1340,7 @@ function emitTaskCellsV2(
         budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
         deadline: null,
         leadBindingId,
-        now: () => new Date().toISOString(),
+        now: () => assignmentWrittenAt,
     });
     writeTaskCell(cwd, cell, { binding_ref: bindingRef });
     written += 1;
@@ -1860,15 +1991,20 @@ async function main(): Promise<void> {
       // parked (adversarial test 6). This is the production end-to-end retry.
       const orphans = findOrphanedAttempts(cwd, runId);
       if (orphans.length > 0) {
+        const acceptedKeys = new Set(
+          findRunAcceptances(cwd, runId)
+            .filter((ra) => ra.acceptance.downstream_release_at !== null)
+            .map((ra) => `${ra.ids.logical_task_id}/${ra.ids.attempt}/${ra.ids.instance_id}`),
+        );
         const paneBySpec = new Map<string, string>();
         const paneByTask = new Map<string, string>();
-        let manifestBackend: "tmux" | "cmux" = "tmux";
+        let manifestBackend: "tmux" | "cmux" | "in-process" = "tmux";
         try {
           const sj = JSON.parse(fs.readFileSync(sjPath, "utf8")) as {
-            backend?: "tmux" | "cmux";
+            backend?: "tmux" | "cmux" | "in-process";
             teammate_panes?: Array<{ specialist?: string; task_id?: string; pane_id?: string }>;
           };
-          manifestBackend = sj.backend === "cmux" ? "cmux" : "tmux";
+          manifestBackend = sj.backend === "cmux" ? "cmux" : sj.backend === "in-process" ? "in-process" : "tmux";
           for (const p of sj.teammate_panes ?? []) {
             if (p.specialist && p.pane_id) paneBySpec.set(p.specialist, p.pane_id);
             if (p.task_id && p.pane_id) paneByTask.set(p.task_id, p.pane_id);
@@ -1882,7 +2018,12 @@ async function main(): Promise<void> {
           // No live pane (pruned/gone) → the pane died; confirm the orphan terminal.
           if (!hasRealPane) {
             try {
-              sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: "reaper: pane already gone", orphaned: true, now: nowIso });
+              sealTerminalAttemptWithSubstantiveEvidence({
+                cwd, runId, ids, terminalState: "terminated", reason: "reaper: pane already gone",
+                orphaned: true,
+                accepted: acceptedKeys.has(`${ids.logical_task_id}/${ids.attempt}/${ids.instance_id}`),
+                now: nowIso,
+              });
               totalOrphansReaped++;
               process.stdout.write(
                 `[REAPED] run "${runId}" specialist="${specialist ?? "unknown"}" ` +
@@ -1897,7 +2038,12 @@ async function main(): Promise<void> {
             : terminatePane(paneId as string);
           if (outcome.ok && outcome.confirmed) {
             try {
-              sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: "reaper retry confirmed pane death", orphaned: true, now: nowIso });
+              sealTerminalAttemptWithSubstantiveEvidence({
+                cwd, runId, ids, terminalState: "terminated", reason: "reaper: retry confirmed pane death",
+                orphaned: true,
+                accepted: acceptedKeys.has(`${ids.logical_task_id}/${ids.attempt}/${ids.instance_id}`),
+                now: nowIso,
+              });
               totalOrphansReaped++;
               process.stdout.write(
                 `[REAPED] run "${runId}" specialist="${specialist}" ` +
@@ -1914,6 +2060,25 @@ async function main(): Promise<void> {
           }
           // outcome.degraded (tmux unavailable) → leave parked, no bump; retried next --reap.
         }
+      }
+
+      // Reaping is a supported accepted-terminal transition too. Reconcile
+      // after every sweep (also covering a crash after the seal) so an accepted
+      // orphan that just reached `terminated` receives the same substantive
+      // evidence as the normal dismiss path. Without an active migration window
+      // the recorder is intentionally inert.
+      const reconciled = reconcileTerminalSubstantiveOperations({
+        cwd,
+        runId,
+        acceptances: findRunAcceptances(cwd, runId).filter((ra) =>
+          isTerminationAuthorized(ra.acceptance)
+        ),
+      });
+      for (const error of reconciled.errors) {
+        process.stderr.write(
+          `[agent-team-launcher] --reap: substantive evidence remains pending for ${error}; ` +
+            `retry --reap while the run is open\n`,
+        );
       }
     }
 
@@ -1963,7 +2128,7 @@ async function main(): Promise<void> {
     }
 
     let sessionManifest: {
-      backend?: "tmux" | "cmux";
+      backend?: "tmux" | "cmux" | "in-process";
       session_name?: string;
       teammate_panes?: Array<{
         specialist: string;
@@ -2011,6 +2176,8 @@ async function main(): Promise<void> {
     let terminatedCount = 0;
     let orphanedCount = 0;
     let deferredCount = 0;
+    let substantiveEvidenceCount = 0;
+    let substantiveEvidencePendingCount = 0;
     const now = () => new Date().toISOString();
     const keyOf = (i: TaskCellInstanceIds) =>
       `${i.logical_task_id}/${i.attempt}/${i.instance_id}`;
@@ -2040,6 +2207,24 @@ async function main(): Promise<void> {
       authBySpecialist.set(specialist, arr);
     }
 
+    // Crash recovery: terminal attempts are immutable and are intentionally
+    // skipped by the teardown loops below. Revisit accepted terminal attempts
+    // here so a prior process stop between terminal sealing and evidence append
+    // converges on the next --dismiss-completed pass.
+    const recovered = reconcileTerminalSubstantiveOperations({
+      cwd,
+      runId,
+      acceptances: authorized,
+    });
+    substantiveEvidenceCount += recovered.emitted;
+    substantiveEvidencePendingCount += recovered.errors.length;
+    for (const error of recovered.errors) {
+      process.stderr.write(
+        `[agent-team-launcher] --dismiss-completed: substantive evidence remains pending for ${error}; ` +
+          `retry --dismiss-completed while the run is open\n`,
+      );
+    }
+
     // A rejected acceptance still authorizes teardown, but writes a rejection
     // terminal event — never a silent kill (D5). Accepted → `terminated`.
     const sealOne = (specialist: string, ra: RunAcceptance, mechanism: string, paneLabel: string): void => {
@@ -2047,12 +2232,21 @@ async function main(): Promise<void> {
       const terminalState = rejected ? "rejected" : "terminated";
       const terminalReason = rejected ? "handoff rejected by acceptance authority" : null;
       try {
-        sealTerminalAttempt({ cwd, ids: ra.ids, terminal_state: terminalState, reason: terminalReason, now });
+        const terminal = sealTerminalAttemptWithSubstantiveEvidence({
+          cwd,
+          runId,
+          ids: ra.ids,
+          terminalState,
+          reason: terminalReason,
+          accepted: !rejected,
+          now,
+        });
         terminatedCount++;
         process.stdout.write(
           `[TERMINATED] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" ` +
             `instance="${ra.ids.instance_id}" pane="${paneLabel}" state=${terminalState} mechanism="${mechanism}"\n`
         );
+        substantiveEvidenceCount += terminal.emitted;
       } catch (err) {
         process.stderr.write(
           `[agent-team-launcher] --dismiss-completed: could not seal terminal record for ` +
@@ -2162,7 +2356,7 @@ async function main(): Promise<void> {
       }
     }
 
-    if (terminatedCount === 0 && orphanedCount === 0 && deferredCount === 0) {
+    if (terminatedCount === 0 && orphanedCount === 0 && deferredCount === 0 && substantiveEvidenceCount === 0 && substantiveEvidencePendingCount === 0) {
       process.stdout.write(
         `[agent-team-launcher] --dismiss-completed: no acceptance-authorized lanes to ` +
           `terminate for run "${runId}" (a receipt on disk does NOT authorize dismissal — ` +
@@ -2172,7 +2366,8 @@ async function main(): Promise<void> {
       process.stdout.write(
         `[agent-team-launcher] --dismiss-completed: run "${runId}" — terminated ` +
           `${terminatedCount} lane(s), ${orphanedCount} orphaned (reaper will retry), ` +
-          `${deferredCount} deferred (shared pane kept alive until all its task-cells are terminal — G4 M2).\n`
+          `${deferredCount} deferred (shared pane kept alive until all its task-cells are terminal — G4 M2), ` +
+          `${substantiveEvidenceCount} substantive evidence record(s), ${substantiveEvidencePendingCount} pending retry.\n`
       );
     }
 
@@ -2679,7 +2874,23 @@ async function main(): Promise<void> {
       }
       if (!args.dryRun) {
         const resultPath = writeLaunchTeamResult(cwd, runId, args.team, launchLanes);
+        // In-process dispatch has no tmux pane, but it still needs a durable
+        // lifecycle registry so --dismiss-completed can seal an accepted
+        // TaskCell and record substantive migration evidence. Placeholder pane
+        // ids deliberately select the existing no-live-pane terminal path.
+        const manifestPath = writeManifest(cwd, buildManifest({
+          runId,
+          mode: process.env["TMUX"] ? "in-session" : "new-session",
+          sessionName: args.sessionName ?? `guild-${slug}`,
+          windowName: null,
+          specialists: launchLanes,
+          dryRun: false,
+          realPaneIds: null,
+          orchestratorHostKind,
+          backend: "in-process",
+        }));
         process.stderr.write(`[agent-team-launcher] wrote TaskCell team_result → ${resultPath}\n`);
+        process.stderr.write(`[agent-team-launcher] wrote in-process lifecycle manifest → ${manifestPath}\n`);
       }
       const signal = {
         backend: resolvedMode,

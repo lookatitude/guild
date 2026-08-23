@@ -70,7 +70,7 @@ function runtimeReceiptIdentity(pluginRoot: string, runtimeHost: MigrationRuntim
 }
 
 export type CompatibilityLoadResult =
-  | { status: "loaded"; bytes: Buffer; payload: unknown; receipt_sequence: number }
+  | { status: "loaded"; bytes: Buffer; payload: unknown; receipt_sequence: number; receipt_recorded_at: string }
   | { status: "refused"; detail: string };
 
 export const FROZEN_COMPATIBILITY_CATALOG_RELPATH = ".guild/artifacts/capability/compatibility-catalog.json";
@@ -184,7 +184,7 @@ export function readCompatibilityAsset(options: {
         try { fs.rmSync(payloadPath, { force: true }); } catch { /* refusal below remains authoritative */ }
         return { status: "refused", detail: appended.failure?.message ?? "compatibility receipt was not durable" };
       }
-      return { status: "loaded", bytes, payload: emitted.payload, receipt_sequence: appended.sequence };
+      return { status: "loaded", bytes, payload: emitted.payload, receipt_sequence: appended.sequence, receipt_recorded_at: recordedAt };
     });
   } catch (error) {
     return { status: "refused", detail: error instanceof Error ? error.message : String(error) };

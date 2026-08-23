@@ -23,7 +23,8 @@ import {
   snapshotTreeHashes,
   type BoundBaseline,
 } from "./profile-emit";
-import { parseYaml } from "../frontmatter";
+import { parseFrontmatter, parseYaml } from "../frontmatter";
+import { extractHandoffEnvelope, validateHandoffV2 } from "../../../hooks/lib/handoff-v2";
 import {
   CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
   capabilityRunStartIdentityHash,
@@ -32,6 +33,12 @@ import {
   readRunBindingRecord,
   withRunBindingExclusion,
 } from "../../../src/modules/lifecycle/workflows/run-binding";
+import { isCanonicalLaneReceipt } from "../../../src/modules/lifecycle/workflows/run-record-validate";
+import {
+  taskCellPaths,
+  validateTaskAssignmentV2,
+  validateTaskAttemptV1,
+} from "../../../src/modules/dispatch/workflows/task-cell-contract";
 import { redactShareableFile } from "../shared/scrub-redact";
 
 export const MIGRATION_BOUNDARY_SCHEMA = "guild.capability_migration_boundary.v1" as const;
@@ -39,6 +46,7 @@ export const MIGRATION_BOUNDARY_CHANNEL = "next" as const;
 export const MIGRATION_OBSERVATION_SCHEMA_V1 = "guild.capability_migration_observation.v1" as const;
 export const MIGRATION_OBSERVATION_SCHEMA = "guild.capability_migration_observation.v2" as const;
 export const MIGRATION_RUN_BASELINE_SCHEMA = "guild.capability_run_baseline.v1" as const;
+export const MIGRATION_SUBSTANTIVE_OPERATION_SCHEMA = "guild.capability_substantive_operation.v1" as const;
 export const MIGRATION_BOUNDARY_EVIDENCE_RELPATH = ".guild/artifacts/capability/migration-boundaries";
 
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -146,6 +154,39 @@ export interface MigrationObservationRunV2 extends MigrationObservationRunV1 {
   readonly baseline: MigrationEvidenceRefV1;
   /** Present on session-bound public projections; absent only on historical v2 records. */
   readonly session_context?: MigrationEvidenceRefV1;
+  /** Present on post-FU18 records; absent on historical release-only v2 observations. */
+  readonly substantive_operations?: readonly MigrationEvidenceRefV1[];
+  /** Portable task-cell bytes that substantiate every post-FU18 operation hash. */
+  readonly substantive_evidence?: readonly MigrationEvidenceRefV1[];
+}
+
+export interface MigrationSubstantiveOperationV1 {
+  readonly schema_version: typeof MIGRATION_SUBSTANTIVE_OPERATION_SCHEMA;
+  readonly run_id: string;
+  readonly operation_id: string;
+  readonly task_id: string;
+  readonly specialist_id: string;
+  readonly host_id: string;
+  readonly task_run_id: string;
+  readonly attempt: number;
+  readonly instance_id: string;
+  readonly assignment_written_at: string;
+  readonly completed_at: string;
+  readonly compatibility_operation_id: string;
+  readonly compatibility_payload_sha256: string;
+  readonly assignment_sha256: string;
+  readonly handoff_sha256: string;
+  readonly handoff_receipt_sha256: string;
+  readonly validation_sha256: string;
+  readonly attempt_sha256: string;
+  readonly acceptance_sha256: string;
+  /** Hashes of the deterministic scrub-clean bytes retained in public evidence. */
+  readonly projected_assignment_sha256: string;
+  readonly projected_handoff_sha256: string;
+  readonly projected_handoff_receipt_sha256: string;
+  readonly projected_validation_sha256: string;
+  readonly projected_attempt_sha256: string;
+  readonly projected_acceptance_sha256: string;
 }
 
 export interface MigrationObservationV1 {
@@ -605,6 +646,12 @@ function sealMigrationObservationRunUnderExclusion(
   if (!closeFacts || closeFacts.started_at !== manifest.started_at) {
     throw new Error("migration run seal requires matching guild.provenance.v1 lifecycle close evidence");
   }
+  let provenance: Record<string, unknown> | null = null;
+  try { provenance = plainRecord(JSON.parse(provenanceBytes.toString("utf8"))); } catch { provenance = null; }
+  const touched = plainRecord(provenance?.touched);
+  const touchedTasks = Array.isArray(touched?.tasks) && touched.tasks.every((task) => typeof task === "string" && task.length > 0)
+    ? touched.tasks as string[]
+    : [];
   const profileBytes = readEvidenceFile(options.projectRoot, `.guild/runs/${options.runId}/capability/profile.json`);
   let profile: ReturnType<typeof validateProjectCapabilityProfileV1> = null;
   try { profile = validateProjectCapabilityProfileV1(JSON.parse(profileBytes.toString("utf8"))); } catch { profile = null; }
@@ -614,10 +661,17 @@ function sealMigrationObservationRunUnderExclusion(
   if (Date.parse(profile.generated_at) > Date.parse(closeFacts.closed_at)) {
     throw new Error("migration run seal requires the final profile before lifecycle close");
   }
-  assertQualifyingCompatibilityBeforeClose(options.projectRoot, options.runId, profile.resolver_mode, closeFacts.closed_at);
+  const compatibility = assertQualifyingCompatibilityBeforeClose(options.projectRoot, options.runId, profile.resolver_mode, closeFacts.closed_at);
   const terminalTrees = assertProfileMatchesCurrentCapabilityTrees(options.projectRoot, profile, "migration run seal");
   const sealedAt = new Date().toISOString();
   if (Date.parse(sealedAt) < Date.parse(closeFacts.closed_at)) throw new Error("migration run seal cannot predate lifecycle close");
+  requirePreexistingSubstantiveOperationReceipts({
+    projectRoot: options.projectRoot,
+    runId: options.runId,
+    touchedTasks,
+    closedAt: closeFacts.closed_at,
+    compatibility,
+  });
   const operationId = `capability-terminal:${options.runId}`;
   const projectedProvenanceHash = sha256(projectMigrationEvidenceBytes(
     options.projectRoot,
@@ -690,6 +744,42 @@ function validateEvidenceRef(value: unknown): MigrationEvidenceRefV1 | null {
   return Object.freeze({ path: record.path, sha256: record.sha256 });
 }
 
+function parseSubstantiveOperation(value: unknown): MigrationSubstantiveOperationV1 | null {
+  const record = plainRecord(value);
+  const keys = [
+    "schema_version", "run_id", "operation_id", "task_id", "specialist_id", "host_id", "task_run_id", "attempt", "instance_id", "assignment_written_at", "completed_at",
+    "compatibility_operation_id", "compatibility_payload_sha256", "assignment_sha256", "handoff_sha256", "handoff_receipt_sha256", "validation_sha256", "attempt_sha256", "acceptance_sha256",
+    "projected_assignment_sha256", "projected_handoff_sha256", "projected_handoff_receipt_sha256", "projected_validation_sha256", "projected_attempt_sha256", "projected_acceptance_sha256",
+  ];
+  if (!record || !exactKeys(record, keys) || record.schema_version !== MIGRATION_SUBSTANTIVE_OPERATION_SCHEMA
+    || typeof record.run_id !== "string" || !/^run-\d{8}-\d{6}-[a-z0-9][a-z0-9-]*$/.test(record.run_id)
+    || typeof record.operation_id !== "string" || !record.operation_id.startsWith(`substantive-operation:${record.run_id}:`)
+    || record.operation_id.startsWith("compatibility-read:")
+    || typeof record.task_id !== "string" || !/^[A-Za-z0-9_.-]+$/.test(record.task_id)
+    || typeof record.specialist_id !== "string" || !/^[A-Za-z0-9_.-]+$/.test(record.specialist_id)
+    || typeof record.host_id !== "string" || !/^[A-Za-z0-9_.-]+$/.test(record.host_id)
+    || typeof record.task_run_id !== "string" || !/^[A-Za-z0-9_.-]+$/.test(record.task_run_id)
+    || !Number.isInteger(record.attempt) || (record.attempt as number) < 1
+    || typeof record.instance_id !== "string" || !/^[A-Za-z0-9_.-]+$/.test(record.instance_id)
+    || canonicalInstant(record.assignment_written_at) === null
+    || canonicalInstant(record.completed_at) === null
+    || typeof record.compatibility_operation_id !== "string" || !record.compatibility_operation_id.startsWith("compatibility-read:")
+    || typeof record.compatibility_payload_sha256 !== "string" || !SHA256.test(record.compatibility_payload_sha256)
+    || typeof record.assignment_sha256 !== "string" || !SHA256.test(record.assignment_sha256)
+    || typeof record.handoff_sha256 !== "string" || !SHA256.test(record.handoff_sha256)
+    || typeof record.handoff_receipt_sha256 !== "string" || !SHA256.test(record.handoff_receipt_sha256)
+    || typeof record.validation_sha256 !== "string" || !SHA256.test(record.validation_sha256)
+    || typeof record.attempt_sha256 !== "string" || !SHA256.test(record.attempt_sha256)
+    || typeof record.acceptance_sha256 !== "string" || !SHA256.test(record.acceptance_sha256)
+    || typeof record.projected_assignment_sha256 !== "string" || !SHA256.test(record.projected_assignment_sha256)
+    || typeof record.projected_handoff_sha256 !== "string" || !SHA256.test(record.projected_handoff_sha256)
+    || typeof record.projected_handoff_receipt_sha256 !== "string" || !SHA256.test(record.projected_handoff_receipt_sha256)
+    || typeof record.projected_validation_sha256 !== "string" || !SHA256.test(record.projected_validation_sha256)
+    || typeof record.projected_attempt_sha256 !== "string" || !SHA256.test(record.projected_attempt_sha256)
+    || typeof record.projected_acceptance_sha256 !== "string" || !SHA256.test(record.projected_acceptance_sha256)) return null;
+  return Object.freeze(record as unknown as MigrationSubstantiveOperationV1);
+}
+
 function readEvidenceFile(projectRoot: string, relativePath: string): Buffer {
   const root = fs.realpathSync(projectRoot);
   const checked = checkContained(root, path.join(root, relativePath), { policy: "physical", requireRegularFileLeaf: true });
@@ -706,7 +796,12 @@ function evidenceRef(projectRoot: string, relativePath: string): MigrationEviden
   return Object.freeze({ path: relativePath.split(path.sep).join("/"), sha256: sha256(bytes) });
 }
 
-function assertQualifyingCompatibilityBeforeClose(projectRoot: string, runId: string, mode: string, closedAt: string): void {
+interface QualifyingCompatibilityReceipt {
+  readonly receipt: ReceiptRecordV1;
+  readonly payload: NonNullable<ReturnType<typeof parseCompatibilityUsageV1>>;
+}
+
+function readQualifyingCompatibilityReceipts(projectRoot: string, runId: string): readonly QualifyingCompatibilityReceipt[] {
   const paths = receiptPaths(projectRoot, runId);
   const scan = scanReceiptJournal(paths.journal);
   if (scan.integrity !== "intact" || scan.blocks_clean_close
@@ -723,15 +818,416 @@ function assertQualifyingCompatibilityBeforeClose(projectRoot: string, runId: st
     try { payload = parseCompatibilityUsageV1(JSON.parse(bytes.toString("utf8"))); } catch { payload = null; }
     payloads.set(sha256(bytes), payload);
   }
-  const qualifying = scan.records.filter((receipt) => {
-    if (receipt.scenario_id !== "PCL-09" || !receipt.operation_id.startsWith("compatibility-read:") || receipt.output_hash === null) return false;
+  const qualifying = scan.records.flatMap((receipt): QualifyingCompatibilityReceipt[] => {
+    if (receipt.scenario_id !== "PCL-09" || !receipt.operation_id.startsWith("compatibility-read:") || receipt.output_hash === null) return [];
     const payload = payloads.get(receipt.output_hash);
-    return payload?.resolver_mode === mode && payload.synthetic === false;
+    return payload?.synthetic === false
+      ? [{ receipt, payload }]
+      : [];
   });
+  return Object.freeze(qualifying);
+}
+
+function assertQualifyingCompatibilityBeforeClose(projectRoot: string, runId: string, mode: string, closedAt: string): readonly QualifyingCompatibilityReceipt[] {
+  const qualifying = readQualifyingCompatibilityReceipts(projectRoot, runId)
+    .filter(({ payload }) => payload.resolver_mode === mode);
   if (qualifying.length === 0) throw new Error(`migration run seal found no non-synthetic PCL-09 ${mode} receipt before lifecycle close`);
-  if (qualifying.some((receipt) => Date.parse(receipt.recorded_at) > Date.parse(closedAt))) {
+  if (qualifying.some(({ receipt }) => Date.parse(receipt.recorded_at) > Date.parse(closedAt))) {
     throw new Error("migration run seal refuses compatibility evidence produced after lifecycle close");
   }
+  return Object.freeze(qualifying);
+}
+
+interface AcceptedTaskCellFacts {
+  readonly task_id: string;
+  readonly specialist_id: string;
+  readonly host_id: string;
+  readonly task_run_id: string;
+  readonly attempt: number;
+  readonly instance_id: string;
+  readonly assignment_written_at: string;
+  readonly completed_at: string;
+  readonly assignment_sha256: string;
+  readonly handoff_sha256: string;
+  readonly handoff_receipt_sha256: string;
+  readonly validation_sha256: string;
+  readonly attempt_sha256: string;
+  readonly acceptance_sha256: string;
+}
+
+interface AcceptedTaskCellEvidenceBytes {
+  readonly assignment: Buffer;
+  readonly handoff: Buffer;
+  readonly handoff_receipt: Buffer;
+  readonly validation: Buffer;
+  readonly attempt: Buffer;
+  readonly acceptance: Buffer;
+}
+
+interface AcceptedTaskCellOperationFacts extends AcceptedTaskCellFacts {
+  readonly projected_assignment_sha256: string;
+  readonly projected_handoff_sha256: string;
+  readonly projected_handoff_receipt_sha256: string;
+  readonly projected_validation_sha256: string;
+  readonly projected_attempt_sha256: string;
+  readonly projected_acceptance_sha256: string;
+}
+
+function acceptedTaskCellFactFromBytes(options: {
+  readonly runId: string;
+  readonly taskId: string;
+  readonly attemptNumber: number;
+  readonly instanceId: string;
+  readonly closedAt: string;
+  readonly bytes: AcceptedTaskCellEvidenceBytes;
+}): AcceptedTaskCellFacts | null {
+  const { runId, taskId, attemptNumber, instanceId, closedAt, bytes } = options;
+  let assignment: ReturnType<typeof validateTaskAssignmentV2> = null;
+  let attempt: ReturnType<typeof validateTaskAttemptV1> = null;
+  let handoff: Record<string, unknown> | null = null;
+  let validation: Record<string, unknown> | null = null;
+  let acceptance: Record<string, unknown> | null = null;
+  try {
+    assignment = validateTaskAssignmentV2(JSON.parse(bytes.assignment.toString("utf8")));
+    handoff = plainRecord(JSON.parse(bytes.handoff.toString("utf8")));
+    validation = plainRecord(JSON.parse(bytes.validation.toString("utf8")));
+    attempt = validateTaskAttemptV1(JSON.parse(bytes.attempt.toString("utf8")));
+    acceptance = plainRecord(JSON.parse(bytes.acceptance.toString("utf8")));
+  } catch { return null; }
+  if (!assignment || !attempt || !handoff || !validation || !acceptance) return null;
+
+  let pointerEnvelope: Record<string, unknown> | null = null;
+  let receiptFrontmatter: Record<string, unknown> | null = null;
+  let receiptText: string;
+  try {
+    receiptText = bytes.handoff_receipt.toString("utf8");
+    pointerEnvelope = plainRecord(extractHandoffEnvelope(receiptText));
+    receiptFrontmatter = parseFrontmatter(receiptText);
+  } catch { return null; }
+
+  const assignmentWrittenAt = canonicalInstant(assignment.written_at);
+  const attemptCreatedAt = canonicalInstant(attempt.created_at);
+  const completedAt = canonicalInstant(acceptance.downstream_release_at);
+  const terminationAuthorizedAt = canonicalInstant(acceptance.termination_authorized_at);
+  const terminatedAt = canonicalInstant(attempt.terminated_at);
+  const validatedAt = canonicalInstant(validation.validated_at);
+  const pointerSubmittedAt = canonicalInstant(handoff.submitted_at);
+  const receiptGeneratedAt = canonicalInstant(receiptFrontmatter?.generated_at);
+  const receiptSpecialist = receiptFrontmatter?.specialist ?? receiptFrontmatter?.agent;
+  const authorities = Array.isArray(acceptance.authorities_observed) ? acceptance.authorities_observed : [];
+  const requiredAuthorities = Array.isArray(acceptance.authorities_required) && acceptance.authorities_required.every((value) => typeof value === "string")
+    ? acceptance.authorities_required as string[] : [];
+  const acceptedAuthorities = new Set(authorities.flatMap((value) => {
+    const authority = plainRecord(value);
+    return authority?.decision === "accepted" && typeof authority.authority === "string" ? [authority.authority] : [];
+  }));
+  const claimedFiles = Array.isArray(handoff.claimed_changed_files) && handoff.claimed_changed_files.every((value) => typeof value === "string")
+    ? handoff.claimed_changed_files as string[] : null;
+  const scopeValid = claimedFiles !== null && (assignment.scope_paths.length === 0 || claimedFiles.every((file) => assignment!.scope_paths.some((scope) => file === scope || file.startsWith(scope.endsWith("/") ? scope : `${scope}/`))));
+  const receiptId = handoff.receipt_id;
+  const expectedHandoffKeys = ["receipt_id", "receipt_path", "schema_valid", "claimed_changed_files", "acceptance_tests_passed", "submitted_at"];
+  const pointerPath = canonicalRelativePath(handoff.receipt_path) ? handoff.receipt_path : null;
+  const pointerShapeValid = exactKeys(handoff, expectedHandoffKeys) && pointerPath !== null
+    && pointerPath.startsWith(`.guild/runs/${runId}/handoffs/`) && pointerPath.endsWith(".md")
+    && handoff.schema_valid === true && isCanonicalLaneReceipt(receiptText, path.posix.basename(pointerPath))
+    && pointerEnvelope !== null && validateHandoffV2(pointerEnvelope).valid
+    && pointerEnvelope.task_id === taskId && pointerEnvelope.status === "done"
+    && receiptFrontmatter?.task_id === taskId
+    && receiptSpecialist === assignment.worker_role
+    && receiptGeneratedAt !== null
+    && Array.isArray(handoff.acceptance_tests_passed)
+    && handoff.acceptance_tests_passed.every((value) => typeof value === "string")
+    && assignment.acceptance_tests.every((test) => (handoff.acceptance_tests_passed as string[]).includes(test));
+
+  if (!pointerShapeValid || !scopeValid || typeof receiptId !== "string" || receiptId.length === 0 || !assignmentWrittenAt || !attemptCreatedAt || !validatedAt || !pointerSubmittedAt || !receiptGeneratedAt
+    || assignment.run_id !== runId || assignment.logical_task_id !== taskId || assignment.attempt !== attemptNumber || assignment.instance_id !== instanceId
+    || validation.schema_version !== "guild.handoff_validation.v1" || validation.validation_result_id !== acceptance.validation_result_id
+    || validation.run_id !== runId || validation.cell_id !== assignment.cell_id || validation.logical_task_id !== taskId
+    || validation.task_run_id !== assignment.task_run_id || validation.attempt !== attemptNumber || validation.instance_id !== instanceId
+    || validation.assignment_id !== `${assignment.task_run_id}:${attemptNumber}:${instanceId}` || validation.receipt_id !== receiptId
+    || validation.schema_valid !== true || validation.scope_valid !== true || validation.tests_passed !== true
+    || validation.result !== "passed" || validation.reason !== null
+    || !Array.isArray(validation.out_of_scope_files) || validation.out_of_scope_files.length !== 0
+    || !Array.isArray(validation.failed_acceptance_tests) || validation.failed_acceptance_tests.length !== 0
+    || attempt.run_id !== runId || attempt.logical_task_id !== taskId || attempt.attempt !== attemptNumber || attempt.instance_id !== instanceId
+    || assignment.task_run_id !== attempt.task_run_id || assignment.attempt_id !== attempt.attempt_id
+    || attempt.immutable !== true || attempt.terminal_state !== "terminated"
+    || !(
+      attempt.orphaned === false
+      || (attempt.orphaned === true
+        && Number.isInteger(attempt.reap_attempts)
+        && attempt.reap_attempts > 0
+        && (attempt.terminal_reason === "orphan reaped" || attempt.terminal_reason?.startsWith("reaper:") === true))
+    )
+    || !terminatedAt || Date.parse(terminatedAt) > Date.parse(closedAt)
+    || acceptance.schema_version !== "guild.handoff_acceptance.v1" || acceptance.run_id !== runId || acceptance.logical_task_id !== taskId
+    || acceptance.cell_id !== assignment.cell_id || acceptance.task_run_id !== assignment.task_run_id || acceptance.attempt !== attemptNumber || acceptance.instance_id !== instanceId
+    || acceptance.assignment_id !== `${assignment.task_run_id}:${attemptNumber}:${instanceId}` || acceptance.receipt_id !== receiptId
+    || !completedAt || !terminationAuthorizedAt || Date.parse(completedAt) > Date.parse(closedAt) || Date.parse(terminationAuthorizedAt) > Date.parse(closedAt)
+    || Date.parse(assignmentWrittenAt) > Date.parse(attemptCreatedAt)
+    || Date.parse(attemptCreatedAt) > Date.parse(receiptGeneratedAt)
+    || Date.parse(receiptGeneratedAt) > Date.parse(pointerSubmittedAt)
+    || Date.parse(pointerSubmittedAt) > Date.parse(validatedAt) || Date.parse(validatedAt) > Date.parse(completedAt)
+    || Date.parse(validatedAt) > Date.parse(terminationAuthorizedAt)
+    || Date.parse(completedAt) > Date.parse(terminatedAt) || Date.parse(terminationAuthorizedAt) > Date.parse(terminatedAt)
+    || !requiredAuthorities.includes("deterministic_floor") || !requiredAuthorities.includes("team_lead")
+    || requiredAuthorities.some((authority) => !acceptedAuthorities.has(authority))
+    || !acceptedAuthorities.has("deterministic_floor") || !acceptedAuthorities.has("team_lead")
+    || typeof assignment.specialist_profile_id !== "string" || !/^[A-Za-z0-9_.-]+$/.test(assignment.specialist_profile_id)
+    || typeof assignment.host_id !== "string" || !/^[A-Za-z0-9_.-]+$/.test(assignment.host_id)) return null;
+
+  return Object.freeze({
+    task_id: taskId,
+    specialist_id: assignment.specialist_profile_id,
+    host_id: assignment.host_id,
+    task_run_id: assignment.task_run_id,
+    attempt: attemptNumber,
+    instance_id: instanceId,
+    assignment_written_at: assignmentWrittenAt,
+    completed_at: completedAt,
+    assignment_sha256: sha256(bytes.assignment),
+    handoff_sha256: sha256(bytes.handoff),
+    handoff_receipt_sha256: sha256(bytes.handoff_receipt),
+    validation_sha256: sha256(bytes.validation),
+    attempt_sha256: sha256(bytes.attempt),
+    acceptance_sha256: sha256(bytes.acceptance),
+  });
+}
+
+function acceptedTaskCellFacts(projectRoot: string, runId: string, touchedTasks: readonly string[], closedAt: string): readonly AcceptedTaskCellOperationFacts[] {
+  const root = fs.realpathSync(projectRoot);
+  const facts: AcceptedTaskCellOperationFacts[] = [];
+  for (const taskId of [...new Set(touchedTasks)].sort()) {
+    let taskRoot: string;
+    try { taskRoot = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: 1, instance_id: "probe" }).cell_dir; }
+    catch { continue; }
+    const attemptsPath = path.join(root, taskRoot, "attempts");
+    const checkedAttempts = checkContained(root, attemptsPath, { policy: "physical" });
+    if (isRefused(checkedAttempts)) continue;
+    let attemptNames: string[];
+    try { attemptNames = fs.readdirSync(checkedAttempts.realPath).sort(); } catch { continue; }
+    for (const attemptName of attemptNames) {
+      const attemptNumber = Number(attemptName);
+      if (!Number.isInteger(attemptNumber) || attemptNumber < 1) continue;
+      const instancesPath = path.join(checkedAttempts.realPath, attemptName, "instances");
+      const checkedInstances = checkContained(root, instancesPath, { policy: "physical" });
+      if (isRefused(checkedInstances)) continue;
+      let instanceIds: string[];
+      try { instanceIds = fs.readdirSync(checkedInstances.realPath).sort(); } catch { continue; }
+      for (const instanceId of instanceIds) {
+        let paths: ReturnType<typeof taskCellPaths>;
+        try { paths = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: attemptNumber, instance_id: instanceId }); }
+        catch { continue; }
+        let assignmentBytes: Buffer; let handoffBytes: Buffer; let validationBytes: Buffer; let attemptBytes: Buffer; let acceptanceBytes: Buffer;
+        try {
+          assignmentBytes = readEvidenceFile(projectRoot, paths.assignment_path);
+          handoffBytes = readEvidenceFile(projectRoot, paths.handoff_path);
+          validationBytes = readEvidenceFile(projectRoot, paths.validation_path);
+          attemptBytes = readEvidenceFile(projectRoot, paths.attempt_path);
+          acceptanceBytes = readEvidenceFile(projectRoot, paths.acceptance_path);
+        } catch { continue; }
+        let handoff: Record<string, unknown> | null = null;
+        try {
+          handoff = plainRecord(JSON.parse(handoffBytes.toString("utf8")));
+        } catch { handoff = null; }
+        const handoffReceiptPath = canonicalRelativePath(handoff?.receipt_path) ? handoff.receipt_path : null;
+        let handoffReceiptBytes: Buffer | null = null;
+        if (handoffReceiptPath !== null && handoffReceiptPath !== paths.handoff_path) {
+          try { handoffReceiptBytes = readEvidenceFile(projectRoot, handoffReceiptPath); }
+          catch { handoffReceiptBytes = null; }
+        }
+        if (!handoffReceiptBytes) continue;
+        const fact = acceptedTaskCellFactFromBytes({
+          runId, taskId, attemptNumber, instanceId, closedAt,
+          bytes: { assignment: assignmentBytes, handoff: handoffBytes, handoff_receipt: handoffReceiptBytes, validation: validationBytes, attempt: attemptBytes, acceptance: acceptanceBytes },
+        });
+        if (fact) {
+          const projected = (sourceRel: string, destinationName: string, bytes: Buffer): string => sha256(projectMigrationEvidenceBytes(
+            projectRoot,
+            runId,
+            sourceRel,
+            `.guild/artifacts/capability/migration-evidence/seal/${runId}/${destinationName}`,
+            bytes,
+          ));
+          facts.push(Object.freeze({
+            ...fact,
+            projected_assignment_sha256: projected(paths.assignment_path, "assignment.json", assignmentBytes),
+            projected_handoff_sha256: projected(paths.handoff_path, "handoff.json", handoffBytes),
+            projected_handoff_receipt_sha256: projected(handoffReceiptPath!, "handoff-receipt.md", handoffReceiptBytes),
+            projected_validation_sha256: projected(paths.validation_path, "handoff-validation.json", validationBytes),
+            projected_attempt_sha256: projected(paths.attempt_path, "attempt.json", attemptBytes),
+            projected_acceptance_sha256: projected(paths.acceptance_path, "handoff-acceptance.json", acceptanceBytes),
+          }));
+        }
+      }
+    }
+  }
+  return Object.freeze(facts);
+}
+
+interface SubstantiveOperationCandidate {
+  readonly payload: MigrationSubstantiveOperationV1;
+  readonly bytes: Buffer;
+  readonly relativePath: string;
+  readonly identity: string;
+  readonly linked: QualifyingCompatibilityReceipt;
+}
+
+function substantiveOperationCandidates(options: {
+  readonly projectRoot: string;
+  readonly runId: string;
+  readonly touchedTasks: readonly string[];
+  readonly closedAt: string;
+  readonly compatibility: readonly QualifyingCompatibilityReceipt[];
+}): readonly SubstantiveOperationCandidate[] {
+  const accepted = acceptedTaskCellFacts(options.projectRoot, options.runId, options.touchedTasks, options.closedAt);
+  const payloadDirectory = `.guild/runs/${options.runId}/receipts/payloads`;
+  const candidates: SubstantiveOperationCandidate[] = [];
+  for (const task of accepted) {
+    const expectedCompatibilityOperation = `compatibility-read:task-cell-identity-${task.task_id}-${task.specialist_id}`;
+    const linked = options.compatibility.find(({ payload, receipt }) => payload.specialist_id === task.specialist_id
+      && receipt.versions.host_id === task.host_id
+      && receipt.operation_id === expectedCompatibilityOperation
+      && Date.parse(receipt.recorded_at) < Date.parse(task.assignment_written_at));
+    if (!linked || linked.receipt.output_hash === null) continue;
+    const identity = sha256(canonical({ ...task, compatibility_operation_id: linked.receipt.operation_id, compatibility_payload_sha256: linked.receipt.output_hash }));
+    const operationId = `substantive-operation:${options.runId}:${identity.slice(0, 16)}`;
+    const payload: MigrationSubstantiveOperationV1 = Object.freeze({
+      schema_version: MIGRATION_SUBSTANTIVE_OPERATION_SCHEMA,
+      run_id: options.runId,
+      operation_id: operationId,
+      ...task,
+      compatibility_operation_id: linked.receipt.operation_id,
+      compatibility_payload_sha256: linked.receipt.output_hash,
+    });
+    const bytes = Buffer.from(`${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    const relativePath = `${payloadDirectory}/${identity}.substantive-operation.json`;
+    candidates.push(Object.freeze({ payload, bytes, relativePath, identity, linked }));
+  }
+  return Object.freeze(candidates);
+}
+
+/**
+ * Record the resolver's actual task-collection operation while the run is open.
+ * Accepted TaskCell termination invokes the held-exclusion variant immediately
+ * after sealing the terminal attempt; the later migration run seal only verifies
+ * that pre-existing receipt and payload. A compatibility-only closed run cannot
+ * manufacture substantive evidence while being sealed.
+ */
+export function recordMigrationSubstantiveTaskOperation(options: {
+  readonly projectRoot: string;
+  readonly runId: string;
+  readonly taskId: string;
+}): readonly MigrationSubstantiveOperationV1[] {
+  return withRunBindingExclusion(options.projectRoot, options.runId, () =>
+    recordMigrationSubstantiveTaskOperationUnderExclusion(options));
+}
+
+/**
+ * Transactional variant for a caller that already holds the run-binding
+ * exclusion. Keeping this separate avoids a nested stable-lock acquisition
+ * when terminal-attempt sealing and evidence append must linearize together.
+ */
+export function recordMigrationSubstantiveTaskOperationUnderExclusion(options: {
+  readonly projectRoot: string;
+  readonly runId: string;
+  readonly taskId: string;
+}): readonly MigrationSubstantiveOperationV1[] {
+  const binding = readRunBindingRecord({ root: options.projectRoot, run_id: options.runId });
+  if (binding.status !== "ok" || binding.record.state !== "open") {
+    throw new Error("substantive migration operation must be recorded while the run binding is open");
+  }
+  const recordedAt = canonicalInstant(new Date().toISOString());
+  if (!recordedAt) throw new Error("substantive migration operation requires a canonical recording instant");
+  let compatibility: readonly QualifyingCompatibilityReceipt[];
+  try { compatibility = readQualifyingCompatibilityReceipts(options.projectRoot, options.runId); }
+  catch { return Object.freeze([]); }
+  const candidates = substantiveOperationCandidates({
+    projectRoot: options.projectRoot,
+    runId: options.runId,
+    touchedTasks: [options.taskId],
+    closedAt: recordedAt,
+    compatibility,
+  });
+  const emitted: MigrationSubstantiveOperationV1[] = [];
+  const paths = receiptPaths(options.projectRoot, options.runId);
+  for (const { payload, bytes, relativePath, identity, linked } of candidates) {
+    const operationId = payload.operation_id;
+    const destination = path.join(fs.realpathSync(options.projectRoot), relativePath);
+    try {
+      const existing = readEvidenceFile(options.projectRoot, relativePath);
+      if (!existing.equals(bytes)) throw new Error(`substantive operation payload collision: ${relativePath}`);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("payload collision")) throw error;
+      const written = writeContainedFile(options.projectRoot, destination, bytes, { policy: "physical" });
+      if (!written.written) throw new Error(`substantive operation payload write refused [${written.code}]: ${relativePath}`);
+    }
+    const outputHash = sha256(bytes);
+    const inputHash = `sha256:${identity}`;
+    const input = makeReceiptInput({
+      run_id: options.runId,
+      operation_id: operationId,
+      correlation_id: operationId,
+      event_id: `${operationId}:${identity.slice(0, 12)}`,
+      causation_id: linked.receipt.event_id,
+      scenario_id: "PCL-09",
+      event_name: "task.collect",
+      outcome_type: "guild.capability_outcome.v1",
+      disposition: "succeeded",
+      observation_state: "checked_clean",
+      input_hash: inputHash,
+      output_hash: outputHash,
+      terminal: false,
+      recorded_at: recordedAt,
+      observed_at: payload.completed_at,
+      versions: linked.receipt.versions,
+      affected_event_range: null,
+    });
+    ensureDurableReceipt(paths, options.runId, operationId, input, (record) => record.scenario_id === "PCL-09"
+      && record.event_name === "task.collect" && record.disposition === "succeeded" && record.observation_state === "checked_clean"
+      && record.input_hash === inputHash && record.output_hash === outputHash && record.terminal === false
+      && canonicalInstant(record.recorded_at) === record.recorded_at && record.observed_at === payload.completed_at
+      && Date.parse(record.recorded_at) >= Date.parse(payload.completed_at)
+      && Date.parse(record.recorded_at) <= Date.parse(recordedAt)
+      && canonical(record.versions) === canonical(linked.receipt.versions));
+    emitted.push(payload);
+  }
+  return Object.freeze(emitted);
+}
+
+function requirePreexistingSubstantiveOperationReceipts(options: {
+  readonly projectRoot: string;
+  readonly runId: string;
+  readonly touchedTasks: readonly string[];
+  readonly closedAt: string;
+  readonly compatibility: readonly QualifyingCompatibilityReceipt[];
+}): readonly MigrationSubstantiveOperationV1[] {
+  const candidates = substantiveOperationCandidates(options);
+  const scan = scanReceiptJournal(receiptPaths(options.projectRoot, options.runId).journal);
+  const accepted: MigrationSubstantiveOperationV1[] = [];
+  for (const { payload, bytes, relativePath, identity, linked } of candidates) {
+    let retained: Buffer;
+    try { retained = readEvidenceFile(options.projectRoot, relativePath); }
+    catch { continue; }
+    if (!retained.equals(bytes)) continue;
+    const receipts = scan.records.filter((record) => record.operation_id === payload.operation_id);
+    if (receipts.length !== 1) continue;
+    const receipt = receipts[0];
+    if (receipt.scenario_id !== "PCL-09" || receipt.event_name !== "task.collect"
+      || receipt.disposition !== "succeeded" || receipt.observation_state !== "checked_clean"
+      || receipt.input_hash !== `sha256:${identity}` || receipt.output_hash !== sha256(bytes)
+      || receipt.terminal !== false || receipt.observed_at !== payload.completed_at
+      || receipt.causation_id !== linked.receipt.event_id || receipt.correlation_id !== payload.operation_id
+      || canonical(receipt.versions) !== canonical(linked.receipt.versions)
+      || receipt.sequence <= linked.receipt.sequence
+      || Date.parse(receipt.recorded_at) < Date.parse(payload.completed_at)
+      || Date.parse(receipt.recorded_at) > Date.parse(options.closedAt)) continue;
+    accepted.push(payload);
+  }
+  if (accepted.length === 0) {
+    throw new Error("migration run seal requires a pre-existing resolver-emitted substantive operation recorded before lifecycle close");
+  }
+  return Object.freeze(accepted);
 }
 
 function readRegularFileNoFollow(filePath: string, label: string): Buffer {
@@ -992,7 +1488,8 @@ export function validateMigrationObservation(value: unknown): MigrationObservati
     const run = plainRecord(rawRun);
     const historicalV2Keys = ["run_id", "run_manifest", "provenance", "terminal_trace_log", "start_snapshot", "baseline", "profile", "journal", "checkpoint", "compatibility_payloads"];
     const projectedV2Keys = [...historicalV2Keys, "source_provenance_sha256", "source_session_context_sha256", "session_context"];
-    if (!run || !(isV2 ? exactKeys(run, historicalV2Keys) || exactKeys(run, projectedV2Keys) : exactKeys(run, ["run_id", "profile", "journal", "checkpoint", "compatibility_payloads"]))) return null;
+    const substantiveProjectedV2Keys = [...projectedV2Keys, "substantive_operations", "substantive_evidence"];
+    if (!run || !(isV2 ? exactKeys(run, historicalV2Keys) || exactKeys(run, projectedV2Keys) || exactKeys(run, substantiveProjectedV2Keys) : exactKeys(run, ["run_id", "profile", "journal", "checkpoint", "compatibility_payloads"]))) return null;
     if (typeof run.run_id !== "string" || !/^run-\d{8}-\d{6}-[a-z0-9][a-z0-9-]*$/.test(run.run_id) || seenRuns.has(run.run_id)) return null;
     const profile = validateEvidenceRef(run.profile);
     const runManifest = isV2 ? validateEvidenceRef(run.run_manifest) : null;
@@ -1019,8 +1516,28 @@ export function validateMigrationObservation(value: unknown): MigrationObservati
       seenPayloads.add(payload.path);
       payloads.push(payload);
     }
+    let substantiveOperations: MigrationEvidenceRefV1[] | undefined;
+    let substantiveEvidence: MigrationEvidenceRefV1[] | undefined;
+    if (Object.prototype.hasOwnProperty.call(run, "substantive_operations")) {
+      if (!Array.isArray(run.substantive_operations) || run.substantive_operations.length === 0 || run.substantive_operations.length > 256) return null;
+      substantiveOperations = [];
+      for (const rawOperation of run.substantive_operations) {
+        const operation = validateEvidenceRef(rawOperation);
+        if (!operation || seenPayloads.has(operation.path)) return null;
+        seenPayloads.add(operation.path);
+        substantiveOperations.push(operation);
+      }
+      if (!Array.isArray(run.substantive_evidence) || run.substantive_evidence.length < substantiveOperations.length * 6 || run.substantive_evidence.length > 1536) return null;
+      substantiveEvidence = [];
+      for (const rawEvidence of run.substantive_evidence) {
+        const evidence = validateEvidenceRef(rawEvidence);
+        if (!evidence || seenPayloads.has(evidence.path)) return null;
+        seenPayloads.add(evidence.path);
+        substantiveEvidence.push(evidence);
+      }
+    }
     seenRuns.add(run.run_id);
-    runs.push(Object.freeze({ run_id: run.run_id, ...(runManifest ? { run_manifest: runManifest } : {}), ...(provenance ? { provenance } : {}), ...(sourceProvenanceSha256 ? { source_provenance_sha256: sourceProvenanceSha256 } : {}), ...(sourceSessionContextSha256 ? { source_session_context_sha256: sourceSessionContextSha256 } : {}), ...(terminalTraceLog ? { terminal_trace_log: terminalTraceLog } : {}), ...(startSnapshot ? { start_snapshot: startSnapshot } : {}), ...(baseline ? { baseline } : {}), ...(sessionContext ? { session_context: sessionContext } : {}), profile, journal, checkpoint, compatibility_payloads: Object.freeze(payloads) }));
+    runs.push(Object.freeze({ run_id: run.run_id, ...(runManifest ? { run_manifest: runManifest } : {}), ...(provenance ? { provenance } : {}), ...(sourceProvenanceSha256 ? { source_provenance_sha256: sourceProvenanceSha256 } : {}), ...(sourceSessionContextSha256 ? { source_session_context_sha256: sourceSessionContextSha256 } : {}), ...(terminalTraceLog ? { terminal_trace_log: terminalTraceLog } : {}), ...(startSnapshot ? { start_snapshot: startSnapshot } : {}), ...(baseline ? { baseline } : {}), ...(sessionContext ? { session_context: sessionContext } : {}), ...(substantiveOperations ? { substantive_operations: Object.freeze(substantiveOperations), substantive_evidence: Object.freeze(substantiveEvidence!) } : {}), profile, journal, checkpoint, compatibility_payloads: Object.freeze(payloads) }));
   }
   const candidate = {
     schema_version: record.schema_version as typeof MIGRATION_OBSERVATION_SCHEMA | typeof MIGRATION_OBSERVATION_SCHEMA_V1,
@@ -1055,11 +1572,13 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     const startSnapshotRef = v2Run?.start_snapshot ?? null;
     const baselineRef = v2Run?.baseline ?? null;
     const sessionContextRef = v2Run?.session_context ?? null;
+    const substantiveOperationRefs = v2Run?.substantive_operations ?? [];
+    const substantiveEvidenceRefs = v2Run?.substantive_evidence ?? [];
     if ((runManifestRef && runManifestRef.path !== `${expectedPrefix}run.yaml`) || (provenanceRef && provenanceRef.path !== `${expectedPrefix}provenance.json`) || (terminalTraceLogRef && terminalTraceLogRef.path !== `${expectedPrefix}terminal-trace-log.jsonl`) || (startSnapshotRef && startSnapshotRef.path !== `${expectedPrefix}run-start-snapshot.json`) || (baselineRef && baselineRef.path !== `${expectedPrefix}baseline.json`) || (sessionContextRef && sessionContextRef.path !== `${expectedPrefix}session-context.json`) || run.profile.path !== `${expectedPrefix}profile.json` || run.journal.path !== `${expectedPrefix}journal.jsonl` || run.checkpoint.path !== `${expectedPrefix}checkpoint.json`) {
       throw new Error(`migration observation run ${run.run_id} has non-canonical evidence paths`);
     }
     const snapshots = new Map<string, Buffer>();
-    for (const ref of [...(runManifestRef ? [runManifestRef] : []), ...(provenanceRef ? [provenanceRef] : []), ...(terminalTraceLogRef ? [terminalTraceLogRef] : []), ...(startSnapshotRef ? [startSnapshotRef] : []), ...(baselineRef ? [baselineRef] : []), ...(sessionContextRef ? [sessionContextRef] : []), run.profile, run.journal, run.checkpoint, ...run.compatibility_payloads]) {
+    for (const ref of [...(runManifestRef ? [runManifestRef] : []), ...(provenanceRef ? [provenanceRef] : []), ...(terminalTraceLogRef ? [terminalTraceLogRef] : []), ...(startSnapshotRef ? [startSnapshotRef] : []), ...(baselineRef ? [baselineRef] : []), ...(sessionContextRef ? [sessionContextRef] : []), run.profile, run.journal, run.checkpoint, ...run.compatibility_payloads, ...substantiveOperationRefs, ...substantiveEvidenceRefs]) {
       if (!ref.path.startsWith(expectedPrefix)) throw new Error(`migration observation evidence path mismatch: ${ref.path}`);
       const bytes = stagedSnapshots?.get(ref.path) ?? readEvidenceFile(projectRoot, ref.path);
       if (sha256(bytes) !== ref.sha256) throw new Error(`migration observation evidence hash mismatch: ${ref.path}`);
@@ -1125,13 +1644,15 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
         throw new Error(`migration observation profile was produced after lifecycle close for ${run.run_id}`);
       }
     }
-    if (sessionContextRef && provenanceRef) {
+    let retainedTouchedTasks = new Set<string>();
+    if (sessionContextRef && provenanceRef && substantiveOperationRefs.length > 0) {
       let retainedProvenance: Record<string, unknown> | null = null;
       try { retainedProvenance = plainRecord(JSON.parse(snapshots.get(provenanceRef.path)!.toString("utf8"))); } catch { retainedProvenance = null; }
       const touched = plainRecord(retainedProvenance?.touched);
       if (!touched || !Array.isArray(touched.tasks) || touched.tasks.length === 0 || touched.tasks.some((task) => typeof task !== "string" || task.length === 0)) {
         throw new Error(`migration observation requires substantive touched.tasks evidence for ${run.run_id}`);
       }
+      retainedTouchedTasks = new Set(touched.tasks as string[]);
     }
     profileInstants.push(Date.parse(profile.generated_at));
     const journalPath = path.join(fs.realpathSync(projectRoot), run.journal.path);
@@ -1149,6 +1670,7 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     let earliestQualifyingReceipt = Number.POSITIVE_INFINITY;
     let latestQualifyingReceipt = Number.NEGATIVE_INFINITY;
     let earliestQualifyingSequence = Number.POSITIVE_INFINITY;
+    const qualifyingCompatibility = new Map<string, { readonly receipt: ReceiptRecordV1; readonly specialist_id: string; readonly payload_sha256: string }>();
     const baselineReceipts = baseline && runManifestRef && baselineRef
       ? scan.records.filter((receipt) => receipt.operation_id === `capability-baseline:${run.run_id}`)
       : [];
@@ -1215,6 +1737,7 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
       const payload = parseCompatibilityUsageV1(rawPayload);
       if (payload && payload.resolver_mode === observation.mode && payload.synthetic === false && (!sessionContextRef || payload.specialist_id !== null)) {
         qualifying += 1;
+        if (payload.specialist_id !== null) qualifyingCompatibility.set(receipt.operation_id, { receipt, specialist_id: payload.specialist_id, payload_sha256: payloadRef.sha256 });
         earliestQualifyingReceipt = Math.min(earliestQualifyingReceipt, Date.parse(receipt.recorded_at));
         latestQualifyingReceipt = Math.max(latestQualifyingReceipt, Date.parse(receipt.recorded_at));
         earliestQualifyingSequence = Math.min(earliestQualifyingSequence, receipt.sequence);
@@ -1229,6 +1752,106 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     if (baselineBoundV2 && Date.parse(profile.generated_at) < earliestQualifyingReceipt) throw new Error(`migration observation profile predates compatibility dispatch for ${run.run_id}`);
     if (retainedCloseFacts && latestQualifyingReceipt > Date.parse(retainedCloseFacts.closed_at)) {
       throw new Error(`migration observation compatibility evidence was produced after lifecycle close for ${run.run_id}`);
+    }
+    const usedSubstantiveEvidencePaths = new Set<string>();
+    for (const operationRef of substantiveOperationRefs) {
+      let rawOperation: unknown;
+      try { rawOperation = JSON.parse(snapshots.get(operationRef.path)!.toString("utf8")); }
+      catch { throw new Error(`migration observation substantive operation is unreadable: ${operationRef.path}`); }
+      const operation = parseSubstantiveOperation(rawOperation);
+      const linked = operation ? qualifyingCompatibility.get(operation.compatibility_operation_id) : undefined;
+      const receipts = operation ? scan.records.filter((receipt) => receipt.operation_id === operation.operation_id) : [];
+      const receipt = receipts.length === 1 ? receipts[0] : null;
+      let retainedTask: AcceptedTaskCellFacts | null = null;
+      if (operation && retainedCloseFacts) {
+        const attemptPrefix = `${expectedPrefix}task-cells/${operation.task_id}/attempts/${operation.attempt}`;
+        const instancePrefix = `${attemptPrefix}/instances/${operation.instance_id}`;
+        const evidenceByPath = new Map(substantiveEvidenceRefs.map((ref) => [ref.path, ref]));
+        const assignmentRef = evidenceByPath.get(`${instancePrefix}/assignment.json`);
+        const handoffRef = evidenceByPath.get(`${instancePrefix}/handoff.json`);
+        const handoffReceiptRef = evidenceByPath.get(`${instancePrefix}/handoff-receipt.md`);
+        const validationRef = evidenceByPath.get(`${instancePrefix}/handoff-validation.json`);
+        const attemptRef = evidenceByPath.get(`${attemptPrefix}/attempt.json`);
+        const acceptanceRef = evidenceByPath.get(`${instancePrefix}/handoff-acceptance.json`);
+        if (assignmentRef && handoffRef && handoffReceiptRef && validationRef && attemptRef && acceptanceRef) {
+          for (const ref of [assignmentRef, handoffRef, handoffReceiptRef, validationRef, attemptRef, acceptanceRef]) usedSubstantiveEvidencePaths.add(ref.path);
+          retainedTask = acceptedTaskCellFactFromBytes({
+            runId: run.run_id,
+            taskId: operation.task_id,
+            attemptNumber: operation.attempt,
+            instanceId: operation.instance_id,
+            closedAt: retainedCloseFacts.closed_at,
+            bytes: {
+              assignment: snapshots.get(assignmentRef.path)!,
+              handoff: snapshots.get(handoffRef.path)!,
+              handoff_receipt: snapshots.get(handoffReceiptRef.path)!,
+              validation: snapshots.get(validationRef.path)!,
+              attempt: snapshots.get(attemptRef.path)!,
+              acceptance: snapshots.get(acceptanceRef.path)!,
+            },
+          });
+        }
+      }
+      if (!operation || operation.run_id !== run.run_id || !retainedTouchedTasks.has(operation.task_id)
+        || operation.host_id !== observation.runtime_package.host_id
+        || !retainedTask || canonical(retainedTask) !== canonical({
+          task_id: operation.task_id,
+          specialist_id: operation.specialist_id,
+          host_id: operation.host_id,
+          task_run_id: operation.task_run_id,
+          attempt: operation.attempt,
+          instance_id: operation.instance_id,
+          assignment_written_at: operation.assignment_written_at,
+          completed_at: operation.completed_at,
+          assignment_sha256: operation.projected_assignment_sha256,
+          handoff_sha256: operation.projected_handoff_sha256,
+          handoff_receipt_sha256: operation.projected_handoff_receipt_sha256,
+          validation_sha256: operation.projected_validation_sha256,
+          attempt_sha256: operation.projected_attempt_sha256,
+          acceptance_sha256: operation.projected_acceptance_sha256,
+        })
+        || !linked || linked.specialist_id !== operation.specialist_id || linked.payload_sha256 !== operation.compatibility_payload_sha256
+        || !receipt || receipt.operation_id.startsWith("compatibility-read:") || receipt.scenario_id !== "PCL-09"
+        || receipt.event_name !== "task.collect" || receipt.outcome_type !== "guild.capability_outcome.v1"
+        || receipt.disposition !== "succeeded" || receipt.observation_state !== "checked_clean"
+        || receipt.input_hash !== `sha256:${sha256(canonical({
+          task_id: operation.task_id,
+          specialist_id: operation.specialist_id,
+          host_id: operation.host_id,
+          task_run_id: operation.task_run_id,
+          attempt: operation.attempt,
+          instance_id: operation.instance_id,
+          assignment_written_at: operation.assignment_written_at,
+          completed_at: operation.completed_at,
+          assignment_sha256: operation.assignment_sha256,
+          handoff_sha256: operation.handoff_sha256,
+          handoff_receipt_sha256: operation.handoff_receipt_sha256,
+          validation_sha256: operation.validation_sha256,
+          attempt_sha256: operation.attempt_sha256,
+          acceptance_sha256: operation.acceptance_sha256,
+          projected_assignment_sha256: operation.projected_assignment_sha256,
+          projected_handoff_sha256: operation.projected_handoff_sha256,
+          projected_handoff_receipt_sha256: operation.projected_handoff_receipt_sha256,
+          projected_validation_sha256: operation.projected_validation_sha256,
+          projected_attempt_sha256: operation.projected_attempt_sha256,
+          projected_acceptance_sha256: operation.projected_acceptance_sha256,
+          compatibility_operation_id: operation.compatibility_operation_id,
+          compatibility_payload_sha256: operation.compatibility_payload_sha256,
+        }))}`
+        || receipt.output_hash !== operationRef.sha256 || receipt.terminal !== false
+        || receipt.observed_at !== operation.completed_at || receipt.causation_id !== linked.receipt.event_id
+        || receipt.correlation_id !== operation.operation_id || canonical(receipt.versions) !== canonical(linked.receipt.versions)
+        || receipt.sequence <= linked.receipt.sequence
+        || Date.parse(receipt.recorded_at) < Date.parse(operation.completed_at)
+        || (retainedCloseFacts && Date.parse(receipt.recorded_at) > Date.parse(retainedCloseFacts.closed_at))
+        || linked.receipt.operation_id !== `compatibility-read:task-cell-identity-${operation.task_id}-${operation.specialist_id}`
+        || Date.parse(linked.receipt.recorded_at) >= Date.parse(operation.assignment_written_at)
+        || (retainedCloseFacts && Date.parse(operation.completed_at) > Date.parse(retainedCloseFacts.closed_at))) {
+        throw new Error(`migration observation substantive operation is invalid, compatibility-only, or detached for ${run.run_id}`);
+      }
+    }
+    if (substantiveOperationRefs.length > 0 && usedSubstantiveEvidencePaths.size !== substantiveEvidenceRefs.length) {
+      throw new Error(`migration observation substantive evidence is missing, duplicated, or unclaimed for ${run.run_id}`);
     }
     if (baseline && retainedRunManifest && retainedCloseFacts && provenanceRef) {
       if (terminalReceipts.length !== 1) throw new Error(`migration observation requires one explicit terminal run seal for ${run.run_id}`);
@@ -1255,6 +1878,12 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
         || terminal.output_hash !== expectedSealHash
         || terminal.terminal !== true
         || terminal.sequence <= earliestQualifyingSequence
+        || substantiveOperationRefs.some((operationRef) => {
+          let operation: MigrationSubstantiveOperationV1 | null = null;
+          try { operation = parseSubstantiveOperation(JSON.parse(snapshots.get(operationRef.path)!.toString("utf8"))); } catch { operation = null; }
+          const substantiveReceipt = operation ? scan.records.find((receipt) => receipt.operation_id === operation.operation_id) : null;
+          return !substantiveReceipt || terminal.sequence <= substantiveReceipt.sequence;
+        })
         || terminal.sequence !== scan.last_sequence
         || Date.parse(terminal.recorded_at) < Date.parse(retainedCloseFacts.closed_at)
         || terminal.versions.host_id !== "guild-cli"
@@ -1269,6 +1898,22 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
     throw new Error("migration observation observed_at does not match its earliest whole-run profile");
   }
   return observation;
+}
+
+/** Historical v2 observations remain valid release evidence, but only FU18 records qualify as substantive runs. */
+export function isSubstantiveMigrationObservation(value: MigrationObservation): boolean {
+  return value.schema_version === MIGRATION_OBSERVATION_SCHEMA
+    && value.runs.every((run) => "substantive_operations" in run
+      && Array.isArray((run as MigrationObservationRunV2).substantive_operations)
+      && (run as MigrationObservationRunV2).substantive_operations!.length > 0);
+}
+
+export function verifySubstantiveMigrationObservation(projectRoot: string, value: unknown, stagedSnapshots?: ReadonlyMap<string, Buffer>): MigrationObservationV2 {
+  const observation = verifyMigrationObservation(projectRoot, value, stagedSnapshots);
+  if (!isSubstantiveMigrationObservation(observation)) {
+    throw new Error("migration observation has no distinct substantive operation evidence; compatibility-only release evidence does not qualify");
+  }
+  return observation as MigrationObservationV2;
 }
 
 function projectMigrationEvidenceBytes(projectRoot: string, runId: string, sourceRel: string, destinationRel: string, source: Buffer, terminalEventId?: string): Buffer {
@@ -1354,8 +1999,40 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
     const payloadDirectory = path.join(fs.realpathSync(options.projectRoot), prefix, "receipts", "payloads");
     const checkedDirectory = checkContained(options.projectRoot, payloadDirectory, { policy: "physical" });
     if (isRefused(checkedDirectory)) throw new Error(`migration observation payload directory refused [${checkedDirectory.code}]`);
-    const payloadNames = fs.readdirSync(checkedDirectory.realPath).filter((name) => name.endsWith(".compatibility-usage.json")).sort();
+    const names = fs.readdirSync(checkedDirectory.realPath).sort();
+    const payloadNames = names.filter((name) => name.endsWith(".compatibility-usage.json"));
+    const substantiveNames = names.filter((name) => name.endsWith(".substantive-operation.json"));
     const destinationPrefix = `.guild/artifacts/capability/migration-evidence/${boundary.boundary_hash}/${runId}`;
+    const substantiveOperations = Object.freeze(substantiveNames.map((name) => stage(`${prefix}/receipts/payloads/${name}`, `${destinationPrefix}/payloads/${name}`)));
+    const substantiveEvidenceByPath = new Map<string, MigrationEvidenceRefV1>();
+    const retainSubstantiveEvidence = (sourcePath: string, destinationPath: string): MigrationEvidenceRefV1 => {
+      const existing = substantiveEvidenceByPath.get(destinationPath);
+      if (existing) return existing;
+      const retained = stage(sourcePath, destinationPath);
+      substantiveEvidenceByPath.set(destinationPath, retained);
+      return retained;
+    };
+    for (const operationRef of substantiveOperations) {
+      let operation: MigrationSubstantiveOperationV1 | null = null;
+      try { operation = parseSubstantiveOperation(JSON.parse(stagedSnapshots.get(operationRef.path)!.toString("utf8"))); }
+      catch { operation = null; }
+      if (!operation || operation.run_id !== runId) throw new Error(`migration observation refuses malformed substantive operation: ${operationRef.path}`);
+      const paths = taskCellPaths({ run_id: runId, logical_task_id: operation.task_id, attempt: operation.attempt, instance_id: operation.instance_id });
+      const attemptDestination = `${destinationPrefix}/task-cells/${operation.task_id}/attempts/${operation.attempt}`;
+      const instanceDestination = `${attemptDestination}/instances/${operation.instance_id}`;
+      retainSubstantiveEvidence(paths.assignment_path, `${instanceDestination}/assignment.json`);
+      const handoffRef = retainSubstantiveEvidence(paths.handoff_path, `${instanceDestination}/handoff.json`);
+      retainSubstantiveEvidence(paths.validation_path, `${instanceDestination}/handoff-validation.json`);
+      retainSubstantiveEvidence(paths.attempt_path, `${attemptDestination}/attempt.json`);
+      retainSubstantiveEvidence(paths.acceptance_path, `${instanceDestination}/handoff-acceptance.json`);
+      let retainedHandoff: Record<string, unknown> | null = null;
+      try { retainedHandoff = plainRecord(JSON.parse(stagedSnapshots.get(handoffRef.path)!.toString("utf8"))); }
+      catch { retainedHandoff = null; }
+      if (canonicalRelativePath(retainedHandoff?.receipt_path) && retainedHandoff.receipt_path !== paths.handoff_path) {
+        retainSubstantiveEvidence(retainedHandoff.receipt_path, `${instanceDestination}/handoff-receipt.md`);
+      }
+    }
+    const substantiveEvidence = Object.freeze([...substantiveEvidenceByPath.values()].sort((left, right) => left.path.localeCompare(right.path)));
     const runManifest = stage(`${prefix}/run.yaml`, `${destinationPrefix}/run.yaml`);
     const provenance = stage(`${prefix}/provenance.json`, `${destinationPrefix}/provenance.json`);
     let terminalEventId: string | null = null;
@@ -1378,6 +2055,7 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
       journal: stage(`${prefix}/receipts/journal.jsonl`, `${destinationPrefix}/journal.jsonl`),
       checkpoint: stage(`${prefix}/receipts/checkpoint.json`, `${destinationPrefix}/checkpoint.json`),
       compatibility_payloads: Object.freeze(payloadNames.map((name) => stage(`${prefix}/receipts/payloads/${name}`, `${destinationPrefix}/payloads/${name}`))),
+      ...(substantiveNames.length > 0 ? { substantive_operations: substantiveOperations, substantive_evidence: substantiveEvidence } : {}),
     });
   });
   const observedAt = new Date(Math.min(...runs.map((run) => {
@@ -1400,7 +2078,7 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
     runs: Object.freeze(runs),
     verdict: "non_synthetic_runtime" as const,
   };
-  const observation = verifyMigrationObservation(options.projectRoot, { ...candidate, observation_hash: observationHash(candidate) }, stagedSnapshots);
+  const observation = verifySubstantiveMigrationObservation(options.projectRoot, { ...candidate, observation_hash: observationHash(candidate) }, stagedSnapshots);
   // Publish only after the complete candidate verifies. All files are first
   // written beneath an observation-hash staging directory, then the ONE run
   // directory is renamed into place atomically. A crash leaves either a
