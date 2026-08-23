@@ -1804,3 +1804,343 @@ describe("D03 evidence-bound migration window", () => {
     expect(legacyRemovalEligibility({ projectLocalDefault: "3.9.0", currentVersion: "4.0.0", g5Passed: true }).passed).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PCL-FU-20 (T1 red-first) — `capability-adopt window verify`.
+//
+// The FU19 observation window needs an operator-runnable, READ-ONLY verifier so
+// a published observation can be re-checked from a second clean checkout. The
+// action does not exist yet, so every control below is RED until T2 adds it.
+//
+// Contract pinned here:
+//   • usage form: `window verify --project-root <root> --observation <path> [--json]`
+//   • `verify` is in the exact per-action option allowlist with ONLY
+//     `project-root`, `observation`, `json` — and NO `--boundary` requirement.
+//   • it runs BEFORE the generic boundary-required branch.
+//   • it is backed directly by `verifySubstantiveMigrationObservation`.
+//   • exit 0 = accepted, exit 2 = verifier refusal, exit 1 = usage error.
+//   • it performs NO write and NO counter update (recursive byte snapshots).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("FU20 — capability-adopt window verify (read-only observation verifier)", () => {
+  const CLI = join(__dirname, "..", "capability-adopt.ts");
+  const TSX = join(__dirname, "..", "node_modules", "tsx", "dist", "cli.mjs");
+
+  function runVerifyCli(args: readonly string[]) {
+    return spawnSync(process.execPath, [TSX, CLI, ...args], { encoding: "utf8" });
+  }
+
+  /** Content-sensitive recursive snapshot: type, mode, symlink target, bytes. */
+  function byteSnapshot(root: string): Record<string, string> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeFs = require("node:fs") as typeof import("node:fs");
+    const snapshot: Record<string, string> = {};
+    const visit = (relative: string): void => {
+      const absolute = relative === "." ? root : join(root, relative);
+      const stat = nodeFs.lstatSync(absolute);
+      const mode = (stat.mode & 0o777).toString(8);
+      if (stat.isSymbolicLink()) {
+        snapshot[relative] = `symlink:${mode}:${nodeFs.readlinkSync(absolute)}`;
+        return;
+      }
+      if (stat.isDirectory()) {
+        snapshot[relative] = `directory:${mode}`;
+        for (const entry of nodeFs.readdirSync(absolute).sort()) {
+          visit(relative === "." ? entry : join(relative, entry));
+        }
+        return;
+      }
+      if (stat.isFile()) {
+        snapshot[relative] =
+          `file:${mode}:` + createHash("sha256").update(nodeFs.readFileSync(absolute)).digest("hex");
+        return;
+      }
+      snapshot[relative] = `other:${mode}`;
+    };
+    visit(".");
+    return snapshot;
+  }
+
+  function snapshotDelta(before: Record<string, string>, after: Record<string, string>): string[] {
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .filter((entry) => before[entry] !== after[entry])
+      .sort();
+  }
+
+  it("accepts a structurally valid substantive observation with exit 0 (RED)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-fu20-verify-ok-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(
+        projectRoot, fixture, "run-20260821-090000-fu20-verify-ok",
+        false, "observe", "2026-08-21T09:00:00.000Z",
+      );
+      // The CLI must be backed by the SAME verifier the library exposes.
+      expect(verifySubstantiveMigrationObservation(projectRoot, evidence.observation))
+        .toEqual(evidence.observation);
+
+      const result = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", evidence.observationPath,
+      ]);
+      expect(result.status).toBe(0);
+
+      const json = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", evidence.observationPath,
+        "--json",
+      ]);
+      expect(json.status).toBe(0);
+      expect(JSON.parse(json.stdout)).toEqual(expect.objectContaining({
+        observation_hash: evidence.observation.observation_hash,
+      }));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Deep-clones a SEALED, valid observation, applies an adversarial mutation,
+   * recomputes the top-level `observation_hash` with the same canonical helper
+   * the suite already uses, and writes the mutated document beside the original.
+   *
+   * The fixture deliberately REFUSES to seal a compatibility-only or detached
+   * run, so those documents cannot be produced by `observationFixture` directly
+   * — the CLI would never be invoked. Mutating a genuinely sealed document is
+   * the only way to hand `window verify` a structurally well-formed observation
+   * whose substantive binding is broken.
+   */
+  function mutatedObservationDocument(
+    originalPath: string,
+    observation: ReturnType<typeof observationFixture>["observation"],
+    mutate: (draft: Record<string, unknown>) => void,
+    label: string,
+  ): string {
+    const draft = JSON.parse(JSON.stringify(observation)) as Record<string, unknown>;
+    mutate(draft);
+    delete draft.observation_hash;
+    const mutated = {
+      ...draft,
+      observation_hash: createHash("sha256").update(canonical(draft)).digest("hex"),
+    };
+    const mutatedPath = join(dirname(originalPath), `${label}-observation.json`);
+    writeFileSync(mutatedPath, `${JSON.stringify(mutated, null, 2)}\n`);
+    return mutatedPath;
+  }
+
+  it("refuses a COMPATIBILITY-ONLY observation with exit 2 (RED)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-fu20-verify-compat-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(
+        projectRoot, fixture, "run-20260821-090000-fu20-compat-only",
+        false, "observe", "2026-08-21T09:00:00.000Z",
+      );
+      // Sanity: the UNMUTATED document is genuinely acceptable, so a refusal
+      // below can only come from the mutation.
+      expect(verifySubstantiveMigrationObservation(projectRoot, evidence.observation))
+        .toEqual(evidence.observation);
+
+      // Adversarial mutation: strip every substantive operation and its
+      // retained evidence, leaving only the compatibility read behind.
+      const mutatedPath = mutatedObservationDocument(
+        evidence.observationPath,
+        evidence.observation,
+        (draft) => {
+          for (const run of draft.runs as Array<Record<string, unknown>>) {
+            delete run.substantive_operations;
+            delete run.substantive_evidence;
+          }
+        },
+        "compatibility-only",
+      );
+
+      const result = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", mutatedPath,
+      ]);
+      // 2 is the VERIFIER-REFUSAL exit, distinct from the usage-error exit 1.
+      expect(result.status).toBe(2);
+      expect(result.stderr).not.toBe("");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a DETACHED compatibility observation with exit 2 (RED)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-fu20-verify-detached-"));
+    const runId = "run-20260821-090000-fu20-detached";
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(
+        projectRoot, fixture, runId, false, "observe", "2026-08-21T09:00:00.000Z",
+      );
+      expect(verifySubstantiveMigrationObservation(projectRoot, evidence.observation))
+        .toEqual(evidence.observation);
+
+      // Adversarial mutation: re-point the compatibility read at ANOTHER task,
+      // exactly as the fixture's own `detachedCompatibility` mode does, so the
+      // read no longer binds to the substantive operation it is supposed to
+      // explain. Applied by content so it does not depend on a field name.
+      const boundOperation = `task-cell-identity-task-${runId}-researcher`;
+      const detachedOperation = "task-cell-identity-other-task-researcher";
+      let rewrites = 0;
+      const detachStrings = (node: unknown): unknown => {
+        if (typeof node === "string") {
+          if (node.includes(boundOperation)) {
+            rewrites += 1;
+            return node.split(boundOperation).join(detachedOperation);
+          }
+          return node;
+        }
+        if (Array.isArray(node)) return node.map(detachStrings);
+        if (node !== null && typeof node === "object") {
+          const record = node as Record<string, unknown>;
+          for (const key of Object.keys(record)) record[key] = detachStrings(record[key]);
+          return record;
+        }
+        return node;
+      };
+
+      const mutatedPath = mutatedObservationDocument(
+        evidence.observationPath,
+        evidence.observation,
+        (draft) => {
+          detachStrings(draft.runs);
+          // If the operation id is not carried in the document itself, detach
+          // the binding by corrupting the compatibility read's own digests.
+          if (rewrites === 0) {
+            for (const run of draft.runs as Array<Record<string, unknown>>) {
+              const operations = run.substantive_operations as
+                Array<Record<string, unknown>> | undefined;
+              for (const operation of operations ?? []) {
+                operation.path = `${String(operation.path)}.detached`;
+                rewrites += 1;
+              }
+            }
+          }
+        },
+        "detached-compatibility",
+      );
+      // The mutation must actually have changed something, or the control is vacuous.
+      expect(rewrites).toBeGreaterThan(0);
+
+      const result = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", mutatedPath,
+      ]);
+      expect(result.status).toBe(2);
+      expect(result.stderr).not.toBe("");
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a MALFORMED observation document with exit 2 (RED)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-fu20-verify-malformed-"));
+    try {
+      const malformed = join(projectRoot, "malformed-observation.json");
+      writeFileSync(malformed, "{ not valid json\n");
+      const result = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", malformed,
+      ]);
+      // A damaged DOCUMENT is a verifier refusal, not a usage error.
+      expect(result.status).toBe(2);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses unknown and stray verify options with exit 1 (RED)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-fu20-verify-usage-"));
+    try {
+      // `--boundary` is NOT in verify's allowlist — it belongs to other actions.
+      const strayBoundary = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", join(projectRoot, "o.json"),
+        "--boundary", join(projectRoot, "b.json"),
+      ]);
+      expect(strayBoundary.status).toBe(1);
+      expect(strayBoundary.stderr).toMatch(/unknown window option.*--boundary/i);
+
+      const unknown = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", join(projectRoot, "o.json"),
+        "--conformance-pass",
+      ]);
+      expect(unknown.status).toBe(1);
+      expect(unknown.stderr).toMatch(/unknown window option.*--conformance-pass/i);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does NOT require --boundary — a missing boundary is never the failure (RED)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-fu20-verify-noboundary-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(
+        projectRoot, fixture, "run-20260821-090000-fu20-no-boundary",
+        false, "observe", "2026-08-21T09:00:00.000Z",
+      );
+      const result = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", evidence.observationPath,
+      ]);
+      // verify executes BEFORE the generic boundary-required branch.
+      expect(result.stderr).not.toMatch(/--boundary is required/i);
+      expect(result.status).toBe(0);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("writes NOTHING — recursive byte snapshots of project and observation hold (RED)", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-fu20-verify-freeze-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    try {
+      const evidence = observationFixture(
+        projectRoot, fixture, "run-20260821-090000-fu20-write-freedom",
+        false, "observe", "2026-08-21T09:00:00.000Z",
+      );
+      const projectBefore = byteSnapshot(projectRoot);
+      const observationBefore = byteSnapshot(dirname(evidence.observationPath));
+
+      const result = runVerifyCli([
+        "window", "verify",
+        "--project-root", projectRoot,
+        "--observation", evidence.observationPath,
+      ]);
+      expect(result.status).toBe(0);
+
+      expect(snapshotDelta(projectBefore, byteSnapshot(projectRoot))).toEqual([]);
+      expect(snapshotDelta(observationBefore, byteSnapshot(dirname(evidence.observationPath))))
+        .toEqual([]);
+      // No counter/window advance may occur as a side effect of a read-only verify.
+      expect(existsSync(join(projectRoot, MIGRATION_TRANSITION_RELPATH))).toBe(false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it("--help documents the EXACT verify usage form (RED)", () => {
+    const help = runVerifyCli(["--help"]);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toContain(
+      "window verify --project-root <root> --observation <path> [--json]",
+    );
+  });
+});

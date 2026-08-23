@@ -1173,24 +1173,23 @@ function specialistIdentity(
   compatibilityRecordedAt: string | null;
 } {
   const ref = specialist.definition_ref;
-  if (ref?.specialist_type_hash && ref.specialist_profile_hash) {
-    return {
-      typeId: specialist.name,
-      typeVersion: "1",
-      typeHash: ref.specialist_type_hash,
-      profileId: specialist.name,
-      profileHash: ref.specialist_profile_hash,
-      compatibilityRecordedAt: null,
-    };
-  }
+  const refTypeHash = ref?.specialist_type_hash ?? null;
+  const refProfileHash = ref?.specialist_profile_hash ?? null;
+  const refIsComplete = refTypeHash !== null && refProfileHash !== null;
 
   const runtimeRoot = process.env["GUILD_PLUGIN_ROOT"] ??
     process.env["CLAUDE_PLUGIN_ROOT"] ?? path.resolve(__dirname, "..");
-  const definitionRoot = specialist.definition_source === "project" ? cwd : runtimeRoot;
-  const definitionPath = specialist.definition
-    ? path.resolve(definitionRoot, specialist.definition)
-    : null;
-  const definitionBytes = definitionPath ? readRegularFile(definitionPath) : null;
+
+  // PCL-FU-20: the shipped-template compatibility read is LOAD-BEARING and must
+  // run BEFORE the complete-ref shortcut. Pre-fix, a lane whose committed
+  // definition ref already carried both identity hashes returned here without
+  // ever touching the catalog, so the FU19 observation window recorded nothing
+  // for exactly the dispatch path it exists to observe — and a divergent
+  // committed ref was never contradicted by the bytes on disk.
+  //
+  // The read itself is unchanged and stays self-gating: it returns null in
+  // `project-local` / `strict`, and null for a role with no matching shipped
+  // catalog template. Those cases keep the original shortcut semantics.
   const templateRead = readSpecialistTemplateCompatibility(
     cwd,
     runId,
@@ -1199,6 +1198,23 @@ function specialistIdentity(
     specialist,
     runtimeRoot,
   );
+
+  if (refIsComplete && templateRead === null) {
+    return {
+      typeId: specialist.name,
+      typeVersion: "1",
+      typeHash: refTypeHash,
+      profileId: specialist.name,
+      profileHash: refProfileHash,
+      compatibilityRecordedAt: null,
+    };
+  }
+
+  const definitionRoot = specialist.definition_source === "project" ? cwd : runtimeRoot;
+  const definitionPath = specialist.definition
+    ? path.resolve(definitionRoot, specialist.definition)
+    : null;
+  const definitionBytes = definitionPath ? readRegularFile(definitionPath) : null;
   const templateBytes = templateRead?.bytes ?? null;
   const templateFm = templateBytes ? parseFrontmatter(templateBytes.toString("utf8")) : null;
   const projectedType = templateFm
@@ -1249,12 +1265,37 @@ function specialistIdentity(
         }))}`,
     local_skill_refs: pinnedSkillIds,
   };
+  const profileHash = hashSpecialistProfile(profile);
+
+  // PCL-FU-20: when the lane carries a complete committed ref AND the shipped
+  // template was really read, the identity derived from those bytes is the
+  // authority. Fail CLOSED on any disagreement — this runs before TaskCell
+  // assignment, so a divergent ref never reaches a cell.
+  if (refIsComplete) {
+    if (inlineType.type_id !== specialist.name || profile.profile_id !== specialist.name) {
+      throw new Error(
+        `compatibility_read_refused: ${specialist.name}/${logicalTaskId} — ` +
+          `identity read from the shipped template resolves to ` +
+          `type_id=${inlineType.type_id} profile_id=${profile.profile_id}, ` +
+          `which does not match the lane name`,
+      );
+    }
+    if (typeHash !== refTypeHash || profileHash !== refProfileHash) {
+      throw new Error(
+        `compatibility_read_refused: ${specialist.name}/${logicalTaskId} — ` +
+          `identity derived from the bytes actually read diverges from the ` +
+          `committed definition ref (type_hash read=${typeHash} ref=${refTypeHash}; ` +
+          `profile_hash read=${profileHash} ref=${refProfileHash})`,
+      );
+    }
+  }
+
   return {
     typeId: inlineType.type_id,
     typeVersion: inlineType.version,
     typeHash,
     profileId: profile.profile_id,
-    profileHash: hashSpecialistProfile(profile),
+    profileHash,
     compatibilityRecordedAt: templateRead?.receiptRecordedAt ?? null,
   };
 }

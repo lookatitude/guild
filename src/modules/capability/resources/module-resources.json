@@ -22,7 +22,7 @@
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
       "resource_path": "resources/scripts/capability-adopt.ts",
-      "sha256": "1528633a50f27d5e6a14b3f37e95ff74eaaf722904b4ee820d1c779a8d8c3b96"
+      "sha256": "99be5da0952b53a530e6e498c12e258232fec2b9d5e2fd3574b3ee123e974a7b"
     },
     {
       "category": "scripts",
