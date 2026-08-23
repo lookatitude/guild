@@ -44,7 +44,7 @@ import {
 } from "./lib/capability/compatibility-catalog";
 import { evaluateG5 } from "./lib/capability/compatibility-usage";
 import { collectCompatibilityUsageWindow, writeFrozenCompatibilityCatalog } from "./lib/capability/compatibility-loader";
-import { createMigrationObservation, sealMigrationObservationRun, writeMigrationObservation } from "./lib/capability/migration-evidence";
+import { createMigrationObservation, sealMigrationObservationRun, verifySubstantiveMigrationObservation, writeMigrationObservation } from "./lib/capability/migration-evidence";
 import { advanceMigrationWindow, inspectMigrationWindow, legacyRemovalEligibility, recordMigrationRelease, restartMigrationWindow, startMigrationWindow } from "./lib/capability/migration-window";
 
 const USAGE = `
@@ -61,6 +61,7 @@ capability-adopt — project capability adoption migration (D6)
   capability-adopt window   record --boundary <boundary.json> --observation <observation.json>
   capability-adopt window   advance --boundary <boundary.json> --to <mode> [--actor <id>]
   capability-adopt window   status [--project-root <p>]
+  capability-adopt window verify --project-root <root> --observation <path> [--json]
   capability-adopt adopt    --project-id <id> --decisions <file> --run-id <id> --binding-ref <ref> \\
                             --authorized-by <decision-record> --adopted-at <rfc3339> [--dry-run]
   capability-adopt rollback --project-id <id> --run-id <id> --authorized-by <record> \\
@@ -203,6 +204,7 @@ function main(argv: readonly string[]): number {
       restart: ["project-root", "boundary", "reason", "actor", "json"],
       record: ["project-root", "boundary", "observation", "json"],
       advance: ["project-root", "boundary", "to", "actor", "json"],
+      verify: ["project-root", "observation", "json"],
     };
     const allowed = Object.prototype.hasOwnProperty.call(allowedByAction, action) ? allowedByAction[action] : undefined;
     if (!allowed) { process.stderr.write(`${USAGE}\n`); return 1; }
@@ -219,6 +221,20 @@ function main(argv: readonly string[]): number {
       try {
         const receipt = sealMigrationObservationRun({ projectRoot, runId });
         process.stdout.write(`${JSON.stringify({ status: "sealed", receipt }, null, 2)}\n`);
+        return 0;
+      } catch (error) { process.stderr.write(`refused: ${(error as Error).message}\n`); return 2; }
+    }
+    if (action === "verify") {
+      // PCL-FU-20: read-only observation verifier. It never writes, never
+      // advances the window counter, and is backed DIRECTLY by the library
+      // verifier so the CLI verdict cannot drift from the library's.
+      const observationPath = str(windowArgs, "observation");
+      if (!observationPath) fail("window verify requires --observation <guild.capability_migration_observation.v2.json>", 1);
+      try {
+        const raw = fs.readFileSync(path.resolve(observationPath), "utf8");
+        // A damaged DOCUMENT is a verifier refusal (2), not a usage error (1).
+        const verified = verifySubstantiveMigrationObservation(projectRoot, JSON.parse(raw));
+        process.stdout.write(`${JSON.stringify(verified, null, 2)}\n`);
         return 0;
       } catch (error) { process.stderr.write(`refused: ${(error as Error).message}\n`); return 2; }
     }

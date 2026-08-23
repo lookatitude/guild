@@ -13,7 +13,7 @@
  *  - $TMUX unset → new-session + attach (unchanged legacy behavior).
  *  - Existing tmux session collision → exit 1 (refuse to clobber).
  */
-import { spawnSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import { createHash } from "crypto";
 import * as path from "path";
 import * as fs from "fs";
@@ -53,6 +53,35 @@ import {
   settleFailedCmuxTaskCells,
 } from "../agent-team-launcher";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
+// FU20 controls seed a genuinely COMMITTED adoption manifest so the launcher's
+// project-definition resolver returns a real `guild.project_definition_ref.v1`.
+import {
+  ADOPTION_MANIFEST_SCHEMA,
+  entryDigest,
+  type AdoptionManifestV1,
+} from "../lib/core/contracts/adoption-manifest";
+import {
+  PROJECT_DEFINITION_REF_SCHEMA,
+  type ProjectDefinitionRefV1,
+} from "../lib/core/contracts/project-definition-ref";
+import { commitAdoptionManifest } from "../lib/capability/adoption-migrate";
+import {
+  hashSpecialistProfile,
+  hashSpecialistType,
+  specialistProfileFromAgentFrontmatter,
+  specialistTypeFromTemplateFrontmatter,
+} from "../lib/core/contracts/specialist-identity";
+import { parseFrontmatter } from "../lib/frontmatter";
+import {
+  BENIGN_COMPATIBILITY_READ_REASONS,
+  COMPATIBILITY_USAGE_SCHEMA,
+  DEPENDENCE_COMPATIBILITY_READ_REASONS,
+} from "../../src/modules/capability/workflows/compatibility-usage";
+import {
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+  computePhysicalNativeClaudePayloadDigest,
+} from "../../src/modules/distribution/workflows/release-package-identity";
 
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 const INHERITED_RUN_ID = "run-20260811-000000-launcher-test";
@@ -3793,4 +3822,526 @@ describe("agent-team-launcher.ts", () => {
     });
   });
 
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PCL-FU-20 — observe-mode definition-ref compatibility repair (T1 red-first).
+//
+// Defect pinned here: `specialistIdentity` returns EARLY whenever the resolved
+// `definition_ref` already carries both `specialist_type_hash` and
+// `specialist_profile_hash`. Under a compatibility-enabled resolver mode
+// (`legacy` / `observe` / `shadow`) that early return happens BEFORE
+// `readSpecialistTemplateCompatibility` is ever called, so a lane whose name
+// matches a SHIPPED template emits no PCL-09 compatibility receipt. The FU19
+// observation window therefore records nothing for exactly the dispatch path it
+// exists to observe.
+//
+// These controls are authored RED on purpose. T2's production correction makes
+// them green — never a loosened assertion here.
+//
+// Scope note: the Guild dev-team lanes (eval-engineer / tooling-engineer /
+// docs-writer) are NOT FU19 observations — they are project-only roles with no
+// shipped template. The `researcher` fixture is the future FU19 path: a role
+// with BOTH a shipped catalog template AND a valid project definition ref.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("FU20 — compatibility read under a complete project definition ref", () => {
+  const FU20_SLUG = "fu20-observe";
+  const RESEARCHER_TEMPLATE = path.join(
+    EXACT_CLAUDE_PLUGIN_ROOT,
+    "templates",
+    "specialists",
+    "researcher.md",
+  );
+
+  function bareSha256(bytes: Buffer): string {
+    return createHash("sha256").update(bytes).digest("hex");
+  }
+
+  function shippedResearcherContentHash(): string {
+    return bareSha256(fs.readFileSync(RESEARCHER_TEMPLATE));
+  }
+
+  interface Fu20Lane {
+    readonly name: string;
+    readonly taskId: string;
+    /**
+     * Overrides the identity hashes recorded in the COMMITTED adoption manifest.
+     * A lane that supplies hashes which cannot be derived from the bytes the
+     * launcher actually reads is the divergent-ref control.
+     */
+    readonly divergentHashes?: { readonly typeHash: string; readonly profileHash: string };
+  }
+
+  /**
+   * The GENUINE identity for a lane: derived only from the bytes on disk — the
+   * shipped catalog template (type) and the project-local definition (profile).
+   * When a shipped template exists the production projection uses it directly,
+   * so this needs no launcher-internal fixture state to reproduce.
+   */
+  function derivedIdentity(
+    templatePath: string | null,
+    definitionBytes: Buffer,
+    laneName: string,
+  ): { typeHash: string; profileHash: string } | null {
+    if (templatePath === null || !fs.existsSync(templatePath)) return null;
+    const templateFm = parseFrontmatter(fs.readFileSync(templatePath, "utf8"));
+    const type = templateFm ? specialistTypeFromTemplateFrontmatter(templateFm) : null;
+    if (!type) return null;
+    const typeHash = hashSpecialistType(type);
+    const definitionFm = parseFrontmatter(definitionBytes.toString("utf8"));
+    const profile = definitionFm
+      ? specialistProfileFromAgentFrontmatter(definitionFm, {
+          type_id: type.type_id,
+          type_version: type.version,
+          type_hash: typeHash,
+        })
+      : null;
+    if (!profile) return null;
+    void laneName;
+    return { typeHash, profileHash: hashSpecialistProfile(profile) };
+  }
+
+  function shippedTemplatePathFor(laneName: string): string | null {
+    const candidate = path.join(
+      EXACT_CLAUDE_PLUGIN_ROOT, "templates", "specialists", `${laneName}.md`,
+    );
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  function seedFu20Repo(
+    dir: string,
+    lanes: readonly Fu20Lane[],
+    resolverMode: "observe" | "project-local" | "strict" | "legacy" | "shadow" | null,
+  ): { teamPath: string; refs: Record<string, ProjectDefinitionRefV1> } {
+    const guild = path.join(dir, ".guild");
+    fs.mkdirSync(path.join(guild, "team"), { recursive: true });
+    fs.mkdirSync(path.join(guild, "plan"), { recursive: true });
+    fs.mkdirSync(path.join(guild, "agents"), { recursive: true });
+    fs.mkdirSync(path.join(guild, "spec"), { recursive: true });
+    fs.writeFileSync(path.join(guild, "spec", `${FU20_SLUG}.md`), "# fu20 spec\n");
+
+    if (resolverMode !== null) {
+      fs.writeFileSync(
+        path.join(guild, "settings.json"),
+        `${JSON.stringify({ capability: { resolver_mode: resolverMode } }, null, 2)}\n`,
+      );
+    }
+
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "guild@example.invalid"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "Guild Test"], { cwd: dir });
+
+    const definitionBytesByLane = new Map<string, Buffer>();
+    for (const lane of lanes) {
+      const body = [
+        "---",
+        `name: ${lane.name}`,
+        "description: >-",
+        `  Project-local ${lane.name} lane definition used by the FU20 compatibility controls.`,
+        "model: opus",
+        "---",
+        "",
+        `# ${lane.name}`,
+        "",
+        `Project-local ${lane.name} role body.`,
+        "",
+      ].join("\n");
+      const relative = path.join(".guild", "agents", `${lane.name}.md`);
+      fs.writeFileSync(path.join(dir, relative), body);
+      definitionBytesByLane.set(lane.name, Buffer.from(body, "utf8"));
+      execFileSync("git", ["add", relative], { cwd: dir });
+    }
+    execFileSync("git", ["commit", "-qm", "fu20 project definitions"], { cwd: dir });
+    const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: dir, encoding: "utf8",
+    }).trim();
+
+    const refs: Record<string, ProjectDefinitionRefV1> = {};
+    const entries: AdoptionManifestV1["entries"] = [];
+    let sequence = 0;
+    for (const lane of lanes) {
+      const definitionBytes = definitionBytesByLane.get(lane.name) as Buffer;
+      const derived = derivedIdentity(
+        shippedTemplatePathFor(lane.name), definitionBytes, lane.name,
+      );
+      // A project-only lane has no shipped template; its committed identity is
+      // whatever the manifest recorded at adoption time.
+      const typeHash = lane.divergentHashes?.typeHash ?? derived?.typeHash ?? "c".repeat(64);
+      const profileHash =
+        lane.divergentHashes?.profileHash ?? derived?.profileHash ?? "d".repeat(64);
+      const ref: ProjectDefinitionRefV1 = {
+        schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+        project_id: "fu20-fixture",
+        layer: "project-guild",
+        kind: "agent",
+        id: lane.name,
+        relative_path: `.guild/agents/${lane.name}.md`,
+        content_hash: `sha256:${bareSha256(definitionBytes)}`,
+        source_commit: sourceCommit,
+        specialist_profile_hash: profileHash,
+        specialist_type_hash: typeHash,
+        skills: [],
+      };
+      refs[lane.name] = ref;
+      sequence += 1;
+      // The manifest is APPEND-ONLY and chained: every entry after the first
+      // carries the digest of the entry before it. A broken chain makes the
+      // manifest uncommittable, so a multi-lane fixture must chain explicitly.
+      const previous = entries[entries.length - 1];
+      entries.push({
+        sequence,
+        kind: "agent",
+        from: {
+          project_id: "fu20-fixture",
+          id: `legacy-${lane.name}`,
+          historical_path: `/legacy/${lane.name}.md`,
+          content_hash: `sha256:${bareSha256(Buffer.from(`legacy-${lane.name}`))}`,
+          home: "plugin-shipped",
+        },
+        to: ref,
+        reason: "migrated",
+        detail: null,
+        reverses_sequence: null,
+        adopted_at: "2026-08-10T06:00:00Z",
+        run_id: "run-fu20-adoption",
+        authorized_by: "cap-loc-D09",
+        prev_digest: previous === undefined ? null : entryDigest(previous),
+      });
+    }
+    const manifest: AdoptionManifestV1 = {
+      schema_version: ADOPTION_MANIFEST_SCHEMA,
+      project_id: "fu20-fixture",
+      entries,
+    };
+    fs.writeFileSync(
+      path.join(guild, "adoption-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+    const commitment = commitAdoptionManifest(dir, manifest, "migration.cutover");
+    expect(commitment?.durable).toBe(true);
+
+    const teamLines: string[] = [
+      `spec: .guild/spec/${FU20_SLUG}.md`,
+      "backend: agent-team",
+      "allow_larger: false",
+      "user_approved_agent_team: true",
+      "specialists:",
+    ];
+    for (const lane of lanes) {
+      teamLines.push(`  - name: ${lane.name}`);
+      teamLines.push(`    scope: "FU20 compatibility control lane for ${lane.name}."`);
+      teamLines.push("    depends-on: []");
+      teamLines.push(`    definition: .guild/agents/${lane.name}.md`);
+      teamLines.push("    definition_source: project");
+    }
+    const teamPath = path.join(guild, "team", `${FU20_SLUG}.yaml`);
+    fs.writeFileSync(teamPath, `${teamLines.join("\n")}\n`);
+
+    const planLines: string[] = [];
+    for (const lane of lanes) {
+      planLines.push(`## Lane: ${lane.name}`);
+      planLines.push(`- task-id: ${lane.taskId}`);
+      planLines.push(`- owner: ${lane.name}`);
+      planLines.push("");
+    }
+    fs.writeFileSync(path.join(guild, "plan", `${FU20_SLUG}.md`), planLines.join("\n"));
+
+    writeRunContexts(
+      dir,
+      INHERITED_RUN_ID,
+      lanes.map((lane) => [lane.name, lane.taskId] as [string, string]),
+    );
+    return { teamPath, refs };
+  }
+
+  function launchFu20(
+    dir: string,
+    teamPath: string,
+    sessionName: string,
+  ): { exitCode: number; stdout: string; stderr: string } {
+    return runScript(
+      ["--team", teamPath, "--session-name", sessionName, "--cwd", dir],
+      { PATH: `${makeLaunchableTmuxBin(dir)}:${process.env["PATH"] ?? ""}` },
+    );
+  }
+
+  function runDirOf(dir: string): string {
+    const sessionJson = findSessionJson(dir);
+    expect(sessionJson).not.toBeNull();
+    return path.dirname(path.dirname(sessionJson as string));
+  }
+
+  function compatibilityReceiptsIn(runDir: string) {
+    const journal = path.join(runDir, "receipts", "journal.jsonl");
+    if (!fs.existsSync(journal)) return [];
+    return scanReceiptJournal(journal).records.filter(
+      (record) =>
+        record.scenario_id === "PCL-09" &&
+        record.operation_id.startsWith("compatibility-read:task-cell-identity-"),
+    );
+  }
+
+  function assignmentFor(runDir: string, logicalTaskId: string): Record<string, unknown> {
+    const instances = path.join(runDir, "task-cells", logicalTaskId, "attempts", "1", "instances");
+    const instanceIds = fs.readdirSync(instances);
+    expect(instanceIds).toHaveLength(1);
+    return JSON.parse(
+      fs.readFileSync(path.join(instances, instanceIds[0], "assignment.json"), "utf8"),
+    ) as Record<string, unknown>;
+  }
+
+  /**
+   * Locates the RETAINED compatibility payload by content identity rather than a
+   * hard-coded path: the payload is the regular file under the run whose sha256
+   * equals the receipt `output_hash`. A telemetry-only or stubbed loader leaves
+   * no such file, so a fabricated receipt cannot satisfy this.
+   */
+  function retainedPayloadBytesFor(runDir: string, outputHash: string): Buffer | null {
+    const stack: string[] = [runDir];
+    while (stack.length > 0) {
+      const current = stack.pop() as string;
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const absolute = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(absolute);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const bytes = fs.readFileSync(absolute);
+        if (bareSha256(bytes) === outputHash) return bytes;
+      }
+    }
+    return null;
+  }
+
+  // The materialized exact-Claude package is a `git archive HEAD` of a working
+  // checkout whose TRACKED identity file can be stale relative to the tracked
+  // payload. When it is, every real launch dies at CH-6 tmux preflight with
+  // "native Claude complete payload digest differs" and never reaches
+  // `specialistIdentity` — which would make these controls red for the wrong
+  // reason. Re-stamp the TEMPORARY package so its identity is self-consistent
+  // with the bytes it actually carries. The identity file is excluded from its
+  // own digest, so this is a fixed point. Production and the shared fixture
+  // helper are untouched; only this temp directory is re-stamped.
+  beforeAll(() => {
+    const version = JSON.parse(
+      fs.readFileSync(
+        path.join(EXACT_CLAUDE_PLUGIN_ROOT, ".claude-plugin", "plugin.json"), "utf8",
+      ),
+    ).version as string;
+    fs.writeFileSync(
+      path.join(EXACT_CLAUDE_PLUGIN_ROOT, NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE),
+      `${JSON.stringify({
+        schema_version: NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+        release_version: version,
+        payload_digest: computePhysicalNativeClaudePayloadDigest(EXACT_CLAUDE_PLUGIN_ROOT),
+      }, null, 2)}\n`,
+      { mode: 0o644 },
+    );
+  });
+
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-fu20-launcher-"));
+  });
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  it("observe + complete researcher ref emits EXACTLY ONE PCL-09 receipt before assignment (RED)", () => {
+    const { teamPath, refs } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "observe",
+    );
+    const launched = launchFu20(tmpDir, teamPath, "guild-fu20-observe-one");
+    expect(launched.exitCode).toBe(0);
+
+    const runDir = runDirOf(tmpDir);
+    const receipts = compatibilityReceiptsIn(runDir);
+
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].operation_id).toBe(
+      "compatibility-read:task-cell-identity-T0-researcher-researcher",
+    );
+    expect(receipts[0].observation_state).toBe("checked_clean");
+
+    const assignment = assignmentFor(runDir, "T0-researcher");
+    expect(assignment["specialist_profile_id"]).toBe("researcher");
+    expect(assignment["host_id"]).toBe("claude-code-cli");
+    // The identity computed from the bytes actually read must equal the approved ref.
+    expect(assignment["specialist_type_hash"]).toBe(refs["researcher"].specialist_type_hash);
+    expect(assignment["specialist_profile_hash"]).toBe(refs["researcher"].specialist_profile_hash);
+    expect(receipts[0].versions.host_id).toBe("claude-code-cli");
+    expect(Date.parse(receipts[0].recorded_at)).toBeLessThan(
+      Date.parse(assignment["written_at"] as string),
+    );
+  });
+
+  it("the observe read is GENUINE — hashes bind the exact shipped bytes and a retained payload (RED)", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "observe",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-observe-genuine").exitCode).toBe(0);
+
+    const runDir = runDirOf(tmpDir);
+    const receipts = compatibilityReceiptsIn(runDir);
+    expect(receipts).toHaveLength(1);
+    const receipt = receipts[0];
+
+    expect(receipt.input_hash).toBe(shippedResearcherContentHash());
+
+    const payloadBytes = retainedPayloadBytesFor(runDir, receipt.output_hash);
+    expect(payloadBytes).not.toBeNull();
+
+    // `guild.compatibility_usage.v1` records no `intent` field — the dispatch
+    // intent is carried as the read REASON, and a dispatch read is a genuine
+    // DEPENDENCE read (never one of the benign mint/shadow reasons). Assert the
+    // fields the shipped contract actually records.
+    const payload = JSON.parse((payloadBytes as Buffer).toString("utf8")) as Record<string, unknown>;
+    expect(payload["schema_version"]).toBe(COMPATIBILITY_USAGE_SCHEMA);
+    expect(payload["asset_kind"]).toBe("shipped_template");
+    expect(payload["asset_id"]).toBe("researcher");
+    expect(payload["asset_path"]).toBe("templates/specialists/researcher.md");
+    // The payload names the SAME bytes the receipt hashed — one read, not two.
+    expect(payload["content_hash"]).toBe(shippedResearcherContentHash());
+    expect(payload["content_hash"]).toBe(receipt.input_hash);
+    expect(payload["resolver_mode"]).toBe("observe");
+    expect(payload["synthetic"]).toBe(false);
+    expect(payload["specialist_id"]).toBe("researcher");
+    expect(DEPENDENCE_COMPATIBILITY_READ_REASONS).toContain(payload["reason"]);
+    expect(BENIGN_COMPATIBILITY_READ_REASONS).not.toContain(payload["reason"]);
+
+    // Task-bound and causally ordered: this payload belongs to THIS lane's read,
+    // and the read completed before the assignment it justifies was written.
+    expect(receipt.operation_id).toBe(
+      "compatibility-read:task-cell-identity-T0-researcher-researcher",
+    );
+    expect(receipt.output_hash).toBe(bareSha256(payloadBytes as Buffer));
+    const assignment = assignmentFor(runDir, "T0-researcher");
+    expect(assignment["specialist_profile_id"]).toBe("researcher");
+    expect(Date.parse(receipt.recorded_at)).toBeLessThan(
+      Date.parse(assignment["written_at"] as string),
+    );
+  });
+
+  it("a DIVERGENT committed ref refuses BEFORE assignment when the read bytes disagree (RED)", () => {
+    // The committed manifest records identity hashes that CANNOT be derived
+    // from the shipped template / project definition bytes the launcher reads.
+    // A telemetry-only or stubbed loader cannot detect this; only a real,
+    // load-bearing read followed by an identity-equality check can.
+    seedFu20Repo(
+      tmpDir,
+      [{
+        name: "researcher",
+        taskId: "T0-researcher",
+        divergentHashes: { typeHash: "1".repeat(64), profileHash: "2".repeat(64) },
+      }],
+      "observe",
+    );
+    const teamPath = path.join(tmpDir, ".guild", "team", `${FU20_SLUG}.yaml`);
+    const launched = launchFu20(tmpDir, teamPath, "guild-fu20-divergent");
+
+    expect(launched.exitCode).not.toBe(0);
+    // Refusal is BEFORE TaskCell assignment — no cell may exist.
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "task-cells", "T0-researcher"),
+      ),
+    ).toBe(false);
+  });
+
+  it("project-local retains the valid ref and emits NO compatibility receipt", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "project-local",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-project-local").exitCode).toBe(0);
+    const runDir = runDirOf(tmpDir);
+    expect(compatibilityReceiptsIn(runDir)).toHaveLength(0);
+    const assignment = assignmentFor(runDir, "T0-researcher");
+    expect(assignment["specialist_type_hash"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(assignment["specialist_profile_hash"]).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("strict retains the valid ref and emits NO compatibility receipt", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "strict",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-strict").exitCode).toBe(0);
+    const runDir = runDirOf(tmpDir);
+    expect(compatibilityReceiptsIn(runDir)).toHaveLength(0);
+    expect(assignmentFor(runDir, "T0-researcher")["specialist_profile_id"]).toBe("researcher");
+  });
+
+  it("a project-only role with NO shipped template emits no receipt in observe", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "eval-engineer", taskId: "T9-eval-engineer" }],
+      "observe",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-project-only").exitCode).toBe(0);
+    const runDir = runDirOf(tmpDir);
+    expect(compatibilityReceiptsIn(runDir)).toHaveLength(0);
+    expect(assignmentFor(runDir, "T9-eval-engineer")["worker_role"]).toBe("eval-engineer");
+  });
+
+  it("multi-lane observe: one receipt per matching shipped-template task, no cross-link (RED)", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [
+        { name: "researcher", taskId: "T0-researcher" },
+        { name: "architect", taskId: "T1-architect" },
+        { name: "eval-engineer", taskId: "T9-eval-engineer" },
+      ],
+      "observe",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-multi").exitCode).toBe(0);
+
+    const runDir = runDirOf(tmpDir);
+    const receipts = compatibilityReceiptsIn(runDir);
+    expect(receipts.map((record) => record.operation_id).sort()).toEqual([
+      "compatibility-read:task-cell-identity-T0-researcher-researcher",
+      "compatibility-read:task-cell-identity-T1-architect-architect",
+    ]);
+    for (const receipt of receipts) {
+      const logicalTaskId = receipt.operation_id
+        .replace("compatibility-read:task-cell-identity-", "")
+        .replace(/-(researcher|architect)$/, "");
+      const assignment = assignmentFor(runDir, logicalTaskId);
+      expect(assignment["logical_task_id"]).toBe(logicalTaskId);
+      expect(Date.parse(receipt.recorded_at)).toBeLessThan(
+        Date.parse(assignment["written_at"] as string),
+      );
+    }
+  });
+
+  it("--dry-run invokes NO compatibility loader and writes nothing (recursive byte snapshot)", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "observe",
+    );
+    // The first invocation absorbs the harness's own lifecycle seeding
+    // (current-run-id, run binding, default-role context bundles). The SECOND
+    // invocation is the control: a preflight that persists nothing leaves the
+    // recursive project bytes identical.
+    const primed = runScript([
+      "--team", teamPath, "--session-name", "guild-fu20-dry", "--cwd", tmpDir, "--dry-run",
+    ]);
+    expect(primed.exitCode).toBe(0);
+    const before = snapshotTree(tmpDir);
+    const launched = runScript([
+      "--team", teamPath, "--session-name", "guild-fu20-dry", "--cwd", tmpDir, "--dry-run",
+    ]);
+    expect(launched.exitCode).toBe(0);
+    expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "receipts", "journal.jsonl"),
+      ),
+    ).toBe(false);
+  });
 });
