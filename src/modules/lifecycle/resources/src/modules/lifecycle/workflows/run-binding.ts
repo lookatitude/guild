@@ -24,6 +24,7 @@
 import * as crypto from "crypto";
 import * as fsReal from "fs";
 import * as path from "path";
+import { writeContainedFile } from "../../kernel";
 import { initStableLockfile, withStableLock } from "./stable-lock";
 
 // ── Schema ───────────────────────────────────────────────────────────────────
@@ -66,6 +67,8 @@ export class BindingRejectedError extends Error {
 export interface BindingFs {
   mkdirp(absPath: string): void;
   writeFile(absPath: string, contents: string): void;
+  /** Atomically replace one physically-contained file. Production always supplies this. */
+  writeFileAtomicContained?(root: string, absPath: string, contents: string): void;
   /** Create a new file without replacing an existing inode. */
   writeFileExclusive?(absPath: string, contents: string): boolean;
   readFile(absPath: string): string | null;
@@ -76,6 +79,12 @@ function realBindingFs(): BindingFs {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
     writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    writeFileAtomicContained: (root, p, c) => {
+      const result = writeContainedFile(root, p, Buffer.from(c, "utf8"), { policy: "physical" });
+      if (!result.written) {
+        throw new Error(`pending substantive operation marker write refused [${result.code}]: ${result.detail}`);
+      }
+    },
     writeFileExclusive: (p, c) => {
       fsReal.mkdirSync(path.dirname(p), { recursive: true });
       try {
@@ -108,7 +117,7 @@ export function pendingSubstantiveOperationPath(root: string, runId: string): st
   return path.join(root, ".guild", "runs", runId, "capability", "pending-substantive-operation.json");
 }
 
-function readPendingSubstantiveOperation(root: string, runId: string, fs: BindingFs): PendingSubstantiveOperationRecord | null {
+export function readPendingSubstantiveOperation(root: string, runId: string, fs: BindingFs = realBindingFs()): PendingSubstantiveOperationRecord | null {
   const raw = fs.readFile(pendingSubstantiveOperationPath(root, runId));
   if (raw === null) return null;
   let value: unknown;
@@ -126,8 +135,15 @@ function readPendingSubstantiveOperation(root: string, runId: string, fs: Bindin
 
 function writePendingSubstantiveOperation(root: string, record: PendingSubstantiveOperationRecord, fs: BindingFs): void {
   const target = pendingSubstantiveOperationPath(root, record.run_id);
+  const serialized = `${JSON.stringify(record, null, 2)}\n`;
+  if (fs.writeFileAtomicContained) {
+    fs.writeFileAtomicContained(root, target, serialized);
+    return;
+  }
+  // Deterministic in-memory lifecycle tests use the minimal BindingFs seam.
+  // Production always takes the physically-contained atomic branch above.
   fs.mkdirp(path.dirname(target));
-  fs.writeFile(target, `${JSON.stringify(record, null, 2)}\n`);
+  fs.writeFile(target, serialized);
 }
 
 /** Caller must already hold withRunBindingExclusion for this run. */

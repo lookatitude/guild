@@ -99,6 +99,7 @@ import {
 } from "./lib/capability/migration-evidence";
 import {
   completePendingSubstantiveOperation,
+  readPendingSubstantiveOperation,
   readRunBindingRecord,
   stagePendingSubstantiveOperation,
   withRunBindingExclusion,
@@ -313,9 +314,11 @@ export function reconcileTerminalSubstantiveOperations(
   },
   deps: {
     readonly readAttempt: typeof readAttemptForInstance;
+    readonly readPending: typeof readPendingSubstantiveOperation;
     readonly recover: typeof sealTerminalAttemptWithSubstantiveEvidence;
   } = {
     readAttempt: readAttemptForInstance,
+    readPending: readPendingSubstantiveOperation,
     recover: sealTerminalAttemptWithSubstantiveEvidence,
   },
 ): TerminalSubstantiveReconciliation {
@@ -326,6 +329,8 @@ export function reconcileTerminalSubstantiveOperations(
     if (ra.acceptance.downstream_release_at === null) continue;
     const attempt = deps.readAttempt(input.cwd, ra.ids);
     if (attempt?.terminal_state !== "terminated") continue;
+    const pending = deps.readPending(input.cwd, input.runId);
+    if (pending?.state !== "pending" || pending.task_id !== ra.ids.logical_task_id) continue;
     attempted++;
     try {
       emitted += deps.recover({

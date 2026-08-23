@@ -1157,7 +1157,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-binding.ts",
       "source_path": "src/modules/lifecycle/workflows/run-binding.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-binding.ts",
-      "sha256": "c07c32be44363b8f94fc4334de9af7426c8f121f749da6252e0d4ae47d8eb1a0",
+      "sha256": "e45fda88312848d858f54b2ef756afd4071e7fad7d11c61c0b580f28465664df",
       "projection_dependency": true
     },
     {

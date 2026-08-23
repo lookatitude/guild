@@ -2273,6 +2273,7 @@ describe("agent-team-launcher.ts", () => {
       let calls = 0;
       const deps = {
         readAttempt: (() => ({ terminal_state: "terminated" })) as never,
+        readPending: (() => ({ state: "pending", task_id: ids.logical_task_id })) as never,
         recover: (() => {
           calls++;
           if (calls === 1) throw new Error("planted append interruption");
@@ -2309,6 +2310,7 @@ describe("agent-team-launcher.ts", () => {
         instance_id: "lt-partial.a1.i1",
       };
       seedAcceptance(tmpDir, runId, ids.logical_task_id, "backend");
+      launcherTestBinding.stagePendingSubstantiveOperation({ root: tmpDir, run_id: runId, task_id: ids.logical_task_id });
       const paths = taskCellPaths(ids);
       const attemptPath = path.join(tmpDir, paths.attempt_path);
       const attempt = JSON.parse(fs.readFileSync(attemptPath, "utf8"));
@@ -2332,6 +2334,27 @@ describe("agent-team-launcher.ts", () => {
         terminal_reason: "accepted",
       });
       expect(fs.existsSync(path.join(tmpDir, paths.terminal_path))).toBe(true);
+    });
+
+    it("FU18: does not replay terminal publications after the transaction marker is complete", () => {
+      const ids: TaskCellInstanceIds = {
+        run_id: "run-reconcile-complete-001",
+        logical_task_id: "lt-complete",
+        attempt: 1,
+        instance_id: "lt-complete.a1.i1",
+      };
+      let recoveries = 0;
+      const result = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        acceptances: [{ ids, acceptance: { downstream_release_at: SEED_NOW() } } as never],
+      }, {
+        readAttempt: (() => ({ terminal_state: "terminated" })) as never,
+        readPending: (() => ({ state: "complete", task_id: ids.logical_task_id })) as never,
+        recover: (() => { recoveries++; return { emitted: 1 }; }) as never,
+      });
+      expect(result).toEqual({ attempted: 0, emitted: 0, errors: [] });
+      expect(recoveries).toBe(0);
     });
 
     it("FU18: holds one exclusion across terminal sealing and substantive evidence append", () => {
