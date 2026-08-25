@@ -13404,6 +13404,10 @@ var init_secret_patterns = __esm({
 });
 
 // ../src/modules/security/workflows/scrub-redact.ts
+function isHandoffReceiptId(value) {
+  if (typeof value !== "string" || !value.startsWith("handoff-sha256:")) return false;
+  return SHA256_HEX.test(value.slice("handoff-sha256:".length));
+}
 function submittedHandoffDocument(value, rel) {
   if (!rel.endsWith("handoff.json") || typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value;
@@ -13411,7 +13415,7 @@ function submittedHandoffDocument(value, rel) {
   const keys = Object.keys(record).sort();
   const receiptPath = typeof record.receipt_path === "string" ? record.receipt_path : "";
   const canonicalReceiptPath = /^\.guild\/runs\/[^/]+\/handoffs\/[^/]+\.md$/.test(receiptPath) || /^\.guild\/runs\/[^/]+\/task-cells\/[^/]+\/attempts\/[1-9]\d*\/instances\/[^/]+\/handoff-receipt\.md$/.test(receiptPath);
-  return JSON.stringify(keys) === JSON.stringify(expected) && typeof record.receipt_id === "string" && HANDOFF_RECEIPT_ID.test(record.receipt_id) && canonicalReceiptPath && typeof record.schema_valid === "boolean" && Array.isArray(record.claimed_changed_files) && record.claimed_changed_files.every((entry) => typeof entry === "string") && Array.isArray(record.acceptance_tests_passed) && record.acceptance_tests_passed.every((entry) => typeof entry === "string") && typeof record.submitted_at === "string" && Number.isFinite(Date.parse(record.submitted_at));
+  return JSON.stringify(keys) === JSON.stringify(expected) && isHandoffReceiptId(record.receipt_id) && canonicalReceiptPath && typeof record.schema_valid === "boolean" && Array.isArray(record.claimed_changed_files) && record.claimed_changed_files.every((entry) => typeof entry === "string") && Array.isArray(record.acceptance_tests_passed) && record.acceptance_tests_passed.every((entry) => typeof entry === "string") && typeof record.submitted_at === "string" && Number.isFinite(Date.parse(record.submitted_at));
 }
 function recognizedHashDocument(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -13525,7 +13529,7 @@ function protectSchemaBoundSha256Occurrences(content, rel) {
       if (typeof value !== "object" || value === null) return;
       for (const [key, entry] of Object.entries(value)) {
         const childPath = [...pathParts, key];
-        const approvedValue = SHA256_VALUE.test(String(entry)) || (schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") && HANDOFF_RECEIPT_ID.test(String(entry)) || schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)) || schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry));
+        const approvedValue = SHA256_VALUE.test(String(entry)) || (schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") && isHandoffReceiptId(entry) || schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)) || schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry));
         if (typeof entry === "string" && approvedValue && approvedHashPath(schema, childPath)) {
           const token = uniqueToken();
           tokens.push({ value: entry, token });
@@ -13635,7 +13639,7 @@ function redactShareableFile(content, rel) {
   for (const { value, token } of protectedValue.tokens) out = out.split(token).join(value);
   return { ...result, out };
 }
-var OPERATOR_PATH_RE, WORKSPACE_ROOT_MARKER, TILDE_CLAUDE_PROJECT_RE, OPERATOR_MEMORY_ROOT_MARKER, PRIVATE_HOME_PATH_RE, PRIVATE_HOME_MARKER, SHA256_VALUE, HANDOFF_RECEIPT_ID, SHA256_FIELDS, HASH_BEARING_SCHEMAS, SUBMITTED_HANDOFF_SCHEMA;
+var OPERATOR_PATH_RE, WORKSPACE_ROOT_MARKER, TILDE_CLAUDE_PROJECT_RE, OPERATOR_MEMORY_ROOT_MARKER, PRIVATE_HOME_PATH_RE, PRIVATE_HOME_MARKER, SHA256_VALUE, SHA256_HEX, SHA256_FIELDS, HASH_BEARING_SCHEMAS, SUBMITTED_HANDOFF_SCHEMA;
 var init_scrub_redact = __esm({
   "../src/modules/security/workflows/scrub-redact.ts"() {
     init_secret_patterns();
@@ -13647,7 +13651,7 @@ var init_scrub_redact = __esm({
     PRIVATE_HOME_PATH_RE = /\/(?:Users|home)\/[A-Za-z0-9._-]+(?=[/\s"',:;)\]}]|$)/g;
     PRIVATE_HOME_MARKER = "<private-home>";
     SHA256_VALUE = /^(?:sha256:)?[0-9a-f]{64}$/;
-    HANDOFF_RECEIPT_ID = /^handoff-sha256:[0-9a-f]{64}$/;
+    SHA256_HEX = /^[0-9a-f]{64}$/;
     SHA256_FIELDS = /* @__PURE__ */ new Set([
       "sha256",
       "content_tree_sha256",
@@ -25135,6 +25139,7 @@ var os3 = __toESM(require("node:os"));
 var path25 = __toESM(require("node:path"));
 init_compatibility_usage();
 init_path_containment();
+init_yaml_loader();
 init_receipt_journal();
 init_receipt_reconcile();
 

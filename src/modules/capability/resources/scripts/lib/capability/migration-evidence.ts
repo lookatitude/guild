@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { parseCompatibilityUsageV1 } from "../../../src/modules/capability/workflows/compatibility-usage";
 import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
+import { loadYamlApi } from "../../../src/modules/kernel/workflows/yaml-loader";
 import {
   acquireJournalAuthority,
   appendReceipt,
@@ -53,7 +54,6 @@ export const MIGRATION_SUBSTANTIVE_OPERATION_SCHEMA = "guild.capability_substant
 export const MIGRATION_BOUNDARY_EVIDENCE_RELPATH = ".guild/artifacts/capability/migration-boundaries";
 
 const SHA256 = /^[0-9a-f]{64}$/;
-const HANDOFF_RECEIPT_ID = /^handoff-sha256:[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 const BETA = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
@@ -61,6 +61,11 @@ const GITHUB_EVENT_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const PRODUCTION_REPOSITORY = "lookatitude/guild";
 const BOUNDARY_SIGNER_WORKFLOW = "lookatitude/guild/.github/workflows/capability-migration-boundary.yml";
+
+function isHandoffReceiptId(value: unknown): value is string {
+  if (typeof value !== "string" || !value.startsWith("handoff-sha256:")) return false;
+  return SHA256.test(value.slice("handoff-sha256:".length));
+}
 
 export interface MigrationBoundaryV1 {
   readonly schema_version: typeof MIGRATION_BOUNDARY_SCHEMA;
@@ -945,7 +950,7 @@ function acceptedTaskCellFactFromBytes(options: {
   const pointerShapeValid = exactKeys(handoff, expectedHandoffKeys) && pointerPath !== null
     && canonicalReceiptPointer
     && handoff.schema_valid === true
-    && typeof receiptId === "string" && HANDOFF_RECEIPT_ID.test(receiptId)
+    && isHandoffReceiptId(receiptId)
     && (options.projectedReceiptIdentity === true || receiptId === `handoff-sha256:${sha256(bytes.handoff_receipt)}`)
     && validateFrozenReceiptDocument(receiptText).status === "parsed"
     && isCanonicalLaneReceipt(receiptText, pointerPath === laneReceiptPath ? path.posix.basename(pointerPath) : undefined)
@@ -1974,7 +1979,18 @@ function projectMigrationEvidenceBytes(projectRoot: string, runId: string, sourc
     }
   }
   if (destinationRel.endsWith("/run.yaml")) {
-    projected = projected.replace(/(^capability_start_snapshot_ref:\s*$\n(?:^[ \t]+[^\n]*\n)*?^[ \t]+path:\s*)capability\/run-start-snapshot\.json\s*$/m, "$1run-start-snapshot.json");
+    const runDocument = plainRecord(parseYaml(projected));
+    const snapshotRef = plainRecord(runDocument?.capability_start_snapshot_ref);
+    if (!runDocument || !snapshotRef || snapshotRef.path !== "capability/run-start-snapshot.json") {
+      throw new Error(`migration public projection refuses malformed run manifest: ${sourceRel}`);
+    }
+    snapshotRef.path = "run-start-snapshot.json";
+    projected = loadYamlApi().dump(runDocument, {
+      indent: 2,
+      lineWidth: -1,
+      quotingType: '"',
+      forceQuotes: false,
+    });
   } else if (destinationRel.endsWith("/provenance.json")) {
     let provenance: Record<string, unknown> | null = null;
     try { provenance = plainRecord(JSON.parse(projected)); } catch { provenance = null; }

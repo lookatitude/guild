@@ -64,7 +64,7 @@ export interface RedactResult {
 }
 
 const SHA256_VALUE = /^(?:sha256:)?[0-9a-f]{64}$/;
-const HANDOFF_RECEIPT_ID = /^handoff-sha256:[0-9a-f]{64}$/;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 const SHA256_FIELDS = new Set([
   "sha256",
   "content_tree_sha256",
@@ -99,6 +99,11 @@ const HASH_BEARING_SCHEMAS = new Set([
 
 const SUBMITTED_HANDOFF_SCHEMA = "guild.submitted_handoff.pointer.v1";
 
+function isHandoffReceiptId(value: unknown): value is string {
+  if (typeof value !== "string" || !value.startsWith("handoff-sha256:")) return false;
+  return SHA256_HEX.test(value.slice("handoff-sha256:".length));
+}
+
 function submittedHandoffDocument(value: unknown, rel: string): value is Record<string, unknown> {
   if (!rel.endsWith("handoff.json") || typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
@@ -108,7 +113,7 @@ function submittedHandoffDocument(value: unknown, rel: string): value is Record<
   const canonicalReceiptPath = /^\.guild\/runs\/[^/]+\/handoffs\/[^/]+\.md$/.test(receiptPath)
     || /^\.guild\/runs\/[^/]+\/task-cells\/[^/]+\/attempts\/[1-9]\d*\/instances\/[^/]+\/handoff-receipt\.md$/.test(receiptPath);
   return JSON.stringify(keys) === JSON.stringify(expected)
-    && typeof record.receipt_id === "string" && HANDOFF_RECEIPT_ID.test(record.receipt_id)
+    && isHandoffReceiptId(record.receipt_id)
     && canonicalReceiptPath
     && typeof record.schema_valid === "boolean"
     && Array.isArray(record.claimed_changed_files) && record.claimed_changed_files.every((entry) => typeof entry === "string")
@@ -228,7 +233,7 @@ function protectSchemaBoundSha256Occurrences(
       for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
         const childPath = [...pathParts, key];
         const approvedValue = SHA256_VALUE.test(String(entry))
-          || ((schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") && HANDOFF_RECEIPT_ID.test(String(entry)))
+          || ((schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") && isHandoffReceiptId(entry))
           || (schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)))
           || (schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry)));
         if (typeof entry === "string" && approvedValue && approvedHashPath(schema, childPath)) {

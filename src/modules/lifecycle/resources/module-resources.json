@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "16af21fe3b7b9dac3eea640b1976e5907b0b0d467a4ad51a11ea5046635ceb4e"
+      "sha256": "aa78fa8302512469f8f44c7a1ae13e1055acdef7225e978449acc6039d858dfa"
     },
     {
       "category": "scripts",
@@ -1357,7 +1357,7 @@
       "id": "projection:src/modules/security/workflows/scrub-redact.ts",
       "source_path": "src/modules/security/workflows/scrub-redact.ts",
       "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
-      "sha256": "d531f6f49a904a90e9f50d0cb96ba7ae463349eec0d549e9d41f0c4850974cab",
+      "sha256": "56873e57db56d96cfe29fadb9aea82a36d99ca9ea6fe2fb3ebb64542bb25595d",
       "projection_dependency": true
     },
     {
