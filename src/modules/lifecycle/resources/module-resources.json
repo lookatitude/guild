@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "16af21fe3b7b9dac3eea640b1976e5907b0b0d467a4ad51a11ea5046635ceb4e"
+      "sha256": "aa78fa8302512469f8f44c7a1ae13e1055acdef7225e978449acc6039d858dfa"
     },
     {
       "category": "scripts",
@@ -365,7 +365,7 @@
       "id": "projection:src/modules/communication/workflows/no-accidental-write.ts",
       "source_path": "src/modules/communication/workflows/no-accidental-write.ts",
       "resource_path": "resources/src/modules/communication/workflows/no-accidental-write.ts",
-      "sha256": "c6a81c563b30ec356cc5e6e92bf59729160006e1644e18c5d36991cd36656e67",
+      "sha256": "9e604545c6daeaef95b8c8f776bd1d0853e27c5b10aa3efa66f6ea6f773d267f",
       "projection_dependency": true
     },
     {
@@ -437,7 +437,7 @@
       "id": "projection:src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "source_path": "src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
-      "sha256": "dfb3758cb875d51f8938b3944ab7e0bb380c5dfb4dbf63fb68c5e61264ba581e",
+      "sha256": "5ca11f770de019204f0ab93383702b362abe43256aa2190d13ed5a35458b4c27",
       "projection_dependency": true
     },
     {
@@ -501,7 +501,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-acceptance.ts",
-      "sha256": "8b088c96d4c0482c2b6f2959c93238a7bf7e3226d35cb745235f172d0c57a25a",
+      "sha256": "3e23e84aabf7273d45a053d8c4ba27459f46f5855396506f043bf1cd2c488ebf",
       "projection_dependency": true
     },
     {
@@ -525,7 +525,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-host-conformance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-host-conformance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-host-conformance.ts",
-      "sha256": "f63e0eb131186f4a91c5abc7f8077985ce68a904a2ca818656592d998302931b",
+      "sha256": "bb6d7956bb74ed281e0469066fc46347539379eb405a1ab976657b095fab7f83",
       "projection_dependency": true
     },
     {
@@ -533,7 +533,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-runtime.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-runtime.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-runtime.ts",
-      "sha256": "d2a373ae036dc0339a9fafefaad20b3c7a86cd8c49c372c6ae9961b2beb6622e",
+      "sha256": "6f24202e2e9d0a336f3c231f368946517d92874fa95dbb631bc235408cc8222a",
       "projection_dependency": true
     },
     {
@@ -749,7 +749,7 @@
       "id": "projection:src/modules/documents/workflows/document-receipts.ts",
       "source_path": "src/modules/documents/workflows/document-receipts.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-receipts.ts",
-      "sha256": "73d4890c3a6aed665be8137acf76f77e1e0904bc9f65f44b3b17a09e01b52797",
+      "sha256": "821191e8e2c803720924ac99d332e630cc3d89fd2c0efb142cb7b067c78a9ab5",
       "projection_dependency": true
     },
     {
@@ -1181,7 +1181,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-record-validate.ts",
       "source_path": "src/modules/lifecycle/workflows/run-record-validate.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-record-validate.ts",
-      "sha256": "95fe6d088426333efd7aa89fd7b55a67d9709e163f0aeafe71b0cf211b7b5239",
+      "sha256": "f564c52113744c1a64f0e6155f60454e846191de3687d9f22869e429e07b4a3b",
       "projection_dependency": true
     },
     {
@@ -1357,7 +1357,7 @@
       "id": "projection:src/modules/security/workflows/scrub-redact.ts",
       "source_path": "src/modules/security/workflows/scrub-redact.ts",
       "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
-      "sha256": "9f5dfa43e0ab063b9405c192315db3a178bf429a9c1fbc9cbe81ce41aef18e0a",
+      "sha256": "56873e57db56d96cfe29fadb9aea82a36d99ca9ea6fe2fb3ebb64542bb25595d",
       "projection_dependency": true
     },
     {

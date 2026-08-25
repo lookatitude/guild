@@ -11180,6 +11180,23 @@ var init_document_decisions = __esm({
 });
 
 // ../src/modules/documents/workflows/document-receipts.ts
+function validateReceiptMachineBlock(block, errors) {
+  for (const key of Object.keys(block)) {
+    if (!RECEIPT_MACHINE_KEYS.has(key)) pushIssue(errors, `$.machine_block.${key}`, "unknown_key", `guild.handoff.v2 rejects unknown key ${key}`);
+  }
+  if (typeof block.task_id !== "string" || block.task_id.trim() === "") pushIssue(errors, "$.machine_block.task_id", "missing_field", "task_id must be a non-empty string");
+  if (block.tier !== "cheap" && block.tier !== "mid" && block.tier !== "powerful") pushIssue(errors, "$.machine_block.tier", "unknown_value", "tier must be cheap, mid, or powerful");
+  if (block.status !== "done" && block.status !== "blocked" && block.status !== "escalate") pushIssue(errors, "$.machine_block.status", "unknown_receipt_status", "status must be done, blocked, or escalate");
+  if (typeof block.summary !== "string" || block.summary.trim() === "" || block.summary.length > 600) pushIssue(errors, "$.machine_block.summary", "invalid_summary", "summary must be a non-empty string of at most 600 characters");
+  for (const key of ["artifacts", "issues"]) {
+    if (!Array.isArray(block[key]) || !block[key].every((value) => typeof value === "string")) pushIssue(errors, `$.machine_block.${key}`, "wrong_type", `${key} must be an array of strings`);
+  }
+  if (block.learnings !== void 0 && (!Array.isArray(block.learnings) || !block.learnings.every((value) => typeof value === "string"))) pushIssue(errors, "$.machine_block.learnings", "wrong_type", "learnings must be an array of strings when provided");
+  if (block.status === "escalate" && (typeof block.escalate_reason !== "string" || block.escalate_reason.trim() === "")) pushIssue(errors, "$.machine_block.escalate_reason", "missing_field", "escalate_reason is required for escalate status");
+  if (block.escalate_reason !== void 0 && typeof block.escalate_reason !== "string") pushIssue(errors, "$.machine_block.escalate_reason", "wrong_type", "escalate_reason must be a string when provided");
+  if (block.notes !== void 0 && (typeof block.notes !== "string" || block.notes.length > 200)) pushIssue(errors, "$.machine_block.notes", "wrong_type", "notes must be a string of at most 200 characters");
+  if (block.injection_clean !== void 0 && !["clean", "flagged", "unverified"].includes(String(block.injection_clean))) pushIssue(errors, "$.machine_block.injection_clean", "unknown_value", "injection_clean must be clean, flagged, or unverified");
+}
 function readReceiptFrontmatter(text) {
   const match = RECEIPT_FRONTMATTER_BLOCK.exec(text);
   if (match === null) {
@@ -11207,7 +11224,7 @@ function readReceiptFrontmatter(text) {
     const scalar = String(value);
     if (scalar !== "") fields[key] = scalar;
   }
-  return { ok: true, fields };
+  return { ok: true, fields, document: parsed };
 }
 function readReceiptMachineBlock(text) {
   const fence = /^```([^\n]*)\n([\s\S]*?)\n```[ \t]*$/gm;
@@ -11252,7 +11269,189 @@ function aliasesAgree(fields, keys) {
   const declared = keys.map((key) => fields[key]).filter((value) => typeof value === "string" && value !== "");
   return new Set(declared).size <= 1;
 }
-function parseReceiptDocument(input) {
+function plainRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function requiredRecord(errors, parent, key) {
+  const value = plainRecord(parent[key]);
+  if (value === null) {
+    pushIssue(errors, `$.frontmatter.${key}`, "missing_field", `${key} must be a mapping`);
+  }
+  return value;
+}
+function requiredString(errors, parent, path27, key) {
+  const value = parent[key];
+  if (typeof value !== "string" || value.length === 0) {
+    pushIssue(errors, `${path27}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    return null;
+  }
+  return value;
+}
+function requiredArray(errors, parent, key) {
+  const value = parent[key];
+  if (!Array.isArray(value)) {
+    pushIssue(errors, `$.frontmatter.${key}`, "missing_field", `${key} must be an array`);
+    return null;
+  }
+  return value;
+}
+function validateStringArray(errors, values, path27) {
+  if (values === null) return;
+  values.forEach((value, index) => {
+    if (typeof value !== "string" || value.length === 0) {
+      pushIssue(errors, `${path27}[${index}]`, "wrong_type", `${path27} entries must be non-empty strings`);
+    }
+  });
+}
+function canonicalReceiptInstant(errors, value, path27) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
+    pushIssue(errors, path27, "invalid_timestamp", `${path27} must be an ISO-8601 timestamp`);
+    return null;
+  }
+  const parsed = Date.parse(value);
+  const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
+  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
+    pushIssue(errors, path27, "invalid_timestamp", `${path27} must name a real UTC calendar instant`);
+    return null;
+  }
+  return expectedCanonical;
+}
+function receiptProvenance(document, fields, errors) {
+  if (plainRecord(document.host) === null) {
+    const authorId2 = firstField(fields, ["agent", "specialist"]);
+    const authorFamily = firstField(fields, ["model_family", "family"]);
+    const hostId2 = firstField(fields, ["host"]);
+    const createdAt2 = firstField(fields, ["generated_at"]);
+    if (!aliasesAgree(fields, ["agent", "specialist"])) {
+      pushIssue(errors, "$.frontmatter.agent", "conflicting_provenance", "frontmatter agent and specialist must agree when both are present");
+    }
+    if (!aliasesAgree(fields, ["model_family", "family"])) {
+      pushIssue(errors, "$.frontmatter.model_family", "conflicting_provenance", "frontmatter model_family and family must agree when both are present");
+    }
+    if (authorId2 === null) pushIssue(errors, "$.frontmatter.agent", "missing_provenance", "frontmatter agent/specialist is required");
+    if (authorFamily === null) pushIssue(errors, "$.frontmatter.model_family", "missing_provenance", "frontmatter model_family/family is required");
+    if (hostId2 === null) pushIssue(errors, "$.frontmatter.host", "missing_provenance", "frontmatter legacy scalar host is required");
+    if (createdAt2 === null) pushIssue(errors, "$.frontmatter.generated_at", "missing_provenance", "frontmatter generated_at is required for a legacy receipt");
+    return {
+      shape: "legacy",
+      authorId: authorId2,
+      authorFamily,
+      hostId: hostId2,
+      createdAt: createdAt2,
+      taskId: firstField(fields, ["task_id"]),
+      title: firstField(fields, ["task", "title"]),
+      status: null
+    };
+  }
+  const ids = requiredRecord(errors, document, "ids");
+  const host = requiredRecord(errors, document, "host");
+  const scope = requiredRecord(errors, document, "scope");
+  const authorId = requiredString(errors, document, "$.frontmatter", "specialist");
+  const taskId = ids === null ? null : requiredString(errors, ids, "$.frontmatter.ids", "task_id");
+  if (ids !== null) {
+    requiredString(errors, ids, "$.frontmatter.ids", "run_id");
+    requiredString(errors, ids, "$.frontmatter.ids", "task_run_id");
+    if (!Object.prototype.hasOwnProperty.call(ids, "initiative_id")) {
+      pushIssue(errors, "$.frontmatter.ids.initiative_id", "missing_field", "initiative_id is required and may be null");
+    } else if (ids.initiative_id !== null && (typeof ids.initiative_id !== "string" || ids.initiative_id.length === 0)) {
+      pushIssue(errors, "$.frontmatter.ids.initiative_id", "wrong_type", "initiative_id must be null or a non-empty string");
+    }
+  }
+  const hostId = host === null ? null : requiredString(errors, host, "$.frontmatter.host", "selected");
+  if (host !== null) {
+    if (typeof host.degraded !== "boolean") pushIssue(errors, "$.frontmatter.host.degraded", "wrong_type", "degraded must be boolean");
+    if (host.native_ref !== null && typeof host.native_ref !== "string") pushIssue(errors, "$.frontmatter.host.native_ref", "wrong_type", "native_ref must be null or a string");
+    if (host.independence !== "strong" && host.independence !== "weak") {
+      pushIssue(errors, "$.frontmatter.host.independence", "unknown_value", "independence must be strong or weak");
+    }
+  }
+  const title = scope === null ? null : requiredString(errors, scope, "$.frontmatter.scope", "objective");
+  if (scope !== null) {
+    validateStringArray(errors, Array.isArray(scope.in_scope) ? scope.in_scope : null, "$.frontmatter.scope.in_scope");
+    validateStringArray(errors, Array.isArray(scope.out_of_scope_touched) ? scope.out_of_scope_touched : null, "$.frontmatter.scope.out_of_scope_touched");
+    if (!Array.isArray(scope.in_scope)) pushIssue(errors, "$.frontmatter.scope.in_scope", "missing_field", "in_scope must be an array");
+    if (!Array.isArray(scope.out_of_scope_touched)) pushIssue(errors, "$.frontmatter.scope.out_of_scope_touched", "missing_field", "out_of_scope_touched must be an array");
+  }
+  const statusValue = document.status;
+  const status = typeof statusValue === "string" && ["completed", "partial", "blocked", "failed"].includes(statusValue) ? statusValue : null;
+  if (status === null) pushIssue(errors, "$.frontmatter.status", "unknown_receipt_status", "status must be completed, partial, blocked, or failed");
+  const changedFiles = requiredArray(errors, document, "changed_files");
+  changedFiles?.forEach((value, index) => {
+    const entry = plainRecord(value);
+    const base = `$.frontmatter.changed_files[${index}]`;
+    if (entry === null) {
+      pushIssue(errors, base, "wrong_type", "changed_files entries must be mappings");
+      return;
+    }
+    requiredString(errors, entry, base, "path");
+    if (!["created", "modified", "deleted", "renamed"].includes(String(entry.change))) {
+      pushIssue(errors, `${base}.change`, "unknown_value", "change must be created, modified, deleted, or renamed");
+    }
+    if (entry.sha256_after !== null && (typeof entry.sha256_after !== "string" || !/^(?:sha256:)?[a-f0-9]{64}$/i.test(entry.sha256_after))) {
+      pushIssue(errors, `${base}.sha256_after`, "invalid_hash", "sha256_after must be null or a SHA-256 digest");
+    }
+  });
+  const evidence = requiredArray(errors, document, "evidence");
+  evidence?.forEach((value, index) => {
+    const entry = plainRecord(value);
+    const base = `$.frontmatter.evidence[${index}]`;
+    if (entry === null) {
+      pushIssue(errors, base, "wrong_type", "evidence entries must be mappings");
+      return;
+    }
+    if (!["test", "command", "log", "artifact", "screenshot", "url"].includes(String(entry.kind))) pushIssue(errors, `${base}.kind`, "unknown_value", "evidence kind is invalid");
+    requiredString(errors, entry, base, "ref");
+    if (!["pass", "fail", "n/a"].includes(String(entry.result))) pushIssue(errors, `${base}.result`, "unknown_value", "evidence result is invalid");
+  });
+  const assumptions = requiredArray(errors, document, "assumptions");
+  assumptions?.forEach((value, index) => {
+    const entry = plainRecord(value);
+    const base = `$.frontmatter.assumptions[${index}]`;
+    if (entry === null) {
+      pushIssue(errors, base, "wrong_type", "assumption entries must be mappings");
+      return;
+    }
+    requiredString(errors, entry, base, "statement");
+    if (!["low", "medium", "high"].includes(String(entry.risk_if_wrong))) pushIssue(errors, `${base}.risk_if_wrong`, "unknown_value", "risk_if_wrong is invalid");
+  });
+  const openRisks = requiredArray(errors, document, "open_risks");
+  openRisks?.forEach((value, index) => {
+    const entry = plainRecord(value);
+    const base = `$.frontmatter.open_risks[${index}]`;
+    if (entry === null) {
+      pushIssue(errors, base, "wrong_type", "open_risks entries must be mappings");
+      return;
+    }
+    requiredString(errors, entry, base, "statement");
+    if (!["low", "medium", "high", "critical"].includes(String(entry.severity))) pushIssue(errors, `${base}.severity`, "unknown_value", "severity is invalid");
+    if (typeof entry.owner_accepted !== "boolean") pushIssue(errors, `${base}.owner_accepted`, "wrong_type", "owner_accepted must be boolean");
+  });
+  const followups = requiredArray(errors, document, "followups");
+  followups?.forEach((value, index) => {
+    const entry = plainRecord(value);
+    const base = `$.frontmatter.followups[${index}]`;
+    if (entry === null) {
+      pushIssue(errors, base, "wrong_type", "followup entries must be mappings");
+      return;
+    }
+    requiredString(errors, entry, base, "statement");
+    if (typeof entry.blocking !== "boolean") pushIssue(errors, `${base}.blocking`, "wrong_type", "blocking must be boolean");
+    if (entry.ref !== null && entry.ref !== void 0 && typeof entry.ref !== "string") pushIssue(errors, `${base}.ref`, "wrong_type", "ref must be null or a string");
+    if (status === "completed" && entry.blocking === true) pushIssue(errors, `${base}.blocking`, "blocking_followup", "a completed receipt cannot retain a blocking followup");
+  });
+  const createdAt = canonicalReceiptInstant(errors, document.produced_at, "$.frontmatter.produced_at");
+  return {
+    shape: "frozen",
+    authorId,
+    authorFamily: firstField(fields, ["model_family", "family"]) ?? hostId,
+    hostId,
+    createdAt,
+    taskId,
+    title,
+    status
+  };
+}
+function parseReceiptDocumentInternal(input, requireFrozen) {
   const errors = [];
   try {
     if (typeof input !== "string") {
@@ -11290,38 +11489,16 @@ function parseReceiptDocument(input) {
         `frontmatter schema_version must be ${RECEIPT_FRONTMATTER_SCHEMA_VERSION}`
       );
     }
-    const authorId = firstField(fields, ["agent", "specialist"]);
-    const authorFamily = firstField(fields, ["model_family", "family"]);
-    const hostId = firstField(fields, ["host"]);
-    const createdAt = firstField(fields, ["generated_at"]);
-    if (!aliasesAgree(fields, ["agent", "specialist"])) {
+    const provenance = receiptProvenance(frontmatter.document, fields, errors);
+    if (requireFrozen && provenance.shape !== "frozen") {
       pushIssue(
         errors,
-        "$.frontmatter.agent",
-        "conflicting_provenance",
-        "frontmatter agent and specialist must agree when both are present"
+        "$.frontmatter.host",
+        "legacy_receipt_transition",
+        "a frozen-contract gate requires the structured host mapping"
       );
     }
-    if (!aliasesAgree(fields, ["model_family", "family"])) {
-      pushIssue(
-        errors,
-        "$.frontmatter.model_family",
-        "conflicting_provenance",
-        "frontmatter model_family and family must agree when both are present"
-      );
-    }
-    if (authorId === null) {
-      pushIssue(errors, "$.frontmatter.agent", "missing_provenance", "frontmatter agent/specialist is required");
-    }
-    if (authorFamily === null) {
-      pushIssue(errors, "$.frontmatter.model_family", "missing_provenance", "frontmatter model_family/family is required");
-    }
-    if (hostId === null) {
-      pushIssue(errors, "$.frontmatter.host", "missing_provenance", "frontmatter host is required");
-    }
-    if (createdAt === null) {
-      pushIssue(errors, "$.frontmatter.generated_at", "missing_provenance", "frontmatter generated_at is required");
-    }
+    if (provenance.shape === "frozen") validateReceiptMachineBlock(block.block, errors);
     const taskIdRead = safeGet(block.block, "task_id");
     const taskId = taskIdRead.ok && typeof taskIdRead.value === "string" ? taskIdRead.value : null;
     if (taskId === null) {
@@ -11329,14 +11506,21 @@ function parseReceiptDocument(input) {
     }
     const statusRead = safeGet(block.block, "status");
     const rawStatus = statusRead.ok && typeof statusRead.value === "string" ? statusRead.value : null;
-    const mappedStatus = rawStatus !== null && Object.prototype.hasOwnProperty.call(RECEIPT_STATUS_MAP, rawStatus) ? RECEIPT_STATUS_MAP[rawStatus] : void 0;
+    const statusMap = provenance.shape === "frozen" ? FROZEN_RECEIPT_STATUS_MAP : LEGACY_RECEIPT_STATUS_MAP;
+    const mappedStatus = rawStatus !== null && Object.prototype.hasOwnProperty.call(statusMap, rawStatus) ? statusMap[rawStatus] : void 0;
     if (mappedStatus === void 0) {
       pushIssue(
         errors,
         "$.machine_block.status",
         "unknown_receipt_status",
-        `status must be one of ${Object.keys(RECEIPT_STATUS_MAP).sort().join("|")}`
+        `status must be one of ${Object.keys(statusMap).sort().join("|")}`
       );
+    }
+    if (provenance.shape === "frozen" && provenance.taskId !== taskId) {
+      pushIssue(errors, "$.frontmatter.ids.task_id", "conflicting_identity", "ids.task_id must match the embedded handoff task_id");
+    }
+    if (provenance.shape === "frozen" && mappedStatus !== void 0 && provenance.status !== mappedStatus) {
+      pushIssue(errors, "$.frontmatter.status", "conflicting_status", "frontmatter status must match the embedded handoff status");
     }
     if (errors.length > 0 || taskId === null) {
       return { status: "unparsable", record: null, errors: sortIssues(errors) };
@@ -11353,17 +11537,17 @@ function parseReceiptDocument(input) {
     }
     const artifactsRead = safeGet(block.block, "artifacts");
     const issuesRead = safeGet(block.block, "issues");
-    const titleField = firstField(fields, ["task", "title"]);
+    const titleField = provenance.title;
     const candidate = {
       schema_version: DOCUMENT_SCHEMA_VERSION,
       kind: "handoff",
       id: recordId,
       title: titleField ?? taskId,
       provenance: {
-        author_id: authorId,
-        author_family: authorFamily,
-        host_id: hostId,
-        created_at: createdAt,
+        author_id: provenance.authorId,
+        author_family: provenance.authorFamily,
+        host_id: provenance.hostId,
+        created_at: provenance.createdAt,
         // The record is derived from a receipt document, not authored as a
         // canonical record — say so rather than claiming authorship.
         source: "imported"
@@ -11384,6 +11568,9 @@ function parseReceiptDocument(input) {
     pushIssue(errors, "$", "internal_guard", "receipt parse was interrupted");
     return { status: "unparsable", record: null, errors: sortIssues(errors) };
   }
+}
+function parseReceiptDocument(input) {
+  return parseReceiptDocumentInternal(input, false);
 }
 function decideFromReceiptDocument(input) {
   const parsed = parseReceiptDocument(input);
@@ -11406,7 +11593,7 @@ function decideFromReceiptDocument(input) {
   }
   return decideFromDocumentSources({ record: parsed.record });
 }
-var RECEIPT_MACHINE_SCHEMA_VERSION, RECEIPT_FRONTMATTER_SCHEMA_VERSION, RECEIPT_PARSE_BOUNDS, RECEIPT_FRONTMATTER_BLOCK, RECEIPT_STATUS_MAP, RECEIPT_REFUSAL_BY_ERROR_CODE;
+var RECEIPT_MACHINE_SCHEMA_VERSION, RECEIPT_FRONTMATTER_SCHEMA_VERSION, RECEIPT_PARSE_BOUNDS, RECEIPT_FRONTMATTER_BLOCK, FROZEN_RECEIPT_STATUS_MAP, LEGACY_RECEIPT_STATUS_MAP, RECEIPT_MACHINE_KEYS, CANONICAL_RECEIPT_SECTIONS, RECEIPT_REFUSAL_BY_ERROR_CODE;
 var init_document_receipts = __esm({
   "../src/modules/documents/workflows/document-receipts.ts"() {
     init_kernel();
@@ -11421,7 +11608,12 @@ var init_document_receipts = __esm({
       max_json_blocks: 20
     });
     RECEIPT_FRONTMATTER_BLOCK = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-    RECEIPT_STATUS_MAP = Object.freeze({
+    FROZEN_RECEIPT_STATUS_MAP = Object.freeze({
+      done: "completed",
+      blocked: "blocked",
+      escalate: "blocked"
+    });
+    LEGACY_RECEIPT_STATUS_MAP = Object.freeze({
       complete: "completed",
       completed: "completed",
       done: "completed",
@@ -11429,6 +11621,26 @@ var init_document_receipts = __esm({
       blocked: "blocked",
       failed: "failed"
     });
+    RECEIPT_MACHINE_KEYS = /* @__PURE__ */ new Set([
+      "schema_version",
+      "task_id",
+      "tier",
+      "status",
+      "summary",
+      "artifacts",
+      "issues",
+      "escalate_reason",
+      "learnings",
+      "notes",
+      "injection_clean"
+    ]);
+    CANONICAL_RECEIPT_SECTIONS = Object.freeze([
+      "changed_files",
+      "opens_for",
+      "assumptions",
+      "evidence",
+      "followups"
+    ]);
     RECEIPT_REFUSAL_BY_ERROR_CODE = Object.freeze({
       missing_frontmatter_schema: "receipt_envelope_schema_unsupported",
       wrong_frontmatter_schema: "receipt_envelope_schema_unsupported"
@@ -13192,6 +13404,19 @@ var init_secret_patterns = __esm({
 });
 
 // ../src/modules/security/workflows/scrub-redact.ts
+function isHandoffReceiptId(value) {
+  if (typeof value !== "string" || !value.startsWith("handoff-sha256:")) return false;
+  return SHA256_HEX.test(value.slice("handoff-sha256:".length));
+}
+function submittedHandoffDocument(value, rel) {
+  if (!rel.endsWith("handoff.json") || typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value;
+  const expected = ["acceptance_tests_passed", "claimed_changed_files", "receipt_id", "receipt_path", "schema_valid", "submitted_at"];
+  const keys = Object.keys(record).sort();
+  const receiptPath = typeof record.receipt_path === "string" ? record.receipt_path : "";
+  const canonicalReceiptPath = /^\.guild\/runs\/[^/]+\/handoffs\/[^/]+\.md$/.test(receiptPath) || /^\.guild\/runs\/[^/]+\/task-cells\/[^/]+\/attempts\/[1-9]\d*\/instances\/[^/]+\/handoff-receipt\.md$/.test(receiptPath);
+  return JSON.stringify(keys) === JSON.stringify(expected) && isHandoffReceiptId(record.receipt_id) && canonicalReceiptPath && typeof record.schema_valid === "boolean" && Array.isArray(record.claimed_changed_files) && record.claimed_changed_files.every((entry) => typeof entry === "string") && Array.isArray(record.acceptance_tests_passed) && record.acceptance_tests_passed.every((entry) => typeof entry === "string") && typeof record.submitted_at === "string" && Number.isFinite(Date.parse(record.submitted_at));
+}
 function recognizedHashDocument(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const schema = value.schema_version;
@@ -13240,6 +13465,9 @@ function approvedHashPath(schema, pathParts) {
   if (schema === "guild.task_assignment.v2") {
     return (/* @__PURE__ */ new Set(["specialist_type_hash", "specialist_profile_hash", "context_bundle_hash", "host_capabilities_hash"])).has(pathKey);
   }
+  if (schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") {
+    return pathKey === "receipt_id";
+  }
   if (schema === "guild.session_context.v1") {
     return (/* @__PURE__ */ new Set([
       "execution_target/account_fingerprint",
@@ -13277,6 +13505,7 @@ function protectSchemaBoundSha256Occurrences(content, rel) {
     while (content.includes(token)) token = `<GUILD-SHA256-${tokenIndex++}>`;
     return token;
   };
+  const normalizedRel = rel.split(/[\\/]/).join("/");
   const protectDocument = (documentContent) => {
     let parsed;
     try {
@@ -13284,14 +13513,14 @@ function protectSchemaBoundSha256Occurrences(content, rel) {
     } catch {
       return documentContent;
     }
-    if (!recognizedHashDocument(parsed)) return documentContent;
+    const schema = recognizedHashDocument(parsed) ? String(parsed.schema_version) : submittedHandoffDocument(parsed, normalizedRel) ? SUBMITTED_HANDOFF_SCHEMA : null;
+    if (schema === null) return documentContent;
     const trailingNewline = documentContent.endsWith("\n");
     const body = trailingNewline ? documentContent.slice(0, -1) : documentContent;
     const compact = JSON.stringify(parsed);
     const pretty = JSON.stringify(parsed, null, 2);
     const indent = body === compact ? void 0 : body === pretty ? 2 : null;
     if (indent === null) return documentContent;
-    const schema = String(parsed.schema_version);
     const protect = (value, pathParts) => {
       if (Array.isArray(value)) {
         value.forEach((entry, index) => protect(entry, [...pathParts, String(index)]));
@@ -13300,7 +13529,7 @@ function protectSchemaBoundSha256Occurrences(content, rel) {
       if (typeof value !== "object" || value === null) return;
       for (const [key, entry] of Object.entries(value)) {
         const childPath = [...pathParts, key];
-        const approvedValue = SHA256_VALUE.test(String(entry)) || schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)) || schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry));
+        const approvedValue = SHA256_VALUE.test(String(entry)) || (schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") && isHandoffReceiptId(entry) || schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)) || schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry));
         if (typeof entry === "string" && approvedValue && approvedHashPath(schema, childPath)) {
           const token = uniqueToken();
           tokens.push({ value: entry, token });
@@ -13314,11 +13543,42 @@ function protectSchemaBoundSha256Occurrences(content, rel) {
     const serialized = JSON.stringify(parsed, null, indent === void 0 ? void 0 : indent);
     return `${serialized}${trailingNewline ? "\n" : ""}`;
   };
-  const normalizedRel = rel.split(/[\\/]/).join("/");
   if (normalizedRel.endsWith(".jsonl")) {
     return { content: content.split("\n").map((line) => line.trim().length === 0 ? line : protectDocument(line)).join("\n"), tokens };
   }
   if (normalizedRel.endsWith(".json")) return { content: protectDocument(content), tokens };
+  if (normalizedRel.endsWith("handoff-receipt.md") || /(?:^|\/)handoffs\/[^/]+\.md$/.test(normalizedRel)) {
+    const match = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(content);
+    let frontmatter = null;
+    try {
+      const parsed = match ? parseYaml(match[1]) : null;
+      frontmatter = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      frontmatter = null;
+    }
+    const host = frontmatter && typeof frontmatter.host === "object" && frontmatter.host !== null && !Array.isArray(frontmatter.host) ? frontmatter.host : null;
+    const ids = frontmatter && typeof frontmatter.ids === "object" && frontmatter.ids !== null && !Array.isArray(frontmatter.ids) ? frontmatter.ids : null;
+    const requiredArrays = ["changed_files", "evidence", "assumptions", "open_risks", "followups"];
+    const frozenShape = frontmatter?.schema_version === "guild.handoff_receipt.v1" && host !== null && typeof host.selected === "string" && typeof host.degraded === "boolean" && (host.native_ref === null || typeof host.native_ref === "string") && (host.independence === "strong" || host.independence === "weak") && ids !== null && typeof ids.run_id === "string" && typeof ids.task_id === "string" && typeof ids.task_run_id === "string" && typeof frontmatter.specialist === "string" && typeof frontmatter.produced_at === "string" && requiredArrays.every((key) => Array.isArray(frontmatter?.[key]));
+    if (frozenShape && match && frontmatter) {
+      const approvedCounts = /* @__PURE__ */ new Map();
+      for (const value of frontmatter.changed_files) {
+        const entry = typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+        if (entry && typeof entry.path === "string" && ["created", "modified", "deleted", "renamed"].includes(String(entry.change)) && typeof entry.sha256_after === "string" && SHA256_VALUE.test(entry.sha256_after)) {
+          approvedCounts.set(entry.sha256_after, (approvedCounts.get(entry.sha256_after) ?? 0) + 1);
+        }
+      }
+      let protectedFrontmatter = match[0];
+      for (const [value, approvedCount] of approvedCounts) {
+        const totalCount = content.split(value).length - 1;
+        if (totalCount !== approvedCount) continue;
+        const token = uniqueToken();
+        tokens.push({ value, token });
+        protectedFrontmatter = protectedFrontmatter.split(value).join(token);
+      }
+      return { content: `${protectedFrontmatter}${content.slice(match[0].length)}`, tokens };
+    }
+  }
   if (normalizedRel.endsWith("run.yaml")) {
     let document = null;
     try {
@@ -13379,7 +13639,7 @@ function redactShareableFile(content, rel) {
   for (const { value, token } of protectedValue.tokens) out = out.split(token).join(value);
   return { ...result, out };
 }
-var OPERATOR_PATH_RE, WORKSPACE_ROOT_MARKER, TILDE_CLAUDE_PROJECT_RE, OPERATOR_MEMORY_ROOT_MARKER, PRIVATE_HOME_PATH_RE, PRIVATE_HOME_MARKER, SHA256_VALUE, SHA256_FIELDS, HASH_BEARING_SCHEMAS;
+var OPERATOR_PATH_RE, WORKSPACE_ROOT_MARKER, TILDE_CLAUDE_PROJECT_RE, OPERATOR_MEMORY_ROOT_MARKER, PRIVATE_HOME_PATH_RE, PRIVATE_HOME_MARKER, SHA256_VALUE, SHA256_HEX, SHA256_FIELDS, HASH_BEARING_SCHEMAS, SUBMITTED_HANDOFF_SCHEMA;
 var init_scrub_redact = __esm({
   "../src/modules/security/workflows/scrub-redact.ts"() {
     init_secret_patterns();
@@ -13391,6 +13651,7 @@ var init_scrub_redact = __esm({
     PRIVATE_HOME_PATH_RE = /\/(?:Users|home)\/[A-Za-z0-9._-]+(?=[/\s"',:;)\]}]|$)/g;
     PRIVATE_HOME_MARKER = "<private-home>";
     SHA256_VALUE = /^(?:sha256:)?[0-9a-f]{64}$/;
+    SHA256_HEX = /^[0-9a-f]{64}$/;
     SHA256_FIELDS = /* @__PURE__ */ new Set([
       "sha256",
       "content_tree_sha256",
@@ -13418,8 +13679,11 @@ var init_scrub_redact = __esm({
       "guild.compatibility_usage.v1",
       "guild.capability_substantive_operation.v1",
       "guild.task_assignment.v2",
+      "guild.handoff_validation.v1",
+      "guild.handoff_acceptance.v1",
       "guild.session_context.v1"
     ]);
+    SUBMITTED_HANDOFF_SCHEMA = "guild.submitted_handoff.pointer.v1";
   }
 });
 
@@ -22692,6 +22956,9 @@ var init_no_accidental_write = __esm({
       "auto_approve",
       "review",
       "host",
+      "host_mode",
+      "roles",
+      "host_profiles",
       "initiative_default",
       "index",
       "record_status_runs",
@@ -22702,10 +22969,14 @@ var init_no_accidental_write = __esm({
       "security",
       "secrets_policy",
       "mcp",
+      "capability",
+      "statusline",
+      "adversarial_review_provider",
       "loops",
       "loop_cap",
       "codex_cap",
-      "defaults"
+      "defaults",
+      "model_policy"
     ], "SETTINGS_JSON_KNOWN_KEYS");
     WORKSPACE_JSON_REQUIRED_KEYS = Object.freeze([
       "schema_version"
@@ -24868,6 +25139,7 @@ var os3 = __toESM(require("node:os"));
 var path25 = __toESM(require("node:path"));
 init_compatibility_usage();
 init_path_containment();
+init_yaml_loader();
 init_receipt_journal();
 init_receipt_reconcile();
 
@@ -25165,6 +25437,9 @@ init_capability();
 init_lifecycle();
 init_capability();
 
+// ../src/modules/dispatch/workflows/task-cell-acceptance.ts
+init_documents();
+
 // ../src/modules/dispatch/workflows/task-cell-telemetry-reconcile.ts
 init_telemetry();
 
@@ -25282,13 +25557,9 @@ var RUN_RECORD_FINDING_CODES = Object.freeze([
   "not_a_directory",
   "usage"
 ]);
-var RECEIPT_SECTIONS = Object.freeze([
-  "changed_files",
-  "opens_for",
-  "assumptions",
-  "evidence",
-  "followups"
-]);
+
+// lib/capability/migration-evidence.ts
+init_documents();
 
 // lib/shared/scrub-redact.ts
 init_scrub_redact();
@@ -25315,7 +25586,7 @@ function canonical(value) {
   }
   return JSON.stringify(value);
 }
-function plainRecord(value) {
+function plainRecord2(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null ? value : null;
@@ -25416,7 +25687,7 @@ function runtimePackageBinding(packageRoot, hostId, expected) {
   });
 }
 function validateRuntimeBinding(value, expectedHost) {
-  const record = plainRecord(value);
+  const record = plainRecord2(value);
   if (!record || !exactKeys(record, ["host_id", "manifest_path", "manifest_sha256", "producer_sha256", "tree_sha256", "install_surface_sha256"])) return null;
   if (record.host_id !== "claude-code-cli" && record.host_id !== "codex-cli") return null;
   if (expectedHost && record.host_id !== expectedHost) return null;
@@ -25425,14 +25696,14 @@ function validateRuntimeBinding(value, expectedHost) {
   return Object.freeze({ host_id: record.host_id, manifest_path: expectedManifest, manifest_sha256: record.manifest_sha256, producer_sha256: record.producer_sha256, tree_sha256: record.tree_sha256, install_surface_sha256: record.install_surface_sha256 });
 }
 function validateRuntimePackage(value, expectedHost) {
-  const record = plainRecord(value);
+  const record = plainRecord2(value);
   if (!record || !exactKeys(record, ["host_id", "manifest_path", "manifest_sha256", "producer_sha256", "tree_sha256", "install_surface_sha256", "files", "install_files"]) || !Array.isArray(record.files) || record.files.length === 0 || record.files.length > 4096 || !Array.isArray(record.install_files) || record.install_files.length === 0 || record.install_files.length > record.files.length) return null;
   const binding = validateRuntimeBinding({ host_id: record.host_id, manifest_path: record.manifest_path, manifest_sha256: record.manifest_sha256, producer_sha256: record.producer_sha256, tree_sha256: record.tree_sha256, install_surface_sha256: record.install_surface_sha256 }, expectedHost);
   if (!binding) return null;
   const files = [];
   const seen = /* @__PURE__ */ new Set();
   for (const raw of record.files) {
-    const file = plainRecord(raw);
+    const file = plainRecord2(raw);
     if (!file || !exactKeys(file, ["path", "sha256"]) || !canonicalRelativePath(file.path) || typeof file.sha256 !== "string" || !SHA256.test(file.sha256) || seen.has(file.path)) return null;
     seen.add(file.path);
     files.push(Object.freeze({ path: file.path, sha256: file.sha256 }));
@@ -25441,7 +25712,7 @@ function validateRuntimePackage(value, expectedHost) {
   if (sha2564(canonical(files)) !== binding.tree_sha256) return null;
   const installFiles = [];
   for (const raw of record.install_files) {
-    const file = plainRecord(raw);
+    const file = plainRecord2(raw);
     if (!file || !exactKeys(file, ["path", "sha256"]) || !canonicalRelativePath(file.path) || typeof file.sha256 !== "string" || !SHA256.test(file.sha256) || !seen.has(file.path) || installFiles.some((entry) => entry.path === file.path)) return null;
     const full = files.find((entry) => entry.path === file.path);
     if (!full || full.sha256 !== file.sha256) return null;
@@ -25571,7 +25842,7 @@ function verifyMigrationBoundaryProvenance(boundaryPath, boundary) {
   const verifiedAt = new Date(verifiedAtMillis).toISOString();
   let run = null;
   try {
-    run = plainRecord(JSON.parse(jsonBody));
+    run = plainRecord2(JSON.parse(jsonBody));
   } catch {
   }
   if (!run || run.head_sha !== boundary.source_commit || run.head_branch !== "next" || run.event !== "push" || run.status !== "completed" || run.conclusion !== "success") {
@@ -25580,7 +25851,7 @@ function verifyMigrationBoundaryProvenance(boundaryPath, boundary) {
   return verifiedAt;
 }
 function validateMigrationBoundary(value) {
-  const record = plainRecord(value);
+  const record = plainRecord2(value);
   if (!record || !exactKeys(record, [
     "schema_version",
     "channel",
@@ -25601,12 +25872,12 @@ function validateMigrationBoundary(value) {
   if (mergedAt === null || mergedAt !== record.merged_at) return null;
   if (typeof record.event_sha256 !== "string" || !SHA256.test(record.event_sha256)) return null;
   if (typeof record.boundary_hash !== "string" || !SHA256.test(record.boundary_hash)) return null;
-  const packages = plainRecord(record.packages);
+  const packages = plainRecord2(record.packages);
   if (!packages || !exactKeys(packages, ["claude-code-cli", "codex-cli"])) return null;
   const claudePackage = validateRuntimePackage(packages["claude-code-cli"], "claude-code-cli");
   const codexPackage = validateRuntimePackage(packages["codex-cli"], "codex-cli");
   if (!claudePackage || !codexPackage) return null;
-  const workflow = plainRecord(record.workflow);
+  const workflow = plainRecord2(record.workflow);
   if (!workflow || !exactKeys(workflow, ["repository", "run_id", "run_attempt", "event", "ref"])) return null;
   if (typeof workflow.repository !== "string" || !REPOSITORY.test(workflow.repository)) return null;
   if (typeof workflow.run_id !== "string" || !/^[1-9]\d*$/.test(workflow.run_id)) return null;

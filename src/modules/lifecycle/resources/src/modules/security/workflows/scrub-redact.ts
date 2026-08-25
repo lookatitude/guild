@@ -64,6 +64,7 @@ export interface RedactResult {
 }
 
 const SHA256_VALUE = /^(?:sha256:)?[0-9a-f]{64}$/;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 const SHA256_FIELDS = new Set([
   "sha256",
   "content_tree_sha256",
@@ -91,8 +92,34 @@ const HASH_BEARING_SCHEMAS = new Set([
   "guild.compatibility_usage.v1",
   "guild.capability_substantive_operation.v1",
   "guild.task_assignment.v2",
+  "guild.handoff_validation.v1",
+  "guild.handoff_acceptance.v1",
   "guild.session_context.v1",
 ]);
+
+const SUBMITTED_HANDOFF_SCHEMA = "guild.submitted_handoff.pointer.v1";
+
+function isHandoffReceiptId(value: unknown): value is string {
+  if (typeof value !== "string" || !value.startsWith("handoff-sha256:")) return false;
+  return SHA256_HEX.test(value.slice("handoff-sha256:".length));
+}
+
+function submittedHandoffDocument(value: unknown, rel: string): value is Record<string, unknown> {
+  if (!rel.endsWith("handoff.json") || typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const expected = ["acceptance_tests_passed", "claimed_changed_files", "receipt_id", "receipt_path", "schema_valid", "submitted_at"];
+  const keys = Object.keys(record).sort();
+  const receiptPath = typeof record.receipt_path === "string" ? record.receipt_path : "";
+  const canonicalReceiptPath = /^\.guild\/runs\/[^/]+\/handoffs\/[^/]+\.md$/.test(receiptPath)
+    || /^\.guild\/runs\/[^/]+\/task-cells\/[^/]+\/attempts\/[1-9]\d*\/instances\/[^/]+\/handoff-receipt\.md$/.test(receiptPath);
+  return JSON.stringify(keys) === JSON.stringify(expected)
+    && isHandoffReceiptId(record.receipt_id)
+    && canonicalReceiptPath
+    && typeof record.schema_valid === "boolean"
+    && Array.isArray(record.claimed_changed_files) && record.claimed_changed_files.every((entry) => typeof entry === "string")
+    && Array.isArray(record.acceptance_tests_passed) && record.acceptance_tests_passed.every((entry) => typeof entry === "string")
+    && typeof record.submitted_at === "string" && Number.isFinite(Date.parse(record.submitted_at));
+}
 
 function recognizedHashDocument(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -132,6 +159,9 @@ function approvedHashPath(schema: string, pathParts: readonly string[]): boolean
   }
   if (schema === "guild.task_assignment.v2") {
     return new Set(["specialist_type_hash", "specialist_profile_hash", "context_bundle_hash", "host_capabilities_hash"]).has(pathKey);
+  }
+  if (schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") {
+    return pathKey === "receipt_id";
   }
   if (schema === "guild.session_context.v1") {
     return new Set([
@@ -174,6 +204,7 @@ function protectSchemaBoundSha256Occurrences(
     while (content.includes(token)) token = `<GUILD-SHA256-${tokenIndex++}>`;
     return token;
   };
+  const normalizedRel = rel.split(/[\\/]/).join("/");
   const protectDocument = (documentContent: string): string => {
     let parsed: unknown;
     try {
@@ -181,14 +212,18 @@ function protectSchemaBoundSha256Occurrences(
     } catch {
       return documentContent;
     }
-    if (!recognizedHashDocument(parsed)) return documentContent;
+    const schema = recognizedHashDocument(parsed)
+      ? String(parsed.schema_version)
+      : submittedHandoffDocument(parsed, normalizedRel)
+        ? SUBMITTED_HANDOFF_SCHEMA
+        : null;
+    if (schema === null) return documentContent;
     const trailingNewline = documentContent.endsWith("\n");
     const body = trailingNewline ? documentContent.slice(0, -1) : documentContent;
     const compact = JSON.stringify(parsed);
     const pretty = JSON.stringify(parsed, null, 2);
     const indent = body === compact ? undefined : body === pretty ? 2 : null;
     if (indent === null) return documentContent;
-    const schema = String(parsed.schema_version);
     const protect = (value: unknown, pathParts: string[]): void => {
       if (Array.isArray(value)) {
         value.forEach((entry, index) => protect(entry, [...pathParts, String(index)]));
@@ -198,6 +233,7 @@ function protectSchemaBoundSha256Occurrences(
       for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
         const childPath = [...pathParts, key];
         const approvedValue = SHA256_VALUE.test(String(entry))
+          || ((schema === SUBMITTED_HANDOFF_SCHEMA || schema === "guild.handoff_validation.v1" || schema === "guild.handoff_acceptance.v1") && isHandoffReceiptId(entry))
           || (schema === "guild.session_context.v1" && /^fp-[0-9a-f]{64}$/.test(String(entry)))
           || (schema === "guild.project_capability_profile.v1" && childPath.join("/") === "source_commit" && /^[0-9a-f]{40}$/.test(String(entry)));
         if (typeof entry === "string" && approvedValue && approvedHashPath(schema, childPath)) {
@@ -214,11 +250,49 @@ function protectSchemaBoundSha256Occurrences(
     return `${serialized}${trailingNewline ? "\n" : ""}`;
   };
 
-  const normalizedRel = rel.split(/[\\/]/).join("/");
   if (normalizedRel.endsWith(".jsonl")) {
     return { content: content.split("\n").map((line) => line.trim().length === 0 ? line : protectDocument(line)).join("\n"), tokens };
   }
   if (normalizedRel.endsWith(".json")) return { content: protectDocument(content), tokens };
+  if (normalizedRel.endsWith("handoff-receipt.md") || /(?:^|\/)handoffs\/[^/]+\.md$/.test(normalizedRel)) {
+    const match = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(content);
+    let frontmatter: Record<string, unknown> | null = null;
+    try {
+      const parsed = match ? parseYaml(match[1]) : null;
+      frontmatter = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    } catch { frontmatter = null; }
+    const host = frontmatter && typeof frontmatter.host === "object" && frontmatter.host !== null && !Array.isArray(frontmatter.host)
+      ? frontmatter.host as Record<string, unknown> : null;
+    const ids = frontmatter && typeof frontmatter.ids === "object" && frontmatter.ids !== null && !Array.isArray(frontmatter.ids)
+      ? frontmatter.ids as Record<string, unknown> : null;
+    const requiredArrays = ["changed_files", "evidence", "assumptions", "open_risks", "followups"];
+    const frozenShape = frontmatter?.schema_version === "guild.handoff_receipt.v1"
+      && host !== null && typeof host.selected === "string" && typeof host.degraded === "boolean"
+      && (host.native_ref === null || typeof host.native_ref === "string")
+      && (host.independence === "strong" || host.independence === "weak")
+      && ids !== null && typeof ids.run_id === "string" && typeof ids.task_id === "string" && typeof ids.task_run_id === "string"
+      && typeof frontmatter.specialist === "string" && typeof frontmatter.produced_at === "string"
+      && requiredArrays.every((key) => Array.isArray(frontmatter?.[key]));
+    if (frozenShape && match && frontmatter) {
+      const approvedCounts = new Map<string, number>();
+      for (const value of frontmatter.changed_files as unknown[]) {
+        const entry = typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+        if (entry && typeof entry.path === "string" && ["created", "modified", "deleted", "renamed"].includes(String(entry.change))
+          && typeof entry.sha256_after === "string" && SHA256_VALUE.test(entry.sha256_after)) {
+          approvedCounts.set(entry.sha256_after, (approvedCounts.get(entry.sha256_after) ?? 0) + 1);
+        }
+      }
+      let protectedFrontmatter = match[0];
+      for (const [value, approvedCount] of approvedCounts) {
+        const totalCount = content.split(value).length - 1;
+        if (totalCount !== approvedCount) continue;
+        const token = uniqueToken();
+        tokens.push({ value, token });
+        protectedFrontmatter = protectedFrontmatter.split(value).join(token);
+      }
+      return { content: `${protectedFrontmatter}${content.slice(match[0].length)}`, tokens };
+    }
+  }
   if (normalizedRel.endsWith("run.yaml")) {
     let document: Record<string, unknown> | null = null;
     try {

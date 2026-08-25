@@ -190,7 +190,7 @@ function handoffIsExact(
   return Boolean(
     handoff &&
     handoff.schema_version === "guild.handoff.v2" &&
-    handoff.task_id === assignment.task_run_id &&
+    handoff.task_id === assignment.logical_task_id &&
     handoff.status === "done" &&
     handoff.summary === expectedSummary &&
     Array.isArray(handoff.artifacts) &&
@@ -258,12 +258,12 @@ class LiveHostWorkerPort implements TaskCellWorkerPort {
     const wrapperRecordPath = path.join(paths.instance_dir, "guild-run-record.json");
     const hostOutputPath = path.join(paths.instance_dir, "host-output.txt");
     const hostErrorPath = path.join(paths.instance_dir, "host-stderr.txt");
-    const handoffReceiptPath = `.guild/runs/${assignment.run_id}/handoffs/${hostSlug}-attempt-${assignment.attempt}.md`;
+    const handoffReceiptPath = paths.receipt_path;
     const prompt = [
       "You are executing an installed-host TaskCell conformance probe in read-only mode.",
       `Read the assignment JSON at ${assignment.assignment_path}.`,
       "Read the context file named by its context_bundle_id field.",
-      "Emit only guild.handoff.v2 and include schema_version exactly guild.handoff.v2. Set task_id to the assignment task_run_id, status to done, tier to cheap,",
+      "Emit only guild.handoff.v2 and include schema_version exactly guild.handoff.v2. Set task_id to the assignment logical_task_id, status to done, tier to cheap,",
       "summary to the complete context file contents without a trailing newline, and artifacts/issues to empty arrays.",
       "Do not infer or repeat values from this prompt; derive them from the files.",
     ].join(" ");
@@ -291,10 +291,51 @@ class LiveHostWorkerPort implements TaskCellWorkerPort {
     writeJson(this.input.cwd, wrapperRecordPath, result.wrapper_record);
 
     if (ok && result.handoff) {
+      const producedAt = this.now();
       const receipt = [
         "---",
         "schema_version: guild.handoff_receipt.v1",
+        "ids:",
+        "  initiative_id: null",
+        `  run_id: ${JSON.stringify(assignment.run_id)}`,
+        `  task_id: ${JSON.stringify(assignment.logical_task_id)}`,
+        `  task_run_id: ${JSON.stringify(assignment.task_run_id)}`,
+        `specialist: ${JSON.stringify(assignment.worker_role)}`,
+        "host:",
+        `  selected: ${JSON.stringify(assignment.host_id)}`,
+        `  degraded: ${this.preflight.degradation_reasons.length > 0 ? "true" : "false"}`,
+        `  native_ref: ${JSON.stringify(wrapperRecordPath)}`,
+        "  independence: weak",
+        "scope:",
+        `  objective: ${JSON.stringify(assignment.objective)}`,
+        `  in_scope: ${JSON.stringify(assignment.scope_paths)}`,
+        "  out_of_scope_touched: []",
+        "status: completed",
+        "changed_files: []",
+        "evidence:",
+        "  - kind: artifact",
+        `    ref: ${JSON.stringify(hostOutputPath)}`,
+        "    result: pass",
+        "assumptions: []",
+        "open_risks: []",
+        "followups: []",
+        `produced_at: ${JSON.stringify(producedAt)}`,
         "---",
+        "",
+        "## changed_files",
+        "- none",
+        "",
+        "## opens_for",
+        "- lead",
+        "",
+        "## assumptions",
+        "- none",
+        "",
+        "## evidence",
+        `- ${hostOutputPath}`,
+        "",
+        "## followups",
+        "- none",
         "",
         "```guild.handoff.v2",
         JSON.stringify(result.handoff),
@@ -306,12 +347,12 @@ class LiveHostWorkerPort implements TaskCellWorkerPort {
       fs.writeFileSync(absReceipt, receipt, "utf8");
       acknowledgeAssignment(this.input.cwd, assignment, this.now);
       writeJson(this.input.cwd, assignment.handoff_path, {
-        receipt_id: `${hostSlug}-attempt-${assignment.attempt}`,
+        receipt_id: `handoff-sha256:${sha256(receipt)}`,
         receipt_path: handoffReceiptPath,
         schema_valid: true,
         claimed_changed_files: [],
         acceptance_tests_passed: [...assignment.acceptance_tests],
-        submitted_at: this.now(),
+        submitted_at: producedAt,
       });
     }
 

@@ -23,6 +23,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { createHash } from "node:crypto";
 
 import {
   buildTaskCell,
@@ -40,9 +41,11 @@ import {
   readAcceptanceForInstance,
   readAssignmentForInstance,
   readAttemptForInstance,
+  retainSubmittedHandoffReceipt,
   releasedLogicalTasks,
   runDeterministicFloor,
   sealTerminalAttempt,
+  validateSubmittedHandoffReceipt,
   writeAcceptanceRecord,
   writeValidationRecord,
   type TaskCellInstanceIds,
@@ -148,6 +151,106 @@ const OBSERVED_ACCEPT = AUTHORITIES.map((authority) => ({
 // ── deterministic floor ──────────────────────────────────────────────────────
 
 describe("runDeterministicFloor", () => {
+  it("derives schema validity from the frozen receipt bytes, never the worker claim", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const receiptPath = `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, receiptPath), [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      `task_id: ${assignment.logical_task_id}`,
+      `specialist: ${assignment.worker_role}`,
+      "model_family: claude",
+      "host: claude-code-cli",
+      `generated_at: ${FIXED_NOW()}`,
+      "---",
+      "",
+      "```guild.handoff.v2",
+      JSON.stringify({ schema_version: "guild.handoff.v2", task_id: assignment.logical_task_id, tier: "mid", status: "done", summary: "legacy receipt", artifacts: [], issues: [] }),
+      "```",
+      "",
+    ].join("\n"));
+    const submitted = validReceipt({ receipt_path: receiptPath, schema_valid: true });
+
+    expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBe(false);
+  });
+
+  it("fails closed instead of throwing on malformed claimed-file arrays", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const submitted = {
+      ...validReceipt(),
+      claimed_changed_files: null,
+      acceptance_tests_passed: "npm test -- api",
+    } as unknown as ReturnType<typeof validReceipt>;
+
+    expect(() => validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).not.toThrow();
+    expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBe(false);
+  });
+
+  it("binds receipt_id to raw file bytes even when ignored prose is not valid UTF-8", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const receiptPath = `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    const prefix = [
+      "---", "schema_version: guild.handoff_receipt.v1", "ids:", "  initiative_id: null",
+      `  run_id: ${assignment.run_id}`, `  task_id: ${assignment.logical_task_id}`, `  task_run_id: ${assignment.task_run_id}`,
+      `specialist: ${assignment.worker_role}`, "host:", `  selected: ${assignment.host_id}`, "  degraded: false",
+      "  native_ref: null", "  independence: strong", "scope:", `  objective: ${JSON.stringify(assignment.objective)}`,
+      `  in_scope: ${JSON.stringify(assignment.scope_paths)}`, "  out_of_scope_touched: []", "status: completed",
+      "changed_files:", "  - path: src/api/routes.ts", "    change: modified", `    sha256_after: ${"b".repeat(64)}`,
+      "evidence: []", "assumptions: []", "open_risks: []", "followups: []", `produced_at: ${FIXED_NOW()}`,
+      "---", "",
+      "## changed_files", "- src/api/routes.ts", "",
+      "## opens_for", "- lead", "",
+      "## assumptions", "- none", "",
+      "## evidence", "- raw-byte binding", "",
+      "## followups", "- none", "",
+      "ignored prose ",
+    ].join("\n");
+    const suffix = ["", "```guild.handoff.v2", JSON.stringify({
+      schema_version: "guild.handoff.v2", task_id: assignment.logical_task_id, tier: "mid", status: "done",
+      summary: "done", artifacts: ["src/api/routes.ts"], issues: [],
+    }), "```", ""].join("\n");
+    const bytes = Buffer.concat([Buffer.from(prefix), Buffer.from([0xff]), Buffer.from(suffix)]);
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, receiptPath), bytes);
+    const submitted = validReceipt({
+      receipt_path: receiptPath,
+      receipt_id: `handoff-sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+    });
+
+    expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBe(true);
+
+    const incompleteWrapperBytes = Buffer.from(
+      bytes.toString("latin1").replace("## followups\n- none\n", ""),
+      "latin1"
+    );
+    fs.writeFileSync(path.join(cwd, receiptPath), incompleteWrapperBytes);
+    expect(validateSubmittedHandoffReceipt({
+      cwd,
+      assignment,
+      submitted: {
+        ...submitted,
+        receipt_id: `handoff-sha256:${createHash("sha256").update(incompleteWrapperBytes).digest("hex")}`,
+      },
+    })).toBe(false);
+    fs.writeFileSync(path.join(cwd, receiptPath), bytes);
+
+    const retainedPath = taskCellPaths(assignment).receipt_path;
+    fs.mkdirSync(path.dirname(path.join(cwd, retainedPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, retainedPath), "planted conflicting receipt");
+    expect(() => retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).not.toThrow();
+    expect(retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBeNull();
+
+    const retainedParent = path.dirname(path.join(cwd, retainedPath));
+    fs.rmSync(retainedParent, { recursive: true });
+    fs.writeFileSync(retainedParent, "planted parent-path collision");
+    expect(() => retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).not.toThrow();
+    expect(retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBeNull();
+  });
+
   it("passes a schema-valid, in-scope, tests-passed receipt", () => {
     const { assignment } = buildTaskCell(dispatch());
     const v = runDeterministicFloor({

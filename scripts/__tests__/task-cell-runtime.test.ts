@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { createHash } from "node:crypto";
 
 import {
   FilesystemTaskCellRuntime,
@@ -154,9 +155,62 @@ describe("FilesystemTaskCellRuntime production seam", () => {
     expect((running as { ok: true; acknowledged_at: string }).acknowledged_at).toBe("2026-08-10T16:59:59.000Z");
 
     const paths = taskCellPaths({ run_id: runId, logical_task_id: "T1", attempt: 1, instance_id: instance.instance_id });
+    const receiptPath = `.guild/runs/${runId}/handoffs/backend-T1.md`;
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    const receiptBytes = [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      "ids:",
+      "  initiative_id: null",
+      `  run_id: ${runId}`,
+      "  task_id: T1",
+      "  task_run_id: T1.tr1",
+      "specialist: backend",
+      "host:",
+      "  selected: claude-code-cli",
+      "  degraded: false",
+      "  native_ref: null",
+      "  independence: weak",
+      "scope:",
+      "  objective: implement T1",
+      "  in_scope: [src/api]",
+      "  out_of_scope_touched: []",
+      "status: completed",
+      "changed_files:",
+      "  - path: src/api/routes.ts",
+      "    change: modified",
+      `    sha256_after: ${"a".repeat(64)}`,
+      "evidence: []",
+      "assumptions: []",
+      "open_risks: []",
+      "followups: []",
+      `produced_at: ${NOW()}`,
+      "---",
+      "",
+      "## changed_files",
+      "- src/api/routes.ts",
+      "",
+      "## opens_for",
+      "- lead",
+      "",
+      "## assumptions",
+      "- none",
+      "",
+      "## evidence",
+      "- runtime collection",
+      "",
+      "## followups",
+      "- none",
+      "",
+      "```guild.handoff.v2",
+      JSON.stringify({ schema_version: "guild.handoff.v2", task_id: "T1", tier: "mid", status: "done", summary: "implemented T1", artifacts: ["src/api/routes.ts"], issues: [] }),
+      "```",
+      "",
+    ].join("\n");
+    fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes);
     fs.writeFileSync(path.join(cwd, paths.handoff_path), JSON.stringify({
-      receipt_id: "r1",
-      receipt_path: paths.handoff_path,
+      receipt_id: `handoff-sha256:${createHash("sha256").update(receiptBytes).digest("hex")}`,
+      receipt_path: receiptPath,
       schema_valid: true,
       claimed_changed_files: ["src/api/routes.ts"],
       acceptance_tests_passed: ["npm test -- api"],
@@ -164,6 +218,10 @@ describe("FilesystemTaskCellRuntime production seam", () => {
     }, null, 2) + "\n");
     const collected = await runtime.collectHandoff(instance);
     expect(collected.ok).toBe(true);
+    expect(fs.readFileSync(path.join(cwd, paths.receipt_path))).toEqual(Buffer.from(receiptBytes));
+    expect(JSON.parse(fs.readFileSync(path.join(cwd, paths.handoff_path), "utf8")).receipt_path).toBe(paths.receipt_path);
+    fs.writeFileSync(path.join(cwd, receiptPath), "later retry bytes");
+    expect(fs.readFileSync(path.join(cwd, paths.receipt_path))).toEqual(Buffer.from(receiptBytes));
     const accepted = await runtime.acceptHandoff(instance, {
       acceptance_policy_version: "1",
       authorities_required: ["deterministic_floor", "team_lead"],

@@ -29,6 +29,7 @@ import {
   documentRoundTripEvidence,
   evaluateDocumentServiceBoundary,
   extractDocumentHtmlBinding,
+  hasCanonicalReceiptWrapper,
   importLegacyMarkdown,
   migrateDocumentRecord,
   parseReceiptDocument,
@@ -1177,8 +1178,8 @@ describe("receipt bridge", () => {
           {
             schema_version: "guild.handoff.v2",
             task_id: "MH-05",
-            tier: "standard",
-            status: overrides.status ?? "complete",
+            tier: "mid",
+            status: overrides.status ?? "done",
             summary: "typed document contracts",
             artifacts: ["src/modules/documents/index.ts"],
             issues: [],
@@ -1191,6 +1192,65 @@ describe("receipt bridge", () => {
       "",
     ].join("\n");
 
+  const frozenReceipt = (): string =>
+    [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      "ids:",
+      "  initiative_id: null",
+      "  run_id: run-20260727-000000-document-contracts",
+      "  task_id: MH-05",
+      "  task_run_id: trun-mh-05-001",
+      "specialist: artifact-services",
+      "host:",
+      "  selected: claude-code",
+      "  degraded: false",
+      "  native_ref: null",
+      "  independence: strong",
+      "scope:",
+      "  objective: Prove the frozen receipt contract",
+      "  in_scope:",
+      "    - src/modules/documents",
+      "  out_of_scope_touched: []",
+      "status: completed",
+      "changed_files: []",
+      "evidence: []",
+      "assumptions: []",
+      "open_risks: []",
+      "followups: []",
+      "produced_at: 2026-07-27T00:00:00.000Z",
+      "---",
+      "",
+      "## changed_files",
+      "- none",
+      "",
+      "## opens_for",
+      "- lead",
+      "",
+      "## assumptions",
+      "- none",
+      "",
+      "## evidence",
+      "- document-contract fixture",
+      "",
+      "## followups",
+      "- none",
+      "",
+      "```guild.handoff.v2",
+      JSON.stringify({
+        schema_version: "guild.handoff.v2",
+        task_id: "MH-05",
+        tier: "mid",
+        status: "done",
+        summary: "typed document contracts",
+        artifacts: [],
+        issues: [],
+        learnings: [],
+      }),
+      "```",
+      "",
+    ].join("\n");
+
   it("parses a real-shape receipt into a canonical handoff record", () => {
     const parsed = parseReceiptDocument(receipt());
     expect(parsed.status).toBe("parsed");
@@ -1198,6 +1258,74 @@ describe("receipt bridge", () => {
     expect(parsed.record!.body.task_id).toBe("MH-05");
     expect(parsed.record!.body.status).toBe("completed");
     expect(parsed.record!.provenance.source).toBe("imported");
+  });
+
+  it("parses the frozen structured-host receipt without legacy scalar provenance", () => {
+    const parsed = parseReceiptDocument(frozenReceipt());
+    expect(parsed.status).toBe("parsed");
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.record!.provenance).toMatchObject({
+      author_id: "artifact-services",
+      host_id: "claude-code",
+      created_at: "2026-07-27T00:00:00.000Z",
+    });
+  });
+
+  it("recognizes only the complete canonical receipt wrapper", () => {
+    expect(hasCanonicalReceiptWrapper(frozenReceipt())).toBe(true);
+    expect(hasCanonicalReceiptWrapper(
+      frozenReceipt().replace("## followups\n- none\n", "")
+    )).toBe(false);
+  });
+
+  it("keeps the legacy scalar-host envelope as an explicit transition shape", () => {
+    const parsed = parseReceiptDocument(receipt({
+      block: JSON.stringify({
+        schema_version: "guild.handoff.v2",
+        task_id: "MH-05",
+        tier: "standard",
+        status: "complete",
+        summary: "legacy receipt",
+        artifacts: [],
+        issues: [],
+      }),
+    }));
+    expect(parsed.status).toBe("parsed");
+    expect(parsed.record!.provenance.host_id).toBe("claude-code-cli");
+    expect(parsed.record!.body.status).toBe("completed");
+  });
+
+  it("refuses a structured host mapping missing a frozen required field", () => {
+    const malformed = frozenReceipt().replace("  independence: strong\n", "");
+    const parsed = parseReceiptDocument(malformed);
+    expect(parsed.status).toBe("unparsable");
+    expect(parsed.errors.map((error) => error.path)).toContain(
+      "$.frontmatter.host.independence"
+    );
+  });
+
+  it("refuses a frozen receipt missing the required nullable initiative id", () => {
+    const malformed = frozenReceipt().replace("  initiative_id: null\n", "");
+    const parsed = parseReceiptDocument(malformed);
+    expect(parsed.status).toBe("unparsable");
+    expect(parsed.errors.map((error) => error.path)).toContain(
+      "$.frontmatter.ids.initiative_id"
+    );
+  });
+
+  it("refuses a syntactically valid timestamp that names no real calendar instant", () => {
+    const malformed = frozenReceipt().replace(
+      "produced_at: 2026-07-27T00:00:00.000Z",
+      "produced_at: 2026-02-30T12:00:00.000Z"
+    );
+    const parsed = parseReceiptDocument(malformed);
+    expect(parsed.status).toBe("unparsable");
+    expect(parsed.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: "$.frontmatter.produced_at",
+        code: "invalid_timestamp",
+      }),
+    ]));
   });
 
   it("accepts the contract-named guild.handoff.v2 fence used by lane receipts", () => {
@@ -1350,6 +1478,14 @@ describe("receipt bridge", () => {
 
   it("refuses an out-of-vocabulary status rather than guessing", () => {
     expect(decideFromReceiptDocument(receipt({ status: "mostly-fine" })).gate_signal).toBe("refuse");
+  });
+
+  it("refuses a machine block that violates the strict guild.handoff.v2 shape", () => {
+    const invalid = frozenReceipt().replace(
+      '"tier":"mid"',
+      '"tier":"standard","unreviewed":true',
+    );
+    expect(parseReceiptDocument(invalid).status).toBe("unparsable");
   });
 
   it("is total over hostile receipt input", () => {

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 
 import {
   FilesystemTaskCellRuntime,
@@ -127,9 +128,70 @@ describe("TaskCell production record-runtime scale proof", () => {
       acknowledgeAssignment(cwd, assignment, NOW);
       expect((await runtime.awaitAssignmentAck(instance)).ok).toBe(true);
       const paths = taskCellPaths({ run_id: runId, logical_task_id: cell.logical_task_id, attempt, instance_id: instance.instance_id });
+      const receiptPath = `.guild/runs/${runId}/handoffs/backend-${cell.logical_task_id}.md`;
+      const receiptBytes = [
+        "---",
+        "schema_version: guild.handoff_receipt.v1",
+        "ids:",
+        "  initiative_id: null",
+        `  run_id: ${runId}`,
+        `  task_id: ${cell.logical_task_id}`,
+        `  task_run_id: ${instance.task_run_id}`,
+        "specialist: backend",
+        "host:",
+        `  selected: host-${substrateIndex}`,
+        "  degraded: false",
+        "  native_ref: null",
+        "  independence: weak",
+        "scope:",
+        `  objective: complete ${cell.logical_task_id}`,
+        "  in_scope: [src]",
+        "  out_of_scope_touched: []",
+        "status: completed",
+        "changed_files:",
+        "  - path: src/output.ts",
+        "    change: modified",
+        `    sha256_after: ${"a".repeat(64)}`,
+        "evidence: []",
+        "assumptions: []",
+        "open_risks: []",
+        "followups: []",
+        `produced_at: ${NOW()}`,
+        "---",
+        "",
+        "## changed_files",
+        "- src/output.ts",
+        "",
+        "## opens_for",
+        "- lead",
+        "",
+        "## assumptions",
+        "- none",
+        "",
+        "## evidence",
+        "- scale runtime",
+        "",
+        "## followups",
+        "- none",
+        "",
+        "```guild.handoff.v2",
+        JSON.stringify({
+          schema_version: "guild.handoff.v2",
+          task_id: cell.logical_task_id,
+          tier: "mid",
+          status: "done",
+          summary: `completed ${cell.logical_task_id}`,
+          artifacts: ["src/output.ts"],
+          issues: [],
+        }),
+        "```",
+        "",
+      ].join("\n");
+      fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+      fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes);
       fs.writeFileSync(path.join(cwd, paths.handoff_path), `${JSON.stringify({
-        receipt_id: `receipt-${instance.instance_id}`,
-        receipt_path: paths.handoff_path,
+        receipt_id: `handoff-sha256:${createHash("sha256").update(receiptBytes).digest("hex")}`,
+        receipt_path: receiptPath,
         schema_valid: true,
         claimed_changed_files: ["src/output.ts"],
         acceptance_tests_passed: ["npm test"],

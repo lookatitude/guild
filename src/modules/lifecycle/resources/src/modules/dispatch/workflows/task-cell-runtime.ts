@@ -64,6 +64,7 @@ import {
   findRunAcceptances,
   gateDependencies,
   markAttemptOrphaned,
+  retainSubmittedHandoffReceipt,
   runDeterministicFloor,
   sealTerminalAttempt,
   writeAcceptanceRecord,
@@ -431,7 +432,30 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (!submitted || !assignment) return this.failure(live, "timed_out", "handoff not submitted");
     this.transition(live, "handoff_submitted");
     this.emitLifecycle(live.handle, "handoff_submitted", this.now());
-    const validation = runDeterministicFloor({ assignment, submitted, validationResultId: this.idFactory("validation"), now: this.now });
+    const retained = retainSubmittedHandoffReceipt({ cwd: this.cwd, assignment, submitted });
+    const submittedRecord = submitted as unknown as Record<string, unknown>;
+    const submittedForValidation: SubmittedHandoff = retained
+      ? { ...retained, schema_valid: true }
+      : {
+          receipt_id: typeof submittedRecord.receipt_id === "string" ? submittedRecord.receipt_id : "invalid-receipt-id",
+          receipt_path: typeof submittedRecord.receipt_path === "string" ? submittedRecord.receipt_path : "invalid-receipt-path",
+          schema_valid: false,
+          claimed_changed_files: Array.isArray(submittedRecord.claimed_changed_files)
+            ? submittedRecord.claimed_changed_files.filter((value): value is string => typeof value === "string")
+            : [],
+          acceptance_tests_passed: Array.isArray(submittedRecord.acceptance_tests_passed)
+            ? submittedRecord.acceptance_tests_passed.filter((value): value is string => typeof value === "string")
+            : [],
+          submitted_at: typeof submittedRecord.submitted_at === "string" ? submittedRecord.submitted_at : this.now(),
+        };
+    if (retained) {
+      fs.writeFileSync(
+        path.resolve(this.cwd, paths.handoff_path),
+        `${JSON.stringify(submittedForValidation, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    const validation = runDeterministicFloor({ assignment, submitted: submittedForValidation, validationResultId: this.idFactory("validation"), now: this.now });
     writeValidationRecord(this.cwd, validation);
     if (validation.result !== "passed") return { ...this.failure(live, "validation_failed", validation.reason ?? "validation failed"), validation };
     this.transition(live, "handoff_validated");

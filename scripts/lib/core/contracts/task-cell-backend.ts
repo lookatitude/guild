@@ -434,6 +434,8 @@ export interface TaskCellPaths {
   attempt_path: string;
   assignment_path: string;
   handoff_path: string;
+  /** Immutable receipt bytes retained for this exact attempt + instance. */
+  receipt_path: string;
   heartbeat_path: string;
   cancel_channel: string;
   validation_path: string;
@@ -477,6 +479,7 @@ export function taskCellPaths(
     attempt_path: path.join(attempt_dir, "attempt.json"),
     assignment_path: path.join(instance_dir, "assignment.json"),
     handoff_path: path.join(instance_dir, "handoff.json"),
+    receipt_path: path.join(instance_dir, "handoff-receipt.md"),
     heartbeat_path: path.join(instance_dir, "heartbeat.json"),
     cancel_channel: path.join(instance_dir, "cancel"),
     validation_path: path.join(instance_dir, "handoff-validation.json"),
