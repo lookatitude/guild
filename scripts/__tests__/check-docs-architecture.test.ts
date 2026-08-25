@@ -12,7 +12,13 @@ import {
 } from "../check-docs-architecture";
 
 const pluginRoot = path.resolve(__dirname, "../..");
+const configuredRealDoc = process.env.GUILD_UMBRELLA_DOCS
+  ? path.resolve(process.env.GUILD_UMBRELLA_DOCS)
+  : process.env.GUILD_UMBRELLA_ROOT
+    ? path.resolve(process.env.GUILD_UMBRELLA_ROOT, "docs/v2/architecture/architecture-spine.html")
+    : undefined;
 const realDocCandidates = [
+  ...(configuredRealDoc ? [configuredRealDoc] : []),
   path.resolve(pluginRoot, "../docs/v2/architecture/architecture-spine.html"),
   path.resolve(pluginRoot, "../../..", "docs/v2/architecture/architecture-spine.html"),
 ];
@@ -214,7 +220,10 @@ describe("check:docs-architecture", () => {
         ["website/src/content/docs/migration-v1-to-v2.mdx", /Compatibility Window And Independent Rollback/, /Adapter rollback/, /Transport rollback/, /Consumer rollback/],
       ] as const;
       for (const [relativePath, ...patterns] of requiredReconciliations) {
-        const absolutePath = path.join(umbrellaRoot!, relativePath);
+        const websitePrefix = "website/";
+        const absolutePath = relativePath.startsWith(websitePrefix) && process.env.GUILD_WEBSITE_ROOT
+          ? path.join(path.resolve(process.env.GUILD_WEBSITE_ROOT), relativePath.slice(websitePrefix.length))
+          : path.join(umbrellaRoot!, relativePath);
         expect(fs.existsSync(absolutePath)).toBe(true);
         const body = fs.readFileSync(absolutePath, "utf8");
         for (const pattern of patterns) expect(body).toMatch(pattern);
