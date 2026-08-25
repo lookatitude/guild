@@ -234,6 +234,20 @@ describe("checkAccidentalWrite — protected surface violations", () => {
       const result = checkAccidentalWrite({ paths: [p] });
       expect(result.violations).toHaveLength(0);
     });
+
+    it.each([
+      "host_mode",
+      "roles",
+      "host_profiles",
+      "capability",
+      "statusline",
+      "adversarial_review_provider",
+      "model_policy",
+    ])("PASS: settings.json accepts canonical config-reader key %s", (key) => {
+      const base = tmpDir();
+      const p = makeSettingsPath(base, { rigor: "deep", [key]: {} });
+      expect(checkAccidentalWrite({ paths: [p] }).violations).toHaveLength(0);
+    });
   });
 
   // ── workspace.json ───────────────────────────────────────────────────────

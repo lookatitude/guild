@@ -105,10 +105,12 @@ export const SETTINGS_JSON_REQUIRED_KEYS: readonly string[] = Object.freeze([
  * is itself a deliberate schema-change checkpoint.
  */
 export const SETTINGS_JSON_KNOWN_KEYS: ReadonlySet<string> = sealSet([
-  "rigor", "auto_approve", "review", "host", "initiative_default",
+  "rigor", "auto_approve", "review", "host", "host_mode", "roles", "host_profiles", "initiative_default",
   "index", "record_status_runs", "codex_skip_enforcement", "agent_mode", "workspace", "models",
   "security", "secrets_policy", "mcp",
+  "capability", "statusline", "adversarial_review_provider",
   "loops", "loop_cap", "codex_cap", "defaults",
+  "model_policy",
 ], "SETTINGS_JSON_KNOWN_KEYS");
 
 /**
