@@ -33,6 +33,13 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { createHash } from "node:crypto";
+
+import {
+  hasCanonicalReceiptWrapper,
+  readReceiptFrontmatter,
+  validateFrozenReceiptDocument,
+} from "../../documents";
 
 import {
   HANDOFF_ACCEPTANCE_SCHEMA,
@@ -68,6 +75,127 @@ export interface TaskCellInstanceIds {
   logical_task_id: string;
   attempt: number;
   instance_id: string;
+}
+
+function receiptPathsForAssignment(assignment: TaskAssignmentV2): {
+  lane: string;
+  retained: string;
+} {
+  return {
+    lane: `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`,
+    retained: taskCellPaths({
+      run_id: assignment.run_id,
+      logical_task_id: assignment.logical_task_id,
+      attempt: assignment.attempt,
+      instance_id: assignment.instance_id,
+    }).receipt_path,
+  };
+}
+
+function submittedReceiptBytes(input: {
+  cwd: string;
+  assignment: TaskAssignmentV2;
+  submitted: SubmittedHandoff;
+}): Buffer | null {
+  const { cwd, assignment, submitted } = input;
+  if (
+    typeof submitted.receipt_path !== "string" ||
+    typeof submitted.receipt_id !== "string" ||
+    !Array.isArray(submitted.claimed_changed_files) ||
+    !submitted.claimed_changed_files.every((value) => typeof value === "string") ||
+    !Array.isArray(submitted.acceptance_tests_passed) ||
+    !submitted.acceptance_tests_passed.every((value) => typeof value === "string")
+  ) return null;
+  const expected = receiptPathsForAssignment(assignment);
+  if (
+    (submitted.receipt_path !== expected.lane && submitted.receipt_path !== expected.retained) ||
+    path.posix.normalize(submitted.receipt_path) !== submitted.receipt_path
+  ) return null;
+  const absolute = path.resolve(cwd, submitted.receipt_path);
+  if (!absolute.startsWith(`${path.resolve(cwd)}${path.sep}`)) return null;
+  try {
+    const stat = fs.lstatSync(absolute);
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+    return fs.readFileSync(absolute);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Recompute the worker's `schema_valid` claim from the immutable receipt bytes.
+ * The pointer must bind to this assignment's canonical lane path and the
+ * frozen frontmatter identities; a readable legacy receipt is deliberately
+ * not schema-valid at a new TaskCell acceptance boundary.
+ */
+export function validateSubmittedHandoffReceipt(input: {
+  cwd: string;
+  assignment: TaskAssignmentV2;
+  submitted: SubmittedHandoff;
+}): boolean {
+  const { cwd, assignment, submitted } = input;
+  const rawBytes = submittedReceiptBytes(input);
+  if (rawBytes === null) return false;
+  if (submitted.receipt_id !== `handoff-sha256:${createHash("sha256").update(rawBytes).digest("hex")}`) return false;
+  const text = rawBytes.toString("utf8");
+  if (
+    validateFrozenReceiptDocument(text).status !== "parsed" ||
+    !hasCanonicalReceiptWrapper(text)
+  ) return false;
+  const frontmatter = readReceiptFrontmatter(text);
+  if (!frontmatter.ok) return false;
+  const document = frontmatter.document;
+  const ids = document.ids as Record<string, unknown> | null;
+  const host = document.host as Record<string, unknown> | null;
+  if (!ids || typeof ids !== "object" || Array.isArray(ids) || !host || typeof host !== "object" || Array.isArray(host)) return false;
+  if (
+    ids.run_id !== assignment.run_id ||
+    ids.task_id !== assignment.logical_task_id ||
+    ids.task_run_id !== assignment.task_run_id ||
+    document.specialist !== assignment.worker_role ||
+    host.selected !== assignment.host_id
+  ) return false;
+  const changedFiles = Array.isArray(document.changed_files)
+    ? document.changed_files.flatMap((value) => {
+        const entry = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+        return typeof entry?.path === "string" ? [entry.path] : [];
+      }).sort()
+    : [];
+  return JSON.stringify(changedFiles) === JSON.stringify([...submitted.claimed_changed_files].sort());
+}
+
+/**
+ * Snapshot validated lane receipt bytes into the immutable attempt/instance tree.
+ * A later retry may update the human-facing lane file, but can never overwrite
+ * evidence already bound to an earlier validation or acceptance record.
+ */
+export function retainSubmittedHandoffReceipt(input: {
+  cwd: string;
+  assignment: TaskAssignmentV2;
+  submitted: SubmittedHandoff;
+}): SubmittedHandoff | null {
+  if (!validateSubmittedHandoffReceipt(input)) return null;
+  const rawBytes = submittedReceiptBytes(input);
+  if (rawBytes === null) return null;
+  const retainedPath = receiptPathsForAssignment(input.assignment).retained;
+  const retainedAbsolute = path.resolve(input.cwd, retainedPath);
+  try {
+    fs.mkdirSync(path.dirname(retainedAbsolute), { recursive: true });
+    fs.writeFileSync(retainedAbsolute, rawBytes, { flag: "wx" });
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : null;
+    if (code !== "EEXIST") return null;
+    try {
+      const stat = fs.lstatSync(retainedAbsolute);
+      if (!stat.isFile() || stat.isSymbolicLink() || !fs.readFileSync(retainedAbsolute).equals(rawBytes)) return null;
+    } catch {
+      return null;
+    }
+  }
+  const retained = { ...input.submitted, receipt_path: retainedPath };
+  return validateSubmittedHandoffReceipt({ ...input, submitted: retained }) ? retained : null;
 }
 
 /** Resolve a run-tree-relative channel path (as the contract emits) to an on-disk path under `cwd`. */

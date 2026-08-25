@@ -36,6 +36,7 @@ import {
   withRunBindingExclusion,
 } from "../../../src/modules/lifecycle/workflows/run-binding";
 import { isCanonicalLaneReceipt } from "../../../src/modules/lifecycle/workflows/run-record-validate";
+import { validateFrozenReceiptDocument } from "../../../src/modules/documents";
 import {
   taskCellPaths,
   validateTaskAssignmentV2,
@@ -52,6 +53,7 @@ export const MIGRATION_SUBSTANTIVE_OPERATION_SCHEMA = "guild.capability_substant
 export const MIGRATION_BOUNDARY_EVIDENCE_RELPATH = ".guild/artifacts/capability/migration-boundaries";
 
 const SHA256 = /^[0-9a-f]{64}$/;
+const HANDOFF_RECEIPT_ID = /^handoff-sha256:[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 const BETA = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
@@ -887,6 +889,7 @@ function acceptedTaskCellFactFromBytes(options: {
   readonly instanceId: string;
   readonly closedAt: string;
   readonly bytes: AcceptedTaskCellEvidenceBytes;
+  readonly projectedReceiptIdentity?: boolean;
 }): AcceptedTaskCellFacts | null {
   const { runId, taskId, attemptNumber, instanceId, closedAt, bytes } = options;
   let assignment: ReturnType<typeof validateTaskAssignmentV2> = null;
@@ -919,8 +922,10 @@ function acceptedTaskCellFactFromBytes(options: {
   const terminatedAt = canonicalInstant(attempt.terminated_at);
   const validatedAt = canonicalInstant(validation.validated_at);
   const pointerSubmittedAt = canonicalInstant(handoff.submitted_at);
-  const receiptGeneratedAt = canonicalInstant(receiptFrontmatter?.generated_at);
-  const receiptSpecialist = receiptFrontmatter?.specialist ?? receiptFrontmatter?.agent;
+  const receiptIds = plainRecord(receiptFrontmatter?.ids);
+  const receiptHost = plainRecord(receiptFrontmatter?.host);
+  const receiptGeneratedAt = canonicalInstant(receiptFrontmatter?.produced_at);
+  const receiptSpecialist = receiptFrontmatter?.specialist;
   const authorities = Array.isArray(acceptance.authorities_observed) ? acceptance.authorities_observed : [];
   const requiredAuthorities = Array.isArray(acceptance.authorities_required) && acceptance.authorities_required.every((value) => typeof value === "string")
     ? acceptance.authorities_required as string[] : [];
@@ -934,13 +939,21 @@ function acceptedTaskCellFactFromBytes(options: {
   const receiptId = handoff.receipt_id;
   const expectedHandoffKeys = ["receipt_id", "receipt_path", "schema_valid", "claimed_changed_files", "acceptance_tests_passed", "submitted_at"];
   const pointerPath = canonicalRelativePath(handoff.receipt_path) ? handoff.receipt_path : null;
+  const evidencePaths = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: attemptNumber, instance_id: instanceId });
+  const laneReceiptPath = `.guild/runs/${runId}/handoffs/${assignment.worker_role}-${taskId}.md`;
+  const canonicalReceiptPointer = pointerPath === laneReceiptPath || pointerPath === evidencePaths.receipt_path;
   const pointerShapeValid = exactKeys(handoff, expectedHandoffKeys) && pointerPath !== null
-    && pointerPath.startsWith(`.guild/runs/${runId}/handoffs/`) && pointerPath.endsWith(".md")
-    && handoff.schema_valid === true && isCanonicalLaneReceipt(receiptText, path.posix.basename(pointerPath))
+    && canonicalReceiptPointer
+    && handoff.schema_valid === true
+    && typeof receiptId === "string" && HANDOFF_RECEIPT_ID.test(receiptId)
+    && (options.projectedReceiptIdentity === true || receiptId === `handoff-sha256:${sha256(bytes.handoff_receipt)}`)
+    && validateFrozenReceiptDocument(receiptText).status === "parsed"
+    && isCanonicalLaneReceipt(receiptText, pointerPath === laneReceiptPath ? path.posix.basename(pointerPath) : undefined)
     && pointerEnvelope !== null && validateHandoffV2(pointerEnvelope).valid
     && pointerEnvelope.task_id === taskId && pointerEnvelope.status === "done"
-    && receiptFrontmatter?.task_id === taskId
+    && receiptIds?.run_id === runId && receiptIds?.task_id === taskId && receiptIds?.task_run_id === assignment.task_run_id
     && receiptSpecialist === assignment.worker_role
+    && receiptHost?.selected === assignment.host_id
     && receiptGeneratedAt !== null
     && Array.isArray(handoff.acceptance_tests_passed)
     && handoff.acceptance_tests_passed.every((value) => typeof value === "string")
@@ -1790,6 +1803,7 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
       const receipts = operation ? scan.records.filter((receipt) => receipt.operation_id === operation.operation_id) : [];
       const receipt = receipts.length === 1 ? receipts[0] : null;
       let retainedTask: AcceptedTaskCellFacts | null = null;
+      let retainedReceiptId: string | null = null;
       if (operation && retainedCloseFacts) {
         const attemptPrefix = `${expectedPrefix}task-cells/${operation.task_id}/attempts/${operation.attempt}`;
         const instancePrefix = `${attemptPrefix}/instances/${operation.instance_id}`;
@@ -1808,6 +1822,7 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
             attemptNumber: operation.attempt,
             instanceId: operation.instance_id,
             closedAt: retainedCloseFacts.closed_at,
+            projectedReceiptIdentity: true,
             bytes: {
               assignment: snapshots.get(assignmentRef.path)!,
               handoff: snapshots.get(handoffRef.path)!,
@@ -1817,11 +1832,15 @@ export function verifyMigrationObservation(projectRoot: string, value: unknown, 
               acceptance: snapshots.get(acceptanceRef.path)!,
             },
           });
+          try {
+            const retainedHandoff = plainRecord(JSON.parse(snapshots.get(handoffRef.path)!.toString("utf8")));
+            retainedReceiptId = typeof retainedHandoff?.receipt_id === "string" ? retainedHandoff.receipt_id : null;
+          } catch { retainedReceiptId = null; }
         }
       }
       if (!operation || operation.run_id !== run.run_id || !retainedTouchedTasks.has(operation.task_id)
         || operation.host_id !== observation.runtime_package.host_id
-        || !retainedTask || canonical(retainedTask) !== canonical({
+        || !retainedTask || retainedReceiptId !== `handoff-sha256:${operation.handoff_receipt_sha256}` || canonical(retainedTask) !== canonical({
           task_id: operation.task_id,
           specialist_id: operation.specialist_id,
           host_id: operation.host_id,
@@ -1983,7 +2002,7 @@ function projectMigrationEvidenceBytes(projectRoot: string, runId: string, sourc
     if (matching.length !== 1) throw new Error(`migration public projection refuses a missing, duplicated, or malformed terminal event: ${sourceRel}`);
     projected = `${JSON.stringify(matching[0])}\n`;
   }
-  const scrubbed = redactShareableFile(projected, path.posix.basename(destinationRel));
+  const scrubbed = redactShareableFile(projected, destinationRel);
   if (scrubbed.secrets.length > 0) {
     const categories = [...new Set(scrubbed.secrets.map((hit) => hit.category))].sort().join(", ");
     throw new Error(`migration public projection refuses credential, secret, or arbitrary entropy in ${sourceRel}: ${categories}`);

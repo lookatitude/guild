@@ -213,12 +213,11 @@ function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: strin
     orphaned: variant === "reaped" || variant === "orphaned-unreaped",
     reap_attempts: variant === "reaped" ? 1 : 0,
   };
-  const receiptId = `receipt-${assignment.attempt_id}`;
   const receiptSpecialist = variant === "foreign-specialist" ? "seo" : specialistId;
   const receiptGeneratedAt = variant === "stale-receipt"
     ? new Date(Date.parse(completedAt) - 1_000).toISOString()
     : completedAt;
-  const handoffReceiptPath = `.guild/runs/${runId}/handoffs/${receiptSpecialist}-${taskId}.md`;
+  const handoffReceiptPath = paths.receipt_path;
   const envelope = {
     schema_version: "guild.handoff.v2",
     task_id: taskId,
@@ -231,11 +230,28 @@ function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: strin
   const handoffReceipt = [
     "---",
     "schema_version: guild.handoff_receipt.v1",
-    `task_id: ${taskId}`,
+    "ids:",
+    "  initiative_id: null",
+    `  run_id: ${runId}`,
+    `  task_id: ${taskId}`,
+    `  task_run_id: ${assignment.task_run_id}`,
     `specialist: ${receiptSpecialist}`,
-    "model_family: claude",
-    "host: claude-code-cli",
-    `generated_at: ${receiptGeneratedAt}`,
+    "host:",
+    `  selected: ${assignment.host_id}`,
+    "  degraded: false",
+    "  native_ref: null",
+    "  independence: strong",
+    "scope:",
+    `  objective: ${JSON.stringify(assignment.objective)}`,
+    `  in_scope: ${JSON.stringify(assignment.scope_paths)}`,
+    "  out_of_scope_touched: []",
+    `status: ${variant === "blocked-handoff" ? "blocked" : "completed"}`,
+    "changed_files: []",
+    "evidence: []",
+    "assumptions: []",
+    "open_risks: []",
+    "followups: []",
+    `produced_at: ${receiptGeneratedAt}`,
     "---",
     "",
     ...(variant === "noncanonical-receipt" ? [] : [
@@ -251,6 +267,7 @@ function writeAcceptedTaskCell(projectRoot: string, runId: string, taskId: strin
     ...(variant === "duplicate-handoff" ? ["", "```guild.handoff.v2", JSON.stringify({ ...envelope, status: "blocked", summary: `conflicting ${taskId}` }), "```"] : []),
     "",
   ].join("\n");
+  const receiptId = `handoff-sha256:${createHash("sha256").update(handoffReceipt).digest("hex")}`;
   const handoff = pointerReceipt ? {
     receipt_id: receiptId,
     receipt_path: handoffReceiptPath,
@@ -404,7 +421,8 @@ function observationFixture(projectRoot: string, fixture: ReturnType<typeof boun
       rmSync(join(projectRoot, paths.handoff_path), { force: true });
     }
     if (timing.taskCellChain === "missing-receipt") {
-      rmSync(join(projectRoot, `.guild/runs/${runId}/handoffs/researcher-${taskId}.md`), { force: true });
+      const paths = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: 1, instance_id: `${taskId}.a1.i-fixture` });
+      rmSync(join(projectRoot, paths.receipt_path), { force: true });
     }
     if (timing.taskCellChain === "failed-validation") {
       const paths = taskCellPaths({ run_id: runId, logical_task_id: taskId, attempt: 1, instance_id: `${taskId}.a1.i-fixture` });

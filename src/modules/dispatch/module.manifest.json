@@ -8,6 +8,7 @@
   "depends_on": [
     "capability",
     "communication",
+    "documents",
     "host-runtime",
     "kernel",
     "lifecycle",

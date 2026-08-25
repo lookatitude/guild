@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
+
 import { redactShareableFile } from "../../src/modules/security/workflows/scrub-redact";
 
 const SHA = "0123456789abcdef".repeat(4);
+const digest = (label: string): string => createHash("sha256").update(label).digest("hex");
 
 describe("shareable-file schema-bound SHA-256 redaction", () => {
   it("preserves only the guild.run.v1 start-snapshot SHA while redacting paths and credentials", () => {
@@ -157,6 +160,76 @@ describe("shareable-file schema-bound SHA-256 redaction", () => {
     expect(result.secrets).toEqual(expect.arrayContaining([
       expect.objectContaining({ category: "email-address" }),
       expect.objectContaining({ category: "customer-identifier" }),
+    ]));
+  });
+
+  it.each([
+    ["assignment.json", JSON.stringify({
+      schema_version: "guild.task_assignment.v2",
+      specialist_type_hash: `sha256:${digest("type")}`,
+      specialist_profile_hash: `sha256:${digest("profile")}`,
+      context_bundle_hash: `sha256:${digest("context")}`,
+      host_capabilities_hash: `sha256:${digest("capabilities")}`,
+      objective: digest("planted-assignment-entropy"),
+    }, null, 2), [digest("type"), digest("profile"), digest("context"), digest("capabilities")], digest("planted-assignment-entropy")],
+    ["handoff.json", JSON.stringify({
+      receipt_id: `handoff-sha256:${digest("receipt-bytes")}`,
+      receipt_path: ".guild/runs/run-20260825-120000-projection/handoffs/backend-T1.md",
+      schema_valid: true,
+      claimed_changed_files: [digest("planted-handoff-entropy")],
+      acceptance_tests_passed: [],
+      submitted_at: "2026-08-25T12:00:00.000Z",
+    }, null, 2), [digest("receipt-bytes")], digest("planted-handoff-entropy")],
+    ["handoff.json", JSON.stringify({
+      receipt_id: `handoff-sha256:${digest("retained-receipt-bytes")}`,
+      receipt_path: ".guild/runs/run-20260825-120000-projection/task-cells/T1/attempts/2/instances/T1.a2.i-codex/handoff-receipt.md",
+      schema_valid: true,
+      claimed_changed_files: [digest("planted-retained-handoff-entropy")],
+      acceptance_tests_passed: [],
+      submitted_at: "2026-08-25T12:00:00.000Z",
+    }, null, 2), [digest("retained-receipt-bytes")], digest("planted-retained-handoff-entropy")],
+    ["handoff-receipt.md", [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      "ids: { initiative_id: null, run_id: run-20260825-120000-projection, task_id: T1, task_run_id: T1.tr1 }",
+      "specialist: backend",
+      "host: { selected: codex-local, degraded: false, native_ref: null, independence: strong }",
+      "scope: { objective: test, in_scope: [src/a.ts], out_of_scope_touched: [] }",
+      "status: completed",
+      `changed_files: [{ path: src/a.ts, change: modified, sha256_after: ${digest("changed-file")} }]`,
+      "evidence: []",
+      "assumptions: []",
+      "open_risks: []",
+      "followups: []",
+      "produced_at: 2026-08-25T12:00:00.000Z",
+      "---",
+      "",
+      `planted prose ${digest("planted-receipt-entropy")}`,
+      "",
+      "```guild.handoff.v2",
+      JSON.stringify({ schema_version: "guild.handoff.v2", task_id: "T1", tier: "mid", status: "done", summary: "done", artifacts: [], issues: [] }),
+      "```",
+    ].join("\n"), [digest("changed-file")], digest("planted-receipt-entropy")],
+    ["handoff-validation.json", JSON.stringify({
+      schema_version: "guild.handoff_validation.v1",
+      receipt_id: `handoff-sha256:${digest("receipt-bytes")}`,
+      reason: digest("planted-validation-entropy"),
+    }, null, 2), [digest("receipt-bytes")], digest("planted-validation-entropy")],
+    ["attempt.json", JSON.stringify({
+      schema_version: "guild.task_attempt.v1",
+      terminal_reason: digest("planted-attempt-entropy"),
+    }, null, 2), [], digest("planted-attempt-entropy")],
+    ["handoff-acceptance.json", JSON.stringify({
+      schema_version: "guild.handoff_acceptance.v1",
+      receipt_id: `handoff-sha256:${digest("receipt-bytes")}`,
+      authorities_observed: [{ authority: "team_lead", decision: "accepted", reason: digest("planted-acceptance-entropy") }],
+    }, null, 2), [digest("receipt-bytes")], digest("planted-acceptance-entropy")],
+  ])("preserves only contract identities in projected TaskCell artifact %s", (rel, body, preserved, planted) => {
+    const result = redactShareableFile(`${body}\n`, rel as string);
+    for (const hash of preserved as string[]) expect(result.out).toContain(hash);
+    expect(result.out).not.toContain(planted as string);
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "high-entropy hex string (potential secret)" }),
     ]));
   });
 });

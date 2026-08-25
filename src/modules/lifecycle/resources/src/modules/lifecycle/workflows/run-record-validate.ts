@@ -33,6 +33,7 @@ import { isCanonicalRunId } from "./run-lifecycle";
 // depend on lifecycle).
 import { validateHandoffV2 } from "../../distribution";
 import {
+  hasCanonicalReceiptWrapper,
   parseReceiptDocument,
   readReceiptFrontmatter,
   RECEIPT_FRONTMATTER_SCHEMA_VERSION,
@@ -103,39 +104,6 @@ const HANDOFF_NAME_RE = /^[A-Za-z0-9_.]+(?:[A-Za-z0-9_.-]*)-[A-Za-z0-9_.-]+\.md$
  */
 const V2_FENCE_RE = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/g;
 
-/** The five §8.2 wrapper sections a lane receipt must carry (PART B). */
-const RECEIPT_SECTIONS = Object.freeze([
-  "changed_files",
-  "opens_for",
-  "assumptions",
-  "evidence",
-  "followups",
-] as const);
-
-/** Remove CommonMark backtick/tilde fenced blocks before reading wrapper headings. */
-function receiptWrapperText(content: string): string {
-  const output: string[] = [];
-  let fence: { marker: "`" | "~"; length: number } | null = null;
-  for (const line of content.split(/\r?\n/)) {
-    if (fence === null) {
-      const opened = /^[ \t]{0,3}(`{3,}|~{3,})(?:[^\n]*)$/.exec(line);
-      if (opened) {
-        fence = {
-          marker: opened[1][0] as "`" | "~",
-          length: opened[1].length,
-        };
-        continue;
-      }
-      output.push(line);
-      continue;
-    }
-    const trimmed = line.replace(/^[ \t]{0,3}/, "");
-    const close = new RegExp(`^${fence.marker === "`" ? "`" : "~"}{${fence.length},}[ \\t]*$`);
-    if (close.test(trimmed)) fence = null;
-  }
-  return output.join("\n");
-}
-
 /**
  * Blocker 3 (independent review): a "valid lane handoff" is the CANONICAL
  * receipt, not any non-empty name-matching Markdown file:
@@ -164,7 +132,13 @@ function canonicalLaneReceiptIdentity(
   ) {
     return null;
   }
-  const frontmatterTaskId = frontmatter.fields["task_id"];
+  const ids = frontmatter.document["ids"];
+  const frozenTaskId = ids !== null && typeof ids === "object" && !Array.isArray(ids)
+    ? (ids as Record<string, unknown>)["task_id"]
+    : null;
+  const frontmatterTaskId = typeof frozenTaskId === "string"
+    ? frozenTaskId
+    : frontmatter.fields["task_id"];
   if (typeof frontmatterTaskId !== "string" || frontmatterTaskId.length === 0) {
     return null;
   }
@@ -194,10 +168,7 @@ function canonicalLaneReceiptIdentity(
   ) {
     return null;
   }
-  const wrapperText = receiptWrapperText(content);
-  if (!RECEIPT_SECTIONS.every((section) =>
-    new RegExp(`^##\\s+${section}\\b`, "m").test(wrapperText)
-  )) return null;
+  if (!hasCanonicalReceiptWrapper(content)) return null;
   return { taskId: frontmatterTaskId, specialist };
 }
 

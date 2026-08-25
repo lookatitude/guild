@@ -35,7 +35,7 @@ function fakeRunner(options: { invalidSecond?: boolean; preflightOk?: boolean } 
         ? null
         : {
             schema_version: "guild.handoff.v2" as const,
-            task_id: input.assignment.task_run_id,
+            task_id: input.assignment.logical_task_id,
             tier: "cheap" as const,
             status: "done" as const,
             summary: context,
@@ -88,6 +88,8 @@ describe("installed-host TaskCell lifecycle conformance", () => {
     expect(receipt.attempts.map((item) => item.task_run_id)).toEqual(["host-probe-codex.tr1", "host-probe-codex.tr2"]);
     expect(new Set(receipt.attempts.map((item) => item.instance_id)).size).toBe(2);
     expect(receipt.attempts[1].previous_attempt_id).toBe(receipt.attempts[0].attempt_id);
+    expect(new Set(receipt.attempts.map((item) => item.handoff_receipt_path)).size).toBe(2);
+    expect(receipt.attempts.every((item) => item.handoff_receipt_path.endsWith("/handoff-receipt.md"))).toBe(true);
     expect(receipt.attempts.every((item) => item.context_bundle_hash === receipt.attempts[0].context_bundle_hash)).toBe(true);
     expect(receipt.normalized_trace).toEqual([
       "spawn_started", "spawned", "ready", "assignment_delivered",
