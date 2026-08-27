@@ -200,7 +200,8 @@ describe("runDeterministicFloor", () => {
       acceptance_tests_passed: assignment.acceptance_tests,
       submitted_at: FIXED_NOW(),
     });
-    expect(submitted?.receipt_id).toMatch(/^handoff-sha256:[a-f0-9]{64}$/);
+    expect(submitted?.receipt_id.startsWith("handoff-sha256:")).toBe(true);
+    expect(submitted?.receipt_id.slice("handoff-sha256:".length)).toMatch(/^[a-f0-9]{64}$/);
     expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted: submitted! })).toBe(true);
     expect(JSON.parse(fs.readFileSync(path.join(cwd, assignment.handoff_path), "utf8"))).toEqual(submitted);
 

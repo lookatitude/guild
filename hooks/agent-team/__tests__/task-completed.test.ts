@@ -306,7 +306,8 @@ describe("task-completed.ts", () => {
         claimed_changed_files: ["hooks/agent-team/task-completed.ts"],
         acceptance_tests_passed: cell.assignment.acceptance_tests,
       });
-      expect(pointer.receipt_id).toMatch(/^handoff-sha256:[a-f0-9]{64}$/);
+      expect(pointer.receipt_id.startsWith("handoff-sha256:")).toBe(true);
+      expect(pointer.receipt_id.slice("handoff-sha256:".length)).toMatch(/^[a-f0-9]{64}$/);
 
       fs.rmSync(path.join(tmpDir, cell.assignment.handoff_path));
       const native = runScript(payload, {
