@@ -29,6 +29,11 @@ const SCRIPT = path.resolve(__dirname, "../task-completed.ts");
 // GUILD_RUN_ID would redirect deriveRunId off the fixture's run).
 import { mintTestBinding } from "../../test-support/mint-binding";
 import { hermeticEnv } from "../../test-support/hermetic-env";
+import {
+  buildTaskCell,
+  writeTaskCell,
+} from "../../../src/modules/dispatch/workflows/task-assignment-v2";
+import { buildTaskAssignment } from "../../../src/modules/dispatch/workflows/task-assignment";
 
 function runScript(
   payloadOverride: object,
@@ -87,6 +92,35 @@ const VALID_ENVELOPE = {
   issues: [],
   learnings: ["Prefer typed returns over prose blobs"],
 };
+
+function createFrozenTaskCellReceipt(
+  runDir: string,
+  assignment: ReturnType<typeof buildTaskCell>["assignment"],
+): string {
+  const filePath = path.join(
+    runDir,
+    "handoffs",
+    `${assignment.worker_role}-${assignment.logical_task_id}.md`,
+  );
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, [
+    "---", "schema_version: guild.handoff_receipt.v1", "ids:", "  initiative_id: null",
+    `  run_id: ${assignment.run_id}`, `  task_id: ${assignment.logical_task_id}`, `  task_run_id: ${assignment.task_run_id}`,
+    `specialist: ${assignment.worker_role}`, "host:", `  selected: ${assignment.host_id}`, "  degraded: false",
+    "  native_ref: null", "  independence: strong", "scope:", `  objective: ${JSON.stringify(assignment.objective)}`,
+    `  in_scope: ${JSON.stringify(assignment.scope_paths)}`, "  out_of_scope_touched: []", "status: completed",
+    "changed_files:", "  - path: hooks/agent-team/task-completed.ts", "    change: modified", `    sha256_after: ${"d".repeat(64)}`,
+    "evidence:", "  - kind: command", `    ref: ${JSON.stringify(assignment.acceptance_tests[0])}`, "    result: pass",
+    "assumptions: []", "open_risks: []", "followups: []", "produced_at: 2026-07-15T00:00:00.000Z",
+    "---", "", "## changed_files", "- hooks/agent-team/task-completed.ts", "", "## opens_for", "- lead", "",
+    "## assumptions", "- none", "", "## evidence", `- ${assignment.acceptance_tests[0]}`, "",
+    "## followups", "- none", "", "```guild.handoff.v2", JSON.stringify({
+      schema_version: "guild.handoff.v2", task_id: assignment.logical_task_id, tier: "mid", status: "done",
+      summary: "task-cell receipt ready", artifacts: ["hooks/agent-team/task-completed.ts"], issues: [],
+    }), "```", "",
+  ].join("\n"));
+  return filePath;
+}
 
 describe("task-completed.ts", () => {
   let tmpDir: string;
@@ -187,6 +221,137 @@ describe("task-completed.ts", () => {
       expect(record.learnings).toEqual(VALID_ENVELOPE.learnings);
       expect(record.task_id).toBe("task-001");
       expect(record.tier).toBe("mid");
+    });
+  });
+
+  describe("task-cell submitted-handoff publication", () => {
+    it("normalizes discovered assignment references to portable POSIX separators", () => {
+      expect(fs.readFileSync(SCRIPT, "utf8")).toContain('replace(/\\\\/g, "/")');
+    });
+
+    it("publishes the six-field pointer after validating the canonical receipt", () => {
+      const runId = "run-task-cell-pointer";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      const bindingRef = mintTestBinding(tmpDir, runId);
+      const cell = buildTaskCell({
+        runId,
+        logicalTaskId: "task-001",
+        taskRunId: "task-001.tr1",
+        attempt: 1,
+        attemptId: "task-001.att1",
+        instanceId: "task-001.a1.i1",
+        cellId: "cell-task-001",
+        goalId: "goal-task-cell-pointer",
+        phaseId: "build",
+        stepId: "task-001",
+        teamId: "guild-team",
+        workerRole: "backend",
+        specialistTypeId: "backend",
+        specialistTypeVersion: "1",
+        specialistTypeHash: "sha256:type-backend",
+        specialistProfileId: "backend",
+        specialistProfileHash: "sha256:profile-backend",
+        contextBundleId: `.guild/context/${runId}/backend-task-001.md`,
+        contextBundleHash: "sha256:context-backend-task-001",
+        hostId: "claude-code-cli",
+        adapterId: "claude-code-cli@1",
+        hostCapabilitiesHash: "sha256:caps",
+        substrate: "tmux",
+        modelTier: "mid",
+        objective: "publish a validated TaskCell handoff pointer",
+        scopePaths: ["hooks/agent-team"],
+        outputSchema: "guild.handoff_receipt.v1",
+        acceptanceTests: ["npx jest task-completed.test.ts"],
+        projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
+        autonomyPolicy: "supervised",
+        budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
+        leadBindingId: "lead-binding-task-cell-pointer",
+        now: () => "2026-07-15T00:00:00.000Z",
+      });
+      writeTaskCell(tmpDir, cell, { binding_ref: bindingRef });
+      createFrozenTaskCellReceipt(runDir, cell.assignment);
+
+      const payload = {
+        session_id: "task-cell-pointer",
+        cwd: tmpDir,
+        hook_event_name: "TaskCompleted",
+        task_id: cell.assignment.logical_task_id,
+        task_subject: "Publish TaskCell pointer",
+        teammate_name: cell.assignment.worker_role,
+        team_name: "guild-team",
+      };
+      const { exitCode, stderr } = runScript(payload, {
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+        GUILD_RUN_ID: runId,
+        GUILD_RUN_BINDING_REF: bindingRef,
+        GUILD_TASK_ASSIGNMENT: cell.assignment.assignment_path,
+      });
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toMatch(/submitted-handoff pointer published/i);
+      const pointer = JSON.parse(
+        fs.readFileSync(path.join(tmpDir, cell.assignment.handoff_path), "utf8"),
+      );
+      expect(Object.keys(pointer).sort()).toEqual([
+        "acceptance_tests_passed",
+        "claimed_changed_files",
+        "receipt_id",
+        "receipt_path",
+        "schema_valid",
+        "submitted_at",
+      ]);
+      expect(pointer).toMatchObject({
+        receipt_path: `.guild/runs/${runId}/handoffs/backend-task-001.md`,
+        schema_valid: true,
+        claimed_changed_files: ["hooks/agent-team/task-completed.ts"],
+        acceptance_tests_passed: cell.assignment.acceptance_tests,
+      });
+      expect(pointer.receipt_id.startsWith("handoff-sha256:")).toBe(true);
+      expect(pointer.receipt_id.slice("handoff-sha256:".length)).toMatch(/^[a-f0-9]{64}$/);
+
+      fs.rmSync(path.join(tmpDir, cell.assignment.handoff_path));
+      const native = runScript(payload, {
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+        GUILD_RUN_ID: runId,
+        GUILD_RUN_BINDING_REF: bindingRef,
+      });
+      expect(native.exitCode).toBe(0);
+      expect(native.stderr).toMatch(/submitted-handoff pointer published/i);
+      expect(fs.existsSync(path.join(tmpDir, cell.assignment.handoff_path))).toBe(true);
+    });
+
+    it("preserves completion for a valid legacy v1 assignment channel", () => {
+      const runId = "run-legacy-assignment";
+      const runDir = path.join(tmpDir, ".guild", "runs", runId);
+      const assignmentRef = `.guild/runs/${runId}/tasks/backend.json`;
+      createReceipt(runDir, "backend", "task-001", FULL_RECEIPT_FIELDS, VALID_ENVELOPE);
+      fs.mkdirSync(path.dirname(path.join(tmpDir, assignmentRef)), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, assignmentRef), JSON.stringify(buildTaskAssignment({
+        runId,
+        specialist: "backend",
+        taskId: "task-001",
+        scope: "Implement auth endpoints",
+        hostKind: "claude-code-cli",
+        now: () => "2026-07-15T00:00:00.000Z",
+      }), null, 2) + "\n");
+
+      const { exitCode, stderr } = runScript({
+        session_id: "legacy-assignment",
+        cwd: tmpDir,
+        hook_event_name: "TaskCompleted",
+        task_id: "task-001",
+        task_subject: "Implement auth endpoints",
+        teammate_name: "backend",
+        team_name: "guild-team",
+      }, {
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+        GUILD_RUN_ID: runId,
+        GUILD_TASK_ASSIGNMENT: assignmentRef,
+      });
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toMatch(/handoff_submitted/i);
+      expect(stderr).not.toMatch(/submitted-handoff pointer refused/i);
     });
   });
 

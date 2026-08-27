@@ -772,7 +772,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-acceptance.ts",
-      "sha256": "3e23e84aabf7273d45a053d8c4ba27459f46f5855396506f043bf1cd2c488ebf",
+      "sha256": "a7766335be5fa1d6d20a3823607e7c439bf05362d5d38b6c6a29289d5fd39265",
       "projection_dependency": true
     },
     {
@@ -1620,7 +1620,7 @@
       "id": "projection:src/modules/prompting/workflows/team-prompt.ts",
       "source_path": "src/modules/prompting/workflows/team-prompt.ts",
       "resource_path": "resources/src/modules/prompting/workflows/team-prompt.ts",
-      "sha256": "6915d10cfcc68e9261435fbeabfb085bf620c84b92721c4435f51f6a77799f4a",
+      "sha256": "3c815616d5620cf2574fc1ceca4e6be24551d9cf7f2957ca7fd5c8b3d73a66ab",
       "projection_dependency": true
     },
     {

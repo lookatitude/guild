@@ -33937,6 +33937,7 @@ init_capability();
 
 // ../src/modules/dispatch/workflows/task-cell-acceptance.ts
 init_documents();
+init_kernel();
 
 // ../src/modules/dispatch/workflows/task-cell-telemetry-reconcile.ts
 init_telemetry();

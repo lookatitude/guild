@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createHash } from "node:crypto";
 
 import {
   FilesystemTaskCellRuntime,
@@ -9,6 +8,7 @@ import {
 } from "../../src/modules/dispatch/workflows/task-cell-runtime";
 import { auditTaskCellScaleRecords, type TaskCellCapabilityIndex } from "../../src/modules/dispatch/workflows/task-cell-scale-audit";
 import { acknowledgeAssignment } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import {
   buildTaskAssignmentV2,
@@ -152,7 +152,10 @@ describe("TaskCell production record-runtime scale proof", () => {
         "  - path: src/output.ts",
         "    change: modified",
         `    sha256_after: ${"a".repeat(64)}`,
-        "evidence: []",
+        "evidence:",
+        "  - kind: command",
+        "    ref: npm test",
+        "    result: pass",
         "assumptions: []",
         "open_risks: []",
         "followups: []",
@@ -189,14 +192,7 @@ describe("TaskCell production record-runtime scale proof", () => {
       ].join("\n");
       fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
       fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes);
-      fs.writeFileSync(path.join(cwd, paths.handoff_path), `${JSON.stringify({
-        receipt_id: `handoff-sha256:${createHash("sha256").update(receiptBytes).digest("hex")}`,
-        receipt_path: receiptPath,
-        schema_valid: true,
-        claimed_changed_files: ["src/output.ts"],
-        acceptance_tests_passed: ["npm test"],
-        submitted_at: NOW(),
-      }, null, 2)}\n`);
+      expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: NOW() })).not.toBeNull();
       expect((await runtime.collectHandoff(instance)).ok).toBe(true);
       const authorities = [
         { authority: "deterministic_floor" as const, decision: "accepted" as const, at: NOW(), reason: null },

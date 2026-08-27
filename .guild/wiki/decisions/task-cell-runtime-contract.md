@@ -190,6 +190,17 @@ required. **Frozen required fields:**
 - **Channels:** `assignment_path`, `handoff_path`, `heartbeat_path`,
   `cancel_channel`.
 
+**Receipt/pointer separation.** `handoff_path` is the immutable six-field
+`SubmittedHandoff` JSON pointer; it is not the worker-authored receipt. The worker
+writes the frozen `guild.handoff_receipt.v1` markdown document to
+`.guild/runs/<run_id>/handoffs/<worker_role>-<logical_task_id>.md`. On Claude's
+agent-team path, `TaskCompleted` validates and scrubs that canonical document,
+then the code-owned TaskCell boundary hashes the final bytes and publishes
+`handoff_path`. Its `claimed_changed_files` comes from frozen frontmatter, and
+`acceptance_tests_passed` includes only exact assignment test commands represented
+by passing `test` or `command` evidence. Neither artifact authorizes acceptance,
+dependency release, or termination by itself (D5).
+
 **Run-tree containment (resolved P0.5 invariant).** The assignment and every
 sibling record (task-run/attempt, context, trace, handoff, validation, acceptance,
 terminal) MUST live under the **same** `run_id` tree. Canonical path:
