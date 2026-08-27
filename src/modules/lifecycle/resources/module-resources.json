@@ -501,7 +501,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-acceptance.ts",
-      "sha256": "3e23e84aabf7273d45a053d8c4ba27459f46f5855396506f043bf1cd2c488ebf",
+      "sha256": "a7766335be5fa1d6d20a3823607e7c439bf05362d5d38b6c6a29289d5fd39265",
       "projection_dependency": true
     },
     {

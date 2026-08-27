@@ -1,7 +1,6 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { createHash } from "node:crypto";
 
 import {
   FilesystemTaskCellRuntime,
@@ -10,6 +9,7 @@ import {
 } from "../../src/modules/dispatch/workflows/task-cell-runtime";
 import { auditTaskCellArtifactJoin } from "../../src/modules/dispatch/workflows/task-cell-artifact-join";
 import { acknowledgeAssignment } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
 import { buildTaskAssignmentV2, taskCellPaths } from "../lib/core/contracts/task-cell-backend";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import type { ExecutionTransportPort } from "../../src/modules/dispatch/workflows/execution-transport-ports";
@@ -180,7 +180,10 @@ describe("FilesystemTaskCellRuntime production seam", () => {
       "  - path: src/api/routes.ts",
       "    change: modified",
       `    sha256_after: ${"a".repeat(64)}`,
-      "evidence: []",
+      "evidence:",
+      "  - kind: command",
+      "    ref: npm test -- api",
+      "    result: pass",
       "assumptions: []",
       "open_risks: []",
       "followups: []",
@@ -208,14 +211,7 @@ describe("FilesystemTaskCellRuntime production seam", () => {
       "",
     ].join("\n");
     fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes);
-    fs.writeFileSync(path.join(cwd, paths.handoff_path), JSON.stringify({
-      receipt_id: `handoff-sha256:${createHash("sha256").update(receiptBytes).digest("hex")}`,
-      receipt_path: receiptPath,
-      schema_valid: true,
-      claimed_changed_files: ["src/api/routes.ts"],
-      acceptance_tests_passed: ["npm test -- api"],
-      submitted_at: NOW(),
-    }, null, 2) + "\n");
+    expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: NOW() })).not.toBeNull();
     const collected = await runtime.collectHandoff(instance);
     expect(collected.ok).toBe(true);
     expect(fs.readFileSync(path.join(cwd, paths.receipt_path))).toEqual(Buffer.from(receiptBytes));

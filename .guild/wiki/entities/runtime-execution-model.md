@@ -92,7 +92,10 @@ This lifecycle is orthogonal to D5 — applies on any backend.
   block is rejected **unconditionally**; a **missing** block **fails closed** on a
   new / post-effective-date receipt (grandfathered/indeterminate-date receipts
   routed leniently via the OD-4 discriminator — grandfathering applies only to the
-  missing case). Extracts learnings; signals §task§agent dismiss. Format
+  missing case). For a bound TaskCell assignment it then hashes the final scrubbed
+  canonical receipt and publishes the distinct six-field `SubmittedHandoff` JSON
+  pointer at the assignment's `handoff_path`; the pointer is a submission record,
+  not an acceptance or dismissal authority. Extracts learnings. Format
   contract: [`../decisions/communication-format-policy.md`](../../../../.guild/wiki/decisions/communication-format-policy.md)
   §"Handoff contract".
 - **TeammateIdle** (`teammate-idle.ts`): nudges stale teammates via stdout message to

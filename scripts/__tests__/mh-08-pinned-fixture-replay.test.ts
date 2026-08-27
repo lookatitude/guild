@@ -96,9 +96,10 @@ function sha256(bytes: Buffer | string): string {
 }
 
 /**
- * The pinned oracle predates the universal dispatch-producer marker. Preserve
- * byte-pinned historical execution while allowing exactly that additive,
- * security-relevant current contract through the compatibility comparison.
+ * The pinned oracle predates the universal dispatch-producer marker and the
+ * TaskCell receipt/pointer separation. Preserve byte-pinned historical execution
+ * while allowing those additive, security-relevant current contracts through the
+ * compatibility comparison.
  */
 function historicalProjection(receipt: LaunchReceipt): LaunchReceipt {
   const projected = structuredClone(receipt);
@@ -128,14 +129,27 @@ function historicalProjection(receipt: LaunchReceipt): LaunchReceipt {
         prompt = prompt.slice(marker.length);
       }
       if (runId && taskId) {
+        const currentReceiptInstruction =
+          `write your §8.2 handoff receipt with all 5 fields ` +
+          `(changed_files, opens_for, assumptions, evidence, followups) to the canonical lane receipt path ` +
+          `\`.guild/runs/${runId}/handoffs/<worker_role>-<logical_task_id>.md\`, using the values in your assignment. ` +
+          `Do not write the assignment's \`handoff_path\`; TaskCompleted publishes the separate \`handoff_path\` pointer ` +
+          `after validating and hashing the canonical receipt`;
+        const historicalReceiptTarget =
+          `write your §8.2 handoff receipt to ` +
+          `\`.guild/runs/${runId}/handoffs/${role}-<task-id>.md\``;
+        const historicalReceiptInstruction =
+          `${historicalReceiptTarget} with all 5 fields ` +
+          `(changed_files, opens_for, assumptions, evidence, followups)`;
         prompt = prompt
           .replace(
             "Read the exact `context_bundle_id` named by your assignment —",
             `Read your context bundle at \`.guild/context/${runId}/${role}-<task-id>.md\` —`,
           )
+          .replace(currentReceiptInstruction, historicalReceiptInstruction)
           .replace(
             "write your §8.2 handoff receipt to the assignment's exact `channels.handoff_path`",
-            `write your §8.2 handoff receipt to \`.guild/runs/${runId}/handoffs/${role}-<task-id>.md\``,
+            historicalReceiptTarget,
           );
       }
       descriptor.prompt = prompt;

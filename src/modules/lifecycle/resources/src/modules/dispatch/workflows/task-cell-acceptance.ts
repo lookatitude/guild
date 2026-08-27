@@ -40,6 +40,11 @@ import {
   readReceiptFrontmatter,
   validateFrozenReceiptDocument,
 } from "../../documents";
+import {
+  checkContained,
+  isRefused,
+  prepareContainedWrite,
+} from "../../kernel";
 
 import {
   HANDOFF_ACCEPTANCE_SCHEMA,
@@ -92,6 +97,47 @@ function receiptPathsForAssignment(assignment: TaskAssignmentV2): {
   };
 }
 
+function receiptChangedFiles(document: Record<string, unknown>): string[] {
+  return Array.isArray(document.changed_files)
+    ? document.changed_files.flatMap((value) => {
+        const entry = value && typeof value === "object" && !Array.isArray(value)
+          ? value as Record<string, unknown>
+          : null;
+        return typeof entry?.path === "string" ? [entry.path] : [];
+      })
+    : [];
+}
+
+function passedEvidenceRefs(document: Record<string, unknown>): Set<string> {
+  const refs = Array.isArray(document.evidence)
+    ? document.evidence.flatMap((value) => {
+        const entry = value && typeof value === "object" && !Array.isArray(value)
+          ? value as Record<string, unknown>
+          : null;
+        return (
+          entry !== null &&
+          (entry.kind === "test" || entry.kind === "command") &&
+          entry.result === "pass" &&
+          typeof entry.ref === "string"
+        ) ? [entry.ref] : [];
+      })
+    : [];
+  return new Set(refs);
+}
+
+function physicallyContainedFileBytes(cwd: string, target: string): Buffer | null {
+  const contained = checkContained(cwd, target, {
+    policy: "physical",
+    requireRegularFileLeaf: true,
+  });
+  if (isRefused(contained)) return null;
+  try {
+    return fs.readFileSync(contained.realPath);
+  } catch {
+    return null;
+  }
+}
+
 function submittedReceiptBytes(input: {
   cwd: string;
   assignment: TaskAssignmentV2;
@@ -111,15 +157,7 @@ function submittedReceiptBytes(input: {
     (submitted.receipt_path !== expected.lane && submitted.receipt_path !== expected.retained) ||
     path.posix.normalize(submitted.receipt_path) !== submitted.receipt_path
   ) return null;
-  const absolute = path.resolve(cwd, submitted.receipt_path);
-  if (!absolute.startsWith(`${path.resolve(cwd)}${path.sep}`)) return null;
-  try {
-    const stat = fs.lstatSync(absolute);
-    if (!stat.isFile() || stat.isSymbolicLink()) return null;
-    return fs.readFileSync(absolute);
-  } catch {
-    return null;
-  }
+  return physicallyContainedFileBytes(cwd, submitted.receipt_path);
 }
 
 /**
@@ -155,13 +193,85 @@ export function validateSubmittedHandoffReceipt(input: {
     document.specialist !== assignment.worker_role ||
     host.selected !== assignment.host_id
   ) return false;
-  const changedFiles = Array.isArray(document.changed_files)
-    ? document.changed_files.flatMap((value) => {
-        const entry = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-        return typeof entry?.path === "string" ? [entry.path] : [];
-      }).sort()
-    : [];
-  return JSON.stringify(changedFiles) === JSON.stringify([...submitted.claimed_changed_files].sort());
+  const changedFiles = receiptChangedFiles(document).sort();
+  const passedRefs = passedEvidenceRefs(document);
+  const derivedPassedTests = assignment.acceptance_tests.filter((test) => passedRefs.has(test));
+  return (
+    JSON.stringify(changedFiles) === JSON.stringify([...submitted.claimed_changed_files].sort()) &&
+    JSON.stringify(derivedPassedTests) === JSON.stringify(submitted.acceptance_tests_passed)
+  );
+}
+
+/**
+ * Publish the immutable six-field `SubmittedHandoff` pointer after the worker's
+ * canonical markdown receipt has been validated and scrubbed. Workers author the
+ * receipt; the code-owned TaskCompleted boundary owns hashing and pointer shape.
+ * Test claims are copied only from exact passing `test`/`command` evidence refs.
+ */
+export function publishSubmittedHandoffPointer(input: {
+  cwd: string;
+  assignment: TaskAssignmentV2;
+  submittedAt: string;
+}): SubmittedHandoff | null {
+  const { cwd, assignment, submittedAt } = input;
+  const parsedAt = Date.parse(submittedAt);
+  if (!Number.isFinite(parsedAt) || new Date(parsedAt).toISOString() !== submittedAt) return null;
+
+  const receiptPath = receiptPathsForAssignment(assignment).lane;
+  const rawBytes = physicallyContainedFileBytes(cwd, receiptPath);
+  if (rawBytes === null) return null;
+
+  const text = rawBytes.toString("utf8");
+  if (
+    validateFrozenReceiptDocument(text).status !== "parsed" ||
+    !hasCanonicalReceiptWrapper(text)
+  ) return null;
+  const frontmatter = readReceiptFrontmatter(text);
+  if (!frontmatter.ok) return null;
+  const changedFiles = receiptChangedFiles(frontmatter.document);
+  const passedRefs = passedEvidenceRefs(frontmatter.document);
+  const submitted: SubmittedHandoff = {
+    receipt_id: `handoff-sha256:${createHash("sha256").update(rawBytes).digest("hex")}`,
+    receipt_path: receiptPath,
+    schema_valid: true,
+    claimed_changed_files: changedFiles,
+    acceptance_tests_passed: assignment.acceptance_tests.filter((test) => passedRefs.has(test)),
+    submitted_at: submittedAt,
+  };
+  if (!validateSubmittedHandoffReceipt({ cwd, assignment, submitted })) return null;
+
+  const prepared = prepareContainedWrite(cwd, assignment.handoff_path, {
+    policy: "physical",
+    requireRegularFileLeaf: true,
+  });
+  if (isRefused(prepared)) return null;
+  const serialized = JSON.stringify(submitted, null, 2) + "\n";
+
+  try {
+    if (fs.existsSync(prepared.realPath)) {
+      const stat = fs.lstatSync(prepared.realPath);
+      if (!stat.isFile() || stat.isSymbolicLink()) return null;
+      const existingBytes = fs.readFileSync(prepared.realPath, "utf8");
+      const existing = JSON.parse(existingBytes) as SubmittedHandoff;
+      const existingAt = typeof existing.submitted_at === "string"
+        ? Date.parse(existing.submitted_at)
+        : Number.NaN;
+      const expectedExisting = {
+        ...submitted,
+        submitted_at: existing.submitted_at,
+      };
+      return Number.isFinite(existingAt) &&
+        new Date(existingAt).toISOString() === existing.submitted_at &&
+        existingBytes === JSON.stringify(expectedExisting, null, 2) + "\n" &&
+        validateSubmittedHandoffReceipt({ cwd, assignment, submitted: existing })
+        ? existing
+        : null;
+    }
+    fs.writeFileSync(prepared.realPath, serialized, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    return submitted;
+  } catch {
+    return null;
+  }
 }
 
 /**

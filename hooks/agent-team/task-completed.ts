@@ -90,6 +90,12 @@ import {
   evaluateContextCompliance,
   recordContextCompliance,
 } from "../lib/context-compliance.js";
+import { readTaskAssignmentV2 } from "../../src/modules/dispatch/workflows/task-assignment-v2.js";
+import {
+  readTaskAssignment,
+  taskAssignmentPath,
+} from "../../src/modules/dispatch/workflows/task-assignment.js";
+import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -319,6 +325,129 @@ function persistRunState(
 
 function runStatePathHint(runDir: string): string {
   return path.join(runDir, "run-state.json");
+}
+
+type TaskCellAssignment = NonNullable<ReturnType<typeof readTaskAssignmentV2>>;
+
+function portableAssignmentRef(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function nativeTaskCellAssignments(input: {
+  guildRoot: string;
+  runId: string;
+  taskId: string;
+  specialist: string;
+}): TaskCellAssignment[] {
+  const root = path.join(input.guildRoot, ".guild", "runs", input.runId, "task-cells");
+  const files: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else if (entry.isFile() && entry.name === "assignment.json") files.push(absolute);
+    }
+  };
+  walk(root);
+
+  return files.sort().flatMap((absolute) => {
+    const assignmentRef = portableAssignmentRef(path.relative(input.guildRoot, absolute));
+    const assignment = readTaskAssignmentV2(input.guildRoot, assignmentRef);
+    if (
+      assignment === null ||
+      assignment.assignment_path !== assignmentRef ||
+      assignment.run_id !== input.runId ||
+      assignment.logical_task_id !== input.taskId ||
+      assignment.worker_role !== input.specialist
+    ) return [];
+    try {
+      fs.lstatSync(path.join(path.dirname(absolute), "terminal.json"));
+      return [];
+    } catch {
+      return [assignment];
+    }
+  });
+}
+
+function publishTaskCellSubmission(input: {
+  guildRoot: string;
+  runId: string;
+  taskId: string;
+  specialist: string;
+  writeAuthorized: boolean;
+}): void {
+  const rawAssignmentRef = process.env["GUILD_TASK_ASSIGNMENT"];
+  const assignmentRef = rawAssignmentRef === undefined
+    ? undefined
+    : portableAssignmentRef(rawAssignmentRef);
+  let assignment: TaskCellAssignment | null = null;
+  if (assignmentRef) {
+    const legacyRunDir = path.join(input.guildRoot, ".guild", "runs", input.runId);
+    const legacyRef = portableAssignmentRef(
+      path.relative(
+        input.guildRoot,
+        taskAssignmentPath(legacyRunDir, input.specialist),
+      ),
+    );
+    const legacyAssignment = readTaskAssignment(legacyRunDir, input.specialist);
+    if (
+      assignmentRef === legacyRef &&
+      legacyAssignment !== null &&
+      legacyAssignment.run_id === input.runId &&
+      legacyAssignment.specialist === input.specialist &&
+      (legacyAssignment.task_id === null || legacyAssignment.task_id === input.taskId)
+    ) return;
+    assignment = readTaskAssignmentV2(input.guildRoot, assignmentRef);
+  } else {
+    const nativeAssignments = nativeTaskCellAssignments(input);
+    if (nativeAssignments.length === 0) return;
+    if (nativeAssignments.length !== 1) {
+      die(
+        `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+          `native assignment discovery is ambiguous (${nativeAssignments.length} active matches).`,
+      );
+    }
+    assignment = nativeAssignments[0];
+  }
+  if (!input.writeAuthorized) {
+    die(
+      `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+        `the run binding did not authorize this TaskCompleted write.`,
+    );
+  }
+  if (
+    assignment === null ||
+    (assignmentRef !== undefined && assignment.assignment_path !== assignmentRef) ||
+    assignment.run_id !== input.runId ||
+    assignment.logical_task_id !== input.taskId ||
+    assignment.worker_role !== input.specialist
+  ) {
+    die(
+      `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+        `GUILD_TASK_ASSIGNMENT is missing, malformed, or does not bind this run/task/worker.`,
+    );
+  }
+  const submitted = publishSubmittedHandoffPointer({
+    cwd: input.guildRoot,
+    assignment,
+    submittedAt: new Date().toISOString(),
+  });
+  if (submitted === null) {
+    die(
+      `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+        `the canonical frozen receipt could not be validated or the immutable pointer could not be written.`,
+    );
+  }
+  process.stderr.write(
+    `[task-completed] OK: submitted-handoff pointer published at ` +
+      `"${assignment.handoff_path}" (${submitted.receipt_id}).\n`,
+  );
 }
 
 /**
@@ -696,6 +825,17 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  // TaskCell D5/D7: the worker authors the canonical markdown receipt, while
+  // this code-owned boundary publishes the immutable six-field pointer from the
+  // final scrubbed bytes. A receipt on disk still grants no acceptance.
+  publishTaskCellSubmission({
+    guildRoot,
+    runId,
+    taskId,
+    specialist,
+    writeAuthorized: writeAuth.ok,
+  });
 
   // ── Persist run-state checkpoint (ADR-RE-1) — lane has terminated ─────────
   // Non-fatal: run-state is a rebuildable cache, the receipt is authoritative.

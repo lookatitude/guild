@@ -14343,7 +14343,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep9) => `${key}${sep9}${KV_REDACTED}`
+    (_match, key, sep8) => `${key}${sep8}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -25879,6 +25879,7 @@ function emitBusEvent(runDir2, input) {
 var fs23 = __toESM(require("fs"));
 var path31 = __toESM(require("path"));
 init_documents();
+init_kernel();
 
 // ../src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts
 var path30 = __toESM(require("path"));

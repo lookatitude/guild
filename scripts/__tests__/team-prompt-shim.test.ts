@@ -27,7 +27,10 @@ describe("team prompt module compatibility", () => {
     expect(teammate).toContain("Read the exact `context_bundle_id` named by your assignment —");
     expect(teammate).toContain("auto-memory (§9.1)");
     expect(teammate).toContain("§8.2 handoff receipt");
-    expect(teammate).toContain("assignment's exact `channels.handoff_path`");
+    expect(teammate).toContain("canonical lane receipt path");
+    expect(teammate).toContain("<worker_role>-<logical_task_id>.md");
+    expect(teammate).toContain("TaskCompleted publishes the separate `handoff_path` pointer");
+    expect(teammate).not.toContain("channels.handoff_path");
     // task-cell-runtime D5: the read-ack gate — read + validate the assignment and
     // acknowledge it BEFORE working; `running` is reachable only after the ack.
     expect(teammate).toContain("$GUILD_TASK_ASSIGNMENT");

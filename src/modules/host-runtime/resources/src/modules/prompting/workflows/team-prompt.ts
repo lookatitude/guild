@@ -142,9 +142,11 @@ export function buildPrompt(
     `Your lane scope: \`${specialist.scope}\`. ` +
     `Read the exact \`context_bundle_id\` named by your assignment — ` +
     `it is authoritative; privilege it over any ambient CLAUDE.md / auto-memory (§9.1). ` +
-    `When you finish, write your §8.2 handoff receipt to the assignment's exact ` +
-    `\`channels.handoff_path\` with all 5 fields ` +
-    `(changed_files, opens_for, assumptions, evidence, followups). ` +
+    `When you finish, write your §8.2 handoff receipt with all 5 fields ` +
+    `(changed_files, opens_for, assumptions, evidence, followups) to the canonical lane receipt path ` +
+    `\`.guild/runs/${runId}/handoffs/<worker_role>-<logical_task_id>.md\`, using the values in your assignment. ` +
+    `Do not write the assignment's \`handoff_path\`; TaskCompleted publishes the separate \`handoff_path\` pointer ` +
+    `after validating and hashing the canonical receipt. ` +
     readAckInstruction +
     waitInstruction
   );
