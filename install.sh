@@ -62,7 +62,7 @@ else
 fi
 
 SOURCE_REPO="${GUILD_SOURCE_REPO:-https://github.com/lookatitude/guild.git}"
-# Release channel → git ref for the clone fallback (release-discipline rule 8):
+# Release channel → git ref for the clone fallback (release-discipline channel contract):
 #   stable → main (the released channel; marketplace default)
 #   beta   → next (the integration channel; features land here first)
 # GUILD_SOURCE_REF overrides both for an arbitrary ref.

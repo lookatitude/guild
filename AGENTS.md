@@ -184,7 +184,7 @@ PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
 
 **The channel must be legible from the manifest** (gap-audit B5, decision
 cap-loc-D12). `main` carries the bare release triple. `next` may share that bare
-version only at the exact quiescent sync-back point where both refs resolve to
+version only at the exact quiescent release point where both refs resolve to
 the same commit. Once `next` diverges, it carries a **prerelease identifier** on
 the next target version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.7.0-beta.1`).
 Without this, `next` and `main` can report the same `"version"` while dozens of
@@ -192,8 +192,8 @@ commits apart, and a user cannot determine which runtime they have from the
 version alone — which is exactly what happened at `2.4.0`. Under SemVer §11 a
 prerelease sorts *below* the same triple, so `2.5.0-beta.1` is correctly ahead
 of `2.4.0` and behind an eventual `2.5.0`; `check:channel-integrity` enforces
-the shape, ordering, and same-commit exception. The release cut's version-bump
-commit drops the identifier.
+the shape, ordering, and same-commit exception. The protected release
+workflow's metadata-only commit drops the identifier.
 
 Day-to-day workflow (features, fixes, docs — everything non-release):
 1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.
@@ -202,56 +202,33 @@ Day-to-day workflow (features, fixes, docs — everything non-release):
 4. Merge via the PR (squash or merge per case). The work is now on the beta
    channel for testing; it reaches stable only with the next release.
 
-Release workflow (operator-driven, when `next` is ready). A release adds only
-**two commits** on top of `next` — a version bump and a changelog — so the cut
-stays small and, *provided the release PR is merged with a merge commit*, the
-sync-back is a fast-forward rather than a delta copy:
-1. Cut `release/vX.Y.Z` from `next`. Add exactly two commits: (a) bump the
-   version in **`.claude-plugin/plugin.json` ONLY** — the single canonical
-   version field — then propagate it with
-   `cd scripts && npm run sync:claude-install`
-   (regenerates `marketplace.json` from `plugin.json`, refreshes the deterministic
-   zero-epoch `guild.inventory.json`, refreshes the tracked native Claude package
-   identity over those final bytes, and rebuilds the generated host packages).
-   **Do not hand-edit `marketplace.json` or the native package identity** — both
-   are generated,
-   and CI (`check:claude-install`) fails any hand edit that disagrees with the
-   canonical field;
-   (b) the changelog section + notes seed via
-   `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (then `--notes`
-   for the PR body); polish both, then run
-   `cd scripts && npm run sync:claude-install` again and include the refreshed
-   native identity in this second commit. The final refresh is mandatory because
-   the identity binds tracked `CHANGELOG.md`; changing the changelog after the
-   first refresh otherwise makes the release package unverifiable. **No
-   live-surface guard pin re-ratification is
-   needed** — the `p2-w2-sc5`/`p2-w3-sc6` guards tolerate a pure `version`-field
-   bump in the two `.claude-plugin` manifests (they only re-red on a real
-   command/skill/agent surface change). `dist/` is gitignored — do not commit it;
-   CI regenerates it from the bumped inventory.
-2. PR `release/vX.Y.Z` → `main` (the ONLY PR shape `main` accepts — enforced by
-   `.github/workflows/branch-policy.yml`).
-3. Merge with a **MERGE COMMIT**. Do NOT squash and do NOT rebase-merge: both
-   rewrite SHAs, leaving `next`'s commits as non-ancestors of `main` and making
-   step 4's fast-forward impossible. (v2.3.2 was squash-merged as PR #96, which
-   is exactly why its sync-back could not fast-forward.) On merge, `release.yml`
-   auto-tags and publishes the GitHub Release (PR body = release notes).
-4. Sync back. First decide by **ancestry, not dates**:
-   `git merge-base --is-ancestor origin/next <release-tag>`.
-   - **Ancestor (the normal case after step 3):** fast-forward —
-     `git merge --ff-only <release-tip>`. `next` is push-protected, so land it
-     with the `GUILD_ALLOW_PUSH_MAIN=1` bootstrap override. Both channels then
-     share the *exact* release commit.
-   - **Diverged:** the fast-forward is impossible. Open a sync-back PR carrying
-     the release delta (version bump + changelog + regenerated inventory).
-     Ancestry is already lost, so merge style no longer matters — the channels
-     will agree on content and version, **not** on SHA.
-   Either way the debt is visible: `channel-integrity.yml` fails while `next`'s
-   version trails `main`'s. It DETECTS only — `release.yml` publishes on the
-   merged-PR event, so it cannot block a release.
+Release workflow (operator-driven, when `next` is ready):
+1. Confirm `next` carries exact `MAJOR.MINOR.PATCH-beta.N`, hash-bound release
+   evidence under `.guild/artifacts/release/vMAJOR.MINOR.PATCH/`, green CI,
+   reconciled `docs/v2`, and a curated PR body suitable as release notes.
+2. Open the release PR from the repository's exact `next` branch to `main`.
+   `branch-policy.yml` rejects every other head branch and all forks.
+3. Merge the PR. The protected `stable-release` job re-runs promotion evidence,
+   derives the bare triple from the reviewed beta manifest, generates the
+   changelog and all version-bearing surfaces, and creates one commit containing
+   exactly six metadata files. If the selected GitHub merge method did not
+   preserve `next` ancestry, CI adds an empty-delta merge wrapper with the exact
+   reviewed PR head as second parent. A short-lived repository-scoped GitHub App
+   token then atomically advances `main`, `next`, and the stable tag to that
+   release point. Keep `next` frozen until this finishes; a moved tip refuses.
+4. Verify the workflow, tag, GitHub Release, and equality of `main`, `next`, and
+   the peeled tag commit. There is no operator release branch and no manual
+   sync-back. A re-run validates an existing tag before creating a missing
+   GitHub Release; it never silently retags different bytes.
+
+The default `GITHUB_TOKEN` remains read-only. The release App credential exists
+only in the protected `stable-release` environment and requests repository
+contents write plus pull-request read for changelog lookup. See
+`.guild/wiki/standards/release-discipline.md` for setup,
+rotation, recovery, and the bounded post-merge channel-transition window.
 
 **Mechanical enforcement.** `branch-policy.yml` rejects any PR into `main` whose
-head is not `release/vX.Y.Z`; the repo-checked-in `pre-push` hook at
+head is not the same-repository exact `next` branch; the repo-checked-in `pre-push` hook at
 `.githooks/pre-push` refuses direct pushes to `main` AND `next`. Wire it once
 per clone:
 

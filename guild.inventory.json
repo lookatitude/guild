@@ -1235,6 +1235,11 @@
       "kind": "cli"
     },
     {
+      "id": "finalize-stable-release",
+      "source_path": "scripts/finalize-stable-release.ts",
+      "kind": "cli"
+    },
+    {
       "id": "flip-report",
       "source_path": "scripts/flip-report.ts",
       "kind": "cli"

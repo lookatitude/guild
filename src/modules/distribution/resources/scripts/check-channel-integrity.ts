@@ -2,19 +2,19 @@
 /**
  * scripts/check-channel-integrity.ts
  *
- * CHANNEL-INTEGRITY GATE — release-discipline rule 8 (sync-back), mechanized.
+ * CHANNEL-INTEGRITY GATE — release-discipline channel convergence, mechanized.
  * (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
  *
  * THE RULE IT ENFORCES.
- * `.guild/wiki/standards/release-discipline.md` rule 8: after a release merges
- * to `main`, `next` must be advanced to the release point. Branches ARE
+ * After a stable promotion, the protected release job must leave `main` and
+ * `next` at the same release point. Branches ARE
  * distribution channels — `main` = stable, `next` = beta — so a `next` whose
  * version trails `main`'s means BETA USERS ARE RUNNING OLDER CODE THAN STABLE.
  * That inverts the whole point of a beta channel and is invisible without a
  * check: every per-PR gate stays green while the channel silently rots.
  *
  * WHY IT WAS NEEDED.
- * Rule 8's sync-back clause was prose only. v2.3.2 merged to `main` on 2026-07-25; the sync-back
+ * The former sync-back clause was prose only. v2.3.2 merged to `main` on 2026-07-25; the sync-back
  * never happened. `next` sat at 2.3.1 while `main` shipped 2.3.2 and nothing
  * anywhere reported it. Prose does not enforce process — CI does.
  *
@@ -33,31 +33,28 @@
  * identifiers numerically and below alphanumerics). `next` at `2.4.0-rc1` is
  * still correctly ahead of `main` at `2.3.2`.
  *
- * DETECTION, NOT PREVENTION — stated plainly so nobody over-trusts this.
- * `release.yml` tags and publishes on the merged-PR event; a workflow triggered
- * by `push` runs concurrently and CANNOT block that publication. This gate
- * reports that the sync-back debt exists; it does not stop a release from being
- * cut while the debt is outstanding. Closing that gap means adding the check to
- * the release path itself — a followup, not this lane.
+ * DETECTION, NOT PREVENTION — stated plainly so nobody over-trusts this mode.
+ * The protected release workflow now owns prevention: it verifies promotion,
+ * creates the stable metadata commit, and atomically advances main/next/tag.
+ * This ordinary channel mode detects debt left by an interrupted or manually
+ * altered channel; it is not the publication authority by itself.
  *
- * NOT A MERGE-SHAPE CHECK. Rule 8 also constrains HOW the sync-back lands (a
- * fast-forward when ancestry allows, otherwise a delta-copy PR). That is a
- * property of the fix, not of the resulting state, and is left to review. This
- * gate answers exactly one question: is beta behind stable?
+ * NOT A WRITE-AUTHORITY CHECK. This gate observes the final graph; branch
+ * rulesets and the environment-scoped release App enforce who may create it.
+ * This mode answers exactly one question: is beta behind stable?
  *
  * Usage:
  *   npx tsx scripts/check-channel-integrity.ts [--stable <ref>] [--beta <ref>] [--json]
- *   npx tsx scripts/check-channel-integrity.ts promotion --release-branch release/vX.Y.Z \
- *       [--head <ref>] [--root <dir>] [--json]
+ *   npx tsx scripts/check-channel-integrity.ts promotion --source-branch next \
+ *       [--head <ref>] [--stable-ref <ref>] [--root <dir>] [--json]
  *
  * Exit: 0 ok (beta >= stable) · 2 gate failure (beta trails stable) · 1 IO/usage error.
  * Promotion mode keeps the same convention: 0 promotable · 2 gate refusal · 1 usage/IO.
  *
- * PROMOTION MODE — the release-branch invariant (FIC-91 / REL-P0, FIC-74 §0/B1+B5).
- * The ordinary channel check above is definitionally inapplicable to a
- * `release/vX.Y.Z` ref (a diverged ref carrying a bare triple is refused by the
- * beta-shape rule). The gate that governs a release branch against stable is
- * `checkStablePromotion` below: hash-bound `guild.release_promotion.v1` /
+ * PROMOTION MODE — the direct next-to-main invariant (FIC-91 / REL-P0, FIC-74 §0/B1+B5).
+ * The gate governs the exact same-repository `next -> main` promotion before
+ * CI creates a metadata-only stable commit. `checkStablePromotion` validates
+ * hash-bound `guild.release_promotion.v1` /
  * `guild.release_conformance.v1` evidence, a production-evaluator RE-RUN over
  * the transported evidence+authority, one source-commit binding, ancestry, and
  * an EXACT allowed diff. It fails closed on every malformed or missing input.
@@ -304,7 +301,7 @@ export function checkChannelIntegrity(
   }
   if (stable.commit === beta.commit) {
     return sv === bv
-      ? { stable, beta, ok: true, reason: `both channels at ${bv} on the same commit — in sync at a quiescent sync-back point.` }
+      ? { stable, beta, ok: true, reason: `both channels at ${bv} on the same commit — in sync at a quiescent release point.` }
       : { stable, beta, ok: false, reason: `the same commit reports different channel versions (${sv} vs ${bv}).` };
   }
   if (cmp <= 0) {
@@ -313,7 +310,7 @@ export function checkChannelIntegrity(
       beta,
       ok: false,
       reason: cmp < 0
-        ? `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — beta users are running OLDER code than stable. The release-discipline rule-8 sync-back did not land.`
+        ? `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — beta users are running OLDER code than stable. The protected release transaction did not converge.`
         : `diverged channels may not share bare version ${bv}; next must identify the newer beta runtime.`,
     };
   }
@@ -365,17 +362,10 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   if (!result.ok) {
     process.stderr.write(`check-channel-integrity: GATE FAILURE — ${result.reason}\n`);
     process.stderr.write(
-      "\nFix (release-discipline rule 8) — advance next to the release point WITHOUT a looping merge commit:\n" +
-        "  # 1. Decide by ANCESTRY, not by dates: is the release point a descendant of next?\n" +
-        "  git merge-base --is-ancestor origin/next <release-tag> && echo ff-possible || echo diverged\n" +
-        "  # 2a. ff-possible -> fast-forward:\n" +
-        "  git checkout next && git merge --ff-only <release-tag>\n" +
-        "  # 2b. diverged -> sync-back PR carrying the release delta (version bump + changelog\n" +
-        "  #      + regenerated inventory). Ancestry is already lost, so the merge style no\n" +
-        "  #      longer matters; the channels will agree on content + version, not on SHA.\n" +
-        "  # NOTE: only a MERGE COMMIT preserves ancestry. Squash AND rebase both rewrite\n" +
-        "  #       SHAs, so either forces 2b every time. Use a merge commit for release PRs\n" +
-        "  #       whenever you want the fast-forward sync-back in 2a to stay possible.\n"
+      "\nFix — inspect and re-run the failed `Finalize stable release after next merges to main` workflow.\n" +
+        "  The environment-scoped release App owns the atomic main/next/tag transaction;\n" +
+        "  do not hand-push a sync-back or move the published tag. Follow the failure and\n" +
+        "  re-run procedure in .guild/wiki/standards/release-discipline.md.\n"
     );
     return 2;
   }
@@ -388,30 +378,20 @@ export function main(argv: string[] = process.argv.slice(2)): number {
 // PROMOTION MODE — the hash-bound stable-promotion gate (FIC-91 / REL-P0)
 // ---------------------------------------------------------------------------
 
-const RELEASE_BRANCH_RE = /^release\/v(.+)$/;
 const BARE_TRIPLE_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
 /**
- * The EXACT set of paths a release branch may change relative to the evidence
- * source commit (FIC-74 §0/B5): the two release evidence files, the single
- * canonical version field, its two GENERATED manifests, and the changelog.
- *
- * `.claude-plugin/marketplace.json` is admitted ONLY because its bytes are
- * generated from `plugin.json` and independently enforced byte-consistent by
- * `check:claude-install`; this gate additionally requires the marketplace
- * version to equal the canonical version at the checked head. Nothing broader
- * is admitted — any other changed path refuses promotion.
+ * The EXACT set of paths `next` may change after the evidence source commit:
+ * only the two hash-bound evidence records. Stable manifests, inventory, and
+ * changelog are generated after merge by the protected release job, never on a
+ * human-authored release branch.
  */
 export function promotionAllowedPaths(version: string): string[] {
   return [
     `.guild/artifacts/release/v${version}/promotion.json`,
     `.guild/artifacts/release/v${version}/conformance.json`,
-    MANIFEST_PATH,
-    MARKETPLACE_PATH,
-    "guild.inventory.json",
-    "CHANGELOG.md",
   ];
 }
 
@@ -486,28 +466,19 @@ function parseJsonRecord(bytes: Buffer): Record<string, unknown> | null {
 }
 
 /**
- * The release-branch invariant, exactly as `branch-policy.yml` enforces it on a
- * PR into `main`. Every gate refuses with a SPECIFIC code; nothing downgrades
+ * The direct next-to-main invariant, exactly as `branch-policy.yml` enforces it
+ * on a PR into `main`. Every gate refuses with a SPECIFIC code; nothing downgrades
  * to a warning, and a missing or malformed input is always a refusal.
  */
 export function checkStablePromotion(
-  opts: { releaseBranch: string; headRef: string },
+  opts: { sourceBranch: string; headRef: string; stableRef?: string },
   git: PromotionGitOps = realPromotionGitOps()
 ): PromotionResult {
-  // 1 — the branch names one exact stable version.
-  const branchMatch = RELEASE_BRANCH_RE.exec(opts.releaseBranch);
-  if (branchMatch === null) {
+  // 1 — only the integration channel may be promoted to stable.
+  if (opts.sourceBranch !== "next") {
     return refusePromotion(
-      "release_branch_malformed",
-      `"${opts.releaseBranch}" is not a release/vX.Y.Z branch — promotion mode governs exactly that shape.`
-    );
-  }
-  const version = branchMatch[1];
-  if (!BARE_TRIPLE_RE.test(version)) {
-    return refusePromotion(
-      "release_version_not_bare",
-      `release branch names "${version}" — a stable promotion needs a bare MAJOR.MINOR.PATCH ` +
-        `(the version-bump commit drops any prerelease identifier).`
+      "source_branch_not_next",
+      `source branch ${JSON.stringify(opts.sourceBranch)} is not exact "next" — stable promotion is only next -> main.`
     );
   }
 
@@ -517,7 +488,8 @@ export function checkStablePromotion(
     return refusePromotion("head_unresolvable", `head ref "${opts.headRef}" does not resolve to a commit.`);
   }
 
-  // 3 — the canonical version field at head equals the branch version.
+  // 3 — next must carry an exact beta version. The stable triple comes from
+  //     the reviewed manifest bytes, never from a branch name.
   const manifestBytes = git.showBytes(headSha, MANIFEST_PATH);
   if (manifestBytes === null) {
     return refusePromotion("manifest_missing", `${MANIFEST_PATH} is absent at ${opts.headRef}.`);
@@ -526,10 +498,44 @@ export function checkStablePromotion(
   if (manifest === null || typeof manifest.version !== "string") {
     return refusePromotion("manifest_malformed", `${MANIFEST_PATH} at ${opts.headRef} has no usable version field.`);
   }
-  if (manifest.version !== version) {
+  if (!BETA_CHANNEL_VERSION.test(manifest.version)) {
     return refusePromotion(
-      "manifest_version_mismatch",
-      `branch names ${version} but ${MANIFEST_PATH} carries ${manifest.version}.`
+      "manifest_version_not_beta",
+      `${MANIFEST_PATH} carries ${manifest.version}; direct stable promotion requires exact MAJOR.MINOR.PATCH-beta.N on next.`
+    );
+  }
+  const version = parseVersion(manifest.version).core.join(".");
+  if (!BARE_TRIPLE_RE.test(version)) {
+    return refusePromotion("manifest_version_not_beta", `${MANIFEST_PATH} did not yield a stable SemVer core.`);
+  }
+
+  // 3b — stable versions only move forward. This runs in the pre-merge gate
+  // against origin/main and again post-merge against the PR's captured base
+  // SHA, so a stale or mis-keyed beta triple cannot regress default installs.
+  const stableRef = opts.stableRef ?? "origin/main";
+  const stableSha = git.resolveCommit(stableRef);
+  if (stableSha === null) {
+    return refusePromotion("stable_ref_unresolvable", `stable ref "${stableRef}" does not resolve to a commit.`);
+  }
+  const stableManifestBytes = git.showBytes(stableSha, MANIFEST_PATH);
+  if (stableManifestBytes === null) {
+    return refusePromotion("stable_manifest_missing", `${MANIFEST_PATH} is absent at ${stableRef}.`);
+  }
+  const stableManifest = parseJsonRecord(stableManifestBytes);
+  if (
+    stableManifest === null ||
+    typeof stableManifest.version !== "string" ||
+    !BARE_CHANNEL_VERSION.test(stableManifest.version)
+  ) {
+    return refusePromotion(
+      "stable_manifest_malformed",
+      `${MANIFEST_PATH} at ${stableRef} must carry exact stable MAJOR.MINOR.PATCH.`
+    );
+  }
+  if (compareVersions(parseVersion(version), parseVersion(stableManifest.version)) <= 0) {
+    return refusePromotion(
+      "stable_version_not_advanced",
+      `derived stable version ${version} must be strictly newer than ${stableManifest.version} at ${stableRef}.`
     );
   }
 
@@ -550,12 +556,11 @@ export function checkStablePromotion(
       `${MARKETPLACE_PATH} at ${opts.headRef} has no plugins[] entry named ${JSON.stringify(manifest.name)}.`
     );
   }
-  if (marketplaceEntry.version !== version) {
+  if (marketplaceEntry.version !== manifest.version) {
     return refusePromotion(
       "marketplace_version_drift",
       `generated ${MARKETPLACE_PATH} carries ${JSON.stringify(marketplaceEntry.version)} while the canonical ` +
-        `${MANIFEST_PATH} carries ${version} — marketplace.json is admitted to the allowed diff ONLY as a ` +
-        `generated manifest; regenerate it (npm run sync:claude-install).`
+        `${MANIFEST_PATH} carries ${manifest.version}; regenerate it (npm run sync:claude-install).`
     );
   }
 
@@ -565,7 +570,7 @@ export function checkStablePromotion(
   if (promotionBytes === null) {
     return refusePromotion(
       "promotion_record_missing",
-      `${evidenceDir}/promotion.json is absent at ${opts.headRef} — a release branch may not reach main without it.`
+      `${evidenceDir}/promotion.json is absent at ${opts.headRef} — next may not reach main without it.`
     );
   }
   const promotion = parseJsonRecord(promotionBytes);
@@ -581,7 +586,7 @@ export function checkStablePromotion(
   if (promotion.version !== version) {
     return refusePromotion(
       "promotion_version_mismatch",
-      `promotion record names version ${JSON.stringify(promotion.version)} but the branch names ${version}.`
+      `promotion record names version ${JSON.stringify(promotion.version)} but next derives stable version ${version}.`
     );
   }
   if (typeof promotion.source_commit !== "string" || !COMMIT_SHA_RE.test(promotion.source_commit)) {
@@ -763,7 +768,7 @@ export function checkStablePromotion(
   // 8b — the evidence runtime must be the runtime the SOURCE COMMIT builds:
   //      `guild-<plugin.json version at source_commit>`. FIC-74 emits evidence
   //      at the `next` tip (SHA-T), whose manifest carries the beta shape
-  //      (e.g. 2.7.0-beta.N); the release branch then changes ONLY metadata.
+  //      (e.g. 2.7.0-beta.N); the protected workflow later changes ONLY metadata.
   //      Binding to the release version would make that real sequence
   //      impossible, and binding to nothing would admit evidence for a runtime
   //      the source never built — this is the truthful middle.
@@ -795,10 +800,10 @@ export function checkStablePromotion(
     );
   }
   // 8c — RELEASE IDENTITY: the source manifest's SemVer CORE must equal the
-  //      release triple. The bump commit may only drop a prerelease identifier
-  //      (2.7.0-beta.N -> 2.7.0) or keep the bare triple; without this, valid
+  //      derived stable triple. The finalizer may only drop a prerelease identifier
+  //      (2.7.0-beta.N -> 2.7.0); without this, valid
   //      evidence for an old source (e.g. 2.6.0) could authorize a
-  //      metadata-only jump to any release/vX.Y.Z.
+  //      metadata-only jump to any unrelated stable version.
   let sourceCore: [string, string, string];
   try {
     sourceCore = parseVersion(sourceManifest.version).core;
@@ -813,26 +818,26 @@ export function checkStablePromotion(
     return refusePromotion(
       "source_version_core_mismatch",
       `evidence source commit ${sourceCommit} builds version ${sourceManifest.version} (core ` +
-        `${sourceCore.join(".")}) but the branch releases ${version} — a release may only drop the source's ` +
+        `${sourceCore.join(".")}) but next derives stable version ${version} — a release may only drop the source's ` +
         `prerelease identifier, never change its core triple.`
     );
   }
   if (!git.isAncestor(sourceCommit, headSha)) {
     return refusePromotion(
       "source_commit_not_ancestor",
-      `evidence source commit ${sourceCommit} is not an ancestor of ${opts.headRef} (${headSha}) — the release ` +
+      `evidence source commit ${sourceCommit} is not an ancestor of ${opts.headRef} (${headSha}) — the promotion ` +
         `head does not descend from the verified source.`
     );
   }
 
-  // 10 — the EXACT allowed diff. Anything else on the branch invalidates the
+  // 10 — the EXACT allowed diff. Anything else after the source invalidates the
   //      evidence (a runtime-path change after verification is unverified code).
   const allowed = new Set(promotionAllowedPaths(version));
   const disallowed = git.changedPaths(sourceCommit, headSha).filter((p) => !allowed.has(p));
   if (disallowed.length > 0) {
     return refusePromotion(
       "disallowed_path_changed",
-      `paths changed outside the allowed release set: ${disallowed.join(", ")} — re-run the evidence emitter ` +
+      `paths changed outside the allowed promotion set: ${disallowed.join(", ")} — re-run the evidence emitter ` +
         `against the new tip instead of promoting unverified changes.`
     );
   }
@@ -860,44 +865,47 @@ export function checkStablePromotion(
     ok: true,
     code: "promotable",
     reason:
-      `release/${`v${version}`} carries hash-bound full-suite conformance evidence for source ${sourceCommit}, ` +
+      `next carries hash-bound full-suite conformance evidence for source ${sourceCommit} and stable ${version}, ` +
       `the integration/assembly decision re-run promotes, and the diff stays inside the allowed release set.`,
   };
 }
 
 function promotionMain(argv: string[]): number {
-  let releaseBranch: string | undefined;
+  let sourceBranch: string | undefined;
   let headRef = "HEAD";
+  let stableRef = "origin/main";
   let root = ".";
   let json = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--release-branch" && argv[i + 1] !== undefined) releaseBranch = argv[++i];
-    else if (a.startsWith("--release-branch=")) releaseBranch = a.slice("--release-branch=".length);
+    if (a === "--source-branch" && argv[i + 1] !== undefined) sourceBranch = argv[++i];
+    else if (a.startsWith("--source-branch=")) sourceBranch = a.slice("--source-branch=".length);
     else if (a === "--head" && argv[i + 1] !== undefined) headRef = argv[++i];
     else if (a.startsWith("--head=")) headRef = a.slice("--head=".length);
+    else if (a === "--stable-ref" && argv[i + 1] !== undefined) stableRef = argv[++i];
+    else if (a.startsWith("--stable-ref=")) stableRef = a.slice("--stable-ref=".length);
     else if (a === "--root" && argv[i + 1] !== undefined) root = argv[++i];
     else if (a.startsWith("--root=")) root = a.slice("--root=".length);
     else if (a === "--json") json = true;
     else {
       process.stderr.write(
         `unknown argument: ${a}\n` +
-          "usage: check-channel-integrity.ts promotion --release-branch release/vX.Y.Z [--head <ref>] [--root <dir>] [--json]\n"
+          "usage: check-channel-integrity.ts promotion --source-branch next [--head <ref>] [--stable-ref <ref>] [--root <dir>] [--json]\n"
       );
       return 1;
     }
   }
-  if (releaseBranch === undefined) {
+  if (sourceBranch === undefined) {
     process.stderr.write(
-      "promotion mode requires --release-branch release/vX.Y.Z\n" +
-        "usage: check-channel-integrity.ts promotion --release-branch release/vX.Y.Z [--head <ref>] [--root <dir>] [--json]\n"
+      "promotion mode requires --source-branch next\n" +
+        "usage: check-channel-integrity.ts promotion --source-branch next [--head <ref>] [--stable-ref <ref>] [--root <dir>] [--json]\n"
     );
     return 1;
   }
 
   let result: PromotionResult;
   try {
-    result = checkStablePromotion({ releaseBranch, headRef }, realPromotionGitOps(root));
+    result = checkStablePromotion({ sourceBranch, headRef, stableRef }, realPromotionGitOps(root));
   } catch (err) {
     process.stderr.write(
       `check-channel-integrity promotion: ${String(err instanceof Error ? err.message : err)}\n`

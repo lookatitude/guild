@@ -299,6 +299,7 @@ const PACKAGE_PATH = path.join(FIXTURES, "evaluator-package.json");
 const SOURCE_COMMIT = "b871c8d973bd8258c25ce5e87a89f68f2e63a516";
 const HEAD_SHA = "1234567890abcdef1234567890abcdef12345678";
 const VERSION = "2.2.0";
+const BETA_VERSION = `${VERSION}-beta.20`;
 const MARKETPLACE_PATH = ".claude-plugin/marketplace.json";
 const GENERATED_AT = "2026-08-18T06:30:00.000Z";
 
@@ -587,16 +588,17 @@ function fakeGit(repo: FakeRepo): PromotionGitOps {
 }
 
 function standardRepo(overrides: { conformance?: Buffer; promotion?: Buffer } = {}): FakeRepo {
+  const stableSha = "abcdef1234567890abcdef1234567890abcdef12";
   const conformance = overrides.conformance ?? CONFORMANCE_BYTES;
   const promotion = overrides.promotion ?? PROMOTION_BYTES;
   const dir = `.guild/artifacts/release/v${VERSION}`;
   const files = new Map<string, Buffer>();
   const put = (p: string, bytes: Buffer | string) =>
     files.set(`${HEAD_SHA}:${p}`, Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
-  put(MANIFEST_PATH, JSON.stringify({ name: "guild", version: VERSION }));
+  put(MANIFEST_PATH, JSON.stringify({ name: "guild", version: BETA_VERSION }));
   put(
     MARKETPLACE_PATH,
-    JSON.stringify({ name: "guild", plugins: [{ name: "guild", source: "./", version: VERSION }] })
+    JSON.stringify({ name: "guild", plugins: [{ name: "guild", source: "./", version: BETA_VERSION }] })
   );
   put(`${dir}/promotion.json`, promotion);
   put(`${dir}/conformance.json`, conformance);
@@ -604,8 +606,18 @@ function standardRepo(overrides: { conformance?: Buffer; promotion?: Buffer } = 
     `${SOURCE_COMMIT}:${MANIFEST_PATH}`,
     Buffer.from(JSON.stringify({ name: "guild", version: VERSION }))
   );
+  files.set(
+    `${stableSha}:${MANIFEST_PATH}`,
+    Buffer.from(JSON.stringify({ name: "guild", version: "2.1.0" }))
+  );
   return {
-    refs: { HEAD: HEAD_SHA, [HEAD_SHA]: HEAD_SHA, [SOURCE_COMMIT]: SOURCE_COMMIT },
+    refs: {
+      HEAD: HEAD_SHA,
+      [HEAD_SHA]: HEAD_SHA,
+      [SOURCE_COMMIT]: SOURCE_COMMIT,
+      "origin/main": stableSha,
+      [stableSha]: stableSha,
+    },
     files,
     ancestries: new Set([`${SOURCE_COMMIT}..${HEAD_SHA}`]),
     diffs: new Map([[`${SOURCE_COMMIT}..${HEAD_SHA}`, promotionAllowedPaths(VERSION)]]),
@@ -613,7 +625,10 @@ function standardRepo(overrides: { conformance?: Buffer; promotion?: Buffer } = 
 }
 
 function check(repo: FakeRepo) {
-  return checkStablePromotion({ releaseBranch: `release/v${VERSION}`, headRef: "HEAD" }, fakeGit(repo));
+  return checkStablePromotion(
+    { sourceBranch: "next", headRef: "HEAD", stableRef: "origin/main" },
+    fakeGit(repo)
+  );
 }
 
 /** Mutate the conformance record and re-bind the promotion hash to the result. */
