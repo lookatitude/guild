@@ -29,6 +29,7 @@
       "codex-guild-prompt-bridge",
       "description-optimizer",
       "emit-release-conformance",
+      "finalize-stable-release",
       "lib/command-registry",
       "lib/equivalence-contract",
       "lib/inventory-schema",

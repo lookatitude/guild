@@ -3,10 +3,11 @@
  *
  * STABLE-PROMOTION GATE — FIC-91 / REL-P0, reconciled to A21-X (FIC-156).
  * Guards the `promotion` mode of `scripts/check-channel-integrity.ts`: the
- * hash-bound release-branch invariant that `branch-policy.yml` enforces on
+ * hash-bound direct `next -> main` invariant that `branch-policy.yml` enforces on
  * every PR into `main`.
  *
- * WHAT THE GATE REQUIRES, end to end: a well-shaped `release/vX.Y.Z` branch, a
+ * WHAT THE GATE REQUIRES, end to end: the exact `next` source branch with an
+ * X.Y.Z-beta.N manifest, a
  * `guild.release_promotion.v1` record, the EXACT bytes of its referenced
  * `guild.release_conformance.v1` record (SHA-256-bound), the frozen 31-scenario
  * contract pin, a COMPLETE 31/31 coverage statement (A21-X: the historical
@@ -56,7 +57,9 @@ const PACKAGE = path.join(FIXTURES, "evaluator-package.json");
 const BETA_PACKAGE = path.join(FIXTURES, "evaluator-package-beta.json");
 const SOURCE_COMMIT = "b871c8d973bd8258c25ce5e87a89f68f2e63a516";
 const HEAD_SHA = "1234567890abcdef1234567890abcdef12345678";
+const STABLE_SHA = "abcdef1234567890abcdef1234567890abcdef12";
 const VERSION = "2.2.0";
+const BETA_VERSION = `${VERSION}-beta.20`;
 const MARKETPLACE_PATH = ".claude-plugin/marketplace.json";
 const GENERATED_AT = "2026-08-18T06:30:00.000Z";
 
@@ -200,7 +203,7 @@ function fakeGit(repo: FakeRepo): PromotionGitOps {
   };
 }
 
-/** A fully bound in-memory release checkout for `release/v2.2.0`. */
+/** A fully bound in-memory `next` checkout deriving stable v2.2.0. */
 function standardRepo(overrides: {
   version?: string;
   conformance?: Buffer;
@@ -209,6 +212,7 @@ function standardRepo(overrides: {
   marketplaceVersion?: string;
   /** plugin.json version AT THE EVIDENCE SOURCE COMMIT (SHA-T). */
   sourceManifestVersion?: string;
+  stableVersion?: string;
 } = {}): FakeRepo {
   const version = overrides.version ?? VERSION;
   const conformance = overrides.conformance ?? CONFORMANCE_BYTES;
@@ -217,12 +221,13 @@ function standardRepo(overrides: {
   const files = new Map<string, Buffer>();
   const put = (p: string, bytes: Buffer | string) =>
     files.set(`${HEAD_SHA}:${p}`, Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
-  put(MANIFEST_PATH, JSON.stringify({ name: "guild", version: overrides.manifestVersion ?? version }));
+  const headVersion = overrides.manifestVersion ?? `${version}-beta.20`;
+  put(MANIFEST_PATH, JSON.stringify({ name: "guild", version: headVersion }));
   put(
     MARKETPLACE_PATH,
     JSON.stringify({
       name: "guild",
-      plugins: [{ name: "guild", source: "./", version: overrides.marketplaceVersion ?? version }],
+      plugins: [{ name: "guild", source: "./", version: overrides.marketplaceVersion ?? headVersion }],
     })
   );
   put(`${dir}/promotion.json`, promotion);
@@ -231,16 +236,26 @@ function standardRepo(overrides: {
     `${SOURCE_COMMIT}:${MANIFEST_PATH}`,
     Buffer.from(JSON.stringify({ name: "guild", version: overrides.sourceManifestVersion ?? VERSION }))
   );
+  files.set(
+    `${STABLE_SHA}:${MANIFEST_PATH}`,
+    Buffer.from(JSON.stringify({ name: "guild", version: overrides.stableVersion ?? "2.1.0" }))
+  );
   return {
-    refs: { HEAD: HEAD_SHA, [HEAD_SHA]: HEAD_SHA, [SOURCE_COMMIT]: SOURCE_COMMIT },
+    refs: {
+      HEAD: HEAD_SHA,
+      [HEAD_SHA]: HEAD_SHA,
+      [SOURCE_COMMIT]: SOURCE_COMMIT,
+      "origin/main": STABLE_SHA,
+      [STABLE_SHA]: STABLE_SHA,
+    },
     files,
     ancestries: new Set([`${SOURCE_COMMIT}..${HEAD_SHA}`]),
     diffs: new Map([[`${SOURCE_COMMIT}..${HEAD_SHA}`, promotionAllowedPaths(version)]]),
   };
 }
 
-function check(repo: FakeRepo, releaseBranch = `release/v${VERSION}`, headRef = "HEAD") {
-  return checkStablePromotion({ releaseBranch, headRef }, fakeGit(repo));
+function check(repo: FakeRepo, sourceBranch = "next", headRef = "HEAD") {
+  return checkStablePromotion({ sourceBranch, headRef, stableRef: "origin/main" }, fakeGit(repo));
 }
 
 /** Mutate the conformance record and RE-BIND the promotion hash to the mutated
@@ -264,15 +279,11 @@ function tamperedPromotion(mutate: (record: any) => void): Buffer {
 }
 
 describe("promotion allowed-diff set", () => {
-  it("admits EXACTLY the six release paths and nothing broader", () => {
+  it("admits EXACTLY the two evidence paths and nothing broader", () => {
     expect(promotionAllowedPaths("2.2.0").sort()).toEqual(
       [
         ".guild/artifacts/release/v2.2.0/promotion.json",
         ".guild/artifacts/release/v2.2.0/conformance.json",
-        ".claude-plugin/plugin.json",
-        ".claude-plugin/marketplace.json",
-        "guild.inventory.json",
-        "CHANGELOG.md",
       ].sort()
     );
   });
@@ -288,14 +299,7 @@ describe("promotion allowed-diff set", () => {
     expect(new Set(FROZEN_SCENARIO_CONTRACT_IDS).size).toBe(31);
   });
 
-  it("admits marketplace.json only alongside the generated-consistency check", () => {
-    // marketplace.json is in the allowed set ONLY because its bytes are
-    // generated from plugin.json. Two enforcement layers must both hold: the
-    // in-gate version-consistency check (tested below as
-    // marketplace_version_drift) and the byte-level `check:claude-install`
-    // invariant, which the REQUIRED promotion-evidence job itself must
-    // execute (asserted in the CI-wiring block) and which stays chained in
-    // check:module-source-of-truth.
+  it("keeps generated host-package consistency in the module source-of-truth gate", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
     expect(pkg.scripts["check:module-source-of-truth"]).toContain("check:claude-install");
   });
@@ -328,7 +332,7 @@ describe("checkStablePromotion — every structural gate passes, the FINAL decis
 
   it("the FIC-74 shape stays structurally admissible: beta-versioned evidence at SHA-T reaches the decision", () => {
     // REL-P1 emits evidence at the `next` tip, whose plugin.json carries the
-    // beta shape (here 2.3.0-beta.1); the release branch then bumps ONLY
+    // beta shape (here 2.3.0-beta.1); the protected finalizer later bumps ONLY
     // metadata to the bare triple. Every binding gate must accept exactly
     // this; the decision re-run is then the only refusal left.
     const version = "2.3.0";
@@ -338,7 +342,7 @@ describe("checkStablePromotion — every structural gate passes, the FINAL decis
       promotion: BETA_PROMOTION_BYTES,
       sourceManifestVersion: "2.3.0-beta.1",
     });
-    const result = check(repo, `release/v${version}`);
+    const result = check(repo);
     expect(result.reason).not.toMatch(/runtime/);
     expect(result.code).toBe("conformance_decision_not_promotable");
   });
@@ -356,17 +360,11 @@ describe("checkStablePromotion — every structural gate passes, the FINAL decis
   });
 });
 
-describe("checkStablePromotion — branch and manifest gates", () => {
-  it("refuses a malformed release branch name", () => {
-    const result = check(standardRepo(), "release/2.2.0");
+describe("checkStablePromotion — source branch and manifest gates", () => {
+  it("refuses every source branch except exact next", () => {
+    const result = check(standardRepo(), "release/v2.2.0");
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("release_branch_malformed");
-  });
-
-  it("refuses a prerelease release branch (stable promotion needs a bare triple)", () => {
-    const result = check(standardRepo(), "release/v2.2.0-beta.1");
-    expect(result.ok).toBe(false);
-    expect(result.code).toBe("release_version_not_bare");
+    expect(result.code).toBe("source_branch_not_next");
   });
 
   it("refuses an unresolvable head", () => {
@@ -383,10 +381,10 @@ describe("checkStablePromotion — branch and manifest gates", () => {
     expect(check(repo).code).toBe("manifest_missing");
   });
 
-  it("refuses a manifest version that disagrees with the branch version", () => {
-    const result = check(standardRepo({ manifestVersion: "2.3.0" }));
+  it("refuses a head manifest that is not exact beta SemVer", () => {
+    const result = check(standardRepo({ manifestVersion: "2.2.0" }));
     expect(result.ok).toBe(false);
-    expect(result.code).toBe("manifest_version_mismatch");
+    expect(result.code).toBe("manifest_version_not_beta");
   });
 
   it("refuses generated-marketplace drift from the canonical version field", () => {
@@ -609,18 +607,18 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
       promotion: BETA_PROMOTION_BYTES,
       sourceManifestVersion: "2.2.0",
     });
-    const result = check(repo, `release/v${version}`);
+    const result = check(repo);
     expect(result.ok).toBe(false);
     expect(result.code).toBe("runtime_version_source_mismatch");
     expect(result.reason).toContain("guild-2.3.0-beta.1");
     expect(result.reason).toContain("guild-2.2.0");
   });
 
-  it("RELEASE-IDENTITY: refuses a metadata-only version jump — source core triple must equal the release triple", () => {
+  it("RELEASE-IDENTITY: refuses a metadata-only version jump — source core must equal the derived stable triple", () => {
     // Structurally valid 2.2.0 evidence (runtime matches its source manifest
-    // exactly) must NOT authorize promoting release/v9.0.0 where only release
+    // exactly) must NOT authorize promoting a derived 9.0.0 where only release
     // metadata changed. The source manifest's SemVer core must equal the
-    // release branch triple (2.7.0-beta.N -> 2.7.0 stays allowed).
+    // derived stable triple (2.7.0-beta.N -> 2.7.0 stays allowed).
     const version = "9.0.0";
     const promotion = JSON.parse(PROMOTION_BYTES.toString("utf8"));
     promotion.version = version;
@@ -629,7 +627,7 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
       promotion: Buffer.from(JSON.stringify(promotion, null, 2) + "\n"),
       sourceManifestVersion: "2.2.0",
     });
-    const result = check(repo, `release/v${version}`);
+    const result = check(repo);
     expect(result.ok).toBe(false);
     expect(result.code).toBe("source_version_core_mismatch");
     expect(result.reason).toContain("2.2.0");
@@ -642,6 +640,14 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
     const result = check(repo);
     expect(result.ok).toBe(false);
     expect(result.code).toBe("source_manifest_missing");
+  });
+
+  it.each(["2.2.0", "2.3.0"])("refuses a stable target that does not advance current main: %s", (stableVersion) => {
+    const repo = standardRepo({ stableVersion });
+    const result = check(repo);
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("stable_version_not_advanced");
+    expect(result.reason).toContain(stableVersion);
   });
 
   it("refuses an unknown source commit", () => {
@@ -660,13 +666,21 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
     expect(result.code).toBe("source_commit_not_ancestor");
   });
 
-  it("refuses ANY changed path outside the allowed set, and names it", () => {
+  it.each([
+    "src/modules/kernel/index.ts",
+    MANIFEST_PATH,
+    MARKETPLACE_PATH,
+    ".codex-plugin/plugin.json",
+    ".guild-native-claude-package-identity.json",
+    "CHANGELOG.md",
+    "guild.inventory.json",
+  ])("refuses changed path outside the evidence pair: %s", (changedPath) => {
     const repo = standardRepo();
-    repo.diffs.get(`${SOURCE_COMMIT}..${HEAD_SHA}`)!.push("src/modules/kernel/index.ts");
+    repo.diffs.get(`${SOURCE_COMMIT}..${HEAD_SHA}`)!.push(changedPath);
     const result = check(repo);
     expect(result.ok).toBe(false);
     expect(result.code).toBe("disallowed_path_changed");
-    expect(result.reason).toContain("src/modules/kernel/index.ts");
+    expect(result.reason).toContain(changedPath);
   });
 });
 
@@ -682,10 +696,14 @@ describe("promotion mode — real git path (temp repository)", () => {
     git(repo, "config", "user.name", "test");
     fs.mkdirSync(path.join(repo, ".claude-plugin"), { recursive: true });
     fs.mkdirSync(path.join(repo, `.guild/artifacts/release/v${VERSION}`), { recursive: true });
-    fs.writeFileSync(path.join(repo, MANIFEST_PATH), JSON.stringify({ name: "guild", version: VERSION }));
+    fs.writeFileSync(path.join(repo, MANIFEST_PATH), JSON.stringify({ name: "guild", version: "2.1.0" }));
+    git(repo, "add", "-A");
+    git(repo, "commit", "-q", "-m", "stable baseline");
+    git(repo, "checkout", "-q", "-b", "next");
+    fs.writeFileSync(path.join(repo, MANIFEST_PATH), JSON.stringify({ name: "guild", version: BETA_VERSION }));
     fs.writeFileSync(
       path.join(repo, MARKETPLACE_PATH),
-      JSON.stringify({ name: "guild", plugins: [{ name: "guild", source: "./", version: VERSION }] })
+      JSON.stringify({ name: "guild", plugins: [{ name: "guild", source: "./", version: BETA_VERSION }] })
     );
     fs.writeFileSync(path.join(repo, "CHANGELOG.md"), "# changelog\n");
     fs.writeFileSync(path.join(repo, "guild.inventory.json"), "{}\n");
@@ -693,7 +711,6 @@ describe("promotion mode — real git path (temp repository)", () => {
     fs.writeFileSync(path.join(repo, `.guild/artifacts/release/v${VERSION}/conformance.json`), CONFORMANCE_BYTES);
     git(repo, "add", "-A");
     git(repo, "commit", "-q", "-m", "release checkout");
-    git(repo, "checkout", "-q", "-b", `release/v${VERSION}`);
     return repo;
   }
 
@@ -705,7 +722,7 @@ describe("promotion mode — real git path (temp repository)", () => {
     // (the decision re-run sits even later and is never reached here).
     const repo = makeReleaseRepo();
     const result = checkStablePromotion(
-      { releaseBranch: `release/v${VERSION}`, headRef: "HEAD" },
+      { sourceBranch: "next", headRef: "HEAD", stableRef: "main" },
       realPromotionGitOps(repo)
     );
     expect(result.ok).toBe(false);
@@ -718,7 +735,7 @@ describe("promotion mode — real git path (temp repository)", () => {
     git(repo, "rm", "-q", `.guild/artifacts/release/v${VERSION}/promotion.json`);
     git(repo, "commit", "-q", "-m", "drop promotion record");
     const result = checkStablePromotion(
-      { releaseBranch: `release/v${VERSION}`, headRef: "HEAD" },
+      { sourceBranch: "next", headRef: "HEAD", stableRef: "main" },
       realPromotionGitOps(repo)
     );
     expect(result.code).toBe("promotion_record_missing");
@@ -731,7 +748,7 @@ describe("promotion mode — real git path (temp repository)", () => {
     git(repo, "add", "-A");
     git(repo, "commit", "-q", "-m", "tamper one byte");
     const result = checkStablePromotion(
-      { releaseBranch: `release/v${VERSION}`, headRef: "HEAD" },
+      { sourceBranch: "next", headRef: "HEAD", stableRef: "main" },
       realPromotionGitOps(repo)
     );
     expect(result.code).toBe("evidence_hash_mismatch");
@@ -740,10 +757,10 @@ describe("promotion mode — real git path (temp repository)", () => {
   it("CLI: promotion mode exits 2 on refusal and 1 on usage errors; ordinary mode is untouched", () => {
     const repo = makeReleaseRepo();
     expect(
-      cliMain(["promotion", "--release-branch", `release/v${VERSION}`, "--head", "HEAD", "--root", repo])
+      cliMain(["promotion", "--source-branch", "next", "--head", "HEAD", "--stable-ref", "main", "--root", repo])
     ).toBe(2);
-    expect(cliMain(["promotion"])).toBe(1); // missing --release-branch
-    expect(cliMain(["promotion", "--release-branch", `release/v${VERSION}`, "--bogus"])).toBe(1);
+    expect(cliMain(["promotion"])).toBe(1); // missing --source-branch
+    expect(cliMain(["promotion", "--source-branch", "next", "--bogus"])).toBe(1);
     // Ordinary channel mode: unknown arguments still refuse exactly as before.
     expect(cliMain(["--bogus"])).toBe(1);
   });
@@ -763,10 +780,12 @@ describe("promotion mode — real git path (temp repository)", () => {
           path.join(__dirname, "..", "node_modules", "tsx", "dist", "cli.mjs"),
           script,
           "promotion",
-          "--release-branch",
-          `release/v${VERSION}`,
+          "--source-branch",
+          "next",
           "--head",
           "HEAD",
+          "--stable-ref",
+          "main",
           "--root",
           repo,
         ],
@@ -796,13 +815,13 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(checkout?.with?.["fetch-depth"]).toBe(0);
     const runs = steps.map((s) => String(s.run ?? ""));
     const gate = runs.join("\n");
-    expect(gate).toMatch(/check-channel-integrity\.ts promotion/);
-    expect(gate).toMatch(/--release-branch/);
+    expect(gate).toMatch(/check:channel-integrity -- promotion/);
+    expect(gate).toMatch(/--source-branch/);
+    expect(gate).toMatch(/--stable-ref origin\/main/);
     // The byte-level generated-manifest invariant must be EXECUTED by this
-    // required job, before the promotion command — the gate's safety argument
-    // for admitting marketplace.json depends on it actually running here.
+    // required job before the promotion command.
     const claudeInstallAt = runs.findIndex((r) => /check:claude-install/.test(r));
-    const promotionAt = runs.findIndex((r) => /check-channel-integrity\.ts promotion/.test(r));
+    const promotionAt = runs.findIndex((r) => /check:channel-integrity -- promotion/.test(r));
     expect(claudeInstallAt).toBeGreaterThanOrEqual(0);
     expect(promotionAt).toBeGreaterThan(claudeInstallAt);
     // Fail-closed dependency install: npm ci only, never an npm install fallback.
@@ -810,29 +829,65 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(installRun).not.toMatch(/npm install/);
   });
 
-  it("branch-policy.yml keeps the same-repo release/v* head-shape job intact", () => {
+  it("branch-policy.yml accepts only the same-repo next branch for stable promotion", () => {
     const raw = fs.readFileSync(path.join(workflows, "branch-policy.yml"), "utf8");
-    expect(raw).toMatch(/release\/v\[0-9\]\+/);
-    expect(raw).toMatch(/must come from a same-repo release\/v\* branch/);
+    expect(raw).toMatch(/must come from the same-repo next branch/i);
+    expect(raw).toMatch(/\[ "\$HEAD_REF" != "next" \]/);
+    expect(raw).not.toMatch(/release\/v\[0-9\]\+/);
   });
 
   it("release.yml re-runs promotion mode using only CLI-supported arguments", () => {
     const raw = fs.readFileSync(path.join(workflows, "release.yml"), "utf8");
     expect(raw).toMatch(/check:channel-integrity -- promotion/);
-    expect(raw).toMatch(/--release-branch/);
+    expect(raw).toMatch(/--source-branch/);
     expect(raw).toMatch(/--head/);
     expect(raw).not.toMatch(/--labels-json|LABELS_JSON/);
 
-    // A pull-request branch is untrusted input. Keep the expression out of the
-    // inline shell program so GitHub passes the exact bytes through env before
-    // the release/vX.Y.Z validator evaluates them.
+    // Promotion is an exact same-repository next -> main operation. No release
+    // branch or branch-derived tag is part of the protocol.
     const doc = yaml.load(raw) as any;
-    const steps = Object.values(doc.jobs ?? {}).flatMap((job: any) => job.steps ?? []);
-    const deriveVersion = steps.find((step: any) => step.id === "ver") as any;
-    expect(deriveVersion).toBeDefined();
-    expect(deriveVersion.env?.RELEASE_BRANCH).toBe("${{ github.event.pull_request.head.ref }}");
-    expect(String(deriveVersion.run ?? "")).toContain('BRANCH="$RELEASE_BRANCH"');
-    expect(String(deriveVersion.run ?? "")).not.toContain("${{ github.event.pull_request.head.ref }}");
+    const releaseJob = doc.jobs?.release;
+    expect(String(releaseJob?.if ?? "")).toContain("github.event.pull_request.head.ref == 'next'");
+    expect(String(releaseJob?.if ?? "")).toContain("github.event.pull_request.head.repo.full_name == github.repository");
+    expect(raw).not.toMatch(/release\/v/);
+  });
+
+  it("release.yml uses an environment-scoped ephemeral GitHub App token and tags the generated stable commit", () => {
+    const raw = fs.readFileSync(path.join(workflows, "release.yml"), "utf8");
+    const doc = yaml.load(raw) as any;
+    const releaseJob = doc.jobs?.release;
+    expect(releaseJob?.environment).toBe("stable-release");
+    expect(doc.permissions?.contents).toBe("read");
+
+    const steps: any[] = releaseJob?.steps ?? [];
+    const token = steps.find((step) => String(step.uses ?? "").startsWith("actions/create-github-app-token@"));
+    expect(token).toBeDefined();
+    expect(token.with?.["permission-contents"]).toBe("write");
+    expect(token.with?.["permission-pull-requests"]).toBe("read");
+    expect(String(token.with?.["private-key"] ?? "")).toContain("RELEASE_APP_PRIVATE_KEY");
+    expect(String(token.with?.["app-id"] ?? "")).toContain("RELEASE_APP_ID");
+    expect(Object.keys(token.with ?? {}).sort()).toEqual(
+      ["app-id", "permission-contents", "permission-pull-requests", "private-key"].sort()
+    );
+
+    const workflow = steps.map((step) => String(step.run ?? "")).join("\n");
+    expect(workflow).toMatch(/run finalize:stable-release -- prepare/);
+    expect(workflow).toMatch(/run finalize:stable-release -- verify/);
+    expect(workflow).not.toMatch(/\bnpx tsx scripts\//);
+    const frozenHead = steps.find((step) => step.name === "Require the reviewed next head to remain frozen");
+    expect(String(frozenHead?.if ?? "")).toContain("steps.existing.outputs.tag_exists == 'false'");
+    expect(String(frozenHead?.run ?? "")).toContain("origin/next");
+    expect(workflow).toMatch(/run finalize:stable-release -- latest/);
+    expect(workflow).toMatch(/--latest=false/);
+    expect(workflow).not.toMatch(/gh release view --json tagName[^\n]*\|\| true/);
+    expect(workflow).toMatch(/git push --atomic origin/);
+    expect(workflow).toMatch(/\$RELEASE_SHA:refs\/heads\/main/);
+    expect(workflow).toMatch(/\$RELEASE_SHA:refs\/heads\/next/);
+    expect(raw).toMatch(/github\.event\.pull_request\.head\.sha/);
+    expect(workflow).toMatch(/git commit-tree/);
+    expect(workflow).toMatch(/git tag -a "\$TAG" "\$RELEASE_SHA"/);
+    expect(workflow).not.toMatch(/git tag -a "\$TAG" "\$MERGE_SHA"/);
+    expect(raw).not.toContain("secrets.GITHUB_TOKEN");
   });
 
   it("the live-required branch-policy context is transitively BLOCKED on promotion evidence", () => {
@@ -856,7 +911,7 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(String(guard?.run ?? "")).toMatch(/exit 1/);
     // The head-shape enforcement must remain a later step of the SAME job.
     const headShape = steps.map((s) => String(s.run ?? "")).join("\n");
-    expect(headShape).toMatch(/release\/v\[0-9\]\+/);
+    expect(headShape).toMatch(/\[ "\$HEAD_REF" != "next" \]/);
   });
 
   it("channel-integrity.yml still runs ONLY the ordinary channel mode", () => {

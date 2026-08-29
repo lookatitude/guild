@@ -50,7 +50,7 @@
       "id": "check-channel-integrity",
       "source_path": "scripts/check-channel-integrity.ts",
       "resource_path": "resources/scripts/check-channel-integrity.ts",
-      "sha256": "d0022161e022b6499ced9b780a28acb85ebb611023deb827e474b9177a908a94"
+      "sha256": "eac6484522c1c5d736c2fe79487d696c83dc075273104dae2646a40d184cca1c"
     },
     {
       "category": "scripts",
@@ -100,6 +100,13 @@
       "source_path": "scripts/emit-release-conformance.ts",
       "resource_path": "resources/scripts/emit-release-conformance.ts",
       "sha256": "e83be2200b89b2e9af41628750aa0a6444650ca02fbcf74cd35f305e365cc555"
+    },
+    {
+      "category": "scripts",
+      "id": "finalize-stable-release",
+      "source_path": "scripts/finalize-stable-release.ts",
+      "resource_path": "resources/scripts/finalize-stable-release.ts",
+      "sha256": "5fe7928354767c78b39eea1bc4e62db96ddcf3849a34d15d3abc2339ac173ee3"
     },
     {
       "category": "scripts",
@@ -212,7 +219,7 @@
       "id": "release-changelog",
       "source_path": "scripts/release-changelog.ts",
       "resource_path": "resources/scripts/release-changelog.ts",
-      "sha256": "ef9f4bb21aee390e46b9baaaa2b8cfe84452f5af8489a9d45d072304ea7b8c76"
+      "sha256": "cbd3128a8c1bdbda2503864eb49bb496b90c37ad7468769d37604c36c5558b83"
     },
     {
       "category": "scripts",

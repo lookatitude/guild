@@ -102,7 +102,8 @@ the same spirit:
    build` first if you touched a hook — the tests run source, the host runs dist).
 5. **Target `next`, not `main`.** All feature/fix PRs go to the `next`
    integration branch (`gh pr create --base next`) — `main` is the stable
-   release channel and only accepts `release/vX.Y.Z` PRs (enforced by the
+   release channel and only accepts the repository's exact `next` branch
+   (enforced by the
    `branch-policy` CI gate; full rules in
    `.guild/wiki/standards/release-discipline.md`).
 6. **Explain the "why" in the commit message**, not the "what"
@@ -157,20 +158,19 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
 
 - Branches are channels: `main` = stable (always green, always releasable),
   `next` = beta/integration (all merged PRs collect and get tested here).
-- Releases are cut **from `next`** as a `release/vX.Y.Z` branch → PR into
-  `main` → on merge, CI tags and publishes the GitHub Release automatically
-  (PR body = release notes). Then `main` is merged back into `next`.
-- Tags are `vMAJOR.MINOR.PATCH` (SemVer) with optional `-beta<N>`
-  pre-release suffix.
-- Update `CHANGELOG.md` as part of the release PR — generate the section with
-  `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (groups the
-  PRs merged since the last tag; `--notes` seeds the PR body), then polish.
-- Bump `.claude-plugin/plugin.json` `version` to match the tag — that file is
-  the **single canonical version field**. Then propagate it:
-  `cd scripts && npm run sync:claude-install && npm run build:inventory`.
-  **Do not hand-edit `.claude-plugin/marketplace.json`** — it is generated from
-  `plugin.json`, and CI (`check:claude-install`) fails any hand edit that
-  disagrees with the canonical field.
+- Stable promotion is a direct same-repository `next -> main` PR. No release
+  branch and no manual merge-back or sync-back is used.
+- Before that PR, an operator freezes the code tip, produces independently
+  authorized full-suite conformance evidence for that exact SHA, and merges an
+  evidence-only PR into `next`. The promotion gate permits only the two
+  hash-bound evidence records after the verified source commit.
+- `next` carries exact `MAJOR.MINOR.PATCH-beta.N`. After the direct PR merges,
+  the protected release workflow derives the bare stable triple, generates the
+  changelog and all version-bearing surfaces, atomically advances `main`,
+  `next`, and `vMAJOR.MINOR.PATCH`, then publishes the PR body as release notes.
+- Contributors do not bump the stable manifest, edit `CHANGELOG.md`, or hand-edit
+  generated manifests for a release. The environment-scoped release App owns
+  that exact six-file metadata commit.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues

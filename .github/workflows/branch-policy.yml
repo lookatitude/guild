@@ -1,18 +1,17 @@
 name: branch-policy
 
-# Enforces the next/main channel model (release-discipline rule 8):
+# Enforces the next/main channel model (release-discipline rules 1-4):
 #
 #   main = STABLE channel. Marketplace installs track it (default branch), so
 #          every merge to main ships to stable users immediately. Therefore
-#          main only ever receives release PRs: head branch `release/vX.Y.Z`
-#          (a hotfix is just a patch-version release branch). release.yml then
-#          tags + publishes the GitHub Release on merge.
+#          main only receives a same-repository PR from exact `next`.
+#          release.yml then creates stable metadata, tags, and publishes.
 #   next = BETA / integration channel. ALL feature/fix PRs target next
 #          (`gh pr create --base next`). Beta users follow it via
 #          `claude plugin marketplace add lookatitude/guild@next`.
 #
 # This gate is the deterministic backstop for that rule: a PR whose base is
-# main fails unless its head is a release/v* branch. Prose alone does not
+# main fails unless its head is exact `next` in this repository. Prose alone does not
 # enforce process — CI does.
 
 on:
@@ -45,28 +44,23 @@ jobs:
             exit 1
           fi
           echo "OK: promotion-evidence succeeded."
-      - name: PRs into main must come from a same-repo release/v* branch
+      - name: PRs into main must come from the same-repo next branch
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
-          # Same-repo only: a fork branch named release/vX.Y.Z must not satisfy
-          # the release shape (it would also arm release.yml on merge).
           if [ "$HEAD_REPO" != "${{ github.repository }}" ]; then
-            echo "::error::PR into main from fork '$HEAD_REPO' — release PRs must come from a branch in ${{ github.repository }} (cut from next). Fork PRs target next." >&2
+            echo "::error::PR into main from fork '$HEAD_REPO' — stable promotion must come from next in ${{ github.repository }}." >&2
             exit 1
           fi
-          if [[ "$HEAD_REF" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "OK: release PR from '$HEAD_REF' — main may receive it."
-            exit 0
+          if [ "$HEAD_REF" != "next" ]; then
+            echo "::error::PR into main from '$HEAD_REF' violates the channel model." >&2
+            echo "main is stable and only accepts the reviewed integration branch: next -> main." >&2
+            echo "Retarget this PR to next. When next is ready, open the release PR from next to main." >&2
+            exit 1
           fi
-          echo "::error::PR into main from '$HEAD_REF' violates the channel model." >&2
-          echo "main is the STABLE release channel — it only receives release/vX.Y.Z branches (cut from next)." >&2
-          echo "Retarget this PR to the integration branch instead:" >&2
-          echo "  gh pr edit ${{ github.event.pull_request.number }} --base next" >&2
-          echo "Release flow: merge features into next → test beta → cut release/vX.Y.Z → PR into main → publish → advance next to the release point by fast-forward when ancestry allows, otherwise by a release-delta PR. Never merge main back into next." >&2
-          exit 1
+          echo "OK: same-repository next -> main stable promotion."
 
   # FIC-91 / REL-P0 (FIC-74 §0/B1): the hash-bound stable-promotion gate. A
   # release PR may not publish without verifiable conformance evidence: the
@@ -93,9 +87,9 @@ jobs:
       - name: Install script dependencies
         working-directory: scripts
         run: npm ci --prefer-offline
-      # The allowed diff admits generated marketplace.json ONLY because its
-      # bytes derive from plugin.json — so this required job must itself
-      # execute the byte-level invariant, before the promotion gate runs.
+      - name: Fetch the current stable channel for monotonic-version comparison
+        run: git fetch origin main --quiet
+      # `next` itself remains internally generated-consistent before promotion.
       - name: Enforce the generated-manifest invariant (check:claude-install)
         working-directory: scripts
         run: npm run check:claude-install -- --root ..
@@ -103,4 +97,4 @@ jobs:
         working-directory: scripts
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: npx tsx check-channel-integrity.ts promotion --release-branch "$HEAD_REF" --head HEAD --root ..
+        run: npm run check:channel-integrity -- promotion --source-branch "$HEAD_REF" --head HEAD --stable-ref origin/main --root ..

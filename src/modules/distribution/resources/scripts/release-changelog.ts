@@ -1,13 +1,13 @@
 /**
  * scripts/release-changelog.ts
  *
- * Release-changelog generator (release-discipline rule 2 / checklist step 3).
+ * Release-changelog generator (release-discipline rules 5 and 8).
  *
  * Collects the PRs merged since the last release tag, groups them into a tidy
  * versioned section, and (with --write) prepends it to CHANGELOG.md — so the
- * changelog is authored ON the release/vX.Y.Z branch and reviewed as part of
- * the release PR. The same output (--notes) seeds the PR body, which
- * release.yml publishes verbatim as the GitHub Release notes.
+ * protected post-merge release job prepends the section to the metadata-only
+ * stable commit. The curated direct `next -> main` PR body remains the GitHub
+ * Release notes published by release.yml.
  *
  *   npx tsx release-changelog.ts --version v2.1.0            # print the section
  *   npx tsx release-changelog.ts --version v2.1.0 --write    # prepend to CHANGELOG.md
