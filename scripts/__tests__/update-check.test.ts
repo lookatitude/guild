@@ -351,7 +351,7 @@ describe("native host channel identity", () => {
       JSON.stringify({ guild: { installLocation: marketplace } })
     );
 
-    expect(readNativeHostIdentity("claude-code", pluginRoot, { homedir: home })).toEqual({
+    expect(readNativeHostIdentity("claude-code-cli", pluginRoot, { homedir: home })).toEqual({
       channel: "stable",
       commit: SHA_A,
     });

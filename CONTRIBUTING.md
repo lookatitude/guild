@@ -172,9 +172,10 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
   bare-version metadata convergence are deferred hardening, not release
   prerequisites. Stable update detection compares the installed commit with
   remote `main`; Claude and Codex native caches recover that identity from the
-  host's existing registry, with a same-core published-tag fallback for legacy
-  commit-less installs. The retained candidate label therefore does not produce
-  a false candidate-to-bare update prompt.
+  host's existing registry. Commit-less stable signals suppress only the exact
+  same-core candidate/tag false positive, and ambiguous native receipt minting
+  is deferred rather than guessing a channel. The retained candidate label
+  therefore does not produce a permanent false update prompt or channel switch.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues

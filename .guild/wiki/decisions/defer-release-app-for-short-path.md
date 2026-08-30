@@ -50,7 +50,8 @@ beta manifest and never rewrites either protected branch.
   generated stable section to `CHANGELOG.md`.
 - Stable update detection uses installed-versus-remote `main` commit identity.
   Claude and Codex recover native cache identity from their existing host
-  registries; a commit-less fallback treats a candidate whose core equals the
-  latest stable tag as the same published release.
+  registries; a commit-less signal treats only the canonical same-core candidate
+  as the published release, while ambiguous first-session receipt minting is
+  deferred instead of guessing a channel.
 - App-backed bare-version metadata convergence remains a non-blocking follow-up.
 - A published tag is immutable; recovery rolls forward and never retags bytes.

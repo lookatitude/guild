@@ -41,9 +41,10 @@ on `main` to the corresponding published stable tag before comparing versions.
 Stable update detection compares the installed commit with remote `main`.
 Claude and Codex native installs recover channel plus commit from their existing
 host registries when the package cache has no `.git`; other managed installs use
-their receipt or clone identity. A commit-less stable fallback treats a
-candidate whose core equals the latest stable tag as those same published bytes,
-so the candidate label cannot create a permanent false update.
+their receipt or clone identity. A commit-less stable signal treats only the
+canonical candidate whose core equals the latest stable tag as those same
+published bytes. When a native candidate package has no host identity yet, the
+hook defers receipt minting instead of permanently guessing stable or beta.
 
 ## Rules
 

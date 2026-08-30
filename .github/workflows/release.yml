@@ -103,10 +103,15 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" "$MERGE_SHA" -m "$PR_TITLE"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$TAG"
+          TAG_OBJECT_SHA="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="$TAG" \
+            -f message="$PR_TITLE" \
+            -f object="$MERGE_SHA" \
+            -f type=commit \
+            --jq .sha)"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/$TAG" \
+            -f sha="$TAG_OBJECT_SHA" >/dev/null
 
       - name: Verify published channel state
         env:

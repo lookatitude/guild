@@ -197,7 +197,7 @@ export function readNativeHostIdentity(
   const isSha = (value: unknown): value is string =>
     typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 
-  if (hostId === "claude-code" || hostId === "claude-code-app") {
+  if (hostId === "claude-code-cli" || hostId === "claude-code-app" || hostId === "claude-code-web") {
     for (const configRoot of [path.join(home, ".claude"), path.join(home, ".config", "claude")]) {
       try {
         const installed = JSON.parse(
@@ -612,6 +612,7 @@ export function computeSignal(opts: {
     if (
       installed &&
       published &&
+      /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version) &&
       installed.prerelease.length > 0 &&
       published.prerelease.length === 0 &&
       installed.triple.every((part, index) => part === published.triple[index])

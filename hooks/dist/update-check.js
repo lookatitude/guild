@@ -32622,7 +32622,7 @@ function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
     }
   };
   const isSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
-  if (hostId === "claude-code" || hostId === "claude-code-app") {
+  if (hostId === "claude-code-cli" || hostId === "claude-code-app" || hostId === "claude-code-web") {
     for (const configRoot of [path4.join(home, ".claude"), path4.join(home, ".config", "claude")]) {
       try {
         const installed = JSON.parse(
@@ -32882,7 +32882,7 @@ function computeSignal(opts) {
   if (latest && state.version) {
     const installed = parseComparable(state.version);
     const published = parseComparable(latest);
-    if (installed && published && installed.prerelease.length > 0 && published.prerelease.length === 0 && installed.triple.every((part, index) => part === published.triple[index])) {
+    if (installed && published && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version) && installed.prerelease.length > 0 && published.prerelease.length === 0 && installed.triple.every((part, index) => part === published.triple[index])) {
       return { ...base, update_available: false, reason: "up-to-date" };
     }
   }
@@ -32974,15 +32974,11 @@ function main() {
   if (state.channel === "dev") return;
   const cacheFile = cachePath();
   const cache = readCache(cacheFile);
-  if (state.source === "default" && state.version) {
+  const versionDerivedBeta = state.version !== null && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
+  if (state.source === "default" && state.version && !versionDerivedBeta) {
     try {
       const receiptPath = path43.join(pluginRoot, RECEIPT_BASENAME);
-      const versionDerivedBeta = /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
-      const candidateCore = /^(\d+\.\d+\.\d+)-beta\.(?:0|[1-9]\d*)$/.exec(state.version)?.[1];
-      const publishedTriple = cache?.remote.latest_tag ? parseSemver(cache.remote.latest_tag) : null;
-      const publishedCore = publishedTriple?.join(".") ?? null;
-      const candidateIsPublishedStable = candidateCore !== void 0 && candidateCore === publishedCore;
-      const receiptChannel = versionDerivedBeta && !candidateIsPublishedStable ? "beta" : state.channel;
+      const receiptChannel = state.channel;
       const descriptor = fs35.openSync(
         receiptPath,
         fs35.constants.O_WRONLY | fs35.constants.O_CREAT | fs35.constants.O_EXCL | fs35.constants.O_NOFOLLOW,
@@ -33002,13 +32998,13 @@ function main() {
               version: state.version,
               installed_at: (/* @__PURE__ */ new Date()).toISOString(),
               minted_by: "update-check-session-start",
-              // Honesty markers: a canonical beta package carries its channel
-              // in its version. Other native installs retain the stable/main
-              // DEFAULT, explicitly marked as an assumption. Nothing may clone
-              // from either: codex-cli's capability row is reinstall_command
+              // Honesty marker: only an unambiguous stable/main DEFAULT reaches
+              // this branch. Candidate-shaped packages without host identity
+              // deliberately mint nothing. Nothing may clone from this
+              // assumption: codex-cli's capability row is reinstall_command
               // (never self_update), so the receipt is identification-only.
               managed_by: "host-native",
-              channel_confidence: nativeIdentity ? "host-registry" : candidateIsPublishedStable ? "published-tag-core" : versionDerivedBeta ? "version-derived" : "assumed-default"
+              channel_confidence: "assumed-default"
             },
             null,
             2
