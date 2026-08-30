@@ -650,6 +650,27 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
     expect(result.reason).toContain(stableVersion);
   });
 
+  it("accepts the next release after a short-path stable tag even though main retains its beta candidate version", () => {
+    const version = "2.3.0";
+    const repo = standardRepo({
+      version,
+      conformance: BETA_CONFORMANCE_BYTES,
+      promotion: BETA_PROMOTION_BYTES,
+      sourceManifestVersion: "2.3.0-beta.1",
+      stableVersion: "2.2.0-beta.20",
+    });
+    repo.refs["refs/tags/v2.2.0"] = STABLE_SHA;
+    const result = check(repo);
+    expect(result.code).toBe("conformance_decision_not_promotable");
+    expect(result.reason).not.toMatch(/stable_manifest/);
+  });
+
+  it("refuses a prerelease-valued main when its corresponding published stable tag is absent", () => {
+    const repo = standardRepo({ stableVersion: "2.1.0-beta.20" });
+    const result = check(repo);
+    expect(result.code).toBe("stable_tag_missing");
+  });
+
   it("refuses an unknown source commit", () => {
     const repo = standardRepo();
     delete repo.refs[SOURCE_COMMIT];
@@ -857,7 +878,8 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     const doc = yaml.load(raw) as any;
     const releaseJob = doc.jobs?.release;
     expect(releaseJob?.environment).toBeUndefined();
-    expect(doc.permissions?.contents).toBe("write");
+    expect(doc.permissions?.contents).toBeUndefined();
+    expect(releaseJob?.permissions?.contents).toBe("write");
 
     const steps: any[] = releaseJob?.steps ?? [];
     const token = steps.find((step) => String(step.uses ?? "").startsWith("actions/create-github-app-token@"));
@@ -870,12 +892,17 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(workflow).toMatch(/run finalize:stable-release -- latest/);
     expect(workflow).toMatch(/--latest=false/);
     expect(workflow).not.toMatch(/gh release view --json tagName[^\n]*\|\| true/);
-    expect(workflow).toMatch(/git push origin "refs\/tags\/\$TAG"/);
+    expect(workflow).toMatch(/git push "https:\/\/x-access-token:\$\{GH_TOKEN\}@github\.com\/\$\{GITHUB_REPOSITORY\}\.git" "refs\/tags\/\$TAG"/);
     expect(workflow).not.toMatch(/refs\/heads\/(main|next)/);
     expect(raw).toMatch(/github\.event\.pull_request\.head\.sha/);
+    expect(workflow).toMatch(/merge-base --is-ancestor "\$PR_HEAD_SHA" "\$MERGE_SHA"/);
+    expect(workflow).toMatch(/merge-base --is-ancestor "\$MERGE_SHA" origin\/main/);
+    expect(workflow).toMatch(/run check:channel-integrity/);
     expect(workflow).not.toMatch(/git commit(-tree)?/);
     expect(workflow).toMatch(/git tag -a "\$TAG" "\$MERGE_SHA"/);
     expect(raw).toContain("GH_TOKEN: ${{ github.token }}");
+    const checkout = steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@"));
+    expect(checkout?.with?.["persist-credentials"]).toBe(false);
     expect(raw).not.toMatch(/RELEASE_APP_|environment:\s*stable-release/);
   });
 

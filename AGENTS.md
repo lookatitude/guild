@@ -205,12 +205,15 @@ Release workflow (operator-driven, when `next` is ready):
    reconciled `docs/v2`, and a curated PR body suitable as release notes.
 2. Open the release PR from the repository's exact `next` branch to `main`.
    `branch-policy.yml` rejects every other head branch and all forks.
-3. Merge the PR. CI re-runs promotion evidence, derives the bare stable tag
+3. Merge the PR with a merge commit (not squash/rebase). CI requires the exact
+   reviewed `next` head as an ancestor, re-runs promotion evidence, derives the bare stable tag
    from the reviewed beta manifest, tags the exact merge commit with the
    built-in repository token, and publishes the PR body as the GitHub Release.
    CI does not commit or push to either protected branch.
 4. Verify the workflow, tag, GitHub Release, and that the peeled tag equals the
-   merged `main` commit. A re-run accepts an existing tag only when it already
+   merged `main` commit. The next release gate treats that immutable tag as the
+   published stable version while `main` retains its reviewed candidate
+   identifier. A re-run accepts an existing tag only when it already
    points to that exact merge commit, then creates a missing Release if needed.
 
 There is no operator release branch, App credential, environment gate, or

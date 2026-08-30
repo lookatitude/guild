@@ -27,15 +27,17 @@ pull request from exact `next` to `main`. No release branch is used.
 | Candidate branch | `next` with exact `MAJOR.MINOR.PATCH-beta.N` manifest |
 | Promotion | Same-repository exact `next -> main` PR |
 | Stable identity | CI-derived `vMAJOR.MINOR.PATCH` tag and GitHub Release |
-| Release bytes | Exact reviewed merge commit; its tree equals the PR head tree |
-| Release write | Built-in `GITHUB_TOKEN` with `contents: write`, tag and Release only |
+| Release bytes | Exact reviewed merge commit; the `next` head is its ancestor and their trees are equal |
+| Granted token scope | Release job only: built-in `GITHUB_TOKEN` with `contents: write`; checkout does not persist it |
+| Workflow writes | Immutable stable tag and GitHub Release only |
 | Protected refs | CI never commits or pushes to `main` or `next` |
 
 The stable tag and GitHub Release are authoritative for the bare stable
 version. The tagged manifest intentionally retains the reviewed beta candidate
 identifier as provenance in this short path. A dedicated release App and a
 generated bare-version metadata commit are deferred hardening, not a current
-release prerequisite.
+release prerequisite. The next promotion binds the retained candidate version
+on `main` to the corresponding published stable tag before comparing versions.
 
 ## Rules
 
@@ -43,15 +45,18 @@ release prerequisite.
 2. `main` accepts only a same-repository PR whose exact head ref is `next`.
 3. The promotion PR must pass `branch-policy`, including the hash-bound release
    promotion evidence gate and generated-manifest consistency check.
-4. The release workflow re-runs the promotion gate after merge and verifies
-   that the merge tree equals the exact reviewed `next` head tree.
+4. Merge the release PR with a merge commit. The release workflow re-runs the
+   promotion gate, requires the reviewed `next` head to be an ancestor of that
+   merge, and verifies that both trees are equal. Squash/rebase release merges
+   fail closed because they discard the ancestry needed by the channel gate.
 5. CI derives the bare tag only from exact `X.Y.Z-beta.N` in the reviewed
    manifest. Branch names, labels, PR titles, and operator input never choose
    the version.
 6. The tag points to the reviewed merge commit. CI does not create another
    commit and does not rewrite either protected branch.
 7. Release notes are the curated `next -> main` PR body. CI appends a compare
-   link when the body does not already contain one.
+   link when the body does not already contain one. The short path does not
+   generate or commit a new stable section in `CHANGELOG.md`.
 8. Re-runs are idempotent: an existing tag is accepted only if it peels to the
    exact merge commit; a missing GitHub Release may then be created.
 9. User-facing changes do not release until the website references and
@@ -82,7 +87,8 @@ release prerequisite.
      --title "release: vX.Y.Z" --body-file /path/to/notes.md
    ```
 
-4. Wait for every required check, then merge. The
+4. Wait for every required check, then merge with a merge commit (`gh pr merge
+   --merge`). The
    `Publish stable release after next merges to main` workflow re-verifies the
    evidence, derives the stable tag, tags the merge, and publishes the Release.
 
@@ -93,13 +99,16 @@ release prerequisite.
    tag_sha="$(git rev-list -n 1 vX.Y.Z)"
    test "$(git rev-parse origin/main)" = "$tag_sha"
    gh release view vX.Y.Z
+   npm --prefix scripts run check:channel-integrity -- \
+     --stable origin/main --beta origin/next
    ```
 
 ## Failure and recovery
 
 - A non-`next` PR, fork PR, malformed beta version, missing evidence, failed
-  conformance decision, tree mismatch, or non-advancing version stops before
-  tag creation.
+  conformance decision, squash/rebase merge, tree mismatch, missing or
+  mismatched prior stable tag, or non-advancing version stops before tag
+  creation.
 - A tag collision fails unless the existing tag already peels to the exact
   reviewed merge commit.
 - If tag creation succeeds but GitHub Release creation fails, re-run the same

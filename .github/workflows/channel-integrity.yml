@@ -34,7 +34,9 @@ on:
     types: [opened, reopened, synchronize, edited]
     branches: [next]
   push:
-    branches: [main, next]
+    # `main` publication is verified inside release.yml after its stable tag is
+    # present, avoiding a race between the merge push and tag creation.
+    branches: [next]
   schedule:
     # 07:00 UTC daily — a stale beta channel is a "notice within a day" problem,
     # not a "notice within a minute" one.

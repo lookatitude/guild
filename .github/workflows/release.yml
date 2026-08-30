@@ -10,9 +10,6 @@ on:
     types: [closed]
     branches: [main]
 
-permissions:
-  contents: write
-
 concurrency:
   group: stable-release
   cancel-in-progress: false
@@ -24,12 +21,15 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'next'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout the reviewed merge commit
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node 24
         uses: actions/setup-node@v7
@@ -47,6 +47,8 @@ jobs:
           set -euo pipefail
           git fetch origin main next --tags --force
           test "$(git rev-parse "$MERGE_SHA^{tree}")" = "$(git rev-parse "$PR_HEAD_SHA^{tree}")"
+          git merge-base --is-ancestor "$PR_HEAD_SHA" "$MERGE_SHA"
+          git merge-base --is-ancestor "$MERGE_SHA" origin/main
 
       - name: Re-verify hash-bound promotion evidence
         env:
@@ -78,7 +80,11 @@ jobs:
         run: |
           set -euo pipefail
           if git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" >/dev/null; then
-            test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$MERGE_SHA"
+            TAG_SHA="$(git rev-parse "refs/tags/$TAG^{commit}")"
+            if [ "$TAG_SHA" != "$MERGE_SHA" ]; then
+              echo "::error::Immutable $TAG points to $TAG_SHA, expected reviewed merge $MERGE_SHA."
+              exit 1
+            fi
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
@@ -92,6 +98,7 @@ jobs:
       - name: Tag the reviewed merge commit
         if: steps.existing.outputs.tag_exists == 'false'
         env:
+          GH_TOKEN: ${{ github.token }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -100,7 +107,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" "$MERGE_SHA" -m "$PR_TITLE"
-          git push origin "refs/tags/$TAG"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$TAG"
+
+      - name: Verify published channel state
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch origin main next "refs/tags/$TAG:refs/tags/$TAG" --force
+          npm --prefix scripts run check:channel-integrity -- \
+            --stable origin/main \
+            --beta origin/next
 
       - name: Decide whether this version may become Latest
         if: steps.existing.outputs.release_exists == 'false'

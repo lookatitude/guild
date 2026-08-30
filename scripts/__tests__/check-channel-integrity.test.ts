@@ -72,14 +72,39 @@ describe("check-channel-integrity", () => {
       expect(r.reason).toMatch(/ahead of stable/);
     });
 
-    it("PASSES the short-path release state when both refs carry the exact reviewed beta version", () => {
+    it("PASSES the short-path release state when both refs carry the exact reviewed beta version on the same commit", () => {
       const r = checkChannelIntegrity(
         "origin/main",
         "origin/next",
-        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" })
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" }),
+        () => "release-commit"
       );
       expect(r.ok).toBe(true);
       expect(r.reason).toMatch(/reviewed release candidate/);
+    });
+
+    it("PASSES the normal beta advance after a short-path release", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.8.0-beta.1" }),
+        (ref) => ({ "origin/main": "release-commit", "origin/next": "beta-commit", "refs/tags/v2.7.0": "release-commit" })[ref] ?? ref,
+        (ancestor, descendant) => ancestor === "release-commit" && descendant === "beta-commit"
+      );
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/ahead of published stable/);
+    });
+
+    it("FAILS when a shared candidate version hides a beta commit outside main ancestry", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" }),
+        (ref) => ({ "origin/main": "release-commit", "origin/next": "older-diverged-commit", "refs/tags/v2.7.0": "release-commit" })[ref] ?? ref,
+        () => false
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/not descended from stable/);
     });
 
     it("FAILS when different commits report the same bare version", () => {

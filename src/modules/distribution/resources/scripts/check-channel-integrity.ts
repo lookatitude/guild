@@ -18,11 +18,10 @@
  *
  * WHAT IT CHECKS.
  * Reads `.claude-plugin/plugin.json`'s `version` from both channel refs and
- * fails when next < main. It also accepts the short-path post-release state
- * where both refs carry the exact same reviewed `X.Y.Z-beta.N` candidate and
- * the bare stable identity lives in the tag. Version, not commit identity, is deliberate: `next`
- * legitimately carries commits `main` lacks (that is what an integration branch
- * IS), so "next is behind main" can only be judged on the released version.
+ * fails when next < main. In the short path, `main` retains the reviewed
+ * `X.Y.Z-beta.N` candidate while the bare identity lives in `vX.Y.Z`; the gate
+ * therefore binds that tag to main and proves next contains main's exact
+ * release tree at their merge base before accepting later beta development.
  *
  * PRERELEASE HANDLING — full SemVer §11 precedence, NOT a bare triple compare.
  * A naive "ignore the suffix" comparison produces a FALSE PASS on exactly the
@@ -41,8 +40,8 @@
  *
  * NOT A WRITE-AUTHORITY CHECK. This gate observes channel versions; branch
  * protection and the release workflow constrain writes. This mode answers
- * exactly one question: is beta behind stable or outside the exact shared
- * candidate exception?
+ * exactly one question: is beta behind the published stable release or missing
+ * the release-tree binding that makes the short-path exception safe?
  *
  * Usage:
  *   npx tsx scripts/check-channel-integrity.ts [--stable <ref>] [--beta <ref>] [--json]
@@ -282,11 +281,34 @@ function gitResolveRef(ref: string): string {
   }).trim();
 }
 
+function gitBetaContainsStableTree(stableCommit: string, betaCommit: string): boolean {
+  if (stableCommit === betaCommit) return true;
+  try {
+    const mergeBase = execFileSync("git", ["merge-base", stableCommit, betaCommit], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    const stableTree = execFileSync("git", ["rev-parse", "--verify", `${stableCommit}^{tree}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    const mergeBaseTree = execFileSync("git", ["rev-parse", "--verify", `${mergeBase}^{tree}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    return stableTree === mergeBaseTree;
+  } catch {
+    return false;
+  }
+}
+
 export function checkChannelIntegrity(
   stableRef: string,
   betaRef: string,
   read: (r: string) => string = gitShowManifest,
-  resolveRef: (r: string) => string = read === gitShowManifest ? gitResolveRef : (r) => r
+  resolveRef: (r: string) => string = read === gitShowManifest ? gitResolveRef : (r) => r,
+  betaContainsStableTree: (stableCommit: string, betaCommit: string) => boolean =
+    read === gitShowManifest ? gitBetaContainsStableTree : (stableCommit, betaCommit) => stableCommit === betaCommit
 ): IntegrityResult {
   const sv = versionAtRef(stableRef, read);
   const bv = versionAtRef(betaRef, read);
@@ -297,17 +319,54 @@ export function checkChannelIntegrity(
   const cmp = compareVersions(bp, sp);
   const coreCmp = compareVersions({ ...bp, prerelease: [] }, { ...sp, prerelease: [] });
 
-  // Short-path stable releases tag the reviewed next -> main merge without
-  // rewriting either protected branch. Both refs therefore retain the exact
-  // beta candidate identity even though the bare stable identity lives in the
-  // immutable tag and GitHub Release. Exact equality is the only prerelease
-  // shape accepted on main; any mismatch still fails below.
-  if (sv === bv && BETA_CHANNEL_VERSION.test(sv)) {
+  // In the short path, main retains the reviewed beta identifier and the
+  // immutable vX.Y.Z tag is the stable identity. Bind that exception to the
+  // tag at main AND prove next still contains the exact stable tree at its
+  // merge base. That keeps later beta development valid without allowing a
+  // reset to older bytes to hide behind a reused candidate version.
+  if (BETA_CHANNEL_VERSION.test(sv)) {
+    const publishedVersion = sp.core.join(".");
+    const stableTag = `refs/tags/v${publishedVersion}`;
+    let taggedCommit: string;
+    try {
+      taggedCommit = resolveRef(stableTag);
+    } catch {
+      return { stable, beta, ok: false, reason: `stable candidate ${sv} has no published ${stableTag} tag.` };
+    }
+    if (taggedCommit !== stable.commit) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `${stableTag} resolves to ${taggedCommit}, not stable commit ${stable.commit}.`,
+      };
+    }
+    if (!BETA_CHANNEL_VERSION.test(bv)) {
+      return { stable, beta, ok: false, reason: `next must use MAJOR.MINOR.PATCH-beta.N after a short-path release; found ${bv}.` };
+    }
+    if (!betaContainsStableTree(stable.commit, beta.commit)) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `beta commit ${beta.commit} is not descended from stable release content ${stable.commit}.`,
+      };
+    }
+    if (coreCmp < 0 || (coreCmp === 0 && cmp < 0)) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `beta channel (${betaRef}) is at ${bv} while published stable v${publishedVersion} came from ${sv} — beta users are running OLDER code than stable.`,
+      };
+    }
     return {
       stable,
       beta,
       ok: true,
-      reason: `both channels carry reviewed release candidate ${sv}; the stable identity is the CI-derived tag.`,
+      reason: sv === bv
+        ? `both channels carry reviewed release candidate ${sv}; published stable v${publishedVersion} is bound to main and next contains the same release tree.`
+        : `beta (${bv}) is ahead of published stable v${publishedVersion} and contains the exact stable release tree.`,
     };
   }
 
@@ -536,20 +595,41 @@ export function checkStablePromotion(
     return refusePromotion("stable_manifest_missing", `${MANIFEST_PATH} is absent at ${stableRef}.`);
   }
   const stableManifest = parseJsonRecord(stableManifestBytes);
-  if (
-    stableManifest === null ||
-    typeof stableManifest.version !== "string" ||
-    !BARE_CHANNEL_VERSION.test(stableManifest.version)
-  ) {
+  if (stableManifest === null || typeof stableManifest.version !== "string") {
     return refusePromotion(
       "stable_manifest_malformed",
-      `${MANIFEST_PATH} at ${stableRef} must carry exact stable MAJOR.MINOR.PATCH.`
+      `${MANIFEST_PATH} at ${stableRef} has no usable version field.`
     );
   }
-  if (compareVersions(parseVersion(version), parseVersion(stableManifest.version)) <= 0) {
+  let publishedStableVersion: string;
+  if (BARE_CHANNEL_VERSION.test(stableManifest.version)) {
+    publishedStableVersion = stableManifest.version;
+  } else if (BETA_CHANNEL_VERSION.test(stableManifest.version)) {
+    publishedStableVersion = parseVersion(stableManifest.version).core.join(".");
+    const stableTag = `refs/tags/v${publishedStableVersion}`;
+    const taggedStableSha = git.resolveCommit(stableTag);
+    if (taggedStableSha === null) {
+      return refusePromotion(
+        "stable_tag_missing",
+        `${MANIFEST_PATH} at ${stableRef} retains ${stableManifest.version}, but published stable tag ${stableTag} is absent.`
+      );
+    }
+    if (taggedStableSha !== stableSha) {
+      return refusePromotion(
+        "stable_tag_mismatch",
+        `published stable tag ${stableTag} resolves to ${taggedStableSha}, not ${stableSha} at ${stableRef}.`
+      );
+    }
+  } else {
+    return refusePromotion(
+      "stable_manifest_malformed",
+      `${MANIFEST_PATH} at ${stableRef} must carry exact MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-beta.N bound to its stable tag.`
+    );
+  }
+  if (compareVersions(parseVersion(version), parseVersion(publishedStableVersion)) <= 0) {
     return refusePromotion(
       "stable_version_not_advanced",
-      `derived stable version ${version} must be strictly newer than ${stableManifest.version} at ${stableRef}.`
+      `derived stable version ${version} must be strictly newer than published stable ${publishedStableVersion} at ${stableRef}.`
     );
   }
 
