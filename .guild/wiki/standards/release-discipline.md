@@ -27,7 +27,7 @@ pull request from exact `next` to `main`. No release branch is used.
 | Candidate branch | `next` with exact `MAJOR.MINOR.PATCH-beta.N` manifest |
 | Promotion | Same-repository exact `next -> main` PR |
 | Stable identity | CI-derived `vMAJOR.MINOR.PATCH` tag and GitHub Release |
-| Release bytes | Exact reviewed merge commit; the `next` head is its ancestor and their trees are equal |
+| Release bytes | Exact reviewed merged commit; its tree equals the PR head tree |
 | Granted token scope | Release job only: built-in `GITHUB_TOKEN` with `contents: write`; checkout does not persist it |
 | Workflow writes | Immutable stable tag and GitHub Release only |
 | Protected refs | CI never commits or pushes to `main` or `next` |
@@ -38,6 +38,9 @@ identifier as provenance in this short path. A dedicated release App and a
 generated bare-version metadata commit are deferred hardening, not a current
 release prerequisite. The next promotion binds the retained candidate version
 on `main` to the corresponding published stable tag before comparing versions.
+Stable update detection compares the installed commit with remote `main`; it
+uses tag/version comparison only for legacy receipts without a commit, so the
+candidate label and its bare tag cannot create a permanent false update.
 
 ## Rules
 
@@ -45,10 +48,10 @@ on `main` to the corresponding published stable tag before comparing versions.
 2. `main` accepts only a same-repository PR whose exact head ref is `next`.
 3. The promotion PR must pass `branch-policy`, including the hash-bound release
    promotion evidence gate and generated-manifest consistency check.
-4. Merge the release PR with a merge commit. The release workflow re-runs the
-   promotion gate, requires the reviewed `next` head to be an ancestor of that
-   merge, and verifies that both trees are equal. Squash/rebase release merges
-   fail closed because they discard the ancestry needed by the channel gate.
+4. The release workflow re-runs the promotion gate and verifies that the merged
+   commit tree equals the exact reviewed `next` head tree. Merge, squash, and
+   rebase PR methods are valid because later channel checks search `next`
+   history for that exact released tree rather than depending on merge topology.
 5. CI derives the bare tag only from exact `X.Y.Z-beta.N` in the reviewed
    manifest. Branch names, labels, PR titles, and operator input never choose
    the version.
@@ -87,8 +90,7 @@ on `main` to the corresponding published stable tag before comparing versions.
      --title "release: vX.Y.Z" --body-file /path/to/notes.md
    ```
 
-4. Wait for every required check, then merge with a merge commit (`gh pr merge
-   --merge`). The
+4. Wait for every required check, then merge the PR. The
    `Publish stable release after next merges to main` workflow re-verifies the
    evidence, derives the stable tag, tags the merge, and publishes the Release.
 
@@ -106,8 +108,8 @@ on `main` to the corresponding published stable tag before comparing versions.
 ## Failure and recovery
 
 - A non-`next` PR, fork PR, malformed beta version, missing evidence, failed
-  conformance decision, squash/rebase merge, tree mismatch, missing or
-  mismatched prior stable tag, or non-advancing version stops before tag
+  conformance decision, tree mismatch, missing or mismatched prior stable tag,
+  or non-advancing version stops before tag
   creation.
 - A tag collision fails unless the existing tag already peels to the exact
   reviewed merge commit.

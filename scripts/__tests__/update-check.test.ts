@@ -279,6 +279,23 @@ describe("computeSignal — per-channel staleness", () => {
     expect(renderSignalLine(sig)).toBeNull();
   });
 
+  it("stable short path: matching main commit suppresses the candidate-to-bare false update", () => {
+    const sig = computeSignal({
+      state: { ...stableState, version: "2.7.0-beta.20", commit: SHA_A },
+      cache: cacheWith({ latest_tag: "v2.7.0", main_head_sha: SHA_A }),
+    });
+    expect(sig).toMatchObject({ update_available: false, reason: "up-to-date" });
+    expect(renderSignalLine(sig)).toBeNull();
+  });
+
+  it("stable short path: a different main commit signals an update even when the manifest label is unchanged", () => {
+    const sig = computeSignal({
+      state: { ...stableState, version: "2.7.0-beta.20", commit: SHA_A },
+      cache: cacheWith({ latest_tag: "v2.7.0", main_head_sha: SHA_B }),
+    });
+    expect(sig).toMatchObject({ update_available: true, reason: "stable-new-commit", available: "2.7.0" });
+  });
+
   it("beta: differing next head SHA → update (SHA labels, wrapper command honored)", () => {
     const sig = computeSignal({
       state: betaState,

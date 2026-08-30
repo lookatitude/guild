@@ -437,6 +437,7 @@ export interface UpdateSignal {
     | "no-cache"
     | "up-to-date"
     | "stable-newer-tag"
+    | "stable-new-commit"
     | "beta-new-commit";
 }
 
@@ -498,6 +499,24 @@ export function computeSignal(opts: {
 
   // stable
   const latest = cache.remote.latest_tag;
+  const remoteSha = cache.remote.main_head_sha;
+  if (remoteSha && state.commit) {
+    if (remoteSha !== state.commit) {
+      return {
+        ...base,
+        update_available: true,
+        available: latest ? latest.replace(/^v/, "") : short(remoteSha),
+        command,
+        reason: "stable-new-commit",
+      };
+    }
+    // Stable installations are branch-backed. When the installed commit is
+    // already origin/main, a candidate-valued manifest plus its bare stable
+    // tag describes the SAME bytes and must not produce a permanent false
+    // update. The tag comparison below remains the fallback for legacy
+    // receipts that do not record an installed commit.
+    return { ...base, update_available: false, reason: "up-to-date" };
+  }
   if (latest && state.version && semverLt(state.version, latest)) {
     return {
       ...base,

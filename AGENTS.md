@@ -205,8 +205,9 @@ Release workflow (operator-driven, when `next` is ready):
    reconciled `docs/v2`, and a curated PR body suitable as release notes.
 2. Open the release PR from the repository's exact `next` branch to `main`.
    `branch-policy.yml` rejects every other head branch and all forks.
-3. Merge the PR with a merge commit (not squash/rebase). CI requires the exact
-   reviewed `next` head as an ancestor, re-runs promotion evidence, derives the bare stable tag
+3. Merge the PR using the repository's normal merge, squash, or rebase method.
+   CI requires the merged tree to equal the exact reviewed `next` tree, re-runs
+   promotion evidence, derives the bare stable tag
    from the reviewed beta manifest, tags the exact merge commit with the
    built-in repository token, and publishes the PR body as the GitHub Release.
    CI does not commit or push to either protected branch.

@@ -32788,12 +32788,12 @@ function computeSignal(opts) {
   const rowCaps = updateCapsForHost(opts.hostId);
   const command = opts.hostId !== void 0 ? rowCaps ? rowCaps.command : null : opts.hostKind === "wrapper" ? "guild-run update" : opts.hostKind === "agents-file" ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update" : "claude plugin marketplace update guild && claude plugin update guild@guild";
   if (state.channel === "beta") {
-    const remoteSha = cache.remote.next_head_sha;
-    if (remoteSha && state.commit && remoteSha !== state.commit) {
+    const remoteSha2 = cache.remote.next_head_sha;
+    if (remoteSha2 && state.commit && remoteSha2 !== state.commit) {
       return {
         ...base,
         update_available: true,
-        available: short(remoteSha),
+        available: short(remoteSha2),
         command,
         reason: "beta-new-commit"
       };
@@ -32801,6 +32801,19 @@ function computeSignal(opts) {
     return { ...base, update_available: false, reason: "up-to-date" };
   }
   const latest = cache.remote.latest_tag;
+  const remoteSha = cache.remote.main_head_sha;
+  if (remoteSha && state.commit) {
+    if (remoteSha !== state.commit) {
+      return {
+        ...base,
+        update_available: true,
+        available: latest ? latest.replace(/^v/, "") : short(remoteSha),
+        command,
+        reason: "stable-new-commit"
+      };
+    }
+    return { ...base, update_available: false, reason: "up-to-date" };
+  }
   if (latest && state.version && semverLt(state.version, latest)) {
     return {
       ...base,

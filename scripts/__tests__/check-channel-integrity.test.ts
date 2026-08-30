@@ -83,6 +83,18 @@ describe("check-channel-integrity", () => {
       expect(r.reason).toMatch(/reviewed release candidate/);
     });
 
+    it("PASSES the real post-release state with distinct commits and the exact stable tree in next history", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" }),
+        (ref) => ({ "origin/main": "release-merge", "origin/next": "reviewed-next-head", "refs/tags/v2.7.0": "release-merge" })[ref] ?? ref,
+        () => true
+      );
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/same release tree/);
+    });
+
     it("PASSES the normal beta advance after a short-path release", () => {
       const r = checkChannelIntegrity(
         "origin/main",
@@ -104,7 +116,7 @@ describe("check-channel-integrity", () => {
         () => false
       );
       expect(r.ok).toBe(false);
-      expect(r.reason).toMatch(/not descended from stable/);
+      expect(r.reason).toMatch(/does not contain the exact stable release tree/);
     });
 
     it("FAILS when different commits report the same bare version", () => {

@@ -20,8 +20,8 @@
  * Reads `.claude-plugin/plugin.json`'s `version` from both channel refs and
  * fails when next < main. In the short path, `main` retains the reviewed
  * `X.Y.Z-beta.N` candidate while the bare identity lives in `vX.Y.Z`; the gate
- * therefore binds that tag to main and proves next contains main's exact
- * release tree at their merge base before accepting later beta development.
+ * therefore binds that tag to main and proves next history contains main's
+ * exact release tree before accepting later beta development.
  *
  * PRERELEASE HANDLING — full SemVer §11 precedence, NOT a bare triple compare.
  * A naive "ignore the suffix" comparison produces a FALSE PASS on exactly the
@@ -282,21 +282,18 @@ function gitResolveRef(ref: string): string {
 }
 
 function gitBetaContainsStableTree(stableCommit: string, betaCommit: string): boolean {
-  if (stableCommit === betaCommit) return true;
   try {
-    const mergeBase = execFileSync("git", ["merge-base", stableCommit, betaCommit], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
     const stableTree = execFileSync("git", ["rev-parse", "--verify", `${stableCommit}^{tree}`], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-    const mergeBaseTree = execFileSync("git", ["rev-parse", "--verify", `${mergeBase}^{tree}`], {
+    const betaHistoryTrees = execFileSync("git", ["log", "--format=%T", betaCommit], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-    return stableTree === mergeBaseTree;
+    })
+      .split("\n")
+      .filter(Boolean);
+    return betaHistoryTrees.includes(stableTree);
   } catch {
     return false;
   }
@@ -321,8 +318,8 @@ export function checkChannelIntegrity(
 
   // In the short path, main retains the reviewed beta identifier and the
   // immutable vX.Y.Z tag is the stable identity. Bind that exception to the
-  // tag at main AND prove next still contains the exact stable tree at its
-  // merge base. That keeps later beta development valid without allowing a
+  // tag at main AND prove next history still contains the exact stable tree.
+  // That supports merge, squash, and rebase PR merges while preventing a
   // reset to older bytes to hide behind a reused candidate version.
   if (BETA_CHANNEL_VERSION.test(sv)) {
     const publishedVersion = sp.core.join(".");
@@ -349,7 +346,7 @@ export function checkChannelIntegrity(
         stable,
         beta,
         ok: false,
-        reason: `beta commit ${beta.commit} is not descended from stable release content ${stable.commit}.`,
+        reason: `beta history at ${beta.commit} does not contain the exact stable release tree from ${stable.commit}.`,
       };
     }
     if (coreCmp < 0 || (coreCmp === 0 && cmp < 0)) {
@@ -366,7 +363,7 @@ export function checkChannelIntegrity(
       ok: true,
       reason: sv === bv
         ? `both channels carry reviewed release candidate ${sv}; published stable v${publishedVersion} is bound to main and next contains the same release tree.`
-        : `beta (${bv}) is ahead of published stable v${publishedVersion} and contains the exact stable release tree.`,
+        : `beta (${bv}) is ahead of published stable v${publishedVersion} and its history contains the exact stable release tree.`,
     };
   }
 

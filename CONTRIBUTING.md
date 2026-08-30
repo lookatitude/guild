@@ -170,7 +170,9 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
 - CI does not rewrite `main` or `next`, and contributors do not hand-edit
   generated manifests for the release. A dedicated App and generated
   bare-version metadata convergence are deferred hardening, not release
-  prerequisites.
+  prerequisites. Stable update detection compares the installed commit with
+  remote `main`, so the retained candidate label does not produce a false
+  candidate-to-bare update prompt.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues

@@ -41,11 +41,15 @@ beta manifest and never rewrites either protected branch.
 - A stable release needs one same-repository `next -> main` PR.
 - The stable tag and GitHub Release are authoritative for the bare release
   version; the tagged manifest retains the reviewed beta provenance.
-- Release PRs use merge commits so the published merge tree remains bound to
-  the exact `next` head and later beta descendants. The next promotion binds
-  the candidate-valued `main` manifest to its corresponding immutable stable
-  tag before enforcing monotonic version advance.
+- The publisher verifies the merged tree equals the exact `next` head, so
+  merge, squash, and rebase PR methods remain valid. Later channel checks prove
+  that exact stable tree remains in `next` history. The next promotion binds the
+  candidate-valued `main` manifest to its corresponding immutable stable tag
+  before enforcing monotonic version advance.
 - The short path uses the PR body for GitHub Release notes and does not add a
   generated stable section to `CHANGELOG.md`.
+- Stable update detection uses installed-versus-remote `main` commit identity;
+  tag/version comparison remains only as a legacy fallback when no installed
+  commit is available.
 - App-backed bare-version metadata convergence remains a non-blocking follow-up.
 - A published tag is immutable; recovery rolls forward and never retags bytes.

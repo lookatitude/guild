@@ -671,6 +671,13 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
     expect(result.code).toBe("stable_tag_missing");
   });
 
+  it("refuses a prerelease-valued main when its corresponding stable tag names another commit", () => {
+    const repo = standardRepo({ stableVersion: "2.1.0-beta.20" });
+    repo.refs["refs/tags/v2.1.0"] = HEAD_SHA;
+    const result = check(repo);
+    expect(result.code).toBe("stable_tag_mismatch");
+  });
+
   it("refuses an unknown source commit", () => {
     const repo = standardRepo();
     delete repo.refs[SOURCE_COMMIT];
@@ -895,7 +902,7 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(workflow).toMatch(/git push "https:\/\/x-access-token:\$\{GH_TOKEN\}@github\.com\/\$\{GITHUB_REPOSITORY\}\.git" "refs\/tags\/\$TAG"/);
     expect(workflow).not.toMatch(/refs\/heads\/(main|next)/);
     expect(raw).toMatch(/github\.event\.pull_request\.head\.sha/);
-    expect(workflow).toMatch(/merge-base --is-ancestor "\$PR_HEAD_SHA" "\$MERGE_SHA"/);
+    expect(workflow).not.toMatch(/merge-base --is-ancestor "\$PR_HEAD_SHA" "\$MERGE_SHA"/);
     expect(workflow).toMatch(/merge-base --is-ancestor "\$MERGE_SHA" origin\/main/);
     expect(workflow).toMatch(/run check:channel-integrity/);
     expect(workflow).not.toMatch(/git commit(-tree)?/);
