@@ -5,7 +5,8 @@ name: branch-policy
 #   main = STABLE channel. Marketplace installs track it (default branch), so
 #          every merge to main ships to stable users immediately. Therefore
 #          main only receives a same-repository PR from exact `next`.
-#          release.yml then creates stable metadata, tags, and publishes.
+#          release.yml derives the stable tag from the reviewed beta manifest,
+#          tags the merge commit, and publishes.
 #   next = BETA / integration channel. ALL feature/fix PRs target next
 #          (`gh pr create --base next`). Beta users follow it via
 #          `claude plugin marketplace add lookatitude/guild@next`.

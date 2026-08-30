@@ -1,5 +1,8 @@
 # Guild Wiki Log
 
+## [2026-08-30] decided defer-release-app-for-short-path
+- decided defer-release-app-for-short-path (single `next -> main` PR remains the release path; CI tags the reviewed merge with the built-in token; dedicated App hardening is deferred)
+
 ## 2026-07-25
 - decided docs-v2-reconciliation-verifies-shipped-code (v23x-deferred-followups close; D8 docs leg reconciles to merged code, not brief intent — 3 of ~10 callouts needed partial flips)
 - reflected run-305333a3 (v23x-deferred-followups: closed the run-37739fa5 followup_backlog; predecessor's 3 execute-plan/codex-review proposals landed and held; 4 re-deferrals filed as #91–#94)

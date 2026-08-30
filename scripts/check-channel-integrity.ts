@@ -2,13 +2,11 @@
 /**
  * scripts/check-channel-integrity.ts
  *
- * CHANNEL-INTEGRITY GATE — release-discipline channel convergence, mechanized.
+ * CHANNEL-INTEGRITY GATE — release-discipline channel ordering, mechanized.
  * (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
  *
  * THE RULE IT ENFORCES.
- * After a stable promotion, the protected release job must leave `main` and
- * `next` at the same release point. Branches ARE
- * distribution channels — `main` = stable, `next` = beta — so a `next` whose
+ * Branches ARE distribution channels — `main` = stable, `next` = beta — so a `next` whose
  * version trails `main`'s means BETA USERS ARE RUNNING OLDER CODE THAN STABLE.
  * That inverts the whole point of a beta channel and is invisible without a
  * check: every per-PR gate stays green while the channel silently rots.
@@ -20,7 +18,9 @@
  *
  * WHAT IT CHECKS.
  * Reads `.claude-plugin/plugin.json`'s `version` from both channel refs and
- * fails when next < main. Version, not commit identity, is deliberate: `next`
+ * fails when next < main. It also accepts the short-path post-release state
+ * where both refs carry the exact same reviewed `X.Y.Z-beta.N` candidate and
+ * the bare stable identity lives in the tag. Version, not commit identity, is deliberate: `next`
  * legitimately carries commits `main` lacks (that is what an integration branch
  * IS), so "next is behind main" can only be judged on the released version.
  *
@@ -34,14 +34,15 @@
  * still correctly ahead of `main` at `2.3.2`.
  *
  * DETECTION, NOT PREVENTION — stated plainly so nobody over-trusts this mode.
- * The protected release workflow now owns prevention: it verifies promotion,
- * creates the stable metadata commit, and atomically advances main/next/tag.
- * This ordinary channel mode detects debt left by an interrupted or manually
+ * The release workflow owns prevention: it verifies promotion and tags the
+ * exact reviewed merge without rewriting either protected branch. This
+ * ordinary channel mode detects debt left by an interrupted or manually
  * altered channel; it is not the publication authority by itself.
  *
- * NOT A WRITE-AUTHORITY CHECK. This gate observes the final graph; branch
- * rulesets and the environment-scoped release App enforce who may create it.
- * This mode answers exactly one question: is beta behind stable?
+ * NOT A WRITE-AUTHORITY CHECK. This gate observes channel versions; branch
+ * protection and the release workflow constrain writes. This mode answers
+ * exactly one question: is beta behind stable or outside the exact shared
+ * candidate exception?
  *
  * Usage:
  *   npx tsx scripts/check-channel-integrity.ts [--stable <ref>] [--beta <ref>] [--json]
@@ -53,7 +54,7 @@
  *
  * PROMOTION MODE — the direct next-to-main invariant (FIC-91 / REL-P0, FIC-74 §0/B1+B5).
  * The gate governs the exact same-repository `next -> main` promotion before
- * CI creates a metadata-only stable commit. `checkStablePromotion` validates
+ * CI tags the reviewed merge commit. `checkStablePromotion` validates
  * hash-bound `guild.release_promotion.v1` /
  * `guild.release_conformance.v1` evidence, a production-evaluator RE-RUN over
  * the transported evidence+authority, one source-commit binding, ancestry, and
@@ -296,6 +297,20 @@ export function checkChannelIntegrity(
   const cmp = compareVersions(bp, sp);
   const coreCmp = compareVersions({ ...bp, prerelease: [] }, { ...sp, prerelease: [] });
 
+  // Short-path stable releases tag the reviewed next -> main merge without
+  // rewriting either protected branch. Both refs therefore retain the exact
+  // beta candidate identity even though the bare stable identity lives in the
+  // immutable tag and GitHub Release. Exact equality is the only prerelease
+  // shape accepted on main; any mismatch still fails below.
+  if (sv === bv && BETA_CHANNEL_VERSION.test(sv)) {
+    return {
+      stable,
+      beta,
+      ok: true,
+      reason: `both channels carry reviewed release candidate ${sv}; the stable identity is the CI-derived tag.`,
+    };
+  }
+
   if (!BARE_CHANNEL_VERSION.test(sv)) {
     return { stable, beta, ok: false, reason: `stable channel (${stableRef}) must use exact MAJOR.MINOR.PATCH; found ${sv}.` };
   }
@@ -362,9 +377,8 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   if (!result.ok) {
     process.stderr.write(`check-channel-integrity: GATE FAILURE — ${result.reason}\n`);
     process.stderr.write(
-      "\nFix — inspect and re-run the failed `Finalize stable release after next merges to main` workflow.\n" +
-        "  The environment-scoped release App owns the atomic main/next/tag transaction;\n" +
-        "  do not hand-push a sync-back or move the published tag. Follow the failure and\n" +
+      "\nFix — inspect and re-run the failed `Publish stable release after next merges to main` workflow.\n" +
+        "  Do not hand-push a sync-back or move the published tag. Follow the failure and\n" +
         "  re-run procedure in .guild/wiki/standards/release-discipline.md.\n"
     );
     return 2;

@@ -1,9 +1,9 @@
-name: Finalize stable release after next merges to main
+name: Publish stable release after next merges to main
 
 # The reviewed release unit is the exact same-repository `next -> main` PR.
-# After merge, this protected job re-runs the promotion gate, creates one
-# metadata-only stable commit, advances both channels to it atomically, tags
-# that commit, and publishes the GitHub Release. No release branch is used.
+# After merge, CI re-runs the promotion gate, derives the bare stable tag from
+# the reviewed beta manifest, tags that merge commit, and publishes the GitHub
+# Release. It does not create a release branch or rewrite protected branches.
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: stable-release
@@ -24,26 +24,12 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'next'
     runs-on: ubuntu-latest
-    environment: stable-release
     steps:
-      # GITHUB_TOKEN remains read-only. This environment-scoped App token is
-      # repository-scoped, short-lived, and requests only contents:write plus
-      # pull-requests:read for deterministic changelog lookups.
-      - name: Mint repository-scoped release App token
-        id: release-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: read
-
-      - name: Checkout main at the reviewed merge commit
+      - name: Checkout the reviewed merge commit
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
-          token: ${{ steps.release-token.outputs.token }}
 
       - name: Set up Node 24
         uses: actions/setup-node@v7
@@ -53,7 +39,7 @@ jobs:
       - name: Install scripts dependencies
         run: npm --prefix scripts ci --prefer-offline
 
-      - name: Fetch both protected channels and release tags
+      - name: Fetch protected channels and release tags
         env:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -86,11 +72,13 @@ jobs:
       - name: Check tag and release independently for idempotent re-runs
         id: existing
         env:
-          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
           if git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" >/dev/null; then
+            test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$MERGE_SHA"
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
@@ -101,114 +89,27 @@ jobs:
             echo "release_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # On the first execution, next must still be the exact reviewed head.
-      # After the atomic release push it intentionally points at the stable
-      # release commit, so re-runs skip this fresh-promotion freeze check and
-      # validate the existing tag/channel state instead.
-      - name: Require the reviewed next head to remain frozen
+      - name: Tag the reviewed merge commit
         if: steps.existing.outputs.tag_exists == 'false'
-        env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: test "$(git rev-parse origin/next)" = "$PR_HEAD_SHA"
-
-      - name: Validate an existing finalized release before resuming
-        if: steps.existing.outputs.tag_exists == 'true'
         env:
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          TAG: ${{ steps.version.outputs.tag }}
-          VERSION: ${{ steps.version.outputs.stable_version }}
-        run: |
-          set -euo pipefail
-          RELEASE_SHA="$(git rev-parse "refs/tags/$TAG^{commit}")"
-          MAIN_SHA="$(git rev-parse origin/main)"
-          NEXT_SHA="$(git rev-parse origin/next)"
-          test "$RELEASE_SHA" = "$MAIN_SHA"
-          git merge-base --is-ancestor "$RELEASE_SHA" "$NEXT_SHA"
-          git merge-base --is-ancestor "$MERGE_SHA" "$RELEASE_SHA"
-          git checkout --detach "$RELEASE_SHA"
-          npm --prefix scripts run finalize:stable-release -- verify \
-            --root .. \
-            --expected-version "$VERSION" \
-            --base "$MERGE_SHA" \
-            --head "$RELEASE_SHA"
-          test -z "$(git status --porcelain)"
-
-      - name: Prepare stable metadata from the beta manifest
-        if: steps.existing.outputs.tag_exists == 'false'
-        run: npm --prefix scripts run finalize:stable-release -- prepare --root ..
-
-      - name: Generate the stable changelog section
-        if: steps.existing.outputs.tag_exists == 'false'
-        env:
-          GH_TOKEN: ${{ steps.release-token.outputs.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: npm --prefix scripts run release:changelog -- --version "$TAG" --write
-
-      - name: Regenerate every tracked version-bearing surface
-        if: steps.existing.outputs.tag_exists == 'false'
-        run: npm --prefix scripts run sync:claude-install -- --root ..
-
-      - name: Create and verify the metadata-only stable commit
-        if: steps.existing.outputs.tag_exists == 'false'
-        env:
-          APP_SLUG: ${{ steps.release-token.outputs.app-slug }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          TAG: ${{ steps.version.outputs.tag }}
-          VERSION: ${{ steps.version.outputs.stable_version }}
-        run: |
-          set -euo pipefail
-          npm --prefix scripts run check:claude-install -- --root ..
-          npm --prefix scripts run check:inventory -- --root ..
-          git config user.name "${APP_SLUG}[bot]"
-          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
-          git add -- \
-            .claude-plugin/plugin.json \
-            .claude-plugin/marketplace.json \
-            .codex-plugin/plugin.json \
-            .guild-native-claude-package-identity.json \
-            CHANGELOG.md \
-            guild.inventory.json
-          git commit -m "chore(release): finalize $TAG"
-          RELEASE_SHA="$(git rev-parse HEAD)"
-          if ! git merge-base --is-ancestor "$PR_HEAD_SHA" "$RELEASE_SHA"; then
-            RELEASE_TREE="$(git rev-parse "$RELEASE_SHA^{tree}")"
-            RELEASE_SHA="$(printf '%s\n' "chore(release): preserve next ancestry for $TAG" | \
-              git commit-tree "$RELEASE_TREE" -p "$RELEASE_SHA" -p "$PR_HEAD_SHA")"
-            git checkout --detach "$RELEASE_SHA"
-          fi
-          npm --prefix scripts run finalize:stable-release -- verify \
-            --root .. \
-            --expected-version "$VERSION" \
-            --base "$MERGE_SHA" \
-            --head "$RELEASE_SHA"
-          test -z "$(git status --porcelain)"
-
-      - name: Atomically advance main and next and push the stable tag
-        if: steps.existing.outputs.tag_exists == 'false'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
           PR_TITLE: ${{ github.event.pull_request.title }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          RELEASE_SHA="$(git rev-parse HEAD)"
-          git tag -a "$TAG" "$RELEASE_SHA" -m "$PR_TITLE"
-          git push --atomic origin \
-            "$RELEASE_SHA:refs/heads/main" \
-            "$RELEASE_SHA:refs/heads/next" \
-            "refs/tags/$TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$MERGE_SHA" -m "$PR_TITLE"
+          git push origin "refs/tags/$TAG"
 
       - name: Decide whether this version may become Latest
         if: steps.existing.outputs.release_exists == 'false'
         id: release-order
         env:
-          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.stable_version }}
         run: |
           set -euo pipefail
-          # This repository already has stable releases. Fail closed on an API
-          # error rather than treating network/auth failure as "no releases"
-          # and accidentally allowing an older line to become Latest.
           CURRENT_TAG="$(gh release view --json tagName --jq .tagName)"
           npm --prefix scripts run finalize:stable-release -- latest \
             --root .. \
@@ -219,7 +120,7 @@ jobs:
       - name: Create the GitHub Release if it is missing
         if: steps.existing.outputs.release_exists == 'false'
         env:
-          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}

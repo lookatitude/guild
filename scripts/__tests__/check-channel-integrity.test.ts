@@ -72,6 +72,16 @@ describe("check-channel-integrity", () => {
       expect(r.reason).toMatch(/ahead of stable/);
     });
 
+    it("PASSES the short-path release state when both refs carry the exact reviewed beta version", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" })
+      );
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/reviewed release candidate/);
+    });
+
     it("FAILS when different commits report the same bare version", () => {
       const r = checkChannelIntegrity("s", "b", readerFor({ s: "2.6.0", b: "2.6.0" }));
       expect(r.ok).toBe(false);
