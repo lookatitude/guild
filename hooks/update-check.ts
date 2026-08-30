@@ -28,6 +28,7 @@ import {
   cachePath,
   computeSignal,
   readCache,
+  readNativeHostIdentity,
   refreshCache,
   renderSignalLine,
   resolveInstallState,
@@ -141,20 +142,26 @@ function main(): void {
   const hostKind: "claude" | "wrapper" | "agents-file" =
     caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
 
-  const state = resolveInstallState(pluginRoot);
+  const nativeIdentity = readNativeHostIdentity(hostId, pluginRoot);
+  const state = resolveInstallState(pluginRoot, { nativeIdentity });
   if (state.channel === "dev") return; // AC-5: dev installs are silent
+
+  const cacheFile = cachePath();
+  const cache = readCache(cacheFile);
 
   // RECEIPT MINTING for host-native installs (xhrd-wi-05 / G5). A `codex
   // plugin add` (or any host-native install path) runs no Guild code at
   // install time, so the package has no guild-install-receipt.json and
-  // `the receipt-consuming tools have nothing to read. The first
-  // session start IS the earliest Guild code that runs — mint the receipt
-  // here, PACKAGE-LOCAL ONLY:
+  // the receipt-consuming tools have nothing to read. The first session start
+  // IS the earliest Guild code that runs — mint a receipt here only when the
+  // channel is unambiguous, PACKAGE-LOCAL ONLY:
   //   - version from the package's own manifest (state.version — the per-host
   //     probe order landed in readInstalledVersion);
-  //   - channel/ref are derived from a canonical `-beta.N` package version;
-  //     otherwise resolveInstallState's stable/main default remains explicitly
-  //     marked as assumed. Commit is unknowable for a native install.
+  //   - Claude/Codex host registries are consulted before this fallback and
+  //     supply channel + commit without requiring `.git` in the package cache;
+  //   - when no host identity exists, a canonical `-beta.N` version is
+  //     ambiguous because short-path main and next can carry identical bytes;
+  //     do not mint a permanent channel-bearing receipt from that guess.
   //   - NEVER written to ~/.guild/receipts. The machine registry is the
   //     installer's ledger: a minted machine receipt would make
   //     `install.sh --update` re-render and RE-REGISTER the marketplace,
@@ -162,11 +169,12 @@ function main(): void {
   //     --update's contract for native installs is detect-and-advise, and this
   //     deliberately keeps it that way.
   // Fail-open: an unwritable package root (or an existing receipt) skips.
-  if (state.source === "default" && state.version) {
+  const versionDerivedBeta =
+    state.version !== null && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
+  if (state.source === "default" && state.version && !versionDerivedBeta) {
     try {
       const receiptPath = path.join(pluginRoot, RECEIPT_BASENAME);
-      const versionDerivedBeta = /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
-      const receiptChannel = versionDerivedBeta ? "beta" : state.channel;
+      const receiptChannel = state.channel;
       const descriptor = fs.openSync(
         receiptPath,
         fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
@@ -186,13 +194,13 @@ function main(): void {
               version: state.version,
               installed_at: new Date().toISOString(),
               minted_by: "update-check-session-start",
-              // Honesty markers: a canonical beta package carries its channel
-              // in its version. Other native installs retain the stable/main
-              // DEFAULT, explicitly marked as an assumption. Nothing may clone
-              // from either: codex-cli's capability row is reinstall_command
+              // Honesty marker: only an unambiguous stable/main DEFAULT reaches
+              // this branch. Candidate-shaped packages without host identity
+              // deliberately mint nothing. Nothing may clone from this
+              // assumption: codex-cli's capability row is reinstall_command
               // (never self_update), so the receipt is identification-only.
               managed_by: "host-native",
-              channel_confidence: versionDerivedBeta ? "version-derived" : "assumed-default",
+              channel_confidence: "assumed-default",
             },
             null,
             2
@@ -206,9 +214,6 @@ function main(): void {
       // fail-open — the signal below still works without a receipt
     }
   }
-
-  const cacheFile = cachePath();
-  const cache = readCache(cacheFile);
 
   // Background refresh when stale — the signal from a fresh check lands next
   // session; THIS session never waits on the network (AC-4).

@@ -182,18 +182,15 @@ Every merge to a channel branch ships to its followers immediately, so both are
 PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
 `.guild/wiki/standards/release-discipline.md`.
 
-**The channel must be legible from the manifest** (gap-audit B5, decision
-cap-loc-D12). `main` carries the bare release triple. `next` may share that bare
-version only at the exact quiescent release point where both refs resolve to
-the same commit. Once `next` diverges, it carries a **prerelease identifier** on
-the next target version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.7.0-beta.1`).
-Without this, `next` and `main` can report the same `"version"` while dozens of
-commits apart, and a user cannot determine which runtime they have from the
-version alone — which is exactly what happened at `2.4.0`. Under SemVer §11 a
-prerelease sorts *below* the same triple, so `2.5.0-beta.1` is correctly ahead
-of `2.4.0` and behind an eventual `2.5.0`; `check:channel-integrity` enforces
-the shape, ordering, and same-commit exception. The protected release
-workflow's metadata-only commit drops the identifier.
+**The beta channel must be legible from the manifest** (gap-audit B5, decision
+cap-loc-D12). `next` carries a **prerelease identifier** on the next target
+version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.7.0-beta.1`). Under the current
+short-path release flow, the reviewed merge and stable tag retain that beta
+manifest as provenance; the bare stable identity is the CI-derived tag and
+GitHub Release. Under SemVer §11 a prerelease sorts below the same triple, so
+`2.5.0-beta.1` is correctly ahead of `2.4.0` and behind the CI-derived
+`v2.5.0`. A later release-App hardening follow-up may restore a generated
+bare-version metadata commit without changing the one-PR operator flow.
 
 Day-to-day workflow (features, fixes, docs — everything non-release):
 1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.
@@ -208,24 +205,22 @@ Release workflow (operator-driven, when `next` is ready):
    reconciled `docs/v2`, and a curated PR body suitable as release notes.
 2. Open the release PR from the repository's exact `next` branch to `main`.
    `branch-policy.yml` rejects every other head branch and all forks.
-3. Merge the PR. The protected `stable-release` job re-runs promotion evidence,
-   derives the bare triple from the reviewed beta manifest, generates the
-   changelog and all version-bearing surfaces, and creates one commit containing
-   exactly six metadata files. If the selected GitHub merge method did not
-   preserve `next` ancestry, CI adds an empty-delta merge wrapper with the exact
-   reviewed PR head as second parent. A short-lived repository-scoped GitHub App
-   token then atomically advances `main`, `next`, and the stable tag to that
-   release point. Keep `next` frozen until this finishes; a moved tip refuses.
-4. Verify the workflow, tag, GitHub Release, and equality of `main`, `next`, and
-   the peeled tag commit. There is no operator release branch and no manual
-   sync-back. A re-run validates an existing tag before creating a missing
-   GitHub Release; it never silently retags different bytes.
+3. Merge the PR using the repository's normal merge, squash, or rebase method.
+   CI requires the merged tree to equal the exact reviewed `next` tree, re-runs
+   promotion evidence, derives the bare stable tag
+   from the reviewed beta manifest, tags the exact merge commit with the
+   built-in repository token, and publishes the PR body as the GitHub Release.
+   CI does not commit or push to either protected branch.
+4. Verify the workflow, tag, GitHub Release, and that the peeled tag equals the
+   merged `main` commit. The next release gate treats that immutable tag as the
+   published stable version while `main` retains its reviewed candidate
+   identifier. A re-run accepts an existing tag only when it already
+   points to that exact merge commit, then creates a missing Release if needed.
 
-The default `GITHUB_TOKEN` remains read-only. The release App credential exists
-only in the protected `stable-release` environment and requests repository
-contents write plus pull-request read for changelog lookup. See
-`.guild/wiki/standards/release-discipline.md` for setup,
-rotation, recovery, and the bounded post-merge channel-transition window.
+There is no operator release branch, App credential, environment gate, or
+manual sync-back in the current short path. The dedicated release App and
+post-merge bare-version metadata convergence remain a non-blocking hardening
+follow-up. See `.guild/wiki/standards/release-discipline.md`.
 
 **Mechanical enforcement.** `branch-policy.yml` rejects any PR into `main` whose
 head is not the same-repository exact `next` branch; the repo-checked-in `pre-push` hook at

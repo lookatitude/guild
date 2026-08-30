@@ -1,12 +1,12 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Finalize the metadata-only stable commit after a reviewed `next -> main` PR.
+ * Derive the stable identity for a reviewed `next -> main` PR.
  *
- * `prepare` derives X.Y.Z from the exact X.Y.Z-beta.N version on `next` and
- * changes only the canonical Claude manifest. The workflow then runs the
- * existing generators and changelog command. `verify` fails closed unless the
- * resulting commit changes exactly the six generated release-metadata paths
- * and every version-bearing record agrees on the stable triple.
+ * The current short-path workflow uses only `inspect` and `latest`: it derives
+ * X.Y.Z from exact X.Y.Z-beta.N, tags the reviewed merge, and never rewrites a
+ * protected branch. `prepare` and `verify` are retained for the deferred
+ * release-App metadata-convergence follow-up; the live workflow does not call
+ * them.
  */
 
 import { execFileSync } from "node:child_process";

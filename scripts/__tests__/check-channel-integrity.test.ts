@@ -72,6 +72,68 @@ describe("check-channel-integrity", () => {
       expect(r.reason).toMatch(/ahead of stable/);
     });
 
+    it("PASSES the short-path release state when both refs carry the exact reviewed beta version on the same commit", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" }),
+        () => "release-commit"
+      );
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/reviewed release candidate/);
+    });
+
+    it("PASSES the real post-release state with distinct commits and the exact stable tree in next history", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" }),
+        (ref) => ({ "origin/main": "release-merge", "origin/next": "reviewed-next-head", "refs/tags/v2.7.0": "release-merge" })[ref] ?? ref,
+        () => true
+      );
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/same release tree/);
+    });
+
+    it("PASSES the normal beta advance after a short-path release", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.8.0-beta.1" }),
+        (ref) => ({ "origin/main": "release-commit", "origin/next": "beta-commit", "refs/tags/v2.7.0": "release-commit" })[ref] ?? ref,
+        (ancestor, descendant) => ancestor === "release-commit" && descendant === "beta-commit"
+      );
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/ahead of published stable/);
+    });
+
+    it("FAILS when a shared candidate version hides a beta commit outside main ancestry", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0-beta.20" }),
+        (ref) => ({ "origin/main": "release-commit", "origin/next": "older-diverged-commit", "refs/tags/v2.7.0": "release-commit" })[ref] ?? ref,
+        () => false
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/does not contain the exact stable release tree/);
+    });
+
+    it("FAILS closed when a candidate-valued main has no corresponding published stable tag", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.8.0-beta.1" }),
+        (ref) => {
+          if (ref === "refs/tags/v2.7.0") throw new Error("unknown ref");
+          return ref;
+        },
+        () => true
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/no published refs\/tags\/v2\.7\.0 tag/);
+    });
+
     it("FAILS when different commits report the same bare version", () => {
       const r = checkChannelIntegrity("s", "b", readerFor({ s: "2.6.0", b: "2.6.0" }));
       expect(r.ok).toBe(false);

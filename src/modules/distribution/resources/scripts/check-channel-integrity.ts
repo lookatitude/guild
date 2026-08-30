@@ -2,13 +2,11 @@
 /**
  * scripts/check-channel-integrity.ts
  *
- * CHANNEL-INTEGRITY GATE — release-discipline channel convergence, mechanized.
+ * CHANNEL-INTEGRITY GATE — release-discipline channel ordering, mechanized.
  * (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
  *
  * THE RULE IT ENFORCES.
- * After a stable promotion, the protected release job must leave `main` and
- * `next` at the same release point. Branches ARE
- * distribution channels — `main` = stable, `next` = beta — so a `next` whose
+ * Branches ARE distribution channels — `main` = stable, `next` = beta — so a `next` whose
  * version trails `main`'s means BETA USERS ARE RUNNING OLDER CODE THAN STABLE.
  * That inverts the whole point of a beta channel and is invisible without a
  * check: every per-PR gate stays green while the channel silently rots.
@@ -20,9 +18,10 @@
  *
  * WHAT IT CHECKS.
  * Reads `.claude-plugin/plugin.json`'s `version` from both channel refs and
- * fails when next < main. Version, not commit identity, is deliberate: `next`
- * legitimately carries commits `main` lacks (that is what an integration branch
- * IS), so "next is behind main" can only be judged on the released version.
+ * fails when next < main. In the short path, `main` retains the reviewed
+ * `X.Y.Z-beta.N` candidate while the bare identity lives in `vX.Y.Z`; the gate
+ * therefore binds that tag to main and proves next history contains main's
+ * exact release tree before accepting later beta development.
  *
  * PRERELEASE HANDLING — full SemVer §11 precedence, NOT a bare triple compare.
  * A naive "ignore the suffix" comparison produces a FALSE PASS on exactly the
@@ -34,14 +33,15 @@
  * still correctly ahead of `main` at `2.3.2`.
  *
  * DETECTION, NOT PREVENTION — stated plainly so nobody over-trusts this mode.
- * The protected release workflow now owns prevention: it verifies promotion,
- * creates the stable metadata commit, and atomically advances main/next/tag.
- * This ordinary channel mode detects debt left by an interrupted or manually
+ * The release workflow owns prevention: it verifies promotion and tags the
+ * exact reviewed merge without rewriting either protected branch. This
+ * ordinary channel mode detects debt left by an interrupted or manually
  * altered channel; it is not the publication authority by itself.
  *
- * NOT A WRITE-AUTHORITY CHECK. This gate observes the final graph; branch
- * rulesets and the environment-scoped release App enforce who may create it.
- * This mode answers exactly one question: is beta behind stable?
+ * NOT A WRITE-AUTHORITY CHECK. This gate observes channel versions; branch
+ * protection and the release workflow constrain writes. This mode answers
+ * exactly one question: is beta behind the published stable release or missing
+ * the release-tree binding that makes the short-path exception safe?
  *
  * Usage:
  *   npx tsx scripts/check-channel-integrity.ts [--stable <ref>] [--beta <ref>] [--json]
@@ -53,7 +53,7 @@
  *
  * PROMOTION MODE — the direct next-to-main invariant (FIC-91 / REL-P0, FIC-74 §0/B1+B5).
  * The gate governs the exact same-repository `next -> main` promotion before
- * CI creates a metadata-only stable commit. `checkStablePromotion` validates
+ * CI tags the reviewed merge commit. `checkStablePromotion` validates
  * hash-bound `guild.release_promotion.v1` /
  * `guild.release_conformance.v1` evidence, a production-evaluator RE-RUN over
  * the transported evidence+authority, one source-commit binding, ancestry, and
@@ -281,11 +281,31 @@ function gitResolveRef(ref: string): string {
   }).trim();
 }
 
+function gitBetaContainsStableTree(stableCommit: string, betaCommit: string): boolean {
+  try {
+    const stableTree = execFileSync("git", ["rev-parse", "--verify", `${stableCommit}^{tree}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    const betaHistoryTrees = execFileSync("git", ["log", "--format=%T", betaCommit], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+      .split("\n")
+      .filter(Boolean);
+    return betaHistoryTrees.includes(stableTree);
+  } catch {
+    return false;
+  }
+}
+
 export function checkChannelIntegrity(
   stableRef: string,
   betaRef: string,
   read: (r: string) => string = gitShowManifest,
-  resolveRef: (r: string) => string = read === gitShowManifest ? gitResolveRef : (r) => r
+  resolveRef: (r: string) => string = read === gitShowManifest ? gitResolveRef : (r) => r,
+  betaContainsStableTree: (stableCommit: string, betaCommit: string) => boolean =
+    read === gitShowManifest ? gitBetaContainsStableTree : (stableCommit, betaCommit) => stableCommit === betaCommit
 ): IntegrityResult {
   const sv = versionAtRef(stableRef, read);
   const bv = versionAtRef(betaRef, read);
@@ -295,6 +315,57 @@ export function checkChannelIntegrity(
   const beta: ChannelState = { ref: betaRef, commit: resolveRef(betaRef), version: bv, ...bp };
   const cmp = compareVersions(bp, sp);
   const coreCmp = compareVersions({ ...bp, prerelease: [] }, { ...sp, prerelease: [] });
+
+  // In the short path, main retains the reviewed beta identifier and the
+  // immutable vX.Y.Z tag is the stable identity. Bind that exception to the
+  // tag at main AND prove next history still contains the exact stable tree.
+  // That supports merge, squash, and rebase PR merges while preventing a
+  // reset to older bytes to hide behind a reused candidate version.
+  if (BETA_CHANNEL_VERSION.test(sv)) {
+    const publishedVersion = sp.core.join(".");
+    const stableTag = `refs/tags/v${publishedVersion}`;
+    let taggedCommit: string;
+    try {
+      taggedCommit = resolveRef(stableTag);
+    } catch {
+      return { stable, beta, ok: false, reason: `stable candidate ${sv} has no published ${stableTag} tag.` };
+    }
+    if (taggedCommit !== stable.commit) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `${stableTag} resolves to ${taggedCommit}, not stable commit ${stable.commit}.`,
+      };
+    }
+    if (!BETA_CHANNEL_VERSION.test(bv)) {
+      return { stable, beta, ok: false, reason: `next must use MAJOR.MINOR.PATCH-beta.N after a short-path release; found ${bv}.` };
+    }
+    if (!betaContainsStableTree(stable.commit, beta.commit)) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `beta history at ${beta.commit} does not contain the exact stable release tree from ${stable.commit}.`,
+      };
+    }
+    if (coreCmp < 0 || (coreCmp === 0 && cmp < 0)) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `beta channel (${betaRef}) is at ${bv} while published stable v${publishedVersion} came from ${sv} — beta users are running OLDER code than stable.`,
+      };
+    }
+    return {
+      stable,
+      beta,
+      ok: true,
+      reason: sv === bv
+        ? `both channels carry reviewed release candidate ${sv}; published stable v${publishedVersion} is bound to main and next contains the same release tree.`
+        : `beta (${bv}) is ahead of published stable v${publishedVersion} and its history contains the exact stable release tree.`,
+    };
+  }
 
   if (!BARE_CHANNEL_VERSION.test(sv)) {
     return { stable, beta, ok: false, reason: `stable channel (${stableRef}) must use exact MAJOR.MINOR.PATCH; found ${sv}.` };
@@ -362,9 +433,8 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   if (!result.ok) {
     process.stderr.write(`check-channel-integrity: GATE FAILURE — ${result.reason}\n`);
     process.stderr.write(
-      "\nFix — inspect and re-run the failed `Finalize stable release after next merges to main` workflow.\n" +
-        "  The environment-scoped release App owns the atomic main/next/tag transaction;\n" +
-        "  do not hand-push a sync-back or move the published tag. Follow the failure and\n" +
+      "\nFix — inspect and re-run the failed `Publish stable release after next merges to main` workflow.\n" +
+        "  Do not hand-push a sync-back or move the published tag. Follow the failure and\n" +
         "  re-run procedure in .guild/wiki/standards/release-discipline.md.\n"
     );
     return 2;
@@ -522,20 +592,41 @@ export function checkStablePromotion(
     return refusePromotion("stable_manifest_missing", `${MANIFEST_PATH} is absent at ${stableRef}.`);
   }
   const stableManifest = parseJsonRecord(stableManifestBytes);
-  if (
-    stableManifest === null ||
-    typeof stableManifest.version !== "string" ||
-    !BARE_CHANNEL_VERSION.test(stableManifest.version)
-  ) {
+  if (stableManifest === null || typeof stableManifest.version !== "string") {
     return refusePromotion(
       "stable_manifest_malformed",
-      `${MANIFEST_PATH} at ${stableRef} must carry exact stable MAJOR.MINOR.PATCH.`
+      `${MANIFEST_PATH} at ${stableRef} has no usable version field.`
     );
   }
-  if (compareVersions(parseVersion(version), parseVersion(stableManifest.version)) <= 0) {
+  let publishedStableVersion: string;
+  if (BARE_CHANNEL_VERSION.test(stableManifest.version)) {
+    publishedStableVersion = stableManifest.version;
+  } else if (BETA_CHANNEL_VERSION.test(stableManifest.version)) {
+    publishedStableVersion = parseVersion(stableManifest.version).core.join(".");
+    const stableTag = `refs/tags/v${publishedStableVersion}`;
+    const taggedStableSha = git.resolveCommit(stableTag);
+    if (taggedStableSha === null) {
+      return refusePromotion(
+        "stable_tag_missing",
+        `${MANIFEST_PATH} at ${stableRef} retains ${stableManifest.version}, but published stable tag ${stableTag} is absent.`
+      );
+    }
+    if (taggedStableSha !== stableSha) {
+      return refusePromotion(
+        "stable_tag_mismatch",
+        `published stable tag ${stableTag} resolves to ${taggedStableSha}, not ${stableSha} at ${stableRef}.`
+      );
+    }
+  } else {
+    return refusePromotion(
+      "stable_manifest_malformed",
+      `${MANIFEST_PATH} at ${stableRef} must carry exact MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-beta.N bound to its stable tag.`
+    );
+  }
+  if (compareVersions(parseVersion(version), parseVersion(publishedStableVersion)) <= 0) {
     return refusePromotion(
       "stable_version_not_advanced",
-      `derived stable version ${version} must be strictly newer than ${stableManifest.version} at ${stableRef}.`
+      `derived stable version ${version} must be strictly newer than published stable ${publishedStableVersion} at ${stableRef}.`
     );
   }
 

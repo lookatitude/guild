@@ -50,7 +50,7 @@
       "id": "check-channel-integrity",
       "source_path": "scripts/check-channel-integrity.ts",
       "resource_path": "resources/scripts/check-channel-integrity.ts",
-      "sha256": "eac6484522c1c5d736c2fe79487d696c83dc075273104dae2646a40d184cca1c"
+      "sha256": "3962ea6e56c75ea819ffb8564adb46987c8ca2ca28a2432a1a739279966b2f28"
     },
     {
       "category": "scripts",
@@ -106,7 +106,7 @@
       "id": "finalize-stable-release",
       "source_path": "scripts/finalize-stable-release.ts",
       "resource_path": "resources/scripts/finalize-stable-release.ts",
-      "sha256": "5fe7928354767c78b39eea1bc4e62db96ddcf3849a34d15d3abc2339ac173ee3"
+      "sha256": "1e53903704c4651a17aaa48eda865fb42d26219ee8c91fc74857c3cc17fb6a70"
     },
     {
       "category": "scripts",
@@ -197,7 +197,7 @@
       "id": "lib/update-check",
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
-      "sha256": "9179ac56a28d7725706280b20488fc78c21a7ace7dd19475796d619d6ada0226"
+      "sha256": "0ecdefc7bf0432e74727287bee490412a51756ab7a3cd40f05e1d87769f37d99"
     },
     {
       "category": "scripts",

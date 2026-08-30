@@ -32611,6 +32611,63 @@ function parseLsRemote(raw) {
   }
   return { latest_tag: latestStableTag(tags), next_head_sha: next, main_head_sha: main2 };
 }
+function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
+  const fsi = opts.fsi ?? fs3;
+  const home = opts.homedir ?? os.homedir();
+  const realPath = (value) => {
+    try {
+      return fsi.realpathSync(value);
+    } catch {
+      return value;
+    }
+  };
+  const isSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+  if (hostId === "claude-code-cli" || hostId === "claude-code-app" || hostId === "claude-code-web") {
+    for (const configRoot of [path4.join(home, ".claude"), path4.join(home, ".config", "claude")]) {
+      try {
+        const installed = JSON.parse(
+          fsi.readFileSync(path4.join(configRoot, "plugins", "installed_plugins.json"), "utf8")
+        );
+        const rawEntries = installed.plugins?.["guild@guild"];
+        const entries = Array.isArray(rawEntries) ? rawEntries : rawEntries ? [rawEntries] : [];
+        const entry = entries.find((candidate) => {
+          if (typeof candidate !== "object" || candidate === null) return false;
+          const installPath = candidate.installPath;
+          return typeof installPath === "string" && realPath(installPath) === realPath(pluginRoot);
+        });
+        if (!entry || !isSha(entry.gitCommitSha)) continue;
+        const known2 = JSON.parse(
+          fsi.readFileSync(path4.join(configRoot, "plugins", "known_marketplaces.json"), "utf8")
+        );
+        const installLocation = known2.guild?.installLocation;
+        if (typeof installLocation !== "string") continue;
+        const gitDir = resolveGitDir(path4.join(realPath(installLocation), ".git"), fsi);
+        if (!gitDir) continue;
+        const branch = readGitHead(gitDir, fsi).branch;
+        if (branch !== "main" && branch !== "next") continue;
+        return { channel: branch === "next" ? "beta" : "stable", commit: entry.gitCommitSha };
+      } catch {
+      }
+    }
+    return null;
+  }
+  if (hostId === "codex-cli" || hostId === "codex-app") {
+    try {
+      const configuredCodexHome = opts.codexHome ?? process.env.CODEX_HOME ?? path4.join(home, ".codex");
+      const raw = fsi.readFileSync(path4.join(configuredCodexHome, "config.toml"), "utf8");
+      const section = /(?:^|\n)\[marketplaces\.guild\]\s*\n([\s\S]*?)(?=\n\[|$)/.exec(raw)?.[1];
+      if (!section) return null;
+      const field = (name) => new RegExp(`^${name}\\s*=\\s*"([^"]+)"\\s*$`, "m").exec(section)?.[1] ?? null;
+      const ref = field("ref");
+      const commit = field("last_revision");
+      if (ref !== "main" && ref !== "next" || !isSha(commit)) return null;
+      return { channel: ref === "next" ? "beta" : "stable", commit };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 function resolveGitDir(gitPath, fsi = fs3) {
   try {
     const st = fsi.statSync(gitPath);
@@ -32712,6 +32769,14 @@ function resolveInstallState(pluginRoot, opts = {}) {
     } catch {
     }
   }
+  if (opts.nativeIdentity) {
+    return {
+      channel: opts.nativeIdentity.channel,
+      version,
+      commit: opts.nativeIdentity.commit,
+      source: "host-registry"
+    };
+  }
   return { channel: "stable", version, commit: null, source: "default" };
 }
 var PLUGIN_MANIFEST_CANDIDATES = [
@@ -32788,12 +32853,12 @@ function computeSignal(opts) {
   const rowCaps = updateCapsForHost(opts.hostId);
   const command = opts.hostId !== void 0 ? rowCaps ? rowCaps.command : null : opts.hostKind === "wrapper" ? "guild-run update" : opts.hostKind === "agents-file" ? "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update" : "claude plugin marketplace update guild && claude plugin update guild@guild";
   if (state.channel === "beta") {
-    const remoteSha = cache.remote.next_head_sha;
-    if (remoteSha && state.commit && remoteSha !== state.commit) {
+    const remoteSha2 = cache.remote.next_head_sha;
+    if (remoteSha2 && state.commit && remoteSha2 !== state.commit) {
       return {
         ...base,
         update_available: true,
-        available: short(remoteSha),
+        available: short(remoteSha2),
         command,
         reason: "beta-new-commit"
       };
@@ -32801,6 +32866,26 @@ function computeSignal(opts) {
     return { ...base, update_available: false, reason: "up-to-date" };
   }
   const latest = cache.remote.latest_tag;
+  const remoteSha = cache.remote.main_head_sha;
+  if (remoteSha && state.commit) {
+    if (remoteSha !== state.commit) {
+      return {
+        ...base,
+        update_available: true,
+        available: latest ? latest.replace(/^v/, "") : short(remoteSha),
+        command,
+        reason: "stable-new-commit"
+      };
+    }
+    return { ...base, update_available: false, reason: "up-to-date" };
+  }
+  if (latest && state.version) {
+    const installed = parseComparable(state.version);
+    const published = parseComparable(latest);
+    if (installed && published && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version) && installed.prerelease.length > 0 && published.prerelease.length === 0 && installed.triple.every((part, index) => part === published.triple[index])) {
+      return { ...base, update_available: false, reason: "up-to-date" };
+    }
+  }
   if (latest && state.version && semverLt(state.version, latest)) {
     return {
       ...base,
@@ -32884,13 +32969,16 @@ function main() {
   }
   const caps = updateCapsForHost(hostId);
   const hostKind = caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
-  const state = resolveInstallState(pluginRoot);
+  const nativeIdentity = readNativeHostIdentity(hostId, pluginRoot);
+  const state = resolveInstallState(pluginRoot, { nativeIdentity });
   if (state.channel === "dev") return;
-  if (state.source === "default" && state.version) {
+  const cacheFile = cachePath();
+  const cache = readCache(cacheFile);
+  const versionDerivedBeta = state.version !== null && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
+  if (state.source === "default" && state.version && !versionDerivedBeta) {
     try {
       const receiptPath = path43.join(pluginRoot, RECEIPT_BASENAME);
-      const versionDerivedBeta = /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
-      const receiptChannel = versionDerivedBeta ? "beta" : state.channel;
+      const receiptChannel = state.channel;
       const descriptor = fs35.openSync(
         receiptPath,
         fs35.constants.O_WRONLY | fs35.constants.O_CREAT | fs35.constants.O_EXCL | fs35.constants.O_NOFOLLOW,
@@ -32910,13 +32998,13 @@ function main() {
               version: state.version,
               installed_at: (/* @__PURE__ */ new Date()).toISOString(),
               minted_by: "update-check-session-start",
-              // Honesty markers: a canonical beta package carries its channel
-              // in its version. Other native installs retain the stable/main
-              // DEFAULT, explicitly marked as an assumption. Nothing may clone
-              // from either: codex-cli's capability row is reinstall_command
+              // Honesty marker: only an unambiguous stable/main DEFAULT reaches
+              // this branch. Candidate-shaped packages without host identity
+              // deliberately mint nothing. Nothing may clone from this
+              // assumption: codex-cli's capability row is reinstall_command
               // (never self_update), so the receipt is identification-only.
               managed_by: "host-native",
-              channel_confidence: versionDerivedBeta ? "version-derived" : "assumed-default"
+              channel_confidence: "assumed-default"
             },
             null,
             2
@@ -32929,8 +33017,6 @@ function main() {
     } catch {
     }
   }
-  const cacheFile = cachePath();
-  const cache = readCache(cacheFile);
   if (!cacheIsFresh(cache, cadenceHours, /* @__PURE__ */ new Date())) {
     spawnDetached(process.execPath, [__filename, "--refresh"]);
   }

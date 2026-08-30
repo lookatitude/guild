@@ -165,12 +165,17 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
   evidence-only PR into `next`. The promotion gate permits only the two
   hash-bound evidence records after the verified source commit.
 - `next` carries exact `MAJOR.MINOR.PATCH-beta.N`. After the direct PR merges,
-  the protected release workflow derives the bare stable triple, generates the
-  changelog and all version-bearing surfaces, atomically advances `main`,
-  `next`, and `vMAJOR.MINOR.PATCH`, then publishes the PR body as release notes.
-- Contributors do not bump the stable manifest, edit `CHANGELOG.md`, or hand-edit
-  generated manifests for a release. The environment-scoped release App owns
-  that exact six-file metadata commit.
+  CI derives `vMAJOR.MINOR.PATCH`, tags the exact reviewed merge commit, and
+  publishes the PR body as release notes with the built-in repository token.
+- CI does not rewrite `main` or `next`, and contributors do not hand-edit
+  generated manifests for the release. A dedicated App and generated
+  bare-version metadata convergence are deferred hardening, not release
+  prerequisites. Stable update detection compares the installed commit with
+  remote `main`; Claude and Codex native caches recover that identity from the
+  host's existing registry. Commit-less stable signals suppress only the exact
+  same-core candidate/tag false positive, and ambiguous native receipt minting
+  is deferred rather than guessing a channel. The retained candidate label
+  therefore does not produce a permanent false update prompt or channel switch.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues

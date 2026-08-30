@@ -279,22 +279,33 @@ describe("update-check mints a package-local receipt for host-native installs", 
     expect(r["channel_confidence"]).toBe("assumed-default");
   });
 
-  it("derives beta/next from a canonical beta package version instead of claiming stable/main", () => {
+  it("defers receipt minting for an ambiguous candidate when no host registry identity exists", () => {
     fs.writeFileSync(
       path.join(pkg, ".codex-plugin", "plugin.json"),
       '{\n  "name": "guild",\n  "version": "2.7.0-beta.4"\n}\n'
     );
 
     runHook();
-    const r = JSON.parse(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")) as Record<
-      string,
-      unknown
-    >;
-    expect(r["version"]).toBe("2.7.0-beta.4");
-    expect(r["channel"]).toBe("beta");
-    expect(r["ref"]).toBe("next");
-    expect(r["managed_by"]).toBe("host-native");
-    expect(r["channel_confidence"]).toBe("version-derived");
+    expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(false);
+  });
+
+  it("does not convert an ambiguous published candidate into a permanent stable receipt", () => {
+    fs.writeFileSync(
+      path.join(pkg, ".codex-plugin", "plugin.json"),
+      '{\n  "name": "guild",\n  "version": "2.7.0-beta.20"\n}\n'
+    );
+    fs.writeFileSync(
+      path.join(home, ".guild", "update-check.json"),
+      JSON.stringify({
+        schema_version: "guild.update_check_cache.v1",
+        checked_at: "2099-01-01T00:00:00Z",
+        source_repo: "fixture",
+        remote: { latest_tag: "v2.7.0", next_head_sha: null, main_head_sha: null },
+      })
+    );
+
+    runHook();
+    expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(false);
   });
 
   it("does NOT clobber an existing receipt on later sessions", () => {

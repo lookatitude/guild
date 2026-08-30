@@ -650,6 +650,34 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
     expect(result.reason).toContain(stableVersion);
   });
 
+  it("accepts the next release after a short-path stable tag even though main retains its beta candidate version", () => {
+    const version = "2.3.0";
+    const repo = standardRepo({
+      version,
+      conformance: BETA_CONFORMANCE_BYTES,
+      promotion: BETA_PROMOTION_BYTES,
+      sourceManifestVersion: "2.3.0-beta.1",
+      stableVersion: "2.2.0-beta.20",
+    });
+    repo.refs["refs/tags/v2.2.0"] = STABLE_SHA;
+    const result = check(repo);
+    expect(result.code).toBe("conformance_decision_not_promotable");
+    expect(result.reason).not.toMatch(/stable_manifest/);
+  });
+
+  it("refuses a prerelease-valued main when its corresponding published stable tag is absent", () => {
+    const repo = standardRepo({ stableVersion: "2.1.0-beta.20" });
+    const result = check(repo);
+    expect(result.code).toBe("stable_tag_missing");
+  });
+
+  it("refuses a prerelease-valued main when its corresponding stable tag names another commit", () => {
+    const repo = standardRepo({ stableVersion: "2.1.0-beta.20" });
+    repo.refs["refs/tags/v2.1.0"] = HEAD_SHA;
+    const result = check(repo);
+    expect(result.code).toBe("stable_tag_mismatch");
+  });
+
   it("refuses an unknown source commit", () => {
     const repo = standardRepo();
     delete repo.refs[SOURCE_COMMIT];
@@ -852,42 +880,40 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(raw).not.toMatch(/release\/v/);
   });
 
-  it("release.yml uses an environment-scoped ephemeral GitHub App token and tags the generated stable commit", () => {
+  it("release.yml tags the reviewed merge with the built-in token and never rewrites protected branches", () => {
     const raw = fs.readFileSync(path.join(workflows, "release.yml"), "utf8");
     const doc = yaml.load(raw) as any;
     const releaseJob = doc.jobs?.release;
-    expect(releaseJob?.environment).toBe("stable-release");
-    expect(doc.permissions?.contents).toBe("read");
+    expect(releaseJob?.environment).toBeUndefined();
+    expect(doc.permissions?.contents).toBeUndefined();
+    expect(releaseJob?.permissions?.contents).toBe("write");
 
     const steps: any[] = releaseJob?.steps ?? [];
     const token = steps.find((step) => String(step.uses ?? "").startsWith("actions/create-github-app-token@"));
-    expect(token).toBeDefined();
-    expect(token.with?.["permission-contents"]).toBe("write");
-    expect(token.with?.["permission-pull-requests"]).toBe("read");
-    expect(String(token.with?.["private-key"] ?? "")).toContain("RELEASE_APP_PRIVATE_KEY");
-    expect(String(token.with?.["app-id"] ?? "")).toContain("RELEASE_APP_ID");
-    expect(Object.keys(token.with ?? {}).sort()).toEqual(
-      ["app-id", "permission-contents", "permission-pull-requests", "private-key"].sort()
-    );
+    expect(token).toBeUndefined();
 
     const workflow = steps.map((step) => String(step.run ?? "")).join("\n");
-    expect(workflow).toMatch(/run finalize:stable-release -- prepare/);
-    expect(workflow).toMatch(/run finalize:stable-release -- verify/);
+    expect(workflow).toMatch(/run finalize:stable-release -- inspect/);
+    expect(workflow).not.toMatch(/run finalize:stable-release -- (prepare|verify)/);
     expect(workflow).not.toMatch(/\bnpx tsx scripts\//);
-    const frozenHead = steps.find((step) => step.name === "Require the reviewed next head to remain frozen");
-    expect(String(frozenHead?.if ?? "")).toContain("steps.existing.outputs.tag_exists == 'false'");
-    expect(String(frozenHead?.run ?? "")).toContain("origin/next");
     expect(workflow).toMatch(/run finalize:stable-release -- latest/);
     expect(workflow).toMatch(/--latest=false/);
     expect(workflow).not.toMatch(/gh release view --json tagName[^\n]*\|\| true/);
-    expect(workflow).toMatch(/git push --atomic origin/);
-    expect(workflow).toMatch(/\$RELEASE_SHA:refs\/heads\/main/);
-    expect(workflow).toMatch(/\$RELEASE_SHA:refs\/heads\/next/);
+    expect(workflow).toMatch(/gh api --method POST "repos\/\$\{GITHUB_REPOSITORY\}\/git\/tags"/);
+    expect(workflow).toMatch(/gh api --method POST "repos\/\$\{GITHUB_REPOSITORY\}\/git\/refs"/);
+    expect(workflow).toMatch(/-f object="\$MERGE_SHA"/);
+    expect(workflow).not.toMatch(/git push|x-access-token/);
+    expect(workflow).not.toMatch(/refs\/heads\/(main|next)/);
     expect(raw).toMatch(/github\.event\.pull_request\.head\.sha/);
-    expect(workflow).toMatch(/git commit-tree/);
-    expect(workflow).toMatch(/git tag -a "\$TAG" "\$RELEASE_SHA"/);
-    expect(workflow).not.toMatch(/git tag -a "\$TAG" "\$MERGE_SHA"/);
-    expect(raw).not.toContain("secrets.GITHUB_TOKEN");
+    expect(workflow).not.toMatch(/merge-base --is-ancestor "\$PR_HEAD_SHA" "\$MERGE_SHA"/);
+    expect(workflow).toMatch(/merge-base --is-ancestor "\$MERGE_SHA" origin\/main/);
+    expect(workflow).toMatch(/run check:channel-integrity/);
+    expect(workflow).not.toMatch(/git commit(-tree)?/);
+    expect(workflow).not.toMatch(/git tag -a/);
+    expect(raw).toContain("GH_TOKEN: ${{ github.token }}");
+    const checkout = steps.find((step) => String(step.uses ?? "").startsWith("actions/checkout@"));
+    expect(checkout?.with?.["persist-credentials"]).toBe(false);
+    expect(raw).not.toMatch(/RELEASE_APP_|environment:\s*stable-release/);
   });
 
   it("the live-required branch-policy context is transitively BLOCKED on promotion evidence", () => {
