@@ -48,8 +48,9 @@ beta manifest and never rewrites either protected branch.
   before enforcing monotonic version advance.
 - The short path uses the PR body for GitHub Release notes and does not add a
   generated stable section to `CHANGELOG.md`.
-- Stable update detection uses installed-versus-remote `main` commit identity;
-  tag/version comparison remains only as a legacy fallback when no installed
-  commit is available.
+- Stable update detection uses installed-versus-remote `main` commit identity.
+  Claude and Codex recover native cache identity from their existing host
+  registries; a commit-less fallback treats a candidate whose core equals the
+  latest stable tag as the same published release.
 - App-backed bare-version metadata convergence remains a non-blocking follow-up.
 - A published tag is immutable; recovery rolls forward and never retags bytes.

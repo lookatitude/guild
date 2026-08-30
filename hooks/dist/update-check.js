@@ -32611,6 +32611,63 @@ function parseLsRemote(raw) {
   }
   return { latest_tag: latestStableTag(tags), next_head_sha: next, main_head_sha: main2 };
 }
+function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
+  const fsi = opts.fsi ?? fs3;
+  const home = opts.homedir ?? os.homedir();
+  const realPath = (value) => {
+    try {
+      return fsi.realpathSync(value);
+    } catch {
+      return value;
+    }
+  };
+  const isSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+  if (hostId === "claude-code" || hostId === "claude-code-app") {
+    for (const configRoot of [path4.join(home, ".claude"), path4.join(home, ".config", "claude")]) {
+      try {
+        const installed = JSON.parse(
+          fsi.readFileSync(path4.join(configRoot, "plugins", "installed_plugins.json"), "utf8")
+        );
+        const rawEntries = installed.plugins?.["guild@guild"];
+        const entries = Array.isArray(rawEntries) ? rawEntries : rawEntries ? [rawEntries] : [];
+        const entry = entries.find((candidate) => {
+          if (typeof candidate !== "object" || candidate === null) return false;
+          const installPath = candidate.installPath;
+          return typeof installPath === "string" && realPath(installPath) === realPath(pluginRoot);
+        });
+        if (!entry || !isSha(entry.gitCommitSha)) continue;
+        const known2 = JSON.parse(
+          fsi.readFileSync(path4.join(configRoot, "plugins", "known_marketplaces.json"), "utf8")
+        );
+        const installLocation = known2.guild?.installLocation;
+        if (typeof installLocation !== "string") continue;
+        const gitDir = resolveGitDir(path4.join(realPath(installLocation), ".git"), fsi);
+        if (!gitDir) continue;
+        const branch = readGitHead(gitDir, fsi).branch;
+        if (branch !== "main" && branch !== "next") continue;
+        return { channel: branch === "next" ? "beta" : "stable", commit: entry.gitCommitSha };
+      } catch {
+      }
+    }
+    return null;
+  }
+  if (hostId === "codex-cli" || hostId === "codex-app") {
+    try {
+      const configuredCodexHome = opts.codexHome ?? process.env.CODEX_HOME ?? path4.join(home, ".codex");
+      const raw = fsi.readFileSync(path4.join(configuredCodexHome, "config.toml"), "utf8");
+      const section = /(?:^|\n)\[marketplaces\.guild\]\s*\n([\s\S]*?)(?=\n\[|$)/.exec(raw)?.[1];
+      if (!section) return null;
+      const field = (name) => new RegExp(`^${name}\\s*=\\s*"([^"]+)"\\s*$`, "m").exec(section)?.[1] ?? null;
+      const ref = field("ref");
+      const commit = field("last_revision");
+      if (ref !== "main" && ref !== "next" || !isSha(commit)) return null;
+      return { channel: ref === "next" ? "beta" : "stable", commit };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 function resolveGitDir(gitPath, fsi = fs3) {
   try {
     const st = fsi.statSync(gitPath);
@@ -32711,6 +32768,14 @@ function resolveInstallState(pluginRoot, opts = {}) {
       }
     } catch {
     }
+  }
+  if (opts.nativeIdentity) {
+    return {
+      channel: opts.nativeIdentity.channel,
+      version,
+      commit: opts.nativeIdentity.commit,
+      source: "host-registry"
+    };
   }
   return { channel: "stable", version, commit: null, source: "default" };
 }
@@ -32814,6 +32879,13 @@ function computeSignal(opts) {
     }
     return { ...base, update_available: false, reason: "up-to-date" };
   }
+  if (latest && state.version) {
+    const installed = parseComparable(state.version);
+    const published = parseComparable(latest);
+    if (installed && published && installed.prerelease.length > 0 && published.prerelease.length === 0 && installed.triple.every((part, index) => part === published.triple[index])) {
+      return { ...base, update_available: false, reason: "up-to-date" };
+    }
+  }
   if (latest && state.version && semverLt(state.version, latest)) {
     return {
       ...base,
@@ -32897,13 +32969,20 @@ function main() {
   }
   const caps = updateCapsForHost(hostId);
   const hostKind = caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
-  const state = resolveInstallState(pluginRoot);
+  const nativeIdentity = readNativeHostIdentity(hostId, pluginRoot);
+  const state = resolveInstallState(pluginRoot, { nativeIdentity });
   if (state.channel === "dev") return;
+  const cacheFile = cachePath();
+  const cache = readCache(cacheFile);
   if (state.source === "default" && state.version) {
     try {
       const receiptPath = path43.join(pluginRoot, RECEIPT_BASENAME);
       const versionDerivedBeta = /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
-      const receiptChannel = versionDerivedBeta ? "beta" : state.channel;
+      const candidateCore = /^(\d+\.\d+\.\d+)-beta\.(?:0|[1-9]\d*)$/.exec(state.version)?.[1];
+      const publishedTriple = cache?.remote.latest_tag ? parseSemver(cache.remote.latest_tag) : null;
+      const publishedCore = publishedTriple?.join(".") ?? null;
+      const candidateIsPublishedStable = candidateCore !== void 0 && candidateCore === publishedCore;
+      const receiptChannel = versionDerivedBeta && !candidateIsPublishedStable ? "beta" : state.channel;
       const descriptor = fs35.openSync(
         receiptPath,
         fs35.constants.O_WRONLY | fs35.constants.O_CREAT | fs35.constants.O_EXCL | fs35.constants.O_NOFOLLOW,
@@ -32929,7 +33008,7 @@ function main() {
               // from either: codex-cli's capability row is reinstall_command
               // (never self_update), so the receipt is identification-only.
               managed_by: "host-native",
-              channel_confidence: versionDerivedBeta ? "version-derived" : "assumed-default"
+              channel_confidence: nativeIdentity ? "host-registry" : candidateIsPublishedStable ? "published-tag-core" : versionDerivedBeta ? "version-derived" : "assumed-default"
             },
             null,
             2
@@ -32942,8 +33021,6 @@ function main() {
     } catch {
     }
   }
-  const cacheFile = cachePath();
-  const cache = readCache(cacheFile);
   if (!cacheIsFresh(cache, cadenceHours, /* @__PURE__ */ new Date())) {
     spawnDetached(process.execPath, [__filename, "--refresh"]);
   }

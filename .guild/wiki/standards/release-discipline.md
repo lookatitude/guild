@@ -38,9 +38,12 @@ identifier as provenance in this short path. A dedicated release App and a
 generated bare-version metadata commit are deferred hardening, not a current
 release prerequisite. The next promotion binds the retained candidate version
 on `main` to the corresponding published stable tag before comparing versions.
-Stable update detection compares the installed commit with remote `main`; it
-uses tag/version comparison only for legacy receipts without a commit, so the
-candidate label and its bare tag cannot create a permanent false update.
+Stable update detection compares the installed commit with remote `main`.
+Claude and Codex native installs recover channel plus commit from their existing
+host registries when the package cache has no `.git`; other managed installs use
+their receipt or clone identity. A commit-less stable fallback treats a
+candidate whose core equals the latest stable tag as those same published bytes,
+so the candidate label cannot create a permanent false update.
 
 ## Rules
 
@@ -115,6 +118,9 @@ candidate label and its bare tag cannot create a permanent false update.
   reviewed merge commit.
 - If tag creation succeeds but GitHub Release creation fails, re-run the same
   workflow; it validates the tag and creates only the missing Release.
+- There is a bounded fail-closed window between the merge and tag push. A
+  coincident `next` channel check may report the missing stable tag; re-run it
+  after the release workflow creates the tag.
 - A bad published release is repaired on `next`, promoted as a new patch, and
   released under a new immutable tag.
 

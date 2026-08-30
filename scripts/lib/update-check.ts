@@ -166,7 +166,87 @@ export interface InstallState {
   /** Installed commit SHA when known (marketplace clone HEAD or receipt). */
   commit: string | null;
   /** How the channel was determined — for the signal line + telemetry. */
-  source: "dev-checkout" | "marketplace-clone" | "receipt" | "default";
+  source: "dev-checkout" | "marketplace-clone" | "receipt" | "host-registry" | "default";
+}
+
+export interface NativeHostIdentity {
+  channel: "stable" | "beta";
+  commit: string;
+}
+
+/**
+ * Recover channel + commit from host-owned registries for package caches that
+ * intentionally omit `.git`. This is the external identity needed when main
+ * and next publish byte-identical candidate manifests during the short release
+ * path; version shape alone cannot distinguish their source channel.
+ */
+export function readNativeHostIdentity(
+  hostId: string,
+  pluginRoot: string,
+  opts: { homedir?: string; codexHome?: string; fsi?: typeof fs } = {}
+): NativeHostIdentity | null {
+  const fsi = opts.fsi ?? fs;
+  const home = opts.homedir ?? os.homedir();
+  const realPath = (value: string): string => {
+    try {
+      return fsi.realpathSync(value);
+    } catch {
+      return value;
+    }
+  };
+  const isSha = (value: unknown): value is string =>
+    typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
+
+  if (hostId === "claude-code" || hostId === "claude-code-app") {
+    for (const configRoot of [path.join(home, ".claude"), path.join(home, ".config", "claude")]) {
+      try {
+        const installed = JSON.parse(
+          fsi.readFileSync(path.join(configRoot, "plugins", "installed_plugins.json"), "utf8")
+        ) as { plugins?: Record<string, unknown> };
+        const rawEntries = installed.plugins?.["guild@guild"];
+        const entries = Array.isArray(rawEntries) ? rawEntries : rawEntries ? [rawEntries] : [];
+        const entry = entries.find((candidate) => {
+          if (typeof candidate !== "object" || candidate === null) return false;
+          const installPath = (candidate as Record<string, unknown>).installPath;
+          return typeof installPath === "string" && realPath(installPath) === realPath(pluginRoot);
+        }) as Record<string, unknown> | undefined;
+        if (!entry || !isSha(entry.gitCommitSha)) continue;
+
+        const known = JSON.parse(
+          fsi.readFileSync(path.join(configRoot, "plugins", "known_marketplaces.json"), "utf8")
+        ) as { guild?: { installLocation?: unknown } };
+        const installLocation = known.guild?.installLocation;
+        if (typeof installLocation !== "string") continue;
+        const gitDir = resolveGitDir(path.join(realPath(installLocation), ".git"), fsi);
+        if (!gitDir) continue;
+        const branch = readGitHead(gitDir, fsi).branch;
+        if (branch !== "main" && branch !== "next") continue;
+        return { channel: branch === "next" ? "beta" : "stable", commit: entry.gitCommitSha };
+      } catch {
+        // Try the next supported Claude config root.
+      }
+    }
+    return null;
+  }
+
+  if (hostId === "codex-cli" || hostId === "codex-app") {
+    try {
+      const configuredCodexHome = opts.codexHome ?? process.env.CODEX_HOME ?? path.join(home, ".codex");
+      const raw = fsi.readFileSync(path.join(configuredCodexHome, "config.toml"), "utf8");
+      const section = /(?:^|\n)\[marketplaces\.guild\]\s*\n([\s\S]*?)(?=\n\[|$)/.exec(raw)?.[1];
+      if (!section) return null;
+      const field = (name: string): string | null =>
+        new RegExp(`^${name}\\s*=\\s*"([^"]+)"\\s*$`, "m").exec(section)?.[1] ?? null;
+      const ref = field("ref");
+      const commit = field("last_revision");
+      if ((ref !== "main" && ref !== "next") || !isSha(commit)) return null;
+      return { channel: ref === "next" ? "beta" : "stable", commit };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -253,7 +333,7 @@ export function branchToChannel(branch: string | null): Channel {
  */
 export function resolveInstallState(
   pluginRoot: string,
-  opts: { homedir?: string; fsi?: typeof fs } = {}
+  opts: { homedir?: string; fsi?: typeof fs; nativeIdentity?: NativeHostIdentity | null } = {}
 ): InstallState {
   const fsi = opts.fsi ?? fs;
   const home = opts.homedir ?? os.homedir();
@@ -315,6 +395,15 @@ export function resolveInstallState(
     } catch {
       // fall through to default
     }
+  }
+
+  if (opts.nativeIdentity) {
+    return {
+      channel: opts.nativeIdentity.channel,
+      version,
+      commit: opts.nativeIdentity.commit,
+      source: "host-registry",
+    };
   }
 
   return { channel: "stable", version, commit: null, source: "default" };
@@ -516,6 +605,23 @@ export function computeSignal(opts: {
     // update. The tag comparison below remains the fallback for legacy
     // receipts that do not record an installed commit.
     return { ...base, update_available: false, reason: "up-to-date" };
+  }
+  if (latest && state.version) {
+    const installed = parseComparable(state.version);
+    const published = parseComparable(latest);
+    if (
+      installed &&
+      published &&
+      installed.prerelease.length > 0 &&
+      published.prerelease.length === 0 &&
+      installed.triple.every((part, index) => part === published.triple[index])
+    ) {
+      // A commit-less stable install may retain the reviewed beta candidate
+      // label while the matching bare tag names those exact published bytes.
+      // Treat equal cores as the same stable release; otherwise the prompt can
+      // never clear because reinstalling main preserves the candidate label.
+      return { ...base, update_available: false, reason: "up-to-date" };
+    }
   }
   if (latest && state.version && semverLt(state.version, latest)) {
     return {

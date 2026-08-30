@@ -26,8 +26,10 @@ import { spawn } from "child_process";
 import {
   cacheIsFresh,
   cachePath,
+  parseSemver,
   computeSignal,
   readCache,
+  readNativeHostIdentity,
   refreshCache,
   renderSignalLine,
   resolveInstallState,
@@ -141,8 +143,12 @@ function main(): void {
   const hostKind: "claude" | "wrapper" | "agents-file" =
     caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
 
-  const state = resolveInstallState(pluginRoot);
+  const nativeIdentity = readNativeHostIdentity(hostId, pluginRoot);
+  const state = resolveInstallState(pluginRoot, { nativeIdentity });
   if (state.channel === "dev") return; // AC-5: dev installs are silent
+
+  const cacheFile = cachePath();
+  const cache = readCache(cacheFile);
 
   // RECEIPT MINTING for host-native installs (xhrd-wi-05 / G5). A `codex
   // plugin add` (or any host-native install path) runs no Guild code at
@@ -152,9 +158,11 @@ function main(): void {
   // here, PACKAGE-LOCAL ONLY:
   //   - version from the package's own manifest (state.version — the per-host
   //     probe order landed in readInstalledVersion);
-  //   - channel/ref are derived from a canonical `-beta.N` package version;
-  //     otherwise resolveInstallState's stable/main default remains explicitly
-  //     marked as assumed. Commit is unknowable for a native install.
+  //   - Claude/Codex host registries are consulted before this fallback and
+  //     supply channel + commit without requiring `.git` in the package cache;
+  //   - when no host identity exists, a canonical `-beta.N` version is beta
+  //     unless its core is already the cached published stable tag, in which
+  //     case the identical candidate bytes are stable/main;
   //   - NEVER written to ~/.guild/receipts. The machine registry is the
   //     installer's ledger: a minted machine receipt would make
   //     `install.sh --update` re-render and RE-REGISTER the marketplace,
@@ -166,7 +174,11 @@ function main(): void {
     try {
       const receiptPath = path.join(pluginRoot, RECEIPT_BASENAME);
       const versionDerivedBeta = /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
-      const receiptChannel = versionDerivedBeta ? "beta" : state.channel;
+      const candidateCore = /^(\d+\.\d+\.\d+)-beta\.(?:0|[1-9]\d*)$/.exec(state.version)?.[1];
+      const publishedTriple = cache?.remote.latest_tag ? parseSemver(cache.remote.latest_tag) : null;
+      const publishedCore = publishedTriple?.join(".") ?? null;
+      const candidateIsPublishedStable = candidateCore !== undefined && candidateCore === publishedCore;
+      const receiptChannel = versionDerivedBeta && !candidateIsPublishedStable ? "beta" : state.channel;
       const descriptor = fs.openSync(
         receiptPath,
         fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
@@ -192,7 +204,13 @@ function main(): void {
               // from either: codex-cli's capability row is reinstall_command
               // (never self_update), so the receipt is identification-only.
               managed_by: "host-native",
-              channel_confidence: versionDerivedBeta ? "version-derived" : "assumed-default",
+              channel_confidence: nativeIdentity
+                ? "host-registry"
+                : candidateIsPublishedStable
+                  ? "published-tag-core"
+                  : versionDerivedBeta
+                    ? "version-derived"
+                    : "assumed-default",
             },
             null,
             2
@@ -206,9 +224,6 @@ function main(): void {
       // fail-open — the signal below still works without a receipt
     }
   }
-
-  const cacheFile = cachePath();
-  const cache = readCache(cacheFile);
 
   // Background refresh when stale — the signal from a fresh check lands next
   // session; THIS session never waits on the network (AC-4).

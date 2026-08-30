@@ -119,6 +119,21 @@ describe("check-channel-integrity", () => {
       expect(r.reason).toMatch(/does not contain the exact stable release tree/);
     });
 
+    it("FAILS closed when a candidate-valued main has no corresponding published stable tag", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.8.0-beta.1" }),
+        (ref) => {
+          if (ref === "refs/tags/v2.7.0") throw new Error("unknown ref");
+          return ref;
+        },
+        () => true
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/no published refs\/tags\/v2\.7\.0 tag/);
+    });
+
     it("FAILS when different commits report the same bare version", () => {
       const r = checkChannelIntegrity("s", "b", readerFor({ s: "2.6.0", b: "2.6.0" }));
       expect(r.ok).toBe(false);

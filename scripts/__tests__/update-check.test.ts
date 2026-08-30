@@ -18,6 +18,7 @@ import {
   latestStableTag,
   parseLsRemote,
   parseSemver,
+  readNativeHostIdentity,
   readGitHead,
   refreshCache,
   renderSignalLine,
@@ -296,6 +297,14 @@ describe("computeSignal — per-channel staleness", () => {
     expect(sig).toMatchObject({ update_available: true, reason: "stable-new-commit", available: "2.7.0" });
   });
 
+  it("stable short path: a commit-less install does not compare its published candidate label below the same bare tag", () => {
+    const sig = computeSignal({
+      state: { ...stableState, version: "2.7.0-beta.20", commit: null },
+      cache: cacheWith({ latest_tag: "v2.7.0", main_head_sha: SHA_B }),
+    });
+    expect(sig).toMatchObject({ update_available: false, reason: "up-to-date" });
+  });
+
   it("beta: differing next head SHA → update (SHA labels, wrapper command honored)", () => {
     const sig = computeSignal({
       state: betaState,
@@ -321,5 +330,44 @@ describe("computeSignal — per-channel staleness", () => {
     expect(dev).toMatchObject({ update_available: false, reason: "dev-install" });
     const noCache = computeSignal({ state: stableState, cache: null });
     expect(noCache).toMatchObject({ update_available: false, reason: "no-cache" });
+  });
+});
+
+describe("native host channel identity", () => {
+  it("reads Claude's installed commit and marketplace branch instead of inferring from a beta-shaped manifest", () => {
+    const home = mkTmp("guild-native-claude-");
+    const pluginRoot = path.join(home, ".claude", "plugins", "cache", "guild", "guild", "2.7.0-beta.20");
+    const marketplace = path.join(home, ".claude", "plugins", "marketplaces", "guild");
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.mkdirSync(path.join(marketplace, ".git", "refs", "heads"), { recursive: true });
+    fs.writeFileSync(path.join(marketplace, ".git", "HEAD"), "ref: refs/heads/main\n");
+    fs.writeFileSync(path.join(marketplace, ".git", "refs", "heads", "main"), `${SHA_A}\n`);
+    fs.writeFileSync(
+      path.join(home, ".claude", "plugins", "installed_plugins.json"),
+      JSON.stringify({ plugins: { "guild@guild": [{ installPath: pluginRoot, gitCommitSha: SHA_A }] } })
+    );
+    fs.writeFileSync(
+      path.join(home, ".claude", "plugins", "known_marketplaces.json"),
+      JSON.stringify({ guild: { installLocation: marketplace } })
+    );
+
+    expect(readNativeHostIdentity("claude-code", pluginRoot, { homedir: home })).toEqual({
+      channel: "stable",
+      commit: SHA_A,
+    });
+  });
+
+  it("reads Codex's marketplace ref and revision", () => {
+    const home = mkTmp("guild-native-codex-");
+    const codexHome = path.join(home, ".codex");
+    fs.mkdirSync(codexHome, { recursive: true });
+    fs.writeFileSync(
+      path.join(codexHome, "config.toml"),
+      `[marketplaces.guild]\nlast_revision = "${SHA_B}"\nsource_type = "git"\nref = "next"\n`
+    );
+    expect(readNativeHostIdentity("codex-cli", "/package/guild", { homedir: home, codexHome })).toEqual({
+      channel: "beta",
+      commit: SHA_B,
+    });
   });
 });

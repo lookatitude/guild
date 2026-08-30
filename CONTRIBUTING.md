@@ -171,8 +171,10 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
   generated manifests for the release. A dedicated App and generated
   bare-version metadata convergence are deferred hardening, not release
   prerequisites. Stable update detection compares the installed commit with
-  remote `main`, so the retained candidate label does not produce a false
-  candidate-to-bare update prompt.
+  remote `main`; Claude and Codex native caches recover that identity from the
+  host's existing registry, with a same-core published-tag fallback for legacy
+  commit-less installs. The retained candidate label therefore does not produce
+  a false candidate-to-bare update prompt.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues

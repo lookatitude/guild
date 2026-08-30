@@ -297,6 +297,32 @@ describe("update-check mints a package-local receipt for host-native installs", 
     expect(r["channel_confidence"]).toBe("version-derived");
   });
 
+  it("mints stable/main when the candidate core is already the published stable tag", () => {
+    fs.writeFileSync(
+      path.join(pkg, ".codex-plugin", "plugin.json"),
+      '{\n  "name": "guild",\n  "version": "2.7.0-beta.20"\n}\n'
+    );
+    fs.writeFileSync(
+      path.join(home, ".guild", "update-check.json"),
+      JSON.stringify({
+        schema_version: "guild.update_check_cache.v1",
+        checked_at: "2099-01-01T00:00:00Z",
+        source_repo: "fixture",
+        remote: { latest_tag: "v2.7.0", next_head_sha: null, main_head_sha: null },
+      })
+    );
+
+    runHook();
+    const r = JSON.parse(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
+    expect(r["version"]).toBe("2.7.0-beta.20");
+    expect(r["channel"]).toBe("stable");
+    expect(r["ref"]).toBe("main");
+    expect(r["channel_confidence"]).toBe("published-tag-core");
+  });
+
   it("does NOT clobber an existing receipt on later sessions", () => {
     runHook();
     const first = fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8");
