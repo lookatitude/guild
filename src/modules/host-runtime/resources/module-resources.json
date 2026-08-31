@@ -924,7 +924,7 @@
       "id": "projection:src/modules/distribution/workflows/release-package-identity.ts",
       "source_path": "src/modules/distribution/workflows/release-package-identity.ts",
       "resource_path": "resources/src/modules/distribution/workflows/release-package-identity.ts",
-      "sha256": "337daa03a567469506f6c4eb819aff3394b2800528e1281ea3eef2920213dd42",
+      "sha256": "4aae6a0479e6adc573767bc3ee85c3e653da64485c0266cf2740771ead2831c1",
       "projection_dependency": true
     },
     {
