@@ -54,9 +54,10 @@ hook defers receipt minting instead of permanently guessing stable or beta.
    hash-bound release-evidence gate, generated-manifest consistency, and any
    required GitHub OIDC attestation verification.
 4. The release workflow re-runs the promotion gate and verifies that the merged
-   commit tree equals the exact reviewed `next` head tree. Merge, squash, and
-   rebase PR methods are valid because later channel checks search `next`
-   history for that exact released tree rather than depending on merge topology.
+   commit tree equals the exact reviewed `next` head tree. The release PR must
+   use GitHub's **Create a merge commit** method so the evidence-bound `next`
+   source commit remains an ancestor of the merged `main` commit. Squash and
+   rebase merges are invalid for this release path and fail the ancestry gate.
 5. CI derives the bare tag only from exact `X.Y.Z-beta.N` in the reviewed
    manifest. Branch names, labels, PR titles, and operator input never choose
    the version.
