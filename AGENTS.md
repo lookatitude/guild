@@ -209,8 +209,10 @@ Release workflow (operator-driven, when `next` is ready):
    unavailable to later versions.
 2. Open the release PR from the repository's exact `next` branch to `main`.
    `branch-policy.yml` rejects every other head branch and all forks.
-3. Merge the PR using the repository's normal merge, squash, or rebase method.
-   CI requires the merged tree to equal the exact reviewed `next` tree, re-runs
+3. Merge the PR using GitHub's **Create a merge commit** method. Squash and
+   rebase merges are invalid because the evidence-bound `next` source commit
+   must remain an ancestor of the merged `main` commit. CI also requires the
+   merged tree to equal the exact reviewed `next` tree, re-runs
    promotion evidence, verifies any required release-basis OIDC identity, and
    derives the bare stable tag
    from the reviewed beta manifest, tags the exact merge commit with the
