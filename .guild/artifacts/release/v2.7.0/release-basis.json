@@ -1,0 +1,13 @@
+{
+  "schema_version": "guild.release_basis.v1",
+  "version": "2.7.0",
+  "source_commit": "c283029ef8a74999f3b60c90bff5bf4807c7b657",
+  "decision": "provenance_release_only",
+  "exception_scope": "v2.7.0_only",
+  "conformance_authority": "not_established",
+  "may_promote_conformant": false,
+  "migration_window_status": "post_release_observe",
+  "github_oidc_attestation_required": true,
+  "scenario_documentation_sha256": "a01ab2c03a13b24c8d99085b966d1eb800dfbeb2e15a178f1dfd764b9453093b",
+  "external_review_sha256": "0c17339bca0514164b6263929dec4d5fb8be8fd1f589afa747e300497f22b8a3"
+}
