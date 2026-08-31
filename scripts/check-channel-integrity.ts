@@ -73,6 +73,9 @@ export const MARKETPLACE_PATH = ".claude-plugin/marketplace.json";
 /** Schema identifiers for the two hash-bound release-evidence records. */
 export const RELEASE_PROMOTION_SCHEMA = "guild.release_promotion.v1";
 export const RELEASE_CONFORMANCE_SCHEMA = "guild.release_conformance.v1";
+export const V270_RELEASE_BASIS_SCHEMA = "guild.release_basis.v1";
+export const V270_SCENARIO_DOCUMENTATION_SCHEMA = "guild.release_scenario_documentation.v1";
+export const V270_EXTERNAL_REVIEW_SCHEMA = "guild.release_external_review.v1";
 
 /**
  * The frozen 31-scenario conformance contract, pinned by content hash.
@@ -466,6 +469,24 @@ export function promotionAllowedPaths(version: string): string[] {
 }
 
 /**
+ * One-release evidence paths for the v2.7.0 provenance-only release basis.
+ *
+ * This is deliberately a differently named, mechanically version-pinned path:
+ * it does not claim `guild.release_conformance.v1`, and it cannot authorize a
+ * later release. The existing conformance path remains the only path returned
+ * by `promotionAllowedPaths`.
+ */
+export function v270ProvenanceAllowedPaths(version: string): string[] {
+  if (version !== "2.7.0") return [];
+  const evidenceDir = `.guild/artifacts/release/v${version}`;
+  return [
+    `${evidenceDir}/release-basis.json`,
+    `${evidenceDir}/scenario-documentation.json`,
+    `${evidenceDir}/external-review.json`,
+  ];
+}
+
+/**
  * The four git facts the gate needs, as an interface so tests can exercise the
  * full decision path against an in-memory repository. The green path is only
  * reachable that way HONESTLY: the sole conformant evidence in this repository
@@ -533,6 +554,227 @@ function parseJsonRecord(bytes: Buffer): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function exactStringArray(value: unknown, expected: readonly string[]): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    expected.every((item, index) => value[index] === item)
+  );
+}
+
+/**
+ * Validate the explicit v2.7.0-only provenance release basis.
+ *
+ * GitHub OIDC verification is intentionally performed by the protected
+ * workflows, because an offline repository check cannot prove a GitHub-issued
+ * attestation. This function proves the attested subject is a truthful,
+ * hash-bound, non-conformance record and that only its three evidence files
+ * changed after the named source commit.
+ */
+function checkV270ProvenanceRelease(
+  version: string,
+  headSha: string,
+  git: PromotionGitOps
+): PromotionResult {
+  if (version !== "2.7.0") {
+    return refusePromotion(
+      "v270_exception_scope_mismatch",
+      `the provenance release basis is mechanically restricted to 2.7.0, not ${version}.`
+    );
+  }
+  const [basisPath, scenarioPath, reviewPath] = v270ProvenanceAllowedPaths(version);
+  const basisBytes = git.showBytes(headSha, basisPath);
+  if (basisBytes === null) {
+    return refusePromotion("v270_release_basis_missing", `${basisPath} is absent at ${headSha}.`);
+  }
+  const scenarioBytes = git.showBytes(headSha, scenarioPath);
+  if (scenarioBytes === null) {
+    return refusePromotion("v270_scenario_documentation_missing", `${scenarioPath} is absent at ${headSha}.`);
+  }
+  const reviewBytes = git.showBytes(headSha, reviewPath);
+  if (reviewBytes === null) {
+    return refusePromotion("v270_external_review_missing", `${reviewPath} is absent at ${headSha}.`);
+  }
+
+  const basis = parseJsonRecord(basisBytes);
+  if (basis === null || basis.schema_version !== V270_RELEASE_BASIS_SCHEMA) {
+    return refusePromotion(
+      "v270_release_basis_malformed",
+      `${basisPath} must be a ${V270_RELEASE_BASIS_SCHEMA} JSON object.`
+    );
+  }
+  if (basis.version !== "2.7.0" || basis.exception_scope !== "v2.7.0_only") {
+    return refusePromotion(
+      "v270_exception_scope_mismatch",
+      `the release basis must name version 2.7.0 and exception_scope "v2.7.0_only".`
+    );
+  }
+  if (
+    basis.decision !== "provenance_release_only" ||
+    basis.conformance_authority !== "not_established" ||
+    basis.may_promote_conformant !== false
+  ) {
+    return refusePromotion(
+      "v270_conformance_authority_claimed",
+      `the v2.7.0 basis may authorize provenance-only publication; it may not claim conformance authority.`
+    );
+  }
+  if (basis.migration_window_status !== "post_release_observe") {
+    return refusePromotion(
+      "v270_migration_status_misrepresented",
+      `migration_window_status must remain "post_release_observe" until the observation windows actually close.`
+    );
+  }
+  if (basis.github_oidc_attestation_required !== true) {
+    return refusePromotion(
+      "v270_oidc_attestation_not_required",
+      `the release basis must require GitHub OIDC attestation; local authorship alone is insufficient.`
+    );
+  }
+  if (typeof basis.source_commit !== "string" || !COMMIT_SHA_RE.test(basis.source_commit)) {
+    return refusePromotion(
+      "v270_source_commit_malformed",
+      `release-basis.source_commit must be a 40-hex commit sha.`
+    );
+  }
+
+  // Bind bytes before interpreting their contents. A tampered or truncated
+  // attachment must report hash drift rather than being mistaken for a fresh
+  // malformed authoring attempt.
+  if (
+    typeof basis.scenario_documentation_sha256 !== "string" ||
+    !SHA256_HEX_RE.test(basis.scenario_documentation_sha256) ||
+    basis.scenario_documentation_sha256 !== sha256Hex(scenarioBytes)
+  ) {
+    return refusePromotion(
+      "v270_scenario_documentation_hash_mismatch",
+      `release-basis does not bind the exact scenario-documentation.json bytes.`
+    );
+  }
+  if (
+    typeof basis.external_review_sha256 !== "string" ||
+    !SHA256_HEX_RE.test(basis.external_review_sha256) ||
+    basis.external_review_sha256 !== sha256Hex(reviewBytes)
+  ) {
+    return refusePromotion(
+      "v270_external_review_hash_mismatch",
+      `release-basis does not bind the exact external-review.json bytes.`
+    );
+  }
+
+  const scenario = parseJsonRecord(scenarioBytes);
+  if (
+    scenario === null ||
+    scenario.schema_version !== V270_SCENARIO_DOCUMENTATION_SCHEMA ||
+    scenario.version !== version ||
+    scenario.source_commit !== basis.source_commit ||
+    scenario.scenario_contract_sha256 !== FROZEN_SCENARIO_CONTRACT_SHA256 ||
+    !exactStringArray(scenario.scenario_ids, FROZEN_SCENARIO_CONTRACT_IDS) ||
+    scenario.documented_scenario_count !== FROZEN_SCENARIO_CONTRACT_COUNT ||
+    scenario.evidence_status !== "unattested_documentation"
+  ) {
+    return refusePromotion(
+      "v270_scenario_documentation_malformed",
+      `scenario documentation must name the exact 31-scenario contract and identify itself as unattested documentation; it makes no execution claim.`
+    );
+  }
+  if (
+    scenario.external_attestation_verified !== false ||
+    scenario.authorizes_promotion !== false ||
+    scenario.may_promote_conformant !== false
+  ) {
+    return refusePromotion(
+      "v270_scenario_authority_claimed",
+      `scenario documentation is non-authorizing and may not claim external attestation or conformance promotion authority.`
+    );
+  }
+
+  const review = parseJsonRecord(reviewBytes);
+  if (
+    review === null ||
+    review.schema_version !== V270_EXTERNAL_REVIEW_SCHEMA ||
+    review.version !== version ||
+    review.source_commit !== basis.source_commit ||
+    review.author_host !== "codex" ||
+    review.reviewer_host !== "claude-code" ||
+    review.independence !== "cross_family_co_located"
+  ) {
+    return refusePromotion(
+      "v270_external_review_malformed",
+      `external review must bind the same source and truthfully identify the cross-family co-located Claude review.`
+    );
+  }
+  if (review.authorizes_cryptographic_conformance !== false) {
+    return refusePromotion(
+      "v270_review_authority_claimed",
+      `the Claude review is advisory and may not claim cryptographic conformance authority.`
+    );
+  }
+  if (
+    review.verdict !== "satisfied" ||
+    !Array.isArray(review.blocking_findings) ||
+    review.blocking_findings.length !== 0
+  ) {
+    return refusePromotion(
+      "v270_external_review_not_satisfied",
+      `the bound Claude review must be satisfied with no blocking findings.`
+    );
+  }
+
+  const sourceCommit = basis.source_commit as string;
+  if (git.resolveCommit(sourceCommit) === null) {
+    return refusePromotion(
+      "source_commit_unknown",
+      `release-basis source commit ${sourceCommit} is not a commit in this repository.`
+    );
+  }
+  const sourceManifestBytes = git.showBytes(sourceCommit, MANIFEST_PATH);
+  const sourceManifest = sourceManifestBytes === null ? null : parseJsonRecord(sourceManifestBytes);
+  if (sourceManifest === null || typeof sourceManifest.version !== "string") {
+    return refusePromotion(
+      "source_manifest_malformed",
+      `${MANIFEST_PATH} at release-basis source commit ${sourceCommit} has no usable version.`
+    );
+  }
+  let sourceCore: string;
+  try {
+    sourceCore = parseVersion(sourceManifest.version).core.join(".");
+  } catch {
+    return refusePromotion(
+      "source_manifest_malformed",
+      `${MANIFEST_PATH} at release-basis source commit ${sourceCommit} carries an unparseable version.`
+    );
+  }
+  if (sourceCore !== version) {
+    return refusePromotion(
+      "source_version_core_mismatch",
+      `release-basis source ${sourceCommit} builds ${sourceManifest.version}, not release core ${version}.`
+    );
+  }
+  if (!git.isAncestor(sourceCommit, headSha)) {
+    return refusePromotion(
+      "source_commit_not_ancestor",
+      `release-basis source commit ${sourceCommit} is not an ancestor of ${headSha}.`
+    );
+  }
+  const allowed = new Set(v270ProvenanceAllowedPaths(version));
+  const disallowed = git.changedPaths(sourceCommit, headSha).filter((candidate) => !allowed.has(candidate));
+  if (disallowed.length > 0) {
+    return refusePromotion(
+      "disallowed_path_changed",
+      `paths changed outside the v2.7.0 provenance evidence set: ${disallowed.join(", ")}.`
+    );
+  }
+
+  return {
+    ok: true,
+    code: "provenance_exception_promotable_v2_7_0",
+    reason:
+      `v2.7.0 carries a GitHub-OIDC-required, hash-bound provenance release basis for source ${sourceCommit}; ` +
+      `it explicitly does not establish cryptographic conformance authority, and migration windows remain post-release observe.`,
+  };
 }
 
 /**
@@ -653,6 +895,14 @@ export function checkStablePromotion(
       `generated ${MARKETPLACE_PATH} carries ${JSON.stringify(marketplaceEntry.version)} while the canonical ` +
         `${MANIFEST_PATH} carries ${manifest.version}; regenerate it (npm run sync:claude-install).`
     );
+  }
+
+  // 4b — exact v2.7.0 may use the separately named provenance-only basis.
+  // Protected workflows additionally verify the GitHub OIDC attestation over
+  // release-basis.json with exact repository, workflow, ref, and source digest.
+  // No later release can enter this path.
+  if (version === "2.7.0") {
+    return checkV270ProvenanceRelease(version, headSha, git);
   }
 
   // 5 — the guild.release_promotion.v1 record.

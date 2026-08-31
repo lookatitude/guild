@@ -10,7 +10,7 @@ source_refs:
   - plugin/scripts/check-channel-integrity.ts
   - plugin/scripts/finalize-stable-release.ts
 created_at: 2026-07-12
-updated_at: 2026-08-30
+updated_at: 2026-08-31
 sensitivity: internal
 ---
 
@@ -28,7 +28,7 @@ pull request from exact `next` to `main`. No release branch is used.
 | Promotion | Same-repository exact `next -> main` PR |
 | Stable identity | CI-derived `vMAJOR.MINOR.PATCH` tag and GitHub Release |
 | Release bytes | Exact reviewed merged commit; its tree equals the PR head tree |
-| Granted token scope | Release job only: built-in `GITHUB_TOKEN` with `contents: write`; checkout does not persist it |
+| Granted token scope | Evidence attester: `id-token: write`, `attestations: write`; release job: built-in `GITHUB_TOKEN` with `contents: write`, `attestations: read`; checkout does not persist credentials |
 | Workflow writes | Immutable stable tag and GitHub Release only |
 | Protected refs | CI never commits or pushes to `main` or `next` |
 
@@ -50,8 +50,9 @@ hook defers receipt minting instead of permanently guessing stable or beta.
 
 1. All feature, fix, documentation, and beta-version work targets `next`.
 2. `main` accepts only a same-repository PR whose exact head ref is `next`.
-3. The promotion PR must pass `branch-policy`, including the hash-bound release
-   promotion evidence gate and generated-manifest consistency check.
+3. The promotion PR must pass `branch-policy`, including the applicable
+   hash-bound release-evidence gate, generated-manifest consistency, and any
+   required GitHub OIDC attestation verification.
 4. The release workflow re-runs the promotion gate and verifies that the merged
    commit tree equals the exact reviewed `next` head tree. Merge, squash, and
    rebase PR methods are valid because later channel checks search `next`
@@ -72,9 +73,10 @@ hook defers receipt minting instead of permanently guessing stable or beta.
 
 ## Release procedure
 
-1. Freeze the current `next` candidate and merge the independently authorized,
-   hash-bound conformance and promotion evidence for that exact source commit.
-   The evidence-only merge is the final `next` tip for this release.
+1. Freeze the current `next` candidate and merge the hash-bound evidence for
+   that exact source commit. Normally this is independently authorized
+   conformance plus promotion evidence. The evidence-only merge is the final
+   `next` tip for the release.
 
 2. Verify the frozen tip locally:
 
@@ -109,12 +111,54 @@ hook defers receipt minting instead of permanently guessing stable or beta.
      --stable origin/main --beta origin/next
    ```
 
+## Bounded v2.7.0 provenance-only basis
+
+The fixture-era WOTS custodians cannot authorize a fresh full-suite record:
+their private seeds were intentionally discarded. Re-labeling a local Claude
+review or GitHub build provenance as independent cryptographic conformance
+would be false. For exactly v2.7.0, the gate therefore accepts a separately
+named `guild.release_basis.v1` record that says the opposite explicitly:
+
+- `decision` is `provenance_release_only` and `conformance_authority` is
+  `not_established`;
+- the 31-scenario attachment is `unattested_documentation` and cannot authorize
+  promotion;
+- the Claude review is recorded as `cross_family_co_located`, advisory, and
+  cannot authorize cryptographic conformance;
+- the two unfinished migration/custody windows remain
+  `post_release_observe` follow-ups;
+- the basis hash-binds both attachments and names the exact source commit;
+- only the three evidence files may differ after that source commit; and
+- GitHub OIDC attests the basis after it lands on exact `next`. Both
+  `branch-policy.yml` and `release.yml` verify the artifact digest plus exact
+  repository, signer workflow, `refs/heads/next`, source digest, and hosted
+  runner provenance.
+
+This is build/release provenance, not conformance authority. The code path is
+mechanically pinned to stable core `2.7.0`; `2.7.1` and every later release use
+the ordinary conformance path. Restoring real external custody requires fresh
+custodian roots and ceremonies and remains a post-release follow-up.
+
+For v2.7.0 only, the evidence sequence is:
+
+1. Merge the implementation/workflow change into `next`; record that merge SHA
+   as `source_commit`.
+2. Produce `scenario-documentation.json` and a satisfied, checksum-bound Claude
+   `external-review.json`, then generate `release-basis.json` over their exact
+   bytes.
+3. Merge only those three files into `next`. Wait for
+   `release-evidence-attestation.yml` to attest `release-basis.json` at that
+   exact `next` SHA.
+4. Run the ordinary local verification and open the single `next -> main` PR.
+   The protected pre-merge and post-merge workflows perform the online OIDC
+   verification; a local pass alone is not sufficient.
+
 ## Failure and recovery
 
 - A non-`next` PR, fork PR, malformed beta version, missing evidence, failed
-  conformance decision, tree mismatch, missing or mismatched prior stable tag,
-  or non-advancing version stops before tag
-  creation.
+  conformance decision (or, for exact v2.7.0, a malformed/over-claiming basis or
+  missing/mismatched OIDC attestation), tree mismatch, missing or mismatched
+  prior stable tag, or non-advancing version stops before tag creation.
 - A tag collision fails unless the existing tag already peels to the exact
   reviewed merge commit.
 - If tag creation succeeds but GitHub Release creation fails, re-run the same

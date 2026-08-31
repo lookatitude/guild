@@ -304,6 +304,46 @@ describe("release package identity — deterministic cross-install lineage", () 
     }
   });
 
+  it("detaches only typed release evidence records from the native payload identity", () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), "guild-native-release-evidence-"));
+    const source = path.join(parent, "source");
+    const cache = path.join(parent, "cache");
+    const archive = path.join(parent, "payload.tar");
+    try {
+      fs.mkdirSync(path.join(source, ".claude-plugin"), { recursive: true });
+      fs.writeFileSync(
+        path.join(source, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "guild", version: "2.7.0" }),
+      );
+      execFileSync("git", ["init", "-q", source]);
+      execFileSync("git", ["-C", source, "config", "user.name", "Guild Test"]);
+      execFileSync("git", ["-C", source, "config", "user.email", "guild-test@example.invalid"]);
+      execFileSync("git", ["-C", source, "add", "."]);
+      execFileSync("git", ["-C", source, "commit", "-qm", "payload"]);
+      const identity = writeNativeClaudePackageIdentity(source, "2.7.0");
+
+      const evidenceDir = path.join(source, ".guild", "artifacts", "release", "v2.7.0");
+      fs.mkdirSync(evidenceDir, { recursive: true });
+      for (const name of ["release-basis", "scenario-documentation", "external-review"]) {
+        fs.writeFileSync(path.join(evidenceDir, `${name}.json`), `${JSON.stringify({ name })}\n`);
+      }
+      execFileSync("git", ["-C", source, "add", "."]);
+      execFileSync("git", ["-C", source, "commit", "-qm", "release evidence"]);
+      fs.mkdirSync(cache);
+      execFileSync("git", ["-C", source, "archive", "--format=tar", `--output=${archive}`, "HEAD"]);
+      execFileSync("tar", ["-xf", archive, "-C", cache]);
+
+      expect(readVerifiedNativeClaudePackageIdentity(cache)).toEqual(identity);
+
+      fs.writeFileSync(path.join(cache, ".guild", "artifacts", "release", "v2.7.0", "payload.sh"), "exit 0\n");
+      expect(() => readVerifiedNativeClaudePackageIdentity(cache)).toThrow(
+        /native Claude complete payload digest differs/i,
+      );
+    } finally {
+      fs.rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("accepts only the lock-bound production runtime added to a native marketplace cache", () => {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), "guild-native-locked-runtime-"));
     const source = path.join(parent, "source");

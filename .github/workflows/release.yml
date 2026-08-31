@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      attestations: read
     steps:
       - name: Checkout the reviewed merge commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -48,6 +49,22 @@ jobs:
           git fetch origin main next --tags --force
           test "$(git rev-parse "$MERGE_SHA^{tree}")" = "$(git rev-parse "$PR_HEAD_SHA^{tree}")"
           git merge-base --is-ancestor "$MERGE_SHA" origin/main
+
+      - name: Verify the v2.7.0 GitHub OIDC provenance attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./.claude-plugin/plugin.json').version")"
+          if [[ "$VERSION" == 2.7.0-beta.* ]]; then
+            gh attestation verify .guild/artifacts/release/v2.7.0/release-basis.json \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release-evidence-attestation.yml@refs/heads/next" \
+              --source-ref refs/heads/next \
+              --source-digest "$PR_HEAD_SHA" \
+              --deny-self-hosted-runners
+          fi
 
       - name: Re-verify hash-bound promotion evidence
         env:

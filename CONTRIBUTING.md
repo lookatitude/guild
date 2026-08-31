@@ -160,10 +160,13 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
   `next` = beta/integration (all merged PRs collect and get tested here).
 - Stable promotion is a direct same-repository `next -> main` PR. No release
   branch and no manual merge-back or sync-back is used.
-- Before that PR, an operator freezes the code tip, produces independently
-  authorized full-suite conformance evidence for that exact SHA, and merges an
-  evidence-only PR into `next`. The promotion gate permits only the two
-  hash-bound evidence records after the verified source commit.
+- Before that PR, an operator freezes the code tip, produces the applicable
+  hash-bound release evidence for that exact SHA, and merges an evidence-only
+  PR into `next`. The normal path requires independently authorized full-suite
+  conformance. Exact v2.7.0 instead uses a separately named, GitHub-OIDC-attested
+  provenance-only basis that explicitly does not claim conformance authority;
+  its gate is unavailable to every later version. The canonical runbook records
+  its three-file allowed diff and the still-open custody/migration follow-ups.
 - `next` carries exact `MAJOR.MINOR.PATCH-beta.N`. After the direct PR merges,
   CI derives `vMAJOR.MINOR.PATCH`, tags the exact reviewed merge commit, and
   publishes the PR body as release notes with the built-in repository token.

@@ -131,6 +131,17 @@ function isHostManagedPackageMetadata(relativePath: string): boolean {
     normalized.startsWith(".in_use/");
 }
 
+/**
+ * Release evidence is committed after the source payload it describes, so it
+ * cannot be part of that payload's self-identity. Only the typed JSON records
+ * accepted by the release gate are detached; any other file under the release
+ * directory remains payload-bound and therefore fails closed if planted.
+ */
+function isDetachedReleaseEvidenceRecord(relativePath: string): boolean {
+  const normalized = normalizedRelativePath(relativePath);
+  return /^\.guild\/artifacts\/release\/v\d+\.\d+\.\d+\/(?:promotion|conformance|release-basis|scenario-documentation|external-review)\.json$/.test(normalized);
+}
+
 function assertNoHostManagedMetadataAtEmission(root: string): void {
   for (const name of [".codex-marketplace-install.json", ".in_use"] as const) {
     try {
@@ -209,7 +220,11 @@ export function computeTrackedNativeClaudePayloadDigest(pluginRoot: string): str
       }
       return { relativePath, executable: mode === "100755" };
     })
-    .filter(({ relativePath }) => normalizedRelativePath(relativePath) !== NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE)
+    .filter(({ relativePath }) => {
+      const normalized = normalizedRelativePath(relativePath);
+      return normalized !== NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE &&
+        !isDetachedReleaseEvidenceRecord(normalized);
+    })
     .sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0);
   if (tracked.length === 0) throw new Error("native Claude payload has no tracked files");
   const digest = createHash("sha256");
@@ -243,7 +258,8 @@ export function computePhysicalNativeClaudePayloadDigest(packageRoot: string): s
         normalized === RELEASE_PACKAGE_INSTALL_RECEIPT_FILE ||
         normalized === ".codex-marketplace-install.json" ||
         normalized === ".in_use" ||
-        normalized.startsWith(".in_use/")
+        normalized.startsWith(".in_use/") ||
+        isDetachedReleaseEvidenceRecord(normalized)
       ) continue;
       const absolutePath = path.join(directory, entry.name);
       const stats = fs.lstatSync(absolutePath);

@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  attestations: read
 
 jobs:
   branch-policy:
@@ -90,6 +91,21 @@ jobs:
         run: npm ci --prefer-offline
       - name: Fetch the current stable channel for monotonic-version comparison
         run: git fetch origin main --quiet
+      - name: Verify the v2.7.0 GitHub OIDC provenance attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./.claude-plugin/plugin.json').version")"
+          if [[ "$VERSION" == 2.7.0-beta.* ]]; then
+            gh attestation verify .guild/artifacts/release/v2.7.0/release-basis.json \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release-evidence-attestation.yml@refs/heads/next" \
+              --source-ref refs/heads/next \
+              --source-digest "$PR_HEAD_SHA" \
+              --deny-self-hosted-runners
+          fi
       # `next` itself remains internally generated-consistent before promotion.
       - name: Enforce the generated-manifest invariant (check:claude-install)
         working-directory: scripts
