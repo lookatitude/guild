@@ -1,0 +1,52 @@
+name: Attest v2.7.0 provenance release basis
+
+# This workflow is deliberately narrower than release conformance. It attests
+# the exact, non-authorizing v2.7.0 release-basis bytes after they land on next.
+# The protected promotion and release workflows independently verify the OIDC
+# identity, source ref, source digest, and artifact digest before publication.
+on:
+  push:
+    branches: [next]
+    paths:
+      - .guild/artifacts/release/v2.7.0/release-basis.json
+      - .guild/artifacts/release/v2.7.0/scenario-documentation.json
+      - .guild/artifacts/release/v2.7.0/external-review.json
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  attest-release-basis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the exact next evidence commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+
+      - name: Install exact script dependencies
+        run: npm --prefix scripts ci --prefer-offline
+
+      - name: Validate the non-conformance basis before signing it
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          npm --prefix scripts run check:channel-integrity -- promotion \
+            --source-branch next \
+            --head "$GITHUB_SHA" \
+            --stable-ref origin/main \
+            --root ..
+
+      - name: Attest the exact v2.7.0 release-basis bytes with GitHub OIDC provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: .guild/artifacts/release/v2.7.0/release-basis.json

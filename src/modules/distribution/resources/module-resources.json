@@ -50,7 +50,7 @@
       "id": "check-channel-integrity",
       "source_path": "scripts/check-channel-integrity.ts",
       "resource_path": "resources/scripts/check-channel-integrity.ts",
-      "sha256": "3962ea6e56c75ea819ffb8564adb46987c8ca2ca28a2432a1a739279966b2f28"
+      "sha256": "ee5393cd79169008d5dddf80d5f147cbb3268289287d11eb4f2f055e665b24cc"
     },
     {
       "category": "scripts",

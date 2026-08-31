@@ -47,7 +47,11 @@ import {
   FROZEN_SCENARIO_CONTRACT_IDS,
   RELEASE_CONFORMANCE_SCHEMA,
   RELEASE_PROMOTION_SCHEMA,
+  V270_EXTERNAL_REVIEW_SCHEMA,
+  V270_RELEASE_BASIS_SCHEMA,
+  V270_SCENARIO_DOCUMENTATION_SCHEMA,
   MANIFEST_PATH,
+  v270ProvenanceAllowedPaths,
   type PromotionGitOps,
 } from "../check-channel-integrity";
 
@@ -877,7 +881,8 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     const releaseJob = doc.jobs?.release;
     expect(String(releaseJob?.if ?? "")).toContain("github.event.pull_request.head.ref == 'next'");
     expect(String(releaseJob?.if ?? "")).toContain("github.event.pull_request.head.repo.full_name == github.repository");
-    expect(raw).not.toMatch(/release\/v/);
+    const withoutEvidencePaths = raw.replaceAll(".guild/artifacts/release/v2.7.0", "");
+    expect(withoutEvidencePaths).not.toMatch(/release\/v/);
   });
 
   it("release.yml tags the reviewed merge with the built-in token and never rewrites protected branches", () => {
@@ -903,7 +908,13 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     expect(workflow).toMatch(/gh api --method POST "repos\/\$\{GITHUB_REPOSITORY\}\/git\/refs"/);
     expect(workflow).toMatch(/-f object="\$MERGE_SHA"/);
     expect(workflow).not.toMatch(/git push|x-access-token/);
-    expect(workflow).not.toMatch(/refs\/heads\/(main|next)/);
+    // Attestation identity legitimately names refs/heads/next twice. Remove
+    // only those exact known-good arguments, then retain the whole-command ban
+    // on any protected-ref spelling (including a future `gh api` rewrite).
+    const withoutAttestationRef = workflow
+      .replaceAll("--source-ref refs/heads/next", "")
+      .replaceAll("@refs/heads/next", "");
+    expect(withoutAttestationRef).not.toMatch(/refs\/heads\/(main|next)/);
     expect(raw).toMatch(/github\.event\.pull_request\.head\.sha/);
     expect(workflow).not.toMatch(/merge-base --is-ancestor "\$PR_HEAD_SHA" "\$MERGE_SHA"/);
     expect(workflow).toMatch(/merge-base --is-ancestor "\$MERGE_SHA" origin\/main/);
@@ -944,5 +955,182 @@ describe("CI wiring — branch-policy.yml and the untouched ordinary mode", () =
     const raw = fs.readFileSync(path.join(workflows, "channel-integrity.yml"), "utf8");
     expect(raw).toMatch(/check.channel.integrity/);
     expect(raw).not.toMatch(/promotion/);
+  });
+});
+
+describe("v2.7.0-only provenance release basis", () => {
+  const version = "2.7.0";
+  const sourceCommit = "1111111111111111111111111111111111111111";
+  const headSha = "2222222222222222222222222222222222222222";
+  const stableSha = "3333333333333333333333333333333333333333";
+
+  function records(overrides: {
+    basis?: Record<string, unknown>;
+    scenario?: Record<string, unknown>;
+    review?: Record<string, unknown>;
+  } = {}) {
+    const scenario = {
+      schema_version: V270_SCENARIO_DOCUMENTATION_SCHEMA,
+      version,
+      source_commit: sourceCommit,
+      scenario_contract_sha256: FROZEN_SCENARIO_CONTRACT_SHA256,
+      scenario_ids: [...FROZEN_SCENARIO_CONTRACT_IDS],
+      documented_scenario_count: FROZEN_SCENARIO_CONTRACT_COUNT,
+      evidence_status: "unattested_documentation",
+      external_attestation_verified: false,
+      authorizes_promotion: false,
+      may_promote_conformant: false,
+      ...overrides.scenario,
+    };
+    const review = {
+      schema_version: V270_EXTERNAL_REVIEW_SCHEMA,
+      version,
+      source_commit: sourceCommit,
+      author_host: "codex",
+      reviewer_host: "claude-code",
+      independence: "cross_family_co_located",
+      verdict: "satisfied",
+      blocking_findings: [],
+      authorizes_cryptographic_conformance: false,
+      ...overrides.review,
+    };
+    const scenarioBytes = Buffer.from(JSON.stringify(scenario, null, 2) + "\n");
+    const reviewBytes = Buffer.from(JSON.stringify(review, null, 2) + "\n");
+    const basis = {
+      schema_version: V270_RELEASE_BASIS_SCHEMA,
+      version,
+      source_commit: sourceCommit,
+      decision: "provenance_release_only",
+      exception_scope: "v2.7.0_only",
+      conformance_authority: "not_established",
+      may_promote_conformant: false,
+      migration_window_status: "post_release_observe",
+      github_oidc_attestation_required: true,
+      scenario_documentation_sha256: sha256(scenarioBytes),
+      external_review_sha256: sha256(reviewBytes),
+      ...overrides.basis,
+    };
+    return {
+      basis: Buffer.from(JSON.stringify(basis, null, 2) + "\n"),
+      scenario: scenarioBytes,
+      review: reviewBytes,
+    };
+  }
+
+  function repo(overrides: Parameters<typeof records>[0] = {}): FakeRepo {
+    const evidence = records(overrides);
+    const files = new Map<string, Buffer>();
+    const put = (ref: string, file: string, bytes: Buffer | string) =>
+      files.set(`${ref}:${file}`, Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
+    put(headSha, MANIFEST_PATH, JSON.stringify({ name: "guild", version: `${version}-beta.20` }));
+    put(
+      headSha,
+      MARKETPLACE_PATH,
+      JSON.stringify({ name: "guild", plugins: [{ name: "guild", version: `${version}-beta.20` }] })
+    );
+    const [basisPath, scenarioPath, reviewPath] = v270ProvenanceAllowedPaths(version);
+    put(headSha, basisPath, evidence.basis);
+    put(headSha, scenarioPath, evidence.scenario);
+    put(headSha, reviewPath, evidence.review);
+    put(sourceCommit, MANIFEST_PATH, JSON.stringify({ name: "guild", version: `${version}-beta.20` }));
+    put(stableSha, MANIFEST_PATH, JSON.stringify({ name: "guild", version: "2.6.0" }));
+    return {
+      refs: {
+        HEAD: headSha,
+        [headSha]: headSha,
+        [sourceCommit]: sourceCommit,
+        "origin/main": stableSha,
+        [stableSha]: stableSha,
+      },
+      files,
+      ancestries: new Set([`${sourceCommit}..${headSha}`]),
+      diffs: new Map([[`${sourceCommit}..${headSha}`, v270ProvenanceAllowedPaths(version)]]),
+    };
+  }
+
+  it("admits the explicit non-conformance provenance basis for exact v2.7.0", () => {
+    const result = checkStablePromotion(
+      { sourceBranch: "next", headRef: "HEAD", stableRef: "origin/main" },
+      fakeGit(repo())
+    );
+    expect(result).toEqual(
+      expect.objectContaining({ ok: true, code: "provenance_exception_promotable_v2_7_0" })
+    );
+  });
+
+  it.each([
+    ["conformance authority", { basis: { conformance_authority: "established" } }, "v270_conformance_authority_claimed"],
+    ["promotion authority", { basis: { may_promote_conformant: true } }, "v270_conformance_authority_claimed"],
+    ["migration closure", { basis: { migration_window_status: "complete" } }, "v270_migration_status_misrepresented"],
+    ["wrong exception scope", { basis: { exception_scope: "all_versions" } }, "v270_exception_scope_mismatch"],
+    ["review blocker", { review: { verdict: "issues", blocking_findings: ["missing control"] } }, "v270_external_review_not_satisfied"],
+    ["review authority", { review: { authorizes_cryptographic_conformance: true } }, "v270_review_authority_claimed"],
+    ["scenario authority", { scenario: { authorizes_promotion: true } }, "v270_scenario_authority_claimed"],
+    ["scenario count", { scenario: { documented_scenario_count: 30 } }, "v270_scenario_documentation_malformed"],
+  ] as const)("refuses %s", (_label, override, code) => {
+    expect(
+      checkStablePromotion(
+        { sourceBranch: "next", headRef: "HEAD", stableRef: "origin/main" },
+        fakeGit(repo(override as any))
+      ).code
+    ).toBe(code);
+  });
+
+  it("refuses hash drift in either attached document", () => {
+    const result = checkStablePromotion(
+      { sourceBranch: "next", headRef: "HEAD", stableRef: "origin/main" },
+      fakeGit(repo({ scenario: { evidence_status: "tampered" } }))
+    );
+    expect(result.code).toBe("v270_scenario_documentation_malformed");
+
+    const drifted = repo();
+    const reviewPath = v270ProvenanceAllowedPaths(version)[2];
+    drifted.files.set(`${headSha}:${reviewPath}`, Buffer.from("{}\n"));
+    expect(
+      checkStablePromotion(
+        { sourceBranch: "next", headRef: "HEAD", stableRef: "origin/main" },
+        fakeGit(drifted)
+      ).code
+    ).toBe("v270_external_review_hash_mismatch");
+  });
+
+  it("does not admit the exception for any later release", () => {
+    expect(v270ProvenanceAllowedPaths("2.7.1")).toEqual([]);
+  });
+
+  it("requires exact GitHub OIDC identity in both pre-merge and post-merge workflows", () => {
+    const workflows = path.join(__dirname, "..", "..", ".github", "workflows");
+    const attester = fs.readFileSync(path.join(workflows, "release-evidence-attestation.yml"), "utf8");
+    expect(attester).toContain("uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4");
+    expect(attester).toMatch(/branches:\s*\[next\]/);
+    expect(attester).toMatch(/release-basis\.json/);
+    expect(attester).not.toMatch(/workflow_dispatch|pull_request/);
+    const attesterDoc = yaml.load(attester) as any;
+    expect(attesterDoc.permissions).toEqual({
+      contents: "read",
+      "id-token": "write",
+      attestations: "write",
+    });
+    const attesterJob = attesterDoc.jobs?.["attest-release-basis"];
+    expect(attesterJob?.["runs-on"]).toBe("ubuntu-latest");
+    const attestStep = (attesterJob?.steps ?? []).find((step: any) =>
+      String(step.uses ?? "").startsWith("actions/attest@")
+    );
+    expect(attestStep?.with).toEqual({
+      "subject-path": ".guild/artifacts/release/v2.7.0/release-basis.json",
+    });
+    for (const workflow of ["branch-policy.yml", "release.yml"]) {
+      const raw = fs.readFileSync(path.join(workflows, workflow), "utf8");
+      expect(raw).toMatch(/gh attestation verify/);
+      expect(raw).not.toMatch(/--signer-workflow|--cert-identity-regex/);
+      expect(raw).toContain(
+        '--cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release-evidence-attestation.yml@refs/heads/next"'
+      );
+      expect(raw).toContain('--repo "$GITHUB_REPOSITORY"');
+      expect(raw).toMatch(/--source-ref[\s\\]+refs\/heads\/next/);
+      expect(raw).toContain('--source-digest "$PR_HEAD_SHA"');
+      expect(raw).toMatch(/--deny-self-hosted-runners/);
+      expect(raw).not.toMatch(/attestation verify[^\n]*\|\| true/);
+    }
   });
 });

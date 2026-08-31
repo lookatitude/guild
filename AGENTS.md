@@ -200,14 +200,19 @@ Day-to-day workflow (features, fixes, docs — everything non-release):
    channel for testing; it reaches stable only with the next release.
 
 Release workflow (operator-driven, when `next` is ready):
-1. Confirm `next` carries exact `MAJOR.MINOR.PATCH-beta.N`, hash-bound release
-   evidence under `.guild/artifacts/release/vMAJOR.MINOR.PATCH/`, green CI,
-   reconciled `docs/v2`, and a curated PR body suitable as release notes.
+1. Confirm `next` carries exact `MAJOR.MINOR.PATCH-beta.N`, the applicable
+   hash-bound release evidence under
+   `.guild/artifacts/release/vMAJOR.MINOR.PATCH/`, green CI, reconciled
+   `docs/v2`, and a curated PR body suitable as release notes. Exact v2.7.0 has
+   a separately named, GitHub-OIDC-attested provenance-only basis that
+   explicitly does not establish conformance authority; it is mechanically
+   unavailable to later versions.
 2. Open the release PR from the repository's exact `next` branch to `main`.
    `branch-policy.yml` rejects every other head branch and all forks.
 3. Merge the PR using the repository's normal merge, squash, or rebase method.
    CI requires the merged tree to equal the exact reviewed `next` tree, re-runs
-   promotion evidence, derives the bare stable tag
+   promotion evidence, verifies any required release-basis OIDC identity, and
+   derives the bare stable tag
    from the reviewed beta manifest, tags the exact merge commit with the
    built-in repository token, and publishes the PR body as the GitHub Release.
    CI does not commit or push to either protected branch.
